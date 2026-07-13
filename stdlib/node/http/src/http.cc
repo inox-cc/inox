@@ -48,8 +48,10 @@ static void inox_http_throw_status(inox_status status, const char* message) {
 #include "inox/fs.h"
 #include "inox/net.h"
 
+#include <new>
 #include <stdio.h>
 #include <stdlib.h>
+#include <utility>
 
 #define INOX_HTTP_MAX_HEADERS 32
 #define INOX_HTTP_MAX_RESPONSE_HEADERS 16
@@ -66,7 +68,7 @@ struct HttpResponseHeader {
 
 struct HttpConnection {
   inox_http_server* server;
-  inox_net_socket* socket;
+  NetSocket socket;
   char buffer[4096];
   size_t length;
   int responded;
@@ -77,7 +79,7 @@ struct inox_http_server {
   inox_allocator* allocator;
   HttpHandlerFn handler;
   void* user;
-  inox_net_server* net_server;
+  NetServer net_server;
 };
 
 struct inox_http_response {
@@ -90,9 +92,15 @@ struct inox_http_response {
   int sent;
 };
 
-static void inox_http_on_connection(void* user, NetServer server, NetSocket socket);
-static void inox_http_on_data(void* user, NetSocket socket, inox::StringView bytes);
-static void inox_http_on_close(void* user, NetSocket socket);
+static inox_status inox_http_on_connection(
+  void* user,
+  const inox_value* args,
+  size_t arg_count,
+  inox_value* out
+);
+static inox_status inox_http_on_data(void* user, const inox_value* args, size_t arg_count, inox_value* out);
+static inox_status inox_http_on_close(void* user, const inox_value* args, size_t arg_count, inox_value* out);
+static inox::Callback inox_http_callback(inox_callback_call_fn call, void* user);
 static inox_status inox_http_try_handle(HttpConnection* connection);
 static inox_status inox_http_response_init(inox_http_response* response, HttpConnection* connection);
 static inox_status inox_http_response_status_from_throw(void);
@@ -130,21 +138,19 @@ void HttpServer::create(HttpHandlerFn handler, void* user) {
     return;
   }
 
-  memset(server, 0, sizeof(inox_http_server));
-  server->loop = loop;
-  server->allocator = allocator;
-  server->handler = handler;
-  server->user = user;
+  new (server) inox_http_server{loop, allocator, handler, user, NetServer()};
 
-  NetServer net_server = NetServer::create(inox_http_on_connection, server);
+  inox::Callback connection = inox_http_callback(inox_http_on_connection, server);
+  NetServer net_server = net.createServer(std::move(connection));
 
   if (inox::thrown()) {
+    server->~inox_http_server();
     allocator->free(allocator->user, server, sizeof(inox_http_server), alignof(inox_http_server));
     inox_http_throw_failed("TypeError: HttpServer.create failed");
     return;
   }
 
-  server->net_server = net_server.raw();
+  server->net_server = std::move(net_server);
   server_ = server;
 }
 
@@ -156,7 +162,7 @@ void HttpServer::listen(inox::StringView host, int port, int backlog) const {
     return;
   }
 
-  NetServer(server->net_server).listen(host, port, backlog);
+  server->net_server.listen(port, host, backlog);
 
   if (inox::thrown()) {
     inox::take_exception();
@@ -172,7 +178,7 @@ int HttpServer::localPort() const {
     return 0;
   }
 
-  int port = NetServer(server->net_server).localPort();
+  int port = static_cast<int>(server->net_server.address().port);
 
   if (inox::thrown()) {
     inox::take_exception();
@@ -202,7 +208,7 @@ void HttpServer::close() const {
     return;
   }
 
-  NetServer(server->net_server).close();
+  server->net_server.close();
 }
 
 void HttpResponse::setStatus(int status) const {
@@ -402,7 +408,7 @@ void HttpResponse::end(inox::StringView bytes) const {
     memcpy(response_bytes + header_size, response->body, response->body_length);
   }
 
-  NetSocket(connection->socket).end(inox::StringView(response_bytes, total_len));
+  connection->socket.end(inox::StringView(response_bytes, total_len));
   connection->server->allocator->free(connection->server->allocator->user, response_bytes, total_len, alignof(char));
 
   if (inox::thrown()) {
@@ -553,8 +559,34 @@ static int inox_http_response_succeeded(void) {
   return 0;
 }
 
-static void inox_http_on_connection(void* user, NetServer server, NetSocket socket) {
-  (void)server;
+static inox::Callback inox_http_callback(inox_callback_call_fn call, void* user) {
+  inox_value value = inox_undefined_value();
+  inox_loop* loop = inox::loop();
+  inox_allocator* allocator = loop == 0 ? 0 : loop->allocator;
+
+  if (allocator == 0 || inox_callback_new(allocator, call, user, 0, &value) != INOX_OK) {
+    inox_http_throw_failed("TypeError: HTTP callback allocation failed");
+    return inox::Callback();
+  }
+
+  return inox::Callback(inox::adopt(value));
+}
+
+static inox_status inox_http_on_connection(
+  void* user,
+  const inox_value* args,
+  size_t arg_count,
+  inox_value* out
+) {
+  if (out != 0) {
+    *out = inox_undefined_value();
+  }
+
+  if (user == 0 || args == 0 || arg_count != 1 || args[0].tag != INOX_TAG_CLASS_INSTANCE) {
+    return INOX_ERR_TYPE;
+  }
+
+  NetSocket socket{inox::Value(args[0])};
   inox_http_server* http_server = (inox_http_server*)user;
   HttpConnection* connection = (HttpConnection*)http_server->allocator->alloc(
     http_server->allocator->user,
@@ -563,57 +595,101 @@ static void inox_http_on_connection(void* user, NetServer server, NetSocket sock
   );
 
   if (connection == 0) {
-    socket.close();
+    socket.destroy();
     inox_http_throw_failed("TypeError: HTTP connection failed");
-    return;
+    return INOX_ERR_OOM;
   }
 
-  memset(connection, 0, sizeof(HttpConnection));
-  connection->server = http_server;
-  connection->socket = socket.raw();
-  socket.setCallbacks(inox_http_on_data, inox_http_on_close, connection);
-  if (inox::thrown()) {
-    return;
-  }
-
-  socket.readStart();
+  new (connection) HttpConnection{http_server, socket, {}, 0, 0};
+  inox::Callback close = inox_http_callback(inox_http_on_close, connection);
+  inox::Callback data = inox_http_callback(inox_http_on_data, connection);
 
   if (inox::thrown()) {
-    return;
+    socket.destroy();
+    connection->~HttpConnection();
+    http_server->allocator->free(
+      http_server->allocator->user,
+      connection,
+      sizeof(HttpConnection),
+      alignof(HttpConnection)
+    );
+    return INOX_ERR_THROW;
   }
+
+  socket.on("close", std::move(close));
+
+  if (inox::thrown()) {
+    socket.destroy();
+    connection->~HttpConnection();
+    http_server->allocator->free(
+      http_server->allocator->user,
+      connection,
+      sizeof(HttpConnection),
+      alignof(HttpConnection)
+    );
+    return INOX_ERR_THROW;
+  }
+
+  socket.on("data", std::move(data));
+
+  if (inox::thrown()) {
+    socket.destroy();
+    return INOX_ERR_THROW;
+  }
+
+  return INOX_OK;
 }
 
-static void inox_http_on_data(void* user, NetSocket socket, inox::StringView bytes) {
-  (void)socket;
+static inox_status inox_http_on_data(void* user, const inox_value* args, size_t arg_count, inox_value* out) {
+  if (out != 0) {
+    *out = inox_undefined_value();
+  }
+
+  if (user == 0 || args == 0 || arg_count != 1 || args[0].tag != INOX_TAG_STRING) {
+    return INOX_ERR_TYPE;
+  }
+
+  inox::String data{inox::Value(args[0])};
+  inox::StringView bytes = data;
   HttpConnection* connection = (HttpConnection*)user;
 
   if (connection->length + bytes.len > sizeof(connection->buffer)) {
     inox_http_response response;
     inox_http_response_init(&response, connection);
     (void)inox_http_response_text_status(&response, 413, "payload too large");
-    return;
+    return inox_http_response_status_from_throw();
   }
 
   memcpy(connection->buffer + connection->length, bytes.bytes, bytes.len);
   connection->length += bytes.len;
 
-  (void)inox_http_try_handle(connection);
+  return inox_http_try_handle(connection);
 }
 
-static void inox_http_on_close(void* user, NetSocket socket) {
-  (void)socket;
+static inox_status inox_http_on_close(void* user, const inox_value* args, size_t arg_count, inox_value* out) {
+  if (out != 0) {
+    *out = inox_undefined_value();
+  }
+
+  if (args == 0 || arg_count != 1 || args[0].tag != INOX_TAG_BOOL) {
+    return INOX_ERR_TYPE;
+  }
+
   HttpConnection* connection = (HttpConnection*)user;
 
   if (connection == 0 || connection->server == 0 || connection->server->allocator == 0) {
-    return;
+    return INOX_OK;
   }
 
-  connection->server->allocator->free(
-    connection->server->allocator->user,
+  inox_allocator* allocator = connection->server->allocator;
+  connection->~HttpConnection();
+  allocator->free(
+    allocator->user,
     connection,
     sizeof(HttpConnection),
     alignof(HttpConnection)
   );
+  return INOX_OK;
 }
 
 static inox_status inox_http_try_handle(HttpConnection* connection) {

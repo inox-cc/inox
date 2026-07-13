@@ -130,7 +130,6 @@ type AsyncTaskFunctionContext = AsyncTaskEmitContext & {
   functionTypes: AsyncTaskFunctionTypeMap
   mapTypes: AsyncTaskMapTypeMap
   narrowedNullableScalars: AsyncTaskStringSet
-  netReadingSockets: AsyncTaskStringSet
   nullableVariables: AsyncTaskStringSet
   objectAliases: AsyncTaskStringMap
   objectDeclaredTypes: AsyncTaskStringMap

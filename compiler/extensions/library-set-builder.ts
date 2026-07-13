@@ -2,6 +2,7 @@ import type {
   CompilerLibraryDescriptor,
   CompilerLibrarySet,
   IntrinsicRoleBinding,
+  LibraryArgumentCheckDescriptor,
   LibraryDeclarationDescriptor,
   LibraryCallbackParameterDescriptor,
   LibraryNativeTypeDescriptor,
@@ -321,7 +322,9 @@ function pushNativeTypes(target: LibraryNativeTypeDescriptor[], values: LibraryN
   }
 }
 
-function operationArgumentChecksFingerprint(operation: LibraryOperationDescriptor): string {
+function operationArgumentChecksFingerprint(
+  operation: { argumentChecks?: LibraryArgumentCheckDescriptor[] }
+): string {
   const checks = operation.argumentChecks ?? []
   const rows: string[] = []
 
@@ -369,6 +372,7 @@ function operationVariantsFingerprint(operation: LibraryOperationDescriptor): st
     const variant = variants[index]
     rows.push(
       (variant.minArgs ?? '') + ':' + (variant.maxArgs ?? '') + ':' +
+        operationArgumentChecksFingerprint(variant) + ':' +
         (variant.argumentIndex ?? '') + ':' + sortedStrings(variant.stringLiterals ?? []).join(',') + ':' +
         sortedStrings(variant.argumentValueTypes ?? []).join(',') + ':' +
         (variant.objectFieldName ?? '') + ':' + sortedBooleans(variant.booleanLiterals ?? []).join(',') + ':' +

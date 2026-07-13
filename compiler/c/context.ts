@@ -11,7 +11,6 @@ import type {
   CFunctionReturnMapType,
   CFunctionType,
   CHttpHandler,
-  CNetHandler,
   CObjectAccessorReturnPath,
   CObjectShape,
   CObjectShapeField,
@@ -41,7 +40,6 @@ export type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
 export type CFunctionTypeMap = Map<string, CFunctionType>
 export type CFunctionPointerAdapterMap = Map<string, string>
 export type CHttpHandlerMap = Map<string, CHttpHandler>
-export type CNetHandlerMap = Map<string, CNetHandler>
 export type CNumberMap = Map<string, number>
 export type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
 export type CObjectAccessorReturnPathMap = Map<string, CObjectAccessorReturnPath>
@@ -179,10 +177,6 @@ export type CEmitContext = {
   objectAccessorReturnPaths: CObjectAccessorReturnPathMap
   moduleObjectShapes: CObjectShapeFieldMap
   moduleValueTypes: CStringMap
-  netConnectNames: CStringSet
-  netCreateServerNames: CStringSet
-  netHandlers: CNetHandlerMap
-  netImportNames: CStringSet
   nextId: number
   nullableLoweringDependencies: NullableLoweringDependencies
   runtimeEntryPath: string | null
@@ -303,7 +297,6 @@ export type CFunctionContext = CEmitContext & {
   mapTypes: CFunctionReturnMapTypeMap
   moduleValueDeclarationScope: boolean
   narrowedNullableScalars: CStringSet
-  netReadingSockets: CStringSet
   nullableVariables: CStringSet
   objectAliases: CStringMap
   objectDeclaredTypes: CStringMap
@@ -413,10 +406,6 @@ export function createFunctionContext(
     objectAccessorReturnPaths: baseContext.objectAccessorReturnPaths,
     moduleObjectShapes: baseContext.moduleObjectShapes,
     moduleValueTypes: baseContext.moduleValueTypes,
-    netConnectNames: baseContext.netConnectNames,
-    netCreateServerNames: baseContext.netCreateServerNames,
-    netHandlers: baseContext.netHandlers,
-    netImportNames: baseContext.netImportNames,
     nextId: baseContext.nextId,
     nullableLoweringDependencies: baseContext.nullableLoweringDependencies,
     runtimeEntryPath: baseContext.runtimeEntryPath,
@@ -458,7 +447,6 @@ export function createFunctionContext(
     externalEventLoop: false,
     mapTypes: new Map(),
     moduleValueDeclarationScope: false,
-    netReadingSockets: new Set(),
     narrowedNullableScalars: new Set(),
     nullableVariables: new Set(),
     objectAliases: new Map(),

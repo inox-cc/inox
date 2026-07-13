@@ -1,106 +1,117 @@
 #ifndef INOX_NET_H
 #define INOX_NET_H
 
-#include <stddef.h>
+#include <optional>
 
+#include "inox/callback.h"
+#include "inox/string.h"
 #include "inox/string_view.h"
-
-struct inox_net_server;
-struct inox_net_socket;
+#include "inox/value.h"
 
 struct NetAddress {
-  char address[64];
-  inox::StringView family;
-  int port;
+  inox::String address;
+  inox::String family;
+  double port;
 };
 
-class NetServer;
-class NetSocket;
+class NetListenOptions {
+public:
+  NetListenOptions();
+  explicit NetListenOptions(const inox::Value& value);
 
-enum class NetError {
-  None,
-  Type,
-  OutOfMemory,
-  Field,
-  Unsupported
-};
-
-typedef void (*NetConnectionFn)(void* user, NetServer server, NetSocket socket);
-typedef void (*NetServerFn)(void* user, NetServer server);
-typedef void (*NetServerErrorFn)(void* user, NetServer server, NetError error);
-typedef void (*NetConnectFn)(void* user, NetSocket socket, NetError error);
-typedef void (*NetDataFn)(void* user, NetSocket socket, inox::StringView bytes);
-typedef void (*NetCloseFn)(void* user, NetSocket socket);
-typedef void (*NetSocketFn)(void* user, NetSocket socket);
-typedef void (*NetSocketErrorFn)(void* user, NetSocket socket, NetError error);
-typedef void (*NetSocketWriteFn)(void* user, NetSocket socket, NetError error);
-
-#ifdef __cplusplus
-
-class NetServer {
 private:
-  inox_net_server* server_;
+  bool valid_;
+  std::optional<double> port_;
+  std::optional<inox::String> host_;
+  std::optional<double> backlog_;
 
+  friend class NetServer;
+};
+
+class NetConnectionOptions {
+public:
+  NetConnectionOptions();
+  explicit NetConnectionOptions(const inox::Value& value);
+
+private:
+  bool valid_;
+  std::optional<double> port_;
+  std::optional<inox::String> host_;
+
+  friend class NetModule;
+};
+
+class NetServer : public inox::Value {
 public:
   NetServer();
-  explicit NetServer(inox_net_server* server);
+  explicit NetServer(const inox::Value& value);
+  explicit NetServer(inox::Value&& value);
 
-  static NetServer create(NetConnectionFn connection, void* user);
+  using inox::Value::operator=;
 
-  inox_net_server* raw() const;
-  void onConnection(NetConnectionFn connection, void* user) const;
-  void onListening(NetServerFn listening, void* user) const;
-  void onClose(NetServerFn close, void* user) const;
-  void onError(NetServerErrorFn error, void* user) const;
-  void listen(inox::StringView host, int port, int backlog) const;
   NetAddress address() const;
-  int localPort() const;
-  void close() const;
+  NetServer& close();
+  NetServer& close(inox::Callback callback);
+  NetServer& listen();
+  NetServer& listen(inox::Callback callback);
+  NetServer& listen(double port);
+  NetServer& listen(double port, double backlog);
+  NetServer& listen(double port, inox::Callback callback);
+  NetServer& listen(double port, inox::StringView host);
+  NetServer& listen(double port, inox::StringView host, inox::Callback callback);
+  NetServer& listen(double port, inox::StringView host, double backlog);
+  NetServer& listen(double port, double backlog, inox::Callback callback);
+  NetServer& listen(double port, inox::StringView host, double backlog, inox::Callback callback);
+  NetServer& listen(const NetListenOptions& options);
+  NetServer& listen(const NetListenOptions& options, inox::Callback callback);
+  NetServer& on(inox::StringView event_name, inox::Callback listener);
 };
 
-class NetSocket {
-private:
-  inox_net_socket* socket_;
-
+class NetSocket : public inox::Value {
 public:
   NetSocket();
-  explicit NetSocket(inox_net_socket* socket);
+  explicit NetSocket(const inox::Value& value);
+  explicit NetSocket(inox::Value&& value);
 
-  static NetSocket connect(
-    inox::StringView host,
-    int port,
-    NetConnectFn connect,
-    NetDataFn data,
-    NetCloseFn close,
-    void* user
-  );
+  using inox::Value::operator=;
 
-  inox_net_socket* raw() const;
-  void setCallbacks(NetDataFn data, NetCloseFn close, void* user) const;
-  void onConnect(NetSocketFn connect, void* user) const;
-  void onReady(NetSocketFn ready, void* user) const;
-  void onData(NetDataFn data, void* user) const;
-  void onEnd(NetSocketFn end, void* user) const;
-  void onClose(NetSocketFn close, void* user) const;
-  void onError(NetSocketErrorFn error, void* user) const;
-  void onDrain(NetSocketFn drain, void* user) const;
-  void readStart() const;
-  void readStop() const;
-  void setEncoding(inox::StringView encoding) const;
   NetAddress address() const;
-  NetAddress remoteAddress() const;
-  size_t bytesRead() const;
-  size_t bytesWritten() const;
-  void setNoDelay(bool enabled) const;
-  void setKeepAlive(bool enabled, unsigned int initial_delay) const;
-  void ref() const;
-  void unref() const;
-  void write(inox::StringView bytes, NetSocketWriteFn callback = nullptr, void* user = nullptr) const;
-  void end(inox::StringView bytes = inox::StringView(), NetSocketWriteFn callback = nullptr, void* user = nullptr) const;
-  void destroy() const;
-  void close() const;
+  double bytesRead() const;
+  double bytesWritten() const;
+  NetSocket& destroy();
+  NetSocket& end();
+  NetSocket& end(inox::Callback callback);
+  NetSocket& end(inox::StringView text);
+  NetSocket& end(inox::StringView text, inox::Callback callback);
+  inox::String localAddress() const;
+  double localPort() const;
+  NetSocket& on(inox::StringView event_name, inox::Callback listener);
+  NetSocket& ref();
+  inox::String remoteAddress() const;
+  double remotePort() const;
+  NetSocket& setEncoding(inox::StringView encoding);
+  NetSocket& setKeepAlive();
+  NetSocket& setKeepAlive(bool enabled);
+  NetSocket& setKeepAlive(bool enabled, double initial_delay);
+  NetSocket& setNoDelay();
+  NetSocket& setNoDelay(bool enabled);
+  NetSocket& unref();
+  bool write(inox::StringView text);
+  bool write(inox::StringView text, inox::Callback callback);
 };
 
-#endif
+class NetModule {
+public:
+  NetSocket connect(double port) const;
+  NetSocket connect(double port, inox::Callback callback) const;
+  NetSocket connect(double port, inox::StringView host) const;
+  NetSocket connect(double port, inox::StringView host, inox::Callback callback) const;
+  NetSocket connect(const NetConnectionOptions& options) const;
+  NetSocket connect(const NetConnectionOptions& options, inox::Callback callback) const;
+  NetServer createServer() const;
+  NetServer createServer(inox::Callback listener) const;
+};
+
+extern const NetModule net;
 
 #endif

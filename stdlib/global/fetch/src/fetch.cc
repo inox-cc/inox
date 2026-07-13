@@ -123,15 +123,17 @@ static int fetch_find_header_value(
 #include "inox/tls.h"
 
 #include <ctype.h>
+#include <new>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <utility>
 
 struct FetchOperation {
   inox_loop* loop;
   inox_allocator* allocator;
-  inox_net_socket* socket;
+  NetSocket socket;
   inox_tls_client* tls;
   inox_timer_handle* abort_timer;
   FetchDoneFn done;
@@ -153,6 +155,7 @@ struct FetchOperation {
   char response[8192];
   size_t response_len;
   int completed;
+  int transport_connected;
 };
 
 struct FetchPromiseRequest {
@@ -211,9 +214,11 @@ static inox_status fetch_append_size(char* out, size_t out_size, size_t* offset,
 static int fetch_header_name_equals(const char* name, size_t name_len, const char* expected);
 static int fetch_headers_include(const FetchNativeHeader* headers, size_t header_count, const char* name);
 static inox_status fetch_redirect_mode_from_init(const FetchNativeInit* init, int* out);
-static void fetch_on_connect(void* user, NetSocket socket, NetError error);
-static void fetch_on_data(void* user, NetSocket socket, inox::StringView bytes);
-static void fetch_on_close(void* user, NetSocket socket);
+static inox_status fetch_on_connect(void* user, const inox_value* args, size_t arg_count, inox_value* out);
+static inox_status fetch_on_data(void* user, const inox_value* args, size_t arg_count, inox_value* out);
+static inox_status fetch_on_close(void* user, const inox_value* args, size_t arg_count, inox_value* out);
+static inox_status fetch_on_error(void* user, const inox_value* args, size_t arg_count, inox_value* out);
+static inox::Callback fetch_callback(inox_allocator* allocator, inox_callback_call_fn call, void* user);
 static inox_status fetch_on_tls_connect(void* user, inox_tls_client* client, inox_status status);
 static inox_status fetch_on_tls_data(void* user, inox_tls_client* client, const char* bytes, size_t len);
 static void fetch_on_tls_close(void* user, inox_tls_client* client);
@@ -289,7 +294,7 @@ static inox_status fetch_request_view(
     return INOX_ERR_OOM;
   }
 
-  memset(request, 0, sizeof(FetchOperation));
+  new (request) FetchOperation{};
   request->loop = loop;
   request->allocator = allocator;
   request->done = done;
@@ -560,8 +565,9 @@ static inox_status fetch_start_connection(FetchOperation* request) {
     return INOX_ERR_TYPE;
   }
 
-  request->socket = 0;
+  request->socket = NetSocket();
   request->tls = 0;
+  request->transport_connected = 0;
 
   if (request->secure) {
     return inox_tls_connect(
@@ -577,21 +583,34 @@ static inox_status fetch_start_connection(FetchOperation* request) {
     );
   }
 
-  NetSocket socket = NetSocket::connect(
-    request->host,
-    request->port,
-    fetch_on_connect,
-    fetch_on_data,
-    fetch_on_close,
-    request
-  );
+  inox::Callback connect = fetch_callback(request->allocator, fetch_on_connect, request);
+  inox::Callback data = fetch_callback(request->allocator, fetch_on_data, request);
+  inox::Callback close = fetch_callback(request->allocator, fetch_on_close, request);
+  inox::Callback error = fetch_callback(request->allocator, fetch_on_error, request);
+
+  if (inox::thrown()) {
+    inox::take_exception();
+    return INOX_ERR_OOM;
+  }
+
+  NetSocket socket = net.connect(request->port, inox::StringView(request->host), std::move(connect));
 
   if (inox::thrown()) {
     inox::take_exception();
     return INOX_ERR_TYPE;
   }
 
-  request->socket = socket.raw();
+  request->socket = socket;
+  request->socket.on("close", std::move(close));
+  request->socket.on("data", std::move(data));
+  request->socket.on("error", std::move(error));
+
+  if (inox::thrown()) {
+    inox::take_exception();
+    (void)fetch_finish(request, INOX_ERR_OOM, 0);
+    return INOX_OK;
+  }
+
   return INOX_OK;
 }
 
@@ -726,7 +745,9 @@ static void fetch_operation_free(FetchOperation* request) {
   }
 
   inox_release(request->signal);
-  request->allocator->free(request->allocator->user, request, sizeof(FetchOperation), alignof(FetchOperation));
+  inox_allocator* allocator = request->allocator;
+  request->~FetchOperation();
+  allocator->free(allocator->user, request, sizeof(FetchOperation), alignof(FetchOperation));
 }
 
 static inox_status fetch_append_bytes(char* out, size_t out_size, size_t* offset, const char* bytes, size_t len) {
@@ -821,54 +842,80 @@ static inox_status fetch_redirect_mode_from_init(const FetchNativeInit* init, in
   return INOX_ERR_UNSUPPORTED;
 }
 
-static inox_status fetch_status_from_net_error(NetError error) {
-  if (error == NetError::None) {
-    return INOX_OK;
+static inox::Callback fetch_callback(inox_allocator* allocator, inox_callback_call_fn call, void* user) {
+  inox_value value = inox_undefined_value();
+
+  if (allocator == 0 || inox_callback_new(allocator, call, user, 0, &value) != INOX_OK) {
+    inox::throw_value(inox::String("TypeError: fetch callback allocation failed"));
+    return inox::Callback();
   }
 
-  if (error == NetError::OutOfMemory) {
-    return INOX_ERR_OOM;
-  }
-
-  if (error == NetError::Unsupported) {
-    return INOX_ERR_UNSUPPORTED;
-  }
-
-  if (error == NetError::Field) {
-    return INOX_ERR_FIELD;
-  }
-
-  return INOX_ERR_TYPE;
+  return inox::Callback(inox::adopt(value));
 }
 
-static void fetch_on_connect(void* user, NetSocket socket, NetError error) {
+static inox_status fetch_on_connect(void* user, const inox_value* args, size_t arg_count, inox_value* out) {
+  (void)args;
+
+  if (out != 0) {
+    *out = inox_undefined_value();
+  }
+
+  if (user == 0 || arg_count != 0) {
+    return INOX_ERR_TYPE;
+  }
+
   FetchOperation* request = (FetchOperation*)user;
-  inox_status status = fetch_status_from_net_error(error);
-
-  if (status != INOX_OK) {
-    (void)fetch_on_transport_connect(request, status);
-    return;
-  }
-
-  socket.readStart();
-
-  if (inox::thrown()) {
-    inox::take_exception();
-    (void)fetch_finish(request, INOX_ERR_FIELD, 0);
-    return;
-  }
-
+  request->transport_connected = 1;
   (void)fetch_on_transport_connect(request, INOX_OK);
+  return inox::thrown() ? INOX_ERR_THROW : INOX_OK;
 }
 
-static void fetch_on_data(void* user, NetSocket socket, inox::StringView bytes) {
-  (void)socket;
+static inox_status fetch_on_data(void* user, const inox_value* args, size_t arg_count, inox_value* out) {
+  if (out != 0) {
+    *out = inox_undefined_value();
+  }
+
+  if (user == 0 || args == 0 || arg_count != 1 || args[0].tag != INOX_TAG_STRING) {
+    return INOX_ERR_TYPE;
+  }
+
+  inox::String data{inox::Value(args[0])};
+  const inox::StringView bytes = data;
   (void)fetch_on_transport_data((FetchOperation*)user, bytes.bytes, bytes.len);
+  return inox::thrown() ? INOX_ERR_THROW : INOX_OK;
 }
 
-static void fetch_on_close(void* user, NetSocket socket) {
-  (void)socket;
+static inox_status fetch_on_error(void* user, const inox_value* args, size_t arg_count, inox_value* out) {
+  if (out != 0) {
+    *out = inox_undefined_value();
+  }
+
+  if (user == 0 || args == 0 || arg_count != 1) {
+    return INOX_ERR_TYPE;
+  }
+
+  FetchOperation* request = (FetchOperation*)user;
+
+  if (request->transport_connected) {
+    (void)fetch_finish(request, INOX_ERR_FIELD, 0);
+  } else {
+    (void)fetch_on_transport_connect(request, INOX_ERR_FIELD);
+  }
+
+  return inox::thrown() ? INOX_ERR_THROW : INOX_OK;
+}
+
+static inox_status fetch_on_close(void* user, const inox_value* args, size_t arg_count, inox_value* out) {
+  if (out != 0) {
+    *out = inox_undefined_value();
+  }
+
+  if (user == 0 || args == 0 || arg_count != 1 || args[0].tag != INOX_TAG_BOOL) {
+    return INOX_ERR_TYPE;
+  }
+
   fetch_on_transport_close((FetchOperation*)user);
+  return INOX_OK;
 }
 
 static inox_status fetch_on_tls_connect(void* user, inox_tls_client* client, inox_status status) {
@@ -938,7 +985,7 @@ static void fetch_on_transport_close(FetchOperation* request) {
   }
 
   if (request->waiting_redirect_close) {
-    request->socket = 0;
+    request->socket = NetSocket();
     request->tls = 0;
     request->waiting_redirect_close = 0;
     inox_status status = fetch_start_connection(request);
@@ -964,11 +1011,11 @@ static inox_status fetch_transport_write(FetchOperation* request, const char* by
     return request->tls == 0 ? INOX_ERR_TYPE : inox_tls_client_write(request->tls, bytes, len);
   }
 
-  if (request->socket == 0) {
+  if (request->socket.tag != INOX_TAG_CLASS_INSTANCE) {
     return INOX_ERR_TYPE;
   }
 
-  NetSocket(request->socket).write(inox::StringView(bytes, len));
+  request->socket.write(inox::StringView(bytes, len));
 
   if (inox::thrown()) {
     inox::take_exception();
@@ -985,8 +1032,8 @@ static void fetch_transport_close(FetchOperation* request) {
 
   if (request->tls != 0) {
     inox_tls_client_close(request->tls);
-  } else if (request->socket != 0) {
-    NetSocket(request->socket).close();
+  } else if (request->socket.tag == INOX_TAG_CLASS_INSTANCE) {
+    request->socket.destroy();
   }
 }
 
@@ -1442,7 +1489,7 @@ static inox_status fetch_follow_redirect(FetchOperation* request, const char* lo
   request->redirected = 1;
   request->waiting_redirect_close = 1;
 
-  if (request->socket != 0 || request->tls != 0) {
+  if (request->socket.tag == INOX_TAG_CLASS_INSTANCE || request->tls != 0) {
     fetch_transport_close(request);
   } else {
     request->waiting_redirect_close = 0;

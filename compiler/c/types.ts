@@ -354,12 +354,6 @@ export type CHttpHandler = {
   expression: AnyNode
 }
 
-export type CNetHandler = {
-  kind: string
-  name: string
-  expression: AnyNode
-}
-
 export type CPromiseConstructorHandler = {
   kind: 'reject' | 'resolve'
   promise: string

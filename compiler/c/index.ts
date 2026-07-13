@@ -146,19 +146,14 @@ import {
 } from './runtime-values.ts'
 import type {
   HttpLoweringDependencies,
-  NetLoweringDependencies,
-  NodeNetworkLoweringDependencies,
   TimerLoweringDependencies
 } from '../stdlib/node/c.ts'
 import {
-  emitNodeNetworkCallStatement,
-  emitNodeNetworkVariableDeclaration,
-  emitPreparedNodeNetworkAddressPortExpression,
+  emitNodeHttpCallStatement,
+  emitNodeHttpVariableDeclaration,
   emitPreparedTimerCallExpression,
   emitTimerVariableDeclaration,
-  inferNodeStdlibMemberExpressionType,
   isTimerStartCallExpression,
-  resolveNodeNetworkAddressStringMember,
   timerCallbackFunctionType
 } from '../stdlib/node/c.ts'
 import type { FetchLoweringDependencies } from '../../stdlib/global/compiler/c.ts'
@@ -504,8 +499,6 @@ let fetchLoweringDependencies = {} as FetchLoweringDependencies
 let compilerLibraryLoweringDependencies = {} as CompilerLibraryLoweringDependencies
 let promiseLoweringDependencies = {} as PromiseLoweringDependencies
 let httpLoweringDependencies = {} as HttpLoweringDependencies
-let netLoweringDependencies = {} as NetLoweringDependencies
-let nodeNetworkLoweringDependencies = {} as NodeNetworkLoweringDependencies
 
 const nullableLoweringDependencies: NullableLoweringDependencies = {
   emitCObjectLiteralValueExpression,
@@ -546,10 +539,9 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitKnownArrayIndexVariableDeclaration,
   emitKnownObjectMemberAssignment,
   emitKnownObjectMemberVariableDeclaration,
-  emitNodeNetworkCallStatement: (expression: AnyNode, context: CFunctionContext) =>
-    emitNodeNetworkCallStatement(expression, context, nodeNetworkLoweringDependencies),
-  emitNodeNetworkVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
-    emitNodeNetworkVariableDeclaration(statement, context, nodeNetworkLoweringDependencies),
+  emitNodeHttpCallStatement: (expression: AnyNode, context: CFunctionContext) =>
+    emitNodeHttpCallStatement(expression, context, httpLoweringDependencies),
+  emitNodeHttpVariableDeclaration,
   emitNullableScalarValueExpression,
   emitNullableRuntimeValueAssignment,
   emitObjectVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
@@ -911,7 +903,6 @@ const stringLoweringDependencies: StringLoweringDependencies = {
   nodeRuntimeStringConstantValue: runtimeStringConstantValue,
   resolveKnownObjectIndex,
   resolveKnownObjectMember,
-  resolveNodeNetworkAddressStringMember,
   resolveRuntimeArrayIndex
 }
 
@@ -1077,20 +1068,6 @@ const declarationEmissionDependencies = {
   emitStatementList
 }
 
-netLoweringDependencies = {
-  createFunctionContext,
-  emitConsoleLogStatement,
-  emitPreparedNumberExpression,
-  emitPreparedStringBytesOperand,
-  emitStatementList,
-  findObjectLiteralPropertyValue
-}
-
-nodeNetworkLoweringDependencies = {
-  http: httpLoweringDependencies,
-  net: netLoweringDependencies
-}
-
 const expressionTypeDependencies = {
   cDebugRuntimeMethodName,
   cFetchRuntimeExpressionMethod,
@@ -1098,7 +1075,6 @@ const expressionTypeDependencies = {
   cPromiseRuntimeCallName,
   cTimeRuntimeCallName,
   collectionConstructorName,
-  inferNodeStdlibMemberExpressionType,
   isArrayIncludesCall,
   isArrayIsArrayCall,
   isArrayJoinCall,
@@ -1201,7 +1177,6 @@ const cScalarExpressionDependencies = {
   emitPreparedCollectionCallExpression,
   emitPreparedCollectionSizeExpression,
   emitNullableScalarValueExpression,
-  emitPreparedNodeNetworkAddressPortExpression,
   emitPreparedJsonScalarParseExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedJsonScalarParseExpression(expression, context, jsonDeclarationDependencies),
   emitPreparedNullableScalarRuntimeValueExpression,
@@ -1347,7 +1322,6 @@ const cUnitDependencies = {
   emitMainWrapper: (irPrograms: IrProgram[], baseContext: CEmitContext) =>
     emitMainWrapperWithDependencies(irPrograms, baseContext, declarationEmissionDependencies),
   httpLoweringDependencies,
-  netLoweringDependencies,
   nullableLoweringDependencies,
   promiseChainLoweringDependencies,
   statementLoweringDependencies,
@@ -1373,7 +1347,6 @@ const cModuleEmissionDependencies = {
   emitFunctionHead,
   emitStatementList,
   httpLoweringDependencies,
-  netLoweringDependencies,
   nullableLoweringDependencies,
   promiseChainLoweringDependencies,
   statementLoweringDependencies,
@@ -1648,10 +1621,6 @@ function createBaseContext(
     httpCreateServerNames: new Set(),
     httpHandlers: new Map(),
     httpImportNames: new Set(),
-    netConnectNames: new Set(),
-    netCreateServerNames: new Set(),
-    netHandlers: new Map(),
-    netImportNames: new Set(),
     runtimeFunctionParams: new Map(),
     runtimeEntryPath: null,
     externalEventLoopFunctions: new Set(),
@@ -6701,16 +6670,6 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
         lines: libraryNativeField.lines,
         format: consoleLogStringFormat,
         values: [libraryNativeField.expression]
-      }
-    }
-
-    const netAddressMember = resolveNodeNetworkAddressStringMember(expression, context) ?? ''
-
-    if (netAddressMember !== '') {
-      return {
-        lines: [],
-        format: '%s',
-        values: [netAddressMember]
       }
     }
 

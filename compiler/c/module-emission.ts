@@ -85,16 +85,13 @@ import { emitCPrelude, emitMathRuntimeInitLines, filterUnusedCPreludeIncludes } 
 import { collectCReferencedFunctionPrototypeNames } from './prototype-references.ts'
 import { addDateStringRuntimeRequirements, resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
 import {
-  collectNodeNetworkHandlers,
-  emitNodeNetworkHandlerDeclarations,
-  emitNodeNetworkHandlerPrototypeLines,
-  hasNodeNetworkHandlers,
+  collectNodeHttpHandlers,
+  emitNodeHttpHandlerDeclarations,
+  emitNodeHttpHandlerPrototypeLines,
+  hasNodeHttpHandlers,
   registerNodeStdlibRuntimeImportNames
 } from '../stdlib/node/c.ts'
-import type {
-  HttpLoweringDependencies,
-  NetLoweringDependencies
-} from '../stdlib/node/c.ts'
+import type { HttpLoweringDependencies } from '../stdlib/node/c.ts'
 import type {
   CCallbackWrapper,
   CClassInfo,
@@ -367,7 +364,6 @@ export type CModuleEmissionDependencies = {
   emitFunctionHead(statement: AnyNode, context: CEmitContext): string
   emitStatementList(body: AnyNode[], context: CFunctionContext): string[]
   httpLoweringDependencies: HttpLoweringDependencies
-  netLoweringDependencies: NetLoweringDependencies
   nullableLoweringDependencies: NullableLoweringDependencies
   promiseChainLoweringDependencies: PromiseChainLoweringDependencies
   statementLoweringDependencies: StatementLoweringDependencies
@@ -463,7 +459,6 @@ export function emitCModuleSource(
       prelude.needsConsoleRuntime,
       prelude.needsFetchRuntime,
       prelude.needsHttpRuntime,
-      prelude.needsNetRuntime,
       prelude.libraryCPreludeIncludes,
       options
     )
@@ -519,10 +514,7 @@ export function emitCModuleSource(
 
   pushCModuleLines(
     bodyLines,
-    emitNodeNetworkHandlerDeclarations(context, {
-      http: deps.httpLoweringDependencies,
-      net: deps.netLoweringDependencies
-    })
+    emitNodeHttpHandlerDeclarations(context, deps.httpLoweringDependencies)
   )
 
   for (let functionIndex = 0; functionIndex < functions.length; functionIndex = functionIndex + 1) {
@@ -766,7 +758,7 @@ function emitCModuleDeclarations(
     lines.push(`${emitPromiseChainCallbackWrapperHead(wrapper)};`)
   }
 
-  pushCModuleLines(lines, emitNodeNetworkHandlerPrototypeLines(context))
+  pushCModuleLines(lines, emitNodeHttpHandlerPrototypeLines(context))
 
   if (
     functionPrototypeNames.size > 0 ||
@@ -774,7 +766,7 @@ function emitCModuleDeclarations(
     context.asyncTaskWrappers.size > 0 ||
     context.callbackWrappers.size > 0 ||
     context.promiseChainWrappers.size > 0 ||
-    hasNodeNetworkHandlers(context)
+    hasNodeHttpHandlers(context)
   ) {
     lines.push('')
   }
@@ -1392,7 +1384,7 @@ function createCModuleBaseContext(
   context.callbackWrappers = collectCallbackWrappers(irPrograms, context, deps.callbackLoweringDependencies)
   context.promiseChainWrappers = collectPromiseChainWrappers(irPrograms, context, deps.promiseChainLoweringDependencies)
   context.asyncTaskWrappers = collectAsyncTaskWrappers(functionEntries, context, deps.asyncTaskLoweringDependencies)
-  collectNodeNetworkHandlers(irPrograms, context)
+  collectNodeHttpHandlers(irPrograms, context)
 
   return context
 }

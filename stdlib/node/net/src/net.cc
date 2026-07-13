@@ -1,1458 +1,1986 @@
 #include "inox/net.h"
 
-#include <string.h>
+#include <array>
+#include <cmath>
+#include <cstdio>
+#include <cstdint>
+#include <cstring>
+#include <limits>
+#include <memory>
+#include <new>
+#include <string>
+#include <utility>
+#include <vector>
 
+#include "inox/class_descriptor.h"
 #include "inox/loop.h"
-#include "inox/string.h"
-
-NetServer::NetServer() : server_(0) {}
-
-NetServer::NetServer(inox_net_server* server) : server_(server) {}
-
-inox_net_server* NetServer::raw() const {
-  return server_;
-}
-
-NetSocket::NetSocket() : socket_(0) {}
-
-NetSocket::NetSocket(inox_net_socket* socket) : socket_(socket) {}
-
-inox_net_socket* NetSocket::raw() const {
-  return socket_;
-}
-
-static void inox_net_throw_failed(const char* message) {
-  inox::throw_value(inox::String(message == 0 ? "TypeError: net operation failed" : message));
-}
-
-static bool inox_net_copy_host(inox::StringView host, const char* fallback, char* out, size_t out_len) {
-  const char* bytes = host.len == 0 && fallback != 0 ? fallback : host.bytes;
-  size_t len = host.len == 0 && fallback != 0 ? strlen(fallback) : host.len;
-
-  if (bytes == 0 || out == 0 || out_len == 0 || len >= out_len) {
-    return false;
-  }
-
-  if (len != 0) {
-    memcpy(out, bytes, len);
-  }
-
-  out[len] = '\0';
-  return true;
-}
-
-static NetError inox_net_error_from_status(inox_status status) {
-  if (status == INOX_OK) {
-    return NetError::None;
-  }
-
-  if (status == INOX_ERR_OOM) {
-    return NetError::OutOfMemory;
-  }
-
-  if (status == INOX_ERR_FIELD) {
-    return NetError::Field;
-  }
-
-  if (status == INOX_ERR_UNSUPPORTED) {
-    return NetError::Unsupported;
-  }
-
-  return NetError::Type;
-}
+#include "inox/object.h"
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
 #include "loop-libuv-internal.h"
+#endif
 
-#include <stdio.h>
-#include <stdlib.h>
+namespace {
 
-struct NetWriteRequest {
-  uv_write_t request;
-  inox_net_socket* socket;
-  char* bytes;
-  size_t length;
-  int close_after;
-  NetSocketWriteFn callback;
-  void* user;
-};
+void throwNetError(const char* message) {
+  inox::throw_value(inox::String(message == nullptr ? "TypeError: net operation failed" : message));
+}
 
-struct NetConnectRequest {
-  uv_connect_t request;
-  inox_net_socket* socket;
-  NetConnectFn connect;
-};
+inox::Value materializeNetError(const inox::String& message) {
+  static const inox_field_info fields[] = {
+    {"message", INOX_FIELD_READONLY},
+  };
+  static const inox_shape shape = {1, fields};
 
-struct inox_net_server {
-  inox_loop* loop;
-  inox_allocator* allocator;
-  NetConnectionFn connection;
-  void* user;
-  NetServerFn listening;
-  void* listening_user;
-  NetServerFn close;
-  void* close_user;
-  NetServerErrorFn error;
-  void* error_user;
-  uv_tcp_t handle;
-  int closing;
-  int retained;
-};
+  inox::ObjectValue object = inox::ObjectValue::create(&shape);
 
-struct inox_net_socket {
-  inox_loop* loop;
-  inox_allocator* allocator;
-  NetDataFn data;
-  void* data_user;
-  NetCloseFn close;
-  void* close_user;
-  NetSocketFn connect_event;
-  void* connect_user;
-  NetSocketFn ready;
-  void* ready_user;
-  NetSocketFn end;
-  void* end_user;
-  NetSocketFn close_event;
-  void* close_event_user;
-  NetSocketErrorFn error;
-  void* error_user;
-  NetSocketFn drain;
-  void* drain_user;
-  void* user;
-  uv_tcp_t handle;
-  size_t bytes_read;
-  size_t bytes_written;
-  int closing;
-  int retained;
-  int utf8_encoding;
-};
+  if (!object.valid() || inox::thrown()) {
+    return inox::Value();
+  }
 
-static inox_status inox_net_ip4_addr(const char* host, int port, struct sockaddr_in* out);
-static inox_status inox_net_resolve_ip4_addr(inox_loop* loop, const char* host, int port, struct sockaddr_in* out);
-static inox_status inox_net_sockaddr_to_address(const struct sockaddr* addr, NetAddress* out);
-static inox_status inox_net_socket_init(inox_loop* loop, inox_net_socket** out);
-static void inox_net_server_report_status(inox_net_server* server, inox_status status);
-static void inox_net_socket_report_status(inox_net_socket* socket, inox_status status);
-static void inox_net_connection_cb(uv_stream_t* server_handle, int status);
-static void inox_net_connect_cb(uv_connect_t* request, int status);
-static void inox_net_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
-static void inox_net_read_cb(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf);
-static void inox_net_write_cb(uv_write_t* request, int status);
-static void inox_net_server_close_cb(uv_handle_t* handle);
-static void inox_net_socket_close_cb(uv_handle_t* handle);
+  object.init(0, message.raw());
 
-NetServer NetServer::create(
-  NetConnectionFn connection,
-  void* user
+  if (inox::thrown()) {
+    return inox::Value();
+  }
+
+  return object;
+}
+
+bool hasText(inox::StringView value, const char* expected) {
+  const std::size_t length = std::strlen(expected);
+  return value.len == length && std::memcmp(value.bytes, expected, length) == 0;
+}
+
+bool readObjectField(const inox::Value& object, const char* name, inox::Value& out, bool& present) {
+  const inox_value raw = object.raw();
+
+  if (raw.tag != INOX_TAG_OBJECT && raw.tag != INOX_TAG_CLASS_INSTANCE) {
+    throwNetError("TypeError: net options must be an object");
+    return false;
+  }
+
+  const inox_status status = inox_object_get(raw, name, std::strlen(name), out.out());
+
+  if (status == INOX_ERR_FIELD) {
+    present = false;
+    return true;
+  }
+
+  if (status != INOX_OK) {
+    throwNetError("TypeError: net option read failed");
+    return false;
+  }
+
+  present = true;
+  return true;
+}
+
+bool readOptionalNumber(
+  const inox::Value& object,
+  const char* name,
+  std::optional<double>& out,
+  double minimum,
+  double maximum
 ) {
-  inox_loop* loop = inox::loop();
+  inox::Value field;
+  bool present = false;
 
-  if (loop == 0 || loop->allocator == 0) {
-    inox_net_throw_failed("TypeError: NetServer.create failed");
-    return NetServer();
+  if (!readObjectField(object, name, field, present)) {
+    return false;
   }
 
-  uv_loop_t* uv_loop = inox_libuv_loop_handle(loop);
-
-  if (uv_loop == 0) {
-    inox_net_throw_failed("TypeError: NetServer.create failed");
-    return NetServer();
+  if (!present || field.tag == INOX_TAG_UNDEFINED) {
+    out.reset();
+    return true;
   }
 
-  inox_allocator* allocator = loop->allocator;
-  inox_net_server* server = (inox_net_server*)allocator->alloc(allocator->user, sizeof(inox_net_server), alignof(inox_net_server));
-
-  if (server == 0) {
-    inox_net_throw_failed("TypeError: NetServer allocation failed");
-    return NetServer();
+  if (field.tag != INOX_TAG_NUMBER || !std::isfinite(field.as.number) || std::floor(field.as.number) != field.as.number ||
+      field.as.number < minimum || field.as.number > maximum) {
+    throwNetError("TypeError: net numeric option is invalid");
+    return false;
   }
 
-  memset(server, 0, sizeof(inox_net_server));
-  server->loop = loop;
-  server->allocator = allocator;
-  server->connection = connection;
-  server->user = user;
-
-  if (uv_tcp_init(uv_loop, &server->handle) != 0) {
-    allocator->free(allocator->user, server, sizeof(inox_net_server), alignof(inox_net_server));
-    inox_net_throw_failed("TypeError: NetServer.create failed");
-    return NetServer();
-  }
-
-  if (inox_libuv_loop_retain_request(loop) != INOX_OK) {
-    uv_close((uv_handle_t*)&server->handle, 0);
-    uv_run(uv_loop, UV_RUN_NOWAIT);
-    allocator->free(allocator->user, server, sizeof(inox_net_server), alignof(inox_net_server));
-    inox_net_throw_failed("TypeError: NetServer.create failed");
-    return NetServer();
-  }
-
-  server->retained = 1;
-  server->handle.data = server;
-
-  return NetServer(server);
+  out = field.as.number;
+  return true;
 }
 
-void NetServer::onConnection(NetConnectionFn connection, void* user) const {
-  inox_net_server* server = server_;
+bool readOptionalString(const inox::Value& object, const char* name, std::optional<inox::String>& out) {
+  inox::Value field;
+  bool present = false;
 
-  if (server == 0 || server->closing) {
-    inox_net_throw_failed("TypeError: NetServer.onConnection failed");
-    return;
+  if (!readObjectField(object, name, field, present)) {
+    return false;
   }
 
-  server->connection = connection;
-  server->user = user;
+  if (!present || field.tag == INOX_TAG_UNDEFINED) {
+    out.reset();
+    return true;
+  }
 
+  if (field.tag != INOX_TAG_STRING) {
+    throwNetError("TypeError: net string option is invalid");
+    return false;
+  }
+
+  out = inox::String(std::move(field));
+  return true;
 }
 
-void NetServer::onListening(NetServerFn listening, void* user) const {
-  inox_net_server* server = server_;
-
-  if (server == 0 || server->closing) {
-    inox_net_throw_failed("TypeError: NetServer.onListening failed");
-    return;
+bool checkedInteger(double value, int minimum, int maximum, int& out, const char* message) {
+  if (!std::isfinite(value) || std::floor(value) != value || value < minimum || value > maximum) {
+    throwNetError(message);
+    return false;
   }
 
-  server->listening = listening;
-  server->listening_user = user;
-
+  out = static_cast<int>(value);
+  return true;
 }
 
-void NetServer::onClose(NetServerFn close, void* user) const {
-  inox_net_server* server = server_;
-
-  if (server == 0 || server->closing) {
-    inox_net_throw_failed("TypeError: NetServer.onClose failed");
-    return;
-  }
-
-  server->close = close;
-  server->close_user = user;
-
-}
-
-void NetServer::onError(NetServerErrorFn error, void* user) const {
-  inox_net_server* server = server_;
-
-  if (server == 0 || server->closing) {
-    inox_net_throw_failed("TypeError: NetServer.onError failed");
-    return;
-  }
-
-  server->error = error;
-  server->error_user = user;
-
-}
-
-void NetServer::listen(inox::StringView host, int port, int backlog) const {
-  inox_net_server* server = server_;
-
-  if (server == 0 || server->closing) {
-    inox_net_throw_failed("TypeError: NetServer.listen failed");
-    return;
-  }
-
-  struct sockaddr_in addr;
-  char host_buffer[256];
-
-  if (!inox_net_copy_host(host, "0.0.0.0", host_buffer, sizeof(host_buffer))) {
-    inox_net_throw_failed("TypeError: NetServer.listen failed");
-    return;
-  }
-
-  inox_status status = inox_net_ip4_addr(host_buffer, port, &addr);
-
-  if (status != INOX_OK) {
-    inox_net_throw_failed("TypeError: NetServer.listen failed");
-    return;
-  }
-
-  if (uv_tcp_bind(&server->handle, (const struct sockaddr*)&addr, 0) != 0) {
-    inox_net_throw_failed("TypeError: NetServer.listen failed");
-    return;
-  }
-
-  if (uv_listen((uv_stream_t*)&server->handle, backlog <= 0 ? 128 : backlog, inox_net_connection_cb) != 0) {
-    inox_net_throw_failed("TypeError: NetServer.listen failed");
-    return;
-  }
-
-  if (server->listening != 0) {
-    server->listening(server->listening_user, NetServer(server));
-
-    if (inox::thrown()) {
-      inox_net_server_report_status(server, INOX_ERR_TYPE);
-      inox_net_throw_failed("TypeError: NetServer.listen callback failed");
-      return;
-    }
-  }
-}
-
-NetAddress NetServer::address() const {
-  NetAddress out = {};
-  inox_net_server* server = server_;
-
-  if (server == 0) {
-    inox_net_throw_failed("TypeError: NetServer.address failed");
-    return out;
-  }
-
-  struct sockaddr_storage addr;
-  int len = sizeof(addr);
-
-  if (uv_tcp_getsockname(&server->handle, (struct sockaddr*)&addr, &len) != 0) {
-    inox_net_throw_failed("TypeError: NetServer.address failed");
-    return out;
-  }
-
-  if (inox_net_sockaddr_to_address((const struct sockaddr*)&addr, &out) != INOX_OK) {
-    inox_net_throw_failed("TypeError: NetServer.address failed");
-  }
-
-  return out;
-}
-
-int NetServer::localPort() const {
-  return address().port;
-}
-
-void NetServer::close() const {
-  inox_net_server* server = server_;
-
-  if (server == 0 || server->closing) {
-    return;
-  }
-
-  server->closing = 1;
-  uv_close((uv_handle_t*)&server->handle, inox_net_server_close_cb);
-}
-
-NetSocket NetSocket::connect(
-  inox::StringView host,
-  int port,
-  NetConnectFn connect,
-  NetDataFn data,
-  NetCloseFn close,
-  void* user
-) {
-  inox_loop* loop = inox::loop();
-
-  if (loop == 0) {
-    inox_net_throw_failed("TypeError: NetSocket.connect failed");
-    return NetSocket();
-  }
-
-  char host_buffer[256];
-
-  if (!inox_net_copy_host(host, 0, host_buffer, sizeof(host_buffer))) {
-    inox_net_throw_failed("TypeError: NetSocket.connect failed");
-    return NetSocket();
-  }
-
-  inox_net_socket* socket = 0;
-  inox_status status = inox_net_socket_init(loop, &socket);
-
-  if (status != INOX_OK) {
-    inox_net_throw_failed("TypeError: NetSocket.connect failed");
-    return NetSocket();
-  }
-
-  inox_allocator* allocator = loop->allocator;
-  NetConnectRequest* request =
-    (NetConnectRequest*)allocator->alloc(allocator->user, sizeof(NetConnectRequest), alignof(NetConnectRequest));
-
-  if (request == 0) {
-    NetSocket(socket).close();
-    inox_net_throw_failed("TypeError: NetSocket connect allocation failed");
-    return NetSocket();
-  }
-
-  memset(request, 0, sizeof(NetConnectRequest));
-  request->socket = socket;
-  request->connect = connect;
-  request->request.data = request;
-
-  struct sockaddr_in addr;
-  status = inox_net_resolve_ip4_addr(loop, host_buffer, port, &addr);
-
-  if (status != INOX_OK) {
-    allocator->free(allocator->user, request, sizeof(NetConnectRequest), alignof(NetConnectRequest));
-    NetSocket(socket).close();
-    inox_net_throw_failed("TypeError: NetSocket.connect failed");
-    return NetSocket();
-  }
-
-  status = inox_libuv_loop_retain_request(loop);
-
-  if (status != INOX_OK) {
-    allocator->free(allocator->user, request, sizeof(NetConnectRequest), alignof(NetConnectRequest));
-    NetSocket(socket).close();
-    inox_net_throw_failed("TypeError: NetSocket.connect failed");
-    return NetSocket();
-  }
-
-  socket->handle.data = socket;
-
-  if (uv_tcp_connect(&request->request, &socket->handle, (const struct sockaddr*)&addr, inox_net_connect_cb) != 0) {
-    inox_libuv_loop_release_request(loop);
-    allocator->free(allocator->user, request, sizeof(NetConnectRequest), alignof(NetConnectRequest));
-    NetSocket(socket).close();
-    inox_net_throw_failed("TypeError: NetSocket.connect failed");
-    return NetSocket();
-  }
-
-  socket->data = data;
-  socket->data_user = user;
-  socket->close = close;
-  socket->close_user = user;
-  socket->user = user;
-
-  return NetSocket(socket);
-}
-
-void NetSocket::setCallbacks(NetDataFn data, NetCloseFn close, void* user) const {
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0) {
-    return;
-  }
-
-  socket->data = data;
-  socket->data_user = user;
-  socket->close = close;
-  socket->close_user = user;
-  socket->user = user;
-}
-
-void NetSocket::onConnect(NetSocketFn connect, void* user) const {
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0 || socket->closing) {
-    inox_net_throw_failed("TypeError: NetSocket.onConnect failed");
-    return;
-  }
-
-  socket->connect_event = connect;
-  socket->connect_user = user;
-
-}
-
-void NetSocket::onReady(NetSocketFn ready, void* user) const {
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0 || socket->closing) {
-    inox_net_throw_failed("TypeError: NetSocket.onReady failed");
-    return;
-  }
-
-  socket->ready = ready;
-  socket->ready_user = user;
-
-}
-
-void NetSocket::onData(NetDataFn data, void* user) const {
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0 || socket->closing) {
-    inox_net_throw_failed("TypeError: NetSocket.onData failed");
-    return;
-  }
-
-  socket->data = data;
-  socket->data_user = user;
-
-}
-
-void NetSocket::onEnd(NetSocketFn end, void* user) const {
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0 || socket->closing) {
-    inox_net_throw_failed("TypeError: NetSocket.onEnd failed");
-    return;
-  }
-
-  socket->end = end;
-  socket->end_user = user;
-
-}
-
-void NetSocket::onClose(NetSocketFn close, void* user) const {
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0 || socket->closing) {
-    inox_net_throw_failed("TypeError: NetSocket.onClose failed");
-    return;
-  }
-
-  socket->close_event = close;
-  socket->close_event_user = user;
-
-}
-
-void NetSocket::onError(NetSocketErrorFn error, void* user) const {
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0 || socket->closing) {
-    inox_net_throw_failed("TypeError: NetSocket.onError failed");
-    return;
-  }
-
-  socket->error = error;
-  socket->error_user = user;
-
-}
-
-void NetSocket::onDrain(NetSocketFn drain, void* user) const {
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0 || socket->closing) {
-    inox_net_throw_failed("TypeError: NetSocket.onDrain failed");
-    return;
-  }
-
-  socket->drain = drain;
-  socket->drain_user = user;
-
-}
-
-void NetSocket::readStart() const {
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0 || socket->closing || (socket->data == 0 && socket->end == 0)) {
-    inox_net_throw_failed("TypeError: NetSocket.readStart failed");
-    return;
-  }
-
-  if (uv_read_start((uv_stream_t*)&socket->handle, inox_net_alloc_cb, inox_net_read_cb) != 0) {
-    inox_net_throw_failed("TypeError: NetSocket.readStart failed");
-  }
-}
-
-void NetSocket::readStop() const {
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0) {
-    inox_net_throw_failed("TypeError: NetSocket.readStop failed");
-    return;
-  }
-
-  if (uv_read_stop((uv_stream_t*)&socket->handle) != 0) {
-    inox_net_throw_failed("TypeError: NetSocket.readStop failed");
-  }
-}
-
-void NetSocket::setEncoding(inox::StringView encoding) const {
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0 || socket->closing) {
-    inox_net_throw_failed("TypeError: NetSocket.setEncoding failed");
-    return;
-  }
-
-  if (encoding.len == 0) {
-    socket->utf8_encoding = 0;
-    return;
-  }
-
-  if (
-    (encoding.len == 4 && memcmp(encoding.bytes, "utf8", 4) == 0) ||
-    (encoding.len == 5 && memcmp(encoding.bytes, "utf-8", 5) == 0)
-  ) {
-    socket->utf8_encoding = 1;
-    return;
-  }
-
-  inox_net_throw_failed("TypeError: NetSocket.setEncoding unsupported encoding");
-}
-
-NetAddress NetSocket::address() const {
-  NetAddress out = {};
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0) {
-    inox_net_throw_failed("TypeError: NetSocket.address failed");
-    return out;
-  }
-
-  struct sockaddr_storage addr;
-  int len = sizeof(addr);
-
-  if (uv_tcp_getsockname(&socket->handle, (struct sockaddr*)&addr, &len) != 0) {
-    inox_net_throw_failed("TypeError: NetSocket.address failed");
-    return out;
-  }
-
-  if (inox_net_sockaddr_to_address((const struct sockaddr*)&addr, &out) != INOX_OK) {
-    inox_net_throw_failed("TypeError: NetSocket.address failed");
-  }
-
-  return out;
-}
-
-NetAddress NetSocket::remoteAddress() const {
-  NetAddress out = {};
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0) {
-    inox_net_throw_failed("TypeError: NetSocket.remoteAddress failed");
-    return out;
-  }
-
-  struct sockaddr_storage addr;
-  int len = sizeof(addr);
-
-  if (uv_tcp_getpeername(&socket->handle, (struct sockaddr*)&addr, &len) != 0) {
-    inox_net_throw_failed("TypeError: NetSocket.remoteAddress failed");
-    return out;
-  }
-
-  if (inox_net_sockaddr_to_address((const struct sockaddr*)&addr, &out) != INOX_OK) {
-    inox_net_throw_failed("TypeError: NetSocket.remoteAddress failed");
-  }
-
-  return out;
-}
-
-size_t NetSocket::bytesRead() const {
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0) {
-    inox_net_throw_failed("TypeError: NetSocket.bytesRead failed");
-    return 0;
-  }
-
-  return socket->bytes_read;
-}
-
-size_t NetSocket::bytesWritten() const {
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0) {
-    inox_net_throw_failed("TypeError: NetSocket.bytesWritten failed");
-    return 0;
-  }
-
-  return socket->bytes_written;
-}
-
-void NetSocket::setNoDelay(bool enabled) const {
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0 || socket->closing) {
-    inox_net_throw_failed("TypeError: NetSocket.setNoDelay failed");
-    return;
-  }
-
-  if (uv_tcp_nodelay(&socket->handle, enabled ? 1 : 0) != 0) {
-    inox_net_throw_failed("TypeError: NetSocket.setNoDelay failed");
-  }
-}
-
-void NetSocket::setKeepAlive(bool enabled, unsigned int initial_delay) const {
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0 || socket->closing) {
-    inox_net_throw_failed("TypeError: NetSocket.setKeepAlive failed");
-    return;
-  }
-
-  if (uv_tcp_keepalive(&socket->handle, enabled ? 1 : 0, initial_delay) != 0) {
-    inox_net_throw_failed("TypeError: NetSocket.setKeepAlive failed");
-  }
-}
-
-void NetSocket::ref() const {
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0) {
-    inox_net_throw_failed("TypeError: NetSocket.ref failed");
-    return;
-  }
-
-  uv_ref((uv_handle_t*)&socket->handle);
-}
-
-void NetSocket::unref() const {
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0) {
-    inox_net_throw_failed("TypeError: NetSocket.unref failed");
-    return;
-  }
-
-  uv_unref((uv_handle_t*)&socket->handle);
-}
-
-void NetSocket::write(inox::StringView bytes, NetSocketWriteFn callback, void* user) const {
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0 || socket->closing || (bytes.bytes == 0 && bytes.len != 0)) {
-    inox_net_throw_failed("TypeError: NetSocket.write failed");
-    return;
-  }
-
-  inox_allocator* allocator = socket->allocator;
-  NetWriteRequest* request =
-    (NetWriteRequest*)allocator->alloc(allocator->user, sizeof(NetWriteRequest), alignof(NetWriteRequest));
-
-  if (request == 0) {
-    inox_net_throw_failed("TypeError: NetSocket write allocation failed");
-    return;
-  }
-
-  memset(request, 0, sizeof(NetWriteRequest));
-  request->socket = socket;
-  request->length = bytes.len;
-  request->close_after = 0;
-  request->callback = callback;
-  request->user = user;
-
-  if (bytes.len != 0) {
-    request->bytes = (char*)allocator->alloc(allocator->user, bytes.len, alignof(char));
-
-    if (request->bytes == 0) {
-      allocator->free(allocator->user, request, sizeof(NetWriteRequest), alignof(NetWriteRequest));
-      inox_net_throw_failed("TypeError: NetSocket write allocation failed");
-      return;
-    }
-
-    memcpy(request->bytes, bytes.bytes, bytes.len);
-  }
-
-  inox_status status = inox_libuv_loop_retain_request(socket->loop);
-
-  if (status != INOX_OK) {
-    if (request->bytes != 0) {
-      allocator->free(allocator->user, request->bytes, bytes.len, alignof(char));
-    }
-
-    allocator->free(allocator->user, request, sizeof(NetWriteRequest), alignof(NetWriteRequest));
-    inox_net_throw_failed("TypeError: NetSocket.write failed");
-    return;
-  }
-
-  uv_buf_t buffer = uv_buf_init(request->bytes, (unsigned int)bytes.len);
-  request->request.data = request;
-
-  if (uv_write(&request->request, (uv_stream_t*)&socket->handle, &buffer, 1, inox_net_write_cb) != 0) {
-    inox_libuv_loop_release_request(socket->loop);
-
-    if (request->bytes != 0) {
-      allocator->free(allocator->user, request->bytes, bytes.len, alignof(char));
-    }
-
-    allocator->free(allocator->user, request, sizeof(NetWriteRequest), alignof(NetWriteRequest));
-    inox_net_throw_failed("TypeError: NetSocket.write failed");
-    return;
-  }
-}
-
-void NetSocket::end(inox::StringView bytes, NetSocketWriteFn callback, void* user) const {
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0 || socket->closing || (bytes.bytes == 0 && bytes.len != 0)) {
-    inox_net_throw_failed("TypeError: NetSocket.end failed");
-    return;
-  }
-
-  inox_allocator* allocator = socket->allocator;
-  NetWriteRequest* request =
-    (NetWriteRequest*)allocator->alloc(allocator->user, sizeof(NetWriteRequest), alignof(NetWriteRequest));
-
-  if (request == 0) {
-    inox_net_throw_failed("TypeError: NetSocket end allocation failed");
-    return;
-  }
-
-  memset(request, 0, sizeof(NetWriteRequest));
-  request->socket = socket;
-  request->length = bytes.len;
-  request->close_after = 1;
-  request->callback = callback;
-  request->user = user;
-
-  if (bytes.len != 0) {
-    request->bytes = (char*)allocator->alloc(allocator->user, bytes.len, alignof(char));
-
-    if (request->bytes == 0) {
-      allocator->free(allocator->user, request, sizeof(NetWriteRequest), alignof(NetWriteRequest));
-      inox_net_throw_failed("TypeError: NetSocket end allocation failed");
-      return;
-    }
-
-    memcpy(request->bytes, bytes.bytes, bytes.len);
-  }
-
-  inox_status status = inox_libuv_loop_retain_request(socket->loop);
-
-  if (status != INOX_OK) {
-    if (request->bytes != 0) {
-      allocator->free(allocator->user, request->bytes, bytes.len, alignof(char));
-    }
-
-    allocator->free(allocator->user, request, sizeof(NetWriteRequest), alignof(NetWriteRequest));
-    inox_net_throw_failed("TypeError: NetSocket.end failed");
-    return;
-  }
-
-  uv_buf_t buffer = uv_buf_init(request->bytes, (unsigned int)bytes.len);
-  request->request.data = request;
-
-  if (uv_write(&request->request, (uv_stream_t*)&socket->handle, &buffer, 1, inox_net_write_cb) != 0) {
-    inox_libuv_loop_release_request(socket->loop);
-
-    if (request->bytes != 0) {
-      allocator->free(allocator->user, request->bytes, bytes.len, alignof(char));
-    }
-
-    allocator->free(allocator->user, request, sizeof(NetWriteRequest), alignof(NetWriteRequest));
-    inox_net_throw_failed("TypeError: NetSocket.end failed");
-    return;
-  }
-}
-
-void NetSocket::close() const {
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0 || socket->closing) {
-    return;
-  }
-
-  socket->closing = 1;
-  uv_read_stop((uv_stream_t*)&socket->handle);
-  uv_close((uv_handle_t*)&socket->handle, inox_net_socket_close_cb);
-}
-
-void NetSocket::destroy() const {
-  inox_net_socket* socket = socket_;
-
-  if (socket == 0) {
-    inox_net_throw_failed("TypeError: NetSocket.destroy failed");
-    return;
-  }
-
-  close();
-}
-
-static inox_status inox_net_ip4_addr(const char* host, int port, struct sockaddr_in* out) {
-  if (host == 0 || out == 0 || port < 0 || port > 65535) {
+class NetServerState;
+class NetSocketState;
+
+struct NetServerHolder {
+  std::shared_ptr<NetServerState> state;
+};
+
+struct NetSocketHolder {
+  std::shared_ptr<NetSocketState> state;
+};
+
+inox_status copyServerHolder(inox_allocator* allocator, const void* instance, void** out) {
+  if (allocator == nullptr || allocator->alloc == nullptr || instance == nullptr || out == nullptr) {
     return INOX_ERR_TYPE;
   }
 
-  return uv_ip4_addr(host, port, out) == 0 ? INOX_OK : INOX_ERR_UNSUPPORTED;
+  void* memory = allocator->alloc(allocator->user, sizeof(NetServerHolder), alignof(NetServerHolder));
+
+  if (memory == nullptr) {
+    *out = nullptr;
+    return INOX_ERR_OOM;
+  }
+
+  try {
+    *out = new (memory) NetServerHolder(*static_cast<const NetServerHolder*>(instance));
+  } catch (const std::bad_alloc&) {
+    allocator->free(allocator->user, memory, sizeof(NetServerHolder), alignof(NetServerHolder));
+    *out = nullptr;
+    return INOX_ERR_OOM;
+  }
+
+  return INOX_OK;
 }
 
-static inox_status inox_net_resolve_ip4_addr(inox_loop* loop, const char* host, int port, struct sockaddr_in* out) {
-  inox_status status = inox_net_ip4_addr(host, port, out);
-
-  if (status == INOX_OK) {
-    return INOX_OK;
+void destroyServerHolder(inox_allocator* allocator, void* instance) {
+  if (allocator == nullptr || allocator->free == nullptr || instance == nullptr) {
+    return;
   }
 
-  uv_loop_t* uv_loop = inox_libuv_loop_handle(loop);
+  static_cast<NetServerHolder*>(instance)->~NetServerHolder();
+  allocator->free(allocator->user, instance, sizeof(NetServerHolder), alignof(NetServerHolder));
+}
 
-  if (uv_loop == 0 || host == 0 || out == 0 || port < 0 || port > 65535) {
-    return status;
+inox_status copySocketHolder(inox_allocator* allocator, const void* instance, void** out) {
+  if (allocator == nullptr || allocator->alloc == nullptr || instance == nullptr || out == nullptr) {
+    return INOX_ERR_TYPE;
   }
 
-  char service[16];
-  int written = snprintf(service, sizeof(service), "%d", port);
+  void* memory = allocator->alloc(allocator->user, sizeof(NetSocketHolder), alignof(NetSocketHolder));
 
-  if (written <= 0 || (size_t)written >= sizeof(service)) {
-    return INOX_ERR_UNSUPPORTED;
+  if (memory == nullptr) {
+    *out = nullptr;
+    return INOX_ERR_OOM;
   }
 
-  struct addrinfo hints;
-  memset(&hints, 0, sizeof(hints));
+  try {
+    *out = new (memory) NetSocketHolder(*static_cast<const NetSocketHolder*>(instance));
+  } catch (const std::bad_alloc&) {
+    allocator->free(allocator->user, memory, sizeof(NetSocketHolder), alignof(NetSocketHolder));
+    *out = nullptr;
+    return INOX_ERR_OOM;
+  }
+
+  return INOX_OK;
+}
+
+void destroySocketHolder(inox_allocator* allocator, void* instance) {
+  if (allocator == nullptr || allocator->free == nullptr || instance == nullptr) {
+    return;
+  }
+
+  static_cast<NetSocketHolder*>(instance)->~NetSocketHolder();
+  allocator->free(allocator->user, instance, sizeof(NetSocketHolder), alignof(NetSocketHolder));
+}
+
+inox_status readServerField(const void* instance, std::uint32_t index, inox_value* out) {
+  (void)instance;
+  (void)index;
+  (void)out;
+  return INOX_ERR_FIELD;
+}
+
+inox_status readSocketField(const void* instance, std::uint32_t index, inox_value* out);
+
+const inox_class_field_descriptor socketFields[] = {
+  {"bytesRead", "number", "number", "value", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
+  {"bytesWritten", "number", "number", "value", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
+  {"localAddress", "string", "string", "owned", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
+  {"localPort", "number", "number", "value", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
+  {"remoteAddress", "string", "string", "owned", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
+  {"remotePort", "number", "number", "value", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
+};
+
+const inox_class_descriptor serverDescriptor = {
+  "Server",
+  0,
+  nullptr,
+  readServerField,
+  copyServerHolder,
+  destroyServerHolder,
+};
+
+const inox_class_descriptor socketDescriptor = {
+  "Socket",
+  6,
+  socketFields,
+  readSocketField,
+  copySocketHolder,
+  destroySocketHolder,
+};
+
+template <typename Holder>
+const Holder* holderFromValue(const inox::Value& value, const inox_class_descriptor& descriptor) {
+  const inox_value raw = value.raw();
+
+  if (raw.tag != INOX_TAG_CLASS_INSTANCE || raw.as.ref == nullptr) {
+    return nullptr;
+  }
+
+  const auto* ref = reinterpret_cast<const inox_class_instance_ref*>(raw.as.ref);
+
+  if (ref->descriptor != &descriptor || ref->instance == nullptr) {
+    return nullptr;
+  }
+
+  return static_cast<const Holder*>(ref->instance);
+}
+
+std::shared_ptr<NetServerState> serverState(const NetServer& server) {
+  const NetServerHolder* holder = holderFromValue<NetServerHolder>(server, serverDescriptor);
+  return holder == nullptr ? std::shared_ptr<NetServerState>() : holder->state;
+}
+
+std::shared_ptr<NetSocketState> socketState(const NetSocket& socket) {
+  const NetSocketHolder* holder = holderFromValue<NetSocketHolder>(socket, socketDescriptor);
+  return holder == nullptr ? std::shared_ptr<NetSocketState>() : holder->state;
+}
+
+NetServer materializeServer(const std::shared_ptr<NetServerState>& state) {
+  if (!state) {
+    return NetServer();
+  }
+
+  const NetServerHolder holder = {state};
+  inox_value value = inox_undefined_value();
+  const inox_status status = inox_class_instance_ref_copy(
+    &inox_default_allocator,
+    &serverDescriptor,
+    &holder,
+    &value
+  );
+
+  if (status != INOX_OK) {
+    throwNetError("TypeError: NetServer materialization failed");
+    return NetServer();
+  }
+
+  return NetServer(inox::adopt(value));
+}
+
+NetSocket materializeSocket(const std::shared_ptr<NetSocketState>& state) {
+  if (!state) {
+    return NetSocket();
+  }
+
+  const NetSocketHolder holder = {state};
+  inox_value value = inox_undefined_value();
+  const inox_status status = inox_class_instance_ref_copy(
+    &inox_default_allocator,
+    &socketDescriptor,
+    &holder,
+    &value
+  );
+
+  if (status != INOX_OK) {
+    throwNetError("TypeError: NetSocket materialization failed");
+    return NetSocket();
+  }
+
+  return NetSocket(inox::adopt(value));
+}
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+
+void reportCallbackStatus(inox_loop* loop) {
+  if (inox::thrown()) {
+    inox_libuv_loop_report_status(loop, INOX_ERR_THROW);
+  }
+}
+
+void callListeners(inox_loop* loop, const std::vector<inox::Callback>& source) {
+  std::vector<inox::Callback> listeners;
+
+  try {
+    listeners = source;
+  } catch (const std::bad_alloc&) {
+    inox_libuv_loop_report_status(loop, INOX_ERR_OOM);
+    return;
+  }
+
+  for (const inox::Callback& listener : listeners) {
+    inox::Value result = listener.call();
+    (void)result;
+
+    if (inox::thrown()) {
+      reportCallbackStatus(loop);
+      return;
+    }
+  }
+}
+
+void callListeners(inox_loop* loop, const std::vector<inox::Callback>& source, const inox::Value& argument) {
+  std::vector<inox::Callback> listeners;
+
+  try {
+    listeners = source;
+  } catch (const std::bad_alloc&) {
+    inox_libuv_loop_report_status(loop, INOX_ERR_OOM);
+    return;
+  }
+
+  const std::array<inox::Value, 1> arguments = {argument};
+
+  for (const inox::Callback& listener : listeners) {
+    inox::Value result = listener.call(std::span<const inox::Value>(arguments));
+    (void)result;
+
+    if (inox::thrown()) {
+      reportCallbackStatus(loop);
+      return;
+    }
+  }
+}
+
+NetAddress socketAddress(uv_tcp_t& handle, bool remote) {
+  NetAddress result = {inox::String(""), inox::String(""), 0};
+  sockaddr_storage address = {};
+  int length = sizeof(address);
+  const int status = remote
+    ? uv_tcp_getpeername(&handle, reinterpret_cast<sockaddr*>(&address), &length)
+    : uv_tcp_getsockname(&handle, reinterpret_cast<sockaddr*>(&address), &length);
+
+  if (status != 0 || address.ss_family != AF_INET) {
+    throwNetError("TypeError: net address is unavailable");
+    return result;
+  }
+
+  char host[INET_ADDRSTRLEN] = {};
+  const auto* ipv4 = reinterpret_cast<const sockaddr_in*>(&address);
+
+  if (uv_ip4_name(ipv4, host, sizeof(host)) != 0) {
+    throwNetError("TypeError: net address conversion failed");
+    return result;
+  }
+
+  result.address = inox::String(host);
+  result.family = inox::String("IPv4");
+  result.port = ntohs(ipv4->sin_port);
+  return result;
+}
+
+bool resolveIpv4(inox_loop* loop, inox::StringView host, int port, bool bind_address, sockaddr_in& out) {
+  const char* fallback = bind_address ? "0.0.0.0" : "127.0.0.1";
+  std::string hostname;
+
+  try {
+    hostname.assign(host.len == 0 ? fallback : host.bytes, host.len == 0 ? std::strlen(fallback) : host.len);
+  } catch (const std::bad_alloc&) {
+    throwNetError("TypeError: net address allocation failed");
+    return false;
+  }
+
+  if (uv_ip4_addr(hostname.c_str(), port, &out) == 0) {
+    return true;
+  }
+
+  uv_loop_t* uv_loop = loop == nullptr ? nullptr : inox_libuv_loop_handle(loop);
+
+  if (uv_loop == nullptr) {
+    throwNetError("TypeError: net address resolution failed");
+    return false;
+  }
+
+  char service[16] = {};
+  const int service_length = std::snprintf(service, sizeof(service), "%d", port);
+
+  if (service_length <= 0 || static_cast<std::size_t>(service_length) >= sizeof(service)) {
+    throwNetError("TypeError: net address resolution failed");
+    return false;
+  }
+
+  addrinfo hints = {};
   hints.ai_family = AF_INET;
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_protocol = IPPROTO_TCP;
+  uv_getaddrinfo_t request = {};
 
-  uv_getaddrinfo_t resolver;
-  memset(&resolver, 0, sizeof(resolver));
-
-  if (uv_getaddrinfo(uv_loop, &resolver, 0, host, service, &hints) != 0) {
-    return status;
+  if (uv_getaddrinfo(uv_loop, &request, nullptr, hostname.c_str(), service, &hints) != 0) {
+    throwNetError("TypeError: net address resolution failed");
+    return false;
   }
 
-  inox_status resolve_status = INOX_ERR_UNSUPPORTED;
+  bool found = false;
 
-  for (struct addrinfo* item = resolver.addrinfo; item != 0; item = item->ai_next) {
-    if (item->ai_family == AF_INET && item->ai_addr != 0 && item->ai_addrlen <= sizeof(struct sockaddr_in)) {
-      memcpy(out, item->ai_addr, item->ai_addrlen);
-      resolve_status = INOX_OK;
+  for (addrinfo* item = request.addrinfo; item != nullptr; item = item->ai_next) {
+    if (item->ai_family == AF_INET && item->ai_addr != nullptr && item->ai_addrlen <= sizeof(out)) {
+      std::memcpy(&out, item->ai_addr, item->ai_addrlen);
+      found = true;
       break;
     }
   }
 
-  uv_freeaddrinfo(resolver.addrinfo);
-  return resolve_status;
+  uv_freeaddrinfo(request.addrinfo);
+
+  if (!found) {
+    throwNetError("TypeError: node:net currently supports only TCP4 addresses");
+  }
+
+  return found;
 }
 
-static inox_status inox_net_sockaddr_to_address(const struct sockaddr* addr, NetAddress* out) {
-  if (addr == 0 || out == 0) {
-    return INOX_ERR_TYPE;
+class NetSocketState : public std::enable_shared_from_this<NetSocketState> {
+public:
+  struct ConnectRequest;
+  struct WriteRequest;
+  struct ShutdownRequest;
+
+  inox_loop* loop_;
+  uv_tcp_t handle_;
+  std::vector<inox::Callback> connect_listeners_;
+  std::vector<inox::Callback> ready_listeners_;
+  std::vector<inox::Callback> data_listeners_;
+  std::vector<inox::Callback> end_listeners_;
+  std::vector<inox::Callback> close_listeners_;
+  std::vector<inox::Callback> error_listeners_;
+  std::vector<inox::Callback> drain_listeners_;
+  std::shared_ptr<NetSocketState> native_owner_;
+  std::size_t bytes_read_;
+  std::size_t bytes_written_;
+  bool initialized_;
+  bool closing_;
+  bool closed_;
+  bool reading_;
+  bool referenced_;
+  bool utf8_encoding_;
+  bool needs_drain_;
+  bool ending_;
+  bool shutdown_started_;
+  bool had_error_;
+
+  NetSocketState();
+  ~NetSocketState();
+
+  static std::shared_ptr<NetSocketState> create(inox_loop* loop);
+  static std::shared_ptr<NetSocketState> connect(
+    double port,
+    inox::StringView host,
+    inox::Callback callback
+  );
+
+  NetAddress address(bool remote) const;
+  void close(inox::Callback callback, bool had_error = false);
+  void end(inox::StringView text, inox::Callback callback);
+  void on(inox::StringView event_name, inox::Callback listener);
+  void ref();
+  void setEncoding(inox::StringView encoding);
+  void setKeepAlive(bool enabled, double initial_delay);
+  void setNoDelay(bool enabled);
+  void startReading();
+  void unref();
+  bool write(inox::StringView text, inox::Callback callback);
+  void reportError(const char* message, int status);
+  void startShutdown(inox::Callback callback);
+
+  static void closeExternalHandle(void* context);
+};
+
+class NetServerState : public std::enable_shared_from_this<NetServerState> {
+public:
+  struct ImmediateRequest;
+
+  inox_loop* loop_;
+  uv_tcp_t handle_;
+  std::vector<inox::Callback> connection_listeners_;
+  std::vector<inox::Callback> listening_listeners_;
+  std::vector<inox::Callback> close_listeners_;
+  std::vector<inox::Callback> error_listeners_;
+  std::shared_ptr<NetServerState> native_owner_;
+  bool initialized_;
+  bool listening_;
+  bool closing_;
+  bool closed_;
+
+  NetServerState();
+  ~NetServerState();
+
+  static std::shared_ptr<NetServerState> create(inox::Callback listener);
+  NetAddress address() const;
+  void close(inox::Callback callback);
+  void listen(double port, inox::StringView host, double backlog, inox::Callback callback);
+  void on(inox::StringView event_name, inox::Callback listener);
+  void reportError(const char* message, int status);
+  void queueListening();
+
+  static void closeExternalHandle(void* context);
+};
+
+struct NetSocketState::ConnectRequest {
+  uv_connect_t request;
+  std::shared_ptr<NetSocketState> socket;
+  inox::Callback callback;
+};
+
+struct NetSocketState::WriteRequest {
+  uv_write_t request;
+  std::shared_ptr<NetSocketState> socket;
+  std::vector<char> bytes;
+  inox::Callback callback;
+  bool shutdown_after;
+};
+
+struct NetSocketState::ShutdownRequest {
+  uv_shutdown_t request;
+  std::shared_ptr<NetSocketState> socket;
+  inox::Callback callback;
+};
+
+struct NetServerState::ImmediateRequest {
+  std::shared_ptr<NetServerState> server;
+};
+
+void net_server_connection_cb(uv_stream_t* stream, int status);
+void net_connect_cb(uv_connect_t* request, int status);
+void net_alloc_cb(uv_handle_t* handle, std::size_t suggested_size, uv_buf_t* buffer);
+void net_read_cb(uv_stream_t* stream, ssize_t size, const uv_buf_t* buffer);
+void net_write_cb(uv_write_t* request, int status);
+void net_shutdown_cb(uv_shutdown_t* request, int status);
+void net_server_close_cb(uv_handle_t* handle);
+void net_socket_close_cb(uv_handle_t* handle);
+
+NetSocketState::NetSocketState()
+  : loop_(nullptr),
+    handle_(),
+    connect_listeners_(),
+    ready_listeners_(),
+    data_listeners_(),
+    end_listeners_(),
+    close_listeners_(),
+    error_listeners_(),
+    drain_listeners_(),
+    native_owner_(),
+    bytes_read_(0),
+    bytes_written_(0),
+    initialized_(false),
+    closing_(false),
+    closed_(false),
+    reading_(false),
+    referenced_(true),
+    utf8_encoding_(false),
+    needs_drain_(false),
+    ending_(false),
+    shutdown_started_(false),
+    had_error_(false) {}
+
+NetSocketState::~NetSocketState() {}
+
+std::shared_ptr<NetSocketState> NetSocketState::create(inox_loop* loop) {
+  uv_loop_t* uv_loop = loop == nullptr ? nullptr : inox_libuv_loop_handle(loop);
+
+  if (loop == nullptr || uv_loop == nullptr) {
+    throwNetError("TypeError: NetSocket creation failed");
+    return {};
   }
 
-  memset(out->address, 0, sizeof(out->address));
-  out->family = inox::StringView();
-  out->port = 0;
+  std::shared_ptr<NetSocketState> socket;
 
-  if (addr->sa_family != AF_INET) {
-    return INOX_ERR_UNSUPPORTED;
+  try {
+    socket = std::make_shared<NetSocketState>();
+  } catch (const std::bad_alloc&) {
+    throwNetError("TypeError: NetSocket allocation failed");
+    return {};
   }
 
-  const struct sockaddr_in* ip4 = (const struct sockaddr_in*)addr;
-  uv_ip4_name(ip4, out->address, sizeof(out->address));
-  out->family = inox::StringView("IPv4");
-  out->port = ntohs(ip4->sin_port);
+  socket->loop_ = loop;
+  const int init_status = uv_tcp_init(uv_loop, &socket->handle_);
 
-  return INOX_OK;
+  if (init_status != 0) {
+    throwNetError("TypeError: NetSocket initialization failed");
+    return {};
+  }
+
+  socket->initialized_ = true;
+  socket->handle_.data = socket.get();
+
+  if (inox_libuv_loop_register_external_handle(loop, socket.get(), closeExternalHandle) != INOX_OK) {
+    uv_close(reinterpret_cast<uv_handle_t*>(&socket->handle_), nullptr);
+    uv_run(uv_loop, UV_RUN_NOWAIT);
+    socket->initialized_ = false;
+    throwNetError("TypeError: NetSocket registration failed");
+    return {};
+  }
+
+  socket->native_owner_ = socket;
+  return socket;
 }
 
-static inox_status inox_net_socket_init(inox_loop* loop, inox_net_socket** out) {
-  if (loop == 0 || loop->allocator == 0 || out == 0) {
-    return INOX_ERR_TYPE;
+std::shared_ptr<NetSocketState> NetSocketState::connect(
+  double port,
+  inox::StringView host,
+  inox::Callback callback
+) {
+  int port_value = 0;
+
+  if (!checkedInteger(port, 0, 65535, port_value, "TypeError: net port is invalid")) {
+    return {};
   }
 
-  *out = 0;
-  uv_loop_t* uv_loop = inox_libuv_loop_handle(loop);
+  inox_loop* loop = inox::loop();
+  std::shared_ptr<NetSocketState> socket = create(loop);
 
-  if (uv_loop == 0) {
-    return INOX_ERR_TYPE;
+  if (!socket) {
+    return {};
   }
 
-  inox_allocator* allocator = loop->allocator;
-  inox_net_socket* socket = (inox_net_socket*)allocator->alloc(allocator->user, sizeof(inox_net_socket), alignof(inox_net_socket));
+  sockaddr_in address = {};
 
-  if (socket == 0) {
+  if (!resolveIpv4(loop, host, port_value, false, address)) {
+    socket->close(inox::Callback());
+    return {};
+  }
+
+  ConnectRequest* request = new (std::nothrow) ConnectRequest{
+    uv_connect_t(),
+    socket,
+    std::move(callback),
+  };
+
+  if (request == nullptr) {
+    socket->close(inox::Callback());
+    throwNetError("TypeError: NetSocket connect allocation failed");
+    return {};
+  }
+
+  request->request.data = request;
+  const int status = uv_tcp_connect(
+    &request->request,
+    &socket->handle_,
+    reinterpret_cast<const sockaddr*>(&address),
+    net_connect_cb
+  );
+
+  if (status != 0) {
+    delete request;
+    socket->close(inox::Callback());
+    throwNetError("TypeError: NetSocket.connect failed");
+    return {};
+  }
+
+  return socket;
+}
+
+NetAddress NetSocketState::address(bool remote) const {
+  if (!initialized_ || closing_ || closed_) {
+    throwNetError("TypeError: NetSocket.address failed");
+    return {inox::String(""), inox::String(""), 0};
+  }
+
+  return socketAddress(const_cast<uv_tcp_t&>(handle_), remote);
+}
+
+void NetSocketState::reportError(const char* message, int status) {
+  if (!error_listeners_.empty()) {
+    inox::String error_message = inox::String::fromFormat(
+      "%s: %s",
+      message == nullptr ? "net operation failed" : message,
+      status == 0 ? "unknown error" : uv_strerror(status)
+    );
+    inox::Value error = materializeNetError(error_message);
+
+    if (inox::thrown() || error.tag != INOX_TAG_OBJECT) {
+      reportCallbackStatus(loop_);
+      return;
+    }
+
+    callListeners(loop_, error_listeners_, error);
+    return;
+  }
+
+  inox_libuv_loop_report_status(loop_, INOX_ERR_FIELD);
+}
+
+void NetSocketState::startReading() {
+  if (reading_ || closing_ || closed_) {
+    return;
+  }
+
+  const int status = uv_read_start(
+    reinterpret_cast<uv_stream_t*>(&handle_),
+    net_alloc_cb,
+    net_read_cb
+  );
+
+  if (status != 0) {
+    reportError("NetSocket read failed", status);
+    close(inox::Callback(), true);
+    return;
+  }
+
+  reading_ = true;
+}
+
+void NetSocketState::on(inox::StringView event_name, inox::Callback listener) {
+  if (!listener.valid()) {
+    throwNetError("TypeError: NetSocket.on requires a function");
+    return;
+  }
+
+  std::vector<inox::Callback>* listeners = nullptr;
+
+  if (hasText(event_name, "connect")) listeners = &connect_listeners_;
+  else if (hasText(event_name, "ready")) listeners = &ready_listeners_;
+  else if (hasText(event_name, "data")) listeners = &data_listeners_;
+  else if (hasText(event_name, "end")) listeners = &end_listeners_;
+  else if (hasText(event_name, "close")) listeners = &close_listeners_;
+  else if (hasText(event_name, "error")) listeners = &error_listeners_;
+  else if (hasText(event_name, "drain")) listeners = &drain_listeners_;
+  else {
+    throwNetError("TypeError: unsupported NetSocket event");
+    return;
+  }
+
+  try {
+    listeners->push_back(std::move(listener));
+  } catch (const std::bad_alloc&) {
+    throwNetError("TypeError: NetSocket listener allocation failed");
+  }
+}
+
+void NetSocketState::close(inox::Callback callback, bool had_error) {
+  had_error_ = had_error_ || had_error;
+
+  if (closed_) {
+    return;
+  }
+
+  if (callback.valid()) {
+    try {
+      close_listeners_.push_back(std::move(callback));
+    } catch (const std::bad_alloc&) {
+      throwNetError("TypeError: NetSocket close callback allocation failed");
+      return;
+    }
+  }
+
+  if (!initialized_ || closing_) {
+    return;
+  }
+
+  closing_ = true;
+
+  if (reading_) {
+    uv_read_stop(reinterpret_cast<uv_stream_t*>(&handle_));
+    reading_ = false;
+  }
+
+  uv_close(reinterpret_cast<uv_handle_t*>(&handle_), net_socket_close_cb);
+}
+
+bool NetSocketState::write(inox::StringView text, inox::Callback callback) {
+  if (!initialized_ || closing_ || closed_ || ending_ || shutdown_started_) {
+    throwNetError("TypeError: NetSocket.write failed");
+    return false;
+  }
+
+  WriteRequest* request = new (std::nothrow) WriteRequest{
+    uv_write_t(),
+    shared_from_this(),
+    std::vector<char>(),
+    std::move(callback),
+    false,
+  };
+
+  if (request == nullptr) {
+    throwNetError("TypeError: NetSocket write allocation failed");
+    return false;
+  }
+
+  try {
+    request->bytes.assign(text.bytes, text.bytes + text.len);
+  } catch (const std::bad_alloc&) {
+    delete request;
+    throwNetError("TypeError: NetSocket write allocation failed");
+    return false;
+  }
+
+  request->request.data = request;
+  uv_buf_t buffer = uv_buf_init(
+    request->bytes.empty() ? nullptr : request->bytes.data(),
+    static_cast<unsigned int>(request->bytes.size())
+  );
+  const int status = uv_write(
+    &request->request,
+    reinterpret_cast<uv_stream_t*>(&handle_),
+    &buffer,
+    1,
+    net_write_cb);
+
+  if (status != 0) {
+    delete request;
+    throwNetError("TypeError: NetSocket.write failed");
+    return false;
+  }
+
+  constexpr std::size_t highWaterMark = 16 * 1024;
+  needs_drain_ = uv_stream_get_write_queue_size(reinterpret_cast<uv_stream_t*>(&handle_)) >= highWaterMark;
+  return !needs_drain_;
+}
+
+void NetSocketState::startShutdown(inox::Callback callback) {
+  if (shutdown_started_) {
+    throwNetError("TypeError: NetSocket.end failed");
+    return;
+  }
+
+  shutdown_started_ = true;
+  ShutdownRequest* request = new (std::nothrow) ShutdownRequest{
+    uv_shutdown_t(),
+    shared_from_this(),
+    std::move(callback),
+  };
+
+  if (request == nullptr) {
+    shutdown_started_ = false;
+    throwNetError("TypeError: NetSocket shutdown allocation failed");
+    return;
+  }
+
+  request->request.data = request;
+  const int status = uv_shutdown(
+    &request->request,
+    reinterpret_cast<uv_stream_t*>(&handle_),
+    net_shutdown_cb);
+
+  if (status != 0) {
+    shutdown_started_ = false;
+    delete request;
+    throwNetError("TypeError: NetSocket.end failed");
+  }
+}
+
+void NetSocketState::end(inox::StringView text, inox::Callback callback) {
+  if (!initialized_ || closing_ || closed_ || ending_ || shutdown_started_) {
+    throwNetError("TypeError: NetSocket.end failed");
+    return;
+  }
+
+  ending_ = true;
+
+  if (text.len == 0) {
+    startShutdown(std::move(callback));
+
+    if (inox::thrown()) {
+      ending_ = false;
+    }
+
+    return;
+  }
+
+  WriteRequest* request = new (std::nothrow) WriteRequest{
+    uv_write_t(),
+    shared_from_this(),
+    std::vector<char>(),
+    std::move(callback),
+    true,
+  };
+
+  if (request == nullptr) {
+    ending_ = false;
+    throwNetError("TypeError: NetSocket end allocation failed");
+    return;
+  }
+
+  try {
+    request->bytes.assign(text.bytes, text.bytes + text.len);
+  } catch (const std::bad_alloc&) {
+    delete request;
+    ending_ = false;
+    throwNetError("TypeError: NetSocket end allocation failed");
+    return;
+  }
+
+  request->request.data = request;
+  uv_buf_t buffer = uv_buf_init(request->bytes.data(), static_cast<unsigned int>(request->bytes.size()));
+  const int status = uv_write(
+    &request->request,
+    reinterpret_cast<uv_stream_t*>(&handle_),
+    &buffer,
+    1,
+    net_write_cb);
+
+  if (status != 0) {
+    delete request;
+    ending_ = false;
+    throwNetError("TypeError: NetSocket.end failed");
+  }
+}
+
+void NetSocketState::setEncoding(inox::StringView encoding) {
+  if (encoding.len == 0) {
+    utf8_encoding_ = false;
+    return;
+  }
+
+  if (!hasText(encoding, "utf8") && !hasText(encoding, "utf-8")) {
+    throwNetError("TypeError: NetSocket.setEncoding supports only utf8");
+    return;
+  }
+
+  utf8_encoding_ = true;
+}
+
+void NetSocketState::setKeepAlive(bool enabled, double initial_delay) {
+  int delay = 0;
+
+  if (!checkedInteger(
+        initial_delay,
+        0,
+        std::numeric_limits<int>::max(),
+        delay,
+        "TypeError: NetSocket.setKeepAlive initialDelay is invalid"
+      )) {
+    return;
+  }
+
+  const int status = uv_tcp_keepalive(&handle_, enabled ? 1 : 0, static_cast<unsigned int>(delay));
+
+  if (status != 0) {
+    throwNetError("TypeError: NetSocket.setKeepAlive failed");
+  }
+}
+
+void NetSocketState::setNoDelay(bool enabled) {
+  if (uv_tcp_nodelay(&handle_, enabled ? 1 : 0) != 0) {
+    throwNetError("TypeError: NetSocket.setNoDelay failed");
+  }
+}
+
+void NetSocketState::ref() {
+  if (!referenced_) {
+    uv_ref(reinterpret_cast<uv_handle_t*>(&handle_));
+    referenced_ = true;
+  }
+}
+
+void NetSocketState::unref() {
+  if (referenced_) {
+    uv_unref(reinterpret_cast<uv_handle_t*>(&handle_));
+    referenced_ = false;
+  }
+}
+
+void NetSocketState::closeExternalHandle(void* context) {
+  auto* socket = static_cast<NetSocketState*>(context);
+
+  if (socket != nullptr) {
+    socket->connect_listeners_.clear();
+    socket->ready_listeners_.clear();
+    socket->data_listeners_.clear();
+    socket->end_listeners_.clear();
+    socket->close_listeners_.clear();
+    socket->error_listeners_.clear();
+    socket->drain_listeners_.clear();
+    socket->close(inox::Callback());
+  }
+}
+
+NetServerState::NetServerState()
+  : loop_(nullptr),
+    handle_(),
+    connection_listeners_(),
+    listening_listeners_(),
+    close_listeners_(),
+    error_listeners_(),
+    native_owner_(),
+    initialized_(false),
+    listening_(false),
+    closing_(false),
+    closed_(false) {}
+
+NetServerState::~NetServerState() {}
+
+std::shared_ptr<NetServerState> NetServerState::create(inox::Callback listener) {
+  inox_loop* loop = inox::loop();
+  uv_loop_t* uv_loop = loop == nullptr ? nullptr : inox_libuv_loop_handle(loop);
+
+  if (loop == nullptr || uv_loop == nullptr) {
+    throwNetError("TypeError: NetServer creation failed");
+    return {};
+  }
+
+  std::shared_ptr<NetServerState> server;
+
+  try {
+    server = std::make_shared<NetServerState>();
+  } catch (const std::bad_alloc&) {
+    throwNetError("TypeError: NetServer allocation failed");
+    return {};
+  }
+
+  server->loop_ = loop;
+
+  if (listener.valid()) {
+    try {
+      server->connection_listeners_.push_back(std::move(listener));
+    } catch (const std::bad_alloc&) {
+      throwNetError("TypeError: NetServer listener allocation failed");
+      return {};
+    }
+  }
+
+  if (uv_tcp_init(uv_loop, &server->handle_) != 0) {
+    throwNetError("TypeError: NetServer initialization failed");
+    return {};
+  }
+
+  server->initialized_ = true;
+  server->handle_.data = server.get();
+
+  if (inox_libuv_loop_register_external_handle(loop, server.get(), closeExternalHandle) != INOX_OK) {
+    uv_close(reinterpret_cast<uv_handle_t*>(&server->handle_), nullptr);
+    uv_run(uv_loop, UV_RUN_NOWAIT);
+    server->initialized_ = false;
+    throwNetError("TypeError: NetServer registration failed");
+    return {};
+  }
+
+  server->native_owner_ = server;
+  return server;
+}
+
+NetAddress NetServerState::address() const {
+  if (!initialized_ || closing_ || closed_ || !listening_) {
+    throwNetError("TypeError: NetServer.address failed");
+    return {inox::String(""), inox::String(""), 0};
+  }
+
+  return socketAddress(const_cast<uv_tcp_t&>(handle_), false);
+}
+
+void NetServerState::reportError(const char* message, int status) {
+  if (!error_listeners_.empty()) {
+    inox::String error_message = inox::String::fromFormat(
+      "%s: %s",
+      message == nullptr ? "net server failed" : message,
+      status == 0 ? "unknown error" : uv_strerror(status)
+    );
+    inox::Value error = materializeNetError(error_message);
+
+    if (inox::thrown() || error.tag != INOX_TAG_OBJECT) {
+      reportCallbackStatus(loop_);
+      return;
+    }
+
+    callListeners(loop_, error_listeners_, error);
+    return;
+  }
+
+  inox_libuv_loop_report_status(loop_, INOX_ERR_FIELD);
+}
+
+inox_status runListeningImmediate(void* context) {
+  auto* request = static_cast<NetServerState::ImmediateRequest*>(context);
+
+  if (request == nullptr || !request->server) {
+    return INOX_OK;
+  }
+
+  try {
+    std::vector<inox::Callback> listeners = request->server->listening_listeners_;
+
+    for (const inox::Callback& listener : listeners) {
+      inox::Value result = listener.call();
+      (void)result;
+
+      if (inox::thrown()) {
+        return INOX_ERR_THROW;
+      }
+    }
+  } catch (const std::bad_alloc&) {
     return INOX_ERR_OOM;
   }
 
-  memset(socket, 0, sizeof(inox_net_socket));
-  socket->loop = loop;
-  socket->allocator = allocator;
-
-  if (uv_tcp_init(uv_loop, &socket->handle) != 0) {
-    allocator->free(allocator->user, socket, sizeof(inox_net_socket), alignof(inox_net_socket));
-    return INOX_ERR_FIELD;
-  }
-
-  if (inox_libuv_loop_retain_request(loop) != INOX_OK) {
-    uv_close((uv_handle_t*)&socket->handle, 0);
-    uv_run(uv_loop, UV_RUN_NOWAIT);
-    allocator->free(allocator->user, socket, sizeof(inox_net_socket), alignof(inox_net_socket));
-    return INOX_ERR_TYPE;
-  }
-
-  socket->retained = 1;
-  socket->handle.data = socket;
-  *out = socket;
-
   return INOX_OK;
 }
 
-static void inox_net_server_report_status(inox_net_server* server, inox_status status) {
-  if (server == 0 || status == INOX_OK) {
-    return;
-  }
-
-  if (server->error != 0) {
-    server->error(server->error_user, NetServer(server), inox_net_error_from_status(status));
-
-    if (inox::thrown()) {
-      inox_libuv_loop_report_status(server->loop, INOX_ERR_TYPE);
-    }
-
-    return;
-  }
-
-  inox_libuv_loop_report_status(server->loop, status);
+void finalizeListeningImmediate(void* context) {
+  delete static_cast<NetServerState::ImmediateRequest*>(context);
 }
 
-static void inox_net_socket_report_status(inox_net_socket* socket, inox_status status) {
-  if (socket == 0 || status == INOX_OK) {
+void NetServerState::queueListening() {
+  ImmediateRequest* request = new (std::nothrow) ImmediateRequest{shared_from_this()};
+
+  if (request == nullptr) {
+    throwNetError("TypeError: NetServer listening callback allocation failed");
     return;
   }
 
-  if (socket->error != 0) {
-    socket->error(socket->error_user, NetSocket(socket), inox_net_error_from_status(status));
-
-    if (inox::thrown()) {
-      inox_libuv_loop_report_status(socket->loop, INOX_ERR_TYPE);
-    }
-
-    return;
+  if (inox_loop_queue_immediate(
+        loop_,
+        runListeningImmediate,
+        request,
+        finalizeListeningImmediate,
+        nullptr
+      ) != INOX_OK) {
+    delete request;
+    throwNetError("TypeError: NetServer listening callback queue failed");
   }
-
-  inox_libuv_loop_report_status(socket->loop, status);
 }
 
-static void inox_net_connection_cb(uv_stream_t* server_handle, int status) {
-  inox_net_server* server = server_handle == 0 ? 0 : (inox_net_server*)server_handle->data;
+void NetServerState::listen(double port, inox::StringView host, double backlog, inox::Callback callback) {
+  if (!initialized_ || listening_ || closing_ || closed_) {
+    throwNetError("TypeError: NetServer.listen failed");
+    return;
+  }
 
-  if (server == 0) {
+  int port_value = 0;
+  int backlog_value = 0;
+
+  if (!checkedInteger(port, 0, 65535, port_value, "TypeError: net port is invalid") ||
+      !checkedInteger(
+        backlog,
+        1,
+        std::numeric_limits<int>::max(),
+        backlog_value,
+        "TypeError: net backlog is invalid"
+      )) {
+    return;
+  }
+
+  if (callback.valid()) {
+    try {
+      listening_listeners_.push_back(std::move(callback));
+    } catch (const std::bad_alloc&) {
+      throwNetError("TypeError: NetServer listening callback allocation failed");
+      return;
+    }
+  }
+
+  sockaddr_in address = {};
+
+  if (!resolveIpv4(loop_, host, port_value, true, address)) {
+    return;
+  }
+
+  int status = uv_tcp_bind(&handle_, reinterpret_cast<const sockaddr*>(&address), 0);
+
+  if (status == 0) {
+    status = uv_listen(reinterpret_cast<uv_stream_t*>(&handle_), backlog_value, net_server_connection_cb);
+  }
+
+  if (status != 0) {
+    reportError("NetServer.listen failed", status);
+    return;
+  }
+
+  listening_ = true;
+  queueListening();
+}
+
+void NetServerState::on(inox::StringView event_name, inox::Callback listener) {
+  if (!listener.valid()) {
+    throwNetError("TypeError: NetServer.on requires a function");
+    return;
+  }
+
+  std::vector<inox::Callback>* listeners = nullptr;
+
+  if (hasText(event_name, "connection")) listeners = &connection_listeners_;
+  else if (hasText(event_name, "listening")) listeners = &listening_listeners_;
+  else if (hasText(event_name, "close")) listeners = &close_listeners_;
+  else if (hasText(event_name, "error")) listeners = &error_listeners_;
+  else {
+    throwNetError("TypeError: unsupported NetServer event");
+    return;
+  }
+
+  try {
+    listeners->push_back(std::move(listener));
+  } catch (const std::bad_alloc&) {
+    throwNetError("TypeError: NetServer listener allocation failed");
+  }
+}
+
+void NetServerState::close(inox::Callback callback) {
+  if (closed_) {
+    throwNetError("TypeError: NetServer.close failed: server is not running");
+    return;
+  }
+
+  if (callback.valid()) {
+    try {
+      close_listeners_.push_back(std::move(callback));
+    } catch (const std::bad_alloc&) {
+      throwNetError("TypeError: NetServer close callback allocation failed");
+      return;
+    }
+  }
+
+  if (!initialized_ || closing_) {
+    return;
+  }
+
+  closing_ = true;
+  uv_close(reinterpret_cast<uv_handle_t*>(&handle_), net_server_close_cb);
+}
+
+void NetServerState::closeExternalHandle(void* context) {
+  auto* server = static_cast<NetServerState*>(context);
+
+  if (server != nullptr) {
+    server->connection_listeners_.clear();
+    server->listening_listeners_.clear();
+    server->close_listeners_.clear();
+    server->error_listeners_.clear();
+    server->close(inox::Callback());
+  }
+}
+
+void net_server_connection_cb(uv_stream_t* stream, int status) {
+  auto* server = stream == nullptr ? nullptr : static_cast<NetServerState*>(stream->data);
+
+  if (server == nullptr) {
     return;
   }
 
   if (status != 0) {
-    inox_net_server_report_status(server, INOX_ERR_FIELD);
+    server->reportError("NetServer connection failed", status);
     return;
   }
 
-  inox_net_socket* socket = 0;
-  inox_status inox_status_value = inox_net_socket_init(server->loop, &socket);
+  std::shared_ptr<NetSocketState> socket = NetSocketState::create(server->loop_);
 
-  if (inox_status_value != INOX_OK) {
-    inox_net_server_report_status(server, inox_status_value);
+  if (!socket) {
+    server->reportError("NetServer socket creation failed", UV_ENOMEM);
     return;
   }
 
-  if (uv_accept(server_handle, (uv_stream_t*)&socket->handle) != 0) {
-    NetSocket(socket).close();
-    inox_net_server_report_status(server, INOX_ERR_FIELD);
+  const int accept_status = uv_accept(stream, reinterpret_cast<uv_stream_t*>(&socket->handle_));
+
+  if (accept_status != 0) {
+    socket->close(inox::Callback());
+    server->reportError("NetServer accept failed", accept_status);
     return;
   }
 
-  if (server->connection == 0) {
-    NetSocket(socket).close();
-    return;
-  }
+  socket->startReading();
+  NetSocket facade = materializeSocket(socket);
 
-  server->connection(server->user, NetServer(server), NetSocket(socket));
-
-  if (inox::thrown()) {
-    inox_net_server_report_status(server, INOX_ERR_TYPE);
+  if (!inox::thrown()) {
+    callListeners(server->loop_, server->connection_listeners_, facade);
   }
 }
 
-static void inox_net_connect_cb(uv_connect_t* request, int status) {
-  NetConnectRequest* connect_request = request == 0 ? 0 : (NetConnectRequest*)request->data;
+void net_connect_cb(uv_connect_t* raw_request, int status) {
+  auto* request = raw_request == nullptr
+    ? nullptr
+    : static_cast<NetSocketState::ConnectRequest*>(raw_request->data);
 
-  if (connect_request == 0 || connect_request->socket == 0) {
+  if (request == nullptr || !request->socket) {
     return;
   }
 
-  inox_net_socket* socket = connect_request->socket;
-  NetConnectFn connect = connect_request->connect;
-  inox_status connect_status = status == 0 ? INOX_OK : INOX_ERR_FIELD;
-
-  inox_libuv_loop_release_request(socket->loop);
-
-  if (connect != 0) {
-    connect(socket->user, NetSocket(socket), inox_net_error_from_status(connect_status));
-
-    if (inox::thrown()) {
-      inox_net_socket_report_status(socket, INOX_ERR_TYPE);
-    }
-  }
-
-  if (connect_status != INOX_OK) {
-    inox_net_socket_report_status(socket, connect_status);
-    NetSocket(socket).close();
-  } else {
-    if (socket->connect_event != 0) {
-      socket->connect_event(socket->connect_user, NetSocket(socket));
-
-      if (inox::thrown()) {
-        inox_net_socket_report_status(socket, INOX_ERR_TYPE);
-      }
-    }
-
-    if (socket->ready != 0) {
-      socket->ready(socket->ready_user, NetSocket(socket));
-
-      if (inox::thrown()) {
-        inox_net_socket_report_status(socket, INOX_ERR_TYPE);
-      }
-    }
-  }
-
-  socket->allocator->free(
-    socket->allocator->user,
-    connect_request,
-    sizeof(NetConnectRequest),
-    alignof(NetConnectRequest)
-  );
-}
-
-static void inox_net_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
-  inox_net_socket* socket = handle == 0 ? 0 : (inox_net_socket*)handle->data;
-  size_t len = suggested_size == 0 ? 65536 : suggested_size;
-
-  if (socket == 0 || socket->allocator == 0) {
-    *buf = uv_buf_init(0, 0);
-    return;
-  }
-
-  char* bytes = (char*)socket->allocator->alloc(socket->allocator->user, len, alignof(char));
-
-  *buf = uv_buf_init(bytes, bytes == 0 ? 0 : (unsigned int)len);
-}
-
-static void inox_net_read_cb(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
-  inox_net_socket* socket = stream == 0 ? 0 : (inox_net_socket*)stream->data;
-
-  if (socket == 0) {
-    return;
-  }
-
-  if (nread < 0) {
-    if (nread == UV_EOF && socket->end != 0) {
-      socket->end(socket->end_user, NetSocket(socket));
-
-      if (inox::thrown()) {
-        inox_net_socket_report_status(socket, INOX_ERR_TYPE);
-      }
-    } else if (nread != UV_EOF) {
-      inox_net_socket_report_status(socket, INOX_ERR_FIELD);
-    }
-
-    NetSocket(socket).close();
-  } else if (nread > 0 && socket->data != 0) {
-    socket->bytes_read += (size_t)nread;
-    socket->data(socket->data_user, NetSocket(socket), inox::StringView(buf->base, (size_t)nread));
-
-    if (inox::thrown()) {
-      inox_net_socket_report_status(socket, INOX_ERR_TYPE);
-    }
-  }
-
-  if (buf != 0 && buf->base != 0) {
-    socket->allocator->free(socket->allocator->user, buf->base, buf->len, alignof(char));
-  }
-}
-
-static void inox_net_write_cb(uv_write_t* request, int status) {
-  NetWriteRequest* write = request == 0 ? 0 : (NetWriteRequest*)request->data;
-
-  if (write == 0 || write->socket == 0) {
-    return;
-  }
-
-  inox_net_socket* socket = write->socket;
+  std::shared_ptr<NetSocketState> socket = request->socket;
+  inox::Callback callback = std::move(request->callback);
+  delete request;
 
   if (status != 0) {
-    inox_net_socket_report_status(socket, INOX_ERR_FIELD);
-  } else {
-    socket->bytes_written += write->length;
-  }
-
-  inox_libuv_loop_release_request(socket->loop);
-
-  if (write->callback != 0) {
-    write->callback(write->user, NetSocket(socket), status == 0 ? NetError::None : NetError::Field);
-
-    if (inox::thrown()) {
-      inox_net_socket_report_status(socket, INOX_ERR_TYPE);
-    }
-  }
-
-  if (status == 0 && socket->drain != 0) {
-    socket->drain(socket->drain_user, NetSocket(socket));
-
-    if (inox::thrown()) {
-      inox_net_socket_report_status(socket, INOX_ERR_TYPE);
-    }
-  }
-
-  if (write->close_after) {
-    NetSocket(socket).close();
-  }
-
-  if (write->bytes != 0) {
-    socket->allocator->free(socket->allocator->user, write->bytes, write->length, alignof(char));
-  }
-
-  socket->allocator->free(socket->allocator->user, write, sizeof(NetWriteRequest), alignof(NetWriteRequest));
-}
-
-static void inox_net_server_close_cb(uv_handle_t* handle) {
-  inox_net_server* server = handle == 0 ? 0 : (inox_net_server*)handle->data;
-
-  if (server == 0) {
+    socket->reportError("NetSocket.connect failed", status);
+    socket->close(inox::Callback(), true);
     return;
   }
 
-  if (server->close != 0) {
-    server->close(server->close_user, NetServer(server));
+  socket->startReading();
 
-    if (inox::thrown()) {
-      inox_net_server_report_status(server, INOX_ERR_TYPE);
-    }
+  if (callback.valid()) {
+    inox::Value result = callback.call();
+    (void)result;
+    reportCallbackStatus(socket->loop_);
   }
 
-  if (server->retained) {
-    inox_libuv_loop_release_request(server->loop);
-  }
-
-  server->allocator->free(server->allocator->user, server, sizeof(inox_net_server), alignof(inox_net_server));
+  if (!inox::thrown()) callListeners(socket->loop_, socket->connect_listeners_);
+  if (!inox::thrown()) callListeners(socket->loop_, socket->ready_listeners_);
 }
 
-static void inox_net_socket_close_cb(uv_handle_t* handle) {
-  inox_net_socket* socket = handle == 0 ? 0 : (inox_net_socket*)handle->data;
+void net_alloc_cb(uv_handle_t* handle, std::size_t suggested_size, uv_buf_t* buffer) {
+  (void)handle;
+  const std::size_t length = suggested_size == 0 ? 65536 : suggested_size;
+  char* bytes = new (std::nothrow) char[length];
+  *buffer = uv_buf_init(bytes, bytes == nullptr ? 0 : static_cast<unsigned int>(length));
+}
 
-  if (socket == 0) {
+void net_read_cb(uv_stream_t* stream, ssize_t size, const uv_buf_t* buffer) {
+  auto* socket = stream == nullptr ? nullptr : static_cast<NetSocketState*>(stream->data);
+  char* bytes = buffer == nullptr ? nullptr : buffer->base;
+
+  if (socket == nullptr) {
+    delete[] bytes;
     return;
   }
 
-  if (socket->close != 0) {
-    socket->close(socket->close_user, NetSocket(socket));
+  if (size > 0) {
+    socket->bytes_read_ += static_cast<std::size_t>(size);
+    inox::String data(bytes, static_cast<std::size_t>(size));
+
+    if (data.valid() && !inox::thrown()) {
+      callListeners(socket->loop_, socket->data_listeners_, data);
+    } else {
+      inox_libuv_loop_report_status(socket->loop_, INOX_ERR_OOM);
+    }
+  } else if (size == UV_EOF) {
+    if (socket->reading_) {
+      uv_read_stop(stream);
+      socket->reading_ = false;
+    }
+
+    callListeners(socket->loop_, socket->end_listeners_);
+    socket->close(inox::Callback());
+  } else if (size < 0) {
+    if (socket->reading_) {
+      uv_read_stop(stream);
+      socket->reading_ = false;
+    }
+
+    socket->reportError("NetSocket read failed", static_cast<int>(size));
+    socket->close(inox::Callback(), true);
   }
 
-  if (socket->close_event != 0) {
-    socket->close_event(socket->close_event_user, NetSocket(socket));
+  delete[] bytes;
+}
+
+void net_write_cb(uv_write_t* raw_request, int status) {
+  auto* request = raw_request == nullptr
+    ? nullptr
+    : static_cast<NetSocketState::WriteRequest*>(raw_request->data);
+
+  if (request == nullptr || !request->socket) {
+    return;
+  }
+
+  std::shared_ptr<NetSocketState> socket = request->socket;
+  inox::Callback callback = std::move(request->callback);
+  const bool shutdown_after = request->shutdown_after;
+  const std::size_t length = request->bytes.size();
+  delete request;
+
+  if (status != 0) {
+    socket->reportError("NetSocket.write failed", status);
+    socket->close(inox::Callback(), true);
+    return;
+  }
+
+  socket->bytes_written_ += length;
+
+  if (shutdown_after) {
+    socket->startShutdown(std::move(callback));
 
     if (inox::thrown()) {
-      inox_net_socket_report_status(socket, INOX_ERR_TYPE);
+      reportCallbackStatus(socket->loop_);
+      socket->close(inox::Callback(), true);
     }
+
+    return;
   }
 
-  if (socket->retained) {
-    inox_libuv_loop_release_request(socket->loop);
+  if (callback.valid()) {
+    inox::Value result = callback.call();
+    (void)result;
+    reportCallbackStatus(socket->loop_);
   }
 
-  socket->allocator->free(socket->allocator->user, socket, sizeof(inox_net_socket), alignof(inox_net_socket));
+  if (socket->needs_drain_ &&
+      uv_stream_get_write_queue_size(reinterpret_cast<uv_stream_t*>(&socket->handle_)) == 0) {
+    socket->needs_drain_ = false;
+    callListeners(socket->loop_, socket->drain_listeners_);
+  }
+}
+
+void net_shutdown_cb(uv_shutdown_t* raw_request, int status) {
+  auto* request = raw_request == nullptr
+    ? nullptr
+    : static_cast<NetSocketState::ShutdownRequest*>(raw_request->data);
+
+  if (request == nullptr || !request->socket) {
+    return;
+  }
+
+  std::shared_ptr<NetSocketState> socket = request->socket;
+  inox::Callback callback = std::move(request->callback);
+  delete request;
+
+  if (status != 0) {
+    socket->reportError("NetSocket.end failed", status);
+    socket->close(inox::Callback(), true);
+    return;
+  }
+
+  if (callback.valid()) {
+    inox::Value result = callback.call();
+    (void)result;
+    reportCallbackStatus(socket->loop_);
+  }
+}
+
+void net_server_close_cb(uv_handle_t* handle) {
+  auto* server = handle == nullptr ? nullptr : static_cast<NetServerState*>(handle->data);
+
+  if (server == nullptr) {
+    return;
+  }
+
+  std::shared_ptr<NetServerState> owner = server->native_owner_;
+  server->closed_ = true;
+  server->initialized_ = false;
+  server->listening_ = false;
+  inox_libuv_loop_unregister_external_handle(server->loop_, server);
+  std::vector<inox::Callback> close_listeners_ = std::move(server->close_listeners_);
+  server->connection_listeners_.clear();
+  server->listening_listeners_.clear();
+  server->error_listeners_.clear();
+  callListeners(server->loop_, close_listeners_);
+  server->native_owner_.reset();
+}
+
+void net_socket_close_cb(uv_handle_t* handle) {
+  auto* socket = handle == nullptr ? nullptr : static_cast<NetSocketState*>(handle->data);
+
+  if (socket == nullptr) {
+    return;
+  }
+
+  std::shared_ptr<NetSocketState> owner = socket->native_owner_;
+  socket->closed_ = true;
+  socket->initialized_ = false;
+  inox_libuv_loop_unregister_external_handle(socket->loop_, socket);
+  std::vector<inox::Callback> close_listeners_ = std::move(socket->close_listeners_);
+  socket->connect_listeners_.clear();
+  socket->ready_listeners_.clear();
+  socket->data_listeners_.clear();
+  socket->end_listeners_.clear();
+  socket->error_listeners_.clear();
+  socket->drain_listeners_.clear();
+  const inox::Value had_error(inox_bool_value(socket->had_error_));
+  callListeners(socket->loop_, close_listeners_, had_error);
+  socket->native_owner_.reset();
 }
 
 #else
 
-struct inox_net_server {
-  int unused;
-};
-
-struct inox_net_socket {
-  int unused;
-};
-
-NetServer NetServer::create(
-  NetConnectionFn connection,
-  void* user
-) {
-  (void)connection;
-  (void)user;
-
-  inox_net_throw_failed("TypeError: NetServer is unsupported without libuv");
-  return NetServer();
-}
-
-void NetServer::onConnection(NetConnectionFn connection, void* user) const {
-  (void)server_;
-  (void)connection;
-  (void)user;
-  inox_net_throw_failed("TypeError: NetServer is unsupported without libuv");
-}
-
-void NetServer::onListening(NetServerFn listening, void* user) const {
-  (void)server_;
-  (void)listening;
-  (void)user;
-  inox_net_throw_failed("TypeError: NetServer is unsupported without libuv");
-}
-
-void NetServer::onClose(NetServerFn close, void* user) const {
-  (void)server_;
-  (void)close;
-  (void)user;
-  inox_net_throw_failed("TypeError: NetServer is unsupported without libuv");
-}
-
-void NetServer::onError(NetServerErrorFn error, void* user) const {
-  (void)server_;
-  (void)error;
-  (void)user;
-  inox_net_throw_failed("TypeError: NetServer is unsupported without libuv");
-}
-
-void NetServer::listen(inox::StringView host, int port, int backlog) const {
-  (void)server_;
-  (void)host;
-  (void)port;
-  (void)backlog;
-  inox_net_throw_failed("TypeError: NetServer is unsupported without libuv");
-}
-
-NetAddress NetServer::address() const {
-  (void)server_;
-  NetAddress out = {};
-  inox_net_throw_failed("TypeError: NetServer is unsupported without libuv");
-  return out;
-}
-
-int NetServer::localPort() const {
-  (void)server_;
-  inox_net_throw_failed("TypeError: NetServer is unsupported without libuv");
-  return 0;
-}
-
-void NetServer::close() const {
-  (void)server_;
-}
-
-NetSocket NetSocket::connect(
-  inox::StringView host,
-  int port,
-  NetConnectFn connect,
-  NetDataFn data,
-  NetCloseFn close,
-  void* user
-) {
-  (void)host;
-  (void)port;
-  (void)connect;
-  (void)data;
-  (void)close;
-  (void)user;
-
-  inox_net_throw_failed("TypeError: NetSocket is unsupported without libuv");
-  return NetSocket();
-}
-
-void NetSocket::setCallbacks(NetDataFn data, NetCloseFn close, void* user) const {
-  (void)socket_;
-  (void)data;
-  (void)close;
-  (void)user;
-}
-
-void NetSocket::onConnect(NetSocketFn connect, void* user) const {
-  (void)socket_;
-  (void)connect;
-  (void)user;
-  inox_net_throw_failed("TypeError: NetSocket is unsupported without libuv");
-}
-
-void NetSocket::onReady(NetSocketFn ready, void* user) const {
-  (void)socket_;
-  (void)ready;
-  (void)user;
-  inox_net_throw_failed("TypeError: NetSocket is unsupported without libuv");
-}
-
-void NetSocket::onData(NetDataFn data, void* user) const {
-  (void)socket_;
-  (void)data;
-  (void)user;
-  inox_net_throw_failed("TypeError: NetSocket is unsupported without libuv");
-}
-
-void NetSocket::onEnd(NetSocketFn end, void* user) const {
-  (void)socket_;
-  (void)end;
-  (void)user;
-  inox_net_throw_failed("TypeError: NetSocket is unsupported without libuv");
-}
-
-void NetSocket::onClose(NetSocketFn close, void* user) const {
-  (void)socket_;
-  (void)close;
-  (void)user;
-  inox_net_throw_failed("TypeError: NetSocket is unsupported without libuv");
-}
-
-void NetSocket::onError(NetSocketErrorFn error, void* user) const {
-  (void)socket_;
-  (void)error;
-  (void)user;
-  inox_net_throw_failed("TypeError: NetSocket is unsupported without libuv");
-}
-
-void NetSocket::onDrain(NetSocketFn drain, void* user) const {
-  (void)socket_;
-  (void)drain;
-  (void)user;
-  inox_net_throw_failed("TypeError: NetSocket is unsupported without libuv");
-}
-
-void NetSocket::readStart() const {
-  (void)socket_;
-  inox_net_throw_failed("TypeError: NetSocket is unsupported without libuv");
-}
-
-void NetSocket::readStop() const {
-  (void)socket_;
-  inox_net_throw_failed("TypeError: NetSocket is unsupported without libuv");
-}
-
-void NetSocket::setEncoding(inox::StringView encoding) const {
-  (void)socket_;
-  (void)encoding;
-  inox_net_throw_failed("TypeError: NetSocket is unsupported without libuv");
-}
-
-NetAddress NetSocket::address() const {
-  (void)socket_;
-  NetAddress out = {};
-  inox_net_throw_failed("TypeError: NetSocket is unsupported without libuv");
-  return out;
-}
-
-NetAddress NetSocket::remoteAddress() const {
-  (void)socket_;
-  NetAddress out = {};
-  inox_net_throw_failed("TypeError: NetSocket is unsupported without libuv");
-  return out;
-}
-
-size_t NetSocket::bytesRead() const {
-  (void)socket_;
-  inox_net_throw_failed("TypeError: NetSocket is unsupported without libuv");
-  return 0;
-}
-
-size_t NetSocket::bytesWritten() const {
-  (void)socket_;
-  inox_net_throw_failed("TypeError: NetSocket is unsupported without libuv");
-  return 0;
-}
-
-void NetSocket::setNoDelay(bool enabled) const {
-  (void)socket_;
-  (void)enabled;
-  inox_net_throw_failed("TypeError: NetSocket is unsupported without libuv");
-}
-
-void NetSocket::setKeepAlive(bool enabled, unsigned int initial_delay) const {
-  (void)socket_;
-  (void)enabled;
-  (void)initial_delay;
-  inox_net_throw_failed("TypeError: NetSocket is unsupported without libuv");
-}
-
-void NetSocket::ref() const {
-  (void)socket_;
-  inox_net_throw_failed("TypeError: NetSocket is unsupported without libuv");
-}
-
-void NetSocket::unref() const {
-  (void)socket_;
-  inox_net_throw_failed("TypeError: NetSocket is unsupported without libuv");
-}
-
-void NetSocket::write(inox::StringView bytes, NetSocketWriteFn callback, void* user) const {
-  (void)socket_;
-  (void)bytes;
-  (void)callback;
-  (void)user;
-  inox_net_throw_failed("TypeError: NetSocket is unsupported without libuv");
-}
-
-void NetSocket::end(inox::StringView bytes, NetSocketWriteFn callback, void* user) const {
-  (void)socket_;
-  (void)bytes;
-  (void)callback;
-  (void)user;
-  inox_net_throw_failed("TypeError: NetSocket is unsupported without libuv");
-}
-
-void NetSocket::destroy() const {
-  (void)socket_;
-  inox_net_throw_failed("TypeError: NetSocket is unsupported without libuv");
-}
-
-void NetSocket::close() const {
-  (void)socket_;
-}
+class NetServerState {};
+class NetSocketState {};
 
 #endif
+
+inox_status readSocketField(const void* instance, std::uint32_t index, inox_value* out) {
+  if (instance == nullptr || out == nullptr) {
+    return INOX_ERR_TYPE;
+  }
+
+  const auto* holder = static_cast<const NetSocketHolder*>(instance);
+  NetSocket socket = materializeSocket(holder->state);
+
+  if (!holder->state || inox::thrown()) {
+    return INOX_ERR_TYPE;
+  }
+
+  switch (index) {
+    case 0:
+      *out = inox_number_value(socket.bytesRead());
+      return INOX_OK;
+    case 1:
+      *out = inox_number_value(socket.bytesWritten());
+      return INOX_OK;
+    case 2:
+      return socket.localAddress().copy_to(out);
+    case 3:
+      *out = inox_number_value(socket.localPort());
+      return INOX_OK;
+    case 4:
+      return socket.remoteAddress().copy_to(out);
+    case 5:
+      *out = inox_number_value(socket.remotePort());
+      return INOX_OK;
+    default:
+      return INOX_ERR_FIELD;
+  }
+}
+
+std::shared_ptr<NetSocketState> connectSocket(
+  double port,
+  inox::StringView host,
+  inox::Callback callback
+) {
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  return NetSocketState::connect(port, host, std::move(callback));
+#else
+  (void)port;
+  (void)host;
+  (void)callback;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+  return {};
+#endif
+}
+
+} // namespace
+
+NetListenOptions::NetListenOptions() : valid_(true), port_(), host_(), backlog_() {}
+
+NetListenOptions::NetListenOptions(const inox::Value& value)
+  : valid_(false), port_(), host_(), backlog_() {
+  if (!readOptionalNumber(value, "port", port_, 0, 65535) ||
+      !readOptionalString(value, "host", host_) ||
+      !readOptionalNumber(value, "backlog", backlog_, 1, std::numeric_limits<int>::max())) {
+    return;
+  }
+
+  valid_ = true;
+}
+
+NetConnectionOptions::NetConnectionOptions() : valid_(false), port_(), host_() {}
+
+NetConnectionOptions::NetConnectionOptions(const inox::Value& value)
+  : valid_(false), port_(), host_() {
+  if (!readOptionalNumber(value, "port", port_, 0, 65535) ||
+      !readOptionalString(value, "host", host_)) {
+    return;
+  }
+
+  if (!port_) {
+    throwNetError("TypeError: net connection options require port");
+    return;
+  }
+
+  valid_ = true;
+}
+
+NetServer::NetServer() : inox::Value() {}
+NetServer::NetServer(const inox::Value& value) : inox::Value(value) {}
+NetServer::NetServer(inox::Value&& value) : inox::Value(std::move(value)) {}
+
+NetAddress NetServer::address() const {
+  std::shared_ptr<NetServerState> state = serverState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) return state->address();
+#endif
+
+  throwNetError("TypeError: NetServer.address failed");
+  return {inox::String(""), inox::String(""), 0};
+}
+
+NetServer& NetServer::close() {
+  return close(inox::Callback());
+}
+
+NetServer& NetServer::close(inox::Callback callback) {
+  std::shared_ptr<NetServerState> state = serverState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) state->close(std::move(callback));
+  else throwNetError("TypeError: NetServer.close failed");
+#else
+  (void)state;
+  (void)callback;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return *this;
+}
+
+NetServer& NetServer::listen() {
+  return listen(0, inox::StringView("0.0.0.0"), 128, inox::Callback());
+}
+
+NetServer& NetServer::listen(inox::Callback callback) {
+  return listen(0, inox::StringView("0.0.0.0"), 128, std::move(callback));
+}
+
+NetServer& NetServer::listen(double port) {
+  return listen(port, inox::StringView("0.0.0.0"), 128, inox::Callback());
+}
+
+NetServer& NetServer::listen(double port, double backlog) {
+  return listen(port, inox::StringView("0.0.0.0"), backlog, inox::Callback());
+}
+
+NetServer& NetServer::listen(double port, inox::Callback callback) {
+  return listen(port, inox::StringView("0.0.0.0"), 128, std::move(callback));
+}
+
+NetServer& NetServer::listen(double port, inox::StringView host) {
+  return listen(port, host, 128, inox::Callback());
+}
+
+NetServer& NetServer::listen(double port, inox::StringView host, inox::Callback callback) {
+  return listen(port, host, 128, std::move(callback));
+}
+
+NetServer& NetServer::listen(double port, inox::StringView host, double backlog) {
+  return listen(port, host, backlog, inox::Callback());
+}
+
+NetServer& NetServer::listen(double port, double backlog, inox::Callback callback) {
+  return listen(port, inox::StringView("0.0.0.0"), backlog, std::move(callback));
+}
+
+NetServer& NetServer::listen(
+  double port,
+  inox::StringView host,
+  double backlog,
+  inox::Callback callback
+) {
+  std::shared_ptr<NetServerState> state = serverState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) state->listen(port, host, backlog, std::move(callback));
+  else throwNetError("TypeError: NetServer.listen failed");
+#else
+  (void)state;
+  (void)port;
+  (void)host;
+  (void)backlog;
+  (void)callback;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return *this;
+}
+
+NetServer& NetServer::listen(const NetListenOptions& options) {
+  return listen(options, inox::Callback());
+}
+
+NetServer& NetServer::listen(const NetListenOptions& options, inox::Callback callback) {
+  if (inox::thrown() || !options.valid_) {
+    return *this;
+  }
+
+  const double port = options.port_.value_or(0);
+  const inox::StringView host = options.host_
+    ? inox::StringView(*options.host_)
+    : inox::StringView("0.0.0.0");
+  return listen(port, host, options.backlog_.value_or(128), std::move(callback));
+}
+
+NetServer& NetServer::on(inox::StringView event_name, inox::Callback listener) {
+  std::shared_ptr<NetServerState> state = serverState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) state->on(event_name, std::move(listener));
+  else throwNetError("TypeError: NetServer.on failed");
+#else
+  (void)state;
+  (void)event_name;
+  (void)listener;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return *this;
+}
+
+NetSocket::NetSocket() : inox::Value() {}
+NetSocket::NetSocket(const inox::Value& value) : inox::Value(value) {}
+NetSocket::NetSocket(inox::Value&& value) : inox::Value(std::move(value)) {}
+
+NetAddress NetSocket::address() const {
+  std::shared_ptr<NetSocketState> state = socketState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) return state->address(false);
+#endif
+
+  throwNetError("TypeError: NetSocket.address failed");
+  return {inox::String(""), inox::String(""), 0};
+}
+
+double NetSocket::bytesRead() const {
+  std::shared_ptr<NetSocketState> state = socketState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) return static_cast<double>(state->bytes_read_);
+#endif
+
+  throwNetError("TypeError: NetSocket.bytesRead failed");
+  return 0;
+}
+
+double NetSocket::bytesWritten() const {
+  std::shared_ptr<NetSocketState> state = socketState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) return static_cast<double>(state->bytes_written_);
+#endif
+
+  throwNetError("TypeError: NetSocket.bytesWritten failed");
+  return 0;
+}
+
+NetSocket& NetSocket::destroy() {
+  std::shared_ptr<NetSocketState> state = socketState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) state->close(inox::Callback());
+  else throwNetError("TypeError: NetSocket.destroy failed");
+#else
+  (void)state;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return *this;
+}
+
+NetSocket& NetSocket::end() {
+  return end(inox::StringView(), inox::Callback());
+}
+
+NetSocket& NetSocket::end(inox::Callback callback) {
+  return end(inox::StringView(), std::move(callback));
+}
+
+NetSocket& NetSocket::end(inox::StringView text) {
+  return end(text, inox::Callback());
+}
+
+NetSocket& NetSocket::end(inox::StringView text, inox::Callback callback) {
+  std::shared_ptr<NetSocketState> state = socketState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) state->end(text, std::move(callback));
+  else throwNetError("TypeError: NetSocket.end failed");
+#else
+  (void)state;
+  (void)text;
+  (void)callback;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return *this;
+}
+
+inox::String NetSocket::localAddress() const {
+  return address().address;
+}
+
+double NetSocket::localPort() const {
+  return address().port;
+}
+
+NetSocket& NetSocket::on(inox::StringView event_name, inox::Callback listener) {
+  std::shared_ptr<NetSocketState> state = socketState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) state->on(event_name, std::move(listener));
+  else throwNetError("TypeError: NetSocket.on failed");
+#else
+  (void)state;
+  (void)event_name;
+  (void)listener;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return *this;
+}
+
+NetSocket& NetSocket::ref() {
+  std::shared_ptr<NetSocketState> state = socketState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) state->ref();
+  else throwNetError("TypeError: NetSocket.ref failed");
+#else
+  (void)state;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return *this;
+}
+
+inox::String NetSocket::remoteAddress() const {
+  std::shared_ptr<NetSocketState> state = socketState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) return state->address(true).address;
+#endif
+
+  throwNetError("TypeError: NetSocket.remoteAddress failed");
+  return inox::String("");
+}
+
+double NetSocket::remotePort() const {
+  std::shared_ptr<NetSocketState> state = socketState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) return state->address(true).port;
+#endif
+
+  throwNetError("TypeError: NetSocket.remotePort failed");
+  return 0;
+}
+
+NetSocket& NetSocket::setEncoding(inox::StringView encoding) {
+  std::shared_ptr<NetSocketState> state = socketState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) state->setEncoding(encoding);
+  else throwNetError("TypeError: NetSocket.setEncoding failed");
+#else
+  (void)state;
+  (void)encoding;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return *this;
+}
+
+NetSocket& NetSocket::setKeepAlive() {
+  return setKeepAlive(false, 0);
+}
+
+NetSocket& NetSocket::setKeepAlive(bool enabled) {
+  return setKeepAlive(enabled, 0);
+}
+
+NetSocket& NetSocket::setKeepAlive(bool enabled, double initial_delay) {
+  std::shared_ptr<NetSocketState> state = socketState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) state->setKeepAlive(enabled, initial_delay);
+  else throwNetError("TypeError: NetSocket.setKeepAlive failed");
+#else
+  (void)state;
+  (void)enabled;
+  (void)initial_delay;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return *this;
+}
+
+NetSocket& NetSocket::setNoDelay() {
+  return setNoDelay(true);
+}
+
+NetSocket& NetSocket::setNoDelay(bool enabled) {
+  std::shared_ptr<NetSocketState> state = socketState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) state->setNoDelay(enabled);
+  else throwNetError("TypeError: NetSocket.setNoDelay failed");
+#else
+  (void)state;
+  (void)enabled;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return *this;
+}
+
+NetSocket& NetSocket::unref() {
+  std::shared_ptr<NetSocketState> state = socketState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) state->unref();
+  else throwNetError("TypeError: NetSocket.unref failed");
+#else
+  (void)state;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return *this;
+}
+
+bool NetSocket::write(inox::StringView text) {
+  return write(text, inox::Callback());
+}
+
+bool NetSocket::write(inox::StringView text, inox::Callback callback) {
+  std::shared_ptr<NetSocketState> state = socketState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) return state->write(text, std::move(callback));
+  throwNetError("TypeError: NetSocket.write failed");
+#else
+  (void)state;
+  (void)text;
+  (void)callback;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return false;
+}
+
+NetSocket NetModule::connect(double port) const {
+  return NetSocket(materializeSocket(connectSocket(port, inox::StringView("127.0.0.1"), inox::Callback())));
+}
+
+NetSocket NetModule::connect(double port, inox::Callback callback) const {
+  return NetSocket(materializeSocket(connectSocket(port, inox::StringView("127.0.0.1"), std::move(callback))));
+}
+
+NetSocket NetModule::connect(double port, inox::StringView host) const {
+  return NetSocket(materializeSocket(connectSocket(port, host, inox::Callback())));
+}
+
+NetSocket NetModule::connect(double port, inox::StringView host, inox::Callback callback) const {
+  return NetSocket(materializeSocket(connectSocket(port, host, std::move(callback))));
+}
+
+NetSocket NetModule::connect(const NetConnectionOptions& options) const {
+  return connect(options, inox::Callback());
+}
+
+NetSocket NetModule::connect(const NetConnectionOptions& options, inox::Callback callback) const {
+  if (inox::thrown() || !options.valid_ || !options.port_) {
+    return NetSocket();
+  }
+
+  const inox::StringView host = options.host_
+    ? inox::StringView(*options.host_)
+    : inox::StringView("127.0.0.1");
+  return NetSocket(materializeSocket(connectSocket(*options.port_, host, std::move(callback))));
+}
+
+NetServer NetModule::createServer() const {
+  return createServer(inox::Callback());
+}
+
+NetServer NetModule::createServer(inox::Callback listener) const {
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  return materializeServer(NetServerState::create(std::move(listener)));
+#else
+  (void)listener;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+  return NetServer();
+#endif
+}
+
+const NetModule net;

@@ -8,12 +8,6 @@ import {
   nodeHttpModuleObjectImportNames
 } from '../../../stdlib/node/http/compiler/descriptor.ts'
 import {
-  nodeNetConnectImportNames,
-  nodeNetCreateServerImportNames,
-  nodeNetImportSource,
-  nodeNetModuleObjectImportNames
-} from '../../../stdlib/node/net/compiler/descriptor.ts'
-import {
   nodeStreamImportSource,
   nodeStreamModuleObjectImportNames
 } from '../../../stdlib/node/stream/compiler/descriptor.ts'
@@ -28,7 +22,6 @@ export {
 } from '../../../stdlib/node/timers/compiler/descriptor.ts'
 
 export type NodeStdlibRuntimeImportKind =
-  | 'connect'
   | 'create-server'
   | 'module-object'
 
@@ -51,10 +44,6 @@ export const nodeStdlibPackageDescriptors: NodeStdlibPackageDescriptor[] = [
   {
     source: nodeHttpImportSource,
     libuvRuntimeFeature: 'node:http'
-  },
-  {
-    source: nodeNetImportSource,
-    libuvRuntimeFeature: 'node:net'
   },
   {
     source: nodeStreamImportSource,
@@ -81,21 +70,6 @@ export const nodeStdlibRuntimeImportDescriptors: NodeStdlibRuntimeImportDescript
     source: nodeHttpImportSource,
     kind: 'create-server',
     importedNames: nodeHttpCreateServerImportNames
-  },
-  {
-    source: nodeNetImportSource,
-    kind: 'module-object',
-    importedNames: nodeNetModuleObjectImportNames
-  },
-  {
-    source: nodeNetImportSource,
-    kind: 'create-server',
-    importedNames: nodeNetCreateServerImportNames
-  },
-  {
-    source: nodeNetImportSource,
-    kind: 'connect',
-    importedNames: nodeNetConnectImportNames
   },
   {
     source: nodeStreamImportSource,

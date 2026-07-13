@@ -3689,7 +3689,7 @@ class Checker {
       return 'unknown'
     }
 
-    this.checkCompilerLibraryOperationArguments(expression, operation)
+    this.checkCompilerLibraryOperationArguments(expression, operation, variant)
     this.checkCompilerLibraryBackendConstraints(expression, operation)
 
     this.checkedCallArgInfos(expression)
@@ -3757,7 +3757,11 @@ class Checker {
     return null
   }
 
-  checkCompilerLibraryOperationArguments(expression: AnyNode, operation: LibraryOperationDescriptor): void {
+  checkCompilerLibraryOperationArguments(
+    expression: AnyNode,
+    operation: LibraryOperationDescriptor,
+    variant: LibraryOperationVariantDescriptor | null = null
+  ): void {
     const minArgs = operation.minArgs
     const maxArgs = operation.maxArgs
 
@@ -3772,7 +3776,7 @@ class Checker {
       )
     }
 
-    const checks = operation.argumentChecks ?? []
+    const checks = variant?.argumentChecks ?? operation.argumentChecks ?? []
 
     for (let index = 0; index < checks.length && index < expression.args.length; index = index + 1) {
       const argument = expression.args[index]
@@ -6334,7 +6338,7 @@ class Checker {
     const variant = this.compilerLibraryOperationVariant(expression, operation)
 
     this.applyCompilerLibraryOperation(expression, operation, variant)
-    this.checkCompilerLibraryOperationArguments(expression, operation)
+    this.checkCompilerLibraryOperationArguments(expression, operation, variant)
     this.checkCompilerLibraryBackendConstraints(expression, operation)
 
     return (variant?.valueType ?? operation.valueType ?? 'object') as ValueType

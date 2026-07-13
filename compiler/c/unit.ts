@@ -71,16 +71,13 @@ import { emitCPrelude, emitMathRuntimeInitLines, filterUnusedCPreludeIncludes } 
 import { collectCReferencedFunctionPrototypeNames } from './prototype-references.ts'
 import { addDateStringRuntimeRequirements, resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
 import {
-  collectNodeNetworkHandlers,
-  emitNodeNetworkHandlerDeclarations,
-  emitNodeNetworkHandlerPrototypeLines,
-  hasNodeNetworkHandlers,
+  collectNodeHttpHandlers,
+  emitNodeHttpHandlerDeclarations,
+  emitNodeHttpHandlerPrototypeLines,
+  hasNodeHttpHandlers,
   registerNodeStdlibRuntimeImportNames
 } from '../stdlib/node/c.ts'
-import type {
-  HttpLoweringDependencies,
-  NetLoweringDependencies
-} from '../stdlib/node/c.ts'
+import type { HttpLoweringDependencies } from '../stdlib/node/c.ts'
 import type {
   CClassInfo,
   CClassMethod,
@@ -138,7 +135,6 @@ export type CUnitDependencies = {
   emitFunctionHead: (statement: AnyNode, context: CEmitContext) => string
   emitMainWrapper: (irPrograms: IrProgram[], baseContext: CEmitContext) => string[]
   httpLoweringDependencies: HttpLoweringDependencies
-  netLoweringDependencies: NetLoweringDependencies
   nullableLoweringDependencies: NullableLoweringDependencies
   promiseChainLoweringDependencies: PromiseChainLoweringDependencies
   statementLoweringDependencies: StatementLoweringDependencies
@@ -1366,7 +1362,7 @@ export function emitCUnit(
     baseContext,
     deps.asyncTaskLoweringDependencies
   )
-  collectNodeNetworkHandlers(irPrograms, baseContext)
+  collectNodeHttpHandlers(irPrograms, baseContext)
   const classMethods = collectClassMethods(baseContext)
   addDateStringRuntimeRequirements(runtimeRequirements, irPrograms, baseContext)
   const signatureRuntimeTypes = collectCUnitContextRuntimeTypes(baseContext)
@@ -1400,7 +1396,6 @@ export function emitCUnit(
   const needsConsoleRuntime: boolean = preludeRequirements.needsConsoleRuntime
   const needsFetchRuntime: boolean = preludeRequirements.needsFetchRuntime
   const needsHttpRuntime: boolean = preludeRequirements.needsHttpRuntime
-  const needsNetRuntime: boolean = preludeRequirements.needsNetRuntime
   baseContext.runtimeEntrypointAdapter = preludeRequirements.runtimeEntrypointAdapter
   baseContext.mathRuntimeInitStatement = needsMathRuntime ? emitMathRuntimeInitLines(options)[0] : null
   if (needsAsyncRuntime) {
@@ -1431,7 +1426,6 @@ export function emitCUnit(
     needsConsoleRuntime,
     needsFetchRuntime,
     needsHttpRuntime,
-    needsNetRuntime,
     preludeRequirements.libraryCPreludeIncludes,
     options
   )
@@ -1530,7 +1524,7 @@ export function emitCUnit(
     }
   }
 
-  pushUnitLines(lines, emitNodeNetworkHandlerPrototypeLines(baseContext))
+  pushUnitLines(lines, emitNodeHttpHandlerPrototypeLines(baseContext))
 
   if (
     functions.length > 0 ||
@@ -1538,7 +1532,7 @@ export function emitCUnit(
     asyncTaskWrappers.size > 0 ||
     callbackWrappers.size > 0 ||
     promiseChainWrappers.size > 0 ||
-    hasNodeNetworkHandlers(baseContext)
+    hasNodeHttpHandlers(baseContext)
   ) {
     lines.push('')
   }
@@ -1595,10 +1589,7 @@ export function emitCUnit(
 
   pushUnitLines(
     lines,
-    emitNodeNetworkHandlerDeclarations(baseContext, {
-      http: deps.httpLoweringDependencies,
-      net: deps.netLoweringDependencies
-    })
+    emitNodeHttpHandlerDeclarations(baseContext, deps.httpLoweringDependencies)
   )
 
   for (const item of functions) {

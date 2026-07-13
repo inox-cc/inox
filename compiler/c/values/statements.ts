@@ -39,7 +39,6 @@ import type {
   CKnownArrayElement,
   CKnownObjectField,
   CKnownObjectIndexField,
-  CNetHandler,
   CObjectAccessorReturnPath,
   CObjectShape,
   CObjectShapeField,
@@ -178,11 +177,6 @@ type CFunctionContext = {
   moduleValueCppTypes: CStringMap
   moduleValueNames: CStringMap
   moduleValueTypes: CStringMap
-  netConnectNames: CStringSet
-  netCreateServerNames: CStringSet
-  netHandlers: Map<string, CNetHandler>
-  netImportNames: CStringSet
-  netReadingSockets: CStringSet
   narrowedNullableScalars: CStringSet
   nextId: number
   nullableLoweringDependencies: NullableLoweringDependencies
@@ -354,8 +348,8 @@ export type StatementLoweringDependencies = {
     member: CKnownObjectField,
     context: CFunctionContext
   ): string[]
-  emitNodeNetworkCallStatement(expression: StatementNode, context: CFunctionContext): string[] | null
-  emitNodeNetworkVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] | null
+  emitNodeHttpCallStatement(expression: StatementNode, context: CFunctionContext): string[] | null
+  emitNodeHttpVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] | null
   emitNullableScalarValueExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression
   emitNullableRuntimeValueAssignment(expression: StatementNode, context: CFunctionContext): string[]
   emitObjectVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[]
@@ -3988,10 +3982,10 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     }
   }
 
-  const nodeNetworkDeclaration = deps.emitNodeNetworkVariableDeclaration(statement, context)
+  const nodeHttpDeclaration = deps.emitNodeHttpVariableDeclaration(statement, context)
 
-  if (nodeNetworkDeclaration !== null && typeof nodeNetworkDeclaration !== 'undefined') {
-    return nodeNetworkDeclaration
+  if (nodeHttpDeclaration !== null && typeof nodeHttpDeclaration !== 'undefined') {
+    return nodeHttpDeclaration
   }
 
   const fetchAbortController = deps.emitFetchAbortControllerVariableDeclaration(statement, context)
@@ -4574,10 +4568,10 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
   }
 
   if (expression.type === 'CallExpression') {
-    const nodeNetworkCall = deps.emitNodeNetworkCallStatement(expression, context)
+    const nodeHttpCall = deps.emitNodeHttpCallStatement(expression, context)
 
-    if (nodeNetworkCall !== null && typeof nodeNetworkCall !== 'undefined') {
-      return nodeNetworkCall
+    if (nodeHttpCall !== null && typeof nodeHttpCall !== 'undefined') {
+      return nodeHttpCall
     }
 
     const arrayPopCall = deps.emitPreparedArrayPopCallExpression(expression, context, preparedCallDiscard())

@@ -186,7 +186,6 @@ export type StringLoweringDependencies = {
   nodeRuntimeStringConstantValue(expression: AnyNode | null | undefined): string | null
   resolveKnownObjectIndex(expression: AnyNode, context: StringCContext): CObjectFieldInfo | null
   resolveKnownObjectMember(expression: AnyNode, context: StringCContext): CObjectFieldInfo | null
-  resolveNodeNetworkAddressStringMember(expression: AnyNode, context: StringCContext): string | null
   resolveRuntimeArrayIndex(expression: AnyNode, context: StringCContext): CRuntimeArrayElement | null
 }
 
@@ -686,10 +685,6 @@ export function canEmitStringBytesOperand(expression: AnyNode | null | undefined
     ) {
       return true
     }
-  }
-
-  if (stringDeps(context).resolveNodeNetworkAddressStringMember(expression, context)) {
-    return true
   }
 
   if (knownObjectStringField(expression, context)) {
@@ -1246,17 +1241,6 @@ export function emitPreparedStringBytesOperand(
       lines: [],
       bytes: '""',
       length: '0'
-    }
-  }
-
-  const netAddressMember = stringDeps(context).resolveNodeNetworkAddressStringMember(expression, context)
-
-  if (netAddressMember !== null && typeof netAddressMember !== 'undefined') {
-    return {
-      lines: [],
-      bytes: netAddressMember,
-      length: `strlen(${netAddressMember})`,
-      cppExpression: netAddressMember
     }
   }
 

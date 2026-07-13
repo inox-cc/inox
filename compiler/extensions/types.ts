@@ -127,6 +127,7 @@ export type LibraryObjectLiteralFieldDescriptor = {
 export type LibraryOperationVariantDescriptor = {
   minArgs?: number | null
   maxArgs?: number | null
+  argumentChecks?: LibraryArgumentCheckDescriptor[]
   argumentIndex?: number | null
   argumentValueTypes?: string[]
   stringLiterals?: string[]

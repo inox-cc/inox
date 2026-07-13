@@ -6,13 +6,15 @@
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
 
+#include <new>
 #include <stdlib.h>
 #include <string.h>
+#include <utility>
 
 struct inox_tls_client {
   inox_loop* loop;
   inox_allocator* allocator;
-  inox_net_socket* socket;
+  NetSocket socket;
   SSL_CTX* ctx;
   SSL* ssl;
   BIO* net_bio;
@@ -27,9 +29,11 @@ struct inox_tls_client {
 
 static inox_status inox_tls_configure_verify(SSL_CTX* ctx);
 static inox_status inox_tls_client_setup_ssl(inox_tls_client* client, const char* servername);
-static void inox_tls_on_tcp_connect(void* user, NetSocket socket, NetError error);
-static void inox_tls_on_tcp_data(void* user, NetSocket socket, inox::StringView bytes);
-static void inox_tls_on_tcp_close(void* user, NetSocket socket);
+static inox_status inox_tls_on_tcp_connect(void* user, const inox_value* args, size_t arg_count, inox_value* out);
+static inox_status inox_tls_on_tcp_data(void* user, const inox_value* args, size_t arg_count, inox_value* out);
+static inox_status inox_tls_on_tcp_close(void* user, const inox_value* args, size_t arg_count, inox_value* out);
+static inox_status inox_tls_on_tcp_error(void* user, const inox_value* args, size_t arg_count, inox_value* out);
+static inox::Callback inox_tls_callback(inox_allocator* allocator, inox_callback_call_fn call, void* user);
 static inox_status inox_tls_drive_handshake(inox_tls_client* client);
 static inox_status inox_tls_drain_plaintext(inox_tls_client* client);
 static inox_status inox_tls_flush_net_bio(inox_tls_client* client);
@@ -62,7 +66,7 @@ inox_status inox_tls_connect(
     return INOX_ERR_OOM;
   }
 
-  memset(client, 0, sizeof(inox_tls_client));
+  new (client) inox_tls_client{};
   client->loop = loop;
   client->allocator = allocator;
   client->connect = connect;
@@ -77,14 +81,18 @@ inox_status inox_tls_connect(
     return status;
   }
 
-  NetSocket socket = NetSocket::connect(
-    host,
-    port,
-    inox_tls_on_tcp_connect,
-    inox_tls_on_tcp_data,
-    inox_tls_on_tcp_close,
-    client
-  );
+  inox::Callback tcp_connect = inox_tls_callback(allocator, inox_tls_on_tcp_connect, client);
+  inox::Callback tcp_data = inox_tls_callback(allocator, inox_tls_on_tcp_data, client);
+  inox::Callback tcp_close = inox_tls_callback(allocator, inox_tls_on_tcp_close, client);
+  inox::Callback tcp_error = inox_tls_callback(allocator, inox_tls_on_tcp_error, client);
+
+  if (inox::thrown()) {
+    inox::take_exception();
+    inox_tls_client_free(client);
+    return INOX_ERR_OOM;
+  }
+
+  NetSocket socket = net.connect(port, inox::StringView(host), std::move(tcp_connect));
 
   if (inox::thrown()) {
     inox::take_exception();
@@ -92,7 +100,24 @@ inox_status inox_tls_connect(
     return INOX_ERR_TYPE;
   }
 
-  client->socket = socket.raw();
+  client->socket = socket;
+  client->socket.on("close", std::move(tcp_close));
+
+  if (inox::thrown()) {
+    inox::take_exception();
+    (void)inox_tls_fail_async(client, INOX_ERR_OOM);
+    *out = client;
+    return INOX_OK;
+  }
+
+  client->socket.on("data", std::move(tcp_data));
+  client->socket.on("error", std::move(tcp_error));
+
+  if (inox::thrown()) {
+    inox::take_exception();
+    (void)inox_tls_fail_async(client, INOX_ERR_OOM);
+  }
+
   *out = client;
   return INOX_OK;
 }
@@ -204,8 +229,8 @@ void inox_tls_client_close(inox_tls_client* client) {
 
   client->closing = 1;
 
-  if (client->socket != 0) {
-    NetSocket(client->socket).close();
+  if (client->socket.tag == INOX_TAG_CLASS_INSTANCE) {
+    client->socket.destroy();
   }
 }
 
@@ -275,57 +300,48 @@ static inox_status inox_tls_client_setup_ssl(inox_tls_client* client, const char
   return INOX_OK;
 }
 
-static inox_status inox_tls_status_from_net_error(NetError error) {
-  if (error == NetError::None) {
-    return INOX_OK;
+static inox::Callback inox_tls_callback(inox_allocator* allocator, inox_callback_call_fn call, void* user) {
+  inox_value value = inox_undefined_value();
+
+  if (allocator == 0 || inox_callback_new(allocator, call, user, 0, &value) != INOX_OK) {
+    inox::throw_value(inox::String("TypeError: TLS callback allocation failed"));
+    return inox::Callback();
   }
 
-  if (error == NetError::OutOfMemory) {
-    return INOX_ERR_OOM;
-  }
-
-  if (error == NetError::Unsupported) {
-    return INOX_ERR_UNSUPPORTED;
-  }
-
-  if (error == NetError::Field) {
-    return INOX_ERR_FIELD;
-  }
-
-  return INOX_ERR_TYPE;
+  return inox::Callback(inox::adopt(value));
 }
 
-static void inox_tls_on_tcp_connect(void* user, NetSocket socket, NetError error) {
+static inox_status inox_tls_callback_result(inox_value* out) {
+  if (out != 0) {
+    *out = inox_undefined_value();
+  }
+
+  return inox::thrown() ? INOX_ERR_THROW : INOX_OK;
+}
+
+static inox_status inox_tls_on_tcp_connect(void* user, const inox_value* args, size_t arg_count, inox_value* out) {
+  (void)args;
   inox_tls_client* client = (inox_tls_client*)user;
 
-  if (client == 0) {
-    return;
-  }
-
-  inox_status status = inox_tls_status_from_net_error(error);
-
-  if (status != INOX_OK) {
-    (void)inox_tls_fail_async(client, status);
-    return;
-  }
-
-  socket.readStart();
-
-  if (inox::thrown()) {
-    inox::take_exception();
-    (void)inox_tls_fail_async(client, INOX_ERR_FIELD);
-    return;
+  if (client == 0 || arg_count != 0) {
+    return INOX_ERR_TYPE;
   }
 
   (void)inox_tls_drive_handshake(client);
+  return inox_tls_callback_result(out);
 }
 
-static void inox_tls_on_tcp_data(void* user, NetSocket socket, inox::StringView bytes) {
-  (void)socket;
+static inox_status inox_tls_on_tcp_data(void* user, const inox_value* args, size_t arg_count, inox_value* out) {
+  if (args == 0 || arg_count != 1 || args[0].tag != INOX_TAG_STRING) {
+    return INOX_ERR_TYPE;
+  }
+
+  inox::String data{inox::Value(args[0])};
+  inox::StringView bytes = data;
   inox_tls_client* client = (inox_tls_client*)user;
 
   if (client == 0 || client->net_bio == 0 || (bytes.bytes == 0 && bytes.len != 0)) {
-    return;
+    return INOX_ERR_TYPE;
   }
 
   size_t offset = 0;
@@ -335,7 +351,7 @@ static void inox_tls_on_tcp_data(void* user, NetSocket socket, inox::StringView 
 
     if (written <= 0) {
       (void)inox_tls_fail_async(client, INOX_ERR_FIELD);
-      return;
+      return inox_tls_callback_result(out);
     }
 
     offset += (size_t)written;
@@ -343,21 +359,34 @@ static void inox_tls_on_tcp_data(void* user, NetSocket socket, inox::StringView 
 
   if (!client->handshake_done) {
     (void)inox_tls_drive_handshake(client);
-    return;
+    return inox_tls_callback_result(out);
   }
 
   (void)inox_tls_drain_plaintext(client);
+  return inox_tls_callback_result(out);
 }
 
-static void inox_tls_on_tcp_close(void* user, NetSocket socket) {
-  (void)socket;
+static inox_status inox_tls_on_tcp_error(void* user, const inox_value* args, size_t arg_count, inox_value* out) {
+  if (user == 0 || args == 0 || arg_count != 1 || args[0].tag != INOX_TAG_OBJECT) {
+    return INOX_ERR_TYPE;
+  }
+
+  (void)inox_tls_fail_async((inox_tls_client*)user, INOX_ERR_FIELD);
+  return inox_tls_callback_result(out);
+}
+
+static inox_status inox_tls_on_tcp_close(void* user, const inox_value* args, size_t arg_count, inox_value* out) {
+  if (args == 0 || arg_count != 1 || args[0].tag != INOX_TAG_BOOL) {
+    return INOX_ERR_TYPE;
+  }
+
   inox_tls_client* client = (inox_tls_client*)user;
 
   if (client == 0) {
-    return;
+    return INOX_ERR_TYPE;
   }
 
-  client->socket = 0;
+  client->socket = NetSocket();
 
   if (!client->connect_reported) {
     (void)inox_tls_report_connect(client, INOX_ERR_FIELD);
@@ -368,6 +397,7 @@ static void inox_tls_on_tcp_close(void* user, NetSocket socket) {
   }
 
   inox_tls_client_free(client);
+  return inox_tls_callback_result(out);
 }
 
 static inox_status inox_tls_drive_handshake(inox_tls_client* client) {
@@ -453,11 +483,11 @@ static inox_status inox_tls_flush_net_bio(inox_tls_client* client) {
     int read = BIO_read(client->net_bio, buffer, (int)sizeof(buffer));
 
     if (read > 0) {
-      if (client->socket == 0) {
+      if (client->socket.tag != INOX_TAG_CLASS_INSTANCE) {
         return INOX_ERR_FIELD;
       }
 
-      NetSocket(client->socket).write(inox::StringView(buffer, (size_t)read));
+      client->socket.write(inox::StringView(buffer, (size_t)read));
 
       if (inox::thrown()) {
         inox::take_exception();
@@ -541,5 +571,6 @@ static void inox_tls_client_free(inox_tls_client* client) {
     client->ctx = 0;
   }
 
+  client->~inox_tls_client();
   allocator->free(allocator->user, client, sizeof(inox_tls_client), alignof(inox_tls_client));
 }

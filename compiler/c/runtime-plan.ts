@@ -38,7 +38,6 @@ export type CRuntimePreludeRequirements = {
   needsConsoleRuntime: boolean
   needsFetchRuntime: boolean
   needsHttpRuntime: boolean
-  needsNetRuntime: boolean
   runtimeEntrypointAdapter: RuntimeEntrypointAdapterDescriptor | null
   libraryCPreludeIncludes: string[]
 }
@@ -123,13 +122,11 @@ export function resolveCRuntimePreludeRequirements(
     needsClassRuntime ||
     signatureRuntimeTypes.has('object')
   const needsHttpRuntime = nodeRuntimeImports.http
-  const needsNetRuntime = nodeRuntimeImports.net
   const needsRuntime =
     input.throwingFunctionCount > 0 ||
     needsAsyncRuntime ||
     needsFetchRuntime ||
     needsHttpRuntime ||
-    needsNetRuntime ||
     needsCallbackRuntime ||
     needsCollectionRuntime ||
     needsObjectRuntime ||
@@ -142,14 +139,12 @@ export function resolveCRuntimePreludeRequirements(
     runtimeRequirements.has('clocks') ||
     needsAsyncRuntime ||
     needsFetchRuntime ||
-    needsHttpRuntime ||
-    needsNetRuntime
+    needsHttpRuntime
   const needsMathRuntime = runtimePlanHasSupportedMathGlobalUsage(input.globalUsages)
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(input.irPrograms)
   const needsStringHeader =
     runtimeRequirements.has('string-bytes') ||
     needsFetchRuntime ||
-    needsNetRuntime ||
     signatureRuntimeTypes.has('string')
 
   return {
@@ -172,7 +167,6 @@ export function resolveCRuntimePreludeRequirements(
     needsConsoleRuntime,
     needsFetchRuntime,
     needsHttpRuntime,
-    needsNetRuntime,
     runtimeEntrypointAdapter: libraryRuntime.entrypointAdapter,
     libraryCPreludeIncludes: libraryRuntime.includes
   }

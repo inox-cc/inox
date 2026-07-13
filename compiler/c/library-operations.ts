@@ -251,6 +251,7 @@ export function emitPreparedCompilerLibraryCallExpression(
   let sourceArgumentIndex = 0
   let optionalArgumentPresent = false
   let receiverExpression = ''
+  let receiverCppType: string | null | undefined = null
   let stringViewArrayCount = 0
   const sourceArguments = compilerLibrarySourceArguments(expression)
 
@@ -276,6 +277,7 @@ export function emitPreparedCompilerLibraryCallExpression(
       const prepared = dependencies.emitCValueExpression(receiver, context)
       pushLines(lines, prepared.lines)
       receiverExpression = prepared.expression
+      receiverCppType = prepared.cppType
       continue
     }
 
@@ -604,7 +606,14 @@ export function emitPreparedCompilerLibraryCallExpression(
   let callTarget = target
 
   applyCompilerLibraryArgumentAdapters(argumentsList, item.libraryCArgumentAdapters)
-  receiverExpression = applyCompilerLibraryValueAdapter(receiverExpression, item.libraryCReceiverAdapter)
+  if (
+    receiverCppType === null ||
+    typeof receiverCppType === 'undefined' ||
+    receiverCppType === 'inox::Value' ||
+    receiverCppType === 'inox_value'
+  ) {
+    receiverExpression = applyCompilerLibraryValueAdapter(receiverExpression, item.libraryCReceiverAdapter)
+  }
 
   if (item.libraryCCallStyle === 'member') {
     if (receiverExpression === '') {

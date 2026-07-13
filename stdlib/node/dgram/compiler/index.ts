@@ -162,7 +162,7 @@ function bindOperation(): LibraryOperationDescriptor {
     memberVariant(1, 1, ['receiver', 'value'], {
       argumentIndex: 0,
       argumentValueTypes: ['object'],
-      cArgumentAdapters: ['', 'DgramBindOptions($value)']
+      cArgumentAdapters: ['DgramBindOptions($value)']
     }),
     memberVariant(2, 2, ['receiver', 'number', 'string-view'], {
       argumentIndex: 0,
@@ -171,7 +171,7 @@ function bindOperation(): LibraryOperationDescriptor {
     memberVariant(2, 2, ['receiver', 'value', 'runtime-callback'], {
       argumentIndex: 0,
       argumentValueTypes: ['object'],
-      cArgumentAdapters: ['', 'DgramBindOptions($value)'],
+      cArgumentAdapters: ['DgramBindOptions($value)', ''],
       cArgumentSources: [null, null, { argumentIndex: 1 }],
       callbackLifetime: 'event-loop'
     }),

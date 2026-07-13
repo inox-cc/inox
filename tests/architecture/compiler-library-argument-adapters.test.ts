@@ -7,7 +7,7 @@ import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.
 
 test('library C arguments поддерживают templates и string-view-or-value lowering', () => {
   const result = compileSource(
-    "const payload = { ok: true }\nbridge.take(3)\nbridge.accept('text')\nbridge.accept(payload)\nbridge.box.touch()\n",
+    "const payload = { ok: true }\nbridge.take(3)\nbridge.accept('text')\nbridge.accept(payload)\nbridge.box.touch()\nbridge.box.accept(3)\n",
     { libraries: createCompilerLibrarySet([bridgeLibrary()]), target: 'cc' }
   )
 
@@ -15,6 +15,7 @@ test('library C arguments поддерживают templates и string-view-or-v
   assert.match(result.code, /bridge\.accept\("text"\)/)
   assert.match(result.code, /bridge\.accept\(inox::Value\(payload\)\)/)
   assert.match(result.code, /BridgeBox\(inox_value_\d+\)\.touch\(\)/)
+  assert.match(result.code, /BridgeBox\(inox_value_\d+\)\.accept\(static_cast<int>\(3(?:\.0)?\)\)/)
 })
 
 function bridgeLibrary(): CompilerLibraryDescriptor {
@@ -56,6 +57,24 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
         minArgs: 0,
         maxArgs: 0,
         argumentChecks: [],
+        cppType: 'void',
+        valueType: 'void'
+      },
+      {
+        libraryId: 'bridge',
+        bindingId: 'bridge#Box.accept',
+        operationId: 'bridge#Box.accept',
+        kind: 'call',
+        runtimeRequirements: [],
+        receiverTypeId: 'bridge#Box',
+        cExpression: 'accept',
+        cCallStyle: 'member',
+        cArgumentKinds: ['receiver', 'number'],
+        cArgumentAdapters: ['static_cast<int>($value)'],
+        cReceiverAdapter: 'BridgeBox($value)',
+        minArgs: 1,
+        maxArgs: 1,
+        argumentChecks: [{ valueTypes: ['number'] }],
         cppType: 'void',
         valueType: 'void'
       },

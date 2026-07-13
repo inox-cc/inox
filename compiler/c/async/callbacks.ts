@@ -419,7 +419,6 @@ function isDependencyCarrierDeclaredType(value: string): boolean {
     value === 'ClassLoweringDependencies' ||
     value === 'CollectionLoweringDependencies' ||
     value === 'HttpLoweringDependencies' ||
-    value === 'NetLoweringDependencies' ||
     value === 'NullableLoweringDependencies' ||
     value === 'PromiseChainLoweringDependencies' ||
     value === 'StatementLoweringDependencies' ||

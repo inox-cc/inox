@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 type GeneratedTextFile = {
   path: string
@@ -22,10 +21,23 @@ import net from 'node:net'
 const server = net.createServer((socket) => {
   socket.end('ok')
 })
-server.listen(0, '127.0.0.1')
+server.on('listening', () => console.log('listening'))
+server.listen({ port: 0, host: '127.0.0.1', backlog: 16 })
 const address = server.address()
-console.log(address.port)
-server.close()
+console.log(address.address, address.family, address.port)
+server.close(() => console.log('server closed'))
+
+const client = net.createConnection(
+  { port: address.port, host: '127.0.0.1' },
+  () => console.log('connected')
+)
+client.setEncoding('utf8')
+client.on('data', (chunk) => console.log(chunk.length))
+client.on('close', (hadError) => console.log(hadError))
+client.setNoDelay()
+client.setKeepAlive(true, 10)
+client.write('ping', () => console.log('written'))
+client.end()
 `
       }
     ],
@@ -36,57 +48,35 @@ server.close()
   const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
+    libraries: defaultCompilerLibrarySet,
     loopBackend: 'libuv',
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /NetServer server;/)
-  assert.match(source, /server = NetServer::create\(inox_net_connection_handler_\d+, 0\);\n  if \(inox::thrown\(\)\) return;/)
-  assert.match(source, /server\.listen\("127\.0\.0\.1", \(int\)\(0\), \(int\)\(128\)\);\n  if \(inox::thrown\(\)\) return;/)
-  assert.match(source, /NetAddress address = server\.address\(\);\n  if \(inox::thrown\(\)\) return;/)
-  assert.match(source, /server\.close\(\);/)
-  assert.match(source, /inox_socket\.end\(inox::StringView\("ok", 2\)\);\n  if \(inox::thrown\(\)\) return;/)
-  assert.doesNotMatch(source, /inox_net_server\* \w+ = 0;/)
-  assert.doesNotMatch(source, /inox_net_socket\* \w+ = 0;/)
-  assert.doesNotMatch(source, /inox_net_status_\d+/)
-  assert.doesNotMatch(source, /NetServer\([a-zA-Z_][a-zA-Z0-9_]*\)\.listen/)
-  assert.doesNotMatch(source, /NetSocket\([a-zA-Z_][a-zA-Z0-9_]*\)\.write/)
-  assert.doesNotMatch(source, /\.address\(&/)
-  assert.doesNotMatch(source, /\.bytesRead\(&/)
-
-  const header = readFileSync(resolve('stdlib/node/net/include/inox/net.h'), 'utf8')
-  assert.match(header, /inox::StringView family;/)
-  assert.match(header, /typedef void \(\*NetDataFn\)\(void\* user, NetSocket socket, inox::StringView bytes\);/)
-  assert.doesNotMatch(header, /typedef inox_status \(\*NetDataFn\)/)
-  assert.match(header, /typedef void \(\*NetCloseFn\)\(void\* user, NetSocket socket\);/)
-  assert.doesNotMatch(header, /NetCloseFn\)\(void\* user, inox_net_socket\* socket\)/)
-  assert.match(header, /typedef void \(\*NetSocketFn\)\(void\* user, NetSocket socket\);/)
-  assert.doesNotMatch(header, /NetSocketFn\)\(void\* user, inox_net_socket\* socket\)/)
-  assert.match(header, /typedef void \(\*NetSocketWriteFn\)\(void\* user, NetSocket socket, NetError error\);/)
-  assert.doesNotMatch(header, /NetSocketWriteFn\)\(void\* user, inox_net_socket\* socket/)
-  assert.match(header, /typedef void \(\*NetSocketErrorFn\)\(void\* user, NetSocket socket, NetError error\);/)
-  assert.doesNotMatch(header, /typedef inox_status \(\*NetSocketErrorFn\)/)
-  assert.doesNotMatch(header, /NetSocketErrorFn\)\(void\* user, inox_net_socket\* socket/)
-  assert.match(header, /typedef void \(\*NetConnectFn\)\(void\* user, NetSocket socket, NetError error\);/)
-  assert.doesNotMatch(header, /typedef inox_status \(\*NetConnectFn\)/)
-  assert.doesNotMatch(header, /NetConnectFn\)\(void\* user, inox_net_socket\* socket/)
-  assert.match(header, /typedef void \(\*NetConnectionFn\)\(void\* user, NetServer server, NetSocket socket\);/)
-  assert.doesNotMatch(header, /typedef inox_status \(\*NetConnectionFn\)/)
-  assert.doesNotMatch(header, /NetConnectionFn\)\(void\* user, inox_net_server\* server, inox_net_socket\* socket/)
-  assert.match(header, /typedef void \(\*NetServerFn\)\(void\* user, NetServer server\);/)
-  assert.doesNotMatch(header, /typedef inox_status \(\*NetServerFn\)/)
-  assert.doesNotMatch(header, /NetServerFn\)\(void\* user, inox_net_server\* server/)
-  assert.match(header, /typedef void \(\*NetServerErrorFn\)\(void\* user, NetServer server, NetError error\);/)
-  assert.doesNotMatch(header, /typedef inox_status \(\*NetServerErrorFn\)/)
-  assert.doesNotMatch(header, /NetServerErrorFn\)\(void\* user, inox_net_server\* server/)
-  assert.match(header, /void listen\(inox::StringView host, int port, int backlog\) const;/)
-  assert.match(header, /static NetSocket connect\([\s\S]*?inox::StringView host,/)
-  assert.doesNotMatch(header, /static NetSocket connect\([\s\S]*?inox_loop\* loop,/)
-  assert.doesNotMatch(header, /const char\* family/)
-  assert.doesNotMatch(header, /NetDataFn\)\(void\* user, inox_net_socket\* socket/)
-  assert.doesNotMatch(header, /listen\(const char\* host/)
-  assert.doesNotMatch(header, /connect\([\s\S]*?inox_loop\* loop,[\s\S]*?const char\* host,/)
+  assert.match(source, /#include "inox\/net\.h"/)
+  assert.match(source, /static inox_status inox_callback_arrow_\d+\(void\* inox_context, const inox_value\* args, size_t arg_count, inox_value\* out\)/)
+  assert.match(source, /args\[0\]\.tag != INOX_TAG_CLASS_INSTANCE/)
+  assert.match(source, /inox_value socket = args\[0\];/)
+  assert.match(source, /NetSocket\(socket\)\.end\("ok"\)/)
+  assert.match(source, /auto server = net\.createServer\(inox_callback_\d+\);/)
+  assert.match(source, /server\.on\("listening", inox_callback_\d+\);/)
+  assert.match(source, /server\.listen\(NetListenOptions\(/)
+  assert.match(source, /auto address = server\.address\(\);/)
+  assert.match(source, /address\.address/)
+  assert.match(source, /address\.family/)
+  assert.match(source, /address\.port/)
+  assert.match(source, /server\.close\(inox_callback_\d+\);/)
+  assert.match(source, /auto client = net\.connect\(NetConnectionOptions\(/)
+  assert.match(source, /client\.on\("data", inox_callback_\d+\);/)
+  assert.match(source, /args\[0\]\.tag != INOX_TAG_STRING/)
+  assert.match(source, /inox_string\* chunk = \(inox_string\*\)args\[0\]\.as\.ref;/)
+  assert.match(source, /client\.on\("close", inox_callback_\d+\);/)
+  assert.match(source, /args\[0\]\.tag != INOX_TAG_BOOL/)
+  assert.match(source, /client\.write\("ping", inox_callback_\d+\)/)
+  assert.doesNotMatch(source, /inox_net_|Net(?:Connection|Data|Close|Socket|Server|Connect)Fn/)
+  assert.doesNotMatch(source, /inox_net_(?:connection|socket|server)_handler_/)
+  assert.doesNotMatch(source, /NetServer\(server\)\.|NetSocket\(client\)\./)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

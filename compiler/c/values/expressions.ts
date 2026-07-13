@@ -449,9 +449,6 @@ function isRawPointerType(valueType: string): boolean {
   return (
     valueType === 'function' ||
     valueType === 'timer' ||
-    valueType === 'net-address' ||
-    valueType === 'net-server' ||
-    valueType === 'net-socket' ||
     valueType === 'http-request' ||
     valueType === 'http-response' ||
     valueType === 'http-server'
@@ -1714,7 +1711,6 @@ function isDependencyCarrierDeclaredType(value: string): boolean {
     value === 'ClassLoweringDependencies' ||
     value === 'CollectionLoweringDependencies' ||
     value === 'HttpLoweringDependencies' ||
-    value === 'NetLoweringDependencies' ||
     value === 'NullableLoweringDependencies' ||
     value === 'PromiseChainLoweringDependencies' ||
     value === 'StatementLoweringDependencies' ||
@@ -1831,10 +1827,6 @@ export type CScalarExpressionDependencies = {
   emitPreparedCollectionCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCollectionSizeExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitNullableScalarValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitPreparedNodeNetworkAddressPortExpression(
-    expression: CValueNode,
-    context: CFunctionContext
-  ): PreparedExpression | null
   emitPreparedJsonScalarParseExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNullableScalarRuntimeValueExpression(
     expression: CValueNode,
@@ -3058,12 +3050,6 @@ export function emitPreparedNumberExpression(
 
     if (libraryNativeField !== null) {
       return libraryNativeField
-    }
-
-    const nodeNetworkAddressPort = deps.emitPreparedNodeNetworkAddressPortExpression(expression, context)
-
-    if (nodeNetworkAddressPort !== null && typeof nodeNetworkAddressPort !== 'undefined') {
-      return nodeNetworkAddressPort
     }
 
     let length: PreparedExpression | null = null

@@ -1,5 +1,4 @@
 import type { CEmitContext, CFunctionContext } from '../../c/context.ts'
-import type { CPreparedExpression as PreparedExpression } from '../../c/types.ts'
 import type { AnyNode, IrGlobalUsage, IrProgram } from '../../types.ts'
 import type { HttpLoweringDependencies as PackageHttpLoweringDependencies } from '../../../stdlib/node/http/compiler/c.ts'
 import {
@@ -12,24 +11,6 @@ import {
   registerHttpRuntimeImportNames
 } from '../../../stdlib/node/http/compiler/c.ts'
 import { isSupportedNodeHttpCGlobalUsage } from '../../../stdlib/node/http/compiler/descriptor.ts'
-import type { NetLoweringDependencies as PackageNetLoweringDependencies } from '../../../stdlib/node/net/compiler/c.ts'
-import {
-  collectNetHandlers,
-  emitNetHandlerDeclaration,
-  emitNetHandlerHead,
-  emitNetAddressMemberVariableDeclaration,
-  emitNetAddressVariableDeclaration,
-  emitNetNumberVariableDeclaration,
-  emitPreparedNetAddressPortExpression,
-  emitNetServerCallStatement,
-  emitNetServerVariableDeclaration,
-  emitNetSocketCallStatement,
-  emitNetSocketVariableDeclaration,
-  irProgramsUseNetRuntimeImport,
-  registerNetRuntimeImportNames,
-  resolveNetAddressStringMember
-} from '../../../stdlib/node/net/compiler/c.ts'
-import { isSupportedNodeNetCGlobalUsage } from '../../../stdlib/node/net/compiler/descriptor.ts'
 import type { TimerLoweringDependencies as PackageTimerLoweringDependencies } from '../../../stdlib/node/timers/compiler/c.ts'
 
 export {
@@ -40,38 +21,26 @@ export {
 } from '../../../stdlib/node/timers/compiler/c.ts'
 
 export type HttpLoweringDependencies = PackageHttpLoweringDependencies
-export type NetLoweringDependencies = PackageNetLoweringDependencies
 export type TimerLoweringDependencies = PackageTimerLoweringDependencies
-
-export type NodeNetworkLoweringDependencies = {
-  http: HttpLoweringDependencies
-  net: NetLoweringDependencies
-}
 
 type NodeCGlobalNameSet = Set<string>
 
 export type NodeStdlibCGlobalUsageContext = {
   httpCreateServerNames?: NodeCGlobalNameSet
   httpImportNames?: NodeCGlobalNameSet
-  netConnectNames?: NodeCGlobalNameSet
-  netCreateServerNames?: NodeCGlobalNameSet
-  netImportNames?: NodeCGlobalNameSet
 }
 
 export type NodeStdlibRuntimeImportUsage = {
   http: boolean
-  net: boolean
 }
 
 export function registerNodeStdlibRuntimeImportNames(context: CEmitContext, irPrograms: IrProgram[]): void {
   registerHttpRuntimeImportNames(context, irPrograms)
-  registerNetRuntimeImportNames(context, irPrograms)
 }
 
 export function nodeStdlibRuntimeImportUsage(irPrograms: IrProgram[]): NodeStdlibRuntimeImportUsage {
   return {
-    http: irProgramsUseHttpRuntimeImport(irPrograms),
-    net: irProgramsUseNetRuntimeImport(irPrograms)
+    http: irProgramsUseHttpRuntimeImport(irPrograms)
   }
 }
 
@@ -79,10 +48,7 @@ export function isSupportedNodeStdlibCGlobalUsage(
   usage: IrGlobalUsage,
   context: NodeStdlibCGlobalUsageContext
 ): boolean {
-  return (
-    isSupportedNodeHttpCGlobalUsage(usage, context) ||
-    isSupportedNodeNetCGlobalUsage(usage, context)
-  )
+  return isSupportedNodeHttpCGlobalUsage(usage, context)
 }
 
 function pushNodeStdlibLines(target: string[], lines: string[]): void {
@@ -91,52 +57,41 @@ function pushNodeStdlibLines(target: string[], lines: string[]): void {
   }
 }
 
-export function collectNodeNetworkHandlers(irPrograms: IrProgram[], context: CEmitContext): void {
+export function collectNodeHttpHandlers(irPrograms: IrProgram[], context: CEmitContext): void {
   context.httpHandlers = collectHttpHandlers(irPrograms, context)
-  context.netHandlers = collectNetHandlers(irPrograms, context)
 }
 
-export function hasNodeNetworkHandlers(context: CEmitContext): boolean {
-  return context.httpHandlers.size > 0 || context.netHandlers.size > 0
+export function hasNodeHttpHandlers(context: CEmitContext): boolean {
+  return context.httpHandlers.size > 0
 }
 
-export function emitNodeNetworkHandlerPrototypeLines(context: CEmitContext): string[] {
+export function emitNodeHttpHandlerPrototypeLines(context: CEmitContext): string[] {
   const lines: string[] = []
 
   for (const wrapper of context.httpHandlers.values()) {
     lines.push(`${emitHttpHandlerHead(wrapper)};`)
   }
 
-  for (const wrapper of context.netHandlers.values()) {
-    lines.push(`${emitNetHandlerHead(wrapper)};`)
-  }
-
   return lines
 }
 
-export function emitNodeNetworkHandlerDeclarations(
+export function emitNodeHttpHandlerDeclarations(
   context: CEmitContext,
-  deps: NodeNetworkLoweringDependencies
+  deps: HttpLoweringDependencies
 ): string[] {
   const lines: string[] = []
 
   for (const wrapper of context.httpHandlers.values()) {
-    pushNodeStdlibLines(lines, emitHttpHandlerDeclaration(wrapper, context, deps.http))
-    lines.push('')
-  }
-
-  for (const wrapper of context.netHandlers.values()) {
-    pushNodeStdlibLines(lines, emitNetHandlerDeclaration(wrapper, context, deps.net))
+    pushNodeStdlibLines(lines, emitHttpHandlerDeclaration(wrapper, context, deps))
     lines.push('')
   }
 
   return lines
 }
 
-export function emitNodeNetworkVariableDeclaration(
+export function emitNodeHttpVariableDeclaration(
   statement: AnyNode,
-  context: CFunctionContext,
-  deps: NodeNetworkLoweringDependencies
+  context: CFunctionContext
 ): string[] | null {
   const httpServer = emitHttpServerVariableDeclaration(statement, context)
 
@@ -144,87 +99,18 @@ export function emitNodeNetworkVariableDeclaration(
     return httpServer
   }
 
-  const netServer = emitNetServerVariableDeclaration(statement, context)
-
-  if (netServer !== null && typeof netServer !== 'undefined') {
-    return netServer
-  }
-
-  const netSocket = emitNetSocketVariableDeclaration(statement, context, deps.net)
-
-  if (netSocket !== null && typeof netSocket !== 'undefined') {
-    return netSocket
-  }
-
-  const netAddress = emitNetAddressVariableDeclaration(statement, context)
-
-  if (netAddress !== null && typeof netAddress !== 'undefined') {
-    return netAddress
-  }
-
-  const netAddressMember = emitNetAddressMemberVariableDeclaration(statement, context)
-
-  if (netAddressMember !== null && typeof netAddressMember !== 'undefined') {
-    return netAddressMember
-  }
-
-  const netNumber = emitNetNumberVariableDeclaration(statement, context)
-
-  if (netNumber !== null && typeof netNumber !== 'undefined') {
-    return netNumber
-  }
-
   return null
 }
 
-export function emitNodeNetworkCallStatement(
+export function emitNodeHttpCallStatement(
   expression: AnyNode,
   context: CFunctionContext,
-  deps: NodeNetworkLoweringDependencies
+  deps: HttpLoweringDependencies
 ): string[] | null {
-  const httpServerCall = emitHttpServerCallStatement(expression, context, deps.http)
+  const httpServerCall = emitHttpServerCallStatement(expression, context, deps)
 
   if (httpServerCall !== null && typeof httpServerCall !== 'undefined') {
     return httpServerCall
-  }
-
-  const netServerCall = emitNetServerCallStatement(expression, context, deps.net)
-
-  if (netServerCall !== null && typeof netServerCall !== 'undefined') {
-    return netServerCall
-  }
-
-  const netSocketCall = emitNetSocketCallStatement(expression, context, deps.net)
-
-  if (netSocketCall !== null && typeof netSocketCall !== 'undefined') {
-    return netSocketCall
-  }
-
-  return null
-}
-
-export function emitPreparedNodeNetworkAddressPortExpression(
-  expression: AnyNode,
-  context: CFunctionContext
-): PreparedExpression | null {
-  return emitPreparedNetAddressPortExpression(expression, context)
-}
-
-export function resolveNodeNetworkAddressStringMember(expression: AnyNode, context: CFunctionContext): string | null {
-  return resolveNetAddressStringMember(expression, context)
-}
-
-export function inferNodeStdlibMemberExpressionType(expression: AnyNode, context: CFunctionContext): string | null {
-  if (expression.type !== 'MemberExpression' && expression.type !== 'OptionalMemberExpression') {
-    return null
-  }
-
-  if (emitPreparedNodeNetworkAddressPortExpression(expression, context)) {
-    return 'number'
-  }
-
-  if (resolveNodeNetworkAddressStringMember(expression, context)) {
-    return 'string'
   }
 
   return null

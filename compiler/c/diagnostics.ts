@@ -16,9 +16,6 @@ type CGlobalNameSet = Set<string>
 export type CGlobalUsageSupportContext = {
   httpCreateServerNames?: CGlobalNameSet
   httpImportNames?: CGlobalNameSet
-  netConnectNames?: CGlobalNameSet
-  netCreateServerNames?: CGlobalNameSet
-  netImportNames?: CGlobalNameSet
 }
 
 export function reportUnsupportedCSyntaxFeatures(
