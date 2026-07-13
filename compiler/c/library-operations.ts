@@ -47,6 +47,7 @@ export type CompilerLibraryLoweringDependencies = {
     context: CFunctionContext,
     tempPrefix?: string
   ): PreparedStringBytesOperand
+  emitThrownCheckLines(context: CFunctionContext): string[]
   inferExpressionType(expression: AnyNode, context: CFunctionContext): string
   registerObjectShape(context: CFunctionContext, name: string, shape: CObjectShape | null | undefined): void
 }
@@ -431,7 +432,7 @@ export function emitPreparedCompilerLibraryCallExpression(
 
   if (cppType === 'void') {
     lines.push(`${callExpression};`)
-    pushCompilerLibraryFailureCheck(lines, item.libraryCFailureMode, '', context)
+    pushCompilerLibraryFailureCheck(lines, item.libraryCFailureMode, '', context, dependencies)
     return {
       lines,
       expression: '',
@@ -458,7 +459,7 @@ export function emitPreparedCompilerLibraryCallExpression(
   if (item.libraryCFailureMode !== null && typeof item.libraryCFailureMode !== 'undefined') {
     const out = nextCName(context, 'inox_library_result')
     lines.push(`auto ${out} = ${callExpression};`)
-    pushCompilerLibraryFailureCheck(lines, item.libraryCFailureMode, out, context)
+    pushCompilerLibraryFailureCheck(lines, item.libraryCFailureMode, out, context, dependencies)
 
     return {
       lines,
@@ -549,7 +550,8 @@ function emitPreparedCompilerLibraryObjectCall(
       lines,
       (expression as CompilerLibraryExpressionNode).libraryCFailureMode,
       out,
-      context
+      context,
+      dependencies
     )
 
     return {
@@ -585,7 +587,8 @@ function emitPreparedCompilerLibraryObjectCall(
     lines,
     (expression as CompilerLibraryExpressionNode).libraryCFailureMode,
     out,
-    context
+    context,
+    dependencies
   )
 
   return {
@@ -728,10 +731,11 @@ function pushCompilerLibraryFailureCheck(
   lines: string[],
   mode: string | null | undefined,
   result: string,
-  context: CFunctionContext
+  context: CFunctionContext,
+  dependencies: CompilerLibraryLoweringDependencies
 ): void {
   if (mode === 'thrown') {
-    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+    pushLines(lines, dependencies.emitThrownCheckLines(context))
   } else if (mode === 'invalid-result' && result !== '') {
     lines.push(emitRuntimeTypeCheck(`!${result}.valid()`, context))
   }

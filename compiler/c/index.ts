@@ -833,6 +833,7 @@ compilerLibraryLoweringDependencies = {
   emitCValueExpression,
   emitPreparedNumberExpression,
   emitPreparedStringBytesOperand,
+  emitThrownCheckLines,
   inferExpressionType,
   registerObjectShape
 }

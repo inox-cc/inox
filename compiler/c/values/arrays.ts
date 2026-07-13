@@ -3393,20 +3393,15 @@ function emitPreparedArrayElementValue(
   valueType: string,
   context: ArrayFunctionContext
 ): PreparedExpression {
-  if (valueType !== 'number' && valueType !== 'boolean') {
+  if (valueType !== 'number') {
     return arrayDeps(context).emitCValueExpression(expression, context)
   }
 
   const value = arrayDeps(context).emitPreparedNumberExpression(expression, context)
-  let valueExpression = `inox_number_value(${value.expression})`
-
-  if (valueType === 'boolean') {
-    valueExpression = `inox_bool_value((${value.expression}) != 0)`
-  }
 
   return {
     lines: value.lines,
-    expression: valueExpression
+    expression: `inox_number_value(${value.expression})`
   }
 }
 

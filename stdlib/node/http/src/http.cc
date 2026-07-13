@@ -494,7 +494,7 @@ int HttpResponse::sendFsFile(const HttpRequest& request, inox::StringView url_pr
   path_len += relative_path_len;
   path[path_len] = '\0';
 
-  Buffer file = fs.readFileBytesSync(inox::StringView(path, path_len));
+  Buffer file = fs.readFileSync(inox::StringView(path, path_len));
 
   if (inox::thrown()) {
     inox::take_exception();

@@ -2777,7 +2777,13 @@ class Checker {
         const valueType = this.resolveExpressionArrayElementType(expression.object) ?? 'unknown'
         const declaredType = this.resolveExpressionArrayElementDeclaredType(expression.object)
         const functionType = this.resolveExpressionArrayElementFunctionType(expression.object)
-        expression.nullable = optionalChainReceiver
+        let nullable = optionalChainReceiver
+
+        if (declaredType !== null && typeof declaredType !== 'undefined') {
+          nullable = nullable || this.resolveDeclaredType(declaredType, expression.loc).nullable
+        }
+
+        expression.nullable = nullable
         expression.optionalChainProtected = optionalChainReceiver
         expression.valueType = valueType
         expression.arrayElementDeclaredType = declaredType

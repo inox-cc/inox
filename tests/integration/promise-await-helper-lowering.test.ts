@@ -73,7 +73,7 @@ try {
     source,
     /if \(inox::thrown\(\)\) goto catch_\d+;/
   )
-  assert.match(source, /auto inox_error = inox::take_exception\(\);/)
+  assert.match(source, /auto error = inox::take_exception\(\);/)
   assert.match(source, /inox_promise_rejected\(inox::loop\(\), inox::String\("bad", 3\), &inox_promise_\d+\)/)
   assert.doesNotMatch(source, /String::fromLiteral\(&inox_default_allocator/)
   assert.doesNotMatch(source, /inox_error = inox_undefined_value\(\);\n\s+inox_error = inox_res_\d+\.error_value\(\);/)
