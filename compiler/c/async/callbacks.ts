@@ -397,7 +397,6 @@ function isContextDeclaredType(value: string): boolean {
     value === 'CallbackFunctionContext' ||
     value === 'ClassFunctionContext' ||
     value === 'CollectionFunctionContext' ||
-    value === 'DgramFunctionContext' ||
     value === 'FetchFunctionContext' ||
     value === 'HttpFunctionContext' ||
     value === 'NullableFunctionContext' ||
@@ -419,7 +418,6 @@ function isDependencyCarrierDeclaredType(value: string): boolean {
     value === 'CallbackLoweringDependencies' ||
     value === 'ClassLoweringDependencies' ||
     value === 'CollectionLoweringDependencies' ||
-    value === 'DgramLoweringDependencies' ||
     value === 'HttpLoweringDependencies' ||
     value === 'NetLoweringDependencies' ||
     value === 'NullableLoweringDependencies' ||
@@ -3833,6 +3831,27 @@ export function isSupportedMutableRuntimeArrowCapture(
 }
 
 function emitRuntimeCallbackWrapperArgChecks(param: CFunctionParam, index: number): string[] {
+  if (param.nullable === true && param.valueType === 'string') {
+    return [
+      `if (args[${index}].tag != INOX_TAG_NULL && ` +
+        `(args[${index}].tag != INOX_TAG_STRING || args[${index}].as.ref == 0)) return INOX_ERR_TYPE;`
+    ]
+  }
+
+  if (param.nullable === true && param.valueType === 'object') {
+    return [
+      `if (args[${index}].tag != INOX_TAG_NULL && ` +
+        `(${runtimeObjectLikeValueMismatchCondition(`args[${index}]`)})) return INOX_ERR_TYPE;`
+    ]
+  }
+
+  if (param.nullable === true && param.valueType === 'bytes') {
+    return [
+      `if (args[${index}].tag != INOX_TAG_NULL && ` +
+        `(args[${index}].tag != INOX_TAG_BYTES || args[${index}].as.ref == 0)) return INOX_ERR_TYPE;`
+    ]
+  }
+
   if (param.nullable === true && isNullableScalarType(param.valueType)) {
     const tag = cRuntimeValueTag(param.valueType)
 

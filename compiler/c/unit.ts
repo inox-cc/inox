@@ -78,7 +78,6 @@ import {
   registerNodeStdlibRuntimeImportNames
 } from '../stdlib/node/c.ts'
 import type {
-  DgramLoweringDependencies,
   HttpLoweringDependencies,
   NetLoweringDependencies
 } from '../stdlib/node/c.ts'
@@ -131,7 +130,6 @@ export type CUnitDependencies = {
     jsGlobalRoots: Set<string>,
     topLevelNodes: AnyNode[]
   ): CEmitContext
-  dgramLoweringDependencies: DgramLoweringDependencies
   emitClassConstructorDeclaration: (info: CClassInfo, baseContext: CEmitContext) => string[]
   emitClassMethodDeclaration: (info: CClassInfo, method: AnyNode, baseContext: CEmitContext) => string[]
   emitClassMethodHead: (info: CClassInfo, method: AnyNode, context: CEmitContext) => string
@@ -1400,7 +1398,6 @@ export function emitCUnit(
   const needsRegexpRuntime: boolean = preludeRequirements.needsRegexpRuntime
   const needsTimerRuntime: boolean = preludeRequirements.needsTimerRuntime
   const needsConsoleRuntime: boolean = preludeRequirements.needsConsoleRuntime
-  const needsDgramRuntime: boolean = preludeRequirements.needsDgramRuntime
   const needsFetchRuntime: boolean = preludeRequirements.needsFetchRuntime
   const needsHttpRuntime: boolean = preludeRequirements.needsHttpRuntime
   const needsNetRuntime: boolean = preludeRequirements.needsNetRuntime
@@ -1432,7 +1429,6 @@ export function emitCUnit(
     needsRegexpRuntime,
     needsTimerRuntime,
     needsConsoleRuntime,
-    needsDgramRuntime,
     needsFetchRuntime,
     needsHttpRuntime,
     needsNetRuntime,
@@ -1600,7 +1596,6 @@ export function emitCUnit(
   pushUnitLines(
     lines,
     emitNodeNetworkHandlerDeclarations(baseContext, {
-      dgram: deps.dgramLoweringDependencies,
       http: deps.httpLoweringDependencies,
       net: deps.netLoweringDependencies
     })

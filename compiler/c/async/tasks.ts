@@ -117,9 +117,6 @@ type AsyncTaskFunctionContext = AsyncTaskEmitContext & {
   cleanupEnabled: boolean
   continueFlowUsed: boolean
   continueTargets: AsyncTaskLoopFlowTarget[]
-  dgramBoundSockets: AsyncTaskStringSet
-  dgramMessageSockets: AsyncTaskStringSet
-  dgramReuseAddrSockets: AsyncTaskStringSet
   errorChannelUsed: boolean
   errorObjectNames: AsyncTaskStringSet
   errorTargets: string[]

@@ -200,7 +200,6 @@ export function emitCPrelude(
   needsRegexpRuntime: boolean,
   needsTimerRuntime: boolean,
   needsConsoleRuntime: boolean,
-  needsDgramRuntime: boolean,
   needsFetchRuntime: boolean,
   needsHttpRuntime: boolean,
   needsNetRuntime: boolean,
@@ -228,10 +227,6 @@ export function emitCPrelude(
 
   if (needsRegexpRuntime) {
     pushCPreludeIncludes(systemIncludes, localIncludes, emitCompilerFeatureCPreludeIncludes('regexp'))
-  }
-
-  if (needsDgramRuntime) {
-    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/dgram.h"')
   }
 
   if (needsDebugMemoryRuntime) {

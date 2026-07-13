@@ -121,6 +121,8 @@ function mapTypeFromMetadata(source: AnyNode | SymbolInfo): CheckerMapType {
   let key: ValueType | null = null
   let value: ValueType | null = null
   let valueShape: ObjectShapeInfo | null = null
+  let valueArrayElementType: ValueType | null = null
+  let valueArrayElementDeclaredType: string | null = null
 
   if (source.mapKeyType !== null && typeof source.mapKeyType !== 'undefined') {
     key = source.mapKeyType
@@ -134,10 +136,23 @@ function mapTypeFromMetadata(source: AnyNode | SymbolInfo): CheckerMapType {
     valueShape = source.mapValueShape
   }
 
+  if (source.mapValueArrayElementType !== null && typeof source.mapValueArrayElementType !== 'undefined') {
+    valueArrayElementType = source.mapValueArrayElementType
+  }
+
+  if (
+    source.mapValueArrayElementDeclaredType !== null &&
+    typeof source.mapValueArrayElementDeclaredType !== 'undefined'
+  ) {
+    valueArrayElementDeclaredType = source.mapValueArrayElementDeclaredType
+  }
+
   return {
     key,
     value,
-    valueShape
+    valueShape,
+    valueArrayElementType,
+    valueArrayElementDeclaredType
   }
 }
 

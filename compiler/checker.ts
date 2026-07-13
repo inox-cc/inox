@@ -346,6 +346,12 @@ type CheckerScopeState = {
   narrowedNullableNames: Set<string>
 }
 
+type CheckerTypeParameterState = {
+  name: string
+  previousType: TypeAliasInfo | null
+  previousResolvedType: ResolvedTypeInfo | null
+}
+
 type CheckerNarrowingState = {
   narrowedNullableNames: Set<string>
 }
@@ -524,29 +530,35 @@ class Checker {
       }
 
       if (item.type === 'FunctionDeclaration') {
-        const returnInfo = this.resolveFunctionDeclarationReturnType(item)
+        const typeParameterState = this.pushFunctionTypeParameters(item)
 
-        this.declare(
-          item.name,
-          {
-            kind: 'function',
-            mutable: false,
-            valueType: 'function',
-            params: this.resolveParams(item.params),
-            returnType: returnInfo.valueType,
-            returnNullable: returnInfo.nullable,
-            returnArrayElementType: returnInfo.arrayElementType,
-            returnArrayElementDeclaredType: returnInfo.arrayElementDeclaredType,
-            returnMapKeyType: returnInfo.mapKeyType,
-            returnMapValueType: returnInfo.mapValueType,
-            returnPromiseValueType: returnInfo.promiseValueType ?? null,
-            returnSetElementType: returnInfo.setElementType,
-            returnShape: returnInfo.shape,
-            async: item.async,
-            loc: item.loc
-          },
-          item.loc
-        )
+        try {
+          const returnInfo = this.resolveFunctionDeclarationReturnType(item)
+
+          this.declare(
+            item.name,
+            {
+              kind: 'function',
+              mutable: false,
+              valueType: 'function',
+              params: this.resolveParams(item.params),
+              returnType: returnInfo.valueType,
+              returnNullable: returnInfo.nullable,
+              returnArrayElementType: returnInfo.arrayElementType,
+              returnArrayElementDeclaredType: returnInfo.arrayElementDeclaredType,
+              returnMapKeyType: returnInfo.mapKeyType,
+              returnMapValueType: returnInfo.mapValueType,
+              returnPromiseValueType: returnInfo.promiseValueType ?? null,
+              returnSetElementType: returnInfo.setElementType,
+              returnShape: returnInfo.shape,
+              async: item.async,
+              loc: item.loc
+            },
+            item.loc
+          )
+        } finally {
+          this.restoreFunctionTypeParameters(typeParameterState)
+        }
       }
 
       if (item.type === 'ClassDeclaration') {
@@ -603,6 +615,8 @@ class Checker {
     symbol.mapKeyType = info.mapKeyType
     symbol.mapValueType = info.mapValueType
     symbol.mapValueShape = info.mapValueShape
+    symbol.mapValueArrayElementType = info.mapValueArrayElementType ?? null
+    symbol.mapValueArrayElementDeclaredType = info.mapValueArrayElementDeclaredType ?? null
     symbol.promiseValueType = info.promiseValueType
     symbol.setElementType = info.setElementType
     symbol.functionType = info.functionType
@@ -664,6 +678,13 @@ class Checker {
     const declaredType = nodeDeclaredTypeOrValueType(param)
 
     const paramInfo = this.resolveDeclaredType(declaredType, param.loc)
+    const declaredFunctionType = this.resolveFunctionTypeMetadata(param.functionType, param.loc)
+
+    if (declaredFunctionType !== null) {
+      paramInfo.valueType = 'function'
+      paramInfo.functionType = declaredFunctionType
+    }
+
     let promiseValueType: ValueType | null = null
 
     if (paramInfo.promiseValueType !== null && typeof paramInfo.promiseValueType !== 'undefined') {
@@ -684,6 +705,8 @@ class Checker {
       mapKeyType: paramInfo.mapKeyType,
       mapValueType: paramInfo.mapValueType,
       mapValueShape: paramInfo.mapValueShape,
+      mapValueArrayElementType: paramInfo.mapValueArrayElementType,
+      mapValueArrayElementDeclaredType: paramInfo.mapValueArrayElementDeclaredType,
       promiseValueType,
       setElementType: paramInfo.setElementType,
       functionType: paramInfo.functionType,
@@ -821,6 +844,7 @@ class Checker {
 
     if (item.type === 'FunctionDeclaration') {
       const scopeState = this.pushScope()
+      const typeParameterState = this.pushFunctionTypeParameters(item)
 
       try {
         const previousReturnType = this.currentReturnType
@@ -863,6 +887,8 @@ class Checker {
               mapKeyType: paramInfo.mapKeyType,
               mapValueType: paramInfo.mapValueType,
               mapValueShape: paramInfo.mapValueShape,
+              mapValueArrayElementType: paramInfo.mapValueArrayElementType,
+              mapValueArrayElementDeclaredType: paramInfo.mapValueArrayElementDeclaredType,
               promiseValueType: paramInfo.promiseValueType ?? null,
               setElementType: paramInfo.setElementType,
               functionType: paramInfo.functionType,
@@ -885,6 +911,7 @@ class Checker {
           this.functionDepth = previousFunctionDepth
         }
       } finally {
+        this.restoreFunctionTypeParameters(typeParameterState)
         this.restoreScope(scopeState)
       }
 
@@ -2411,6 +2438,10 @@ class Checker {
     )
     expression.mapKeyType = resolvedValueTypeMetadata(field.mapKeyType, fieldType.mapKeyType)
     expression.mapValueType = resolvedValueTypeMetadata(field.mapValueType, fieldType.mapValueType)
+    expression.mapValueArrayElementType =
+      field.mapValueArrayElementType ?? fieldType.mapValueArrayElementType ?? null
+    expression.mapValueArrayElementDeclaredType =
+      field.mapValueArrayElementDeclaredType ?? fieldType.mapValueArrayElementDeclaredType ?? null
     expression.promiseValueType = resolvedValueTypeMetadata(field.promiseValueType, fieldType.promiseValueType)
     expression.setElementType = resolvedValueTypeMetadata(field.setElementType, fieldType.setElementType)
     expression.shape = resolvedObjectShapeMetadata(field.shape, fieldType.shape)
@@ -2513,6 +2544,10 @@ class Checker {
     )
     expression.mapKeyType = resolvedValueTypeMetadata(field.mapKeyType, fieldType.mapKeyType)
     expression.mapValueType = resolvedValueTypeMetadata(field.mapValueType, fieldType.mapValueType)
+    expression.mapValueArrayElementType =
+      field.mapValueArrayElementType ?? fieldType.mapValueArrayElementType ?? null
+    expression.mapValueArrayElementDeclaredType =
+      field.mapValueArrayElementDeclaredType ?? fieldType.mapValueArrayElementDeclaredType ?? null
     expression.promiseValueType = resolvedValueTypeMetadata(field.promiseValueType, fieldType.promiseValueType)
     expression.setElementType = resolvedValueTypeMetadata(field.setElementType, fieldType.setElementType)
     expression.shape = resolvedObjectShapeMetadata(field.shape, fieldType.shape)
@@ -3738,6 +3773,23 @@ class Checker {
     }
 
     const checks = operation.argumentChecks ?? []
+
+    for (let index = 0; index < checks.length && index < expression.args.length; index = index + 1) {
+      const argument = expression.args[index]
+      const check = checks[index]
+
+      if (
+        argument.type === 'ArrowFunctionExpression' &&
+        check.functionParameters !== null &&
+        typeof check.functionParameters !== 'undefined'
+      ) {
+        this.checkArrowFunctionExpression(
+          argument,
+          this.compilerLibraryCallbackFunctionType(check, argument.loc)
+        )
+      }
+    }
+
     const argInfos = this.checkedCallArgInfos(expression)
 
     for (let index = 0; index < checks.length && index < argInfos.length; index = index + 1) {
@@ -3857,6 +3909,61 @@ class Checker {
           }
         }
       }
+    }
+  }
+
+  compilerLibraryCallbackFunctionType(
+    check: LibraryArgumentCheckDescriptor,
+    loc: SourceLocation
+  ): AnyNode {
+    const parameters = check.functionParameters ?? []
+    const params: AnyNode[] = []
+    const libraries = resolveCompilerLibrarySet(this.options.libraries)
+
+    for (let index = 0; index < parameters.length; index = index + 1) {
+      const parameter = parameters[index]
+      const nativeType = parameter.resultTypeId === null || typeof parameter.resultTypeId === 'undefined'
+        ? null
+        : compilerLibraryNativeTypeForId(libraries, parameter.resultTypeId)
+      const fields = parameter.shapeFields ?? nativeType?.fields ?? []
+      const shapeFields: AnyNode[] = []
+
+      for (let fieldIndex = 0; fieldIndex < fields.length; fieldIndex = fieldIndex + 1) {
+        shapeFields.push(this.compilerLibraryResultShapeField(fields[fieldIndex], loc))
+      }
+
+      const param: AnyNode = {
+        name: parameter.name,
+        valueType: parameter.valueType,
+        nullable: parameter.nullable === true,
+        loc
+      }
+
+      if (
+        parameter.resultTypeId !== null &&
+        typeof parameter.resultTypeId !== 'undefined'
+      ) {
+        param.shape = {
+          kind: 'object',
+          fields: shapeFields,
+          libraryTypeId: parameter.resultTypeId,
+          libraryCppType: nativeType?.cppType ?? null
+        }
+      } else if (shapeFields.length > 0) {
+        param.shape = {
+          kind: 'object',
+          fields: shapeFields
+        }
+      }
+
+      params.push(param)
+    }
+
+    return {
+      kind: 'function',
+      resolved: true,
+      params,
+      returnType: check.functionReturnType ?? 'void'
     }
   }
 
@@ -4261,6 +4368,8 @@ class Checker {
       name: field.name,
       valueType: field.valueType,
       readonly: field.readonly,
+      libraryCMember: field.cMember ?? null,
+      libraryCppType: field.cppType ?? null,
       loc
     }
     const nestedFields = field.resultShapeFields
@@ -7973,6 +8082,12 @@ class Checker {
       }
     }
 
+    const typeofNarrowing = this.resolveTypeofNarrowing(expression)
+
+    if (typeofNarrowing !== null) {
+      return typeofNarrowing
+    }
+
     if (
       expression.operator !== '===' &&
       expression.operator !== '!=='
@@ -8047,6 +8162,55 @@ class Checker {
     return {
       trueNames: [],
       falseNames: [key]
+    }
+  }
+
+  resolveTypeofNarrowing(expression: AnyNode): NullableConditionNarrowing | null {
+    if (expression.operator !== '===' && expression.operator !== '!==') {
+      return null
+    }
+
+    let typeofExpression = expression.left
+    let typeName = expression.right
+
+    if (expression.right.type === 'UnaryExpression' && expression.right.operator === 'typeof') {
+      typeofExpression = expression.right
+      typeName = expression.left
+    }
+
+    if (
+      typeofExpression.type !== 'UnaryExpression' ||
+      typeofExpression.operator !== 'typeof' ||
+      typeName.type !== 'StringLiteral' ||
+      !isNonNullableTypeofName(typeName.value)
+    ) {
+      return null
+    }
+
+    let names = optionalChainNarrowingKeys(typeofExpression.argument)
+
+    if (names.length === 0) {
+      const key = nullableNarrowingKey(typeofExpression.argument)
+
+      if (key !== null) {
+        names = [key]
+      }
+    }
+
+    if (names.length === 0) {
+      return null
+    }
+
+    if (expression.operator === '===') {
+      return {
+        trueNames: names,
+        falseNames: []
+      }
+    }
+
+    return {
+      trueNames: [],
+      falseNames: names
     }
   }
 
@@ -8344,6 +8508,47 @@ class Checker {
     return resolved
   }
 
+  pushFunctionTypeParameters(item: AnyNode): CheckerTypeParameterState[] {
+    const state: CheckerTypeParameterState[] = []
+    const typeParameters: AnyNode[] = item.typeParameters ?? []
+
+    for (let index = 0; index < typeParameters.length; index = index + 1) {
+      const typeParameter = checkerNodeAt(typeParameters, index)
+      const name: string = typeParameter.name
+      const previousType = this.types.get(name) ?? null
+      const previousResolvedType = this.resolvedDeclaredTypes.get(name) ?? null
+      let constraint = 'unknown'
+
+      if (typeof typeParameter.constraint === 'string' && typeParameter.constraint.length > 0) {
+        constraint = typeParameter.constraint
+      }
+
+      state.push({ name, previousType, previousResolvedType })
+      this.types.set(name, { kind: 'alias', valueType: constraint })
+      this.resolvedDeclaredTypes.delete(name)
+    }
+
+    return state
+  }
+
+  restoreFunctionTypeParameters(state: CheckerTypeParameterState[]): void {
+    for (let index = state.length - 1; index >= 0; index = index - 1) {
+      const item = state[index]
+
+      if (item.previousType !== null) {
+        this.types.set(item.name, item.previousType)
+      } else {
+        this.types.delete(item.name)
+      }
+
+      if (item.previousResolvedType !== null) {
+        this.resolvedDeclaredTypes.set(item.name, item.previousResolvedType)
+      } else {
+        this.resolvedDeclaredTypes.delete(item.name)
+      }
+    }
+  }
+
   resolveUnionDeclaredType(names: string[], loc: SourceLocation): ResolvedTypeInfo {
     return resolveUnionDeclaredTypeInContext(this.declaredTypeContext(), names, loc)
   }
@@ -8617,4 +8822,60 @@ class Checker {
     const diagnostics = this.diagnostics
     diagnostics.push(item)
   }
+}
+
+function isNonNullableTypeofName(value: string): boolean {
+  return value === 'string' || value === 'number' || value === 'boolean' || value === 'function'
+}
+
+function optionalChainNarrowingKeys(expression: AnyNode): string[] {
+  if (!containsOptionalMemberExpression(expression)) {
+    return []
+  }
+
+  const names: string[] = []
+  appendMemberNarrowingKeys(expression, names)
+  return uniqueNames(names)
+}
+
+function containsOptionalMemberExpression(expression: AnyNode): boolean {
+  if (expression.type === 'OptionalMemberExpression') {
+    return true
+  }
+
+  if (expression.type === 'MemberExpression') {
+    return containsOptionalMemberExpression(expression.object)
+  }
+
+  return false
+}
+
+function appendMemberNarrowingKeys(expression: AnyNode, names: string[]): void {
+  const path = optionalChainMemberPath(expression)
+
+  if (path.length > 0) {
+    names.push(path.join('.'))
+  }
+
+  if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
+    appendMemberNarrowingKeys(expression.object, names)
+  }
+}
+
+function optionalChainMemberPath(expression: AnyNode): string[] {
+  if (expression.type === 'Reference') {
+    return expression.path
+  }
+
+  if (expression.type !== 'MemberExpression' && expression.type !== 'OptionalMemberExpression') {
+    return []
+  }
+
+  const path = optionalChainMemberPath(expression.object)
+
+  if (path.length === 0) {
+    return []
+  }
+
+  return [...path, expression.property]
 }

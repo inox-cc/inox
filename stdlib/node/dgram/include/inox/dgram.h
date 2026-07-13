@@ -1,66 +1,113 @@
 #ifndef INOX_DGRAM_H
 #define INOX_DGRAM_H
 
-#include <stddef.h>
+#include <memory>
+#include <optional>
 
+#include "inox/buffer.h"
+#include "inox/callback.h"
+#include "inox/string.h"
 #include "inox/string_view.h"
 
-struct inox_dgram_socket;
-
 struct DgramAddress {
-  char address[64];
-  inox::StringView family;
-  int port;
+  inox::String address;
+  inox::String family;
+  double port;
+};
+
+struct DgramRemoteInfo : DgramAddress {
+  double size;
 };
 
 class DgramSocket;
+class DgramModule;
 
-typedef void (*DgramRecvFn)(
-  void* user,
-  DgramSocket socket,
-  inox::StringView bytes,
-  inox::StringView host,
-  int port
-);
-typedef void (*DgramCloseFn)(void* user, DgramSocket socket);
+class DgramSocketOptions {
+public:
+  DgramSocketOptions();
+  explicit DgramSocketOptions(const inox::Value& value);
 
-#define INOX_DGRAM_BIND_REUSEADDR 1u
+private:
+  bool valid_;
+  inox::String type_;
+  bool reuse_addr_;
+  std::optional<double> recv_buffer_size_;
+  std::optional<double> send_buffer_size_;
 
-#ifdef __cplusplus
+  friend class DgramModule;
+};
+
+class DgramBindOptions {
+public:
+  DgramBindOptions();
+  explicit DgramBindOptions(const inox::Value& value);
+
+private:
+  bool valid_;
+  std::optional<double> port_;
+  std::optional<inox::String> address_;
+
+  friend class DgramSocket;
+};
 
 class DgramSocket {
 private:
-  inox_dgram_socket* socket_;
+  class Impl;
+  std::shared_ptr<Impl> impl_;
+
+  explicit DgramSocket(std::shared_ptr<Impl> impl);
+
+  friend class DgramModule;
 
 public:
   DgramSocket();
-  explicit DgramSocket(inox_dgram_socket* socket);
+  DgramSocket(const DgramSocket& other);
+  DgramSocket(DgramSocket&& other) noexcept;
+  DgramSocket& operator=(const DgramSocket& other);
+  DgramSocket& operator=(DgramSocket&& other) noexcept;
+  ~DgramSocket();
 
-  static DgramSocket create(DgramRecvFn recv, void* user);
-
-  void bind(inox::StringView host, int port, unsigned int flags = 0) const;
-  void onMessage(DgramRecvFn recv, void* user) const;
-  void onClose(DgramCloseFn close, void* user) const;
-  void connect(inox::StringView host, int port) const;
-  void disconnect() const;
-  void recvStart() const;
-  void recvStop() const;
-  void send(inox::StringView bytes) const;
-  void send(inox::StringView bytes, inox::StringView host, int port) const;
-  void close() const;
   DgramAddress address() const;
+  DgramSocket& bind();
+  DgramSocket& bind(double port);
+  DgramSocket& bind(double port, inox::StringView address);
+  DgramSocket& bind(double port, inox::StringView address, inox::Callback callback);
+  DgramSocket& bind(const DgramBindOptions& options);
+  DgramSocket& bind(const DgramBindOptions& options, inox::Callback callback);
+  DgramSocket& close();
+  DgramSocket& close(inox::Callback callback);
+  DgramSocket& connect(double port);
+  DgramSocket& connect(double port, inox::StringView address);
+  DgramSocket& connect(double port, inox::StringView address, inox::Callback callback);
+  DgramSocket& disconnect();
+  double getRecvBufferSize() const;
+  double getSendBufferSize() const;
+  DgramSocket& on(inox::StringView event_name, inox::Callback listener);
+  DgramSocket& ref();
   DgramAddress remoteAddress() const;
-  int localPort() const;
-  void setBroadcast(bool enabled) const;
-  void setTTL(int ttl) const;
-  int getSendBufferSize() const;
-  void setSendBufferSize(int size) const;
-  int getRecvBufferSize() const;
-  void setRecvBufferSize(int size) const;
-  void ref() const;
-  void unref() const;
+  void send(inox::StringView message);
+  void send(inox::StringView message, inox::Callback callback);
+  void send(inox::StringView message, double port, inox::StringView address);
+  void send(inox::StringView message, double port, inox::StringView address, inox::Callback callback);
+  void send(const Uint8Array& message);
+  void send(const Uint8Array& message, inox::Callback callback);
+  void send(const Uint8Array& message, double port, inox::StringView address);
+  void send(const Uint8Array& message, double port, inox::StringView address, inox::Callback callback);
+  DgramSocket& setBroadcast(bool enabled);
+  DgramSocket& setRecvBufferSize(double size);
+  DgramSocket& setSendBufferSize(double size);
+  DgramSocket& setTTL(double ttl);
+  DgramSocket& unref();
 };
 
-#endif
+class DgramModule {
+public:
+  DgramSocket createSocket(inox::StringView type) const;
+  DgramSocket createSocket(inox::StringView type, inox::Callback listener) const;
+  DgramSocket createSocket(const DgramSocketOptions& options) const;
+  DgramSocket createSocket(const DgramSocketOptions& options, inox::Callback listener) const;
+};
+
+extern const DgramModule dgram;
 
 #endif

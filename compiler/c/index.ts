@@ -131,6 +131,8 @@ import {
   compilerLibraryStringConstantValue,
   emitPreparedCompilerLibraryCallExpression as emitPreparedCompilerLibraryCallExpressionWithDependencies,
   emitPreparedCompilerLibraryExpression,
+  emitPreparedCompilerLibraryNativeFieldExpression,
+  isCompilerLibraryNativeFieldExpression,
   isCompilerLibraryExternalEventLoopCallExpression,
   isCompilerLibraryPromiseExpression,
   isCompilerLibraryStringExpression,
@@ -143,7 +145,6 @@ import {
   runtimeObjectLikeValueMismatchCondition
 } from './runtime-values.ts'
 import type {
-  DgramLoweringDependencies,
   HttpLoweringDependencies,
   NetLoweringDependencies,
   NodeNetworkLoweringDependencies,
@@ -502,7 +503,6 @@ let timerLoweringDependencies = {} as TimerLoweringDependencies
 let fetchLoweringDependencies = {} as FetchLoweringDependencies
 let compilerLibraryLoweringDependencies = {} as CompilerLibraryLoweringDependencies
 let promiseLoweringDependencies = {} as PromiseLoweringDependencies
-let dgramLoweringDependencies = {} as DgramLoweringDependencies
 let httpLoweringDependencies = {} as HttpLoweringDependencies
 let netLoweringDependencies = {} as NetLoweringDependencies
 let nodeNetworkLoweringDependencies = {} as NodeNetworkLoweringDependencies
@@ -961,16 +961,6 @@ function isConfiguredRuntimeProducedStringExpression(expression: AnyNode | null 
   return isCompilerLibraryStringExpression(expression)
 }
 
-dgramLoweringDependencies = {
-  emitPreparedNumberExpression,
-  emitPreparedStringBytesOperand,
-  emitReference,
-  emitStatementList,
-  findObjectLiteralPropertyValue,
-  staticObjectBooleanPropertyValue,
-  staticObjectStringPropertyValue
-}
-
 httpLoweringDependencies = {
   emitConsoleLogStatement,
   emitPreparedNumberExpression,
@@ -1097,7 +1087,6 @@ netLoweringDependencies = {
 }
 
 nodeNetworkLoweringDependencies = {
-  dgram: dgramLoweringDependencies,
   http: httpLoweringDependencies,
   net: netLoweringDependencies
 }
@@ -1346,7 +1335,6 @@ const cUnitDependencies = {
   collectExternalEventLoopFunctions,
   collectionLoweringDependencies,
   createBaseContext,
-  dgramLoweringDependencies,
   emitClassConstructorDeclaration: (info: CClassInfo, baseContext: CEmitContext) =>
     emitClassConstructorDeclarationWithDependencies(info, baseContext, declarationEmissionDependencies),
   emitClassMethodDeclaration: (info: CClassInfo, method: AnyNode, baseContext: CEmitContext) =>
@@ -1374,7 +1362,6 @@ const cModuleEmissionDependencies = {
   collectExternalEventLoopFunctions,
   collectionLoweringDependencies,
   createBaseContext,
-  dgramLoweringDependencies,
   emitClassConstructorDeclaration: (info: CClassInfo, baseContext: CEmitContext) =>
     emitClassConstructorDeclarationWithDependencies(info, baseContext, declarationEmissionDependencies),
   emitClassMethodDeclaration: (info: CClassInfo, method: AnyNode, baseContext: CEmitContext) =>
@@ -1631,9 +1618,6 @@ function createBaseContext(
     arrayLoweringDependencies,
     stringLoweringDependencies,
     diagnostics,
-    dgramCreateSocketNames: new Set(),
-    dgramImportNames: new Set(),
-    dgramMessageHandlers: new Map(),
     functionThrowValueTypes: throwing.functionThrowValueTypes,
     functionNames,
     functionParams,
@@ -2500,30 +2484,6 @@ function findObjectLiteralPropertyValue(expression: AnyNode, key: string): AnyNo
 
       return null
     }
-  }
-
-  return null
-}
-
-function staticObjectStringPropertyValue(expression: AnyNode, key: string): string | null {
-  const value = findObjectLiteralPropertyValue(expression, key)
-
-  if (value !== null && typeof value !== 'undefined' && value.type === 'StringLiteral') {
-    return value.value
-  }
-
-  if (value !== null && typeof value !== 'undefined' && value.type === 'TemplateLiteral' && !value.raw.includes('${')) {
-    return cookTemplateLiteralText(value.raw.slice(1, -1))
-  }
-
-  return null
-}
-
-function staticObjectBooleanPropertyValue(expression: AnyNode, key: string): boolean | null {
-  const value = findObjectLiteralPropertyValue(expression, key)
-
-  if (value !== null && typeof value !== 'undefined' && value.type === 'BooleanLiteral') {
-    return value.value === true
   }
 
   return null
@@ -6653,6 +6613,21 @@ function emitNativeClassInstanceLogValue(expression: AnyNode, context: CFunction
   }
 }
 
+function emitPreparedCompilerLibraryNativeFieldValueExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression | null {
+  if (!isCompilerLibraryNativeFieldExpression(expression, context)) {
+    return null
+  }
+
+  const preparedObject = expression.object.type === 'Reference'
+    ? null
+    : emitCValueExpression(expression.object, context)
+
+  return emitPreparedCompilerLibraryNativeFieldExpression(expression, context, preparedObject)
+}
+
 function emitStringLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
   if (expression !== null && typeof expression !== 'undefined' && expression.type === 'Reference') {
     const name = joinStrings(expression.path, '_')
@@ -6719,6 +6694,16 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
   }
 
   if (isMemberAccessExpression(expression)) {
+    const libraryNativeField = emitPreparedCompilerLibraryNativeFieldValueExpression(expression, context)
+
+    if (libraryNativeField !== null && libraryNativeField.valueType === 'string') {
+      return {
+        lines: libraryNativeField.lines,
+        format: consoleLogStringFormat,
+        values: [libraryNativeField.expression]
+      }
+    }
+
     const netAddressMember = resolveNodeNetworkAddressStringMember(expression, context) ?? ''
 
     if (netAddressMember !== '') {
@@ -6938,6 +6923,16 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): Con
   }
 
   if (isMemberAccessExpression(expression)) {
+    const libraryNativeField = emitPreparedCompilerLibraryNativeFieldValueExpression(expression, context)
+
+    if (libraryNativeField !== null && libraryNativeField.valueType === 'number') {
+      return {
+        lines: libraryNativeField.lines,
+        format: consoleLogNumberFormat,
+        values: [`((double)${libraryNativeField.expression})`]
+      }
+    }
+
     const stringLength = emitPreparedStringLengthExpression(expression, context)
 
     if (stringLength !== null && typeof stringLength !== 'undefined') {
@@ -7059,6 +7054,16 @@ function emitBooleanLogValue(expression: AnyNode, context: CFunctionContext): Co
   }
 
   if (isMemberAccessExpression(expression)) {
+    const libraryNativeField = emitPreparedCompilerLibraryNativeFieldValueExpression(expression, context)
+
+    if (libraryNativeField !== null && libraryNativeField.valueType === 'boolean') {
+      return {
+        lines: libraryNativeField.lines,
+        format: consoleLogBooleanFormat,
+        values: [libraryNativeField.expression]
+      }
+    }
+
     const nativeClassField = emitPreparedNativeClassFieldScalarExpression(expression, context)
 
     if (nativeClassField !== null && typeof nativeClassField !== 'undefined') {

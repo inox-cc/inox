@@ -486,7 +486,8 @@ export function emitPreparedStringLengthExpression(
 
   if (
     isDynamicRuntimeStringFieldExpression(object, context) &&
-    !stringDeps(context).isNodeRuntimeProducedStringExpression(object)
+    !stringDeps(context).isNodeRuntimeProducedStringExpression(object) &&
+    !isNarrowedNullableStringPath(object, context)
   ) {
     return null
   }
@@ -1886,6 +1887,10 @@ function isNarrowedNullableStringField(
     return false
   }
 
+  return isNarrowedNullableStringPath(expression, context)
+}
+
+function isNarrowedNullableStringPath(expression: AnyNode, context: StringCContext): boolean {
   const narrowedNullableScalars = context.narrowedNullableScalars
 
   if (narrowedNullableScalars === null || typeof narrowedNullableScalars === 'undefined') {

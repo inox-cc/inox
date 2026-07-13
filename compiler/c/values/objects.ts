@@ -440,6 +440,8 @@ function normalizedObjectShapeField(field: CObjectShapeField): CObjectShapeField
     mapValueType: field.mapValueType,
     promiseValueType: field.promiseValueType,
     setElementType: field.setElementType,
+    libraryCMember: field.libraryCMember,
+    libraryCppType: field.libraryCppType,
     functionTypeOwnership: field.functionTypeOwnership,
     shape: field.shape,
     shapeOwnership: field.shapeOwnership,

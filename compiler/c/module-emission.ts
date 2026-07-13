@@ -92,7 +92,6 @@ import {
   registerNodeStdlibRuntimeImportNames
 } from '../stdlib/node/c.ts'
 import type {
-  DgramLoweringDependencies,
   HttpLoweringDependencies,
   NetLoweringDependencies
 } from '../stdlib/node/c.ts'
@@ -360,7 +359,6 @@ export type CModuleEmissionDependencies = {
     jsGlobalRoots: Set<string>,
     topLevelNodes: AnyNode[]
   ): CEmitContext
-  dgramLoweringDependencies: DgramLoweringDependencies
   emitClassConstructorDeclaration(info: CClassInfo, baseContext: CEmitContext): string[]
   emitClassMethodDeclaration(info: CClassInfo, method: AnyNode, baseContext: CEmitContext): string[]
   emitClassMethodHead(info: CClassInfo, method: AnyNode, context: CEmitContext): string
@@ -463,7 +461,6 @@ export function emitCModuleSource(
       prelude.needsRegexpRuntime,
       prelude.needsTimerRuntime,
       prelude.needsConsoleRuntime,
-      prelude.needsDgramRuntime,
       prelude.needsFetchRuntime,
       prelude.needsHttpRuntime,
       prelude.needsNetRuntime,
@@ -523,7 +520,6 @@ export function emitCModuleSource(
   pushCModuleLines(
     bodyLines,
     emitNodeNetworkHandlerDeclarations(context, {
-      dgram: deps.dgramLoweringDependencies,
       http: deps.httpLoweringDependencies,
       net: deps.netLoweringDependencies
     })

@@ -394,7 +394,7 @@ function resolveNullableScalarNullCheckNarrowing(
     return emptyNullableScalarNarrowing()
   }
 
-  const typeofNarrowing = resolveNullableScalarTypeofUndefinedNarrowing(expression, context)
+  const typeofNarrowing = resolveNullableScalarTypeofNarrowing(expression, context)
 
   if (typeofNarrowing !== null) {
     return typeofNarrowing
@@ -437,7 +437,7 @@ function resolveNullableScalarNullCheckNarrowing(
   }
 }
 
-function resolveNullableScalarTypeofUndefinedNarrowing(
+function resolveNullableScalarTypeofNarrowing(
   expression: AnyNode,
   context: NullableFunctionContext
 ): NullableScalarNarrowing | null {
@@ -453,7 +453,7 @@ function resolveNullableScalarTypeofUndefinedNarrowing(
     typeofExpression.type !== 'UnaryExpression' ||
     typeofExpression.operator !== 'typeof' ||
     literal.type !== 'StringLiteral' ||
-    literal.value !== 'undefined'
+    (literal.value !== 'undefined' && !isNonNullableTypeofName(literal.value))
   ) {
     return null
   }
@@ -461,15 +461,28 @@ function resolveNullableScalarTypeofUndefinedNarrowing(
   const argument = typeofExpression.argument
   const name = nullableScalarNarrowingKey(argument)
 
-  if (name === null || typeof name === 'undefined' || !isNullableScalarNarrowingExpression(argument, name, context)) {
+  if (name === null || typeof name === 'undefined') {
     return emptyNullableScalarNarrowing()
   }
 
-  if (expression.operator === '!==') {
+  if (literal.value !== 'string' && !isNullableScalarNarrowingExpression(argument, name, context)) {
+    return emptyNullableScalarNarrowing()
+  }
+
+  const narrowsWhenEqual = literal.value !== 'undefined'
+
+  if (
+    (expression.operator === '===' && narrowsWhenEqual) ||
+    (expression.operator === '!==' && !narrowsWhenEqual)
+  ) {
     return { trueNames: [name], falseNames: [] }
   }
 
   return { trueNames: [], falseNames: [name] }
+}
+
+function isNonNullableTypeofName(value: string): boolean {
+  return value === 'string' || value === 'number' || value === 'boolean' || value === 'function'
 }
 
 function nullableScalarNarrowingKey(expression: AnyNode | null | undefined): string | null {

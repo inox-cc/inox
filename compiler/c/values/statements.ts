@@ -31,7 +31,6 @@ import type {
   CAsyncTaskWrapper,
   CCallbackWrapper,
   CClassInfo,
-  CDgramMessageHandler,
   CFunctionParam,
   CFunctionPointerAdapter,
   CFunctionReturnMapType,
@@ -138,12 +137,6 @@ type CFunctionContext = {
   cppStringValues: CStringSet
   cppValueTypes: CStringMap
   diagnostics: Diagnostic[]
-  dgramBoundSockets: CStringSet
-  dgramCreateSocketNames: CStringSet
-  dgramImportNames: CStringSet
-  dgramMessageHandlers: Map<string, CDgramMessageHandler>
-  dgramMessageSockets: CStringSet
-  dgramReuseAddrSockets: CStringSet
   errorChannelUsed: boolean
   errorObjectNames: CStringSet
   errorTargets: string[]

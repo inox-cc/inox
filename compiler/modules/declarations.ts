@@ -277,10 +277,11 @@ function appendModuleDeclarationTypeAlias(lines: string[], item: AnyNode): void 
 
 function appendModuleDeclarationFunction(lines: string[], item: AnyNode): void {
   const asyncPrefix = item.async === true ? 'async ' : ''
+  const typeParameters = formatTypeParameterList(item.typeParameters)
   const params = formatParamList(item.params)
   const returnType = declarationReturnType(item)
 
-  lines.push(`${exportPrefix(item)}${asyncPrefix}function ${item.name}(${params}): ${returnType};`)
+  lines.push(`${exportPrefix(item)}${asyncPrefix}function ${item.name}${typeParameters}(${params}): ${returnType};`)
 }
 
 function appendModuleDeclarationVariable(lines: string[], item: AnyNode, diagnostics: Diagnostic[]): void {
@@ -914,6 +915,26 @@ function formatFunctionType(info: AnyNode): string {
   return `(${formatParamList(info.params)}) => ${returnType}`
 }
 
+function formatTypeParameterList(typeParameters: AnyNode[] | null | undefined): string {
+  if (typeParameters === null || typeof typeParameters === 'undefined' || typeParameters.length === 0) {
+    return ''
+  }
+
+  const values: string[] = []
+
+  for (const typeParameter of typeParameters) {
+    const constraint = nullableStringMetadata(typeParameter.constraint)
+
+    if (constraint !== null) {
+      values.push(`${typeParameter.name} extends ${constraint}`)
+    } else {
+      values.push(typeParameter.name)
+    }
+  }
+
+  return `<${joinStrings(values, ', ')}>`
+}
+
 function formatObjectType(info: AnyNode): string {
   const objectBody = formatObjectTypeBody(info)
   const baseTypes = info.baseTypes
@@ -1221,7 +1242,7 @@ function createModuleDeclarationNode(item: AnyNode): AnyNode | null {
 }
 
 function cloneFunctionDeclaration(item: AnyNode): AnyNode {
-  return {
+  const declaration: AnyNode = {
     type: 'FunctionDeclaration',
     exported: true,
     declarationOnly: true,
@@ -1241,6 +1262,31 @@ function cloneFunctionDeclaration(item: AnyNode): AnyNode {
     returnShape: nullableMetadata(item.returnShape),
     body: []
   }
+  const typeParameters = cloneTypeParameters(item.typeParameters)
+
+  if (typeParameters.length > 0) {
+    declaration.typeParameters = typeParameters
+  }
+
+  return declaration
+}
+
+function cloneTypeParameters(typeParameters: AnyNode[] | null | undefined): AnyNode[] {
+  const cloned: AnyNode[] = []
+
+  if (typeParameters === null || typeof typeParameters === 'undefined') {
+    return cloned
+  }
+
+  for (const typeParameter of typeParameters) {
+    cloned.push({
+      name: typeParameter.name,
+      constraint: nullableMetadata(typeParameter.constraint),
+      loc: nullableMetadata(typeParameter.loc)
+    })
+  }
+
+  return cloned
 }
 
 function cloneVariableDeclaration(item: AnyNode): AnyNode {

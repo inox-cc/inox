@@ -1,20 +1,6 @@
 import type { CEmitContext, CFunctionContext } from '../../c/context.ts'
 import type { CPreparedExpression as PreparedExpression } from '../../c/types.ts'
 import type { AnyNode, IrGlobalUsage, IrProgram } from '../../types.ts'
-import type { DgramLoweringDependencies as PackageDgramLoweringDependencies } from '../../../stdlib/node/dgram/compiler/c.ts'
-import {
-  collectDgramMessageHandlers,
-  emitDgramAddressVariableDeclaration,
-  emitDgramMessageHandlerDeclaration,
-  emitDgramMessageHandlerHead,
-  emitDgramNumberVariableDeclaration,
-  emitPreparedDgramAddressPortExpression,
-  emitDgramSocketCallStatement,
-  emitDgramSocketVariableDeclaration,
-  irProgramsUseDgramRuntimeImport,
-  registerDgramRuntimeImportNames
-} from '../../../stdlib/node/dgram/compiler/c.ts'
-import { isSupportedNodeDgramCGlobalUsage } from '../../../stdlib/node/dgram/compiler/descriptor.ts'
 import type { HttpLoweringDependencies as PackageHttpLoweringDependencies } from '../../../stdlib/node/http/compiler/c.ts'
 import {
   collectHttpHandlers,
@@ -53,13 +39,11 @@ export {
   timerCallbackFunctionType
 } from '../../../stdlib/node/timers/compiler/c.ts'
 
-export type DgramLoweringDependencies = PackageDgramLoweringDependencies
 export type HttpLoweringDependencies = PackageHttpLoweringDependencies
 export type NetLoweringDependencies = PackageNetLoweringDependencies
 export type TimerLoweringDependencies = PackageTimerLoweringDependencies
 
 export type NodeNetworkLoweringDependencies = {
-  dgram: DgramLoweringDependencies
   http: HttpLoweringDependencies
   net: NetLoweringDependencies
 }
@@ -67,8 +51,6 @@ export type NodeNetworkLoweringDependencies = {
 type NodeCGlobalNameSet = Set<string>
 
 export type NodeStdlibCGlobalUsageContext = {
-  dgramCreateSocketNames?: NodeCGlobalNameSet
-  dgramImportNames?: NodeCGlobalNameSet
   httpCreateServerNames?: NodeCGlobalNameSet
   httpImportNames?: NodeCGlobalNameSet
   netConnectNames?: NodeCGlobalNameSet
@@ -77,20 +59,17 @@ export type NodeStdlibCGlobalUsageContext = {
 }
 
 export type NodeStdlibRuntimeImportUsage = {
-  dgram: boolean
   http: boolean
   net: boolean
 }
 
 export function registerNodeStdlibRuntimeImportNames(context: CEmitContext, irPrograms: IrProgram[]): void {
-  registerDgramRuntimeImportNames(context, irPrograms)
   registerHttpRuntimeImportNames(context, irPrograms)
   registerNetRuntimeImportNames(context, irPrograms)
 }
 
 export function nodeStdlibRuntimeImportUsage(irPrograms: IrProgram[]): NodeStdlibRuntimeImportUsage {
   return {
-    dgram: irProgramsUseDgramRuntimeImport(irPrograms),
     http: irProgramsUseHttpRuntimeImport(irPrograms),
     net: irProgramsUseNetRuntimeImport(irPrograms)
   }
@@ -101,7 +80,6 @@ export function isSupportedNodeStdlibCGlobalUsage(
   context: NodeStdlibCGlobalUsageContext
 ): boolean {
   return (
-    isSupportedNodeDgramCGlobalUsage(usage, context) ||
     isSupportedNodeHttpCGlobalUsage(usage, context) ||
     isSupportedNodeNetCGlobalUsage(usage, context)
   )
@@ -114,21 +92,16 @@ function pushNodeStdlibLines(target: string[], lines: string[]): void {
 }
 
 export function collectNodeNetworkHandlers(irPrograms: IrProgram[], context: CEmitContext): void {
-  context.dgramMessageHandlers = collectDgramMessageHandlers(irPrograms, context)
   context.httpHandlers = collectHttpHandlers(irPrograms, context)
   context.netHandlers = collectNetHandlers(irPrograms, context)
 }
 
 export function hasNodeNetworkHandlers(context: CEmitContext): boolean {
-  return context.dgramMessageHandlers.size > 0 || context.httpHandlers.size > 0 || context.netHandlers.size > 0
+  return context.httpHandlers.size > 0 || context.netHandlers.size > 0
 }
 
 export function emitNodeNetworkHandlerPrototypeLines(context: CEmitContext): string[] {
   const lines: string[] = []
-
-  for (const wrapper of context.dgramMessageHandlers.values()) {
-    lines.push(`${emitDgramMessageHandlerHead(wrapper)};`)
-  }
 
   for (const wrapper of context.httpHandlers.values()) {
     lines.push(`${emitHttpHandlerHead(wrapper)};`)
@@ -146,11 +119,6 @@ export function emitNodeNetworkHandlerDeclarations(
   deps: NodeNetworkLoweringDependencies
 ): string[] {
   const lines: string[] = []
-
-  for (const wrapper of context.dgramMessageHandlers.values()) {
-    pushNodeStdlibLines(lines, emitDgramMessageHandlerDeclaration(wrapper, context, deps.dgram))
-    lines.push('')
-  }
 
   for (const wrapper of context.httpHandlers.values()) {
     pushNodeStdlibLines(lines, emitHttpHandlerDeclaration(wrapper, context, deps.http))
@@ -170,24 +138,6 @@ export function emitNodeNetworkVariableDeclaration(
   context: CFunctionContext,
   deps: NodeNetworkLoweringDependencies
 ): string[] | null {
-  const dgramSocket = emitDgramSocketVariableDeclaration(statement, context, deps.dgram)
-
-  if (dgramSocket !== null && typeof dgramSocket !== 'undefined') {
-    return dgramSocket
-  }
-
-  const dgramNumber = emitDgramNumberVariableDeclaration(statement, context)
-
-  if (dgramNumber !== null && typeof dgramNumber !== 'undefined') {
-    return dgramNumber
-  }
-
-  const dgramAddress = emitDgramAddressVariableDeclaration(statement, context)
-
-  if (dgramAddress !== null && typeof dgramAddress !== 'undefined') {
-    return dgramAddress
-  }
-
   const httpServer = emitHttpServerVariableDeclaration(statement, context)
 
   if (httpServer !== null && typeof httpServer !== 'undefined') {
@@ -232,12 +182,6 @@ export function emitNodeNetworkCallStatement(
   context: CFunctionContext,
   deps: NodeNetworkLoweringDependencies
 ): string[] | null {
-  const dgramSocketCall = emitDgramSocketCallStatement(expression, context, deps.dgram)
-
-  if (dgramSocketCall !== null && typeof dgramSocketCall !== 'undefined') {
-    return dgramSocketCall
-  }
-
   const httpServerCall = emitHttpServerCallStatement(expression, context, deps.http)
 
   if (httpServerCall !== null && typeof httpServerCall !== 'undefined') {
@@ -263,12 +207,6 @@ export function emitPreparedNodeNetworkAddressPortExpression(
   expression: AnyNode,
   context: CFunctionContext
 ): PreparedExpression | null {
-  const dgramAddressPort = emitPreparedDgramAddressPortExpression(expression, context)
-
-  if (dgramAddressPort !== null && typeof dgramAddressPort !== 'undefined') {
-    return dgramAddressPort
-  }
-
   return emitPreparedNetAddressPortExpression(expression, context)
 }
 

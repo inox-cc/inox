@@ -87,6 +87,8 @@ export function isReadonlyCObjectShapeField(field: AnyNode): boolean {
 
 export type CObjectShape = {
   builtin?: string | null
+  libraryCppType?: string | null
+  libraryTypeId?: string | null
   dynamic?: boolean
   dynamicField?: CObjectShapeField | null
   fields?: CObjectShapeField[] | null
@@ -345,11 +347,6 @@ export type CAsyncTaskWrapper = {
   successPhases: CAsyncTaskPhase[]
   tryHandler: CAsyncTaskTryHandlerPlan | null
   tryPhases: CAsyncTaskPhase[]
-}
-
-export type CDgramMessageHandler = {
-  name: string
-  expression: AnyNode
 }
 
 export type CHttpHandler = {

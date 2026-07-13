@@ -36,7 +36,6 @@ export type CRuntimePreludeRequirements = {
   needsRegexpRuntime: boolean
   needsTimerRuntime: boolean
   needsConsoleRuntime: boolean
-  needsDgramRuntime: boolean
   needsFetchRuntime: boolean
   needsHttpRuntime: boolean
   needsNetRuntime: boolean
@@ -118,7 +117,6 @@ export function resolveCRuntimePreludeRequirements(
     needsAsyncRuntime ||
     signatureRuntimeTypes.size > 0
   const nodeRuntimeImports = nodeStdlibRuntimeImportUsage(input.irPrograms)
-  const needsDgramRuntime = nodeRuntimeImports.dgram
   const needsObjectRuntime =
     runtimeRequirements.has('objects') ||
     needsFetchRuntime ||
@@ -129,7 +127,6 @@ export function resolveCRuntimePreludeRequirements(
   const needsRuntime =
     input.throwingFunctionCount > 0 ||
     needsAsyncRuntime ||
-    needsDgramRuntime ||
     needsFetchRuntime ||
     needsHttpRuntime ||
     needsNetRuntime ||
@@ -144,7 +141,6 @@ export function resolveCRuntimePreludeRequirements(
   const needsTimeRuntime =
     runtimeRequirements.has('clocks') ||
     needsAsyncRuntime ||
-    needsDgramRuntime ||
     needsFetchRuntime ||
     needsHttpRuntime ||
     needsNetRuntime
@@ -152,7 +148,6 @@ export function resolveCRuntimePreludeRequirements(
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(input.irPrograms)
   const needsStringHeader =
     runtimeRequirements.has('string-bytes') ||
-    needsDgramRuntime ||
     needsFetchRuntime ||
     needsNetRuntime ||
     signatureRuntimeTypes.has('string')
@@ -175,7 +170,6 @@ export function resolveCRuntimePreludeRequirements(
     needsRegexpRuntime,
     needsTimerRuntime,
     needsConsoleRuntime,
-    needsDgramRuntime,
     needsFetchRuntime,
     needsHttpRuntime,
     needsNetRuntime,

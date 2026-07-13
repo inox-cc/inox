@@ -19,7 +19,7 @@ export function memberExpressionPath(expression: MemberPathNode | null | undefin
     }
   }
 
-  if (expression.type === 'MemberExpression') {
+  if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
     const objectPath = memberExpressionPath(expression.object)
     const property = expression.property
 

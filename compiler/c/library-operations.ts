@@ -8,7 +8,7 @@ import {
   registerOwnedValue
 } from './context.ts'
 import type { CFunctionContext } from './context.ts'
-import { cStringLiteral } from './identifiers.ts'
+import { cStringLiteral, emitCIdentifier } from './identifiers.ts'
 import type {
   CFunctionType,
   CObjectShape,
@@ -39,6 +39,14 @@ type CompilerLibraryExpressionNode = AnyNode & {
   libraryOwned?: boolean | null
   promiseRejectionValueType?: string | null
   promiseValueType?: string | null
+}
+
+type CompilerLibraryNativeFieldContext = {
+  cppValueTypes: Map<string, string>
+  localValueNames: Set<string>
+  moduleObjectShapes: Map<string, CObjectShapeField[]>
+  moduleValueNames: Map<string, string>
+  objectShapes: Map<string, CObjectShapeField[]>
 }
 
 export type CompilerLibraryLoweringDependencies = {
@@ -81,6 +89,133 @@ export function emitPreparedCompilerLibraryExpression(expression: AnyNode): Prep
     cppType,
     owned: item.libraryOwned === true
   }
+}
+
+export function isCompilerLibraryNativeFieldExpression(
+  expression: AnyNode,
+  context: CompilerLibraryNativeFieldContext
+): boolean {
+  return compilerLibraryNativeField(expression, context) !== null
+}
+
+export function emitPreparedCompilerLibraryNativeFieldExpression(
+  expression: AnyNode,
+  context: CompilerLibraryNativeFieldContext,
+  preparedObject: PreparedExpression | null
+): PreparedExpression | null {
+  const field = compilerLibraryNativeField(expression, context)
+
+  if (field === null) {
+    return null
+  }
+
+  let lines: string[] = []
+  let objectReference = ''
+  let objectCppType: string | null | undefined = null
+  const directReference = expression.object.type === 'Reference' && expression.object.path.length === 1
+
+  if (directReference) {
+    const objectName = expression.object.path[0]
+    objectCppType = context.cppValueTypes.get(objectName)
+    objectReference = emitCIdentifier(objectName)
+
+    if (!context.localValueNames.has(objectName)) {
+      objectReference = context.moduleValueNames.get(objectName) ?? objectReference
+    }
+  } else {
+    if (preparedObject === null) {
+      return null
+    }
+
+    objectCppType = preparedObject.cppType
+    lines = preparedObject.lines
+    objectReference = `(${preparedObject.expression})`
+  }
+
+  if (
+    objectCppType === null ||
+    typeof objectCppType === 'undefined' ||
+    objectCppType === 'inox::Value'
+  ) {
+    return null
+  }
+
+  return {
+    lines,
+    expression: `${objectReference}.${emitCIdentifier(field.libraryCMember)}`,
+    cppType: compilerLibraryNativeFieldCppType(field),
+    runtimeTypeChecked: true,
+    valueType: field.valueType
+  }
+}
+
+function compilerLibraryNativeField(
+  expression: AnyNode,
+  context: CompilerLibraryNativeFieldContext
+): CObjectShapeField | null {
+  if (expression.type !== 'MemberExpression') {
+    return null
+  }
+
+  let fields: CObjectShapeField[] | null = null
+  const directReference = expression.object.type === 'Reference' && expression.object.path.length === 1
+
+  if (directReference) {
+    const objectName = expression.object.path[0]
+    fields = context.objectShapes.get(objectName) ?? context.moduleObjectShapes.get(objectName) ?? null
+  } else {
+    const shape = expression.object.shape as CObjectShape | null | undefined
+    fields = shape?.fields ?? null
+  }
+
+  if (fields === null) {
+    return null
+  }
+
+  let field: CObjectShapeField | null = null
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    if (fields[index].name === expression.property) {
+      field = fields[index]
+      break
+    }
+  }
+
+  if (field === null) {
+    return null
+  }
+
+  const cMember = field.libraryCMember
+
+  if (typeof cMember !== 'string' || cMember === '') {
+    return null
+  }
+
+  return field
+}
+
+function compilerLibraryNativeFieldCppType(field: CObjectShapeField): string | undefined {
+  if (typeof field.libraryCppType === 'string') {
+    return field.libraryCppType
+  }
+
+  if (field.valueType === 'string') {
+    return 'inox::String'
+  }
+
+  if (field.valueType === 'number') {
+    return 'double'
+  }
+
+  if (field.valueType === 'boolean') {
+    return 'bool'
+  }
+
+  if (typeof field.shape?.libraryCppType === 'string') {
+    return field.shape.libraryCppType
+  }
+
+  return undefined
 }
 
 export function emitPreparedCompilerLibraryCallExpression(

@@ -55,9 +55,9 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       baseTypeIds: [],
       runtimeRequirements: [runtimeRequirement],
       fields: [
-        { name: 'address', valueType: 'string', readonly: true },
-        { name: 'family', valueType: 'string', readonly: true },
-        { name: 'port', valueType: 'number', readonly: true }
+        { name: 'address', valueType: 'string', readonly: true, cMember: 'address' },
+        { name: 'family', valueType: 'string', readonly: true, cMember: 'family' },
+        { name: 'port', valueType: 'number', readonly: true, cMember: 'port' }
       ]
     },
     {
@@ -111,7 +111,7 @@ function createSocketOperation(): LibraryOperationDescriptor {
     cFailureMode: 'thrown',
     minArgs: 1,
     maxArgs: 2,
-    argumentChecks: [socketOptionsArgument(), callbackArgument()],
+    argumentChecks: [socketOptionsArgument(), messageCallbackArgument()],
     variants: [
       callVariant(1, 1, ['string-view'], 'DgramSocket', 'object', {
         argumentIndex: 0,
@@ -215,7 +215,7 @@ function onOperation(): LibraryOperationDescriptor {
     cResultMode: 'borrowed',
     minArgs: 2,
     maxArgs: 2,
-    argumentChecks: [messageEventArgument(), callbackArgument()],
+    argumentChecks: [messageEventArgument(), messageCallbackArgument()],
     resultTypeId: socketTypeId,
     cppType: 'DgramSocket',
     valueType: 'object',
@@ -243,9 +243,9 @@ function sendOperation(): LibraryOperationDescriptor {
     maxArgs: 4,
     argumentChecks: [
       { valueTypes: ['string', 'bytes'] },
-      { valueTypes: ['number', 'function'] },
+      sendPortOrCallbackArgument(),
       stringArgument(),
-      callbackArgument()
+      sendCallbackArgument()
     ],
     variants,
     cppType: 'void',
@@ -460,7 +460,60 @@ function booleanArgument(): LibraryArgumentCheckDescriptor {
 }
 
 function callbackArgument(): LibraryArgumentCheckDescriptor {
-  return { valueTypes: ['function'] }
+  return {
+    valueTypes: ['function'],
+    functionParameters: [],
+    functionReturnType: 'void'
+  }
+}
+
+function sendCallbackArgument(): LibraryArgumentCheckDescriptor {
+  return {
+    valueTypes: ['function'],
+    functionParameters: [
+      {
+        name: 'error',
+        valueType: 'object',
+        nullable: true,
+        shapeFields: [{ name: 'message', valueType: 'string', readonly: true }]
+      },
+      { name: 'bytes', valueType: 'number' }
+    ],
+    functionReturnType: 'void'
+  }
+}
+
+function sendPortOrCallbackArgument(): LibraryArgumentCheckDescriptor {
+  const callback = sendCallbackArgument()
+  return {
+    ...callback,
+    valueTypes: ['number', 'function']
+  }
+}
+
+function messageCallbackArgument(): LibraryArgumentCheckDescriptor {
+  return {
+    valueTypes: ['function'],
+    functionParameters: [
+      {
+        name: 'message',
+        valueType: 'bytes',
+        resultTypeId: 'node:buffer#Buffer'
+      },
+      {
+        name: 'remoteInfo',
+        valueType: 'object',
+        resultTypeId: remoteInfoTypeId,
+        shapeFields: [
+          { name: 'address', valueType: 'string', readonly: true },
+          { name: 'family', valueType: 'string', readonly: true },
+          { name: 'port', valueType: 'number', readonly: true },
+          { name: 'size', valueType: 'number', readonly: true }
+        ]
+      }
+    ],
+    functionReturnType: 'void'
+  }
 }
 
 function messageEventArgument(): LibraryArgumentCheckDescriptor {

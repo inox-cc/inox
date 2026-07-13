@@ -321,6 +321,11 @@ function declarationTypeDependencyNames(declaration: SyntheticImportNode): strin
 
 function collectFunctionDeclarationTypeDependencyNames(declaration: SyntheticImportNode, names: string[]): void {
   const params: AnyNode[] = declaration.params ?? []
+  const typeParameters: AnyNode[] = declaration.typeParameters ?? []
+
+  for (const typeParameter of typeParameters) {
+    collectTypeNameDependencyNames(typeParameter.constraint, names)
+  }
 
   for (const param of params) {
     collectValueDeclarationTypeDependencyNames(param, names)
@@ -534,7 +539,7 @@ function createFunctionAliasDeclaration(
     setElementType: nullableNodeValue(target.returnSetElementType),
     shape: nullableNodeValue(target.returnShape)
   }
-  return {
+  const declaration: AnyNode = {
     type: 'FunctionDeclaration',
     exported,
     async: target.async,
@@ -553,6 +558,31 @@ function createFunctionAliasDeclaration(
     returnShape: nullableNodeValue(target.returnShape),
     body: createFunctionAliasBody(target, call, loc)
   }
+  const typeParameters = cloneFunctionTypeParameters(target.typeParameters)
+
+  if (typeParameters.length > 0) {
+    declaration.typeParameters = typeParameters
+  }
+
+  return declaration
+}
+
+function cloneFunctionTypeParameters(typeParameters: AnyNode[] | null | undefined): AnyNode[] {
+  const cloned: AnyNode[] = []
+
+  if (typeParameters === null || typeof typeParameters === 'undefined') {
+    return cloned
+  }
+
+  for (const typeParameter of typeParameters) {
+    cloned.push({
+      name: typeParameter.name,
+      constraint: nullableNodeValue(typeParameter.constraint),
+      loc: nullableNodeValue(typeParameter.loc)
+    })
+  }
+
+  return cloned
 }
 
 function createFunctionAliasBody(target: AnyNode, call: AnyNode, loc: SourceLocation): AnyNode[] {

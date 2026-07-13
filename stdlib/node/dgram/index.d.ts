@@ -1,10 +1,11 @@
 import type { Buffer, Uint8Array } from 'node:buffer';
 
-export type SocketType = string;
-export type SocketEventName = string;
+export type SocketType = 'udp4';
+export type SocketEventName = 'message';
 export type SocketMessage = string | Buffer | Uint8Array;
-export type SocketMessageListener = (message: SocketMessage, remoteInfo: RemoteInfo) => void;
+export type SocketMessageListener = (message: Buffer, remoteInfo: RemoteInfo) => void;
 export type SocketCallback = () => void;
+export type SocketSendCallback = (error: Error | null, bytes: number) => void;
 
 export interface AddressInfo {
   readonly address: string;
@@ -44,8 +45,8 @@ export class Socket {
   on(eventName: SocketEventName, listener: SocketMessageListener): Socket;
   ref(): Socket;
   remoteAddress(): AddressInfo;
-  send(message: SocketMessage, callback?: SocketCallback): void;
-  send(message: SocketMessage, port: number, address: string, callback?: SocketCallback): void;
+  send(message: SocketMessage, callback?: SocketSendCallback): void;
+  send(message: SocketMessage, port: number, address: string, callback?: SocketSendCallback): void;
   setBroadcast(flag: boolean): Socket;
   setRecvBufferSize(size: number): Socket;
   setSendBufferSize(size: number): Socket;

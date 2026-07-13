@@ -1,9 +1,4 @@
 import {
-  nodeDgramCreateSocketImportNames,
-  nodeDgramImportSource,
-  nodeDgramModuleObjectImportNames
-} from '../../../stdlib/node/dgram/compiler/descriptor.ts'
-import {
   nodeEventsImportSource,
   nodeEventsModuleObjectImportNames
 } from '../../../stdlib/node/events/compiler/descriptor.ts'
@@ -35,7 +30,6 @@ export {
 export type NodeStdlibRuntimeImportKind =
   | 'connect'
   | 'create-server'
-  | 'create-socket'
   | 'module-object'
 
 export type NodeStdlibPackageDescriptor = {
@@ -50,10 +44,6 @@ export type NodeStdlibRuntimeImportDescriptor = {
 }
 
 export const nodeStdlibPackageDescriptors: NodeStdlibPackageDescriptor[] = [
-  {
-    source: nodeDgramImportSource,
-    libuvRuntimeFeature: 'node:dgram'
-  },
   {
     source: nodeEventsImportSource,
     libuvRuntimeFeature: null
@@ -77,16 +67,6 @@ export const nodeStdlibPackageDescriptors: NodeStdlibPackageDescriptor[] = [
 ]
 
 export const nodeStdlibRuntimeImportDescriptors: NodeStdlibRuntimeImportDescriptor[] = [
-  {
-    source: nodeDgramImportSource,
-    kind: 'module-object',
-    importedNames: nodeDgramModuleObjectImportNames
-  },
-  {
-    source: nodeDgramImportSource,
-    kind: 'create-socket',
-    importedNames: nodeDgramCreateSocketImportNames
-  },
   {
     source: nodeEventsImportSource,
     kind: 'module-object',

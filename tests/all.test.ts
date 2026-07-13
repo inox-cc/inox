@@ -138,6 +138,8 @@ async function runIntegrationTests(): Promise<void> {
   const { assertModuleDeclarationContracts } = await import('./integration/module-declaration-contracts.test.ts')
   const { assertModuleDeclarationFunctionKeywordType } =
     await import('./integration/module-declaration-function-keyword-type.test.ts')
+  const { assertModuleDeclarationGenericFunction } =
+    await import('./integration/module-declaration-generic-function.test.ts')
   const { assertModuleDeclarationInferredConsts } =
     await import('./integration/module-declaration-inferred-consts.test.ts')
   const { assertModuleDeclarationImportedNestedArrayShape } =
@@ -283,6 +285,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('module-declaration-function-keyword-type', () => {
       assertModuleDeclarationFunctionKeywordType()
+    })
+
+    await t.test('module-declaration-generic-function', () => {
+      assertModuleDeclarationGenericFunction()
     })
 
     await t.test('module-declaration-inferred-consts', () => {

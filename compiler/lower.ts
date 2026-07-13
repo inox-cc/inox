@@ -1,5 +1,5 @@
 import { lowerParam, lowerStatementList } from './lower/statements.ts'
-import type { LowerContext } from './lower/type-resolution.ts'
+import type { LowerContext, LowerResolvedType } from './lower/type-resolution.ts'
 import { createLowerContext, resolveDeclaredType, resolveObjectShape } from './lower/type-resolution.ts'
 import type { AnyNode, ProgramNode } from './types.ts'
 import type { CompilerLibrarySet } from './extensions/types.ts'
@@ -23,6 +23,12 @@ export function lowerProgram(
 }
 
 type LoweredTopLevelItem = AnyNode[]
+
+type LowerTypeParameterState = {
+  name: string
+  previousType: AnyNode | null
+  previousResolvedType: LowerResolvedType | null
+}
 
 function appendLoweredTopLevelItem(out: AnyNode[], items: LoweredTopLevelItem): void {
   for (const item of items) {
@@ -64,16 +70,18 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
   }
 
   if (item.type === 'FunctionDeclaration') {
-    const returnTypeName = lowerNodeReturnTypeName(item)
-    const returnType = resolveDeclaredType(returnTypeName, context)
+    const typeParameterState = pushLowerTypeParameters(item, context)
 
-    if (item.returnShape !== null && typeof item.returnShape !== 'undefined') {
-      returnType.valueType = 'object'
-      returnType.shape = resolveObjectShape(item.returnShape, context)
-    }
+    try {
+      const returnTypeName = lowerNodeReturnTypeName(item)
+      const returnType = resolveDeclaredType(returnTypeName, context)
 
-    return [
-      {
+      if (item.returnShape !== null && typeof item.returnShape !== 'undefined') {
+        returnType.valueType = 'object'
+        returnType.shape = resolveObjectShape(item.returnShape, context)
+      }
+
+      const lowered: AnyNode = {
         type: 'FunctionDeclaration',
         exported: item.exported,
         async: item.async,
@@ -93,7 +101,16 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
         returnShape: returnType.shape,
         body: lowerStatementList(item.body, context)
       }
-    ]
+      const typeParameters = cloneLowerTypeParameters(item.typeParameters)
+
+      if (typeParameters.length > 0) {
+        lowered.typeParameters = typeParameters
+      }
+
+      return [lowered]
+    } finally {
+      restoreLowerTypeParameters(typeParameterState, context)
+    }
   }
 
   if (item.type === 'ClassDeclaration') {
@@ -111,6 +128,65 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
   }
 
   return lowerStatementList([item], context)
+}
+
+function cloneLowerTypeParameters(typeParameters: AnyNode[] | null | undefined): AnyNode[] {
+  const cloned: AnyNode[] = []
+
+  if (typeParameters === null || typeof typeParameters === 'undefined') {
+    return cloned
+  }
+
+  for (const typeParameter of typeParameters) {
+    cloned.push({
+      name: typeParameter.name,
+      constraint: nullableString(typeParameter.constraint),
+      loc: typeParameter.loc
+    })
+  }
+
+  return cloned
+}
+
+function pushLowerTypeParameters(item: AnyNode, context: LowerContext): LowerTypeParameterState[] {
+  const state: LowerTypeParameterState[] = []
+  const typeParameters: AnyNode[] = item.typeParameters ?? []
+
+  for (let index = 0; index < typeParameters.length; index = index + 1) {
+    const typeParameter = typeParameters[index]
+    const name: string = typeParameter.name
+    const previousType = context.types.get(name) ?? null
+    const previousResolvedType = context.resolvedTypes.get(name) ?? null
+    let constraint = 'unknown'
+
+    if (typeof typeParameter.constraint === 'string' && typeParameter.constraint.length > 0) {
+      constraint = typeParameter.constraint
+    }
+
+    state.push({ name, previousType, previousResolvedType })
+    context.types.set(name, { kind: 'alias', valueType: constraint })
+    context.resolvedTypes.delete(name)
+  }
+
+  return state
+}
+
+function restoreLowerTypeParameters(state: LowerTypeParameterState[], context: LowerContext): void {
+  for (let index = state.length - 1; index >= 0; index = index - 1) {
+    const item = state[index]
+
+    if (item.previousType !== null) {
+      context.types.set(item.name, item.previousType)
+    } else {
+      context.types.delete(item.name)
+    }
+
+    if (item.previousResolvedType !== null) {
+      context.resolvedTypes.set(item.name, item.previousResolvedType)
+    } else {
+      context.resolvedTypes.delete(item.name)
+    }
+  }
 }
 
 function lowerParamList(params: AnyNode[], context: LowerContext): AnyNode[] {

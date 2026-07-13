@@ -878,6 +878,14 @@ export function resolveRuntimeArrayElementType(
     return null
   }
 
+  if (expression.type === 'IndexExpression' && expression.object.type === 'CallExpression') {
+    const objectRuntimeCall = objectRuntimeArrayCallName(expression.object)
+
+    if (objectRuntimeCall === 'entries') {
+      return 'unknown'
+    }
+  }
+
   return null
 }
 

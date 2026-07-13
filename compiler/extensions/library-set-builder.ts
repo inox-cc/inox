@@ -3,6 +3,7 @@ import type {
   CompilerLibrarySet,
   IntrinsicRoleBinding,
   LibraryDeclarationDescriptor,
+  LibraryCallbackParameterDescriptor,
   LibraryNativeTypeDescriptor,
   LibraryNestedResultShapeFieldDescriptor,
   LibraryOperationDescriptor,
@@ -334,11 +335,30 @@ function operationArgumentChecksFingerprint(operation: LibraryOperationDescripto
         sortedStrings(check.arrayElementValueTypes ?? []).join(',') + ':' +
         sortedStrings(check.stringLiterals ?? []).join(',') + ':' +
         (check.literalDiagnosticCode ?? '') + ':' + (check.literalDiagnosticMessage ?? '')
-        + ':' + objectLiteralFieldsFingerprint(check.objectLiteralFields ?? [])
+        + ':' + objectLiteralFieldsFingerprint(check.objectLiteralFields ?? []) + ':' +
+        callbackParametersFingerprint(check.functionParameters ?? []) + ':' +
+        (check.functionReturnType ?? '')
     )
   }
 
   return rows.join(';')
+}
+
+function callbackParametersFingerprint(
+  parameters: LibraryCallbackParameterDescriptor[]
+): string {
+  const rows: string[] = []
+
+  for (let index = 0; index < parameters.length; index = index + 1) {
+    const parameter = parameters[index]
+    rows.push(
+      parameter.name + ':' + parameter.valueType + ':' + (parameter.nullable === true ? 'nullable' : '') + ':' +
+        (parameter.resultTypeId ?? '') + ':' +
+        resultShapeFieldsFingerprint(parameter.shapeFields ?? [])
+    )
+  }
+
+  return rows.join(',')
 }
 
 function operationVariantsFingerprint(operation: LibraryOperationDescriptor): string {
@@ -447,7 +467,7 @@ function resultShapeFieldsFingerprint(
     const nestedFields = field.resultShapeFields
     rows.push(
       `${field.name}=${field.valueType}:${field.readonly ? 'readonly' : 'mutable'}:` +
-        `${field.resultTypeId ?? ''}:${field.cppType ?? ''}:` +
+        `${field.cMember ?? ''}:${field.resultTypeId ?? ''}:${field.cppType ?? ''}:` +
         (nestedFields === null || typeof nestedFields === 'undefined'
           ? ''
           : `{${nestedResultShapeFieldsFingerprint(nestedFields)}}`)
@@ -466,7 +486,7 @@ function nestedResultShapeFieldsFingerprint(
     const field = fields[index]
     rows.push(
       `${field.name}=${field.valueType}:${field.readonly ? 'readonly' : 'mutable'}:` +
-        `${field.resultTypeId ?? ''}:${field.cppType ?? ''}`
+        `${field.cMember ?? ''}:${field.resultTypeId ?? ''}:${field.cppType ?? ''}`
     )
   }
 

@@ -132,6 +132,8 @@ function checkMapMethodCall(
       expression.valueType = mapValueType
       expression.nullable = true
       expression.shape = mapValueShape(info.mapType)
+      expression.arrayElementType = info.mapType?.valueArrayElementType ?? null
+      expression.arrayElementDeclaredType = info.mapType?.valueArrayElementDeclaredType ?? null
       return mapValueType
     }
 

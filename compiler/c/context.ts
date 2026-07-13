@@ -6,7 +6,6 @@ import type {
   CAsyncTaskWrapper,
   CCallbackWrapper,
   CClassInfo,
-  CDgramMessageHandler,
   CFunctionParam,
   CFunctionPointerAdapter,
   CFunctionReturnMapType,
@@ -38,7 +37,6 @@ export type CArrayShapeMap = Map<string, CArrayElementInfo[]>
 export type CAsyncTaskWrapperMap = Map<string, CAsyncTaskWrapper>
 export type CBooleanMap = Map<string, boolean>
 export type CCallbackWrapperMap = Map<string, CCallbackWrapper>
-export type CDgramMessageHandlerMap = Map<string, CDgramMessageHandler>
 export type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
 export type CFunctionTypeMap = Map<string, CFunctionType>
 export type CFunctionPointerAdapterMap = Map<string, string>
@@ -153,9 +151,6 @@ export type CEmitContext = {
   classLoweringDependencies: ClassLoweringDependencies
   collectionLoweringDependencies: CollectionLoweringDependencies
   diagnostics: Diagnostic[]
-  dgramCreateSocketNames: CStringSet
-  dgramImportNames: CStringSet
-  dgramMessageHandlers: CDgramMessageHandlerMap
   explicitEventLoop?: boolean | null
   externalEventLoopFunctions: CStringSet
   functionAsyncFlags: CBooleanMap
@@ -292,9 +287,6 @@ export type CFunctionContext = CEmitContext & {
   cppSetValues: CStringSet
   cppStringValues: CStringSet
   cppValueTypes: CStringMap
-  dgramBoundSockets: CStringSet
-  dgramMessageSockets: CStringSet
-  dgramReuseAddrSockets: CStringSet
   errorChannelUsed: boolean
   errorObjectNames: CStringSet
   errorTargets: string[]
@@ -394,9 +386,6 @@ export function createFunctionContext(
     classLoweringDependencies: baseContext.classLoweringDependencies,
     collectionLoweringDependencies: baseContext.collectionLoweringDependencies,
     diagnostics: baseContext.diagnostics,
-    dgramCreateSocketNames: baseContext.dgramCreateSocketNames,
-    dgramImportNames: baseContext.dgramImportNames,
-    dgramMessageHandlers: baseContext.dgramMessageHandlers,
     externalEventLoopFunctions: baseContext.externalEventLoopFunctions,
     forceRuntimeStringDeclarations: baseContext.forceRuntimeStringDeclarations,
     functionAsyncFlags: baseContext.functionAsyncFlags,
@@ -456,9 +445,6 @@ export function createFunctionContext(
     continueFlowUsed: false,
     continueTargets: [],
     cleanupEnabled: true,
-    dgramBoundSockets: new Set(),
-    dgramMessageSockets: new Set(),
-    dgramReuseAddrSockets: new Set(),
     errorChannelUsed: false,
     errorObjectNames: new Set(),
     errorTargets: [],

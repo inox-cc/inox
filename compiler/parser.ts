@@ -12,6 +12,7 @@ import {
   createObjectType,
   createObjectTypeField,
   createParam,
+  createTypeParameter,
   createTypeAliasDeclaration,
   createVariableDeclaration
 } from './parser/declarations.ts'
@@ -391,6 +392,7 @@ class Parser {
 
   parseFunctionDeclaration(exported: boolean, isAsync: boolean): AnyNode {
     const name = this.expectFunctionDeclarationName()
+    const typeParameters = this.parseFunctionTypeParameters()
     const params: AnyNode[] = []
 
     this.expectValue('(', 'INOX_EXPECTED_PAREN', 'expected ( after function name')
@@ -428,11 +430,39 @@ class Parser {
       exported,
       isAsync,
       name,
+      typeParameters,
       params,
       returnType,
       returnShape,
       body: this.parseBlock()
     })
+  }
+
+  parseFunctionTypeParameters(): AnyNode[] {
+    const typeParameters: AnyNode[] = []
+
+    if (!this.matchValue('<')) {
+      return typeParameters
+    }
+
+    while (!this.isValue('>') && !this.is('eof')) {
+      const name = this.expectTypeParameterName('expected type parameter name')
+      let constraint: string | null = null
+
+      if (this.matchContextualKeyword('extends')) {
+        constraint = this.parseTypeAnnotation([',', '>'], null)
+      }
+
+      typeParameters.push(createTypeParameter(name, constraint))
+
+      if (!this.matchValue(',')) {
+        break
+      }
+    }
+
+    this.expectValue('>', 'INOX_EXPECTED_TYPE', 'expected > after type parameters')
+
+    return typeParameters
   }
 
   expectFunctionDeclarationName(): Token {

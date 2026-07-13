@@ -13,6 +13,8 @@ export type ResolvedTypeInfo = {
   mapKeyType: ValueType | null
   mapValueType: ValueType | null
   mapValueShape: ObjectShapeInfo | null
+  mapValueArrayElementType?: ValueType | null
+  mapValueArrayElementDeclaredType?: string | null
   promiseValueType: ValueType | null
   setElementType: ValueType | null
 }
@@ -70,6 +72,8 @@ export type FunctionTypeParamMetadata = {
   mapKeyType?: ValueType | null
   mapValueType?: ValueType | null
   mapValueShape?: ObjectShapeInfo | null
+  mapValueArrayElementType?: ValueType | null
+  mapValueArrayElementDeclaredType?: string | null
   promiseValueType?: ValueType | null
   setElementType?: ValueType | null
   functionType?: FunctionTypeMetadata | null
@@ -100,6 +104,8 @@ export type CheckerMapType = {
   key: ValueType | null
   value: ValueType | null
   valueShape?: ObjectShapeInfo | null
+  valueArrayElementType?: ValueType | null
+  valueArrayElementDeclaredType?: string | null
 }
 
 
@@ -195,6 +201,10 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('params', 'array', null, false, loc, {
         arrayElementType: 'object'
       }),
+      anyNodeField('typeParameters', 'array', null, false, loc, {
+        arrayElementType: 'object',
+        arrayElementDeclaredType: 'AnyNode'
+      }),
       anyNodeField('methods', 'array', null, false, loc, {
         arrayElementType: 'object'
       }),
@@ -245,6 +255,9 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('arrayElementFunctionType', 'object', null, true, loc),
       anyNodeField('mapKeyType', 'string', null, true, loc),
       anyNodeField('mapValueType', 'string', null, true, loc),
+      anyNodeField('mapValueArrayElementType', 'string', null, true, loc),
+      anyNodeField('mapValueArrayElementDeclaredType', 'string', null, true, loc),
+      anyNodeField('constraint', 'string', null, true, loc),
       anyNodeField('promiseValueType', 'string', null, true, loc),
       anyNodeField('promiseRejectionValueType', 'string', null, true, loc),
       anyNodeField('setElementType', 'string', null, true, loc),
@@ -262,7 +275,6 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('functionType', 'object', null, true, loc),
       anyNodeField('shape', 'object', null, true, loc, { shape: objectShapeMetadata }),
       anyNodeField('rest', 'boolean', null, false, loc),
-      anyNodeField('dgramMessageHandlerName', 'string', null, true, loc),
       anyNodeField('regexpRuntimeMethod', 'string', null, true, loc),
       anyNodeField('libraryReceiverTypeId', 'string', null, true, loc),
       anyNodeField('libraryResultTypeId', 'string', null, true, loc),

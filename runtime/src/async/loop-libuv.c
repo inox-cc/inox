@@ -12,11 +12,18 @@ typedef struct inox_microtask {
 
 typedef enum inox_timer_kind { INOX_TIMER_IMMEDIATE, INOX_TIMER_TIMEOUT, INOX_TIMER_INTERVAL } inox_timer_kind;
 
+typedef struct inox_libuv_external_handle {
+  void* context;
+  inox_libuv_external_handle_close_fn close;
+  struct inox_libuv_external_handle* next;
+} inox_libuv_external_handle;
+
 typedef struct inox_libuv_loop_backend {
   uv_loop_t uv_loop;
   size_t request_count;
   size_t closing_count;
   inox_status callback_status;
+  inox_libuv_external_handle* external_handle_head;
 } inox_libuv_loop_backend;
 
 struct inox_timer_handle {
@@ -74,6 +81,7 @@ inox_status inox_loop_init(inox_loop* loop, inox_allocator* allocator) {
   backend->closing_count = 0;
   backend->request_count = 0;
   backend->callback_status = INOX_OK;
+  backend->external_handle_head = 0;
 
   if (uv_loop_init(&backend->uv_loop) != 0) {
     allocator->free(allocator->user, backend, sizeof(inox_libuv_loop_backend), _Alignof(inox_libuv_loop_backend));
@@ -113,7 +121,15 @@ void inox_loop_dispose(inox_loop* loop) {
   inox_libuv_dispose_handle_list((inox_timer_handle*)loop->timer_head);
 
   if (backend != 0) {
-    while (backend->request_count > 0 || backend->closing_count > 0) {
+    inox_libuv_external_handle* external = backend->external_handle_head;
+
+    while (external != 0) {
+      inox_libuv_external_handle* next = external->next;
+      external->close(external->context);
+      external = next;
+    }
+
+    while (backend->request_count > 0 || backend->closing_count > 0 || uv_loop_alive(&backend->uv_loop)) {
       uv_run(&backend->uv_loop, UV_RUN_DEFAULT);
     }
 
@@ -358,6 +374,71 @@ uv_loop_t* inox_libuv_loop_handle(inox_loop* loop) {
   inox_libuv_loop_backend* backend = inox_libuv_backend(loop);
 
   return backend == 0 ? 0 : &backend->uv_loop;
+}
+
+inox_status inox_libuv_loop_register_external_handle(
+  inox_loop* loop,
+  void* context,
+  inox_libuv_external_handle_close_fn close
+) {
+  inox_libuv_loop_backend* backend = inox_libuv_backend(loop);
+
+  if (loop == 0 || loop->allocator == 0 || backend == 0 || context == 0 || close == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  inox_libuv_external_handle* current = backend->external_handle_head;
+
+  while (current != 0) {
+    if (current->context == context) {
+      return INOX_ERR_TYPE;
+    }
+
+    current = current->next;
+  }
+
+  inox_libuv_external_handle* external = loop->allocator->alloc(
+    loop->allocator->user,
+    sizeof(inox_libuv_external_handle),
+    _Alignof(inox_libuv_external_handle)
+  );
+
+  if (external == 0) {
+    return INOX_ERR_OOM;
+  }
+
+  external->context = context;
+  external->close = close;
+  external->next = backend->external_handle_head;
+  backend->external_handle_head = external;
+  return INOX_OK;
+}
+
+void inox_libuv_loop_unregister_external_handle(inox_loop* loop, void* context) {
+  inox_libuv_loop_backend* backend = inox_libuv_backend(loop);
+
+  if (loop == 0 || loop->allocator == 0 || backend == 0 || context == 0) {
+    return;
+  }
+
+  inox_libuv_external_handle** current = &backend->external_handle_head;
+
+  while (*current != 0) {
+    inox_libuv_external_handle* external = *current;
+
+    if (external->context == context) {
+      *current = external->next;
+      loop->allocator->free(
+        loop->allocator->user,
+        external,
+        sizeof(inox_libuv_external_handle),
+        _Alignof(inox_libuv_external_handle)
+      );
+      return;
+    }
+
+    current = &external->next;
+  }
 }
 
 inox_status inox_libuv_loop_retain_request(inox_loop* loop) {

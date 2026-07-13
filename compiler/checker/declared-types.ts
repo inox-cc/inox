@@ -173,6 +173,8 @@ export function resolveDeclaredType(
       info.mapKeyType = keyInfo.valueType
       info.mapValueType = valueInfo.valueType
       info.mapValueShape = valueInfo.shape
+      info.mapValueArrayElementType = valueInfo.arrayElementType
+      info.mapValueArrayElementDeclaredType = valueInfo.arrayElementDeclaredType
     }
 
     return info
@@ -352,6 +354,8 @@ function libraryNativeTypeField(
     name: field.name,
     valueType: field.valueType,
     readonly: field.readonly,
+    libraryCMember: field.cMember ?? null,
+    libraryCppType: field.cppType ?? null,
     loc
   }
   const nestedFields = field.resultShapeFields
@@ -369,6 +373,8 @@ function libraryNativeTypeField(
         name: nestedField.name,
         valueType: nestedField.valueType,
         readonly: nestedField.readonly,
+        libraryCMember: nestedField.cMember ?? null,
+        libraryCppType: nestedField.cppType ?? null,
         loc
       })
     }
@@ -605,6 +611,8 @@ export function resolveObjectShapeField(
     mapKeyType: fieldInfo.mapKeyType,
     mapValueType: fieldInfo.mapValueType,
     mapValueShape: fieldInfo.mapValueShape,
+    mapValueArrayElementType: fieldInfo.mapValueArrayElementType ?? null,
+    mapValueArrayElementDeclaredType: fieldInfo.mapValueArrayElementDeclaredType ?? null,
     promiseValueType,
     setElementType: fieldInfo.setElementType,
     functionType,
@@ -848,6 +856,8 @@ export function resolveWeakTargetObjectShape(
       arrayElementDeclaredType: declared.arrayElementDeclaredType,
       mapKeyType: declared.mapKeyType,
       mapValueType: declared.mapValueType,
+      mapValueArrayElementType: declared.mapValueArrayElementType ?? null,
+      mapValueArrayElementDeclaredType: declared.mapValueArrayElementDeclaredType ?? null,
       promiseValueType,
       setElementType: declared.setElementType,
       functionType,
@@ -1008,6 +1018,8 @@ export function cloneResolvedTypeInfo(info: ResolvedTypeInfo): ResolvedTypeInfo 
     mapKeyType: info.mapKeyType,
     mapValueType: info.mapValueType,
     mapValueShape: info.mapValueShape,
+    mapValueArrayElementType: info.mapValueArrayElementType ?? null,
+    mapValueArrayElementDeclaredType: info.mapValueArrayElementDeclaredType ?? null,
     promiseValueType: info.promiseValueType,
     setElementType: info.setElementType
   }

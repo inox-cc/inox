@@ -79,6 +79,7 @@ export type LibraryResultShapeFieldDescriptor = {
   name: string
   valueType: string
   readonly: boolean
+  cMember?: string | null
   resultTypeId?: LibraryObjectTypeId | null
   resultShapeFields?: LibraryNestedResultShapeFieldDescriptor[]
   cppType?: string | null
@@ -88,6 +89,7 @@ export type LibraryNestedResultShapeFieldDescriptor = {
   name: string
   valueType: string
   readonly: boolean
+  cMember?: string | null
   resultTypeId?: LibraryObjectTypeId | null
   cppType?: string | null
 }
@@ -102,6 +104,16 @@ export type LibraryArgumentCheckDescriptor = {
   literalDiagnosticCode?: string | null
   literalDiagnosticMessage?: string | null
   objectLiteralFields?: LibraryObjectLiteralFieldDescriptor[]
+  functionParameters?: LibraryCallbackParameterDescriptor[]
+  functionReturnType?: string | null
+}
+
+export type LibraryCallbackParameterDescriptor = {
+  name: string
+  valueType: string
+  nullable?: boolean
+  resultTypeId?: LibraryObjectTypeId | null
+  shapeFields?: LibraryResultShapeFieldDescriptor[]
 }
 
 export type LibraryObjectLiteralFieldDescriptor = {

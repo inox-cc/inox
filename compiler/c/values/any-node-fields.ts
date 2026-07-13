@@ -15,11 +15,12 @@ export const compilerAnyNodeStringFields: readonly string[] = [
   'arrayElementTypeId',
   'mapKeyType',
   'mapValueType',
+  'mapValueArrayElementType',
+  'mapValueArrayElementDeclaredType',
   'promiseValueType',
   'promiseRejectionValueType',
   'setElementType',
   'propertyValueType',
-  'dgramMessageHandlerName',
   'httpHandlerName',
   'debugRuntimeMethod',
   'fetchRuntimeMethod',
@@ -52,6 +53,7 @@ export const compilerAnyNodeStringFields: readonly string[] = [
   'returnSetElementType',
   'className',
   'collectionKind',
+  'constraint',
   'param',
   'functionTypeOwnership',
   'shapeOwnership',
@@ -92,7 +94,8 @@ export const compilerAnyNodeArrayFields: readonly string[] = [
   'params',
   'path',
   'properties',
-  'specifiers'
+  'specifiers',
+  'typeParameters'
 ]
 
 export const compilerAnyNodeObjectFields: readonly string[] = [

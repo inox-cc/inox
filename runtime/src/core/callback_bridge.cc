@@ -1,5 +1,6 @@
 #include "inox/callback.h"
 
+#include <new>
 #include <utility>
 #include <vector>
 
@@ -48,10 +49,16 @@ Value Callback::call(std::span<const Value> args) const {
   }
 
   std::vector<inox_value> raw_args;
-  raw_args.reserve(args.size());
 
-  for (const Value& argument : args) {
-    raw_args.push_back(argument.raw());
+  try {
+    raw_args.reserve(args.size());
+
+    for (const Value& argument : args) {
+      raw_args.push_back(argument.raw());
+    }
+  } catch (const std::bad_alloc&) {
+    throw_value(String("TypeError: callback argument allocation failed"));
+    return Value();
   }
 
   Value result;

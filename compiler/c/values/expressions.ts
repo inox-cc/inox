@@ -23,6 +23,10 @@ import {
 import { reportCJsGlobalDiagnostic } from '../diagnostics.ts'
 import { isCJsGlobalRoot, usesCJsGlobal } from '../globals.ts'
 import { cStringLiteral, emitCIdentifier, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
+import {
+  emitPreparedCompilerLibraryNativeFieldExpression,
+  isCompilerLibraryNativeFieldExpression
+} from '../library-operations.ts'
 import { mathRuntimeMethodName } from '../runtime-methods.ts'
 import {
   emitRuntimeNullableValueCheck,
@@ -445,7 +449,6 @@ function isRawPointerType(valueType: string): boolean {
   return (
     valueType === 'function' ||
     valueType === 'timer' ||
-    valueType === 'dgram-socket' ||
     valueType === 'net-address' ||
     valueType === 'net-server' ||
     valueType === 'net-socket' ||
@@ -1689,7 +1692,6 @@ function isContextDeclaredType(value: string): boolean {
     value === 'CallbackFunctionContext' ||
     value === 'ClassFunctionContext' ||
     value === 'CollectionFunctionContext' ||
-    value === 'DgramFunctionContext' ||
     value === 'FetchFunctionContext' ||
     value === 'HttpFunctionContext' ||
     value === 'NullableFunctionContext' ||
@@ -1711,7 +1713,6 @@ function isDependencyCarrierDeclaredType(value: string): boolean {
     value === 'CallbackLoweringDependencies' ||
     value === 'ClassLoweringDependencies' ||
     value === 'CollectionLoweringDependencies' ||
-    value === 'DgramLoweringDependencies' ||
     value === 'HttpLoweringDependencies' ||
     value === 'NetLoweringDependencies' ||
     value === 'NullableLoweringDependencies' ||
@@ -3045,6 +3046,20 @@ export function emitPreparedNumberExpression(
   }
 
   if (deps.isMemberAccessExpression(expression)) {
+    let libraryNativeField: PreparedExpression | null = null
+
+    if (isCompilerLibraryNativeFieldExpression(expression, context)) {
+      const preparedObject = expression.object.type === 'Reference'
+        ? null
+        : deps.emitCValueExpression(expression.object, context)
+
+      libraryNativeField = emitPreparedCompilerLibraryNativeFieldExpression(expression, context, preparedObject)
+    }
+
+    if (libraryNativeField !== null) {
+      return libraryNativeField
+    }
+
     const nodeNetworkAddressPort = deps.emitPreparedNodeNetworkAddressPortExpression(expression, context)
 
     if (nodeNetworkAddressPort !== null && typeof nodeNetworkAddressPort !== 'undefined') {
@@ -5470,6 +5485,20 @@ export function emitCValueExpression(
   }
 
   if (deps.isMemberAccessExpression(expression)) {
+    let libraryNativeField: PreparedExpression | null = null
+
+    if (isCompilerLibraryNativeFieldExpression(expression, context)) {
+      const preparedObject = expression.object.type === 'Reference'
+        ? null
+        : deps.emitCValueExpression(expression.object, context)
+
+      libraryNativeField = emitPreparedCompilerLibraryNativeFieldExpression(expression, context, preparedObject)
+    }
+
+    if (libraryNativeField !== null) {
+      return libraryNativeField
+    }
+
     const nativeClassField = emitPreparedNativeClassFieldValueExpression(expression, context)
 
     if (nativeClassField !== null && typeof nativeClassField !== 'undefined') {

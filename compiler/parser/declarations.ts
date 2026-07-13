@@ -5,6 +5,7 @@ type FunctionDeclarationOptions = {
   exported: boolean
   isAsync: boolean
   name: Token
+  typeParameters: AnyNode[]
   params: AnyNode[]
   returnType: string
   returnShape: AnyNode | null
@@ -121,11 +122,23 @@ export function createFunctionDeclaration(options: FunctionDeclarationOptions): 
     body: options.body
   }
 
+  if (options.typeParameters.length > 0) {
+    declaration.typeParameters = options.typeParameters
+  }
+
   if (options.returnShape !== null && typeof options.returnShape !== 'undefined') {
     declaration.returnShape = options.returnShape
   }
 
   return declaration
+}
+
+export function createTypeParameter(name: Token, constraint: string | null): AnyNode {
+  return {
+    name: name.value,
+    constraint,
+    loc: locFromToken(name)
+  }
 }
 
 export function createTypeAliasDeclaration(exported: boolean, name: Token, valueType: AnyNode): AnyNode {
