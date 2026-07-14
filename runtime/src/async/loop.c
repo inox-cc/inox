@@ -238,7 +238,7 @@ inox_status inox_loop_run_once(inox_loop* loop) {
   }
 
   inox_number next_due_ms = 0;
-  inox_number now_ms = inox_performance_now();
+  inox_number now_ms = inox_monotonic_now_ms();
 
   if (
     inox_loop_pending_microtasks(loop) == 0 && inox_loop_pending_immediates(loop) == 0 &&
@@ -247,7 +247,7 @@ inox_status inox_loop_run_once(inox_loop* loop) {
     inox_time_sleep_ms(next_due_ms - now_ms);
   }
 
-  return inox_loop_poll(loop, inox_performance_now());
+  return inox_loop_poll(loop, inox_monotonic_now_ms());
 }
 
 inox_status inox_loop_run(inox_loop* loop) {

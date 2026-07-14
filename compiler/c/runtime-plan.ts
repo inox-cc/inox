@@ -1,10 +1,6 @@
 import {
   irProgramsUseCPreludeFeature
 } from '../features/index.ts'
-import {
-  dateInstanceRuntimeMethodName,
-  dateInstanceRuntimeMethodReturnType
-} from '../../stdlib/global/compiler/descriptor.ts'
 import type { AnyNode, IrGlobalUsage, IrProgram, IrRuntimeRequirement } from '../types.ts'
 import { isSupportedCFetchGlobalUsage } from './diagnostics.ts'
 import { irProgramsUseConsoleRuntime } from '../../stdlib/global/compiler/c.ts'
@@ -16,7 +12,6 @@ import type {
 
 export type CRuntimePreludeRequirements = {
   needsRuntime: boolean
-  needsTimeRuntime: boolean
   needsDebugMemoryRuntime: boolean
   needsAsyncRuntime: boolean
   needsCallbackRuntime: boolean
@@ -46,23 +41,6 @@ export type CRuntimePreludeRequirementInput = {
   runtimeRequirements: Set<IrRuntimeRequirement>
   signatureRuntimeTypes?: Set<string>
   throwingFunctionCount: number
-}
-
-type CDateStringRuntimeContext = {
-  moduleValueTypes: Map<string, string>
-}
-
-export function addDateStringRuntimeRequirements(
-  requirements: Set<IrRuntimeRequirement>,
-  programs: IrProgram[],
-  context: CDateStringRuntimeContext
-): void {
-  if (!irProgramsUseDateStringRuntime(programs, context)) {
-    return
-  }
-
-  requirements.add('managed-values')
-  requirements.add('string-bytes')
 }
 
 export function resolveCRuntimePreludeRequirements(
@@ -124,10 +102,6 @@ export function resolveCRuntimePreludeRequirements(
     needsJsonRuntime ||
     signatureRuntimeTypes.size > 0 ||
     runtimeRequirements.has('managed-values')
-  const needsTimeRuntime =
-    runtimeRequirements.has('clocks') ||
-    needsAsyncRuntime ||
-    needsFetchRuntime
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(input.irPrograms)
   const needsStringHeader =
     runtimeRequirements.has('string-bytes') ||
@@ -136,7 +110,6 @@ export function resolveCRuntimePreludeRequirements(
 
   return {
     needsRuntime,
-    needsTimeRuntime,
     needsDebugMemoryRuntime,
     needsAsyncRuntime,
     needsCallbackRuntime,
@@ -275,11 +248,11 @@ function insertOrderedRuntimeRequirementId(values: string[], value: string): voi
 }
 
 function irProgramsUseArrayIncludes(programs: IrProgram[]): boolean {
-  return irProgramsUseNode(programs, 'array-includes', '', null)
+  return irProgramsUseNode(programs, 'array-includes', '')
 }
 
 function irProgramsUseArrayIsArray(programs: IrProgram[]): boolean {
-  return irProgramsUseNode(programs, 'array-is-array', '', null)
+  return irProgramsUseNode(programs, 'array-is-array', '')
 }
 
 function nodeIsArrayIncludesCall(node: AnyNode): boolean {
@@ -310,7 +283,7 @@ function nodeIsArrayIncludesCall(node: AnyNode): boolean {
 }
 
 function irProgramsUseCollectionKind(programs: IrProgram[], kind: string): boolean {
-  return irProgramsUseNode(programs, 'collection', kind, null)
+  return irProgramsUseNode(programs, 'collection', kind)
 }
 
 function nodeUsesCollectionKind(node: AnyNode, kind: string): boolean {
@@ -351,13 +324,12 @@ function nodeIsCollectionConstructor(value: AnyNode, kind: string): boolean {
 function irProgramsUseNode(
   programs: IrProgram[],
   kind: string,
-  collectionKind: string,
-  dateStringContext: CDateStringRuntimeContext | null
+  collectionKind: string
 ): boolean {
   for (let index = 0; index < programs.length; index = index + 1) {
     const program = programs[index] as IrProgram
 
-    if (nodeTreeUses(program.body, kind, collectionKind, dateStringContext)) {
+    if (nodeTreeUses(program.body, kind, collectionKind)) {
       return true
     }
   }
@@ -368,8 +340,7 @@ function irProgramsUseNode(
 function nodeTreeUses(
   value: any,
   kind: string,
-  collectionKind: string,
-  dateStringContext: CDateStringRuntimeContext | null
+  collectionKind: string
 ): boolean {
   if (value === null || typeof value === 'undefined') {
     return false
@@ -377,7 +348,7 @@ function nodeTreeUses(
 
   if (Array.isArray(value)) {
     for (let index = 0; index < value.length; index = index + 1) {
-      if (nodeTreeUses(value[index], kind, collectionKind, dateStringContext)) {
+      if (nodeTreeUses(value[index], kind, collectionKind)) {
         return true
       }
     }
@@ -392,56 +363,54 @@ function nodeTreeUses(
   const node = value as AnyNode
 
   return (
-    nodeMatchesRuntimePlanKind(node, kind, collectionKind, dateStringContext) ||
-    nodeChildrenUse(node, kind, collectionKind, dateStringContext)
+    nodeMatchesRuntimePlanKind(node, kind, collectionKind) ||
+    nodeChildrenUse(node, kind, collectionKind)
   )
 }
 
 function nodeChildrenUse(
   node: AnyNode,
   kind: string,
-  collectionKind: string,
-  dateStringContext: CDateStringRuntimeContext | null
+  collectionKind: string
 ): boolean {
   return (
-    nodeTreeUses(node.body, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.params, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.fields, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.methods, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.init, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.condition, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.consequent, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.alternate, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.test, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.update, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.iterable, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.discriminant, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.cases, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.block, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.handler, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.finalizer, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.argument, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.args, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.callee, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.object, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.index, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.target, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.value, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.functionType, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.returnShape, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.left, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.right, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.elements, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.properties, kind, collectionKind, dateStringContext) ||
-    nodeTreeUses(node.expression, kind, collectionKind, dateStringContext)
+    nodeTreeUses(node.body, kind, collectionKind) ||
+    nodeTreeUses(node.params, kind, collectionKind) ||
+    nodeTreeUses(node.fields, kind, collectionKind) ||
+    nodeTreeUses(node.methods, kind, collectionKind) ||
+    nodeTreeUses(node.init, kind, collectionKind) ||
+    nodeTreeUses(node.condition, kind, collectionKind) ||
+    nodeTreeUses(node.consequent, kind, collectionKind) ||
+    nodeTreeUses(node.alternate, kind, collectionKind) ||
+    nodeTreeUses(node.test, kind, collectionKind) ||
+    nodeTreeUses(node.update, kind, collectionKind) ||
+    nodeTreeUses(node.iterable, kind, collectionKind) ||
+    nodeTreeUses(node.discriminant, kind, collectionKind) ||
+    nodeTreeUses(node.cases, kind, collectionKind) ||
+    nodeTreeUses(node.block, kind, collectionKind) ||
+    nodeTreeUses(node.handler, kind, collectionKind) ||
+    nodeTreeUses(node.finalizer, kind, collectionKind) ||
+    nodeTreeUses(node.argument, kind, collectionKind) ||
+    nodeTreeUses(node.args, kind, collectionKind) ||
+    nodeTreeUses(node.callee, kind, collectionKind) ||
+    nodeTreeUses(node.object, kind, collectionKind) ||
+    nodeTreeUses(node.index, kind, collectionKind) ||
+    nodeTreeUses(node.target, kind, collectionKind) ||
+    nodeTreeUses(node.value, kind, collectionKind) ||
+    nodeTreeUses(node.functionType, kind, collectionKind) ||
+    nodeTreeUses(node.returnShape, kind, collectionKind) ||
+    nodeTreeUses(node.left, kind, collectionKind) ||
+    nodeTreeUses(node.right, kind, collectionKind) ||
+    nodeTreeUses(node.elements, kind, collectionKind) ||
+    nodeTreeUses(node.properties, kind, collectionKind) ||
+    nodeTreeUses(node.expression, kind, collectionKind)
   )
 }
 
 function nodeMatchesRuntimePlanKind(
   node: AnyNode,
   kind: string,
-  collectionKind: string,
-  dateStringContext: CDateStringRuntimeContext | null
+  collectionKind: string
 ): boolean {
   if (kind === 'array-includes') {
     return nodeIsArrayIncludesCall(node)
@@ -453,10 +422,6 @@ function nodeMatchesRuntimePlanKind(
 
   if (kind === 'collection') {
     return nodeUsesCollectionKind(node, collectionKind)
-  }
-
-  if (kind === 'date-string' && dateStringContext !== null && typeof dateStringContext !== 'undefined') {
-    return dateStringRuntimeCall(node, dateStringContext)
   }
 
   return false
@@ -472,34 +437,4 @@ function runtimePlanHasSupportedFetchGlobalUsage(globalUsages: IrGlobalUsage[]):
   }
 
   return false
-}
-
-function irProgramsUseDateStringRuntime(programs: IrProgram[], context: CDateStringRuntimeContext): boolean {
-  return irProgramsUseNode(programs, 'date-string', '', context)
-}
-
-function dateStringRuntimeCall(node: AnyNode, context: CDateStringRuntimeContext): boolean {
-  if (node.type !== 'CallExpression' || node.callee.type !== 'MemberExpression') {
-    return false
-  }
-
-  if (!isDateRuntimeReceiver(node.callee.object, context)) {
-    return false
-  }
-
-  const method = dateInstanceRuntimeMethodName(node.callee.property)
-
-  return dateInstanceRuntimeMethodReturnType(method) === 'string'
-}
-
-function isDateRuntimeReceiver(expression: AnyNode, context: CDateStringRuntimeContext): boolean {
-  if (expression.valueType === 'date') {
-    return true
-  }
-
-  if (expression.type !== 'Reference' || expression.path.length !== 1) {
-    return false
-  }
-
-  return context.moduleValueTypes.get(expression.path[0]) === 'date'
 }

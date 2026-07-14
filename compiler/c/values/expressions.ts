@@ -33,7 +33,6 @@ import {
   runtimeObjectApiValueMismatchCondition,
   runtimeObjectLikeTagMatchCondition
 } from '../runtime-values.ts'
-import { cTimeRuntimeCallName } from '../../../stdlib/global/compiler/c.ts'
 import {
   cUnsupportedExpressionCode,
   emitCOperator,
@@ -61,10 +60,11 @@ import type {
 import {
   cRuntimeValueTag,
   isManagedRuntimeReturnType,
-  isNullableScalarParam,
+  isBoxedScalarParam,
   isNullableScalarType,
   isOpaqueRuntimeValueType,
-  isRuntimeNullableType
+  isRuntimeNullableType,
+  libraryNativeCppType
 } from '../value-types.ts'
 import type { ArrayLoweringDependencies } from './arrays.ts'
 import {
@@ -344,13 +344,7 @@ function isEqualityOperator(operator: string): boolean {
 }
 
 function isStringComparisonOperator(operator: string): boolean {
-  return (
-    isEqualityOperator(operator) ||
-    operator === '<' ||
-    operator === '<=' ||
-    operator === '>' ||
-    operator === '>='
-  )
+  return isEqualityOperator(operator) || operator === '<' || operator === '<=' || operator === '>' || operator === '>='
 }
 
 function isPositiveEqualityOperator(operator: string): boolean {
@@ -362,11 +356,7 @@ function isTypedStringValueExpression(expression: CValueNode): boolean {
     return false
   }
 
-  if (
-    expression.type === 'Reference' ||
-    expression.type === 'StringLiteral' ||
-    expression.type === 'TemplateLiteral'
-  ) {
+  if (expression.type === 'Reference' || expression.type === 'StringLiteral' || expression.type === 'TemplateLiteral') {
     return false
   }
 
@@ -2105,31 +2095,68 @@ export function emitPreparedCallExpression(
   invalidateArrayReferenceArguments(expression, params, context)
 
   if (isThrowingFunctionCallee(expression.callee, context)) {
-    return emitPreparedThrowingCallExpression(expression, args, lines, context, deps)
+    return withFunctionCallReturnMetadata(
+      expression,
+      emitPreparedThrowingCallExpression(expression, args, lines, context, deps),
+      context
+    )
   }
 
   if (deps.isPromiseReturningFunctionCallee(expression.callee, context)) {
     registerEventLoop(context)
 
-    return {
-      lines,
-      expression: `${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')})`
-    }
+    return withFunctionCallReturnMetadata(
+      expression,
+      {
+        lines,
+        expression: `${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')})`
+      },
+      context
+    )
   }
 
   if (deps.isExternalEventLoopFunctionCallee(expression.callee, context)) {
     registerEventLoop(context)
 
-    return {
-      lines,
-      expression: `${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')})`
-    }
+    return withFunctionCallReturnMetadata(
+      expression,
+      {
+        lines,
+        expression: `${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')})`
+      },
+      context
+    )
   }
 
-  return {
-    lines,
-    expression: `${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')})`
+  return withFunctionCallReturnMetadata(
+    expression,
+    {
+      lines,
+      expression: `${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')})`
+    },
+    context
+  )
+}
+
+function withFunctionCallReturnMetadata(
+  expression: CValueNode,
+  value: PreparedExpression,
+  context: CFunctionContext
+): PreparedExpression {
+  if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
+    return value
   }
+
+  const shape = context.functionReturnShapes.get(expression.callee.path[0])
+  const cppType = libraryNativeCppType(shape)
+
+  if (cppType === null) {
+    return value
+  }
+
+  value.cppType = cppType
+  value.valueType = 'object'
+  return value
 }
 
 function invalidateArrayReferenceArguments(
@@ -2271,7 +2298,7 @@ function appendPreparedCallArg(
 ): void {
   const paramValueType = param.valueType
 
-  if (isNullableScalarParam(param)) {
+  if (isBoxedScalarParam(param)) {
     const value = deps.emitNullableScalarValueExpression(arg, context)
 
     appendLines(lines, value.lines)
@@ -2383,6 +2410,10 @@ function emitPreparedScalarCallArgumentExpression(
 }
 
 function emitDefaultOptionalArg(param: CFunctionParam): string {
+  if (isBoxedScalarParam(param)) {
+    return 'inox_undefined_value()'
+  }
+
   if (param.nullable === true && isRuntimeNullableType(param.valueType)) {
     return 'inox_null_value()'
   }
@@ -2440,14 +2471,19 @@ function emitPreparedThrowingCallExpression(
   appendLines(lines, emitPrepareOwnedValueWrite('inox_error'))
 
   if (returnType !== 'void') {
+    const returnCppType = libraryNativeCppType(context.functionReturnShapes.get(name))
+
     if (
-      returnType === 'unknown' ||
-      isManagedRuntimeReturnType(returnType) ||
-      isOpaqueRuntimeValueType(returnType) ||
-      (returnNullable && isNullableScalarType(returnType))
+      (returnCppType === null && returnType === 'unknown') ||
+      (returnCppType === null && isManagedRuntimeReturnType(returnType)) ||
+      (returnCppType === null && isOpaqueRuntimeValueType(returnType)) ||
+      (returnCppType === null && returnNullable && isNullableScalarType(returnType))
     ) {
       result = nextCName(context, 'inox_call_result')
       lines.push(`inox_value ${result} = inox_undefined_value();`)
+    } else if (returnCppType !== null) {
+      result = nextCName(context, 'inox_call_result')
+      lines.push(`${returnCppType} ${result}{};`)
     } else {
       result = nextCName(context, 'inox_call_result')
       lines.push(`double ${result} = 0;`)
@@ -2497,11 +2533,7 @@ function resolveCFunctionCallReturnInfo(name: string, context: CFunctionContext)
   }
 }
 
-function emitThrowingCallStatusCheck(
-  status: string,
-  target: string,
-  context: CFunctionContext
-): string[] {
+function emitThrowingCallStatusCheck(status: string, target: string, context: CFunctionContext): string[] {
   const lines = [`if (${status} == INOX_ERR_THROW) {`]
 
   if (target !== '') {
@@ -2536,12 +2568,6 @@ export function isThrowingFunctionName(name: string, context: CEmitContext): boo
 }
 
 export function emitCallee(callee: CValueNode, context: CFunctionContext): string {
-  const timeRuntimeCall = cTimeRuntimeCallName(callee) ?? ''
-
-  if (timeRuntimeCall !== '') {
-    return timeRuntimeCall
-  }
-
   const objectFunctionCallee = objectFunctionFieldCallee(callee, context)
 
   if (objectFunctionCallee !== null && typeof objectFunctionCallee !== 'undefined') {
@@ -2703,10 +2729,7 @@ export function emitPreparedNumberExpression(
   if (expression.type === 'Reference') {
     const valueType = deps.inferExpressionType(expression, context)
 
-    if (
-      (valueType === 'number' || valueType === 'boolean') &&
-      isRuntimeValueReferenceExpression(expression, context)
-    ) {
+    if ((valueType === 'number' || valueType === 'boolean') && isRuntimeValueReferenceExpression(expression, context)) {
       const value = deps.emitReference(expression, context)
       const check = emitRuntimeValueCheck(value, cRuntimeValueTag(valueType), context)
       const lines: string[] = []
@@ -3008,9 +3031,8 @@ export function emitPreparedNumberExpression(
     let libraryNativeField: PreparedExpression | null = null
 
     if (isCompilerLibraryNativeFieldExpression(expression, context)) {
-      const preparedObject = expression.object.type === 'Reference'
-        ? null
-        : deps.emitCValueExpression(expression.object, context)
+      const preparedObject =
+        expression.object.type === 'Reference' ? null : deps.emitCValueExpression(expression.object, context)
 
       libraryNativeField = emitPreparedCompilerLibraryNativeFieldExpression(expression, context, preparedObject)
     }
@@ -3130,7 +3152,6 @@ export function emitPreparedNumberExpression(
         expression: scalarRuntimeValueExpression(value.expression, runtimeElement.valueType)
       }
     }
-
   }
 
   if (expression.type === 'AwaitExpression') {
@@ -3338,7 +3359,11 @@ function emitPreparedDynamicObjectStringLiteralCompareExpression(
     if (deps.isMemberAccessExpression(expression.right)) {
       const nativeClassField = emitPreparedNativeClassFieldValueExpression(expression.right, context)
 
-      if (nativeClassField !== null && typeof nativeClassField !== 'undefined' && nativeClassField.valueType === 'string') {
+      if (
+        nativeClassField !== null &&
+        typeof nativeClassField !== 'undefined' &&
+        nativeClassField.valueType === 'string'
+      ) {
         return deps.emitPreparedStringCompareExpression(expression, context)
       }
     }
@@ -3358,7 +3383,11 @@ function emitPreparedDynamicObjectStringLiteralCompareExpression(
     if (deps.isMemberAccessExpression(expression.left)) {
       const nativeClassField = emitPreparedNativeClassFieldValueExpression(expression.left, context)
 
-      if (nativeClassField !== null && typeof nativeClassField !== 'undefined' && nativeClassField.valueType === 'string') {
+      if (
+        nativeClassField !== null &&
+        typeof nativeClassField !== 'undefined' &&
+        nativeClassField.valueType === 'string'
+      ) {
         return deps.emitPreparedStringCompareExpression(expression, context)
       }
     }
@@ -3789,10 +3818,7 @@ function emitPreparedOptionalPlainFunctionPointerCallExpression(
   return deps.emitPreparedCallExpression(asRequiredCallExpression(expression), context)
 }
 
-function plainOptionalCallFunctionType(
-  expression: CValueNode,
-  context: CFunctionContext
-): CFunctionType | null {
+function plainOptionalCallFunctionType(expression: CValueNode, context: CFunctionContext): CFunctionType | null {
   if (expression.type !== 'OptionalCallExpression') {
     return null
   }
@@ -3889,17 +3915,23 @@ function emitPreparedNullableNullCompareExpression(
   let nullable = expression.left
   let maybeNull = expression.right
 
-  if (expression.left.type === 'NullLiteral') {
+  if (isNullishLiteralExpression(expression.left)) {
     nullable = expression.right
     maybeNull = expression.left
   }
 
-  if (maybeNull.type !== 'NullLiteral' || !isNullableRuntimeExpression(nullable, context)) {
+  if (!isNullishLiteralExpression(maybeNull) || !isNullableRuntimeExpression(nullable, context)) {
     return null
   }
 
   const value = deps.emitCValueExpression(nullable, context)
-  const equals = `(${value.expression}.tag == INOX_TAG_NULL || ${value.expression}.tag == INOX_TAG_UNDEFINED)`
+  let expectedTag = 'INOX_TAG_NULL'
+
+  if (maybeNull.type === 'Reference') {
+    expectedTag = 'INOX_TAG_UNDEFINED'
+  }
+
+  const equals = `(${value.expression}.tag == ${expectedTag})`
   let result = `(!${equals})`
 
   if (isPositiveEqualityOperator(expression.operator)) {
@@ -3910,6 +3942,13 @@ function emitPreparedNullableNullCompareExpression(
     lines: value.lines,
     expression: result
   }
+}
+
+function isNullishLiteralExpression(expression: CValueNode): boolean {
+  return (
+    expression.type === 'NullLiteral' ||
+    (expression.type === 'Reference' && expression.path.length === 1 && expression.path[0] === 'undefined')
+  )
 }
 
 function emitPreparedNullableBooleanLiteralCompareExpression(
@@ -5004,10 +5043,7 @@ export type CValueExpressionDependencies = {
     context: CFunctionContext
   ): PreparedExpression | null
   emitPreparedNumberExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitPreparedRuntimeTruthinessExpression(
-    expression: CValueNode,
-    context: CFunctionContext
-  ): PreparedExpression | null
+  emitPreparedRuntimeTruthinessExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedObjectExpressionIndexValueExpression(
     expression: CValueNode,
     context: CFunctionContext
@@ -5475,9 +5511,8 @@ export function emitCValueExpression(
     let libraryNativeField: PreparedExpression | null = null
 
     if (isCompilerLibraryNativeFieldExpression(expression, context)) {
-      const preparedObject = expression.object.type === 'Reference'
-        ? null
-        : deps.emitCValueExpression(expression.object, context)
+      const preparedObject =
+        expression.object.type === 'Reference' ? null : deps.emitCValueExpression(expression.object, context)
 
       libraryNativeField = emitPreparedCompilerLibraryNativeFieldExpression(expression, context, preparedObject)
     }
@@ -5608,8 +5643,13 @@ export function emitCValueExpression(
 
     const temp = nextCName(context, 'inox_value')
     const tag = cRuntimeValueTag(valueType)
-    registerOwnedValue(context, temp)
     const call = deps.emitPreparedCallExpression(expression, context)
+
+    if (call.cppType !== null && typeof call.cppType !== 'undefined') {
+      return call
+    }
+
+    registerOwnedValue(context, temp)
     const lines: string[] = []
 
     appendLines(lines, call.lines)

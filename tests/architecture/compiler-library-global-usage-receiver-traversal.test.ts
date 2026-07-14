@@ -15,7 +15,7 @@ test('global usage traversal пропускает package binding, но обхо
   const paths = collectGlobalUsages(program).map((usage) => usage.path.join('.'))
 
   paths.sort()
-  assert.deepEqual(paths, ['Date.now', 'performance.now'])
+  assert.deepEqual(paths, ['Object.keys', 'Promise.resolve'])
 })
 
 function libraryGlobalCall(): object {
@@ -23,7 +23,7 @@ function libraryGlobalCall(): object {
     type: 'CallExpression',
     libraryOperationId: 'fixture#parse',
     callee: member(reference('JSON'), 'parse'),
-    args: [call(member(reference('performance'), 'now'))]
+    args: [call(member(reference('Promise'), 'resolve'))]
   }
 }
 
@@ -32,7 +32,7 @@ function libraryReceiverCall(): object {
     type: 'CallExpression',
     libraryOperationId: 'fixture#receiver-run',
     libraryReceiverTypeId: 'fixture#Receiver',
-    callee: member(call(member(reference('Date'), 'now')), 'run'),
+    callee: member(call(member(reference('Object'), 'keys')), 'run'),
     args: []
   }
 }

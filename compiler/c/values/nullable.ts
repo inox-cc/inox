@@ -140,7 +140,8 @@ function emitNullableThrownCheckLines(context: NullableFunctionContext): string[
     return [`if (inox::thrown()) ${emitFailureStatement(context)}`]
   }
 
-  const errorActiveNeeded = currentNullableErrorTargetRequiresActive(context) || (target === '' && context.throwingFunction)
+  const errorActiveNeeded =
+    currentNullableErrorTargetRequiresActive(context) || (target === '' && context.throwingFunction)
 
   if (errorActiveNeeded) {
     registerNullableErrorChannel(context)
@@ -412,10 +413,16 @@ function resolveNullableScalarNullCheckNarrowing(
     return typeofNarrowing
   }
 
+  const literalNarrowing = resolveNullableScalarLiteralEqualityNarrowing(expression, context)
+
+  if (literalNarrowing !== null) {
+    return literalNarrowing
+  }
+
   let nullable = expression.left
   let maybeNull = expression.right
 
-  if (expression.left !== null && typeof expression.left !== 'undefined' && expression.left.type === 'NullLiteral') {
+  if (isNullishLiteral(expression.left)) {
     nullable = expression.right
     maybeNull = expression.left
   }
@@ -423,7 +430,7 @@ function resolveNullableScalarNullCheckNarrowing(
   if (
     maybeNull === null ||
     typeof maybeNull === 'undefined' ||
-    maybeNull.type !== 'NullLiteral' ||
+    !isNullishLiteral(maybeNull) ||
     nullable === null ||
     typeof nullable === 'undefined'
   ) {
@@ -447,6 +454,50 @@ function resolveNullableScalarNullCheckNarrowing(
     trueNames: [],
     falseNames: [name]
   }
+}
+
+function isNullishLiteral(expression: AnyNode | null | undefined): boolean {
+  return (
+    expression !== null &&
+    typeof expression !== 'undefined' &&
+    (expression.type === 'NullLiteral' ||
+      (expression.type === 'Reference' && expression.path.length === 1 && expression.path[0] === 'undefined'))
+  )
+}
+
+function resolveNullableScalarLiteralEqualityNarrowing(
+  expression: AnyNode,
+  context: NullableFunctionContext
+): NullableScalarNarrowing | null {
+  let nullable = expression.left
+  let literal = expression.right
+
+  if (isScalarLiteral(expression.left)) {
+    nullable = expression.right
+    literal = expression.left
+  }
+
+  if (!isScalarLiteral(literal)) {
+    return null
+  }
+
+  const name = nullableScalarNarrowingKey(nullable)
+
+  if (name === null || !isNullableScalarNarrowingExpression(nullable, name, context)) {
+    return emptyNullableScalarNarrowing()
+  }
+
+  if (expression.operator === '===') {
+    return { trueNames: [name], falseNames: [] }
+  }
+
+  return { trueNames: [], falseNames: [name] }
+}
+
+function isScalarLiteral(expression: AnyNode): boolean {
+  return (
+    expression.type === 'StringLiteral' || expression.type === 'NumberLiteral' || expression.type === 'BooleanLiteral'
+  )
 }
 
 function resolveNullableScalarTypeofNarrowing(
@@ -483,10 +534,7 @@ function resolveNullableScalarTypeofNarrowing(
 
   const narrowsWhenEqual = literal.value !== 'undefined'
 
-  if (
-    (expression.operator === '===' && narrowsWhenEqual) ||
-    (expression.operator === '!==' && !narrowsWhenEqual)
-  ) {
+  if ((expression.operator === '===' && narrowsWhenEqual) || (expression.operator === '!==' && !narrowsWhenEqual)) {
     return { trueNames: [name], falseNames: [] }
   }
 
@@ -532,17 +580,17 @@ function isNullableScalarNarrowingExpression(
     return true
   }
 
-  if (expression.nullable === true && isNullableScalarType(nullableDeps(context).inferExpressionType(expression, context))) {
+  if (
+    expression.nullable === true &&
+    isNullableScalarType(nullableDeps(context).inferExpressionType(expression, context))
+  ) {
     return true
   }
 
   return false
 }
 
-function nullableScalarObjectField(
-  expression: AnyNode,
-  context: NullableFunctionContext
-): CObjectFieldInfo | null {
+function nullableScalarObjectField(expression: AnyNode, context: NullableFunctionContext): CObjectFieldInfo | null {
   if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
     const member = resolveKnownObjectMember(expression, context)
 
@@ -952,8 +1000,8 @@ function emitCOptionalObjectReadValueExpression(
 
   appendLines(lines, object.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(`if (${object.expression}.tag == INOX_TAG_NULL) {`)
-  lines.push(`  ${temp} = inox_null_value();`)
+  lines.push(`if (${object.expression}.tag == INOX_TAG_NULL || ${object.expression}.tag == INOX_TAG_UNDEFINED) {`)
+  lines.push(`  ${temp} = inox_undefined_value();`)
   lines.push('} else {')
   lines.push(`  ${typeCheck}`)
   appendPrefixedLines(lines, getLines, '  ')
@@ -1000,8 +1048,8 @@ function emitCOptionalArrayIndexValueExpression(
 
   appendLines(lines, array.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(`if (${array.expression}.tag == INOX_TAG_NULL) {`)
-  lines.push(`  ${temp} = inox_null_value();`)
+  lines.push(`if (${array.expression}.tag == INOX_TAG_NULL || ${array.expression}.tag == INOX_TAG_UNDEFINED) {`)
+  lines.push(`  ${temp} = inox_undefined_value();`)
   lines.push('} else {')
   lines.push(`  ${typeCheck}`)
   appendPrefixedLines(lines, index.lines, '  ')

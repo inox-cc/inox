@@ -1,6 +1,6 @@
 #include "inox/time_bridge.h"
 
-#include "inox/time.h"
+#include <chrono>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -9,8 +9,10 @@
 #include <time.h>
 #endif
 
-extern "C" inox_number inox_performance_now(void) {
-  return performance.now();
+extern "C" inox_number inox_monotonic_now_ms(void) {
+  const std::chrono::steady_clock::duration elapsed = std::chrono::steady_clock::now().time_since_epoch();
+
+  return std::chrono::duration<inox_number, std::milli>(elapsed).count();
 }
 
 extern "C" void inox_time_sleep_ms(inox_number delay_ms) {

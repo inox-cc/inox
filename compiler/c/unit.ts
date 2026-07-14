@@ -13,12 +13,6 @@ import {
   irClassMethodEffectName,
   mergeIrFunctionEffects
 } from '../ir.ts'
-import { memberExpressionPath } from '../member-paths.ts'
-import {
-  dateConstructorRuntimeMethodNameFromPath,
-  dateInstanceRuntimeMethodReturnType,
-  timeRuntimeMethodNameFromPath
-} from '../../stdlib/global/compiler/descriptor.ts'
 import type {
   AnyNode,
   Diagnostic,
@@ -71,7 +65,7 @@ import { emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { emitCompilerLibraryRuntimeInitializerDefinitions } from './library-initializers.ts'
 import { emitCPrelude, filterUnusedCPreludeIncludes } from './prelude.ts'
 import { collectCReferencedFunctionPrototypeNames } from './prototype-references.ts'
-import { addDateStringRuntimeRequirements, resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
+import { resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
 import type {
   CClassInfo,
   CClassMethod,
@@ -503,24 +497,10 @@ function emitCUnitObjectFunctionFieldDefinitions(
 
 function cUnitValueType(node: AnyNode, context: CEmitContext): string {
   const valueType = node.valueType
-  const timeValueType = cUnitTimeExpressionValueType(node.init)
   const classValueType = cUnitNativeClassValueType(node, context)
 
   if (classValueType !== null && typeof classValueType !== 'undefined') {
     return classValueType
-  }
-
-  if (
-    timeValueType !== null &&
-    typeof timeValueType !== 'undefined' &&
-    (valueType === null ||
-      typeof valueType === 'undefined' ||
-      valueType === '' ||
-      valueType === 'unknown' ||
-      valueType === 'object' ||
-      valueType === timeValueType)
-  ) {
-    return timeValueType
   }
 
   if (valueType === null || typeof valueType === 'undefined' || valueType === '') {
@@ -595,63 +575,6 @@ function cUnitNativeClassValueType(node: AnyNode, context: CEmitContext): string
   }
 
   return cClassValueTypeName(className)
-}
-
-function cUnitTimeExpressionValueType(expression: AnyNode | null | undefined): string | null {
-  const method = cUnitTimeExpressionMethod(expression)
-
-  if (method === null || typeof method === 'undefined') {
-    return null
-  }
-
-  if (method === 'dateConstructor') {
-    return 'date'
-  }
-
-  const dateReturnType = dateInstanceRuntimeMethodReturnType(method)
-
-  if (dateReturnType !== null && typeof dateReturnType !== 'undefined') {
-    return dateReturnType
-  }
-
-  return 'number'
-}
-
-function cUnitTimeExpressionMethod(expression: AnyNode | null | undefined): string | null {
-  if (expression === null || typeof expression === 'undefined') {
-    return null
-  }
-
-  const method = nullableString(expression.timeRuntimeMethod)
-
-  if (method !== null && typeof method !== 'undefined') {
-    return method
-  }
-
-  if (expression.type === 'NewExpression') {
-    return dateConstructorRuntimeMethodNameFromPath(memberExpressionPath(expression.callee))
-  }
-
-  if (expression.type === 'CallExpression') {
-    const path = memberExpressionPath(expression.callee)
-    const callMethod = timeRuntimeMethodNameFromPath(path)
-
-    if (callMethod !== null && typeof callMethod !== 'undefined') {
-      return callMethod
-    }
-
-    return dateConstructorRuntimeMethodNameFromPath(path)
-  }
-
-  return null
-}
-
-function nullableString(value: string | null | undefined): string | null {
-  if (value === null || typeof value === 'undefined') {
-    return null
-  }
-
-  return value
 }
 
 function cUnitValueFunctionType(node: AnyNode): CFunctionType | null {
@@ -1359,7 +1282,6 @@ export function emitCUnit(
     deps.asyncTaskLoweringDependencies
   )
   const classMethods = collectClassMethods(baseContext)
-  addDateStringRuntimeRequirements(runtimeRequirements, irPrograms, baseContext)
   const signatureRuntimeTypes = collectCUnitContextRuntimeTypes(baseContext)
   const preludeRequirements = resolveCRuntimePreludeRequirements({
     classDescriptorCount: classDescriptorNames.size,
@@ -1373,7 +1295,6 @@ export function emitCUnit(
     throwingFunctionCount: baseContext.throwingFunctions.size
   })
   const needsRuntime: boolean = preludeRequirements.needsRuntime
-  const needsTimeRuntime: boolean = preludeRequirements.needsTimeRuntime
   const needsDebugMemoryRuntime: boolean = preludeRequirements.needsDebugMemoryRuntime
   const needsAsyncRuntime: boolean = preludeRequirements.needsAsyncRuntime
   const needsCallbackRuntime: boolean = preludeRequirements.needsCallbackRuntime
@@ -1404,7 +1325,6 @@ export function emitCUnit(
   const lines = emitCPrelude(
     needsRuntime,
     true,
-    needsTimeRuntime,
     needsDebugMemoryRuntime,
     needsAsyncRuntime,
     needsCallbackRuntime,

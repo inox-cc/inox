@@ -291,7 +291,7 @@ inox_status inox_loop_run_once(inox_loop* loop) {
     return INOX_ERR_TYPE;
   }
 
-  return inox_loop_poll(loop, inox_performance_now());
+  return inox_loop_poll(loop, inox_monotonic_now_ms());
 }
 
 inox_status inox_loop_run(inox_loop* loop) {
@@ -360,7 +360,7 @@ int inox_loop_next_timer_due_ms(const inox_loop* loop, inox_number* out) {
   }
 
   if (found) {
-    *out = inox_performance_now() + (inox_number)next_due_in_ms;
+    *out = inox_monotonic_now_ms() + (inox_number)next_due_in_ms;
   }
 
   return found;

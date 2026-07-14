@@ -155,7 +155,6 @@ function cPreludeBodyUsesCStdioHeader(body: string): boolean {
 export function emitCPrelude(
   needsRuntime: boolean,
   needsMainRuntime: boolean,
-  needsTimeRuntime: boolean,
   needsDebugMemoryRuntime: boolean,
   needsAsyncRuntime: boolean,
   needsCallbackRuntime: boolean,
@@ -236,10 +235,6 @@ export function emitCPrelude(
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/string.h"')
   } else if (needsStringHeader) {
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/string.h"')
-  }
-
-  if (needsTimeRuntime) {
-    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/time.h"')
   }
 
   const lines = emitCPreludeIncludeLines(systemIncludes, localIncludes)

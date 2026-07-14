@@ -52,7 +52,8 @@ import {
   isManagedRuntimeReturnType,
   isNullableScalarType,
   isOpaqueRuntimeValueType,
-  isRuntimeNullableType
+  isRuntimeNullableType,
+  libraryNativeCppType
 } from '../value-types.ts'
 import type { ArrayLoweringDependencies, PreparedArrayExpression } from './arrays.ts'
 import {
@@ -584,11 +585,7 @@ function stringOrNull(value: string | null | undefined): string | null {
 }
 
 function functionTypeFromArrowFunctionExpression(expression: StatementNode | null | undefined): CFunctionType | null {
-  if (
-    expression === null ||
-    typeof expression === 'undefined' ||
-    expression.type !== 'ArrowFunctionExpression'
-  ) {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'ArrowFunctionExpression') {
     return null
   }
 
@@ -1355,7 +1352,9 @@ export function emitStringScalarVariableDeclaration(
 
   if (runtimeString !== null && typeof runtimeString !== 'undefined') {
     context.runtimeStrings.add(statement.name)
-    return [`${constPrefix(statement.kind === 'const')}inox_string* ${emitCIdentifier(statement.name)} = ${runtimeString};`]
+    return [
+      `${constPrefix(statement.kind === 'const')}inox_string* ${emitCIdentifier(statement.name)} = ${runtimeString};`
+    ]
   }
 
   const runtimeElement = deps.resolveRuntimeArrayIndex(statement.init, context)
@@ -1418,15 +1417,14 @@ export function emitFunctionScalarVariableDeclaration(
     context.functionTypes.set(statement.name, normalizeFunctionType(functionType))
   }
 
-  if (
-    runtimeElement !== null &&
-    typeof runtimeElement !== 'undefined' &&
-    runtimeElement.valueType === 'function'
-  ) {
+  if (runtimeElement !== null && typeof runtimeElement !== 'undefined' && runtimeElement.valueType === 'function') {
     return emitRuntimeArrayFunctionValueVariableDeclaration(statement, runtimeElement, context)
   }
 
-  if (isRuntimeFunctionType(functionType) || (runtimeFunctionType !== null && typeof runtimeFunctionType !== 'undefined')) {
+  if (
+    isRuntimeFunctionType(functionType) ||
+    (runtimeFunctionType !== null && typeof runtimeFunctionType !== 'undefined')
+  ) {
     return deps.emitRuntimeCallbackVariableDeclaration(statement, context)
   }
 
@@ -1482,17 +1480,6 @@ export function emitNumberBooleanScalarVariableDeclaration(
     return emitBoxedScalarVariableDeclaration(statement, context)
   }
 
-  if (inferred === 'date') {
-    const value = statementDeps(context).emitPreparedNumberExpression(statement.init, context)
-    const lines: string[] = []
-
-    context.variables.set(statement.name, 'date')
-    pushAllLines(lines, value.lines)
-    lines.push(`${constPrefix(statement.kind === 'const')}double ${emitCIdentifier(statement.name)} = ${value.expression};`)
-
-    return lines
-  }
-
   if (!isNullableScalarType(inferred)) {
     pushDiagnostic(
       context,
@@ -1532,7 +1519,9 @@ export function emitNumberBooleanScalarVariableDeclaration(
   const value = deps.emitPreparedNumberExpression(statement.init, context)
   const lines: string[] = []
   pushAllLines(lines, value.lines)
-  lines.push(`${constPrefix(statement.kind === 'const')}double ${emitCIdentifier(statement.name)} = ${value.expression};`)
+  lines.push(
+    `${constPrefix(statement.kind === 'const')}double ${emitCIdentifier(statement.name)} = ${value.expression};`
+  )
   pushAwaitVariableDeclarationSpacing(lines, statement.init)
 
   return lines
@@ -1559,7 +1548,9 @@ function emitDynamicObjectScalarVariableDeclaration(
 
   pushAllLines(lines, value.lines)
   lines.push(emitRuntimeValueCheck(value.expression, tag, context))
-  lines.push(`${constPrefix(statement.kind === 'const')}double ${emitCIdentifier(statement.name)} = ${runtimeValueExpression};`)
+  lines.push(
+    `${constPrefix(statement.kind === 'const')}double ${emitCIdentifier(statement.name)} = ${runtimeValueExpression};`
+  )
 
   return lines
 }
@@ -1769,14 +1760,19 @@ function shouldSkipRuntimeValueDeclarationCheck(
     return false
   }
 
+  if (
+    value.cppType !== null &&
+    typeof value.cppType !== 'undefined' &&
+    value.cppType !== 'inox::Value' &&
+    isManagedRuntimeReturnType(valueType)
+  ) {
+    return true
+  }
+
   return value.runtimeTypeChecked === true && value.valueType === valueType
 }
 
-function pushPreparedRuntimeValueOwnershipLines(
-  lines: string[],
-  target: string,
-  value: PreparedExpression
-): void {
+function pushPreparedRuntimeValueOwnershipLines(lines: string[], target: string, value: PreparedExpression): void {
   if (value.owned === true) {
     if (value.expression !== target) {
       lines.push(`${value.expression} = inox_undefined_value();`)
@@ -1875,12 +1871,7 @@ function resolveRuntimeObjectDeclaredType(
 function knownRuntimeObjectBuiltin(shape: CObjectShape | null | undefined): string | null {
   const builtin = shape?.builtin
 
-  if (
-    builtin === null ||
-    typeof builtin === 'undefined' ||
-    builtin === '' ||
-    builtin === 'compiler.AnyNode'
-  ) {
+  if (builtin === null || typeof builtin === 'undefined' || builtin === '' || builtin === 'compiler.AnyNode') {
     return null
   }
 
@@ -2033,10 +2024,7 @@ function resolveRuntimeObjectLiteralShapeFields(
   return fields
 }
 
-function resolveRuntimeObjectLiteralShapeField(
-  property: StatementNode,
-  context: CFunctionContext
-): CObjectShapeField {
+function resolveRuntimeObjectLiteralShapeField(property: StatementNode, context: CFunctionContext): CObjectShapeField {
   const value: StatementNode = property.value
   let shape = value.shape
 
@@ -2251,10 +2239,17 @@ export function emitBoxedRuntimeValueVariableDeclaration(
 
   const lines: string[] = []
   pushAllLines(lines, value.lines)
-  lines.push(`${emitCIdentifier(statement.name)} = (inox_value*)inox_default_alloc(0, sizeof(inox_value), _Alignof(inox_value));`)
+  lines.push(
+    `${emitCIdentifier(statement.name)} = (inox_value*)inox_default_alloc(0, sizeof(inox_value), _Alignof(inox_value));`
+  )
   lines.push(`if (${emitCIdentifier(statement.name)} == 0) ${deps.emitFailureStatement(context)}`)
   lines.push(`*${emitCIdentifier(statement.name)} = ${value.expression};`)
-  lines.push(emitRuntimeTypeCheck(`(*${emitCIdentifier(statement.name)}).tag != ${tag} || (*${emitCIdentifier(statement.name)}).as.ref == 0`, context))
+  lines.push(
+    emitRuntimeTypeCheck(
+      `(*${emitCIdentifier(statement.name)}).tag != ${tag} || (*${emitCIdentifier(statement.name)}).as.ref == 0`,
+      context
+    )
+  )
   lines.push(`inox_retain(*${emitCIdentifier(statement.name)});`)
 
   return lines
@@ -2842,7 +2837,10 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
       context.functionTypes.set(statement.name, normalizeFunctionType(functionType))
     }
 
-    if (isRuntimeFunctionType(functionType) || (runtimeFunctionType !== null && typeof runtimeFunctionType !== 'undefined')) {
+    if (
+      isRuntimeFunctionType(functionType) ||
+      (runtimeFunctionType !== null && typeof runtimeFunctionType !== 'undefined')
+    ) {
       return {
         lines: deps.emitRuntimeCallbackVariableDeclaration(statement, context),
         expression: ''
@@ -3378,7 +3376,11 @@ function emitRuntimeCollectionValueForOfStatement(
 
     const lines: string[] = []
     pushAllLines(lines, setupLines)
-    const collectionData = cppObject ? `${collectionName}.data()` : isMap ? `Map(${collectionName}).data()` : `Set(${collectionName}).data()`
+    const collectionData = cppObject
+      ? `${collectionName}.data()`
+      : isMap
+        ? `Map(${collectionName}).data()`
+        : `Set(${collectionName}).data()`
     lines.push(`${collectionType}* ${collection} = ${collectionData};`)
     lines.push(emitRuntimeTypeCheck(`${collection} == nullptr`, context))
     lines.push(`for (size_t ${index} = 0; ${index} < ${collection}->capacity; ++${index}) {`)
@@ -3903,6 +3905,10 @@ export function emitReturnStatement(statement: StatementNode, context: CFunction
     return emitNullableScalarReturnStatement(returnStatement, context)
   }
 
+  if (context.returnType === 'object' && libraryNativeCppType(context.returnShape) !== null) {
+    return emitLibraryNativeReturnStatement(returnStatement, context)
+  }
+
   if (isRuntimeValueReturnType(context.returnType)) {
     return emitRuntimeValueReturnStatement(returnStatement, context)
   }
@@ -3951,6 +3957,20 @@ export function emitReturnStatement(statement: StatementNode, context: CFunction
   return [`return ${expression};`]
 }
 
+function emitLibraryNativeReturnStatement(statement: StatementNode, context: CFunctionContext): string[] {
+  if (statement.argument === null || typeof statement.argument === 'undefined') {
+    return emitReturnJump(context)
+  }
+
+  const value = statementDeps(context).emitCValueExpression(statement.argument, context)
+  const lines: string[] = []
+
+  pushAllLines(lines, value.lines)
+  lines.push(`inox_return = ${value.expression};`)
+  pushAllLines(lines, emitReturnJump(context))
+  return lines
+}
+
 export function emitVariableDeclarationStatement(statement: StatementNode, context: CFunctionContext): string[] {
   const deps = statementDeps(context)
 
@@ -3969,7 +3989,9 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
 
       context.variables.set(statement.name, 'number')
       pushAllLines(lines, arrayReduceCall.lines)
-      lines.push(`${constPrefix(statement.kind === 'const')}double ${emitCIdentifier(statement.name)} = ${arrayReduceCall.expression};`)
+      lines.push(
+        `${constPrefix(statement.kind === 'const')}double ${emitCIdentifier(statement.name)} = ${arrayReduceCall.expression};`
+      )
 
       return lines
     }
@@ -4431,7 +4453,9 @@ function emitNativeClassValueVariableDeclaration(
   context.variables.set(statement.name, cClassValueTypeName(className))
   context.classInstanceTypes.set(statement.name, className)
   pushAllLines(lines, value.lines)
-  lines.push(`${emitCClassTypeNameForClassName(context, className)} ${emitCIdentifier(statement.name)} = ${value.expression};`)
+  lines.push(
+    `${emitCClassTypeNameForClassName(context, className)} ${emitCIdentifier(statement.name)} = ${value.expression};`
+  )
 
   return lines
 }
@@ -4485,11 +4509,7 @@ function emitRuntimeValueAssignment(expression: StatementNode, context: CFunctio
   return lines
 }
 
-function updateRuntimeArrayAssignmentMetadata(
-  target: string,
-  value: StatementNode,
-  context: CFunctionContext
-): void {
+function updateRuntimeArrayAssignmentMetadata(target: string, value: StatementNode, context: CFunctionContext): void {
   context.arrayLengths.delete(target)
   context.arrayShapes.delete(target)
   context.runtimeArrayElementTypes.set(target, resolveRuntimeArrayAssignmentElementType(target, value, context))
@@ -5112,11 +5132,7 @@ function pushRuntimeValueReturnAssignment(
   value: PreparedExpression,
   context: CFunctionContext
 ): void {
-  if (
-    value.cppType !== null &&
-    typeof value.cppType !== 'undefined' &&
-    isManagedRuntimeReturnType(value.valueType)
-  ) {
+  if (value.cppType !== null && typeof value.cppType !== 'undefined' && isManagedRuntimeReturnType(value.valueType)) {
     const temp = nextCName(context, 'inox_return_value')
 
     lines.push(`auto ${temp} = ${value.expression};`)

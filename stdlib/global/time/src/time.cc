@@ -1,84 +1,61 @@
 #include "inox/time.h"
 #include "inox/string.h"
+#include "inox/time_bridge.h"
 
+#include <chrono>
+#include <limits>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
 
-struct TimeAdapter {
-  void* user;
-  inox_number (*monotonic_now_ms)(void* user);
-  inox_number (*wall_now_ms)(void* user);
-};
-
-static inox_number inox_default_monotonic_now_ms(void* user);
-static inox_number inox_default_wall_now_ms(void* user);
+static inox_number inox_default_wall_now_ms(void);
 static int inox_date_day_from_civil(int year, unsigned int month, unsigned int day);
 static int inox_date_floor_div(int value, int divisor);
 static inox_number inox_floor_ms(inox_number value);
 static inox_number inox_date_nan(void);
 static int inox_date_parse_fixed_digits(const char* bytes, size_t len, size_t* offset, size_t count, int* out);
 static int inox_date_parse_iso(const char* bytes, size_t len, inox_number* out);
+static inox_number inox_date_part(inox_number value, int part, bool utc);
+static inox_number inox_date_timezone_offset(inox_number value);
 static int inox_date_time_struct(inox_number value, int utc, struct tm* out, int* millisecond);
+static inox::String inox_date_to_string(inox_number value, int kind);
 static int inox_date_timezone_offset_minutes(const char* bytes, size_t len, size_t* offset, int* out);
-static inox_number inox_timespec_ms(const struct timespec* value);
+static inox_number inox_date_utc(
+  inox_number year,
+  inox_number month,
+  inox_number day,
+  inox_number hour,
+  inox_number minute,
+  inox_number second,
+  inox_number millisecond
+);
+static inox_number inox_date_from_local(
+  inox_number year,
+  inox_number month,
+  inox_number day,
+  inox_number hour,
+  inox_number minute,
+  inox_number second,
+  inox_number millisecond
+);
 static void inox_time_ensure_initialized(void);
 
-static TimeAdapter inox_time_current_adapter = { 0, inox_default_monotonic_now_ms, inox_default_wall_now_ms };
 static int inox_time_initialized = 0;
 static inox_number inox_performance_base_ms = 0;
-static inox_number inox_wall_base_ms = 0;
-static inox_number inox_wall_base_monotonic_ms = 0;
 
 static void inox_time_ensure_initialized(void) {
   if (inox_time_initialized) {
     return;
   }
 
-  inox_performance_base_ms = inox_time_current_adapter.monotonic_now_ms(inox_time_current_adapter.user);
-  inox_wall_base_monotonic_ms = inox_performance_base_ms;
-  inox_wall_base_ms = inox_time_current_adapter.wall_now_ms(inox_time_current_adapter.user);
+  inox_performance_base_ms = inox_monotonic_now_ms();
   inox_time_initialized = 1;
 }
 
-static inox_number inox_default_monotonic_now_ms(void* user) {
-  (void)user;
+static inox_number inox_default_wall_now_ms(void) {
+  const std::chrono::system_clock::duration elapsed = std::chrono::system_clock::now().time_since_epoch();
 
-#if defined(CLOCK_MONOTONIC)
-  struct timespec value;
-
-  if (clock_gettime(CLOCK_MONOTONIC, &value) == 0) {
-    return inox_timespec_ms(&value);
-  }
-#endif
-
-  return ((inox_number)clock() * 1000.0) / (inox_number)CLOCKS_PER_SEC;
-}
-
-static inox_number inox_default_wall_now_ms(void* user) {
-  (void)user;
-
-#if defined(CLOCK_REALTIME)
-  {
-    struct timespec value;
-
-    if (clock_gettime(CLOCK_REALTIME, &value) == 0) {
-      return inox_timespec_ms(&value);
-    }
-  }
-#endif
-
-#if defined(TIME_UTC)
-  {
-    struct timespec value;
-
-    if (timespec_get(&value, TIME_UTC) == TIME_UTC) {
-      return inox_timespec_ms(&value);
-    }
-  }
-#endif
-
-  return inox_default_monotonic_now_ms(user);
+  return std::chrono::duration<inox_number, std::milli>(elapsed).count();
 }
 
 static inox_number inox_floor_ms(inox_number value) {
@@ -92,7 +69,7 @@ static inox_number inox_floor_ms(inox_number value) {
 }
 
 static inox_number inox_date_nan(void) {
-  return 0.0 / 0.0;
+  return std::numeric_limits<inox_number>::quiet_NaN();
 }
 
 static int inox_date_floor_div(int value, int divisor) {
@@ -233,7 +210,7 @@ static int inox_date_parse_iso(const char* bytes, size_t len, inox_number* out) 
     return 0;
   }
 
-  *out = ::Date.UTC(year, month - 1, day, hour, minute, second, millisecond) -
+  *out = inox_date_utc(year, month - 1, day, hour, minute, second, millisecond) -
          ((inox_number)timezone_offset * 60000.0);
   return 1;
 }
@@ -270,34 +247,7 @@ static int inox_date_time_struct(inox_number value, int utc, struct tm* out, int
   return 1;
 }
 
-static inox_number inox_timespec_ms(const struct timespec* value) {
-  return ((inox_number)value->tv_sec * 1000.0) + ((inox_number)value->tv_nsec / 1000000.0);
-}
-
-inox_number Date::now() const {
-  inox_time_ensure_initialized();
-
-  return inox_floor_ms(
-    inox_wall_base_ms +
-    (inox_time_current_adapter.monotonic_now_ms(inox_time_current_adapter.user) - inox_wall_base_monotonic_ms)
-  );
-}
-
-inox_number Date::parse(inox::StringView text) const {
-  inox_number result = 0;
-
-  if (text.bytes == 0) {
-    return inox_date_nan();
-  }
-
-  if (inox_date_parse_iso(text.bytes, text.len, &result)) {
-    return result;
-  }
-
-  return inox_date_nan();
-}
-
-inox_number Date::UTC(
+static inox_number inox_date_utc(
   inox_number year,
   inox_number month,
   inox_number day,
@@ -305,7 +255,7 @@ inox_number Date::UTC(
   inox_number minute,
   inox_number second,
   inox_number millisecond
-) const {
+) {
   int full_year = (int)year;
   int full_month = (int)month;
 
@@ -333,7 +283,7 @@ inox_number Date::UTC(
   return (inox_number)total_ms;
 }
 
-inox_number Date::fromLocal(
+static inox_number inox_date_from_local(
   inox_number year,
   inox_number month,
   inox_number day,
@@ -341,7 +291,7 @@ inox_number Date::fromLocal(
   inox_number minute,
   inox_number second,
   inox_number millisecond
-) const {
+) {
   int full_year = (int)year;
 
   if (full_year >= 0 && full_year <= 99) {
@@ -367,7 +317,7 @@ inox_number Date::fromLocal(
   return ((inox_number)seconds * 1000.0) + (inox_number)((int)millisecond);
 }
 
-inox_number Date::part(inox_number value, int part, bool utc) const {
+static inox_number inox_date_part(inox_number value, int part, bool utc) {
   struct tm time_value;
   int millisecond = 0;
 
@@ -387,7 +337,7 @@ inox_number Date::part(inox_number value, int part, bool utc) const {
   return inox_date_nan();
 }
 
-inox_number Date::timezoneOffset(inox_number value) const {
+static inox_number inox_date_timezone_offset(inox_number value) {
   struct tm local_value;
   int millisecond = 0;
 
@@ -396,7 +346,7 @@ inox_number Date::timezoneOffset(inox_number value) const {
   }
 
   const inox_number whole_ms = inox_floor_ms(value);
-  const inox_number local_as_utc = ::Date.UTC(
+  const inox_number local_as_utc = inox_date_utc(
     local_value.tm_year + 1900,
     local_value.tm_mon,
     local_value.tm_mday,
@@ -409,7 +359,7 @@ inox_number Date::timezoneOffset(inox_number value) const {
   return (whole_ms - local_as_utc) / 60000.0;
 }
 
-inox::String Date::toString(inox_number value, int kind) const {
+static inox::String inox_date_to_string(inox_number value, int kind) {
   static const char* weekdays[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
   static const char* months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
   struct tm time_value;
@@ -488,11 +438,89 @@ inox::String Date::toString(inox_number value, int kind) const {
   return inox::String(buffer, (size_t)len);
 }
 
+DateValue::DateValue() : value_(inox_date_nan()) {}
+
+DateValue::DateValue(inox_number value) : value_(value) {}
+
+inox_number DateValue::getDate() const { return inox_date_part(value_, 2, false); }
+inox_number DateValue::getDay() const { return inox_date_part(value_, 3, false); }
+inox_number DateValue::getFullYear() const { return inox_date_part(value_, 0, false); }
+inox_number DateValue::getHours() const { return inox_date_part(value_, 4, false); }
+inox_number DateValue::getMilliseconds() const { return inox_date_part(value_, 7, false); }
+inox_number DateValue::getMinutes() const { return inox_date_part(value_, 5, false); }
+inox_number DateValue::getMonth() const { return inox_date_part(value_, 1, false); }
+inox_number DateValue::getSeconds() const { return inox_date_part(value_, 6, false); }
+inox_number DateValue::getTime() const { return value_; }
+inox_number DateValue::getTimezoneOffset() const { return inox_date_timezone_offset(value_); }
+inox_number DateValue::getUTCDate() const { return inox_date_part(value_, 2, true); }
+inox_number DateValue::getUTCDay() const { return inox_date_part(value_, 3, true); }
+inox_number DateValue::getUTCFullYear() const { return inox_date_part(value_, 0, true); }
+inox_number DateValue::getUTCHours() const { return inox_date_part(value_, 4, true); }
+inox_number DateValue::getUTCMilliseconds() const { return inox_date_part(value_, 7, true); }
+inox_number DateValue::getUTCMinutes() const { return inox_date_part(value_, 5, true); }
+inox_number DateValue::getUTCMonth() const { return inox_date_part(value_, 1, true); }
+inox_number DateValue::getUTCSeconds() const { return inox_date_part(value_, 6, true); }
+inox_number DateValue::valueOf() const { return value_; }
+
+inox::String DateValue::toDateString() const { return inox_date_to_string(value_, 3); }
+inox::String DateValue::toISOString() const { return inox_date_to_string(value_, 0); }
+inox::String DateValue::toJSON() const { return inox_date_to_string(value_, 0); }
+inox::String DateValue::toString() const { return inox_date_to_string(value_, 2); }
+inox::String DateValue::toTimeString() const { return inox_date_to_string(value_, 4); }
+inox::String DateValue::toUTCString() const { return inox_date_to_string(value_, 1); }
+
+DateValue DateObject::operator()() const { return DateValue(now()); }
+DateValue DateObject::operator()(inox_number value) const { return DateValue(value); }
+DateValue DateObject::operator()(inox::StringView value) const { return DateValue(parse(value)); }
+DateValue DateObject::operator()(const DateValue& value) const { return value; }
+
+DateValue DateObject::operator()(
+  inox_number year,
+  inox_number month,
+  inox_number day,
+  inox_number hour,
+  inox_number minute,
+  inox_number second,
+  inox_number millisecond
+) const {
+  return DateValue(inox_date_from_local(year, month, day, hour, minute, second, millisecond));
+}
+
+inox_number DateObject::now() const {
+  return inox_floor_ms(inox_default_wall_now_ms());
+}
+
+inox_number DateObject::parse(inox::StringView text) const {
+  inox_number result = 0;
+
+  if (text.bytes == 0) {
+    return inox_date_nan();
+  }
+
+  if (inox_date_parse_iso(text.bytes, text.len, &result)) {
+    return result;
+  }
+
+  return inox_date_nan();
+}
+
+inox_number DateObject::UTC(
+  inox_number year,
+  inox_number month,
+  inox_number day,
+  inox_number hour,
+  inox_number minute,
+  inox_number second,
+  inox_number millisecond
+) const {
+  return inox_date_utc(year, month, day, hour, minute, second, millisecond);
+}
+
 inox_number Performance::now() const {
   inox_time_ensure_initialized();
 
-  return inox_time_current_adapter.monotonic_now_ms(inox_time_current_adapter.user) - inox_performance_base_ms;
+  return inox_monotonic_now_ms() - inox_performance_base_ms;
 }
 
-class Date Date;
-Performance performance;
+const DateObject Date;
+const Performance performance;

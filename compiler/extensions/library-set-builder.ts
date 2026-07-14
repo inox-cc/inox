@@ -29,7 +29,6 @@ import {
 const compilerCoreRuntimeRequirementIds = [
   'async-runtime',
   'callback-values',
-  'clocks',
   'collections',
   'debug-memory',
   'json',
@@ -538,11 +537,27 @@ function validateRuntimeRequirementReferences(
   }
 
   for (let index = 0; index < operations.length; index = index + 1) {
+    const operation = operations[index]
+
     validateRuntimeRequirementList(
-      `operation ${operations[index].operationId}`,
-      operations[index].runtimeRequirements,
+      `operation ${operation.operationId}`,
+      operation.runtimeRequirements,
       requirements
     )
+
+    const variants = operation.variants ?? []
+
+    for (let variantIndex = 0; variantIndex < variants.length; variantIndex = variantIndex + 1) {
+      const variantRequirements = variants[variantIndex].runtimeRequirements
+
+      if (variantRequirements !== null && typeof variantRequirements !== 'undefined') {
+        validateRuntimeRequirementList(
+          `operation ${operation.operationId} variant ${variantIndex}`,
+          variantRequirements,
+          requirements
+        )
+      }
+    }
   }
 
   for (let index = 0; index < nativeTypes.length; index = index + 1) {
@@ -913,7 +928,8 @@ function operationVariantsFingerprint(operation: LibraryOperationDescriptor): st
   for (let index = 0; index < variants.length; index = index + 1) {
     const variant = variants[index]
     rows.push(
-      (variant.minArgs ?? '') + ':' + (variant.maxArgs ?? '') + ':' +
+      sortedStrings(variant.runtimeRequirements ?? []).join(',') + ':' +
+        (variant.minArgs ?? '') + ':' + (variant.maxArgs ?? '') + ':' +
         operationArgumentChecksFingerprint(variant) + ':' +
         (variant.argumentIndex ?? '') + ':' + sortedStrings(variant.stringLiterals ?? []).join(',') + ':' +
         sortedStrings(variant.argumentValueTypes ?? []).join(',') + ':' +

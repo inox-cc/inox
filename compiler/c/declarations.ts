@@ -57,10 +57,12 @@ import {
   emitCStringParamName,
   emitCType,
   emitThrowingFunctionOutType,
+  isBoxedScalarParam,
   isNullableScalarParam,
   isOpaqueRuntimeValueType,
   isRuntimeNullableType,
-  isThrowingFunctionRuntimeOut
+  isThrowingFunctionRuntimeOut,
+  libraryNativeCppType
 } from './value-types.ts'
 import {
   classFieldUsesCppStringStorage,
@@ -322,6 +324,8 @@ export function emitFunctionDeclaration(
 
     if (context.returnType === 'string') {
       returnValue = '""'
+    } else if (libraryNativeCppType(context.returnShape) !== null) {
+      returnValue = '{}'
     }
 
     pushDeclarationLines(lines, bodyLines)
@@ -345,19 +349,18 @@ function registerFunctionParamsInContext(
 
     context.localValueNames.add(param.name)
 
-    const omittedStringWithoutDefault =
-      param.valueType === 'string' &&
-      param.optional === true &&
-      param.rest !== true &&
-      typeof param.defaultValue === 'undefined'
-
-    if ((param.nullable === true || omittedStringWithoutDefault) && isRuntimeNullableType(param.valueType)) {
+    if (isNullableScalarParam(param)) {
       context.nullableVariables.add(param.name)
     }
 
+    const libraryCppType = libraryNativeParamCppType(param)
     const nativeClassParam = nativeClassParamName(param, context)
 
-    if (nativeClassParam !== null && typeof nativeClassParam !== 'undefined') {
+    if (libraryCppType !== null) {
+      context.variables.set(param.name, 'object')
+      context.cppValueTypes.set(param.name, libraryCppType)
+      registerObjectShape(context, param.name, param.shape)
+    } else if (nativeClassParam !== null && typeof nativeClassParam !== 'undefined') {
       context.variables.set(param.name, cClassValueTypeName(nativeClassParam))
       context.classInstanceTypes.set(param.name, nativeClassParam)
     } else if (isNullableScalarParam(param)) {
@@ -377,7 +380,7 @@ function registerFunctionParamsInContext(
     } else if (param.valueType === 'string') {
       context.variables.set(param.name, 'string')
 
-      if (param.nullable !== true && !omittedStringWithoutDefault) {
+      if (param.nullable !== true && !isNullableScalarParam(param)) {
         context.runtimeStrings.add(param.name)
         context.runtimeStringValues.set(param.name, emitCStringParamName(param.name))
       }
@@ -441,6 +444,7 @@ export function emitFunctionHead(statement: CNode, context: CEmitContext): strin
   const returnType = returnInfo.returnType
   const returnNullable = returnInfo.returnNullable
   const functionParams = resolveFunctionDeclarationParams(statement.name, statement.params, context)
+  const returnShape: CObjectShape | null | undefined = context.functionReturnShapes.get(statement.name)
   const params: string[] = []
 
   for (let index = 0; index < functionParams.length; index = index + 1) {
@@ -453,7 +457,9 @@ export function emitFunctionHead(statement: CNode, context: CEmitContext): strin
 
   if (isThrowingFunctionName(statement.name, context)) {
     if (returnType !== 'void') {
-      params.push(`${emitThrowingFunctionOutType(returnType, returnNullable)}* inox_out`)
+      params.push(
+        `${emitThrowingFunctionOutType(returnType, returnNullable, returnShape)}* inox_out`
+      )
     }
 
     params.push('inox_value* inox_error_out')
@@ -461,7 +467,7 @@ export function emitFunctionHead(statement: CNode, context: CEmitContext): strin
     return `inox_status ${name}(${declarationParamList(params)})`
   }
 
-  return `${emitCReturnType(returnType, returnNullable)} ${name}(${declarationParamList(params)})`
+  return `${emitCReturnType(returnType, returnNullable, returnShape)} ${name}(${declarationParamList(params)})`
 }
 
 function pushFunctionHeadParam(
@@ -618,14 +624,7 @@ function pushObjectShapeFunctionFieldParams(
 
       const pushedTypes = pushSeenDeclaredType(seenTypes, field.declaredType)
 
-      pushObjectShapeFunctionFieldParams(
-        params,
-        `${objectName}_${field.name}`,
-        field.shape,
-        context,
-        loc,
-        seenTypes
-      )
+      pushObjectShapeFunctionFieldParams(params, `${objectName}_${field.name}`, field.shape, context, loc, seenTypes)
 
       popSeenDeclaredTypes(seenTypes, pushedTypes)
     }
@@ -649,7 +648,13 @@ function emitObjectFunctionFieldParam(
 }
 
 function emitFunctionHeadParam(param: CFunctionParam, index: number, statement: CNode, context: CEmitContext): string {
-  if (isNullableScalarParam(param)) {
+  const libraryCppType = libraryNativeParamCppType(param)
+
+  if (libraryCppType !== null) {
+    return `${libraryCppType} ${emitCLocalName(param.name)}`
+  }
+
+  if (isBoxedScalarParam(param)) {
     return `inox_value ${emitCScalarParamName(param.name)}`
   }
 
@@ -678,8 +683,8 @@ function emitFunctionHeadParam(param: CFunctionParam, index: number, statement: 
   }
 
   if (isBoxedFunctionParam(param, index, statement, context) && isBoxedScalarParamValueType(param.valueType)) {
-  return `${emitCType(param.valueType)} ${emitCLocalName(param.name)}`
-}
+    return `${emitCType(param.valueType)} ${emitCLocalName(param.name)}`
+  }
 
   return `${emitCType(param.valueType)} ${emitCLocalName(param.name)}`
 }
@@ -698,7 +703,7 @@ export function emitClassMethodDeclaration(
   const params = method.params
   const methodEffectName = irClassMethodEffectName(info.name, method.name)
 
-  context.returnShape = null
+  context.returnShape = method.returnShape ?? null
   context.throwingFunction = isThrowingClassMethod(info, method, baseContext)
   context.externalEventLoop = functionTakesEventLoopParam(methodEffectName, baseContext)
   context.functionReturnOut = 'inox_out'
@@ -755,6 +760,8 @@ export function emitClassMethodDeclaration(
 
     if (context.returnType === 'string') {
       returnValue = 'inox_undefined_value()'
+    } else if (libraryNativeCppType(context.returnShape) !== null) {
+      returnValue = '{}'
     }
 
     lines.push(`  return ${returnValue};`)
@@ -778,10 +785,7 @@ export function emitClassConstructorDeclaration(
 
   const constructorMethod = info.constructor
 
-  if (
-    constructorMethod === null ||
-    typeof constructorMethod === 'undefined'
-  ) {
+  if (constructorMethod === null || typeof constructorMethod === 'undefined') {
     return []
   }
 
@@ -944,7 +948,10 @@ function emitNativeClassConstructorDeclaration(
   const bodyLines: string[] = []
   const lines: string[] = []
 
-  pushIndentedDeclarationLines(bodyLines, emitConstructorRuntimeParamPreludeForParams(constructorMethod, params, context))
+  pushIndentedDeclarationLines(
+    bodyLines,
+    emitConstructorRuntimeParamPreludeForParams(constructorMethod, params, context)
+  )
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(body, context))
   pushIndentedDeclarationLines(bodyLines, emitEventLoopDrain(context))
   const needsCleanup = shouldEmitCleanupLabel(context)
@@ -986,10 +993,7 @@ function emitConstructorRuntimeParamPreludeForParams(
   const lines: string[] = []
 
   for (let index = 0; index < params.length; index = index + 1) {
-    pushDeclarationLines(
-      lines,
-      emitConstructorRuntimeParamPreludeForParam(statement, params[index], index, context)
-    )
+    pushDeclarationLines(lines, emitConstructorRuntimeParamPreludeForParam(statement, params[index], index, context))
   }
 
   return lines
@@ -1036,7 +1040,7 @@ export function emitClassMethodPrototype(info: CClassInfo, method: CNode, contex
     return `inox_status ${emitCIdentifier(method.name)}(${joinDeclarationParams(params)});`
   }
 
-  return `${emitCReturnType(method.returnType, method.returnNullable)} ${emitCIdentifier(method.name)}(${joinDeclarationParams(
+  return `${emitCReturnType(method.returnType, method.returnNullable, method.returnShape)} ${emitCIdentifier(method.name)}(${joinDeclarationParams(
     params
   )});`
 }
@@ -1053,7 +1057,7 @@ export function emitClassMethodHead(info: CClassInfo, method: CNode, context: CE
     return `inox_status ${name}(${joinDeclarationParams(params)})`
   }
 
-  return `${emitCReturnType(method.returnType, method.returnNullable)} ${name}(${joinDeclarationParams(params)})`
+  return `${emitCReturnType(method.returnType, method.returnNullable, method.returnShape)} ${name}(${joinDeclarationParams(params)})`
 }
 
 function emitRuntimeClassMethodHead(info: CClassInfo, method: CNode, context: CEmitContext): string {
@@ -1064,7 +1068,7 @@ function emitRuntimeClassMethodHead(info: CClassInfo, method: CNode, context: CE
     return `static inox_status ${name}(${joinDeclarationParams(params)})`
   }
 
-  return `static ${emitCReturnType(method.returnType, method.returnNullable)} ${name}(${joinDeclarationParams(params)})`
+  return `static ${emitCReturnType(method.returnType, method.returnNullable, method.returnShape)} ${name}(${joinDeclarationParams(params)})`
 }
 
 function emitRuntimeClassMethodParams(info: CClassInfo, method: CNode, context: CEmitContext): string[] {
@@ -1084,7 +1088,9 @@ function emitRuntimeClassMethodParams(info: CClassInfo, method: CNode, context: 
 
   if (isThrowingClassMethod(info, method, context)) {
     if (method.returnType !== 'void') {
-      params.push(`${emitThrowingFunctionOutType(method.returnType, method.returnNullable === true)}* inox_out`)
+      params.push(
+        `${emitThrowingFunctionOutType(method.returnType, method.returnNullable === true, method.returnShape)}* inox_out`
+      )
     }
 
     params.push('inox_value* inox_error_out')
@@ -1108,7 +1114,9 @@ function emitClassMethodParams(info: CClassInfo, method: CNode, context: CEmitCo
 
   if (isThrowingClassMethod(info, method, context)) {
     if (method.returnType !== 'void') {
-      params.push(`${emitThrowingFunctionOutType(method.returnType, method.returnNullable === true)}* inox_out`)
+      params.push(
+        `${emitThrowingFunctionOutType(method.returnType, method.returnNullable === true, method.returnShape)}* inox_out`
+      )
     }
 
     params.push('inox_value* inox_error_out')
@@ -1123,7 +1131,13 @@ function isThrowingClassMethod(info: CClassInfo, method: CNode, context: CEmitCo
 }
 
 function emitClassMethodParam(param: CFunctionParam, index: number, method: CNode, context: CEmitContext): string {
-  if (isNullableScalarParam(param)) {
+  const libraryCppType = libraryNativeParamCppType(param)
+
+  if (libraryCppType !== null) {
+    return `${libraryCppType} ${emitCLocalName(param.name)}`
+  }
+
+  if (isBoxedScalarParam(param)) {
     return `inox_value ${emitCScalarParamName(param.name)}`
   }
 
@@ -1301,7 +1315,7 @@ function emitRuntimeParamPreludeForParam(
   const lines: string[] = []
   const localName = emitCLocalName(param.name)
 
-  if (isNativeClassParam(param, context)) {
+  if (libraryNativeParamCppType(param) !== null || isNativeClassParam(param, context)) {
     return lines
   }
 
@@ -1313,6 +1327,21 @@ function emitRuntimeParamPreludeForParam(
 
     pushDeclarationLines(lines, emitRuntimeNullableValueCheck(paramName, expectedTag, context))
     lines.push(`inox_value ${localName} = ${paramName};`)
+    return lines
+  }
+
+  if (isBoxedScalarParam(param) && (param.valueType === 'number' || param.valueType === 'boolean')) {
+    const paramName = emitCScalarParamName(param.name)
+    const expectedTag = cRuntimeValueTag(param.valueType)
+
+    lines.push(emitRuntimeTypeCheck(`${paramName}.tag != ${expectedTag}`, context))
+
+    if (param.valueType === 'boolean') {
+      lines.push(`double ${localName} = ${paramName}.as.boolean ? 1 : 0;`)
+    } else {
+      lines.push(`double ${localName} = ${paramName}.as.number;`)
+    }
+
     return lines
   }
 
@@ -1388,6 +1417,14 @@ function emitRuntimeParamPreludeForParam(
   return lines
 }
 
+function libraryNativeParamCppType(param: CFunctionParam): string | null {
+  if (param.valueType !== 'object' || param.nullable === true || param.optional === true) {
+    return null
+  }
+
+  return libraryNativeCppType(param.shape)
+}
+
 function isNativeClassParam(param: CFunctionParam, context: CFunctionContext): boolean {
   return nativeClassParamName(param, context) !== null
 }
@@ -1411,6 +1448,29 @@ function nativeClassParamName(param: CFunctionParam, context: CFunctionContext):
 function emitDefaultRuntimeParamPreludeForParam(param: CFunctionParam, context: CFunctionContext): string[] {
   const value = param.defaultValue
   const localName = emitCLocalName(param.name)
+
+  if (
+    param.valueType === 'number' &&
+    value !== null &&
+    typeof value !== 'undefined' &&
+    value.type === 'NumberLiteral'
+  ) {
+    const paramName = emitCScalarParamName(param.name)
+
+    return [`if (${paramName}.tag == INOX_TAG_UNDEFINED) {`, `  ${paramName} = inox_number_value(${value.value});`, '}']
+  }
+
+  if (
+    param.valueType === 'boolean' &&
+    value !== null &&
+    typeof value !== 'undefined' &&
+    value.type === 'BooleanLiteral'
+  ) {
+    const paramName = emitCScalarParamName(param.name)
+    const defaultValue = value.value === true ? 'true' : 'false'
+
+    return [`if (${paramName}.tag == INOX_TAG_UNDEFINED) {`, `  ${paramName} = inox_bool_value(${defaultValue});`, '}']
+  }
 
   if (
     param.valueType === 'string' &&
@@ -1501,7 +1561,9 @@ function emitThrowingFunctionPrelude(context: CFunctionContext): string[] {
   if (context.returnType !== 'void') {
     let returnValue = '0'
 
-    if (isThrowingFunctionRuntimeOut(context)) {
+    if (libraryNativeCppType(context.returnShape) !== null) {
+      returnValue = '{}'
+    } else if (isThrowingFunctionRuntimeOut(context)) {
       returnValue = 'inox_undefined_value()'
     }
 

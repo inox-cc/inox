@@ -174,29 +174,12 @@ export const globals: Map<string, SymbolInfo> = new Map([
     }
   ],
   [
-    'Date',
-    {
-      kind: 'global',
-      mutable: false,
-      valueType: 'object',
-      constructable: true
-    }
-  ],
-  [
     'Error',
     {
       kind: 'global',
       mutable: false,
       valueType: 'object',
       constructable: true
-    }
-  ],
-  [
-    'performance',
-    {
-      kind: 'global',
-      mutable: false,
-      valueType: 'object'
     }
   ],
   [
@@ -317,7 +300,6 @@ export function builtinGlobalSymbol(name: string): SymbolInfo | null {
 
   if (
     name === 'Promise' ||
-    name === 'Date' ||
     name === 'Error' ||
     name === 'Set' ||
     name === 'Map' ||
@@ -340,7 +322,6 @@ export function builtinGlobalSymbol(name: string): SymbolInfo | null {
   if (
     name === 'inox' ||
     name === 'console' ||
-    name === 'performance' ||
     name === 'Object' ||
     name === 'JSON'
   ) {

@@ -17,7 +17,13 @@ import type {
   CPromiseConstructorHandler
 } from './types.ts'
 import { emitCIdentifier } from './identifiers.ts'
-import { isManagedRuntimeReturnType, isNullableScalarType, isOpaqueRuntimeValueType } from './value-types.ts'
+import {
+  emitCReturnType,
+  isManagedRuntimeReturnType,
+  isNullableScalarType,
+  isOpaqueRuntimeValueType,
+  libraryNativeCppType
+} from './value-types.ts'
 import type { ArrayLoweringDependencies } from './values/arrays.ts'
 import type { ClassLoweringDependencies } from './values/classes.ts'
 import type { CollectionLoweringDependencies } from './values/collections.ts'
@@ -584,6 +590,7 @@ type CReturnValueDeclarationContext = {
   cleanupEnabled?: boolean | null
   returnFlowUsed?: boolean | null
   returnNullable?: boolean | null
+  returnShape?: CObjectShape | null
   returnType?: string | null
 }
 
@@ -653,6 +660,12 @@ export function emitReturnValueDeclarations(context: CReturnValueDeclarationCont
 
   if (returnType === 'promise') {
     return ['inox_promise* inox_return = 0;']
+  }
+
+  const libraryCppType = libraryNativeCppType(context.returnShape)
+
+  if (returnType === 'object' && context.returnNullable !== true && libraryCppType !== null) {
+    return [`${emitCReturnType(returnType, false, context.returnShape)} inox_return{};`]
   }
 
   if (context.returnNullable === true && isNullableScalarType(returnType)) {
@@ -740,7 +753,7 @@ export function emitOwnedPromiseDeclarations(context: COwnedPromiseDeclarationCo
 
 export function emitEventLoopDeclarations(context: CEventLoopDeclarationContext): string[] {
   if (context.eventLoopUsed === true && context.externalEventLoop !== true) {
-    return [`inox::RuntimeContext inox_runtime(&inox_default_allocator, ${emitEventLoopCurrentTimeExpression()});`]
+    return ['inox::RuntimeContext inox_runtime(&inox_default_allocator);']
   }
 
   return []
@@ -799,9 +812,7 @@ export function emitEventLoopInit(context: CFunctionContext): string[] {
     return []
   }
 
-  return [
-    `if (!inox_runtime) ${emitFailureStatement(context)}`
-  ]
+  return [`if (!inox_runtime) ${emitFailureStatement(context)}`]
 }
 
 export function emitEventLoopDrain(context: CFunctionContext): string[] {
@@ -826,10 +837,6 @@ export function emitEventLoopReference(context: CEventLoopContext): string {
   }
 
   return 'inox::loop()'
-}
-
-export function emitEventLoopCurrentTimeExpression(): string {
-  return 'performance.now()'
 }
 
 export function emitBoxedValueCleanup(context: CFunctionContext): string[] {
@@ -877,11 +884,7 @@ export function emitThrowingFunctionErrorTransfer(context: CFunctionContext): st
     return []
   }
 
-  return [
-    'if (inox_error_active) {',
-    `  *${context.functionErrorOut} = inox_error.release();`,
-    '}'
-  ]
+  return ['if (inox_error_active) {', `  *${context.functionErrorOut} = inox_error.release();`, '}']
 }
 
 export function emitThrowingFunctionCleanupReturn(context: CFunctionContext): string[] {

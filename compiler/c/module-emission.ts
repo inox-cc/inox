@@ -12,13 +12,7 @@ import {
   mergeIrFunctionEffects
 } from '../ir.ts'
 import { resolveCompilerLibrarySet } from '../extensions/library-set.ts'
-import { memberExpressionPath } from '../member-paths.ts'
 import { reexportImportAliasName } from '../modules/synthetic-imports.ts'
-import {
-  dateConstructorRuntimeMethodNameFromPath,
-  dateInstanceRuntimeMethodReturnType,
-  timeRuntimeMethodNameFromPath
-} from '../../stdlib/global/compiler/descriptor.ts'
 import type {
   AnyNode,
   Diagnostic,
@@ -85,7 +79,7 @@ import { relativeCIncludePath, uniqueCModuleImports } from './modules.ts'
 import { emitCompilerLibraryRuntimeInitializerDefinitions } from './library-initializers.ts'
 import { emitCPrelude, filterUnusedCPreludeIncludes } from './prelude.ts'
 import { collectCReferencedFunctionPrototypeNames } from './prototype-references.ts'
-import { addDateStringRuntimeRequirements, resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
+import { resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
 import type {
   CCallbackWrapper,
   CClassInfo,
@@ -392,7 +386,6 @@ export function emitCModuleSource(
   const signatureRuntimeTypes = collectCModuleContextRuntimeTypes(context)
   const moduleValues = collectCModuleStaticValueDeclarations(plan, context)
   const classDescriptorNames = collectCClassDescriptorNames(irPrograms, context.classInfos)
-  addDateStringRuntimeRequirements(runtimeRequirements, irPrograms, context)
   const prelude = resolveCRuntimePreludeRequirements({
     classDescriptorCount: classDescriptorNames.size,
     cppValueRuntime: classInfosUseCppValueRuntime(context),
@@ -451,7 +444,6 @@ export function emitCModuleSource(
     emitCPrelude(
       prelude.needsRuntime,
       emitsMain,
-      prelude.needsTimeRuntime,
       prelude.needsDebugMemoryRuntime,
       prelude.needsAsyncRuntime,
       prelude.needsCallbackRuntime,
@@ -2013,24 +2005,10 @@ function emitCModuleObjectFunctionFieldDefinitions(
 
 function cModuleValueType(node: AnyNode, context?: CEmitContext): string {
   const valueType = node.valueType
-  const timeValueType = cModuleTimeExpressionValueType(node.init)
   const classValueType = cModuleNativeClassValueType(node, context)
 
   if (classValueType !== null && typeof classValueType !== 'undefined') {
     return classValueType
-  }
-
-  if (
-    timeValueType !== null &&
-    typeof timeValueType !== 'undefined' &&
-    (valueType === null ||
-      typeof valueType === 'undefined' ||
-      valueType === '' ||
-      valueType === 'unknown' ||
-      valueType === 'object' ||
-      valueType === timeValueType)
-  ) {
-    return timeValueType
   }
 
   if (valueType === null || typeof valueType === 'undefined' || valueType === '') {
@@ -2109,63 +2087,6 @@ function cModuleNativeClassValueType(node: AnyNode, context: CEmitContext | null
   }
 
   return cClassValueTypeName(className)
-}
-
-function cModuleTimeExpressionValueType(expression: AnyNode | null | undefined): string | null {
-  const method = cModuleTimeExpressionMethod(expression)
-
-  if (method === null || typeof method === 'undefined') {
-    return null
-  }
-
-  if (method === 'dateConstructor') {
-    return 'date'
-  }
-
-  const dateReturnType = dateInstanceRuntimeMethodReturnType(method)
-
-  if (dateReturnType !== null && typeof dateReturnType !== 'undefined') {
-    return dateReturnType
-  }
-
-  return 'number'
-}
-
-function cModuleTimeExpressionMethod(expression: AnyNode | null | undefined): string | null {
-  if (expression === null || typeof expression === 'undefined') {
-    return null
-  }
-
-  const method = nullableString(expression.timeRuntimeMethod)
-
-  if (method !== null && typeof method !== 'undefined') {
-    return method
-  }
-
-  if (expression.type === 'NewExpression') {
-    return dateConstructorRuntimeMethodNameFromPath(memberExpressionPath(expression.callee))
-  }
-
-  if (expression.type === 'CallExpression') {
-    const path = memberExpressionPath(expression.callee)
-    const callMethod = timeRuntimeMethodNameFromPath(path)
-
-    if (callMethod !== null && typeof callMethod !== 'undefined') {
-      return callMethod
-    }
-
-    return dateConstructorRuntimeMethodNameFromPath(path)
-  }
-
-  return null
-}
-
-function nullableString(value: string | null | undefined): string | null {
-  if (value === null || typeof value === 'undefined') {
-    return null
-  }
-
-  return value
 }
 
 function cModuleValueFunctionType(node: AnyNode): CFunctionType | null {

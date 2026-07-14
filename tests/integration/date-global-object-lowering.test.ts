@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync, compileSource } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 type GeneratedTextFile = {
   path: string
@@ -24,6 +25,7 @@ console.log(local.toISOString())
 `
 
   const unitResult = compileSource(sourceText, {
+    libraries: defaultCompilerLibrarySet,
     target: 'cc'
   })
 
@@ -43,6 +45,7 @@ console.log(local.toISOString())
   const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
@@ -54,12 +57,11 @@ function assertDateObjectCalls(source: string): void {
   assert.match(source, /Date\.now\(\)/)
   assert.match(source, /Date\.parse\("2026-06-24T12:34:56\.789Z"\)/)
   assert.match(source, /Date\.UTC\(2026, 5, 24, 12, 34, 56, 789\)/)
-  assert.match(source, /Date\.fromLocal\(2026, 5, 24, 12, 34, 56, 789\)/)
-  assert.match(source, /Date\.part\(local, 0, false\)/)
-  assert.match(source, /Date\.part\(local, 1, true\)/)
-  assert.match(source, /Date\.timezoneOffset\(local\)/)
-  assert.match(source, /Date\.toString\(local, 0\)/)
-  assert.doesNotMatch(source, /Date\.toStringValue\(/)
+  assert.match(source, /Date\(2026, 5, 24, 12, 34, 56, 789\)/)
+  assert.match(source, /local\.getFullYear\(\)/)
+  assert.match(source, /local\.getUTCMonth\(\)/)
+  assert.match(source, /local\.getTimezoneOffset\(\)/)
+  assert.match(source, /local\.toISOString\(\)/)
   assert.doesNotMatch(source, /inox_date_now\(\)/)
   assert.doesNotMatch(source, /inox_date_parse\(/)
   assert.doesNotMatch(source, /inox_date_utc\(/)

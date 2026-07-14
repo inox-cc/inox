@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-inox_number inox_performance_now(void);
+inox_number inox_monotonic_now_ms(void);
 void inox_time_sleep_ms(inox_number delay_ms);
 
 #ifdef __cplusplus

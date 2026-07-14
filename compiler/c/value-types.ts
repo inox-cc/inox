@@ -1,5 +1,10 @@
 import { emitCIdentifier } from './identifiers.ts'
 
+type CLibraryNativeShape = {
+  libraryCppType?: string | null
+  libraryTypeId?: string | null
+}
+
 export type CValueTypeInput = string | null | undefined
 
 export type CReturnTypeContext = {
@@ -56,7 +61,6 @@ export function isOpaqueRuntimeValueType(valueType: CValueTypeInput): boolean {
     valueType !== 'function' &&
     valueType !== 'promise' &&
     valueType !== 'regexp' &&
-    valueType !== 'date' &&
     valueType !== 'optional' &&
     valueType !== 'js-global'
   )
@@ -95,14 +99,33 @@ export function emitCType(valueType: CValueTypeInput): string {
     return 'RegExp'
   }
 
-  if (valueType === 'date') {
-    return 'double'
-  }
-
   return 'double'
 }
 
-export function emitCReturnType(valueType: CValueTypeInput, nullable: boolean): string {
+export function libraryNativeCppType(shape: CLibraryNativeShape | null | undefined): string | null {
+  const typeId = shape?.libraryTypeId
+  const cppType = shape?.libraryCppType
+
+  if (
+    typeId === null ||
+    typeof typeId === 'undefined' ||
+    cppType === null ||
+    typeof cppType === 'undefined' ||
+    cppType === ''
+  ) {
+    return null
+  }
+
+  return cppType
+}
+
+export function emitCReturnType(valueType: CValueTypeInput, nullable: boolean, shape?: CLibraryNativeShape | null): string {
+  const libraryCppType = libraryNativeCppType(shape)
+
+  if (valueType === 'object' && !nullable && libraryCppType !== null) {
+    return libraryCppType
+  }
+
   if (nullable && isNullableScalarType(valueType)) {
     return 'inox_value'
   }
@@ -114,7 +137,17 @@ export function emitCReturnType(valueType: CValueTypeInput, nullable: boolean): 
   return emitCType(valueType)
 }
 
-export function emitThrowingFunctionOutType(valueType: CValueTypeInput, nullable: boolean): string {
+export function emitThrowingFunctionOutType(
+  valueType: CValueTypeInput,
+  nullable: boolean,
+  shape?: CLibraryNativeShape | null
+): string {
+  const libraryCppType = libraryNativeCppType(shape)
+
+  if (valueType === 'object' && !nullable && libraryCppType !== null) {
+    return libraryCppType
+  }
+
   if (nullable && isNullableScalarType(valueType)) {
     return 'inox_value'
   }
@@ -191,13 +224,21 @@ export function isNullableScalarParam(param: CNullableScalarParamInput): boolean
   return isNullableScalarParamRecord(param as CNullableScalarParamRecord)
 }
 
+export function isBoxedScalarParam(param: CNullableScalarParamInput): boolean {
+  if (param === null || typeof param === 'undefined' || !isNullableScalarType(param.valueType)) {
+    return false
+  }
+
+  return param.nullable === true || (param.optional === true && param.rest !== true)
+}
+
 function isNullableScalarParamRecord(param: CNullableScalarParamRecord): boolean {
-  const omittedStringWithoutDefault =
-    param.valueType === 'string' &&
+  const omittedScalarWithoutDefault =
+    isNullableScalarType(param.valueType) &&
     param.optional === true &&
     param.rest !== true &&
     typeof param.defaultValue === 'undefined'
-  return (param.nullable === true && isNullableScalarType(param.valueType)) || omittedStringWithoutDefault
+  return (param.nullable === true && isNullableScalarType(param.valueType)) || omittedScalarWithoutDefault
 }
 
 export function emitCStringParamName(name: string): string {

@@ -26,7 +26,6 @@ export type CExpressionTypeDependencies = {
   cFetchRuntimeExpressionMethod: (expression: AnyNode) => string | null
   cJsonRuntimeCallName: (callee: AnyNode) => string | null
   cPromiseRuntimeCallName: (callee: AnyNode) => string | null
-  cTimeRuntimeCallName: (callee: AnyNode) => string | null
   collectionConstructorName: (expression: AnyNode) => string | null
   isArrayIncludesCall: (expression: AnyNode) => boolean
   isArrayIsArrayCall: (expression: AnyNode) => boolean
@@ -537,10 +536,6 @@ export function inferExpressionType(
     typeof expression.libraryOperationId !== 'undefined'
   ) {
     return cValueTypeOrUnknown(expression)
-  }
-
-  if (expression.type === 'CallExpression' && deps.cTimeRuntimeCallName(expression.callee)) {
-    return 'number'
   }
 
   if (isRegExpTestCall(expression, context)) {

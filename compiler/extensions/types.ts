@@ -178,6 +178,7 @@ export type LibraryObjectLiteralFieldDescriptor = {
 }
 
 export type LibraryOperationVariantDescriptor = {
+  runtimeRequirements?: RuntimeRequirementId[]
   minArgs?: number | null
   maxArgs?: number | null
   argumentChecks?: LibraryArgumentCheckDescriptor[]

@@ -274,6 +274,7 @@ function lowerClassMethod(method: AnyNode, context: LowerContext): AnyNode {
     returnMapValueType: returnType.mapValueType,
     returnPromiseValueType: nullableString(returnType.promiseValueType),
     returnSetElementType: returnType.setElementType,
+    returnShape: nullableNode(returnType.shape),
     body: lowerStatementList(method.body, context)
   }
 }
@@ -283,11 +284,7 @@ function lowerClassMethodReturnTypeName(method: AnyNode): string {
     return method.declaredReturnType
   }
 
-  if (
-    method.returnType !== null &&
-    typeof method.returnType !== 'undefined' &&
-    method.returnType !== 'unknown'
-  ) {
+  if (method.returnType !== null && typeof method.returnType !== 'undefined' && method.returnType !== 'unknown') {
     return method.returnType
   }
 

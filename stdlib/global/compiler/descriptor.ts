@@ -37,10 +37,3 @@ export {
   isSupportedFetchResponseBodyMethod
 } from '../fetch/compiler/descriptor.ts'
 export { jsonRuntimeMethodNameFromPath } from '../json/compiler/descriptor.ts'
-export {
-  dateConstructorRuntimeMethodNameFromPath,
-  dateInstanceRuntimeMethodName,
-  dateInstanceRuntimeMethodReturnType,
-  timeRuntimeCapabilityFromPath,
-  timeRuntimeMethodNameFromPath
-} from '../time/compiler/descriptor.ts'

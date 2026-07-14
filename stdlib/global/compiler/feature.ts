@@ -17,13 +17,11 @@ import {
 import { collectDebugMemoryIrFeatures, debugMemoryFeature } from '../debug/compiler/feature.ts'
 import { collectJsonIrFeatures, jsonFeature } from '../json/compiler/feature.ts'
 import { collectRegExpIrFeatures, emitCRegExpPreludeHelpers, regexpFeature } from '../regexp/compiler/feature.ts'
-import { clocksFeature, collectClocksIrFeatures } from '../time/compiler/feature.ts'
 
 export { emitCRegExpFlags } from '../regexp/compiler/feature.ts'
 
 export const globalStdlibFeatures: CompilerFeatureDescriptor[] = [
   arrayPopNullFeature,
-  clocksFeature,
   debugMemoryFeature,
   jsonFeature,
   mapGetNullFeature,
@@ -35,7 +33,6 @@ export const globalStdlibFeatures: CompilerFeatureDescriptor[] = [
 
 export function collectGlobalStdlibIrFeatures(node: AnyNode, features: Set<IrFeature>): void {
   collectArrayPopNullIrFeatures(node, features)
-  collectClocksIrFeatures(node, features)
   collectDebugMemoryIrFeatures(node, features)
   collectJsonIrFeatures(node, features)
   collectMapGetNullIrFeatures(node, features)

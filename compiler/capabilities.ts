@@ -1,11 +1,8 @@
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
-import { collectIrGlobalUsages } from './ir.ts'
-import { timeRuntimeCapabilityFromPath } from '../stdlib/global/compiler/descriptor.ts'
 import type {
   AnyNode,
   CompileOptions,
   Diagnostic,
-  IrGlobalUsage,
   IrProgram,
   RuntimeCapabilities,
   SourceLocation
@@ -18,14 +15,8 @@ type CapabilityNode = AnyNode & {
   libraryCapabilities?: string[] | null
   libraryOperationId?: string | null
   loc?: SourceLocation
-  timeRuntimeMethod?: string | null
   type?: string | null
   valueType?: string | null
-}
-
-type CapabilityArrayDeclarationNode = {
-  loweredArrayMethod: boolean
-  loweredArrayMethodName?: string | null
 }
 
 type CapabilityMemberNode = AnyNode & {
@@ -33,14 +24,16 @@ type CapabilityMemberNode = AnyNode & {
   type?: string | null
 }
 
-type RuntimeCapabilityKey = string
-
-type RequiredCapability = {
-  key: RuntimeCapabilityKey
-  name: string
+type CapabilityArrayDeclarationNode = {
+  loweredArrayMethod: boolean
+  loweredArrayMethodName?: string | null
 }
 
-type CapabilityUsage = RequiredCapability & {
+type RuntimeCapabilityKey = string
+
+type CapabilityUsage = {
+  key: RuntimeCapabilityKey
+  name: string
   loc?: SourceLocation
   path: string
 }
@@ -52,10 +45,6 @@ function capabilityNodeAt(values: NodeList, index: number): AnyNode {
 }
 
 function capabilityUsageAt(values: CapabilityUsage[], index: number): CapabilityUsage {
-  return values[index]
-}
-
-function globalUsageAt(values: IrGlobalUsage[], index: number): IrGlobalUsage {
   return values[index]
 }
 
@@ -71,7 +60,7 @@ export function checkCProfileCapabilities(programs: IrProgram[], options: Compil
   const diagnostics: Diagnostic[] = []
   const reported = createStringSet()
 
-  const usages = collectCapabilityUsages(programs, options)
+  const usages = collectCapabilityUsages(programs)
 
   for (let index = 0; index < usages.length; index = index + 1) {
     const usage = capabilityUsageAt(usages, index)
@@ -95,18 +84,8 @@ export function checkCProfileCapabilities(programs: IrProgram[], options: Compil
   throwDiagnostics(diagnostics)
 }
 
-function collectCapabilityUsages(programs: IrProgram[], options: CompileOptions): CapabilityUsage[] {
-  const globalUsages = collectIrGlobalUsages(programs)
+function collectCapabilityUsages(programs: IrProgram[]): CapabilityUsage[] {
   const usages: CapabilityUsage[] = []
-
-  for (let usageIndex = 0; usageIndex < globalUsages.length; usageIndex = usageIndex + 1) {
-    const usage = globalUsageAt(globalUsages, usageIndex)
-    const required = requiredCapabilityForGlobalUsage(usage)
-
-    if (required !== null && typeof required !== 'undefined') {
-      pushCapabilityUsage(usages, required, dotPath(usage.path), usage.loc)
-    }
-  }
 
   for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
     const program = programAt(programs, programIndex)
@@ -196,40 +175,11 @@ function recordNodeCapabilityUsages(expression: CapabilityNode, usages: Capabili
     }
   }
 
-  const timeMethod = expression.timeRuntimeMethod
-
-  if (timeMethod === 'dateConstructor' && capabilityArgCount(expression) === 0) {
-    pushCapability(usages, 'wallClock', 'wall-clock', 'Date', loc)
-  } else if (timeMethod === 'dateNow') {
-    pushCapability(usages, 'wallClock', 'wall-clock', 'Date.now', loc)
-  } else if (timeMethod === 'performanceNow') {
-    pushCapability(usages, 'monotonicClock', 'monotonic-clock', 'performance.now', loc)
-  }
-
   const arrayMethod = arrayProducingMethodName(expression)
 
   if (arrayMethod !== null && typeof arrayMethod !== 'undefined') {
     pushCapability(usages, 'heap', 'heap', `Array.${arrayMethod}`, loc)
   }
-}
-
-function capabilityArgCount(expression: CapabilityNode): number {
-  const args = expression.args
-
-  if (Array.isArray(args)) {
-    return args.length
-  }
-
-  return 0
-}
-
-function requiredCapabilityForGlobalUsage(usage: IrGlobalUsage): RequiredCapability | null {
-  const timeCapability = timeRuntimeCapabilityFromPath(usage.path)
-  if (timeCapability !== null && typeof timeCapability !== 'undefined') {
-    return timeCapability
-  }
-
-  return null
 }
 
 function arrayProducingMethodName(expression: CapabilityNode): string | null {
@@ -285,15 +235,6 @@ function capabilityEnabled(capabilities: RuntimeCapabilities | null | undefined,
   return capabilities[key] === true
 }
 
-function pushCapabilityUsage(
-  usages: CapabilityUsage[],
-  required: RequiredCapability,
-  path: string,
-  loc: SourceLocation | undefined
-): void {
-  pushCapability(usages, required.key, required.name, path, loc)
-}
-
 function pushCapability(
   usages: CapabilityUsage[],
   key: RuntimeCapabilityKey,
@@ -307,20 +248,6 @@ function pushCapability(
     path,
     loc
   })
-}
-
-function dotPath(path: string[]): string {
-  let result = ''
-
-  for (let index = 0; index < path.length; index = index + 1) {
-    if (index === 0) {
-      result = path[index]
-    } else {
-      result = `${result}.${path[index]}`
-    }
-  }
-
-  return result
 }
 
 function createStringSet(): StringSet {

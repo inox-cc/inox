@@ -210,6 +210,10 @@ export function collectCoreRuntimeIrFeatures(node: AnyNode, features: CoreRuntim
     features.add('runtime-values')
   }
 
+  if (isArrayIndexExpression(item)) {
+    features.add('collections')
+  }
+
   if (isStringIndexExpression(item)) {
     features.add('runtime-values')
     features.add('string-bytes')
@@ -381,11 +385,7 @@ function plainFunctionCallHasStringArgument(expression: CoreRuntimeNode): boolea
     return false
   }
 
-  if (
-    isStringConversionCall(expression) ||
-    isNumberConversionCall(expression) ||
-    isNumericCastCall(expression)
-  ) {
+  if (isStringConversionCall(expression) || isNumberConversionCall(expression) || isNumericCastCall(expression)) {
     return false
   }
 
@@ -494,6 +494,20 @@ function isStringIndexExpression(expression: CoreRuntimeNode | null | undefined)
   )
 }
 
+function isArrayIndexExpression(expression: CoreRuntimeNode | null | undefined): boolean {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    (expression.type !== 'IndexExpression' && expression.type !== 'OptionalIndexExpression')
+  ) {
+    return false
+  }
+
+  const object = expression.object
+
+  return object !== null && typeof object !== 'undefined' && object.valueType === 'array'
+}
+
 function isCollectionMethodCall(expression: CoreRuntimeNode): boolean {
   const callee = expression.callee
 
@@ -529,24 +543,14 @@ function isArrayMethodCall(expression: CoreRuntimeNode): boolean {
 function isArrayFromCall(expression: CoreRuntimeNode): boolean {
   const path = memberExpressionPath(expression.callee)
 
-  return (
-    path !== null &&
-    typeof path !== 'undefined' &&
-    path.length === 2 &&
-    path[0] === 'Array' &&
-    path[1] === 'from'
-  )
+  return path !== null && typeof path !== 'undefined' && path.length === 2 && path[0] === 'Array' && path[1] === 'from'
 }
 
 function isArrayIsArrayCall(expression: CoreRuntimeNode): boolean {
   const path = memberExpressionPath(expression.callee)
 
   return (
-    path !== null &&
-    typeof path !== 'undefined' &&
-    path.length === 2 &&
-    path[0] === 'Array' &&
-    path[1] === 'isArray'
+    path !== null && typeof path !== 'undefined' && path.length === 2 && path[0] === 'Array' && path[1] === 'isArray'
   )
 }
 

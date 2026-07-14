@@ -1,11 +1,9 @@
 import { diagnostic } from '../diagnostics.ts'
 import {
-  dateConstructorRuntimeMethodNameFromPath,
   isCollectionConstructorGlobalUsagePath,
   isDebugRuntimeMethodPath,
   isFetchGlobalRoot,
-  jsonRuntimeMethodNameFromPath,
-  timeRuntimeMethodNameFromPath
+  jsonRuntimeMethodNameFromPath
 } from '../../stdlib/global/compiler/descriptor.ts'
 import type { Diagnostic, IrGlobalUsage, IrSyntaxFeatureUsage, SourceLocation } from '../types.ts'
 
@@ -31,8 +29,6 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
   const path = joinStrings(usage.path, '.')
 
   return (
-    !!timeRuntimeMethodNameFromPath(usage.path) ||
-    !!dateConstructorRuntimeMethodNameFromPath(usage.path) ||
     path === 'Error' ||
     path === 'Promise' ||
     path === 'Promise.resolve' ||

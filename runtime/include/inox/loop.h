@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "inox/allocator.h"
+#include "inox/time_bridge.h"
 #include "inox/value.h"
 
 #ifdef __cplusplus
@@ -289,6 +290,9 @@ private:
   inox_status status_;
 
 public:
+  explicit RuntimeContext(inox_allocator* allocator)
+    : RuntimeContext(allocator, inox_monotonic_now_ms()) {}
+
   RuntimeContext(inox_allocator* allocator, inox_number now_ms)
     : runtime_(), scope_(runtime_), status_(runtime_.init(allocator)) {
     if (status_ == INOX_OK) {

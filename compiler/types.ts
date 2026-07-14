@@ -39,7 +39,6 @@ export type IrFeature =
   | 'array-pop-null'
   | 'async-runtime'
   | 'callback-values'
-  | 'clocks'
   | 'collections'
   | 'debug-memory'
   | 'json'
@@ -250,8 +249,6 @@ export type RuntimeCapabilities = {
   [key: string]: boolean | undefined
   entropy?: boolean
   heap?: boolean
-  monotonicClock?: boolean
-  wallClock?: boolean
 }
 
 export type RuntimeBudgets = {

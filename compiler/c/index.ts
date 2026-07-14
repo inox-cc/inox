@@ -5,11 +5,7 @@ import type { IrLocalThrowValueTypeOptions } from '../ir/effects.ts'
 import type { IrModuleRecord } from '../ir/top-level.ts'
 import { memberExpressionPath } from '../member-paths.ts'
 import {
-  dateConstructorRuntimeMethodNameFromPath,
-  dateInstanceRuntimeMethodName,
-  dateInstanceRuntimeMethodReturnType,
-  debugMemoryStatsFields,
-  timeRuntimeMethodNameFromPath
+  debugMemoryStatsFields
 } from '../../stdlib/global/compiler/descriptor.ts'
 import type {
   AnyNode,
@@ -160,13 +156,6 @@ import {
   emitJsonParseVariableDeclaration,
   emitPreparedJsonCallExpression,
   emitPreparedJsonScalarParseExpression
-} from '../../stdlib/global/compiler/c.ts'
-import type { TimeLoweringDependencies } from '../../stdlib/global/compiler/c.ts'
-import {
-  cTimeRuntimeCallName,
-  emitPreparedDateNumberExpression,
-  emitPreparedDateStringExpression,
-  isDateStringExpression
 } from '../../stdlib/global/compiler/c.ts'
 import { cUnsupportedExpressionCode, isCoalesceExpression } from './syntax.ts'
 import type {
@@ -480,7 +469,6 @@ let objectExpressionFieldDependencies: ObjectExpressionFieldDependencies = {
   inferExpressionType
 }
 let jsonDeclarationDependencies = {} as JsonDeclarationDependencies
-let timeLoweringDependencies = {} as TimeLoweringDependencies
 let fetchLoweringDependencies = {} as FetchLoweringDependencies
 let compilerLibraryLoweringDependencies = {} as CompilerLibraryLoweringDependencies
 let promiseLoweringDependencies = {} as PromiseLoweringDependencies
@@ -784,12 +772,6 @@ function emitPreparedJsonClassInstanceOperand(
   }
 }
 
-timeLoweringDependencies = {
-  emitPreparedNumberExpression,
-  emitPreparedStringBytesOperand,
-  inferExpressionType
-}
-
 fetchLoweringDependencies = {
   emitCValueExpression,
   emitPreparedStringBytesOperand,
@@ -1033,7 +1015,6 @@ const expressionTypeDependencies = {
   cFetchRuntimeExpressionMethod,
   cJsonRuntimeCallName,
   cPromiseRuntimeCallName,
-  cTimeRuntimeCallName,
   collectionConstructorName,
   isArrayIncludesCall,
   isArrayIsArrayCall,
@@ -2860,23 +2841,6 @@ function inferModuleValueAssignmentType(statement: AnyNode, context: CFunctionCo
     return 'unknown'
   }
 
-  if (statement.init !== null && typeof statement.init !== 'undefined') {
-    const timeValueType = timeRuntimeExpressionValueType(statement.init, context)
-
-    if (
-      timeValueType !== null &&
-      typeof timeValueType !== 'undefined' &&
-      (statement.valueType === null ||
-        typeof statement.valueType === 'undefined' ||
-        statement.valueType === '' ||
-        statement.valueType === 'unknown' ||
-        statement.valueType === 'object' ||
-        statement.valueType === timeValueType)
-    ) {
-      return timeValueType
-    }
-  }
-
   const declared = knownValueType(statement.valueType)
 
   if (declared !== null && typeof declared !== 'undefined') {
@@ -3037,7 +3001,7 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
     ]
   }
 
-  if (inferred === 'number' || inferred === 'boolean' || inferred === 'date') {
+  if (inferred === 'number' || inferred === 'boolean') {
     const value = emitPreparedNumberExpression(statement.init, context)
     const lines: string[] = []
 
@@ -4835,21 +4799,6 @@ function emitObjectFieldValueExpression(
 }
 
 function emitCValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
-  const dateString = emitPreparedDateStringExpression(expression, context, timeLoweringDependencies)
-
-  if (dateString !== null && typeof dateString !== 'undefined') {
-    return dateString
-  }
-
-  const dateNumber = emitPreparedDateNumberExpression(expression, context, timeLoweringDependencies)
-
-  if (dateNumber !== null && typeof dateNumber !== 'undefined') {
-    return {
-      lines: dateNumber.lines,
-      expression: `inox_number_value(${dateNumber.expression})`
-    }
-  }
-
   return emitCValueExpressionWithDependencies(expression, context, cValueExpressionDependencies)
 }
 
@@ -6588,21 +6537,6 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
     }
   }
 
-  if (isDateStringExpression(expression, context)) {
-    const value = emitPreparedDateStringExpression(expression, context, timeLoweringDependencies)
-    const lines: string[] = []
-
-    if (value !== null && typeof value !== 'undefined') {
-      pushAll(lines, value.lines)
-
-      return {
-        lines,
-        format: consoleLogStringFormat,
-        values: [emitConsolePreparedStringValue(value)]
-      }
-    }
-  }
-
   if (isMemberAccessExpression(expression)) {
     const libraryNativeField = emitPreparedCompilerLibraryNativeFieldValueExpression(expression, context)
 
@@ -7369,12 +7303,6 @@ function emitErrorLogObjectExpression(expression: AnyNode, context: CFunctionCon
 }
 
 function emitPreparedNumberExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
-  const dateNumber = emitPreparedDateNumberExpression(expression, context, timeLoweringDependencies)
-
-  if (dateNumber !== null && typeof dateNumber !== 'undefined') {
-    return dateNumber
-  }
-
   return emitPreparedNumberExpressionWithDependencies(expression, context, cScalarExpressionDependencies)
 }
 
@@ -7438,18 +7366,6 @@ function emitCallExpression(expression: AnyNode, context: CFunctionContext): str
 }
 
 function emitPreparedCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
-  const dateString = emitPreparedDateStringExpression(expression, context, timeLoweringDependencies)
-
-  if (dateString !== null && typeof dateString !== 'undefined') {
-    return dateString
-  }
-
-  const dateNumber = emitPreparedDateNumberExpression(expression, context, timeLoweringDependencies)
-
-  if (dateNumber !== null && typeof dateNumber !== 'undefined') {
-    return dateNumber
-  }
-
   return emitPreparedCallExpressionWithDependencies(expression, context, cCallExpressionDependencies)
 }
 
@@ -9040,91 +8956,7 @@ function resolveFunctionParams(callee: CAccessorNode, context: FunctionParamCont
 }
 
 function inferExpressionType(expression: AnyNode, context: CFunctionContext): string {
-  const timeValueType = timeRuntimeExpressionValueType(expression, context)
-
-  if (timeValueType !== null && typeof timeValueType !== 'undefined') {
-    return timeValueType
-  }
-
   return inferExpressionTypeWithDependencies(expression, context, expressionTypeDependencies)
-}
-
-function timeRuntimeExpressionValueType(expression: AnyNode, context?: CFunctionContext | null): string | null {
-  const method = timeRuntimeExpressionMethod(expression, context)
-
-  if (method === null || typeof method === 'undefined') {
-    return null
-  }
-
-  if (method === 'dateConstructor') {
-    return 'date'
-  }
-
-  const dateReturnType = dateInstanceRuntimeMethodReturnType(method)
-
-  if (dateReturnType !== null && typeof dateReturnType !== 'undefined') {
-    return dateReturnType
-  }
-
-  return 'number'
-}
-
-function timeRuntimeExpressionMethod(expression: AnyNode, context?: CFunctionContext | null): string | null {
-  const method = nullableString(expression.timeRuntimeMethod)
-
-  if (method !== null && typeof method !== 'undefined') {
-    return method
-  }
-
-  if (expression.type === 'NewExpression') {
-    return dateConstructorRuntimeMethodNameFromPath(memberExpressionPath(expression.callee))
-  }
-
-  if (expression.type === 'CallExpression') {
-    const path = memberExpressionPath(expression.callee)
-    const callMethod = timeRuntimeMethodNameFromPath(path)
-
-    if (callMethod !== null && typeof callMethod !== 'undefined') {
-      return callMethod
-    }
-
-    const constructorMethod = dateConstructorRuntimeMethodNameFromPath(path)
-
-    if (constructorMethod !== null && typeof constructorMethod !== 'undefined') {
-      return constructorMethod
-    }
-
-    if (
-      context !== null &&
-      typeof context !== 'undefined' &&
-      expression.callee.type === 'MemberExpression' &&
-      inferDateReceiverExpression(expression.callee.object, context)
-    ) {
-      return dateInstanceRuntimeMethodName(expression.callee.property)
-    }
-  }
-
-  return null
-}
-
-function inferDateReceiverExpression(expression: AnyNode, context: CFunctionContext): boolean {
-  if (expression.valueType === 'date') {
-    return true
-  }
-
-  if (expression.type !== 'Reference' || expression.path.length !== 1) {
-    return false
-  }
-
-  return context.variables.get(expression.path[0]) === 'date'
-}
-
-function nullableString(value: string | null | undefined): string | null {
-  if (value === null || typeof value === 'undefined') {
-    return null
-  }
-
-  return value
 }
 
 function isErrorConstructorExpression(expression: AnyNode): boolean {

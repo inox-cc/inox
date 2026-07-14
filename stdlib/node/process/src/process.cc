@@ -17,7 +17,6 @@
 #include "inox/object.h"
 #include "inox/promise.h"
 #include "inox/string.h"
-#include "inox/time.h"
 
 #ifndef INOX_PACKAGE_VERSION
 #define INOX_PACKAGE_VERSION "0.0.0"
