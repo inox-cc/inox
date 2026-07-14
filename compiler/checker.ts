@@ -6042,7 +6042,9 @@ class Checker {
     this.checkCompilerLibraryOperationArguments(expression, operation, variant)
     this.checkCompilerLibraryBackendConstraints(expression, operation)
 
-    return (variant?.valueType ?? operation.valueType ?? 'unknown') as ValueType
+    return typeof expression.valueType === 'string'
+      ? expression.valueType as ValueType
+      : 'unknown'
   }
 
   checkArrayFromCall(expression: AnyNode): ValueType | null {

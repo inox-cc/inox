@@ -28,12 +28,15 @@ const operations: LibraryOperationDescriptor[] = [
         literalDiagnosticMessage: 'regular expression flags must contain only i at most once'
       }
     ],
-    resultTypeId: regexpTypeId,
-    cResultMode: 'value',
-    cppType: 'RegExp',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    resultTypeRef: {
+      kind: 'nominal',
+      typeId: regexpTypeId,
+      args: [],
+      nullable: false,
+      ownership: 'value',
+      traits: []
+    },
+    cResultMode: 'value'
   },
   {
     libraryId,
@@ -48,10 +51,13 @@ const operations: LibraryOperationDescriptor[] = [
     minArgs: 1,
     maxArgs: 1,
     argumentChecks: [{ valueTypes: ['string'] }],
-    cppType: 'bool',
-    valueType: 'boolean',
-    nullable: false,
-    owned: false
+    resultTypeRef: {
+      kind: 'primitive',
+      name: 'boolean',
+      nullable: false,
+      ownership: 'value',
+      traits: []
+    }
   }
 ]
 

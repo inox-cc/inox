@@ -127,6 +127,7 @@ export const compilerAnyNodeObjectFields: readonly string[] = [
   'staticLoc',
   'target',
   'test',
+  'typeRef',
   'update'
 ]
 
