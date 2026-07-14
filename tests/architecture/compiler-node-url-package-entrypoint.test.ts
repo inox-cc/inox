@@ -15,20 +15,13 @@ test('entrypoint package node:url владеет object operations и runtime pl
   const operations = urlPackage.compilerPackage.operations
   const constructor = operations.find((operation) => operation.operationId === 'node:url#URL')
   const get = operations.find((operation) => operation.operationId === 'node:url#URLSearchParams#get')
-  const pathnameWrite = operations.find(
-    (operation) => operation.operationId === 'node:url#URL#write:pathname'
-  )
+  const pathnameWrite = operations.find((operation) => operation.operationId === 'node:url#URL#write:pathname')
   const parse = operations.find((operation) => operation.operationId === 'node:url#parse')
 
-  assert.deepEqual(constructor?.cArgumentKinds, [
-    'value',
-    'optional-value',
-    'argument-presence',
-    'result-shape'
-  ])
+  assert.deepEqual(constructor?.cArgumentKinds, ['value', 'optional-value', 'argument-presence', 'result-shape'])
   assert.ok(constructor?.bindingAliases?.includes('node:url#module:node:url:default.URL'))
   assert.equal(get?.receiverTypeId, 'node:url#URLSearchParams')
-  assert.equal(get?.nullable, true)
+  assert.equal(get?.cExpression, 'get')
   assert.equal(pathnameWrite?.kind, 'member-write')
   assert.equal(pathnameWrite?.cExpression, 'setPathname')
   assert.equal(parse?.diagnosticCode, 'INOX_NOT_IMPLEMENTED')

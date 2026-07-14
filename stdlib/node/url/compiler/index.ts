@@ -2,15 +2,18 @@ import type {
   CompilerLibraryPackageDescriptor,
   LibraryArgumentCheckDescriptor,
   LibraryCArgumentKind,
+  LibraryCResultMappingDescriptor,
   LibraryOperationDescriptor,
   LibraryOperationKind,
-  LibraryResultShapeFieldDescriptor
+  LibraryResultShapeFieldDescriptor,
+  TypeRef
 } from '../../../../compiler/extensions/types.ts'
 
 const libraryId = 'node:url'
 const runtimeRequirement = 'node:url'
 const urlTypeId = `${libraryId}#URL`
 const searchParamsTypeId = `${libraryId}#URLSearchParams`
+const runtimeRequirements = [runtimeRequirement]
 const urlFields: LibraryResultShapeFieldDescriptor[] = [
   stringField('href', true),
   stringField('protocol', true),
@@ -20,33 +23,71 @@ const urlFields: LibraryResultShapeFieldDescriptor[] = [
   stringField('search', false),
   stringField('hash', false)
 ]
+const urlTypeRef = nominalTypeRef(urlTypeId)
+const searchParamsTypeRef = nominalTypeRef(searchParamsTypeId)
+const booleanTypeRef = primitiveTypeRef('boolean')
+const stringTypeRef = primitiveTypeRef('string')
+const nullableStringTypeRef = primitiveTypeRef('string', true)
+const voidTypeRef = primitiveTypeRef('void')
+const stringCResultMapping = cResultMapping('inox::String')
+const valueCResultMapping = cResultMapping('inox::Value')
+const voidCResultMapping = cResultMapping('void')
 
 const operations: LibraryOperationDescriptor[] = [
-  moduleCall('fileURLToPath', ['value'], 'url.fileURLToPath', 'inox::String', 'string', {
+  moduleCall('fileURLToPath', ['value'], 'url.fileURLToPath', {
     minArgs: 1,
     maxArgs: 1,
-    argumentChecks: [{ valueTypes: ['string', 'object'], objectTypeIds: [urlTypeId] }]
+    argumentChecks: [{ valueTypes: ['string', 'object'], objectTypeIds: [urlTypeId] }],
+    resultTypeRef: stringTypeRef,
+    cResultMapping: stringCResultMapping
   }),
-  moduleCall('pathToFileURL', ['value', 'result-shape'], 'url.pathToFileURL', 'URL', 'object', {
+  moduleCall('pathToFileURL', ['value', 'result-shape'], 'url.pathToFileURL', {
     minArgs: 1,
     maxArgs: 1,
     argumentChecks: [stringArgument()],
-    resultTypeId: urlTypeId,
-    resultShapeFields: urlFields
+    resultTypeRef: urlTypeRef
   }),
-  constructorOperation('URL', ['value', 'optional-value', 'argument-presence', 'result-shape'], 'URL::from', 'URL', urlTypeId, urlFields, 1, 2, [
-    stringArgument(),
-    { valueTypes: ['string', 'object'], objectTypeIds: [urlTypeId] }
-  ]),
-  constructorOperation('URLSearchParams', ['optional-value'], 'URLSearchParams::from', 'URLSearchParams', searchParamsTypeId, [], 0, 1, [
+  constructorOperation(
+    'URL',
+    ['value', 'optional-value', 'argument-presence', 'result-shape'],
+    'URL::from',
+    urlTypeRef,
+    1,
+    2,
+    [stringArgument(), { valueTypes: ['string', 'object'], objectTypeIds: [urlTypeId] }]
+  ),
+  constructorOperation('URLSearchParams', ['optional-value'], 'URLSearchParams::from', searchParamsTypeRef, 0, 1, [
     { valueTypes: ['string', 'object'], objectFieldValueType: 'string' }
   ]),
-  receiverCall(searchParamsTypeId, 'append', ['receiver', 'string-view', 'string-view'], 'append', 'void', null, false, [stringArgument(), stringArgument()]),
-  receiverCall(searchParamsTypeId, 'delete', ['receiver', 'string-view'], 'remove', 'void', null, false, [stringArgument()]),
-  receiverCall(searchParamsTypeId, 'get', ['receiver', 'string-view'], 'get', 'string', 'inox::Value', true, [stringArgument()]),
-  receiverCall(searchParamsTypeId, 'has', ['receiver', 'string-view'], 'has', 'boolean', 'bool', false, [stringArgument()]),
-  receiverCall(searchParamsTypeId, 'set', ['receiver', 'string-view', 'string-view'], 'set', 'void', null, false, [stringArgument(), stringArgument()]),
-  receiverCall(searchParamsTypeId, 'toString', ['receiver'], 'toString', 'string', 'inox::String', false, []),
+  receiverCall(
+    searchParamsTypeId,
+    'append',
+    ['receiver', 'string-view', 'string-view'],
+    'append',
+    voidTypeRef,
+    undefined,
+    [stringArgument(), stringArgument()]
+  ),
+  receiverCall(searchParamsTypeId, 'delete', ['receiver', 'string-view'], 'remove', voidTypeRef, undefined, [
+    stringArgument()
+  ]),
+  receiverCall(
+    searchParamsTypeId,
+    'get',
+    ['receiver', 'string-view'],
+    'get',
+    nullableStringTypeRef,
+    valueCResultMapping,
+    [stringArgument()]
+  ),
+  receiverCall(searchParamsTypeId, 'has', ['receiver', 'string-view'], 'has', booleanTypeRef, undefined, [
+    stringArgument()
+  ]),
+  receiverCall(searchParamsTypeId, 'set', ['receiver', 'string-view', 'string-view'], 'set', voidTypeRef, undefined, [
+    stringArgument(),
+    stringArgument()
+  ]),
+  receiverCall(searchParamsTypeId, 'toString', ['receiver'], 'toString', stringTypeRef, stringCResultMapping, []),
   ...urlFields.map((field) => receiverMemberRead(urlTypeId, field)),
   receiverMemberWrite(urlTypeId, 'pathname', 'setPathname'),
   receiverMemberWrite(urlTypeId, 'search', 'setSearch'),
@@ -62,6 +103,27 @@ const operations: LibraryOperationDescriptor[] = [
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
   dependencies: [],
+  nativeTypes: [
+    {
+      libraryId,
+      typeId: urlTypeId,
+      declarationNames: ['URL'],
+      valueType: 'object',
+      cppType: 'URL',
+      baseTypeIds: [],
+      runtimeRequirements,
+      fields: urlFields
+    },
+    {
+      libraryId,
+      typeId: searchParamsTypeId,
+      declarationNames: ['URLSearchParams'],
+      valueType: 'object',
+      cppType: 'URLSearchParams',
+      baseTypeIds: [],
+      runtimeRequirements
+    }
+  ],
   operations,
   intrinsicBindings: [],
   runtimeRequirements: [
@@ -78,17 +140,15 @@ type ModuleCallOptions = {
   minArgs?: number
   maxArgs?: number
   argumentChecks?: LibraryArgumentCheckDescriptor[]
-  resultTypeId?: string
-  resultShapeFields?: LibraryResultShapeFieldDescriptor[]
+  resultTypeRef: TypeRef
+  cResultMapping?: LibraryCResultMappingDescriptor
 }
 
 function moduleCall(
   name: string,
   cArgumentKinds: LibraryCArgumentKind[],
   cExpression: string,
-  cppType: string,
-  valueType: string,
-  options: ModuleCallOptions = {}
+  options: ModuleCallOptions
 ): LibraryOperationDescriptor {
   return {
     libraryId,
@@ -96,20 +156,16 @@ function moduleCall(
     bindingAliases: [moduleDefaultBinding(name)],
     operationId: `${libraryId}#${name}`,
     kind: 'call',
-    runtimeRequirements: [runtimeRequirement],
+    runtimeRequirements,
     cExpression,
     cArgumentKinds,
-    resultShapeFields: options.resultShapeFields,
-    resultTypeId: options.resultTypeId,
+    resultTypeRef: options.resultTypeRef,
+    cResultMapping: options.cResultMapping,
     cCallStyle: 'function',
     cFailureMode: 'thrown',
     minArgs: options.minArgs,
     maxArgs: options.maxArgs,
-    argumentChecks: options.argumentChecks,
-    cppType,
-    valueType,
-    owned: false,
-    nullable: false
+    argumentChecks: options.argumentChecks
   }
 }
 
@@ -117,9 +173,7 @@ function constructorOperation(
   name: string,
   cArgumentKinds: LibraryCArgumentKind[],
   cExpression: string,
-  cppType: string,
-  resultTypeId: string,
-  resultShapeFields: LibraryResultShapeFieldDescriptor[],
+  resultTypeRef: TypeRef,
   minArgs: number,
   maxArgs: number,
   argumentChecks: LibraryArgumentCheckDescriptor[]
@@ -130,20 +184,15 @@ function constructorOperation(
     bindingAliases: [moduleDefaultBinding(name)],
     operationId: `${libraryId}#${name}`,
     kind: 'construct',
-    runtimeRequirements: [runtimeRequirement],
+    runtimeRequirements,
     cExpression,
     cArgumentKinds,
-    resultShapeFields,
-    resultTypeId,
+    resultTypeRef,
     cCallStyle: 'function',
     cFailureMode: name === 'URLSearchParams' ? 'invalid-result' : 'thrown',
     minArgs,
     maxArgs,
-    argumentChecks,
-    cppType,
-    valueType: 'object',
-    owned: false,
-    nullable: false
+    argumentChecks
   }
 }
 
@@ -152,9 +201,8 @@ function receiverCall(
   name: string,
   cArgumentKinds: LibraryCArgumentKind[],
   cExpression: string,
-  valueType: string,
-  cppType: string | null = null,
-  nullable = false,
+  resultTypeRef: TypeRef,
+  cResultMapping: LibraryCResultMappingDescriptor | undefined,
   argumentChecks: LibraryArgumentCheckDescriptor[] = []
 ): LibraryOperationDescriptor {
   return {
@@ -162,7 +210,7 @@ function receiverCall(
     bindingId: receiverBinding(receiverTypeId, name),
     operationId: `${receiverTypeId}#${name}`,
     kind: 'call',
-    runtimeRequirements: [runtimeRequirement],
+    runtimeRequirements,
     receiverTypeId,
     cExpression,
     cArgumentKinds,
@@ -171,10 +219,8 @@ function receiverCall(
     minArgs: argumentChecks.length,
     maxArgs: argumentChecks.length,
     argumentChecks,
-    cppType: cppType ?? (valueType === 'void' ? 'void' : null),
-    valueType,
-    owned: false,
-    nullable
+    resultTypeRef,
+    cResultMapping
   }
 }
 
@@ -187,27 +233,21 @@ function receiverMemberRead(
     bindingId: receiverBinding(receiverTypeId, field.name),
     operationId: `${receiverTypeId}#read:${field.name}`,
     kind: 'member-read',
-    runtimeRequirements: [runtimeRequirement],
+    runtimeRequirements,
     receiverTypeId,
     cExpression: null,
-    cppType: 'inox::String',
-    valueType: field.valueType,
-    owned: false,
-    nullable: false
+    resultTypeRef: stringTypeRef,
+    cResultMapping: stringCResultMapping
   }
 }
 
-function receiverMemberWrite(
-  receiverTypeId: string,
-  field: string,
-  cExpression: string
-): LibraryOperationDescriptor {
+function receiverMemberWrite(receiverTypeId: string, field: string, cExpression: string): LibraryOperationDescriptor {
   return {
     libraryId,
     bindingId: receiverBinding(receiverTypeId, field),
     operationId: `${receiverTypeId}#write:${field}`,
     kind: 'member-write',
-    runtimeRequirements: [runtimeRequirement],
+    runtimeRequirements,
     receiverTypeId,
     cExpression,
     cArgumentKinds: ['receiver', 'value'],
@@ -216,10 +256,8 @@ function receiverMemberWrite(
     minArgs: 1,
     maxArgs: 1,
     argumentChecks: [stringArgument()],
-    cppType: 'void',
-    valueType: 'string',
-    owned: false,
-    nullable: false
+    resultTypeRef: stringTypeRef,
+    cResultMapping: voidCResultMapping
   }
 }
 
@@ -242,6 +280,31 @@ function unsupportedOperation(name: string): LibraryOperationDescriptor {
 
 function stringField(name: string, readonly: boolean): LibraryResultShapeFieldDescriptor {
   return { name, valueType: 'string', readonly }
+}
+
+function nominalTypeRef(typeId: string): TypeRef {
+  return {
+    kind: 'nominal',
+    typeId,
+    args: [],
+    nullable: false,
+    ownership: 'value',
+    traits: []
+  }
+}
+
+function primitiveTypeRef(name: 'boolean' | 'string' | 'void', nullable = false): TypeRef {
+  return {
+    kind: 'primitive',
+    name,
+    nullable,
+    ownership: 'value',
+    traits: []
+  }
+}
+
+function cResultMapping(cppType: string): LibraryCResultMappingDescriptor {
+  return { cppType, fields: [] }
 }
 
 function stringArgument(): LibraryArgumentCheckDescriptor {
