@@ -2,9 +2,11 @@ import type {
   CompilerLibraryPackageDescriptor,
   LibraryArgumentCheckDescriptor,
   LibraryCArgumentKind,
+  LibraryCResultMappingDescriptor,
   LibraryCallbackParameterDescriptor,
   LibraryOperationDescriptor,
-  LibraryOperationVariantDescriptor
+  LibraryOperationVariantDescriptor,
+  TypeRef
 } from '../../../../compiler/extensions/types.ts'
 
 const libraryId = 'node:net'
@@ -13,6 +15,18 @@ const serverTypeId = `${libraryId}#Server`
 const socketTypeId = `${libraryId}#Socket`
 const addressTypeId = `${libraryId}#AddressInfo`
 const runtimeRequirements = [runtimeRequirement]
+const serverValueTypeRef = nominalTypeRef(serverTypeId, 'value')
+const serverBorrowedTypeRef = nominalTypeRef(serverTypeId, 'borrowed')
+const socketValueTypeRef = nominalTypeRef(socketTypeId, 'value')
+const socketBorrowedTypeRef = nominalTypeRef(socketTypeId, 'borrowed')
+const addressTypeRef = nominalTypeRef(addressTypeId, 'value')
+const booleanTypeRef = primitiveTypeRef('boolean')
+const numberTypeRef = primitiveTypeRef('number')
+const stringTypeRef = primitiveTypeRef('string')
+const stringCResultMapping: LibraryCResultMappingDescriptor = {
+  cppType: 'inox::String',
+  fields: []
+}
 
 const operations: LibraryOperationDescriptor[] = [
   createServerOperation(),
@@ -22,16 +36,16 @@ const operations: LibraryOperationDescriptor[] = [
   serverListenOperation(),
   serverOnOperation(),
   socketAddressOperation(),
-  socketScalarMemberReadOperation('bytesRead', 'double', 'number'),
-  socketScalarMemberReadOperation('bytesWritten', 'double', 'number'),
+  socketScalarMemberReadOperation('bytesRead', numberTypeRef),
+  socketScalarMemberReadOperation('bytesWritten', numberTypeRef),
   socketResultOperation('destroy'),
   socketEndOperation(),
-  socketScalarMemberReadOperation('localAddress', 'inox::String', 'string'),
-  socketScalarMemberReadOperation('localPort', 'double', 'number'),
+  socketScalarMemberReadOperation('localAddress', stringTypeRef, stringCResultMapping),
+  socketScalarMemberReadOperation('localPort', numberTypeRef),
   socketOnOperation(),
   socketResultOperation('ref'),
-  socketScalarMemberReadOperation('remoteAddress', 'inox::String', 'string'),
-  socketScalarMemberReadOperation('remotePort', 'double', 'number'),
+  socketScalarMemberReadOperation('remoteAddress', stringTypeRef, stringCResultMapping),
+  socketScalarMemberReadOperation('remotePort', numberTypeRef),
   socketSetEncodingOperation(),
   socketSetKeepAliveOperation(),
   socketSetNoDelayOperation(),
@@ -81,13 +95,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: [
-        'async-runtime',
-        'callback-values',
-        'managed-values',
-        'objects',
-        'string-bytes'
-      ],
+      dependencies: ['async-runtime', 'callback-values', 'managed-values', 'objects', 'string-bytes'],
       cPreludeIncludes: ['inox/net.h'],
       capabilities: ['tcp'],
       backendConstraints: [
@@ -123,11 +131,7 @@ function createServerOperation(): LibraryOperationDescriptor {
         callbackLifetime: 'event-loop'
       })
     ],
-    resultTypeId: serverTypeId,
-    cppType: 'NetServer',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    resultTypeRef: serverValueTypeRef
   }
 }
 
@@ -193,11 +197,7 @@ function connectOperation(): LibraryOperationDescriptor {
         callbackLifetime: 'event-loop'
       })
     ],
-    resultTypeId: socketTypeId,
-    cppType: 'NetSocket',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    resultTypeRef: socketValueTypeRef
   }
 }
 
@@ -208,11 +208,7 @@ function serverAddressOperation(): LibraryOperationDescriptor {
     minArgs: 0,
     maxArgs: 0,
     argumentChecks: [],
-    resultTypeId: addressTypeId,
-    cppType: 'NetAddress',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    resultTypeRef: addressTypeRef
   }
 }
 
@@ -232,11 +228,7 @@ function serverCloseOperation(): LibraryOperationDescriptor {
         callbackLifetime: 'event-loop'
       })
     ],
-    resultTypeId: serverTypeId,
-    cppType: 'NetServer',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    resultTypeRef: serverBorrowedTypeRef
   }
 }
 
@@ -324,11 +316,7 @@ function serverListenOperation(): LibraryOperationDescriptor {
         callbackLifetime: 'event-loop'
       })
     ],
-    resultTypeId: serverTypeId,
-    cppType: 'NetServer',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    resultTypeRef: serverBorrowedTypeRef
   }
 }
 
@@ -343,11 +331,7 @@ function serverOnOperation(): LibraryOperationDescriptor {
       serverEventVariant(['listening', 'close'], zeroArgumentCallback()),
       serverEventVariant(['error'], errorCallbackArgument())
     ],
-    resultTypeId: serverTypeId,
-    cppType: 'NetServer',
-    valueType: 'object',
-    nullable: false,
-    owned: false,
+    resultTypeRef: serverBorrowedTypeRef,
     callbackLifetime: 'event-loop'
   }
 }
@@ -359,11 +343,7 @@ function socketAddressOperation(): LibraryOperationDescriptor {
     minArgs: 0,
     maxArgs: 0,
     argumentChecks: [],
-    resultTypeId: addressTypeId,
-    cppType: 'NetAddress',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    resultTypeRef: addressTypeRef
   }
 }
 
@@ -395,11 +375,7 @@ function socketEndOperation(): LibraryOperationDescriptor {
         callbackLifetime: 'event-loop'
       })
     ],
-    resultTypeId: socketTypeId,
-    cppType: 'NetSocket',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    resultTypeRef: socketBorrowedTypeRef
   }
 }
 
@@ -415,11 +391,7 @@ function socketOnOperation(): LibraryOperationDescriptor {
       socketEventVariant(['close'], closeCallbackArgument()),
       socketEventVariant(['error'], errorCallbackArgument())
     ],
-    resultTypeId: socketTypeId,
-    cppType: 'NetSocket',
-    valueType: 'object',
-    nullable: false,
-    owned: false,
+    resultTypeRef: socketBorrowedTypeRef,
     callbackLifetime: 'event-loop'
   }
 }
@@ -432,11 +404,7 @@ function socketSetEncodingOperation(): LibraryOperationDescriptor {
     minArgs: 1,
     maxArgs: 1,
     argumentChecks: [encodingArgument()],
-    resultTypeId: socketTypeId,
-    cppType: 'NetSocket',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    resultTypeRef: socketBorrowedTypeRef
   }
 }
 
@@ -455,11 +423,7 @@ function socketSetKeepAliveOperation(): LibraryOperationDescriptor {
         argumentChecks: [booleanArgument(), numberArgument()]
       })
     ],
-    resultTypeId: socketTypeId,
-    cppType: 'NetSocket',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    resultTypeRef: socketBorrowedTypeRef
   }
 }
 
@@ -475,11 +439,7 @@ function socketSetNoDelayOperation(): LibraryOperationDescriptor {
         argumentChecks: [booleanArgument()]
       })
     ],
-    resultTypeId: socketTypeId,
-    cppType: 'NetSocket',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    resultTypeRef: socketBorrowedTypeRef
   }
 }
 
@@ -501,10 +461,7 @@ function socketWriteOperation(): LibraryOperationDescriptor {
         callbackLifetime: 'event-loop'
       })
     ],
-    cppType: 'bool',
-    valueType: 'boolean',
-    nullable: false,
-    owned: false
+    resultTypeRef: booleanTypeRef
   }
 }
 
@@ -516,18 +473,14 @@ function socketResultOperation(name: string): LibraryOperationDescriptor {
     minArgs: 0,
     maxArgs: 0,
     argumentChecks: [],
-    resultTypeId: socketTypeId,
-    cppType: 'NetSocket',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    resultTypeRef: socketBorrowedTypeRef
   }
 }
 
 function socketScalarMemberReadOperation(
   name: string,
-  cppType: string,
-  valueType: string
+  resultTypeRef: TypeRef,
+  cResultMapping?: LibraryCResultMappingDescriptor
 ): LibraryOperationDescriptor {
   return {
     libraryId,
@@ -541,10 +494,8 @@ function socketScalarMemberReadOperation(
     cReceiverAdapter: 'NetSocket($value)',
     cCallStyle: 'member',
     cFailureMode: 'thrown',
-    cppType,
-    valueType,
-    nullable: false,
-    owned: false
+    resultTypeRef,
+    cResultMapping
   }
 }
 
@@ -603,12 +554,7 @@ function serverVariant(
 ): LibraryOperationVariantDescriptor {
   return {
     ...operationVariant(minArgs, maxArgs, cArgumentKinds, options),
-    cResultMode: 'borrowed',
-    resultTypeId: serverTypeId,
-    cppType: 'NetServer',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    cResultMode: 'borrowed'
   }
 }
 
@@ -620,12 +566,28 @@ function socketVariant(
 ): LibraryOperationVariantDescriptor {
   return {
     ...operationVariant(minArgs, maxArgs, cArgumentKinds, options),
-    cResultMode: 'borrowed',
-    resultTypeId: socketTypeId,
-    cppType: 'NetSocket',
-    valueType: 'object',
+    cResultMode: 'borrowed'
+  }
+}
+
+function nominalTypeRef(typeId: string, ownership: 'borrowed' | 'value'): TypeRef {
+  return {
+    kind: 'nominal',
+    typeId,
+    args: [],
     nullable: false,
-    owned: false
+    ownership,
+    traits: []
+  }
+}
+
+function primitiveTypeRef(name: 'boolean' | 'number' | 'string'): TypeRef {
+  return {
+    kind: 'primitive',
+    name,
+    nullable: false,
+    ownership: 'value',
+    traits: []
   }
 }
 
@@ -782,10 +744,7 @@ function serverEventArgument(): LibraryArgumentCheckDescriptor {
 }
 
 function socketEventArgument(): LibraryArgumentCheckDescriptor {
-  return stringLiteralArgument(
-    ['connect', 'ready', 'data', 'end', 'close', 'error', 'drain'],
-    'INOX_NET_SOCKET'
-  )
+  return stringLiteralArgument(['connect', 'ready', 'data', 'end', 'close', 'error', 'drain'], 'INOX_NET_SOCKET')
 }
 
 function stringLiteralArgument(values: string[], code: string): LibraryArgumentCheckDescriptor {

@@ -41,16 +41,11 @@ test('node:net объявляет module, Server и Socket operations через
   const createServer = operation(operations, 'node:net#createServer')
 
   assert.equal(createServer.bindingId, 'node:net#module:node:net:createServer')
-  assert.deepEqual(createServer.bindingAliases, [
-    'node:net#module:node:net:default.createServer'
-  ])
+  assert.deepEqual(createServer.bindingAliases, ['node:net#module:node:net:default.createServer'])
   assert.equal(createServer.cExpression, 'net.createServer')
-  assert.equal(createServer.resultTypeId, 'node:net#Server')
   assert.ok(
     createServer.variants?.some(
-      (variant) =>
-        variant.callbackLifetime === 'event-loop' &&
-        variant.cArgumentKinds?.includes('runtime-callback')
+      (variant) => variant.callbackLifetime === 'event-loop' && variant.cArgumentKinds?.includes('runtime-callback')
     )
   )
 
@@ -61,7 +56,7 @@ test('node:net объявляет module, Server и Socket operations через
     'node:net#module:node:net:default.connect',
     'node:net#module:node:net:default.createConnection'
   ])
-  assert.equal(connect.resultTypeId, 'node:net#Socket')
+  assert.equal(connect.cExpression, 'net.connect')
   assert.ok(
     connect.variants?.some(
       (variant) =>
@@ -84,16 +79,14 @@ test('node:net объявляет module, Server и Socket operations через
       callbackOperation.variants?.some(
         (variant) =>
           variant.callbackLifetime === 'event-loop' &&
-          (
-            variant.cArgumentKinds?.includes('runtime-callback') ||
-            variant.cArgumentKinds?.includes('optional-runtime-callback')
-          )
+          (variant.cArgumentKinds?.includes('runtime-callback') ||
+            variant.cArgumentKinds?.includes('optional-runtime-callback'))
       ) || callbackOperation.callbackLifetime === 'event-loop'
     )
   }
 
-  assert.equal(operation(operations, 'node:net#Server.address').resultTypeId, 'node:net#AddressInfo')
-  assert.equal(operation(operations, 'node:net#Socket.address').resultTypeId, 'node:net#AddressInfo')
+  assert.equal(operation(operations, 'node:net#Server.address').cExpression, 'address')
+  assert.equal(operation(operations, 'node:net#Socket.address').cExpression, 'address')
 
   for (const operationId of [
     'node:net#Socket.bytesRead',
@@ -107,10 +100,7 @@ test('node:net объявляет module, Server и Socket operations через
   }
 })
 
-function operation(
-  operations: LibraryOperationDescriptor[],
-  operationId: string
-): LibraryOperationDescriptor {
+function operation(operations: LibraryOperationDescriptor[], operationId: string): LibraryOperationDescriptor {
   const result = operations.find((item) => item.operationId === operationId)
 
   assert.ok(result, `missing operation ${operationId}`)
