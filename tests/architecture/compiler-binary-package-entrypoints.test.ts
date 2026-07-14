@@ -60,7 +60,14 @@ test('binary packages expose generic native types, operations and runtime requir
     'node:buffer#module:node:buffer:default.Buffer.from',
     'node:buffer#module:node:buffer:buffer.Buffer.from'
   ])
-  assert.equal(bufferFrom.resultTypeId, 'node:buffer#Buffer')
+  assert.deepEqual(bufferFrom.resultTypeRef, {
+    kind: 'nominal',
+    typeId: 'node:buffer#Buffer',
+    args: [],
+    nullable: false,
+    ownership: 'value',
+    traits: []
+  })
   assert.ok(bufferWrite)
   assert.deepEqual(bufferWrite.cArgumentKinds, ['receiver', 'number', 'number'])
   assert.equal(bufferWrite.cReceiverAdapter, 'Buffer($value)')

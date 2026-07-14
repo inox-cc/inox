@@ -2,9 +2,13 @@ import type {
   CompilerLibraryPackageDescriptor,
   LibraryArgumentCheckDescriptor,
   LibraryCArgumentKind,
+  LibraryCResultMappingDescriptor,
   LibraryOperationDescriptor,
   LibraryOperationKind,
-  LibraryOperationVariantDescriptor
+  LibraryOperationVariantDescriptor,
+  NominalTypeRef,
+  PrimitiveTypeRef,
+  TypeRef
 } from '../../../../compiler/extensions/types.ts'
 
 const libraryId = 'node:buffer'
@@ -12,25 +16,39 @@ const binaryLibraryId = 'global:binary'
 const runtimeRequirement = libraryId
 const uint8ArrayTypeId = `${binaryLibraryId}#Uint8Array`
 const bufferTypeId = `${libraryId}#Buffer`
+const bufferTypeRef: NominalTypeRef = {
+  kind: 'nominal',
+  typeId: bufferTypeId,
+  args: [],
+  nullable: false,
+  ownership: 'value',
+  traits: []
+}
+const booleanTypeRef: PrimitiveTypeRef = primitiveTypeRef('boolean')
+const numberTypeRef: PrimitiveTypeRef = primitiveTypeRef('number')
+const stringTypeRef: PrimitiveTypeRef = primitiveTypeRef('string')
+const stringCResultMapping: LibraryCResultMappingDescriptor = {
+  cppType: 'inox::String',
+  fields: []
+}
 
 const operations: LibraryOperationDescriptor[] = [
   bufferFromOperation(),
-  staticCall('alloc', ['number'], 'Buffer::alloc', 'Buffer', 'bytes', 1, 1, [numberArgument()], bufferTypeId),
-  staticCall('isBuffer', ['value'], 'Buffer::isBuffer', 'bool', 'boolean', 1, 1, []),
+  staticCall('alloc', ['number'], 'Buffer::alloc', bufferTypeRef, null, 1, 1, [numberArgument()]),
+  staticCall('isBuffer', ['value'], 'Buffer::isBuffer', booleanTypeRef, null, 1, 1, []),
   constantOperation(),
-  receiverMemberRead('length', 'length', 'double', 'number'),
+  receiverMemberRead('length', 'length', numberTypeRef, null),
   receiverIndexRead(),
   receiverIndexWrite(),
   receiverCall(
     'slice',
     ['receiver', 'number', 'optional-number'],
     'slice',
-    'Buffer',
-    'bytes',
+    bufferTypeRef,
+    null,
     1,
     2,
-    [numberArgument(), numberArgument()],
-    bufferTypeId
+    [numberArgument(), numberArgument()]
   ),
   bufferToStringOperation(),
   ...unsupportedCalls().map((name) => unsupportedOperation(name, 'call')),
@@ -70,16 +88,15 @@ function bufferFromOperation(): LibraryOperationDescriptor {
       'from',
       ['string-view'],
       'Buffer::from',
-      'Buffer',
-      'bytes',
+      bufferTypeRef,
+      null,
       1,
       2,
-      [stringArgument(), utf8Argument('Buffer.from')],
-      bufferTypeId
+      [stringArgument(), utf8Argument('Buffer.from')]
     ),
     variants: [
-      staticVariant(1, 1, ['string-view'], 'Buffer', 'bytes', bufferTypeId),
-      staticVariant(2, 2, ['string-view', 'string-view'], 'Buffer', 'bytes', bufferTypeId)
+      staticVariant(1, 1, ['string-view']),
+      staticVariant(2, 2, ['string-view', 'string-view'])
     ]
   }
 }
@@ -90,15 +107,15 @@ function bufferToStringOperation(): LibraryOperationDescriptor {
       'toString',
       ['receiver'],
       'toString',
-      'inox::String',
-      'string',
+      stringTypeRef,
+      stringCResultMapping,
       0,
       1,
       [utf8Argument('Buffer.toString')]
     ),
     variants: [
-      receiverVariant(0, 0, ['receiver'], 'inox::String', 'string'),
-      receiverVariant(1, 1, ['receiver', 'string-view'], 'inox::String', 'string')
+      receiverVariant(0, 0, ['receiver']),
+      receiverVariant(1, 1, ['receiver', 'string-view'])
     ]
   }
 }
@@ -107,12 +124,11 @@ function staticCall(
   name: string,
   cArgumentKinds: LibraryCArgumentKind[],
   cExpression: string,
-  cppType: string,
-  valueType: string,
+  resultTypeRef: TypeRef,
+  cResultMapping: LibraryCResultMappingDescriptor | null,
   minArgs: number,
   maxArgs: number,
-  argumentChecks: LibraryArgumentCheckDescriptor[],
-  resultTypeId?: string
+  argumentChecks: LibraryArgumentCheckDescriptor[]
 ): LibraryOperationDescriptor {
   return {
     libraryId,
@@ -123,46 +139,35 @@ function staticCall(
     runtimeRequirements: [runtimeRequirement],
     cExpression,
     cArgumentKinds,
-    cResultMode: resultTypeId ? 'value' : null,
-    resultTypeId,
+    cResultMode: resultTypeRef.kind === 'nominal' ? 'value' : null,
     cFailureMode: 'thrown',
     minArgs,
     maxArgs,
     argumentChecks,
-    cppType,
-    valueType,
-    nullable: false,
-    owned: false
+    resultTypeRef,
+    cResultMapping
   }
 }
 
 function staticVariant(
   minArgs: number,
   maxArgs: number,
-  cArgumentKinds: LibraryCArgumentKind[],
-  cppType: string,
-  valueType: string,
-  resultTypeId?: string
+  cArgumentKinds: LibraryCArgumentKind[]
 ): LibraryOperationVariantDescriptor {
   return {
     minArgs,
     maxArgs,
     cExpression: 'Buffer::from',
     cArgumentKinds,
-    cResultMode: resultTypeId ? 'value' : null,
-    resultTypeId,
-    cppType,
-    valueType,
-    nullable: false,
-    owned: false
+    cResultMode: 'value'
   }
 }
 
 function receiverMemberRead(
   name: string,
   cExpression: string,
-  cppType: string,
-  valueType: string
+  resultTypeRef: TypeRef,
+  cResultMapping: LibraryCResultMappingDescriptor | null
 ): LibraryOperationDescriptor {
   return {
     libraryId,
@@ -176,10 +181,8 @@ function receiverMemberRead(
     cReceiverAdapter: 'Buffer($value)',
     cCallStyle: 'member',
     cFailureMode: 'thrown',
-    cppType,
-    valueType,
-    nullable: false,
-    owned: false
+    resultTypeRef,
+    cResultMapping
   }
 }
 
@@ -187,12 +190,11 @@ function receiverCall(
   name: string,
   cArgumentKinds: LibraryCArgumentKind[],
   cExpression: string,
-  cppType: string,
-  valueType: string,
+  resultTypeRef: TypeRef,
+  cResultMapping: LibraryCResultMappingDescriptor | null,
   minArgs: number,
   maxArgs: number,
-  argumentChecks: LibraryArgumentCheckDescriptor[],
-  resultTypeId?: string
+  argumentChecks: LibraryArgumentCheckDescriptor[]
 ): LibraryOperationDescriptor {
   return {
     libraryId,
@@ -204,37 +206,28 @@ function receiverCall(
     cExpression,
     cArgumentKinds,
     cReceiverAdapter: 'Buffer($value)',
-    cResultMode: resultTypeId ? 'value' : null,
-    resultTypeId,
+    cResultMode: resultTypeRef.kind === 'nominal' ? 'value' : null,
     cCallStyle: 'member',
     cFailureMode: 'thrown',
     minArgs,
     maxArgs,
     argumentChecks,
-    cppType,
-    valueType,
-    nullable: false,
-    owned: false
+    resultTypeRef,
+    cResultMapping
   }
 }
 
 function receiverVariant(
   minArgs: number,
   maxArgs: number,
-  cArgumentKinds: LibraryCArgumentKind[],
-  cppType: string,
-  valueType: string
+  cArgumentKinds: LibraryCArgumentKind[]
 ): LibraryOperationVariantDescriptor {
   return {
     minArgs,
     maxArgs,
     cExpression: 'toString',
     cArgumentKinds,
-    cReceiverAdapter: 'Buffer($value)',
-    cppType,
-    valueType,
-    nullable: false,
-    owned: false
+    cReceiverAdapter: 'Buffer($value)'
   }
 }
 
@@ -254,10 +247,7 @@ function receiverIndexRead(): LibraryOperationDescriptor {
     minArgs: 1,
     maxArgs: 1,
     argumentChecks: [numberArgument()],
-    cppType: 'double',
-    valueType: 'number',
-    nullable: false,
-    owned: false
+    resultTypeRef: numberTypeRef
   }
 }
 
@@ -277,10 +267,7 @@ function receiverIndexWrite(): LibraryOperationDescriptor {
     minArgs: 2,
     maxArgs: 2,
     argumentChecks: [numberArgument(), numberArgument()],
-    cppType: 'double',
-    valueType: 'number',
-    nullable: false,
-    owned: false
+    resultTypeRef: numberTypeRef
   }
 }
 
@@ -296,10 +283,7 @@ function constantOperation(): LibraryOperationDescriptor {
     kind: 'member-read',
     runtimeRequirements: [runtimeRequirement],
     cExpression: 'buffer.constants.MAX_LENGTH',
-    cppType: 'double',
-    valueType: 'number',
-    nullable: false,
-    owned: false
+    resultTypeRef: numberTypeRef
   }
 }
 
@@ -334,6 +318,16 @@ function utf8Argument(label: string): LibraryArgumentCheckDescriptor {
     stringLiterals: ['utf8'],
     literalDiagnosticCode: 'INOX_TYPE_MISMATCH',
     literalDiagnosticMessage: `${label} encoding must be 'utf8' in the MVP`
+  }
+}
+
+function primitiveTypeRef(name: 'boolean' | 'number' | 'string'): PrimitiveTypeRef {
+  return {
+    kind: 'primitive',
+    name,
+    nullable: false,
+    ownership: 'value',
+    traits: []
   }
 }
 
