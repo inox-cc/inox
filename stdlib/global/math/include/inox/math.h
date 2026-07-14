@@ -1,21 +1,18 @@
 #ifndef INOX_MATH_H
 #define INOX_MATH_H
 
-#include <stddef.h>
 #include <stdint.h>
 
 enum class MathRandomBackend {
+  Auto,
   Simple,
   Xorshift32,
   Os
 };
 
-class Math {
+class MathObject final {
 public:
-  Math();
-
-  void init(uint32_t seed) const;
-  void init(uint32_t seed, MathRandomBackend backend) const;
+  MathObject(uint32_t seed, bool seed_configured, MathRandomBackend backend);
 
   double abs(double value) const;
   double floor(double value) const;
@@ -35,6 +32,6 @@ private:
   mutable MathRandomBackend random_backend_;
 };
 
-extern Math Math;
+extern MathObject Math;
 
 #endif

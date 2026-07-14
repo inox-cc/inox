@@ -11,6 +11,7 @@ import {
   irClassMethodEffectName,
   mergeIrFunctionEffects
 } from '../ir.ts'
+import { resolveCompilerLibrarySet } from '../extensions/library-set.ts'
 import { memberExpressionPath } from '../member-paths.ts'
 import { reexportImportAliasName } from '../modules/synthetic-imports.ts'
 import {
@@ -81,7 +82,8 @@ import {
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
 import { cStringLiteral, emitCFunctionName, emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { relativeCIncludePath, uniqueCModuleImports } from './modules.ts'
-import { emitCPrelude, emitMathRuntimeInitLines, filterUnusedCPreludeIncludes } from './prelude.ts'
+import { emitCompilerLibraryRuntimeInitializerDefinitions } from './library-initializers.ts'
+import { emitCPrelude, filterUnusedCPreludeIncludes } from './prelude.ts'
 import { collectCReferencedFunctionPrototypeNames } from './prototype-references.ts'
 import { addDateStringRuntimeRequirements, resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
 import type {
@@ -363,7 +365,7 @@ export type CModuleEmissionDependencies = {
 
 export function emitCModuleSource(
   plan: CModulePlan,
-  _plans: CModulePlan[],
+  plans: CModulePlan[],
   options: CModuleEmitOptions,
   diagnostics: Diagnostic[],
   deps: CModuleEmissionDependencies
@@ -373,6 +375,18 @@ export function emitCModuleSource(
   const functions: AnyNode[] = []
   const context = createCModuleBaseContext(plan, diagnostics, deps)
   const runtimeRequirements = runtimeRequirementSetFromArray(collectIrRuntimeRequirements(irPrograms))
+  const emitsMain = plan.isEntry || plan.initName === null || typeof plan.initName === 'undefined'
+  const ownsProgramRuntime = plan.isGraphEntry
+
+  if (ownsProgramRuntime) {
+    for (let planIndex = 0; planIndex < plans.length; planIndex = planIndex + 1) {
+      const requirements = collectIrRuntimeRequirements([plans[planIndex].ir])
+
+      for (let requirementIndex = 0; requirementIndex < requirements.length; requirementIndex = requirementIndex + 1) {
+        runtimeRequirements.add(requirements[requirementIndex])
+      }
+    }
+  }
   const globalUsages = collectIrGlobalUsages(irPrograms)
   const syntaxFeatures = collectIrSyntaxFeatureUsages(irPrograms)
   const signatureRuntimeTypes = collectCModuleContextRuntimeTypes(context)
@@ -399,7 +413,13 @@ export function emitCModuleSource(
   }
 
   context.runtimeEntrypointAdapter = prelude.runtimeEntrypointAdapter
-  context.mathRuntimeInitStatement = prelude.needsMathRuntime ? emitMathRuntimeInitLines(options)[0] : null
+  context.runtimeInitializerDefinitions = ownsProgramRuntime
+    ? emitCompilerLibraryRuntimeInitializerDefinitions(
+        resolveCompilerLibrarySet(options.libraries),
+        prelude.libraryRuntimeRequirements,
+        options.libraryOptions
+      )
+    : []
   if (prelude.needsAsyncRuntime) {
     context.unhandledRejectionFlag = `${plan.symbolPrefix}_unhandled_rejection`
   } else {
@@ -408,7 +428,6 @@ export function emitCModuleSource(
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics)
 
-  const emitsMain = plan.isEntry || plan.initName === null || typeof plan.initName === 'undefined'
   const lines: string[] = []
   lines.push(`#include "${relativeCIncludePath(plan.sourcePath, plan.headerPath, options.host)}"`)
 
@@ -433,7 +452,6 @@ export function emitCModuleSource(
       prelude.needsRuntime,
       emitsMain,
       prelude.needsTimeRuntime,
-      prelude.needsMathRuntime,
       prelude.needsDebugMemoryRuntime,
       prelude.needsAsyncRuntime,
       prelude.needsCallbackRuntime,
@@ -448,10 +466,14 @@ export function emitCModuleSource(
       prelude.needsRegexpRuntime,
       prelude.needsConsoleRuntime,
       prelude.needsFetchRuntime,
-      prelude.libraryCPreludeIncludes,
-      options
+      prelude.libraryCPreludeIncludes
     )
   )
+  pushCModuleLines(lines, context.runtimeInitializerDefinitions)
+
+  if (context.runtimeInitializerDefinitions.length > 0) {
+    lines.push('')
+  }
 
   const bodyLines: string[] = []
 
@@ -1473,6 +1495,10 @@ function registerCModuleValueDeclarations(context: CEmitContext, plan: CModulePl
     context.moduleValueNames.set(item.name, item.symbolName)
     context.moduleValueTypes.set(item.name, item.valueType)
 
+    if (cModuleValueDeclarationCType(item, context) === 'inox_value') {
+      context.moduleRuntimeValueNames.add(item.name)
+    }
+
     if (item.cppType !== null && typeof item.cppType !== 'undefined') {
       context.moduleValueCppTypes.set(item.name, item.cppType)
     }
@@ -1517,7 +1543,12 @@ function registerImportedCModuleValueDeclarations(context: CEmitContext, plan: C
 
         if (syntheticName !== null && typeof syntheticName !== 'undefined') {
           context.moduleValueNames.set(syntheticName, emitCModuleValueName(importedModule, specifier.imported))
-          context.moduleValueTypes.set(syntheticName, cModuleValueType(exported))
+          const valueType = cModuleValueType(exported)
+          context.moduleValueTypes.set(syntheticName, valueType)
+
+          if (valueType === 'unknown' || isOpaqueRuntimeValueType(valueType) || (valueType !== 'string' && isManagedRuntimeReturnType(valueType))) {
+            context.moduleRuntimeValueNames.add(syntheticName)
+          }
         }
 
         continue
@@ -1525,7 +1556,12 @@ function registerImportedCModuleValueDeclarations(context: CEmitContext, plan: C
 
       if (!context.moduleValueNames.has(localName)) {
         context.moduleValueNames.set(localName, emitCModuleValueName(importedModule, specifier.imported))
-        context.moduleValueTypes.set(localName, cModuleValueType(exported))
+        const valueType = cModuleValueType(exported)
+        context.moduleValueTypes.set(localName, valueType)
+
+        if (valueType === 'unknown' || isOpaqueRuntimeValueType(valueType) || (valueType !== 'string' && isManagedRuntimeReturnType(valueType))) {
+          context.moduleRuntimeValueNames.add(localName)
+        }
       }
     }
   }
@@ -2278,9 +2314,6 @@ function emitCModuleInitFunction(
   const initCalls = emitCModuleImportInitCalls(plan)
   context.moduleValueDeclarationScope = true
   const bodyLines: string[] = []
-  if (context.mathRuntimeInitStatement !== null) {
-    pushIndentedCModuleLines(bodyLines, [context.mathRuntimeInitStatement])
-  }
   pushIndentedCModuleLines(bodyLines, initCalls)
   pushIndentedCModuleLines(bodyLines, deps.emitStatementList(body, context))
   pushIndentedCModuleLines(bodyLines, emitEventLoopDrain(context))
@@ -2328,9 +2361,6 @@ function emitCModuleMainFunction(
   context.cleanupEnabled = false
   context.externalEventLoop = true
   const bodyLines: string[] = []
-  if (context.mathRuntimeInitStatement !== null) {
-    pushIndentedCModuleLines(bodyLines, [context.mathRuntimeInitStatement])
-  }
   pushIndentedCModuleLines(bodyLines, initCalls)
   pushIndentedCModuleLines(bodyLines, deps.emitStatementList(body, context))
   const lines: string[] = []

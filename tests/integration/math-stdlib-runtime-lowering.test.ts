@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 type GeneratedTextFile = {
   path: string
@@ -28,12 +29,14 @@ console.log(Math.random() >= 0)
   const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
   assert.match(source, /#include "inox\/math\.h"/)
-  assert.match(source, /\n  Math\.init\(0x[0-9a-f]+u\);/)
+  assert.match(source, /MathObject Math\(0x6d2b79f5u, false, MathRandomBackend::Auto\);/)
+  assert.doesNotMatch(source, /Math\.init/)
   assert.match(source, /Math\.min\(2, 3\)/)
   assert.match(source, /Math\.round\(2\.6\)/)
   assert.match(source, /console\.log\("%.17g", Math\.min\(2, 3\)\);/)
@@ -49,15 +52,19 @@ console.log(Math.random() >= 0)
   const xorshiftFiles = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
-    random: {
-      backend: 'xorshift32',
-      seed: 7
-    },
+    libraries: defaultCompilerLibrarySet,
+    libraryOptions: [
+      { optionId: 'global:math#random-backend', value: 'xorshift32' },
+      { optionId: 'global:math#random-seed', value: 7 }
+    ],
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const xorshiftSource = generatedTextFile(xorshiftFiles, 'src/index.cc').code
 
-  assert.match(xorshiftSource, /Math\.init\(0x00000007u, MathRandomBackend::Xorshift32\);/)
+  assert.match(
+    xorshiftSource,
+    /MathObject Math\(0x00000007u, true, MathRandomBackend::Xorshift32\);/
+  )
   assert.doesNotMatch(xorshiftSource, /INOX_MATH_RANDOM_/)
 }
 

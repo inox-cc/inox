@@ -3,20 +3,47 @@ import type {
   CompilerLibrarySet,
   IntrinsicRoleBinding,
   LibraryArgumentCheckDescriptor,
+  LibraryCValueMappingDescriptor,
   LibraryDeclarationDescriptor,
   LibraryCallbackParameterDescriptor,
   LibraryNativeTypeDescriptor,
+  LibraryOptionDescriptor,
+  LibraryOptionScalar,
   LibraryNestedResultShapeFieldDescriptor,
   LibraryOperationDescriptor,
   LibraryResultShapeFieldDescriptor,
+  LibraryRuntimeInitializerArgumentDescriptor,
+  LibraryRuntimeInitializerDescriptor,
   RuntimeRequirementDescriptor
 } from './types.ts'
 import { formatDiagnostics } from '../diagnostics.ts'
 import { parseCompilerLibraryGlobalDeclarations } from './global-declarations.ts'
+import {
+  compilerLibraryOptionScalarText,
+  compilerLibraryOptionScalarType,
+  compilerLibraryOptionScalarsEqual,
+  validateCompilerLibraryOptionValue,
+  validateCompilerLibraryOptionDescriptors
+} from './library-options.ts'
+
+const compilerCoreRuntimeRequirementIds = [
+  'async-runtime',
+  'callback-values',
+  'clocks',
+  'collections',
+  'debug-memory',
+  'json',
+  'managed-values',
+  'objects',
+  'string-bytes',
+  'weak-references'
+]
 
 export function createCompilerLibrarySet(libraries: CompilerLibraryDescriptor[]): CompilerLibrarySet {
   const ordered = orderCompilerLibraries(libraries)
   const declarations: LibraryDeclarationDescriptor[] = []
+  const options: LibraryOptionDescriptor[] = []
+  const runtimeInitializers: LibraryRuntimeInitializerDescriptor[] = []
   const nativeTypes: LibraryNativeTypeDescriptor[] = []
   const operations: LibraryOperationDescriptor[] = []
   const intrinsicBindings: IntrinsicRoleBinding[] = []
@@ -25,18 +52,31 @@ export function createCompilerLibrarySet(libraries: CompilerLibraryDescriptor[])
   for (let libraryIndex = 0; libraryIndex < ordered.length; libraryIndex = libraryIndex + 1) {
     const library = ordered[libraryIndex]
 
+    validateCompilerLibraryDescriptorOwnership(library)
     pushDeclarations(declarations, library.declarations)
+    pushLibraryOptions(options, library.options ?? [])
+    pushRuntimeInitializers(runtimeInitializers, library.runtimeInitializers ?? [])
     pushNativeTypes(nativeTypes, library.nativeTypes ?? [])
     pushOperations(operations, library.operations)
     pushIntrinsicBindings(intrinsicBindings, library.intrinsicBindings)
     pushRuntimeRequirements(runtimeRequirements, library.runtimeRequirements)
   }
 
-  validateCompilerLibrarySet(declarations, nativeTypes, operations, intrinsicBindings, runtimeRequirements)
+  validateCompilerLibrarySet(
+    declarations,
+    options,
+    runtimeInitializers,
+    nativeTypes,
+    operations,
+    intrinsicBindings,
+    runtimeRequirements
+  )
 
   return {
     fingerprint: compilerLibrarySetFingerprint(ordered),
     declarations,
+    options,
+    runtimeInitializers,
     nativeTypes,
     operations,
     intrinsicBindings,
@@ -118,6 +158,8 @@ function validateLibraryDependencies(
 
 function validateCompilerLibrarySet(
   declarations: LibraryDeclarationDescriptor[],
+  options: LibraryOptionDescriptor[],
+  runtimeInitializers: LibraryRuntimeInitializerDescriptor[],
   nativeTypes: LibraryNativeTypeDescriptor[],
   operations: LibraryOperationDescriptor[],
   intrinsicBindings: IntrinsicRoleBinding[],
@@ -125,10 +167,446 @@ function validateCompilerLibrarySet(
 ): void {
   validateUniqueDeclarationSources(declarations)
   validateGlobalDeclarations(declarations)
+  validateCompilerLibraryOptionDescriptors(options)
+  validateUniqueRuntimeRequirementIds(runtimeRequirements)
+  validateRuntimeInitializers(runtimeInitializers, options, runtimeRequirements)
+  validateRuntimeOptionConditions(runtimeRequirements, options)
+  validateRuntimeRequirementReferences(operations, nativeTypes, runtimeRequirements)
   validateNativeTypes(nativeTypes)
   validateUniqueOperationIds(operations)
   validateUniqueIntrinsicRoles(intrinsicBindings)
-  validateUniqueRuntimeRequirementIds(runtimeRequirements)
+}
+
+function validateCompilerLibraryDescriptorOwnership(library: CompilerLibraryDescriptor): void {
+  for (let index = 0; index < library.declarations.length; index = index + 1) {
+    validateCompilerLibraryItemOwner(
+      library.id,
+      library.declarations[index].libraryId,
+      `declaration ${library.declarations[index].source}`
+    )
+  }
+
+  const options = library.options ?? []
+
+  for (let index = 0; index < options.length; index = index + 1) {
+    validateCompilerLibraryItemOwner(
+      library.id,
+      options[index].libraryId,
+      `option ${options[index].optionId}`
+    )
+  }
+
+  const initializers = library.runtimeInitializers ?? []
+
+  for (let index = 0; index < initializers.length; index = index + 1) {
+    validateCompilerLibraryItemOwner(
+      library.id,
+      initializers[index].libraryId,
+      `runtime initializer ${initializers[index].initializerId}`
+    )
+  }
+
+  const nativeTypes = library.nativeTypes ?? []
+
+  for (let index = 0; index < nativeTypes.length; index = index + 1) {
+    validateCompilerLibraryItemOwner(
+      library.id,
+      nativeTypes[index].libraryId,
+      `native type ${nativeTypes[index].typeId}`
+    )
+  }
+
+  for (let index = 0; index < library.operations.length; index = index + 1) {
+    validateCompilerLibraryItemOwner(
+      library.id,
+      library.operations[index].libraryId,
+      `operation ${library.operations[index].operationId}`
+    )
+  }
+}
+
+function validateCompilerLibraryItemOwner(
+  expectedLibraryId: string,
+  actualLibraryId: string,
+  label: string
+): void {
+  if (actualLibraryId !== expectedLibraryId) {
+    throw new Error(`${label} is owned by ${actualLibraryId}, expected ${expectedLibraryId}`)
+  }
+}
+
+function validateRuntimeOptionConditions(
+  requirements: RuntimeRequirementDescriptor[],
+  options: LibraryOptionDescriptor[]
+): void {
+  for (let index = 0; index < requirements.length; index = index + 1) {
+    const requirement = requirements[index]
+    const capabilities = requirement.conditionalCapabilities ?? []
+
+    for (let capabilityIndex = 0; capabilityIndex < capabilities.length; capabilityIndex = capabilityIndex + 1) {
+      const capability = capabilities[capabilityIndex]
+
+      for (let conditionIndex = 0; conditionIndex < capability.conditions.length; conditionIndex = conditionIndex + 1) {
+        const condition = capability.conditions[conditionIndex]
+
+        if (libraryOptionDescriptor(options, condition.optionId) === null) {
+          throw new Error(
+            `runtime requirement ${requirement.id} references missing option ${condition.optionId}`
+          )
+        }
+
+        const option = libraryOptionDescriptor(options, condition.optionId)
+
+        if (option !== null) {
+          validateRuntimeOptionCondition(requirement, condition, option)
+        }
+      }
+    }
+  }
+}
+
+function validateRuntimeOptionCondition(
+  requirement: RuntimeRequirementDescriptor,
+  condition: { optionId: string; source: 'value' | 'present'; values: LibraryOptionScalar[] },
+  option: LibraryOptionDescriptor
+): void {
+  if (condition.values.length === 0) {
+    throw new Error(
+      `runtime requirement ${requirement.id} option ${condition.optionId} condition has no values`
+    )
+  }
+
+  for (let index = 0; index < condition.values.length; index = index + 1) {
+    const value = condition.values[index]
+
+    if (condition.source === 'present') {
+      if (typeof value !== 'boolean') {
+        throw new Error(
+          `runtime requirement ${requirement.id} option ${condition.optionId} present condition expects boolean values`
+        )
+      }
+    } else {
+      if (compilerLibraryOptionScalarType(value) !== option.valueType) {
+        throw new Error(
+          `runtime requirement ${requirement.id} option ${condition.optionId} condition value ` +
+            `${compilerLibraryOptionScalarText(value)} expects ${option.valueType}`
+        )
+      }
+
+      validateCompilerLibraryOptionValue(option, value)
+    }
+
+    for (let previousIndex = 0; previousIndex < index; previousIndex = previousIndex + 1) {
+      if (compilerLibraryOptionScalarsEqual(condition.values[previousIndex], value)) {
+        throw new Error(
+          `runtime requirement ${requirement.id} option ${condition.optionId} has duplicate condition value ` +
+            compilerLibraryOptionScalarText(value)
+        )
+      }
+    }
+  }
+}
+
+function validateRuntimeInitializers(
+  initializers: LibraryRuntimeInitializerDescriptor[],
+  options: LibraryOptionDescriptor[],
+  requirements: RuntimeRequirementDescriptor[]
+): void {
+  const ids: Set<string> = new Set()
+  const cNames: Set<string> = new Set()
+
+  for (let index = 0; index < initializers.length; index = index + 1) {
+    const initializer = initializers[index]
+
+    if (ids.has(initializer.initializerId)) {
+      throw new Error(`duplicate compiler library runtime initializer ${initializer.initializerId}`)
+    }
+
+    ids.add(initializer.initializerId)
+
+    if (initializer.cType.length === 0 || initializer.cName.length === 0) {
+      throw new Error(`runtime initializer ${initializer.initializerId} requires C++ type and name`)
+    }
+
+    if (cNames.has(initializer.cName)) {
+      throw new Error(
+        `duplicate compiler library runtime initializer C++ name ${initializer.cName}`
+      )
+    }
+
+    cNames.add(initializer.cName)
+
+    if (!runtimeRequirementDescriptorExists(requirements, initializer.runtimeRequirement)) {
+      throw new Error(
+        `runtime initializer ${initializer.initializerId} references missing requirement ${initializer.runtimeRequirement}`
+      )
+    }
+
+    for (let argumentIndex = 0; argumentIndex < initializer.arguments.length; argumentIndex = argumentIndex + 1) {
+      const argument = initializer.arguments[argumentIndex]
+      const option = libraryOptionDescriptor(options, argument.optionId)
+
+      if (option === null) {
+        throw new Error(
+          `runtime initializer ${initializer.initializerId} references missing option ${argument.optionId}`
+        )
+      }
+
+      if (option.libraryId !== initializer.libraryId) {
+        throw new Error(
+          `runtime initializer ${initializer.initializerId} cannot use option owned by ${option.libraryId}`
+        )
+      }
+
+      validateRuntimeInitializerArgument(initializer, argument, option)
+    }
+  }
+}
+
+function validateRuntimeInitializerArgument(
+  initializer: LibraryRuntimeInitializerDescriptor,
+  argument: LibraryRuntimeInitializerArgumentDescriptor,
+  option: LibraryOptionDescriptor
+): void {
+  const mappings = argument.cValueMap ?? []
+  const argumentValueType = argument.source === 'present' ? 'boolean' : option.valueType
+
+  if (argument.cValueKind === 'mapped') {
+    validateRuntimeInitializerMappings(initializer, argument, option, mappings)
+    return
+  }
+
+  if (mappings.length > 0) {
+    throw new Error(
+      `runtime initializer ${initializer.initializerId} has C++ mappings for non-mapped option ${argument.optionId}`
+    )
+  }
+
+  if (argument.cValueKind === 'boolean') {
+    if (argumentValueType !== 'boolean') {
+      throw new Error(
+        `runtime initializer ${initializer.initializerId} boolean argument requires boolean option`
+      )
+    }
+
+    return
+  }
+
+  if (argument.cValueKind === 'number') {
+    if (argument.source !== 'value' || option.valueType !== 'number') {
+      throw new Error(
+        `runtime initializer ${initializer.initializerId} number argument requires numeric option value`
+      )
+    }
+
+    return
+  }
+
+  if (!runtimeInitializerOptionFitsUint32(option, argument.source)) {
+    throw new Error(
+      `runtime initializer ${initializer.initializerId} uint32-hex option must constrain integers from 0 to 4294967295`
+    )
+  }
+}
+
+function runtimeInitializerOptionFitsUint32(
+  option: LibraryOptionDescriptor,
+  source: 'value' | 'present'
+): boolean {
+  const minimum = option.minimum
+  const maximum = option.maximum
+
+  return (
+    source === 'value' &&
+    option.valueType === 'number' &&
+    option.integer === true &&
+    minimum !== null &&
+    typeof minimum !== 'undefined' &&
+    minimum >= 0 &&
+    maximum !== null &&
+    typeof maximum !== 'undefined' &&
+    maximum <= 4294967295
+  )
+}
+
+function validateRuntimeInitializerMappings(
+  initializer: LibraryRuntimeInitializerDescriptor,
+  argument: LibraryRuntimeInitializerArgumentDescriptor,
+  option: LibraryOptionDescriptor,
+  mappings: LibraryCValueMappingDescriptor[]
+): void {
+  if (mappings.length === 0) {
+    throw new Error(`runtime initializer ${initializer.initializerId} requires C++ mappings`)
+  }
+
+  const expectedValues = runtimeInitializerExpectedMappedValues(initializer, argument, option)
+
+  for (let index = 0; index < mappings.length; index = index + 1) {
+    const mapping = mappings[index]
+
+    if (mapping.cExpression.length === 0) {
+      throw new Error(
+        `runtime initializer ${initializer.initializerId} has empty C++ mapping for ` +
+          compilerLibraryOptionScalarText(mapping.value)
+      )
+    }
+
+    if (argument.source === 'present') {
+      if (typeof mapping.value !== 'boolean') {
+        throw new Error(
+          `runtime initializer ${initializer.initializerId} present mapping expects boolean values`
+        )
+      }
+    } else {
+      validateCompilerLibraryOptionValue(option, mapping.value)
+    }
+
+    for (let previousIndex = 0; previousIndex < index; previousIndex = previousIndex + 1) {
+      if (compilerLibraryOptionScalarsEqual(mappings[previousIndex].value, mapping.value)) {
+        throw new Error(
+          `runtime initializer ${initializer.initializerId} has duplicate C++ mapping for ` +
+            compilerLibraryOptionScalarText(mapping.value)
+        )
+      }
+    }
+  }
+
+  for (let index = 0; index < expectedValues.length; index = index + 1) {
+    if (!runtimeInitializerMappingsContain(mappings, expectedValues[index])) {
+      throw new Error(
+        `runtime initializer ${initializer.initializerId} has no C++ mapping for ` +
+          compilerLibraryOptionScalarText(expectedValues[index])
+      )
+    }
+  }
+}
+
+function runtimeInitializerExpectedMappedValues(
+  initializer: LibraryRuntimeInitializerDescriptor,
+  argument: LibraryRuntimeInitializerArgumentDescriptor,
+  option: LibraryOptionDescriptor
+): LibraryOptionScalar[] {
+  if (argument.source === 'present') {
+    return [false, true]
+  }
+
+  const allowed = option.allowedValues ?? []
+
+  if (allowed.length > 0) {
+    return allowed
+  }
+
+  if (option.valueType === 'boolean') {
+    return [false, true]
+  }
+
+  throw new Error(
+    `runtime initializer ${initializer.initializerId} mapped option ${option.optionId} requires allowed values`
+  )
+}
+
+function runtimeInitializerMappingsContain(
+  mappings: LibraryCValueMappingDescriptor[],
+  expected: LibraryOptionScalar
+): boolean {
+  for (let index = 0; index < mappings.length; index = index + 1) {
+    if (compilerLibraryOptionScalarsEqual(mappings[index].value, expected)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function validateRuntimeRequirementReferences(
+  operations: LibraryOperationDescriptor[],
+  nativeTypes: LibraryNativeTypeDescriptor[],
+  requirements: RuntimeRequirementDescriptor[]
+): void {
+  for (let index = 0; index < requirements.length; index = index + 1) {
+    const requirement = requirements[index]
+
+    for (let dependencyIndex = 0; dependencyIndex < requirement.dependencies.length; dependencyIndex = dependencyIndex + 1) {
+      const dependency = requirement.dependencies[dependencyIndex]
+
+      if (!runtimeRequirementReferenceExists(requirements, dependency)) {
+        throw new Error(
+          `runtime requirement ${requirement.id} references unknown dependency ${dependency}`
+        )
+      }
+    }
+  }
+
+  for (let index = 0; index < operations.length; index = index + 1) {
+    validateRuntimeRequirementList(
+      `operation ${operations[index].operationId}`,
+      operations[index].runtimeRequirements,
+      requirements
+    )
+  }
+
+  for (let index = 0; index < nativeTypes.length; index = index + 1) {
+    validateRuntimeRequirementList(
+      `native type ${nativeTypes[index].typeId}`,
+      nativeTypes[index].runtimeRequirements,
+      requirements
+    )
+  }
+}
+
+function validateRuntimeRequirementList(
+  label: string,
+  references: string[],
+  requirements: RuntimeRequirementDescriptor[]
+): void {
+  for (let index = 0; index < references.length; index = index + 1) {
+    if (!runtimeRequirementReferenceExists(requirements, references[index])) {
+      throw new Error(`${label} references unknown runtime requirement ${references[index]}`)
+    }
+  }
+}
+
+function runtimeRequirementReferenceExists(
+  requirements: RuntimeRequirementDescriptor[],
+  id: string
+): boolean {
+  if (runtimeRequirementDescriptorExists(requirements, id)) {
+    return true
+  }
+
+  for (let index = 0; index < compilerCoreRuntimeRequirementIds.length; index = index + 1) {
+    if (compilerCoreRuntimeRequirementIds[index] === id) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function runtimeRequirementDescriptorExists(
+  requirements: RuntimeRequirementDescriptor[],
+  id: string
+): boolean {
+  for (let index = 0; index < requirements.length; index = index + 1) {
+    if (requirements[index].id === id) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function libraryOptionDescriptor(
+  options: LibraryOptionDescriptor[],
+  optionId: string
+): LibraryOptionDescriptor | null {
+  for (let index = 0; index < options.length; index = index + 1) {
+    if (options[index].optionId === optionId) {
+      return options[index]
+    }
+  }
+
+  return null
 }
 
 function validateGlobalDeclarations(declarations: LibraryDeclarationDescriptor[]): void {
@@ -241,6 +719,8 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
     const library = libraries[index]
     const dependencyIds = sortedStrings(library.dependencies)
     const declarationIds: string[] = []
+    const optionIds: string[] = []
+    const initializerIds: string[] = []
     const nativeTypeIds: string[] = []
     const operationIds: string[] = []
     const intrinsicIds: string[] = []
@@ -282,6 +762,51 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
       )
     }
 
+    const libraryOptions = library.options ?? []
+
+    for (let itemIndex = 0; itemIndex < libraryOptions.length; itemIndex = itemIndex + 1) {
+      const item = libraryOptions[itemIndex]
+      insertSortedString(
+        optionIds,
+        item.libraryId + ':' + item.optionId + ':' + sortedStrings(item.cliAliases).join(',') + ':' +
+          item.valueType + ':' + compilerLibraryOptionScalarText(item.defaultValue) + ':' +
+          sortedOptionScalars(item.allowedValues ?? []).join(',') + ':' +
+          (item.integer === true ? 'integer' : '') + ':' +
+          (item.minimum ?? '') + ':' + (item.maximum ?? '')
+      )
+    }
+
+    const libraryInitializers = library.runtimeInitializers ?? []
+
+    for (let itemIndex = 0; itemIndex < libraryInitializers.length; itemIndex = itemIndex + 1) {
+      const item = libraryInitializers[itemIndex]
+      const argumentsFingerprint: string[] = []
+
+      for (let argumentIndex = 0; argumentIndex < item.arguments.length; argumentIndex = argumentIndex + 1) {
+        const argument = item.arguments[argumentIndex]
+        const mappings: string[] = []
+        const valueMap = argument.cValueMap ?? []
+
+        for (let mappingIndex = 0; mappingIndex < valueMap.length; mappingIndex = mappingIndex + 1) {
+          const mappingValue = valueMap[mappingIndex].value
+          mappings.push(
+            compilerLibraryOptionScalarType(mappingValue) + ':' + compilerLibraryOptionScalarText(mappingValue) +
+              '=' + valueMap[mappingIndex].cExpression
+          )
+        }
+
+        argumentsFingerprint.push(
+          argument.optionId + ':' + argument.source + ':' + argument.cValueKind + ':' + mappings.join(',')
+        )
+      }
+
+      insertSortedString(
+        initializerIds,
+        item.libraryId + ':' + item.initializerId + ':' + item.runtimeRequirement + ':' +
+          item.cType + ':' + item.cName + ':' + argumentsFingerprint.join(';')
+      )
+    }
+
     const libraryNativeTypes = library.nativeTypes ?? []
 
     for (let itemIndex = 0; itemIndex < libraryNativeTypes.length; itemIndex = itemIndex + 1) {
@@ -308,6 +833,7 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
         item.id + ':deps=' + sortedStrings(item.dependencies).join(',') +
           ':includes=' + sortedStrings(item.cPreludeIncludes).join(',') +
           ':capabilities=' + sortedStrings(item.capabilities).join(',') +
+          ':conditional=' + runtimeConditionalCapabilitiesFingerprint(item) +
           ':backend=' + runtimeBackendConstraintsFingerprint(item) +
           ':entrypoint=' + runtimeEntrypointAdapterFingerprint(item)
       )
@@ -317,6 +843,8 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
       library.id +
         '|deps=' + dependencyIds.join(',') +
         '|decl=' + declarationIds.join(',') +
+        '|options=' + optionIds.join(',') +
+        '|initializers=' + initializerIds.join(',') +
         '|types=' + nativeTypeIds.join(',') +
         '|ops=' + operationIds.join(',') +
         '|intrinsics=' + intrinsicIds.join(',') +
@@ -465,6 +993,29 @@ function runtimeBackendConstraintsFingerprint(requirement: RuntimeRequirementDes
   return rows.join(';')
 }
 
+function runtimeConditionalCapabilitiesFingerprint(requirement: RuntimeRequirementDescriptor): string {
+  const capabilities = requirement.conditionalCapabilities ?? []
+  const rows: string[] = []
+
+  for (let index = 0; index < capabilities.length; index = index + 1) {
+    const item = capabilities[index]
+    const conditions: string[] = []
+
+    for (let conditionIndex = 0; conditionIndex < item.conditions.length; conditionIndex = conditionIndex + 1) {
+      const condition = item.conditions[conditionIndex]
+      conditions.push(
+        condition.optionId + ':' + condition.source + ':' +
+          sortedOptionScalars(condition.values).join(',')
+      )
+    }
+
+    rows.push(item.capability + ':' + conditions.join('&'))
+  }
+
+  rows.sort()
+  return rows.join(';')
+}
+
 function operationResultShapeFingerprint(operation: LibraryOperationDescriptor): string {
   const fields = operation.resultShapeFields
 
@@ -579,6 +1130,19 @@ function sortedStrings(values: string[]): string[] {
   return result
 }
 
+function sortedOptionScalars(values: Array<string | number | boolean>): string[] {
+  const result: string[] = []
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    insertSortedString(
+      result,
+      compilerLibraryOptionScalarType(values[index]) + ':' + compilerLibraryOptionScalarText(values[index])
+    )
+  }
+
+  return result
+}
+
 function insertSortedString(values: string[], value: string): void {
   values.push(value)
   let index = values.length - 1
@@ -592,6 +1156,21 @@ function insertSortedString(values: string[], value: string): void {
 }
 
 function pushDeclarations(target: LibraryDeclarationDescriptor[], values: LibraryDeclarationDescriptor[]): void {
+  for (let index = 0; index < values.length; index = index + 1) {
+    target.push(values[index])
+  }
+}
+
+function pushLibraryOptions(target: LibraryOptionDescriptor[], values: LibraryOptionDescriptor[]): void {
+  for (let index = 0; index < values.length; index = index + 1) {
+    target.push(values[index])
+  }
+}
+
+function pushRuntimeInitializers(
+  target: LibraryRuntimeInitializerDescriptor[],
+  values: LibraryRuntimeInitializerDescriptor[]
+): void {
   for (let index = 0; index < values.length; index = index + 1) {
     target.push(values[index])
   }

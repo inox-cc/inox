@@ -38,11 +38,6 @@ export {
 } from '../fetch/compiler/descriptor.ts'
 export { jsonRuntimeMethodNameFromPath } from '../json/compiler/descriptor.ts'
 export {
-  knownMathRuntimeArgCount,
-  mathRuntimeArgCount,
-  mathRuntimeMethodNameFromPath
-} from '../math/compiler/descriptor.ts'
-export {
   dateConstructorRuntimeMethodNameFromPath,
   dateInstanceRuntimeMethodName,
   dateInstanceRuntimeMethodReturnType,

@@ -365,11 +365,6 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.jsonRuntimeMethod = jsonRuntimeMethod
   }
 
-  const mathRuntimeMethod = nullableString(source.mathRuntimeMethod)
-  if (mathRuntimeMethod !== null && typeof mathRuntimeMethod !== 'undefined') {
-    target.mathRuntimeMethod = mathRuntimeMethod
-  }
-
   const libraryBindingId = nullableString(source.libraryBindingId)
   if (libraryBindingId !== null && typeof libraryBindingId !== 'undefined') {
     target.libraryBindingId = libraryBindingId
@@ -446,6 +441,8 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
 
   copyStringMetadataArray(target, source, 'libraryRuntimeRequirements')
   copyStringMetadataArray(target, source, 'libraryCapabilities')
+  copyStringMetadataArray(target, source, 'narrowingTrueNames')
+  copyStringMetadataArray(target, source, 'narrowingFalseNames')
 
   const objectRuntimeMethod = nullableString(source.objectRuntimeMethod)
   if (objectRuntimeMethod !== null && typeof objectRuntimeMethod !== 'undefined') {
@@ -1679,12 +1676,8 @@ function inferConditionalExpressionType(consequent: LowerExpressionNode, alterna
     return consequentType
   }
 
-  if (consequentType === 'unknown') {
-    return alternateType
-  }
-
-  if (alternateType === 'unknown') {
-    return consequentType
+  if (consequentType === 'unknown' || alternateType === 'unknown') {
+    return 'unknown'
   }
 
   return 'unknown'

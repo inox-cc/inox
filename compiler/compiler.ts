@@ -193,9 +193,9 @@ function compileOptionsWithNodeHost(options: CompileOptions): CompileOptions {
     declarationImports: options.declarationImports,
     host,
     libraries: options.libraries,
+    libraryOptions: options.libraryOptions,
     loopBackend: options.loopBackend,
     profile: options.profile,
-    random: options.random,
     tlsBackend: options.tlsBackend
   }
 }
@@ -210,9 +210,9 @@ function cModuleOptionsWithNodeHost(options: CModuleCompileOptions): CModuleComp
       declarationImports: options.declarationImports,
       host: options.host,
       libraries: options.libraries,
+      libraryOptions: options.libraryOptions,
       loopBackend: options.loopBackend,
       profile: options.profile,
-      random: options.random,
       tlsBackend: options.tlsBackend,
       sourceRoot: options.sourceRoot
     }
@@ -245,9 +245,9 @@ function cModuleOptionsWithNodeHost(options: CModuleCompileOptions): CModuleComp
       shortHash: shortHashNodeCompilerHost
     },
     libraries: options.libraries,
+    libraryOptions: options.libraryOptions,
     loopBackend: options.loopBackend,
     profile: options.profile,
-    random: options.random,
     tlsBackend: options.tlsBackend,
     sourceRoot: options.sourceRoot
   }

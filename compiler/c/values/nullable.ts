@@ -333,6 +333,18 @@ export function resolveNullableScalarConditionNarrowing(
     }
   }
 
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    const trueNames = expression.narrowingTrueNames ?? []
+    const falseNames = expression.narrowingFalseNames ?? []
+
+    if (trueNames.length > 0 || falseNames.length > 0) {
+      return {
+        trueNames,
+        falseNames
+      }
+    }
+  }
+
   if (expression.type !== 'BinaryExpression') {
     return resolveNullableScalarTruthinessNarrowing(expression, context)
   }

@@ -3613,12 +3613,20 @@ export function emitNativeClassFieldAssignment(
   pushAllLines(lines, value.lines)
 
   if (access.field.valueType === 'number' || access.field.valueType === 'date') {
-    lines.push(`${access.reference} = ${value.expression}.as.number;`)
+    if (value.scalarType === 'double' || value.cppType === 'double') {
+      lines.push(`${access.reference} = ${value.expression};`)
+    } else {
+      lines.push(`${access.reference} = ${value.expression}.as.number;`)
+    }
     return lines
   }
 
   if (access.field.valueType === 'boolean') {
-    lines.push(`${access.reference} = ${value.expression}.as.boolean;`)
+    if (value.scalarType === 'bool' || value.cppType === 'bool') {
+      lines.push(`${access.reference} = ${value.expression};`)
+    } else {
+      lines.push(`${access.reference} = ${value.expression}.as.boolean;`)
+    }
     return lines
   }
 

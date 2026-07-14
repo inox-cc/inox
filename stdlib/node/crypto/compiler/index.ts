@@ -120,7 +120,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: ['binary', 'collections', 'managed-values', 'string-bytes'],
+      dependencies: ['global:binary', 'collections', 'managed-values', 'string-bytes'],
       cPreludeIncludes: ['inox/crypto.h'],
       capabilities: [],
       backendConstraints: [

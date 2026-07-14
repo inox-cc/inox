@@ -5,7 +5,9 @@ import { checkProgram } from './checker.ts'
 import { emitCBundleFromIrModules, emitCFromIr, emitCModuleFilesFromGraph } from './codegen-c.ts'
 import type { CompilerHost } from './host.ts'
 import { resolveCompilerLibrarySet } from './extensions/library-set.ts'
+import { compilerLibraryOptionsFingerprint } from './extensions/library-options.ts'
 import type { CompilerLibrarySet } from './extensions/types.ts'
+import type { CompilerLibraryOptionValue } from './extensions/types.ts'
 import { collectIrModuleRecords, collectIrRuntimeRequirements, lowerHirToIr } from './ir.ts'
 import type { IrModuleRecord } from './ir/top-level.ts'
 import { tokenize } from './lexer.ts'
@@ -22,7 +24,6 @@ import type {
   ModuleDeclarationImport,
   ModuleGraph,
   ProgramNode,
-  RandomOptions,
   RuntimeBudgets,
   RuntimeCapabilities,
   RuntimeLoopBackend,
@@ -39,9 +40,9 @@ export type CModuleCompileOptions = {
   declarationImports?: ModuleDeclarationImport[]
   host?: CompilerHost
   libraries?: CompilerLibrarySet
+  libraryOptions?: CompilerLibraryOptionValue[]
   loopBackend?: RuntimeLoopBackend
   profile?: RuntimeProfile
-  random?: RandomOptions
   tlsBackend?: TlsBackend
   sourceRoot?: string
 }
@@ -53,9 +54,9 @@ export type MemoryCompileOptions = {
   capabilities?: RuntimeCapabilities
   declarationImports?: ModuleDeclarationImport[]
   libraries?: CompilerLibrarySet
+  libraryOptions?: CompilerLibraryOptionValue[]
   loopBackend?: RuntimeLoopBackend
   profile?: RuntimeProfile
-  random?: RandomOptions
   root?: string
   tlsBackend?: TlsBackend
 }
@@ -67,9 +68,9 @@ export type MemoryCModuleCompileOptions = {
   capabilities?: RuntimeCapabilities
   declarationImports?: ModuleDeclarationImport[]
   libraries?: CompilerLibrarySet
+  libraryOptions?: CompilerLibraryOptionValue[]
   loopBackend?: RuntimeLoopBackend
   profile?: RuntimeProfile
-  random?: RandomOptions
   root?: string
   tlsBackend?: TlsBackend
   sourceRoot?: string
@@ -120,7 +121,11 @@ export function compileSourceToIr(source: string, options: CompileOptions = {}):
   const ast = parse(tokens)
   const checked = checkProgram(ast, compileOptionsWithTargetAndLibraries(options, target, libraries))
   const hir = lowerProgram(checked.ast, libraries)
-  const ir = lowerHirToIr(hir, libraries.fingerprint)
+  const ir = lowerHirToIr(
+    hir,
+    libraries.fingerprint,
+    compilerLibraryOptionsFingerprint(libraries, options.libraryOptions)
+  )
 
   return {
     target,
@@ -215,7 +220,7 @@ export function compileFileToCModulesWithHostSync(
     callMain: options.callMain,
     host,
     libraries: options.libraries,
-    random: options.random,
+    libraryOptions: options.libraryOptions,
     sourceRoot: options.sourceRoot
   }
 
@@ -257,7 +262,7 @@ export function compileFileToCModuleTextsWithHostSync(
     callMain: options.callMain,
     host,
     libraries: options.libraries,
-    random: options.random,
+    libraryOptions: options.libraryOptions,
     sourceRoot: options.sourceRoot
   }
   const files: CModuleTextFile[] = emitCModuleFilesFromGraph(compiled.graph, emitOptions)
@@ -358,9 +363,9 @@ function compileOptionsWithTargetAndLibraries(
     declarationImports: options.declarationImports,
     host: options.host,
     libraries,
+    libraryOptions: options.libraryOptions,
     loopBackend: options.loopBackend,
     profile: options.profile,
-    random: options.random,
     tlsBackend: options.tlsBackend
   }
 }
@@ -378,9 +383,9 @@ function compileOptionsWithHostAndTarget(
     declarationImports: options.declarationImports,
     host,
     libraries: options.libraries,
+    libraryOptions: options.libraryOptions,
     loopBackend: options.loopBackend,
     profile: options.profile,
-    random: options.random,
     tlsBackend: options.tlsBackend
   }
 }
@@ -398,9 +403,9 @@ function cModuleOptionsWithHostAndTarget(
     declarationImports: options.declarationImports,
     host,
     libraries: options.libraries,
+    libraryOptions: options.libraryOptions,
     loopBackend: options.loopBackend,
     profile: options.profile,
-    random: options.random,
     tlsBackend: options.tlsBackend
   }
 }
@@ -414,9 +419,9 @@ function memoryCompileOptions(options: MemoryCompileOptions, host: any): Compile
     declarationImports: options.declarationImports,
     host,
     libraries: options.libraries,
+    libraryOptions: options.libraryOptions,
     loopBackend: options.loopBackend,
     profile: options.profile,
-    random: options.random,
     tlsBackend: options.tlsBackend
   }
 }
@@ -432,20 +437,29 @@ function memoryCModuleCompileOptions(options: MemoryCModuleCompileOptions, host:
     declarationImports: base.declarationImports,
     host: base.host,
     libraries: base.libraries,
+    libraryOptions: base.libraryOptions,
     loopBackend: base.loopBackend,
     profile: base.profile,
-    random: base.random,
     tlsBackend: base.tlsBackend,
     sourceRoot: options.sourceRoot
   }
 }
 
 function assertIrLibrarySetFingerprint(ir: IrProgram, options: CompileOptions): void {
-  const actual = resolveCompilerLibrarySet(options.libraries).fingerprint
+  const libraries = resolveCompilerLibrarySet(options.libraries)
+  const actual = libraries.fingerprint
 
   if (ir.librarySetFingerprint !== actual) {
     throw new Error(
       `Compiler library set fingerprint mismatch: IR uses ${ir.librarySetFingerprint}, emission uses ${actual}`
+    )
+  }
+
+  const actualOptions = compilerLibraryOptionsFingerprint(libraries, options.libraryOptions)
+
+  if (ir.libraryOptionsFingerprint !== actualOptions) {
+    throw new Error(
+      `Compiler library options fingerprint mismatch: IR uses ${ir.libraryOptionsFingerprint}, emission uses ${actualOptions}`
     )
   }
 }

@@ -220,6 +220,12 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('cases', 'array', null, false, loc, {
         arrayElementType: 'object'
       }),
+      anyNodeField('narrowingFalseNames', 'array', null, false, loc, {
+        arrayElementType: 'string'
+      }),
+      anyNodeField('narrowingTrueNames', 'array', null, false, loc, {
+        arrayElementType: 'string'
+      }),
       anyNodeField('specifiers', 'array', null, false, loc, {
         arrayElementType: 'object',
         arrayElementDeclaredType: 'AnyNode'
@@ -506,12 +512,8 @@ export function conditionalExpressionValueType(consequentType: ValueType, altern
     return consequentType
   }
 
-  if (consequentType === 'unknown') {
-    return alternateType
-  }
-
-  if (alternateType === 'unknown') {
-    return consequentType
+  if (consequentType === 'unknown' || alternateType === 'unknown') {
+    return 'unknown'
   }
 
   return 'unknown'

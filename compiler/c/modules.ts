@@ -1,5 +1,6 @@
 import { diagnostic, throwDiagnostics } from '../diagnostics.ts'
 import { resolveCompilerLibrarySet } from '../extensions/library-set.ts'
+import { compilerLibraryOptionsFingerprint } from '../extensions/library-options.ts'
 import type { CompilerHost } from '../host.ts'
 import { collectIrTopLevelNodes, lowerHirToIr } from '../ir.ts'
 import { emitModuleDeclarationContractResult } from '../modules/declarations.ts'
@@ -87,7 +88,8 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
     const declarationPath = replaceCModuleExtension(relativeSourcePath, '.d.ts', host)
     const symbolPrefix = cModuleSymbolPrefix(relativeSourcePath, record.path, host)
     let initName: CModuleInitName = null
-    const isEntry = record.path === graph.entry && options.callMain !== false
+    const isGraphEntry = record.path === graph.entry
+    const isEntry = isGraphEntry && options.callMain !== false
 
     if (!isEntry) {
       initName = `${symbolPrefix}_init`
@@ -97,6 +99,7 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
       record,
       ir,
       external: record.external === true,
+      isGraphEntry,
       isEntry,
       relativeSourcePath,
       sourcePath,
@@ -288,9 +291,11 @@ function cModulePlanIr(record: ModuleRecord, options: CModuleEmitOptions): IrPro
     record.declarationProgram !== null &&
     typeof record.declarationProgram !== 'undefined'
   ) {
+    const libraries = resolveCompilerLibrarySet(options.libraries)
     const ir = lowerHirToIr(
       record.declarationProgram,
-      resolveCompilerLibrarySet(options.libraries).fingerprint
+      libraries.fingerprint,
+      compilerLibraryOptionsFingerprint(libraries, options.libraryOptions)
     )
     const externalFunctionEffects = record.externalFunctionEffects
 
@@ -299,6 +304,7 @@ function cModulePlanIr(record: ModuleRecord, options: CModuleEmitOptions): IrPro
         type: ir.type,
         version: ir.version,
         librarySetFingerprint: ir.librarySetFingerprint,
+        libraryOptionsFingerprint: ir.libraryOptionsFingerprint,
         features: ir.features,
         runtimeRequirements: ir.runtimeRequirements,
         topLevelItems: ir.topLevelItems,

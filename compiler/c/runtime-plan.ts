@@ -6,10 +6,7 @@ import {
   dateInstanceRuntimeMethodReturnType
 } from '../../stdlib/global/compiler/descriptor.ts'
 import type { AnyNode, IrGlobalUsage, IrProgram, IrRuntimeRequirement } from '../types.ts'
-import {
-  isSupportedCFetchGlobalUsage,
-  isSupportedCMathGlobalUsage
-} from './diagnostics.ts'
+import { isSupportedCFetchGlobalUsage } from './diagnostics.ts'
 import { irProgramsUseConsoleRuntime } from '../../stdlib/global/compiler/c.ts'
 import type {
   CompilerLibrarySet,
@@ -20,7 +17,6 @@ import type {
 export type CRuntimePreludeRequirements = {
   needsRuntime: boolean
   needsTimeRuntime: boolean
-  needsMathRuntime: boolean
   needsDebugMemoryRuntime: boolean
   needsAsyncRuntime: boolean
   needsCallbackRuntime: boolean
@@ -37,6 +33,7 @@ export type CRuntimePreludeRequirements = {
   needsFetchRuntime: boolean
   runtimeEntrypointAdapter: RuntimeEntrypointAdapterDescriptor | null
   libraryCPreludeIncludes: string[]
+  libraryRuntimeRequirements: string[]
 }
 
 export type CRuntimePreludeRequirementInput = {
@@ -131,7 +128,6 @@ export function resolveCRuntimePreludeRequirements(
     runtimeRequirements.has('clocks') ||
     needsAsyncRuntime ||
     needsFetchRuntime
-  const needsMathRuntime = runtimePlanHasSupportedMathGlobalUsage(input.globalUsages)
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(input.irPrograms)
   const needsStringHeader =
     runtimeRequirements.has('string-bytes') ||
@@ -141,7 +137,6 @@ export function resolveCRuntimePreludeRequirements(
   return {
     needsRuntime,
     needsTimeRuntime,
-    needsMathRuntime,
     needsDebugMemoryRuntime,
     needsAsyncRuntime,
     needsCallbackRuntime,
@@ -157,7 +152,8 @@ export function resolveCRuntimePreludeRequirements(
     needsConsoleRuntime,
     needsFetchRuntime,
     runtimeEntrypointAdapter: libraryRuntime.entrypointAdapter,
-    libraryCPreludeIncludes: libraryRuntime.includes
+    libraryCPreludeIncludes: libraryRuntime.includes,
+    libraryRuntimeRequirements: orderedRuntimeRequirementIds(libraryRuntime.requirements)
   }
 }
 
@@ -471,18 +467,6 @@ function runtimePlanHasSupportedFetchGlobalUsage(globalUsages: IrGlobalUsage[]):
     const usage = globalUsages[index] as IrGlobalUsage
 
     if (isSupportedCFetchGlobalUsage(usage)) {
-      return true
-    }
-  }
-
-  return false
-}
-
-function runtimePlanHasSupportedMathGlobalUsage(globalUsages: IrGlobalUsage[]): boolean {
-  for (let index = 0; index < globalUsages.length; index = index + 1) {
-    const usage = globalUsages[index] as IrGlobalUsage
-
-    if (isSupportedCMathGlobalUsage(usage)) {
       return true
     }
   }

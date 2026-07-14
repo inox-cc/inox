@@ -3,7 +3,11 @@
 import { compileFileSync, compileFileToCModuleTextsSync } from './compiler.ts'
 import type { CModuleCompileOptions } from './core.ts'
 import { formatDiagnostics } from './diagnostics.ts'
-import type { CompilerLibrarySet } from './extensions/types.ts'
+import {
+  compilerLibraryOptionForCliAlias,
+  parseCompilerLibraryOptionCliValue
+} from './extensions/library-options.ts'
+import type { CompilerLibraryOptionValue, CompilerLibrarySet } from './extensions/types.ts'
 import type { CompileOptions, Diagnostic, RuntimeLoopBackend, TlsBackend } from './types.ts'
 
 type DiagnosticError = {
@@ -32,6 +36,7 @@ type CliPlan = {
   hasOutDir: boolean
   hasOutput: boolean
   input: string
+  libraryOptions: CompilerLibraryOptionValue[]
   loopBackend: RuntimeLoopBackend | null
   outDir: string
   output: string
@@ -62,15 +67,26 @@ function defaultOutputPath(input: string): string {
   return input + '.cc'
 }
 
-function usage(): string {
-  return 'Usage:\n  inox --help\n  inox input.ts [output.cc]\n  inox input.ts --emit cc [-o output.cc] [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]\n  inox input.ts --emit cc --out-dir generated --entry [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]\n\nCompiles a TypeScript entry file to C++ source.\nIf output.cc is omitted, inox writes input.cc.'
+function usage(libraries: CompilerLibrarySet): string {
+  let source = 'Usage:\n  inox --help\n  inox input.ts [output.cc]\n  inox input.ts --emit cc [-o output.cc] [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]\n  inox input.ts --emit cc --out-dir generated --entry [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]\n\nCompiles a TypeScript entry file to C++ source.\nIf output.cc is omitted, inox writes input.cc.'
+  const options = libraries.options ?? []
+
+  if (options.length > 0) {
+    source = source + '\n\nLibrary options:'
+
+    for (let index = 0; index < options.length; index = index + 1) {
+      source = source + '\n  ' + options[index].cliAliases.join(', ')
+    }
+  }
+
+  return source
 }
 
 function isHelpArgument(value: string): boolean {
   return value === '--help' || value === '-h'
 }
 
-function parseCliArgs(args: string[]): CliParseResult {
+function parseCliArgs(args: string[], libraries: CompilerLibrarySet): CliParseResult {
   if (args.length === 0) {
     return failCliParse('missing input file')
   }
@@ -90,6 +106,7 @@ function parseCliArgs(args: string[]): CliParseResult {
   let hasOutDir = false
   let hasOutput = false
   let input: string | null = null
+  const libraryOptions: CompilerLibraryOptionValue[] = []
   let loopBackend: RuntimeLoopBackend | null = null
   let outDir = ''
   let output = ''
@@ -152,7 +169,23 @@ function parseCliArgs(args: string[]): CliParseResult {
 
       tlsBackend = value
     } else if (arg.startsWith('-')) {
-      return failCliParse(`unknown option ${arg}`)
+      const descriptor = compilerLibraryOptionForCliAlias(libraries, arg)
+
+      if (descriptor === null) {
+        return failCliParse(`unknown option ${arg}`)
+      }
+
+      const value = args[index + 1]
+      index = index + 1
+
+      if (value === null || typeof value === 'undefined' || value.length === 0) {
+        return failCliParse(`${arg} expects a value`)
+      }
+
+      libraryOptions.push({
+        optionId: descriptor.optionId,
+        value: parseCompilerLibraryOptionCliValue(descriptor, value)
+      })
     } else if (input === null) {
       input = arg
     } else if (!hasOutput && !emitCc && !hasOutDir) {
@@ -192,6 +225,7 @@ function parseCliArgs(args: string[]): CliParseResult {
       hasOutDir,
       hasOutput,
       input,
+      libraryOptions,
       loopBackend,
       outDir,
       output,
@@ -225,6 +259,8 @@ function compileOptions(plan: CliPlan, libraries: CompilerLibrarySet): CompileOp
     options.loopBackend = plan.loopBackend
   }
 
+  options.libraryOptions = plan.libraryOptions
+
   if (plan.tlsBackend !== null) {
     options.tlsBackend = plan.tlsBackend
   }
@@ -247,6 +283,8 @@ function cModuleCompileOptions(
   if (plan.loopBackend !== null) {
     options.loopBackend = plan.loopBackend
   }
+
+  options.libraryOptions = plan.libraryOptions
 
   if (plan.tlsBackend !== null) {
     options.tlsBackend = plan.tlsBackend
@@ -370,24 +408,26 @@ function errorMessage(error: unknown): string | null {
   return null
 }
 
-export function runCompilerCli(libraries: CompilerLibrarySet, environment: CliEnvironment): void {
+function executeCompilerCli(libraries: CompilerLibrarySet, environment: CliEnvironment): boolean {
   try {
-    const parsed = parseCliArgs(userArgs(environment.args))
+    const parsed = parseCliArgs(userArgs(environment.args), libraries)
 
     if (!parsed.ok) {
       const parseError = parsed.error ?? 'invalid CLI arguments'
 
       environment.error(parseError)
       environment.error('')
-      environment.error(usage())
-      environment.setExitCode(1)
+      environment.error(usage(libraries))
+      return false
     } else if (parsed.help) {
-      environment.log(usage())
+      environment.log(usage(libraries))
     } else if (parsed.plan !== null && parsed.plan.hasOutDir) {
       writeCModules(parsed.plan, libraries, environment)
     } else if (parsed.plan !== null) {
       writeBundledC(parsed.plan, libraries, environment)
     }
+
+    return true
   } catch (error) {
     const diagnostics = errorDiagnostics(error)
 
@@ -402,6 +442,13 @@ export function runCompilerCli(libraries: CompilerLibrarySet, environment: CliEn
         environment.error('INOX BUILD ERROR')
       }
     }
+
+    return false
+  }
+}
+
+export function runCompilerCli(libraries: CompilerLibrarySet, environment: CliEnvironment): void {
+  if (!executeCompilerCli(libraries, environment)) {
     environment.setExitCode(1)
   }
 }

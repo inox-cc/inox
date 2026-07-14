@@ -165,13 +165,14 @@ type CFunctionContext = {
   functionThrowValueTypes: Map<string, IrFunctionEffect['throwValueTypes']>
   functionTypes: Map<string, CFunctionType>
   jsGlobalRoots: CStringSet
-  mathRuntimeInitStatement: string | null
+  runtimeInitializerDefinitions: string[]
   localValueNames: CStringSet
   mapTypes: Map<string, CFunctionReturnMapType>
   moduleObjectShapes: Map<string, CObjectShapeField[]>
   moduleValueDeclarationScope: boolean
   moduleValueCppTypes: CStringMap
   moduleValueNames: CStringMap
+  moduleRuntimeValueNames: CStringSet
   moduleValueTypes: CStringMap
   narrowedNullableScalars: CStringSet
   nextId: number
@@ -204,6 +205,7 @@ type CFunctionContext = {
   runtimeCallbacks: CStringSet
   runtimeStrings: CStringSet
   runtimeStringValues: CStringMap
+  runtimeValueStorageNames: CStringSet
   runtimeFunctionParams: Map<string, CFunctionType>
   setElementTypes: CStringMap
   statementLoweringDependencies: StatementLoweringDependencies
@@ -1792,6 +1794,7 @@ export function registerRuntimeValueMetadata(
   context: CFunctionContext
 ): void {
   context.variables.set(name, valueType)
+  context.runtimeValueStorageNames.add(name)
 
   if (valueType === 'object') {
     registerObjectShape(context, name, resolveRuntimeObjectShape(declaration, expression, context))
@@ -3956,6 +3959,7 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
   }
 
   context.localValueNames.add(statement.name)
+  context.runtimeValueStorageNames.delete(statement.name)
 
   if (statement.init !== null && typeof statement.init !== 'undefined') {
     const arrayReduceCall = deps.emitPreparedArrayReduceCallExpression(statement.init, context)
@@ -4266,6 +4270,10 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
 
   if (isRuntimeValueLocalExpression(statement.init, context)) {
     return emitRuntimeValueVariableDeclaration(statement, statement.init, context)
+  }
+
+  if (isOpaqueRuntimeValueType(statement.valueType)) {
+    return emitRuntimeValueVariableDeclaration(statement, statement.init, context, statement.valueType)
   }
 
   if (isDynamicRuntimeValueDeclaration(statement, context)) {

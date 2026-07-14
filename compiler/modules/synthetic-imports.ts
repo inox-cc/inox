@@ -12,6 +12,7 @@ type TypeAliasValueNode = {
   baseTypes: string[]
   fields: AnyNode[]
   dynamic?: boolean
+  dynamicField?: AnyNode | null
 }
 
 type TypeAliasDeclarationNode = {
@@ -437,20 +438,27 @@ function collectTypeAliasDependencyNames(valueType: TypeAliasValueNode, names: s
     }
 
     for (let fieldIndex = 0; fieldIndex < valueType.fields.length; fieldIndex = fieldIndex + 1) {
-      const field = valueType.fields[fieldIndex]
-
-      collectTypeNameDependencyNames(field.valueType, names)
-
-      if (field.functionType !== null && typeof field.functionType !== 'undefined') {
-        collectTypeAliasDependencyNames(field.functionType, names)
-      }
-
-      const functionOverloads: AnyNode[] = field.functionOverloads ?? []
-
-      for (const overload of functionOverloads) {
-        collectTypeAliasDependencyNames(overload as TypeAliasValueNode, names)
-      }
+      collectTypeAliasFieldDependencyNames(valueType.fields[fieldIndex], names)
     }
+
+    if (valueType.dynamicField !== null && typeof valueType.dynamicField !== 'undefined') {
+      collectTypeAliasFieldDependencyNames(valueType.dynamicField, names)
+    }
+  }
+}
+
+function collectTypeAliasFieldDependencyNames(field: AnyNode, names: string[]): void {
+  collectTypeNameDependencyNames(field.valueType, names)
+  collectTypeNameDependencyNames(field.declaredType, names)
+
+  if (field.functionType !== null && typeof field.functionType !== 'undefined') {
+    collectTypeAliasDependencyNames(field.functionType, names)
+  }
+
+  const functionOverloads: AnyNode[] = field.functionOverloads ?? []
+
+  for (const overload of functionOverloads) {
+    collectTypeAliasDependencyNames(overload as TypeAliasValueNode, names)
   }
 }
 
@@ -482,6 +490,7 @@ function cloneTypeAliasValue(valueType: TypeAliasValueNode): AnyNode {
       kind: 'object',
       baseTypes: cloneStringArray(stringArray(valueType.baseTypes)),
       dynamic: valueType.dynamic === true,
+      dynamicField: cloneNullableTypeAliasField(valueType.dynamicField),
       fields: cloneTypeAliasFields(valueType.fields)
     }
   }
@@ -637,6 +646,14 @@ function cloneTypeAliasField(field: AnyNode): AnyNode {
     functionOverloads: nullableNodeValue(field.functionOverloads),
     className: nullableNodeValue(field.className)
   }
+}
+
+function cloneNullableTypeAliasField(field: AnyNode | null | undefined): AnyNode | null {
+  if (field === null || typeof field === 'undefined') {
+    return null
+  }
+
+  return cloneTypeAliasField(field)
 }
 
 function cloneParams(params: AnyNode[]): AnyNode[] {

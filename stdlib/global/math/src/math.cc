@@ -16,7 +16,11 @@
 #endif
 #endif
 
-Math::Math() : random_state_(0x6d2b79f5u), random_backend_(MathRandomBackend::Simple) {}
+MathObject::MathObject(uint32_t seed, bool seed_configured, MathRandomBackend backend)
+  : random_state_(seed),
+    random_backend_(backend == MathRandomBackend::Auto
+      ? (seed_configured ? MathRandomBackend::Simple : MathRandomBackend::Os)
+      : backend) {}
 
 static double math_reduce_radians(double value) {
   const double pi = 3.14159265358979323846;
@@ -102,54 +106,44 @@ static int math_os_random_bytes(uint8_t* out, size_t len) {
 #endif
 }
 
-void Math::init(uint32_t seed) const {
-  random_state_ = seed;
-  random_backend_ = MathRandomBackend::Simple;
-}
-
-void Math::init(uint32_t seed, MathRandomBackend backend) const {
-  random_state_ = seed;
-  random_backend_ = backend;
-}
-
-double Math::abs(double value) const {
+double MathObject::abs(double value) const {
   return value < 0 ? -value : value;
 }
 
-double Math::floor(double value) const {
+double MathObject::floor(double value) const {
   long long truncated = (long long)value;
   return (double)truncated > value ? (double)(truncated - 1) : (double)truncated;
 }
 
-double Math::ceil(double value) const {
+double MathObject::ceil(double value) const {
   long long truncated = (long long)value;
   return (double)truncated < value ? (double)(truncated + 1) : (double)truncated;
 }
 
-double Math::round(double value) const {
+double MathObject::round(double value) const {
   double shifted = value + 0.5;
   long long truncated = (long long)shifted;
 
   return (double)truncated > shifted ? (double)(truncated - 1) : (double)truncated;
 }
 
-double Math::trunc(double value) const {
+double MathObject::trunc(double value) const {
   return (double)((long long)value);
 }
 
-double Math::fround(double value) const {
+double MathObject::fround(double value) const {
   return (double)((float)value);
 }
 
-double Math::min(double left, double right) const {
+double MathObject::min(double left, double right) const {
   return left < right ? left : right;
 }
 
-double Math::max(double left, double right) const {
+double MathObject::max(double left, double right) const {
   return left > right ? left : right;
 }
 
-double Math::sqrt(double value) const {
+double MathObject::sqrt(double value) const {
   if (value < 0) return 0.0/0.0;
   if (value == 0) return 0;
 
@@ -162,7 +156,7 @@ double Math::sqrt(double value) const {
   return estimate;
 }
 
-double Math::sin(double value) const {
+double MathObject::sin(double value) const {
   double x = math_reduce_radians(value);
   double x2 = x * x;
 
@@ -175,7 +169,7 @@ double Math::sin(double value) const {
   );
 }
 
-double Math::cos(double value) const {
+double MathObject::cos(double value) const {
   double x = math_reduce_radians(value);
   double x2 = x * x;
 
@@ -187,7 +181,7 @@ double Math::cos(double value) const {
     (x2 * x2 * x2 * x2)/40320;
 }
 
-double Math::random() const {
+double MathObject::random() const {
   if (random_backend_ == MathRandomBackend::Xorshift32) {
     return math_xorshift32_random(&random_state_);
   }
@@ -202,5 +196,3 @@ double Math::random() const {
 
   return math_simple_random(&random_state_);
 }
-
-class Math Math;

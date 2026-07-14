@@ -716,9 +716,40 @@ export function resolveFieldDeclaredType(
     return resolveWeakFieldDeclaredType(context, field)
   }
 
+  if (
+    (field.declaredType === null || typeof field.declaredType === 'undefined') &&
+    (field.loc === null || typeof field.loc === 'undefined')
+  ) {
+    return resolvedSyntheticFieldType(field)
+  }
+
   const declaredType = nodeDeclaredTypeOrValueType(field)
 
   return resolveDeclaredType(context, declaredType, field.loc)
+}
+
+function resolvedSyntheticFieldType(field: AnyNode): ResolvedTypeInfo {
+  const info = unresolvedTypeInfo()
+
+  if (field.valueType !== null && typeof field.valueType !== 'undefined') {
+    info.valueType = field.valueType
+  }
+
+  info.nullable = field.nullable === true
+  info.functionType = field.functionType ?? null
+  info.shape = field.shape ?? null
+  info.arrayElementType = field.arrayElementType ?? null
+  info.arrayElementDeclaredType = field.arrayElementDeclaredType ?? null
+  info.arrayElementFunctionType = field.arrayElementFunctionType ?? null
+  info.mapKeyType = field.mapKeyType ?? null
+  info.mapValueType = field.mapValueType ?? null
+  info.mapValueShape = field.mapValueShape ?? null
+  info.mapValueArrayElementType = field.mapValueArrayElementType ?? null
+  info.mapValueArrayElementDeclaredType = field.mapValueArrayElementDeclaredType ?? null
+  info.promiseValueType = field.promiseValueType ?? null
+  info.setElementType = field.setElementType ?? null
+
+  return info
 }
 
 export function resolveWeakFieldDeclaredType(

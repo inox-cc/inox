@@ -1,10 +1,10 @@
 import type { CompilerHost } from '../host.ts'
-import type { CompilerLibrarySet } from '../extensions/types.ts'
-import type { AnyNode, IrProgram, ModuleRecord, RandomOptions } from '../types.ts'
+import type { CompilerLibraryOptionValue, CompilerLibrarySet } from '../extensions/types.ts'
+import type { AnyNode, IrProgram, ModuleRecord } from '../types.ts'
 
 export type CEmitOptions = {
   libraries?: CompilerLibrarySet
-  random?: RandomOptions
+  libraryOptions?: CompilerLibraryOptionValue[]
 }
 
 export type CPreparedExpression = {
@@ -371,6 +371,7 @@ export type CModulePlan = {
   record: ModuleRecord
   ir: IrProgram
   external?: boolean
+  isGraphEntry: boolean
   isEntry: boolean
   relativeSourcePath: string
   sourcePath: string

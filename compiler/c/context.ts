@@ -166,9 +166,10 @@ export type CEmitContext = {
   functionThrowValueTypes: Map<string, IrFunctionEffect['throwValueTypes']>
   forceRuntimeStringDeclarations?: CStringSet
   jsGlobalRoots: CStringSet
-  mathRuntimeInitStatement: string | null
+  runtimeInitializerDefinitions: string[]
   moduleValueNames: CStringMap
   moduleValueCppTypes: CStringMap
+  moduleRuntimeValueNames: CStringSet
   objectAccessorReturnPaths: CObjectAccessorReturnPathMap
   moduleObjectShapes: CObjectShapeFieldMap
   moduleValueTypes: CStringMap
@@ -255,6 +256,7 @@ type CVariableScopeContext = {
   runtimeCallbacks: CStringSet
   runtimeStringValues: CStringMap
   runtimeStrings: CStringSet
+  runtimeValueStorageNames: CStringSet
   setElementTypes: CStringMap
   variables: CStringMap
 }
@@ -314,6 +316,7 @@ export type CFunctionContext = CEmitContext & {
   runtimeArrayElementTypes: CStringMap
   runtimeStringValues: CStringMap
   runtimeStrings: CStringSet
+  runtimeValueStorageNames: CStringSet
   setElementTypes: CStringMap
   statusReturn: boolean
   throwingFunction: boolean
@@ -349,6 +352,7 @@ export type CVariableScopeSnapshot = {
   runtimeCallbacks: CStringSet
   runtimeStringValues: CStringMap
   runtimeStrings: CStringSet
+  runtimeValueStorageNames: CStringSet
   setElementTypes: CStringMap
   variables: CStringMap
 }
@@ -392,9 +396,10 @@ export function createFunctionContext(
     functionReturnTypes: baseContext.functionReturnTypes,
     functionThrowValueTypes: baseContext.functionThrowValueTypes,
     jsGlobalRoots: baseContext.jsGlobalRoots,
-    mathRuntimeInitStatement: baseContext.mathRuntimeInitStatement,
+    runtimeInitializerDefinitions: baseContext.runtimeInitializerDefinitions,
     moduleValueNames: baseContext.moduleValueNames,
     moduleValueCppTypes: baseContext.moduleValueCppTypes,
+    moduleRuntimeValueNames: baseContext.moduleRuntimeValueNames,
     objectAccessorReturnPaths: baseContext.objectAccessorReturnPaths,
     moduleObjectShapes: baseContext.moduleObjectShapes,
     moduleValueTypes: baseContext.moduleValueTypes,
@@ -456,6 +461,7 @@ export function createFunctionContext(
     runtimeStringValues: new Map(),
     setElementTypes: new Map(),
     runtimeStrings: new Set(),
+    runtimeValueStorageNames: cloneCStringSet(baseContext.moduleRuntimeValueNames),
     statusReturn: false,
     throwingFunction: false,
     usedCleanupGoto: false,
@@ -926,6 +932,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   const previousRuntimeStringValues = context.runtimeStringValues
   const previousSetElementTypes = context.setElementTypes
   const previousRuntimeStrings = context.runtimeStrings
+  const previousRuntimeValueStorageNames = context.runtimeValueStorageNames
 
   context.variables = cloneCStringMap(previousVariables)
   context.arrayLengths = cloneCNumberMap(previousArrayLengths)
@@ -955,6 +962,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   context.runtimeStringValues = cloneCStringMap(previousRuntimeStringValues)
   context.setElementTypes = cloneCStringMap(previousSetElementTypes)
   context.runtimeStrings = cloneCStringSet(previousRuntimeStrings)
+  context.runtimeValueStorageNames = cloneCStringSet(previousRuntimeValueStorageNames)
 
   return {
     arrayLengths: previousArrayLengths,
@@ -983,6 +991,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
     runtimeCallbacks: previousRuntimeCallbacks,
     runtimeStringValues: previousRuntimeStringValues,
     runtimeStrings: previousRuntimeStrings,
+    runtimeValueStorageNames: previousRuntimeValueStorageNames,
     setElementTypes: previousSetElementTypes,
     variables: previousVariables
   }
@@ -1019,6 +1028,7 @@ export function restoreVariableScope(context: CVariableScopeContext, snapshot: C
   context.runtimeStringValues = snapshot.runtimeStringValues
   context.setElementTypes = snapshot.setElementTypes
   context.runtimeStrings = snapshot.runtimeStrings
+  context.runtimeValueStorageNames = snapshot.runtimeValueStorageNames
 }
 
 function mergeScopedArrayMetadata(context: CVariableScopeContext, snapshot: CVariableScopeSnapshot): void {

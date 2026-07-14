@@ -125,7 +125,6 @@ import {
 } from './module-emission.ts'
 import type { CModuleFileEmitters } from './modules.ts'
 import { emitCModuleFilesFromGraph as emitCModuleFilesFromGraphWithEmitters } from './modules.ts'
-import { mathRuntimeMethodName } from './runtime-methods.ts'
 import {
   compilerLibraryRuntimeCallbackArgumentInfo,
   compilerLibraryStringConstantValue,
@@ -1057,7 +1056,6 @@ const expressionTypeDependencies = {
   isStringSplitCall,
   isStringTrimCall,
   knownValueType,
-  mathRuntimeMethodName,
   resolveKnownArrayIndex,
   resolveKnownArrayLength,
   resolveKnownObjectIndex,
@@ -1565,9 +1563,10 @@ function createBaseContext(
     functionAsyncFlags,
     asyncTaskWrappers: new Map(),
     jsGlobalRoots,
-    mathRuntimeInitStatement: null,
+    runtimeInitializerDefinitions: [],
     moduleValueNames: new Map(),
     moduleValueCppTypes: new Map(),
+    moduleRuntimeValueNames: new Set(),
     objectAccessorReturnPaths,
     moduleObjectShapes,
     moduleValueTypes: new Map(),
@@ -4480,20 +4479,36 @@ function emitRuntimeObjectAssignmentValue(valueExpression: AnyNode, context: CFu
   const value = emitCValueExpression(valueExpression, context)
   const classInstanceValue = emitPreparedClassInstanceRefValueExpression(value, context)
 
-  if (classInstanceValue === null || typeof classInstanceValue === 'undefined') {
-    return value
+  if (classInstanceValue !== null && typeof classInstanceValue !== 'undefined') {
+    const lines: string[] = []
+
+    pushAll(lines, value.lines)
+    pushAll(lines, classInstanceValue.lines)
+
+    return {
+      lines,
+      expression: classInstanceValue.expression,
+      valueType: classInstanceValue.valueType
+    }
   }
 
-  const lines: string[] = []
-
-  pushAll(lines, value.lines)
-  pushAll(lines, classInstanceValue.lines)
-
-  return {
-    lines,
-    expression: classInstanceValue.expression,
-    valueType: classInstanceValue.valueType
+  if (value.scalarType === 'double' || value.cppType === 'double') {
+    return {
+      lines: value.lines,
+      expression: `inox_number_value(${value.expression})`,
+      valueType: value.valueType
+    }
   }
+
+  if (value.scalarType === 'bool' || value.cppType === 'bool') {
+    return {
+      lines: value.lines,
+      expression: `inox_bool_value(${value.expression})`,
+      valueType: value.valueType
+    }
+  }
+
+  return value
 }
 
 function knownObjectMemberKey(member: CKnownObjectField): string {

@@ -8,7 +8,9 @@ import type {
   CompilerLibrarySet,
   IntrinsicRoleBinding,
   LibraryNativeTypeDescriptor,
+  LibraryOptionDescriptor,
   LibraryOperationDescriptor,
+  LibraryRuntimeInitializerDescriptor,
   RuntimeRequirementDescriptor
 } from '../../compiler/extensions/types.ts'
 import {
@@ -180,6 +182,8 @@ function compilerLibraryDescriptor(library: DiscoveredCompilerLibrary): Compiler
     id: library.id,
     dependencies: compilerPackage === null ? [] : compilerPackage.dependencies,
     declarations,
+    options: compilerPackage === null ? [] : compilerPackage.options ?? [],
+    runtimeInitializers: compilerPackage === null ? [] : compilerPackage.runtimeInitializers ?? [],
     nativeTypes: compilerPackage === null ? [] : compilerPackage.nativeTypes ?? [],
     operations: compilerPackage === null ? [] : compilerPackage.operations,
     intrinsicBindings: compilerPackage === null ? [] : compilerPackage.intrinsicBindings,
@@ -211,6 +215,18 @@ function renderRegistrySource(
   source = source + '\nexport const defaultCompilerLibrarySet: CompilerLibrarySet = {\n'
   source = source + `  "fingerprint": ${JSON.stringify(librarySet.fingerprint)},\n`
   source = source + `  "declarations": ${JSON.stringify(librarySet.declarations, null, 2)},\n`
+  source = source + `  "options": ${renderPackageArray(
+    librarySet.options ?? [],
+    discovered,
+    packageNames,
+    'options'
+  )},\n`
+  source = source + `  "runtimeInitializers": ${renderPackageArray(
+    librarySet.runtimeInitializers ?? [],
+    discovered,
+    packageNames,
+    'runtimeInitializers'
+  )},\n`
   source = source + `  "nativeTypes": ${renderPackageArray(
     librarySet.nativeTypes,
     discovered,
@@ -242,10 +258,18 @@ function renderRegistrySource(
 
 type PackageArrayItem =
   | LibraryNativeTypeDescriptor
+  | LibraryOptionDescriptor
   | LibraryOperationDescriptor
+  | LibraryRuntimeInitializerDescriptor
   | IntrinsicRoleBinding
   | RuntimeRequirementDescriptor
-type PackageArrayName = 'nativeTypes' | 'operations' | 'intrinsicBindings' | 'runtimeRequirements'
+type PackageArrayName =
+  | 'options'
+  | 'runtimeInitializers'
+  | 'nativeTypes'
+  | 'operations'
+  | 'intrinsicBindings'
+  | 'runtimeRequirements'
 
 function renderPackageArray(
   values: PackageArrayItem[],
@@ -299,6 +323,14 @@ function compilerPackageArray(
 ): PackageArrayItem[] {
   if (arrayName === 'operations') {
     return compilerPackage.operations
+  }
+
+  if (arrayName === 'options') {
+    return compilerPackage.options ?? []
+  }
+
+  if (arrayName === 'runtimeInitializers') {
+    return compilerPackage.runtimeInitializers ?? []
   }
 
   if (arrayName === 'nativeTypes') {

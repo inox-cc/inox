@@ -48,6 +48,7 @@ import {
   parseCompilerLibraryGlobalDeclarations,
   type ParsedCompilerLibraryGlobalDeclaration
 } from './extensions/global-declarations.ts'
+import { compilerLibraryCapabilities } from './extensions/library-options.ts'
 import type {
   LibraryOperationDescriptor,
   LibraryOperationKind,
@@ -124,9 +125,7 @@ import {
   checkArrayIsArrayCall as checkArrayIsArrayCallInContext,
   checkConsoleCall as checkConsoleCallInContext,
   checkDebugMemoryCall as checkDebugMemoryCallInContext,
-  checkMathCall as checkMathCallInContext,
   checkObjectStaticCall as checkObjectStaticCallInContext,
-  isMathCall as isMathCallInContext,
   isObjectStaticCall as isObjectStaticCallInContext
 } from './checker/global-calls.ts'
 import type {
@@ -1328,6 +1327,23 @@ class Checker {
         nullable = true
       }
 
+      let narrowingTrueNames: string[] = []
+      let narrowingFalseNames: string[] = []
+
+      if (
+        statement.kind === 'const' &&
+        initType === 'boolean' &&
+        statement.init !== null &&
+        typeof statement.init !== 'undefined'
+      ) {
+        const narrowing = this.resolveNullableConditionNarrowing(statement.init)
+
+        if (this.nullableAliasNarrowingIsStable(narrowing)) {
+          narrowingTrueNames = narrowing.trueNames
+          narrowingFalseNames = narrowing.falseNames
+        }
+      }
+
       const statementArrayElementDeclaredType = arrayElementDeclaredType
 
       let mapKeyType: ValueType | null = null
@@ -1443,6 +1459,8 @@ class Checker {
           mutable: statement.kind === 'let',
           valueType,
           nullable,
+          narrowingTrueNames,
+          narrowingFalseNames,
           arrayElementType,
           arrayElementDeclaredType,
           arrayElementFunctionType,
@@ -1829,6 +1847,8 @@ class Checker {
         valueType = symbol.valueType
         expression.nullable = symbol.nullable === true && !this.narrowedNullableNames.has(path[0])
         expression.valueType = valueType
+        expression.narrowingTrueNames = symbol.narrowingTrueNames ?? []
+        expression.narrowingFalseNames = symbol.narrowingFalseNames ?? []
 
         if (symbol.arrayElementType !== null && typeof symbol.arrayElementType !== 'undefined') {
           expression.arrayElementType = symbol.arrayElementType
@@ -3728,12 +3748,6 @@ class Checker {
       return classMethodType
     }
 
-    const mathType = this.checkMathCall(expression)
-
-    if (mathType !== null && typeof mathType !== 'undefined') {
-      return mathType
-    }
-
     const arrayIsArrayType = this.checkArrayIsArrayCall(expression)
 
     if (arrayIsArrayType !== null && typeof arrayIsArrayType !== 'undefined') {
@@ -4391,6 +4405,7 @@ class Checker {
         }
       }
     }
+
   }
 
   checkCompilerLibrarySingleArgument(
@@ -4525,23 +4540,11 @@ class Checker {
     variant: LibraryOperationVariantDescriptor | null = null
   ): void {
     const libraries = resolveCompilerLibrarySet(this.options.libraries)
-    const capabilities: string[] = []
-
-    for (let requirementIndex = 0; requirementIndex < operation.runtimeRequirements.length; requirementIndex = requirementIndex + 1) {
-      const requirementId = operation.runtimeRequirements[requirementIndex]
-
-      for (let descriptorIndex = 0; descriptorIndex < libraries.runtimeRequirements.length; descriptorIndex = descriptorIndex + 1) {
-        const requirement = libraries.runtimeRequirements[descriptorIndex]
-
-        if (requirement.id !== requirementId) {
-          continue
-        }
-
-        for (let capabilityIndex = 0; capabilityIndex < requirement.capabilities.length; capabilityIndex = capabilityIndex + 1) {
-          capabilities.push(requirement.capabilities[capabilityIndex])
-        }
-      }
-    }
+    const capabilities = compilerLibraryCapabilities(
+      libraries,
+      operation.runtimeRequirements,
+      this.options.libraryOptions
+    )
 
     expression.libraryBindingId = operation.bindingId
     expression.libraryOperationId = operation.operationId
@@ -4790,14 +4793,6 @@ class Checker {
     expression.shape = returnInfo.shape
 
     return returnInfo.valueType
-  }
-
-  checkMathCall(expression: AnyNode): ValueType | null {
-    if (!isMathCallInContext(expression, this.runtimeGlobalIsShadowed('Math'))) {
-      return null
-    }
-
-    return checkMathCallInContext(this.globalCallContext(), expression, this.checkedCallArgInfos(expression))
   }
 
   checkTimeCall(expression: AnyNode): ValueType | null {
@@ -6815,7 +6810,11 @@ class Checker {
     }
 
     if (node.type === 'ArrowFunctionExpression') {
-      this.collectPromiseExecutorValueTypesFromNode(node.body, resolveName, types)
+      if (node.expressionBody === true) {
+        this.collectPromiseExecutorValueTypesFromNode(node.body, resolveName, types)
+      } else {
+        this.collectPromiseExecutorValueTypesFromList(node.body, resolveName, types)
+      }
     }
   }
 
@@ -8320,6 +8319,22 @@ class Checker {
       }
     }
 
+    if (expression.type === 'Reference' && expression.path.length === 1) {
+      const symbol = this.scope.resolve(firstPathSegment(expression.path))
+
+      if (symbol !== null && typeof symbol !== 'undefined') {
+        const trueNames = symbol.narrowingTrueNames ?? []
+        const falseNames = symbol.narrowingFalseNames ?? []
+
+        if (trueNames.length > 0 || falseNames.length > 0) {
+          return {
+            trueNames,
+            falseNames
+          }
+        }
+      }
+    }
+
     if (expression.type !== 'BinaryExpression') {
       const key = nullableNarrowingKey(expression)
 
@@ -8487,6 +8502,38 @@ class Checker {
       trueNames: [],
       falseNames: [key]
     }
+  }
+
+  nullableAliasNarrowingIsStable(narrowing: NullableConditionNarrowing): boolean {
+    const names: string[] = []
+
+    for (let index = 0; index < narrowing.trueNames.length; index = index + 1) {
+      names.push(narrowing.trueNames[index])
+    }
+
+    for (let index = 0; index < narrowing.falseNames.length; index = index + 1) {
+      names.push(narrowing.falseNames[index])
+    }
+
+    if (names.length === 0) {
+      return false
+    }
+
+    for (let index = 0; index < names.length; index = index + 1) {
+      const name = names[index]
+
+      if (name.includes('.')) {
+        return false
+      }
+
+      const symbol = this.scope.resolve(name)
+
+      if (symbol === null || typeof symbol === 'undefined' || symbol.mutable === true) {
+        return false
+      }
+    }
+
+    return true
   }
 
   resolveTypeofNarrowing(expression: AnyNode): NullableConditionNarrowing | null {

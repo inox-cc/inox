@@ -32,14 +32,19 @@ export {
 } from './ir/top-level.ts'
 export type { IrFunctionNodeEntry, IrModuleRecord } from './ir/top-level.ts'
 
-export function lowerHirToIr(program: ProgramNode, librarySetFingerprint: string): IrProgram {
+export function lowerHirToIr(
+  program: ProgramNode,
+  librarySetFingerprint: string,
+  libraryOptionsFingerprint: string
+): IrProgram {
   const features = collectIrFeatures(program)
   const topLevelItems = collectTopLevelItems(program)
 
   return {
     type: 'IrProgram',
-    version: 2,
+    version: 3,
     librarySetFingerprint,
+    libraryOptionsFingerprint,
     features,
     runtimeRequirements: collectRuntimeRequirements(features, program),
     topLevelItems,

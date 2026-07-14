@@ -11,7 +11,7 @@ import {
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('native types resolve from library data and preserve inheritance', () => {
-  const libraries = createCompilerLibrarySet([binaryLibrary()])
+  const libraries = createCompilerLibrarySet(binaryLibraries())
   const uint8Array = compilerLibraryNativeTypeForName(libraries, 'Uint8Array')
   const buffer = compilerLibraryNativeTypeForName(libraries, 'Buffer')
 
@@ -30,7 +30,7 @@ test('native types resolve from library data and preserve inheritance', () => {
 })
 
 test('native type inheritance participates in checker assignability', () => {
-  const libraries = createCompilerLibrarySet([binaryLibrary()])
+  const libraries = createCompilerLibrarySet(binaryLibraries())
 
   assert.doesNotThrow(() => {
     compileSourceToIr('function upcast(value: Buffer): Uint8Array { return value }', { libraries })
@@ -49,16 +49,16 @@ test('native type inheritance participates in checker assignability', () => {
 })
 
 test('native type metadata changes the library fingerprint', () => {
-  const baseline = createCompilerLibrarySet([binaryLibrary()]).fingerprint
-  const changed = binaryLibrary()
-  const changedNativeTypes = changed.nativeTypes ?? []
+  const baseline = createCompilerLibrarySet(binaryLibraries()).fingerprint
+  const changed = binaryLibraries()
+  const changedNativeTypes = changed[0].nativeTypes ?? []
   changedNativeTypes[0].cppType = 'ChangedUint8Array'
 
-  assert.notEqual(createCompilerLibrarySet([changed]).fingerprint, baseline)
+  assert.notEqual(createCompilerLibrarySet(changed).fingerprint, baseline)
 })
 
 test('declared native types reach checked AST and HIR without core name knowledge', () => {
-  const libraries = createCompilerLibrarySet([binaryLibrary()])
+  const libraries = createCompilerLibrarySet(binaryLibraries())
   const result = compileSourceToIr(
     'function identity(value: Buffer): Uint8Array { return value }',
     { libraries, target: 'cc' }
@@ -79,46 +79,59 @@ test('declared native types reach checked AST and HIR without core name knowledg
   assert.equal(result.ir.runtimeRequirements.includes('node:buffer'), true)
 })
 
-function binaryLibrary(): CompilerLibraryDescriptor {
-  return {
-    id: 'global:binary',
-    dependencies: [],
-    declarations: [],
-    nativeTypes: [
-      {
-        libraryId: 'global:binary',
-        typeId: 'global:binary#Uint8Array',
-        declarationNames: ['Uint8Array'],
-        valueType: 'bytes',
-        cppType: 'Uint8Array',
-        baseTypeIds: [],
-        runtimeRequirements: ['global:binary']
-      },
-      {
-        libraryId: 'node:buffer',
-        typeId: 'node:buffer#Buffer',
-        declarationNames: ['Buffer'],
-        valueType: 'bytes',
-        cppType: 'Buffer',
-        baseTypeIds: ['global:binary#Uint8Array'],
-        runtimeRequirements: ['global:binary', 'node:buffer']
-      }
-    ],
-    operations: [],
-    intrinsicBindings: [],
-    runtimeRequirements: [
-      {
-        id: 'global:binary',
-        dependencies: [],
-        cPreludeIncludes: ['inox/binary.h'],
-        capabilities: []
-      },
-      {
-        id: 'node:buffer',
-        dependencies: ['global:binary'],
-        cPreludeIncludes: ['inox/buffer.h'],
-        capabilities: []
-      }
-    ]
-  }
+function binaryLibraries(): CompilerLibraryDescriptor[] {
+  return [
+    {
+      id: 'global:binary',
+      dependencies: [],
+      declarations: [],
+      nativeTypes: [
+        {
+          libraryId: 'global:binary',
+          typeId: 'global:binary#Uint8Array',
+          declarationNames: ['Uint8Array'],
+          valueType: 'bytes',
+          cppType: 'Uint8Array',
+          baseTypeIds: [],
+          runtimeRequirements: ['global:binary']
+        }
+      ],
+      operations: [],
+      intrinsicBindings: [],
+      runtimeRequirements: [
+        {
+          id: 'global:binary',
+          dependencies: [],
+          cPreludeIncludes: ['inox/binary.h'],
+          capabilities: []
+        }
+      ]
+    },
+    {
+      id: 'node:buffer',
+      dependencies: ['global:binary'],
+      declarations: [],
+      nativeTypes: [
+        {
+          libraryId: 'node:buffer',
+          typeId: 'node:buffer#Buffer',
+          declarationNames: ['Buffer'],
+          valueType: 'bytes',
+          cppType: 'Buffer',
+          baseTypeIds: ['global:binary#Uint8Array'],
+          runtimeRequirements: ['global:binary', 'node:buffer']
+        }
+      ],
+      operations: [],
+      intrinsicBindings: [],
+      runtimeRequirements: [
+        {
+          id: 'node:buffer',
+          dependencies: ['global:binary'],
+          cPreludeIncludes: ['inox/buffer.h'],
+          capabilities: []
+        }
+      ]
+    }
+  ]
 }

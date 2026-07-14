@@ -260,14 +260,6 @@ export const globals: Map<string, SymbolInfo> = new Map([
     }
   ],
   [
-    'Math',
-    {
-      kind: 'global',
-      mutable: false,
-      valueType: 'object'
-    }
-  ],
-  [
     'Int8Array',
     {
       kind: 'global',
@@ -350,8 +342,7 @@ export function builtinGlobalSymbol(name: string): SymbolInfo | null {
     name === 'console' ||
     name === 'performance' ||
     name === 'Object' ||
-    name === 'JSON' ||
-    name === 'Math'
+    name === 'JSON'
   ) {
     return {
       kind: 'global',

@@ -108,31 +108,12 @@ function collectCapabilityUsages(programs: IrProgram[], options: CompileOptions)
     }
   }
 
-  collectEntropyCapabilityUsages(globalUsages, options, usages)
-
   for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
     const program = programAt(programs, programIndex)
     visitCapabilityNode(program.body, usages)
   }
 
   return usages
-}
-
-function collectEntropyCapabilityUsages(
-  globalUsages: IrGlobalUsage[],
-  options: CompileOptions,
-  usages: CapabilityUsage[]
-): void {
-  const random = options.random
-
-  for (let usageIndex = 0; usageIndex < globalUsages.length; usageIndex = usageIndex + 1) {
-    const usage = globalUsageAt(globalUsages, usageIndex)
-    const path = dotPath(usage.path)
-
-    if (path === 'Math.random' && random !== null && typeof random !== 'undefined' && random.backend === 'os') {
-      pushCapability(usages, 'entropy', 'entropy', path, usage.loc)
-    }
-  }
 }
 
 function visitCapabilityNode(node: AnyNode | NodeList | null | undefined, usages: CapabilityUsage[]): void {

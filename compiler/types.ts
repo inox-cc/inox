@@ -1,5 +1,5 @@
 import type { CompilerHost } from './host.ts'
-import type { CompilerLibrarySet } from './extensions/types.ts'
+import type { CompilerLibraryOptionValue, CompilerLibrarySet } from './extensions/types.ts'
 
 export type SourceLocation = {
   file?: string
@@ -104,8 +104,9 @@ export type IrTopLevelItem = {
 
 export type IrProgram = {
   type: 'IrProgram'
-  version: 2
+  version: 3
   librarySetFingerprint: string
+  libraryOptionsFingerprint: string
   features: IrFeature[]
   runtimeRequirements: IrRuntimeRequirement[]
   topLevelItems: IrTopLevelItem[]
@@ -186,6 +187,8 @@ export type SymbolInfo = {
   importedName?: string
   importSource?: string
   nullable?: boolean
+  narrowingTrueNames?: string[]
+  narrowingFalseNames?: string[]
   arrayElementType?: ValueType | null
   arrayElementDeclaredType?: string | null
   arrayElementFunctionType?: any
@@ -240,11 +243,6 @@ export type ModuleGraph = {
 
 export type CompileTarget = 'cc'
 
-export type RandomOptions = {
-  backend?: 'simple' | 'xorshift32' | 'os'
-  seed?: number
-}
-
 export type RuntimeProfile = 'embedded' | 'hosted'
 export type RuntimeLoopBackend = 'embedded' | 'libuv'
 
@@ -280,9 +278,9 @@ export type CompileOptions = {
   declarationImports?: ModuleDeclarationImport[]
   host?: CompilerHost
   libraries?: CompilerLibrarySet
+  libraryOptions?: CompilerLibraryOptionValue[]
   loopBackend?: RuntimeLoopBackend
   profile?: RuntimeProfile
-  random?: RandomOptions
   tlsBackend?: TlsBackend
 }
 

@@ -54,6 +54,7 @@ type StringCContext = {
   returnType?: string
   runtimeStringValues?: Map<string, string>
   runtimeStrings?: Set<string>
+  runtimeValueStorageNames?: Set<string>
   statusReturn: boolean
   stringLoweringDependencies?: StringLoweringDependencies
   throwingFunction: boolean
@@ -1140,12 +1141,21 @@ export function emitPreparedStringBytesOperand(
 
     const variables = context.variables
     let valueType = nodeValueType(expression)
+    let storageValueType: string | null = null
 
     if (variables !== null && typeof variables !== 'undefined') {
       const variableType = variables.get(name)
 
       if (variableType !== null && typeof variableType !== 'undefined') {
-        valueType = variableType
+        storageValueType = variableType
+
+        if (
+          valueType === null ||
+          valueType === 'unknown' ||
+          (valueType.startsWith('union<') && !variableType.startsWith('union<'))
+        ) {
+          valueType = variableType
+        }
       }
     }
 
@@ -1166,6 +1176,24 @@ export function emitPreparedStringBytesOperand(
     if (valueType === 'string') {
       const reference = stringDeps(context).emitReference(expression, context)
       const cppStringValues = context.cppStringValues
+      const runtimeValueStorageNames = context.runtimeValueStorageNames
+      const usesRuntimeValueStorage =
+        runtimeValueStorageNames !== null &&
+        typeof runtimeValueStorageNames !== 'undefined' &&
+        runtimeValueStorageNames.has(name)
+
+      if (usesRuntimeValueStorage) {
+        const string = nextCName(context, tempPrefix)
+
+        return {
+          lines: [
+            emitRuntimeTypeCheck(`${reference}.tag != INOX_TAG_STRING || ${reference}.as.ref == 0`, context),
+            `inox_string* ${string} = (inox_string*)${reference}.as.ref;`
+          ],
+          bytes: `${string}->bytes`,
+          length: `${string}->len`
+        }
+      }
 
       if (cppStringValues !== null && typeof cppStringValues !== 'undefined' && cppStringValues.has(name)) {
         return {

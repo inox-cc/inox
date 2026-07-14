@@ -423,6 +423,7 @@ function registerFunctionParamsInContext(
       }
     } else if (isOpaqueRuntimeValueType(param.valueType)) {
       context.variables.set(param.name, 'unknown')
+      context.runtimeValueStorageNames.add(param.name)
     } else {
       context.variables.set(param.name, param.valueType)
     }
@@ -1244,9 +1245,6 @@ export function emitMainWrapper(
   context.cleanupEnabled = false
   context.externalEventLoop = true
 
-  if (context.mathRuntimeInitStatement !== null) {
-    pushIndentedDeclarationLines(bodyLines, [context.mathRuntimeInitStatement])
-  }
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(body, context))
 
   lines.push('static void inox_main(void) {')

@@ -27,7 +27,6 @@ import {
   emitPreparedCompilerLibraryNativeFieldExpression,
   isCompilerLibraryNativeFieldExpression
 } from '../library-operations.ts'
-import { mathRuntimeMethodName } from '../runtime-methods.ts'
 import {
   emitRuntimeNullableValueCheck,
   emitRuntimeValueCheck,
@@ -209,6 +208,7 @@ type CFunctionContext = CEmitContext & {
   runtimeCallbacks: CStringSet
   runtimeStringValues: CStringMap
   runtimeStrings: CStringSet
+  runtimeValueStorageNames: CStringSet
   setElementTypes: CStringMap
   statusReturn: boolean
   statementLoweringDependencies: StatementLoweringDependencies
@@ -536,7 +536,11 @@ function emitPreparedTypeofArgumentValue(
     const reference = deps.emitReference(expression, context)
     const variableType = context.variables.get(name)
 
-    if (context.boxedVariables.has(name) || context.nullableVariables.has(name)) {
+    if (
+      context.runtimeValueStorageNames.has(name) ||
+      context.boxedVariables.has(name) ||
+      context.nullableVariables.has(name)
+    ) {
       return {
         lines: [],
         expression: reference,
@@ -1988,12 +1992,6 @@ export function emitPreparedCallExpression(
     return libraryCall
   }
 
-  const mathCall = emitPreparedMathCallExpression(expression, context, deps)
-
-  if (mathCall !== null && typeof mathCall !== 'undefined') {
-    return mathCall
-  }
-
   const numberConversion = deps.emitCNumberConversionValueExpression(expression, context)
 
   if (numberConversion !== null && typeof numberConversion !== 'undefined') {
@@ -2218,35 +2216,6 @@ function arrayShapeElementType(elements: CArrayElementInfo[]): string {
   }
 
   return 'unknown'
-}
-
-function emitPreparedMathCallExpression(
-  expression: CValueNode,
-  context: CFunctionContext,
-  deps: CCallExpressionDependencies
-): PreparedExpression | null {
-  const method = mathRuntimeMethodName(expression.callee) ?? ''
-
-  if (method === '') {
-    return null
-  }
-
-  const lines: string[] = []
-  const expressions: string[] = []
-
-  for (const arg of expression.args) {
-    const prepared = deps.emitPreparedNumberExpression(arg, context)
-
-    appendLines(lines, prepared.lines)
-    expressions.push(prepared.expression)
-  }
-
-  return {
-    lines,
-    expression: `Math.${method}(${joinStrings(expressions, ', ')})`,
-    scalarType: 'double',
-    valueType: 'number'
-  }
 }
 
 export function emitPreparedCallArgs(
@@ -2691,6 +2660,10 @@ export function emitPreparedNumberExpression(
     }
   }
 
+  if (expression.type === 'TypeAssertionExpression') {
+    return emitPreparedScalarTypeAssertionExpression(expression, context, deps)
+  }
+
   if (isNarrowedNullableScalarReference(expression, context)) {
     const name = stringValueAt(expression.path, 0)
     const resolvedType = context.variables.get(name)
@@ -2728,6 +2701,26 @@ export function emitPreparedNumberExpression(
   }
 
   if (expression.type === 'Reference') {
+    const valueType = deps.inferExpressionType(expression, context)
+
+    if (
+      (valueType === 'number' || valueType === 'boolean') &&
+      isRuntimeValueReferenceExpression(expression, context)
+    ) {
+      const value = deps.emitReference(expression, context)
+      const check = emitRuntimeValueCheck(value, cRuntimeValueTag(valueType), context)
+      const lines: string[] = []
+
+      if (check !== '') {
+        lines.push(check)
+      }
+
+      return {
+        lines,
+        expression: scalarRuntimeValueExpression(value, valueType)
+      }
+    }
+
     return {
       lines: [],
       expression: deps.emitReference(expression, context)
@@ -2908,6 +2901,13 @@ export function emitPreparedNumberExpression(
 
     appendLines(lines, left.lines)
     appendLines(lines, right.lines)
+
+    if (expression.operator === '%') {
+      return {
+        lines,
+        expression: `fmod(${left.expression}, ${right.expression})`
+      }
+    }
 
     return {
       lines,
@@ -3175,6 +3175,36 @@ export function emitPreparedNumberExpression(
     lines: [],
     expression: '0'
   }
+}
+
+function emitPreparedScalarTypeAssertionExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): PreparedExpression {
+  const operand = expression.expression
+  const valueType = expression.valueType
+
+  if (
+    operand.type === 'Reference' &&
+    (valueType === 'number' || valueType === 'boolean') &&
+    isRuntimeValueReferenceExpression(operand, context)
+  ) {
+    const value = deps.emitReference(operand, context)
+    const check = emitRuntimeValueCheck(value, cRuntimeValueTag(valueType), context)
+    const lines: string[] = []
+
+    if (check !== '') {
+      lines.push(check)
+    }
+
+    return {
+      lines,
+      expression: scalarRuntimeValueExpression(value, valueType)
+    }
+  }
+
+  return emitPreparedNumberExpression(operand, context, deps)
 }
 
 export function emitPreparedRuntimeTruthinessExpression(
@@ -4479,6 +4509,10 @@ function runtimeValueReferenceName(expression: CValueNode, context: CFunctionCon
 
   const name = stringValueAt(expression.path, 0)
   const valueType = context.variables.get(name)
+
+  if (context.runtimeValueStorageNames.has(name)) {
+    return emitCIdentifier(name)
+  }
 
   if (valueType !== 'unknown' && !isManagedRuntimeReturnType(valueType) && !isOpaqueRuntimeValueType(valueType)) {
     return null

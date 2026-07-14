@@ -5,7 +5,6 @@ import {
   isDebugRuntimeMethodPath,
   isFetchGlobalRoot,
   jsonRuntimeMethodNameFromPath,
-  mathRuntimeMethodNameFromPath,
   timeRuntimeMethodNameFromPath
 } from '../../stdlib/global/compiler/descriptor.ts'
 import type { Diagnostic, IrGlobalUsage, IrSyntaxFeatureUsage, SourceLocation } from '../types.ts'
@@ -46,8 +45,7 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
     !!jsonRuntimeMethodNameFromPath(usage.path) ||
     isCollectionConstructorGlobalUsagePath(usage.path) ||
     isSupportedCFetchGlobalUsage(usage) ||
-    isSupportedCDebugGlobalUsage(usage) ||
-    isSupportedCMathGlobalUsage(usage)
+    isSupportedCDebugGlobalUsage(usage)
   )
 }
 
@@ -71,10 +69,6 @@ export function isSupportedCFetchGlobalUsage(usage: IrGlobalUsage): boolean {
 
 export function isSupportedCDebugGlobalUsage(usage: IrGlobalUsage): boolean {
   return isDebugRuntimeMethodPath(usage.path)
-}
-
-export function isSupportedCMathGlobalUsage(usage: IrGlobalUsage): boolean {
-  return !!mathRuntimeMethodNameFromPath(usage.path)
 }
 
 export function reportCJsGlobalDiagnostic(diagnostics: Diagnostic[], loc: SourceLocation | null | undefined): void {

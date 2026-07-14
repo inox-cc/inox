@@ -1156,7 +1156,9 @@ export function emitPreparedRuntimeArrayIndexValueExpression(
       return {
         lines,
         expression: value.expression,
-        owned: value.owned
+        owned: value.owned,
+        runtimeTypeChecked: true,
+        valueType: runtimeElement.valueType
       }
     }
 
@@ -1174,7 +1176,9 @@ export function emitPreparedRuntimeArrayIndexValueExpression(
     return {
       lines: checkedLines,
       expression: value.expression,
-      owned: value.owned
+      owned: value.owned,
+      runtimeTypeChecked: true,
+      valueType: runtimeElement.valueType
     }
   }
 

@@ -49,7 +49,6 @@ export type CExpressionTypeDependencies = {
   isStringSplitCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isStringTrimCall: (expression: AnyNode, context: CFunctionContext) => boolean
   knownValueType: (valueType: string | null | undefined) => string | null
-  mathRuntimeMethodName: (callee: AnyNode) => string | null
   resolveKnownArrayIndex: (expression: AnyNode, context: CFunctionContext) => CKnownArrayElement | null
   resolveKnownArrayLength: (expression: AnyNode, context: CFunctionContext) => string | null
   resolveKnownObjectIndex: (expression: AnyNode, context: CFunctionContext) => CKnownObjectIndexField | null
@@ -432,7 +431,11 @@ function cReferenceExpressionType(
         return variableType
       }
 
-      if (metadataType === 'string' || metadataType === 'function') {
+      if (
+        metadataType !== null &&
+        typeof metadataType !== 'undefined' &&
+        isConcreteContextValueType(metadataType)
+      ) {
         return metadataType
       }
     }
@@ -498,6 +501,10 @@ function shouldPreferReferenceMetadataType(
 
   if (isUnionMetadataType(metadataType) && isConcreteContextValueType(variableType)) {
     return false
+  }
+
+  if (variableType === 'unknown' && isConcreteContextValueType(metadataType)) {
+    return true
   }
 
   if (variableType === 'number' && metadataType !== 'number') {
@@ -582,10 +589,6 @@ export function inferExpressionType(
 
   if (expression.type === 'CallExpression' && deps.isPromiseReturningFunctionCallee(expression.callee, context)) {
     return 'promise'
-  }
-
-  if (expression.type === 'CallExpression' && deps.mathRuntimeMethodName(expression.callee)) {
-    return 'number'
   }
 
   if (expression.type === 'CallExpression') {
@@ -957,12 +960,8 @@ function inferConditionalExpressionType(consequentType: string, alternateType: s
     return consequentType
   }
 
-  if (consequentType === 'unknown') {
-    return alternateType
-  }
-
-  if (alternateType === 'unknown') {
-    return consequentType
+  if (consequentType === 'unknown' || alternateType === 'unknown') {
+    return 'unknown'
   }
 
   return 'unknown'

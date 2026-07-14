@@ -5,6 +5,56 @@ export type LibraryObjectTypeId = string
 export type LibraryNativeTypeId = string
 export type RuntimeRequirementId = string
 export type PlatformCapabilityId = string
+export type LibraryOptionScalar = string | number | boolean
+
+export type CompilerLibraryOptionValue = {
+  optionId: string
+  value: LibraryOptionScalar
+}
+
+export type LibraryOptionDescriptor = {
+  libraryId: LibraryId
+  optionId: string
+  cliAliases: string[]
+  valueType: 'string' | 'number' | 'boolean'
+  defaultValue: LibraryOptionScalar
+  allowedValues?: LibraryOptionScalar[]
+  integer?: boolean
+  minimum?: number
+  maximum?: number
+}
+
+export type LibraryOptionConditionDescriptor = {
+  optionId: string
+  source: 'value' | 'present'
+  values: LibraryOptionScalar[]
+}
+
+export type LibraryConditionalCapabilityDescriptor = {
+  capability: PlatformCapabilityId
+  conditions: LibraryOptionConditionDescriptor[]
+}
+
+export type LibraryCValueMappingDescriptor = {
+  value: LibraryOptionScalar
+  cExpression: string
+}
+
+export type LibraryRuntimeInitializerArgumentDescriptor = {
+  optionId: string
+  source: 'value' | 'present'
+  cValueKind: 'boolean' | 'number' | 'uint32-hex' | 'mapped'
+  cValueMap?: LibraryCValueMappingDescriptor[]
+}
+
+export type LibraryRuntimeInitializerDescriptor = {
+  libraryId: LibraryId
+  initializerId: string
+  runtimeRequirement: RuntimeRequirementId
+  cType: string
+  cName: string
+  arguments: LibraryRuntimeInitializerArgumentDescriptor[]
+}
 
 export type LibraryDeclarationKind = 'global' | 'module'
 
@@ -212,6 +262,7 @@ export type RuntimeRequirementDescriptor = {
   dependencies: RuntimeRequirementId[]
   cPreludeIncludes: string[]
   capabilities: PlatformCapabilityId[]
+  conditionalCapabilities?: LibraryConditionalCapabilityDescriptor[]
   backendConstraints?: LibraryBackendConstraintDescriptor[]
   cEntrypointAdapter?: RuntimeEntrypointAdapterDescriptor | null
 }
@@ -220,6 +271,8 @@ export type CompilerLibraryDescriptor = {
   id: LibraryId
   dependencies: LibraryId[]
   declarations: LibraryDeclarationDescriptor[]
+  options?: LibraryOptionDescriptor[]
+  runtimeInitializers?: LibraryRuntimeInitializerDescriptor[]
   nativeTypes?: LibraryNativeTypeDescriptor[]
   operations: LibraryOperationDescriptor[]
   intrinsicBindings: IntrinsicRoleBinding[]
@@ -229,6 +282,8 @@ export type CompilerLibraryDescriptor = {
 export type CompilerLibraryPackageDescriptor = {
   id: LibraryId
   dependencies: LibraryId[]
+  options?: LibraryOptionDescriptor[]
+  runtimeInitializers?: LibraryRuntimeInitializerDescriptor[]
   nativeTypes?: LibraryNativeTypeDescriptor[]
   operations: LibraryOperationDescriptor[]
   intrinsicBindings: IntrinsicRoleBinding[]
@@ -238,6 +293,8 @@ export type CompilerLibraryPackageDescriptor = {
 export type CompilerLibrarySet = {
   fingerprint: string
   declarations: LibraryDeclarationDescriptor[]
+  options?: LibraryOptionDescriptor[]
+  runtimeInitializers?: LibraryRuntimeInitializerDescriptor[]
   nativeTypes: LibraryNativeTypeDescriptor[]
   operations: LibraryOperationDescriptor[]
   intrinsicBindings: IntrinsicRoleBinding[]

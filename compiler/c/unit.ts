@@ -1,4 +1,5 @@
 import { throwDiagnostics } from '../diagnostics.ts'
+import { resolveCompilerLibrarySet } from '../extensions/library-set.ts'
 import {
   collectIrFunctionDeclarations,
   collectIrFunctionEffectsWithExternalEffects,
@@ -67,7 +68,8 @@ import type {
 } from './context.ts'
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
 import { emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
-import { emitCPrelude, emitMathRuntimeInitLines, filterUnusedCPreludeIncludes } from './prelude.ts'
+import { emitCompilerLibraryRuntimeInitializerDefinitions } from './library-initializers.ts'
+import { emitCPrelude, filterUnusedCPreludeIncludes } from './prelude.ts'
 import { collectCReferencedFunctionPrototypeNames } from './prototype-references.ts'
 import { addDateStringRuntimeRequirements, resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
 import type {
@@ -280,6 +282,10 @@ function registerCUnitValueDeclarations(context: CEmitContext, values: CUnitValu
     const item = unitValueDeclarationAt(values, index)
     context.moduleValueNames.set(item.name, item.symbolName)
     context.moduleValueTypes.set(item.name, item.valueType)
+
+    if (cUnitValueDeclarationCType(item) === 'inox_value') {
+      context.moduleRuntimeValueNames.add(item.name)
+    }
 
     if (item.cppType !== null && typeof item.cppType !== 'undefined') {
       context.moduleValueCppTypes.set(item.name, item.cppType)
@@ -1368,7 +1374,6 @@ export function emitCUnit(
   })
   const needsRuntime: boolean = preludeRequirements.needsRuntime
   const needsTimeRuntime: boolean = preludeRequirements.needsTimeRuntime
-  const needsMathRuntime: boolean = preludeRequirements.needsMathRuntime
   const needsDebugMemoryRuntime: boolean = preludeRequirements.needsDebugMemoryRuntime
   const needsAsyncRuntime: boolean = preludeRequirements.needsAsyncRuntime
   const needsCallbackRuntime: boolean = preludeRequirements.needsCallbackRuntime
@@ -1384,7 +1389,11 @@ export function emitCUnit(
   const needsConsoleRuntime: boolean = preludeRequirements.needsConsoleRuntime
   const needsFetchRuntime: boolean = preludeRequirements.needsFetchRuntime
   baseContext.runtimeEntrypointAdapter = preludeRequirements.runtimeEntrypointAdapter
-  baseContext.mathRuntimeInitStatement = needsMathRuntime ? emitMathRuntimeInitLines(options)[0] : null
+  baseContext.runtimeInitializerDefinitions = emitCompilerLibraryRuntimeInitializerDefinitions(
+    resolveCompilerLibrarySet(options.libraries),
+    preludeRequirements.libraryRuntimeRequirements,
+    options.libraryOptions
+  )
   if (needsAsyncRuntime) {
     baseContext.unhandledRejectionFlag = 'inox_unhandled_rejection'
   } else {
@@ -1396,7 +1405,6 @@ export function emitCUnit(
     needsRuntime,
     true,
     needsTimeRuntime,
-    needsMathRuntime,
     needsDebugMemoryRuntime,
     needsAsyncRuntime,
     needsCallbackRuntime,
@@ -1411,9 +1419,13 @@ export function emitCUnit(
     needsRegexpRuntime,
     needsConsoleRuntime,
     needsFetchRuntime,
-    preludeRequirements.libraryCPreludeIncludes,
-    options
+    preludeRequirements.libraryCPreludeIncludes
   )
+  pushUnitLines(lines, baseContext.runtimeInitializerDefinitions)
+
+  if (baseContext.runtimeInitializerDefinitions.length > 0) {
+    lines.push('')
+  }
   const declarationLines: string[] = []
   const functionPrototypeNames = collectCUnitNeededFunctionPrototypeNames(functions, classMethods, baseContext)
 

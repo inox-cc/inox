@@ -1,9 +1,7 @@
 import {
   debugRuntimeMethodNameFromKnownPath,
-  isDebugRuntimeMethodPath,
-  knownMathRuntimeArgCount
+  isDebugRuntimeMethodPath
 } from '../../stdlib/global/compiler/descriptor.ts'
-import { isMathRuntimeMethod } from '../../stdlib/global/compiler/checker.ts'
 import { diagnostic } from '../diagnostics.ts'
 import { memberExpressionPath } from '../member-paths.ts'
 import type { AnyNode, Diagnostic, ObjectShapeInfo, SourceLocation, ValueType } from '../types.ts'
@@ -81,41 +79,6 @@ export function checkConsoleCall(
   expression.valueType = 'void'
 
   return 'void'
-}
-
-export function isMathCall(expression: AnyNode, mathShadowed: boolean): boolean {
-  return isMathRuntimeMethod(expression.callee) && !mathShadowed
-}
-
-export function checkMathCall(
-  context: GlobalCallCheckerContext,
-  expression: AnyNode,
-  argInfos: CheckedCallArgInfo[]
-): ValueType {
-  const method = expression.callee.property
-  const expectedArgCount = knownMathRuntimeArgCount(method)
-
-  expression.mathRuntimeMethod = method
-  expression.valueType = 'number'
-
-  if (expression.args.length !== expectedArgCount) {
-    report(
-      context,
-      'INOX_ARG_COUNT',
-      `function Math.${method} expects ${expectedArgCount} argument(s), got ${expression.args.length}`,
-      expression.loc
-    )
-  }
-
-  for (let index = 0; index < expression.args.length; index = index + 1) {
-    const info = argInfos[index]
-
-    if (info !== null && typeof info !== 'undefined') {
-      checkAssignableType(context, info.valueType, 'number', info.loc, false, false)
-    }
-  }
-
-  return 'number'
 }
 
 export function checkArrayIsArrayCall(

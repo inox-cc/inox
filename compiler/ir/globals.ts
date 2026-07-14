@@ -6,6 +6,8 @@ type GlobalUsageNode = AnyNode & {
   args?: AnyNode[] | null
   index?: AnyNode | null
   loc?: SourceLocation
+  libraryOperationId?: string | null
+  libraryReceiverTypeId?: string | null
   object?: AnyNode | null
   path?: string[]
   property?: string | null
@@ -78,6 +80,11 @@ function visitGlobalUsage(node: AnyNode | NodeList | null | undefined, usages: I
   const item: GlobalUsageNode = node
   const itemType = item.type
 
+  if (item.libraryOperationId !== null && typeof item.libraryOperationId !== 'undefined') {
+    visitCompilerLibraryOperationChildren(item, usages)
+    return
+  }
+
   if (itemType === 'MemberExpression' || itemType === 'OptionalMemberExpression') {
     const path = globalUsagePath(item)
 
@@ -121,6 +128,53 @@ function visitGlobalUsage(node: AnyNode | NodeList | null | undefined, usages: I
   }
 
   visitGlobalUsageChildren(item, usages)
+}
+
+function visitCompilerLibraryOperationChildren(item: GlobalUsageNode, usages: IrGlobalUsage[]): void {
+  visitGlobalUsageChild(item.args, usages)
+  visitGlobalUsageChild(item.index, usages)
+  visitGlobalUsageChild(item.value, usages)
+
+  const receiverTypeId = item.libraryReceiverTypeId
+
+  if (receiverTypeId === null || typeof receiverTypeId === 'undefined') {
+    return
+  }
+
+  const receiver = compilerLibraryOperationReceiver(item)
+
+  visitGlobalUsageChild(receiver, usages)
+
+  if (item.type === 'AssignmentExpression') {
+    visitGlobalUsageChild(item.target?.index, usages)
+  }
+}
+
+function compilerLibraryOperationReceiver(item: GlobalUsageNode): AnyNode | null {
+  if (item.type === 'CallExpression' || item.type === 'NewExpression') {
+    const callee = item.callee
+
+    if (
+      callee !== null &&
+      typeof callee !== 'undefined' &&
+      (
+        callee.type === 'MemberExpression' ||
+        callee.type === 'OptionalMemberExpression' ||
+        callee.type === 'IndexExpression' ||
+        callee.type === 'OptionalIndexExpression'
+      )
+    ) {
+      return callee.object ?? null
+    }
+
+    return null
+  }
+
+  if (item.type === 'AssignmentExpression') {
+    return item.target?.object ?? null
+  }
+
+  return item.object ?? null
 }
 
 function visitGlobalUsageList(nodes: NodeList, usages: IrGlobalUsage[]): void {
@@ -256,7 +310,6 @@ function isJsStdGlobalRootName(name: string): boolean {
     name === 'Int32Array' ||
     name === 'JSON' ||
     name === 'Map' ||
-    name === 'Math' ||
     name === 'Object' ||
     name === 'Promise' ||
     name === 'Set' ||
@@ -300,7 +353,6 @@ function sortedStringSet(values: StringSet): string[] {
   pushStringIfPresent(values, result, 'Int8Array')
   pushStringIfPresent(values, result, 'JSON')
   pushStringIfPresent(values, result, 'Map')
-  pushStringIfPresent(values, result, 'Math')
   pushStringIfPresent(values, result, 'Object')
   pushStringIfPresent(values, result, 'Promise')
   pushStringIfPresent(values, result, 'Set')

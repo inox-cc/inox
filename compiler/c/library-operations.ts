@@ -70,7 +70,9 @@ export type CompilerLibraryLoweringDependencies = {
 export function emitPreparedCompilerLibraryExpression(expression: AnyNode): PreparedExpression | null {
   const item = expression as CompilerLibraryExpressionNode
   const cExpression = item.libraryCExpression
-  const cppType = item.libraryCppType
+  const declaredCppType = item.libraryCppType
+  const scalarType = compilerLibraryScalarType(item.valueType)
+  const cppType = declaredCppType ?? scalarType
   const argumentKinds = item.libraryCArgumentKinds
 
   if (
@@ -228,7 +230,9 @@ export function emitPreparedCompilerLibraryCallExpression(
   const target = item.libraryCExpression
   const argumentKinds = item.libraryCArgumentKinds
   const argumentSources = item.libraryCArgumentSources
-  const cppType = item.libraryCppType
+  const declaredCppType = item.libraryCppType
+  const scalarType = compilerLibraryScalarType(item.valueType)
+  const cppType = declaredCppType ?? scalarType
 
   if (
     (expression.type !== 'CallExpression' &&
@@ -721,12 +725,25 @@ export function emitPreparedCompilerLibraryCallExpression(
   return {
     lines,
     expression: callExpression,
-    cppType,
+    cppType: declaredCppType ?? undefined,
+    scalarType,
     nullable: item.nullable === true,
     runtimeTypeChecked: cppType !== 'inox::Value',
     valueType: item.valueType ?? undefined,
     owned: item.libraryOwned === true
   }
+}
+
+function compilerLibraryScalarType(valueType: string | null | undefined): string | undefined {
+  if (valueType === 'number') {
+    return 'double'
+  }
+
+  if (valueType === 'boolean') {
+    return 'bool'
+  }
+
+  return undefined
 }
 
 export function compilerLibraryRuntimeCallbackArgumentInfo(
