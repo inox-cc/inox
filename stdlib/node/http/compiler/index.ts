@@ -4,7 +4,8 @@ import type {
   LibraryCArgumentKind,
   LibraryCallbackParameterDescriptor,
   LibraryOperationDescriptor,
-  LibraryOperationVariantDescriptor
+  LibraryOperationVariantDescriptor,
+  TypeRef
 } from '../../../../compiler/extensions/types.ts'
 
 const libraryId = 'node:http'
@@ -13,6 +14,10 @@ const serverTypeId = `${libraryId}#Server`
 const requestTypeId = `${libraryId}#IncomingMessage`
 const responseTypeId = `${libraryId}#ServerResponse`
 const runtimeRequirements = [runtimeRequirement]
+const stringTypeRef = primitiveTypeRef('string')
+const numberTypeRef = primitiveTypeRef('number')
+const booleanTypeRef = primitiveTypeRef('boolean')
+const voidTypeRef = primitiveTypeRef('void')
 
 const operations: LibraryOperationDescriptor[] = [
   createServerOperation(),
@@ -112,11 +117,7 @@ function createServerOperation(): LibraryOperationDescriptor {
         callbackLifetime: 'event-loop'
       })
     ],
-    resultTypeId: serverTypeId,
-    cppType: 'HttpServer',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    resultTypeRef: nominalTypeRef(serverTypeId, 'value')
   }
 }
 
@@ -136,11 +137,7 @@ function serverCloseOperation(): LibraryOperationDescriptor {
         callbackLifetime: 'event-loop'
       })
     ],
-    resultTypeId: serverTypeId,
-    cppType: 'HttpServer',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    resultTypeRef: nominalTypeRef(serverTypeId, 'borrowed')
   }
 }
 
@@ -152,11 +149,7 @@ function serverListenOperation(): LibraryOperationDescriptor {
     ...serverReceiverOperation('listen'),
     minArgs: 0,
     maxArgs: 3,
-    argumentChecks: [
-      { valueTypes: ['number', 'object'] },
-      optionalStringOrCallbackArgument(),
-      callback
-    ],
+    argumentChecks: [{ valueTypes: ['number', 'object'] }, optionalStringOrCallbackArgument(), callback],
     variants: [
       serverVariant(0, 0, ['receiver']),
       serverVariant(1, 1, ['receiver', 'number'], {
@@ -196,11 +189,7 @@ function serverListenOperation(): LibraryOperationDescriptor {
         callbackLifetime: 'event-loop'
       })
     ],
-    resultTypeId: serverTypeId,
-    cppType: 'HttpServer',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    resultTypeRef: nominalTypeRef(serverTypeId, 'borrowed')
   }
 }
 
@@ -222,11 +211,7 @@ function serverOnOperation(): LibraryOperationDescriptor {
       })
     ],
     cResultMode: 'borrowed',
-    resultTypeId: serverTypeId,
-    cppType: 'HttpServer',
-    valueType: 'object',
-    nullable: false,
-    owned: false,
+    resultTypeRef: nominalTypeRef(serverTypeId, 'borrowed'),
     callbackLifetime: 'event-loop'
   }
 }
@@ -244,10 +229,11 @@ function requestMemberReadOperation(name: string): LibraryOperationDescriptor {
     cReceiverAdapter: 'HttpRequest($value)',
     cCallStyle: 'member',
     cFailureMode: 'thrown',
-    cppType: 'inox::String',
-    valueType: 'string',
-    nullable: false,
-    owned: false
+    resultTypeRef: stringTypeRef,
+    cResultMapping: {
+      cppType: 'inox::String',
+      fields: []
+    }
   }
 }
 
@@ -264,10 +250,7 @@ function responseStatusReadOperation(): LibraryOperationDescriptor {
     cReceiverAdapter: 'HttpResponse($value)',
     cCallStyle: 'member',
     cFailureMode: 'thrown',
-    cppType: 'double',
-    valueType: 'number',
-    nullable: false,
-    owned: false
+    resultTypeRef: numberTypeRef
   }
 }
 
@@ -287,10 +270,11 @@ function responseStatusWriteOperation(): LibraryOperationDescriptor {
     minArgs: 1,
     maxArgs: 1,
     argumentChecks: [numberArgument()],
-    cppType: 'void',
-    valueType: 'number',
-    nullable: false,
-    owned: false
+    resultTypeRef: numberTypeRef,
+    cResultMapping: {
+      cppType: 'void',
+      fields: []
+    }
   }
 }
 
@@ -300,15 +284,8 @@ function responseEndOperation(): LibraryOperationDescriptor {
     minArgs: 0,
     maxArgs: 1,
     argumentChecks: [bodyArgument()],
-    variants: [
-      operationVariant(0, 0, ['receiver']),
-      bodyVariant('string'),
-      bodyVariant('bytes')
-    ],
-    cppType: 'void',
-    valueType: 'void',
-    nullable: false,
-    owned: false
+    variants: [operationVariant(0, 0, ['receiver']), bodyVariant('string'), bodyVariant('bytes')],
+    resultTypeRef: voidTypeRef
   }
 }
 
@@ -319,10 +296,7 @@ function responseSetHeaderOperation(): LibraryOperationDescriptor {
     minArgs: 2,
     maxArgs: 2,
     argumentChecks: [stringArgument(), stringArgument()],
-    cppType: 'void',
-    valueType: 'void',
-    nullable: false,
-    owned: false
+    resultTypeRef: voidTypeRef
   }
 }
 
@@ -333,10 +307,7 @@ function responseWriteOperation(): LibraryOperationDescriptor {
     maxArgs: 1,
     argumentChecks: [bodyArgument()],
     variants: [bodyVariant('string'), bodyVariant('bytes')],
-    cppType: 'bool',
-    valueType: 'boolean',
-    nullable: false,
-    owned: false
+    resultTypeRef: booleanTypeRef
   }
 }
 
@@ -353,18 +324,11 @@ function responseWriteHeadOperation(): LibraryOperationDescriptor {
         argumentValueTypes: ['object'],
         argumentChecks: [numberArgument(), headersArgument()],
         cArgumentAdapters: ['', 'HttpHeaders($value)'],
-        cResultMode: 'borrowed',
-        resultTypeId: responseTypeId,
-        cppType: 'HttpResponse',
-        valueType: 'object'
+        cResultMode: 'borrowed'
       })
     ],
     cResultMode: 'borrowed',
-    resultTypeId: responseTypeId,
-    cppType: 'HttpResponse',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    resultTypeRef: nominalTypeRef(responseTypeId, 'borrowed')
   }
 }
 
@@ -404,9 +368,6 @@ type VariantOptions = {
   cArgumentAdapters?: string[]
   cArgumentSources?: Array<{ argumentIndex: number } | null>
   cResultMode?: 'value' | 'borrowed'
-  resultTypeId?: string
-  cppType?: string
-  valueType?: string
   callbackLifetime?: 'call' | 'event-loop'
 }
 
@@ -418,27 +379,17 @@ function serverVariant(
 ): LibraryOperationVariantDescriptor {
   return {
     ...operationVariant(minArgs, maxArgs, cArgumentKinds, options),
-    cResultMode: 'borrowed',
-    resultTypeId: serverTypeId,
-    cppType: 'HttpServer',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    cResultMode: 'borrowed'
   }
 }
 
 function bodyVariant(valueType: 'string' | 'bytes'): LibraryOperationVariantDescriptor {
-  return operationVariant(
-    1,
-    1,
-    valueType === 'string' ? ['receiver', 'string-view'] : ['receiver', 'value'],
-    {
-      argumentIndex: 0,
-      argumentValueTypes: [valueType],
-      argumentChecks: [{ valueTypes: [valueType] }],
-      cArgumentAdapters: valueType === 'bytes' ? ['Uint8Array($value)'] : []
-    }
-  )
+  return operationVariant(1, 1, valueType === 'string' ? ['receiver', 'string-view'] : ['receiver', 'value'], {
+    argumentIndex: 0,
+    argumentValueTypes: [valueType],
+    argumentChecks: [{ valueTypes: [valueType] }],
+    cArgumentAdapters: valueType === 'bytes' ? ['Uint8Array($value)'] : []
+  })
 }
 
 function operationVariant(
@@ -458,10 +409,28 @@ function operationVariant(
     cArgumentAdapters: options.cArgumentAdapters,
     cArgumentSources: options.cArgumentSources,
     cResultMode: options.cResultMode,
-    resultTypeId: options.resultTypeId,
-    cppType: options.cppType,
-    valueType: options.valueType,
     callbackLifetime: options.callbackLifetime
+  }
+}
+
+function nominalTypeRef(typeId: string, ownership: 'borrowed' | 'value'): TypeRef {
+  return {
+    kind: 'nominal',
+    typeId,
+    args: [],
+    nullable: false,
+    ownership,
+    traits: []
+  }
+}
+
+function primitiveTypeRef(name: 'boolean' | 'number' | 'string' | 'void'): TypeRef {
+  return {
+    kind: 'primitive',
+    name,
+    nullable: false,
+    ownership: 'value',
+    traits: []
   }
 }
 
@@ -486,10 +455,7 @@ function zeroArgumentCallback(): LibraryArgumentCheckDescriptor {
 }
 
 function requestCallbackArgument(): LibraryArgumentCheckDescriptor {
-  return callbackArgument([
-    callbackParameter('request', requestTypeId),
-    callbackParameter('response', responseTypeId)
-  ])
+  return callbackArgument([callbackParameter('request', requestTypeId), callbackParameter('response', responseTypeId)])
 }
 
 function callbackParameter(name: string, resultTypeId: string): LibraryCallbackParameterDescriptor {
@@ -500,9 +466,7 @@ function callbackParameter(name: string, resultTypeId: string): LibraryCallbackP
   }
 }
 
-function callbackArgument(
-  parameters: LibraryCallbackParameterDescriptor[]
-): LibraryArgumentCheckDescriptor {
+function callbackArgument(parameters: LibraryCallbackParameterDescriptor[]): LibraryArgumentCheckDescriptor {
   return {
     valueTypes: ['function'],
     functionParameters: parameters,

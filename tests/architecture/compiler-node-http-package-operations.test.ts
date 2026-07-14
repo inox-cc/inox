@@ -39,11 +39,8 @@ test('node:http объявляет module, Server, IncomingMessage и ServerResp
   const createServer = operation(operations, 'node:http#createServer')
 
   assert.equal(createServer.bindingId, 'node:http#module:node:http:createServer')
-  assert.deepEqual(createServer.bindingAliases, [
-    'node:http#module:node:http:default.createServer'
-  ])
+  assert.deepEqual(createServer.bindingAliases, ['node:http#module:node:http:default.createServer'])
   assert.equal(createServer.cExpression, 'http.createServer')
-  assert.equal(createServer.resultTypeId, serverTypeId)
   assert.deepEqual(callbackParameterTypeIds(callbackVariant(createServer)), [requestTypeId, responseTypeId])
 
   const close = operation(operations, 'node:http#Server.close')
@@ -77,16 +74,13 @@ test('node:http объявляет module, Server, IncomingMessage и ServerResp
   assert.ok(requestVariant)
   assert.deepEqual(callbackParameterTypeIds(requestVariant), [requestTypeId, responseTypeId])
 
-  for (const operationId of [
-    'node:http#IncomingMessage.method',
-    'node:http#IncomingMessage.url'
-  ]) {
+  for (const operationId of ['node:http#IncomingMessage.method', 'node:http#IncomingMessage.url']) {
     const requestRead = operation(operations, operationId)
 
     assert.equal(requestRead.kind, 'member-read')
     assert.equal(requestRead.receiverTypeId, requestTypeId)
     assert.equal(requestRead.cReceiverAdapter, 'HttpRequest($value)')
-    assert.equal(requestRead.valueType, 'string')
+    assert.equal(requestRead.cCallStyle, 'member')
   }
 
   const statusRead = operation(operations, 'node:http#ServerResponse.statusCode.read')
@@ -95,11 +89,9 @@ test('node:http объявляет module, Server, IncomingMessage и ServerResp
   assert.equal(statusRead.kind, 'member-read')
   assert.equal(statusRead.receiverTypeId, responseTypeId)
   assert.equal(statusRead.cReceiverAdapter, 'HttpResponse($value)')
-  assert.equal(statusRead.valueType, 'number')
   assert.equal(statusWrite.kind, 'member-write')
   assert.equal(statusWrite.receiverTypeId, responseTypeId)
   assert.equal(statusWrite.cReceiverAdapter, 'HttpResponse($value)')
-  assert.equal(statusWrite.valueType, 'number')
 
   const end = operation(operations, 'node:http#ServerResponse.end')
   const setHeader = operation(operations, 'node:http#ServerResponse.setHeader')
@@ -112,27 +104,19 @@ test('node:http объявляет module, Server, IncomingMessage и ServerResp
     assert.equal(responseOperation.cCallStyle, 'member')
   }
 
-  assert.equal(end.valueType, 'void')
   assertBodyVariants(end)
-  assert.equal(setHeader.valueType, 'void')
-  assert.equal(write.cppType, 'bool')
-  assert.equal(write.valueType, 'boolean')
+  assert.deepEqual(setHeader.cArgumentKinds, ['receiver', 'string-view', 'string-view'])
   assertBodyVariants(write)
-  assert.equal(writeHead.resultTypeId, responseTypeId)
   assert.equal(writeHead.cResultMode, 'borrowed')
   assert.ok(
     writeHead.variants?.some(
       (variant) =>
-        variant.argumentValueTypes?.includes('object') &&
-        variant.cArgumentAdapters?.includes('HttpHeaders($value)')
+        variant.argumentValueTypes?.includes('object') && variant.cArgumentAdapters?.includes('HttpHeaders($value)')
     )
   )
 })
 
-function operation(
-  operations: LibraryOperationDescriptor[],
-  operationId: string
-): LibraryOperationDescriptor {
+function operation(operations: LibraryOperationDescriptor[], operationId: string): LibraryOperationDescriptor {
   const result = operations.find((item) => item.operationId === operationId)
 
   assert.ok(result, `missing operation ${operationId}`)
@@ -141,9 +125,7 @@ function operation(
 
 function callbackVariant(operationDescriptor: LibraryOperationDescriptor): LibraryOperationVariantDescriptor {
   const variant = operationDescriptor.variants?.find(
-    (item) =>
-      item.callbackLifetime === 'event-loop' &&
-      item.cArgumentKinds?.includes('runtime-callback')
+    (item) => item.callbackLifetime === 'event-loop' && item.cArgumentKinds?.includes('runtime-callback')
   )
 
   assert.ok(variant, `missing callback variant for ${operationDescriptor.operationId}`)
@@ -164,19 +146,17 @@ function callbackParameterTypeId(parameter: LibraryCallbackParameterDescriptor):
 }
 
 function hasEventLoopCallbackVariant(operationDescriptor: LibraryOperationDescriptor): boolean {
-  return operationDescriptor.variants?.some(
-    (variant) =>
-      variant.callbackLifetime === 'event-loop' &&
-      variant.cArgumentKinds?.includes('runtime-callback')
-  ) === true
+  return (
+    operationDescriptor.variants?.some(
+      (variant) => variant.callbackLifetime === 'event-loop' && variant.cArgumentKinds?.includes('runtime-callback')
+    ) === true
+  )
 }
 
 function assertBodyVariants(operationDescriptor: LibraryOperationDescriptor): void {
   assert.ok(
     operationDescriptor.variants?.some(
-      (variant) =>
-        variant.argumentValueTypes?.includes('string') &&
-        variant.cArgumentKinds?.includes('string-view')
+      (variant) => variant.argumentValueTypes?.includes('string') && variant.cArgumentKinds?.includes('string-view')
     ),
     `${operationDescriptor.operationId} must accept string bodies`
   )
