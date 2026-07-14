@@ -1,26 +1,58 @@
 import type {
   CompilerLibraryPackageDescriptor,
-  LibraryResultShapeFieldDescriptor
+  LibraryCResultFieldMappingDescriptor,
+  ObjectTypeRef,
+  ObjectTypeRefField,
+  PrimitiveTypeRef
 } from '../../../../compiler/extensions/types.ts'
 
 const libraryId = 'global:debug'
 const runtimeRequirement = libraryId
-const memoryStatsTypeId = `${libraryId}#MemoryStats`
-
-const memoryStatsFields: LibraryResultShapeFieldDescriptor[] = [
-  memoryField('allocCount', 'alloc_count'),
-  memoryField('reallocCount', 'realloc_count'),
-  memoryField('freeCount', 'free_count'),
-  memoryField('liveAllocCount', 'live_alloc_count'),
-  memoryField('liveBytes', 'live_bytes'),
-  memoryField('peakLiveBytes', 'peak_live_bytes'),
-  memoryField('retainCount', 'retain_count'),
-  memoryField('releaseCount', 'release_count'),
-  memoryField('livePromises', 'live_promises'),
-  memoryField('liveCallbacks', 'live_callbacks'),
-  memoryField('liveWeakCells', 'live_weak_cells'),
-  memoryField('oomFailureCount', 'oom_failure_count')
+const memoryStatsFieldDefinitions = [
+  { name: 'allocCount', cMember: 'alloc_count' },
+  { name: 'reallocCount', cMember: 'realloc_count' },
+  { name: 'freeCount', cMember: 'free_count' },
+  { name: 'liveAllocCount', cMember: 'live_alloc_count' },
+  { name: 'liveBytes', cMember: 'live_bytes' },
+  { name: 'peakLiveBytes', cMember: 'peak_live_bytes' },
+  { name: 'retainCount', cMember: 'retain_count' },
+  { name: 'releaseCount', cMember: 'release_count' },
+  { name: 'livePromises', cMember: 'live_promises' },
+  { name: 'liveCallbacks', cMember: 'live_callbacks' },
+  { name: 'liveWeakCells', cMember: 'live_weak_cells' },
+  { name: 'oomFailureCount', cMember: 'oom_failure_count' }
 ]
+const numberTypeRef: PrimitiveTypeRef = {
+  kind: 'primitive',
+  name: 'number',
+  nullable: false,
+  ownership: 'value',
+  traits: []
+}
+const memoryStatsTypeFields: ObjectTypeRefField[] = []
+const memoryStatsCFields: LibraryCResultFieldMappingDescriptor[] = []
+
+for (let index = 0; index < memoryStatsFieldDefinitions.length; index = index + 1) {
+  const field = memoryStatsFieldDefinitions[index]
+  memoryStatsTypeFields.push({
+    name: field.name,
+    typeRef: numberTypeRef,
+    readonly: true
+  })
+  memoryStatsCFields.push({
+    name: field.name,
+    cMember: field.cMember,
+    cppType: 'size_t'
+  })
+}
+
+const memoryStatsTypeRef: ObjectTypeRef = {
+  kind: 'object',
+  fields: memoryStatsTypeFields,
+  nullable: false,
+  ownership: 'value',
+  traits: []
+}
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
@@ -44,12 +76,11 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       runtimeRequirements: [runtimeRequirement],
       cExpression: 'inox::debugMemory.snapshot',
       cArgumentKinds: [],
-      resultTypeId: memoryStatsTypeId,
-      resultShapeFields: memoryStatsFields,
-      cppType: 'inox::DebugMemoryStats',
-      valueType: 'object',
-      nullable: false,
-      owned: false
+      resultTypeRef: memoryStatsTypeRef,
+      cResultMapping: {
+        cppType: 'inox::DebugMemoryStats',
+        fields: memoryStatsCFields
+      }
     }
   ],
   intrinsicBindings: [],
@@ -61,14 +92,4 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       capabilities: []
     }
   ]
-}
-
-function memoryField(name: string, cMember: string): LibraryResultShapeFieldDescriptor {
-  return {
-    name,
-    valueType: 'number',
-    readonly: true,
-    cMember,
-    cppType: 'size_t'
-  }
 }

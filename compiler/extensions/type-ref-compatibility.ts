@@ -102,12 +102,13 @@ function baseTypeRefCompatibilityMetadata(
         promiseRejectionValueType: fieldMetadata.promiseRejectionValueType,
         setElementType: fieldMetadata.setElementType,
         shape: fieldMetadata.shape,
+        libraryCMember: null,
         libraryCppType: fieldMetadata.libraryCppType,
         loc
       })
     }
 
-    metadata.shape = { kind: 'object', fields }
+    metadata.shape = { kind: 'object', fields, libraryCppType: null }
     return metadata
   }
 

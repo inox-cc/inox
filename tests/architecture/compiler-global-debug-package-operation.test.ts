@@ -25,7 +25,8 @@ test('global:debug владеет namespace, memory operation и allocator initi
   const stats = result.ir.body[0].init
 
   assert.equal(stats.libraryOperationId, 'global:debug#memory')
-  assert.equal(stats.shape?.libraryTypeId, 'global:debug#MemoryStats')
+  assert.equal(stats.typeRef?.kind, 'object')
+  assert.equal(stats.shape?.libraryTypeId, undefined)
   assert.equal(stats.shape?.libraryCppType, 'inox::DebugMemoryStats')
   assert.equal(stats.shape?.fields[0].libraryCMember, 'alloc_count')
   assert.match(result.code, /#include "inox\/debug\.h"/)
