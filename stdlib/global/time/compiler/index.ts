@@ -2,8 +2,12 @@ import type {
   CompilerLibraryPackageDescriptor,
   LibraryArgumentCheckDescriptor,
   LibraryCArgumentKind,
+  LibraryCResultMappingDescriptor,
   LibraryOperationDescriptor,
-  LibraryOperationVariantDescriptor
+  LibraryOperationVariantDescriptor,
+  NominalTypeRef,
+  PrimitiveTypeRef,
+  TypeRef
 } from '../../../../compiler/extensions/types.ts'
 
 const libraryId = 'global:time'
@@ -12,6 +16,20 @@ const wallRuntimeRequirement = `${libraryId}#wall`
 const monotonicRuntimeRequirement = `${libraryId}#monotonic`
 const stringRuntimeRequirement = `${libraryId}#string`
 const dateTypeId = `${libraryId}#Date`
+const dateTypeRef: NominalTypeRef = {
+  kind: 'nominal',
+  typeId: dateTypeId,
+  args: [],
+  nullable: false,
+  ownership: 'value',
+  traits: []
+}
+const numberTypeRef: PrimitiveTypeRef = primitiveTypeRef('number')
+const stringTypeRef: PrimitiveTypeRef = primitiveTypeRef('string')
+const stringCResultMapping: LibraryCResultMappingDescriptor = {
+  cppType: 'inox::String',
+  fields: []
+}
 
 const numberMethods = [
   'getDate',
@@ -46,13 +64,13 @@ const stringMethods = [
 
 const operations: LibraryOperationDescriptor[] = [
   dateConstructor(),
-  staticCall('Date', 'now', [], 'double', 'number', 0, 0, [], [wallRuntimeRequirement]),
+  staticCall('Date', 'now', [], numberTypeRef, null, 0, 0, [], [wallRuntimeRequirement]),
   staticCall(
     'Date',
     'parse',
     ['string-view'],
-    'double',
-    'number',
+    numberTypeRef,
+    null,
     1,
     1,
     [argument(['string'])],
@@ -62,8 +80,8 @@ const operations: LibraryOperationDescriptor[] = [
     'Date',
     'UTC',
     datePartsArgumentKinds(),
-    'double',
-    'number',
+    numberTypeRef,
+    null,
     2,
     7,
     repeatedArguments(7, ['number']),
@@ -73,8 +91,8 @@ const operations: LibraryOperationDescriptor[] = [
     'performance',
     'now',
     [],
-    'double',
-    'number',
+    numberTypeRef,
+    null,
     0,
     0,
     [],
@@ -83,11 +101,11 @@ const operations: LibraryOperationDescriptor[] = [
 ]
 
 for (let index = 0; index < numberMethods.length; index = index + 1) {
-  operations.push(dateReceiverCall(numberMethods[index], 'double', 'number', [runtimeRequirement]))
+  operations.push(dateReceiverCall(numberMethods[index], numberTypeRef, null, [runtimeRequirement]))
 }
 
 for (let index = 0; index < stringMethods.length; index = index + 1) {
-  operations.push(dateReceiverCall(stringMethods[index], 'inox::String', 'string', [stringRuntimeRequirement]))
+  operations.push(dateReceiverCall(stringMethods[index], stringTypeRef, stringCResultMapping, [stringRuntimeRequirement]))
 }
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
@@ -166,12 +184,8 @@ function dateConstructor(): LibraryOperationDescriptor {
     ],
     minArgs: 0,
     maxArgs: 7,
-    resultTypeId: dateTypeId,
     cResultMode: 'value',
-    cppType: 'DateValue',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    resultTypeRef: dateTypeRef
   }
 }
 
@@ -193,12 +207,7 @@ function constructorVariant(
     argumentValueTypes,
     cExpression: 'Date',
     cArgumentKinds,
-    cResultMode: 'value',
-    resultTypeId: dateTypeId,
-    cppType: 'DateValue',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    cResultMode: 'value'
   }
 }
 
@@ -206,8 +215,8 @@ function staticCall(
   root: string,
   name: string,
   cArgumentKinds: LibraryCArgumentKind[],
-  cppType: string,
-  valueType: string,
+  resultTypeRef: TypeRef,
+  cResultMapping: LibraryCResultMappingDescriptor | null,
   minArgs: number,
   maxArgs: number,
   argumentChecks: LibraryArgumentCheckDescriptor[],
@@ -224,17 +233,15 @@ function staticCall(
     minArgs,
     maxArgs,
     argumentChecks,
-    cppType,
-    valueType,
-    nullable: false,
-    owned: false
+    resultTypeRef,
+    cResultMapping
   }
 }
 
 function dateReceiverCall(
   name: string,
-  cppType: string,
-  valueType: string,
+  resultTypeRef: TypeRef,
+  cResultMapping: LibraryCResultMappingDescriptor | null,
   runtimeRequirements: string[]
 ): LibraryOperationDescriptor {
   return {
@@ -250,10 +257,8 @@ function dateReceiverCall(
     minArgs: 0,
     maxArgs: 0,
     argumentChecks: [],
-    cppType,
-    valueType,
-    nullable: false,
-    owned: false
+    resultTypeRef,
+    cResultMapping
   }
 }
 
@@ -281,4 +286,14 @@ function repeatedArguments(count: number, valueTypes: string[]): LibraryArgument
   }
 
   return checks
+}
+
+function primitiveTypeRef(name: 'number' | 'string'): PrimitiveTypeRef {
+  return {
+    kind: 'primitive',
+    name,
+    nullable: false,
+    ownership: 'value',
+    traits: []
+  }
 }
