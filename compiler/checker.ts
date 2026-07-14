@@ -38,11 +38,16 @@ import {
   compilerLibraryHasModuleDeclaration,
   compilerLibraryNativeTypeForId,
   compilerLibraryNativeTypeIsAssignable,
+  compilerLibraryOperationForBinding,
   compilerLibraryOperationForGlobal,
   compilerLibraryOperationForImport,
   compilerLibraryOperationForReceiver,
   resolveCompilerLibrarySet
 } from './extensions/library-set.ts'
+import {
+  parseCompilerLibraryGlobalDeclarations,
+  type ParsedCompilerLibraryGlobalDeclaration
+} from './extensions/global-declarations.ts'
 import type {
   LibraryOperationDescriptor,
   LibraryOperationKind,
@@ -275,12 +280,20 @@ import type {
 import type { ExpressionMetadataResolverContext } from './checker/expression-metadata.ts'
 
 class CheckerScope {
-  parent: CheckerScope | null
+  parentBindings: Map<string, SymbolInfo>[]
   bindings: Map<string, SymbolInfo>
 
   constructor(parent: CheckerScope | null) {
-    this.parent = parent
+    this.parentBindings = []
     this.bindings = new Map()
+
+    if (parent !== null) {
+      this.parentBindings.push(parent.bindings)
+
+      for (let index = 0; index < parent.parentBindings.length; index = index + 1) {
+        this.parentBindings.push(parent.parentBindings[index])
+      }
+    }
   }
 
   hasOwn(name: string): boolean {
@@ -294,16 +307,12 @@ class CheckerScope {
       return local
     }
 
-    let current = this.parent
-
-    while (current !== null && typeof current !== 'undefined') {
-      const found = current.bindings.get(name)
+    for (let index = 0; index < this.parentBindings.length; index = index + 1) {
+      const found = this.parentBindings[index].get(name)
 
       if (found !== null && typeof found !== 'undefined') {
         return found
       }
-
-      current = current.parent
     }
 
     return null
@@ -312,11 +321,8 @@ class CheckerScope {
   collectBindings(target: Map<string, SymbolInfo>[]): void {
     target.push(this.bindings)
 
-    let current = this.parent
-
-    while (current !== null && typeof current !== 'undefined') {
-      target.push(current.bindings)
-      current = current.parent
+    for (let index = 0; index < this.parentBindings.length; index = index + 1) {
+      target.push(this.parentBindings[index])
     }
   }
 }
@@ -380,6 +386,8 @@ class Checker {
   types: Map<string, TypeAliasInfo>
   typeSymbols: Map<string, SymbolInfo>
   classNames: Set<string>
+  ambientTypeNames: Set<string>
+  localTypeNames: Set<string>
   breakDepth: number
   continueDepth: number
   currentReturnType: ValueType
@@ -402,6 +410,8 @@ class Checker {
     this.types = new Map()
     this.typeSymbols = new Map()
     this.classNames = new Set()
+    this.ambientTypeNames = new Set()
+    this.localTypeNames = new Set()
     this.breakDepth = 0
     this.continueDepth = 0
     this.currentReturnType = 'void'
@@ -418,6 +428,7 @@ class Checker {
   }
 
   check(): void {
+    this.collectLibraryGlobalDeclarations()
     this.collectTopLevelDeclarations()
 
     for (let index = 0; index < this.program.body.length; index = index + 1) {
@@ -427,6 +438,154 @@ class Checker {
     }
 
     throwDiagnostics(this.diagnostics)
+  }
+
+  collectLibraryGlobalDeclarations(): void {
+    const parsed = parseCompilerLibraryGlobalDeclarations(
+      resolveCompilerLibrarySet(this.options.libraries).declarations
+    )
+
+    for (let index = 0; index < parsed.diagnostics.length; index = index + 1) {
+      this.diagnostics.push(parsed.diagnostics[index])
+    }
+
+    throwDiagnostics(this.diagnostics)
+
+    for (let declarationIndex = 0; declarationIndex < parsed.declarations.length; declarationIndex = declarationIndex + 1) {
+      const declaration = parsed.declarations[declarationIndex]
+
+      for (let itemIndex = 0; itemIndex < declaration.program.body.length; itemIndex = itemIndex + 1) {
+        const item = checkerNodeAt(declaration.program.body, itemIndex)
+
+        if (item.type === 'TypeAliasDeclaration') {
+          this.types.set(item.name, item.valueType)
+          this.ambientTypeNames.add(item.name)
+        } else if (item.type === 'ClassDeclaration') {
+          this.classNames.add(item.name)
+          this.ambientTypeNames.add(item.name)
+        }
+      }
+    }
+
+    for (let declarationIndex = 0; declarationIndex < parsed.declarations.length; declarationIndex = declarationIndex + 1) {
+      this.declareLibraryGlobalProgram(parsed.declarations[declarationIndex])
+    }
+
+    const ambientScope = this.scope
+
+    this.scope = new CheckerScope(ambientScope)
+    this.resolvedDeclaredTypes.clear()
+    this.resolvingDeclaredTypes.clear()
+  }
+
+  declareLibraryGlobalProgram(declaration: ParsedCompilerLibraryGlobalDeclaration): void {
+    for (let index = 0; index < declaration.program.body.length; index = index + 1) {
+      const item = checkerNodeAt(declaration.program.body, index)
+
+      if (item.type === 'FunctionDeclaration') {
+        this.declareLibraryGlobalFunction(declaration.libraryId, item)
+      } else if (item.type === 'VariableDeclaration') {
+        this.declareLibraryGlobalVariable(declaration.libraryId, item)
+      } else if (item.type === 'ClassDeclaration') {
+        this.declareLibraryGlobalClass(declaration.libraryId, item)
+      }
+    }
+  }
+
+  declareLibraryGlobalFunction(libraryId: string, item: AnyNode): void {
+    const symbol = this.importedFunctionDeclarationSymbol(item, item.loc)
+    symbol.libraryId = libraryId
+    symbol.libraryBindingId = `global:${item.name}`
+    const existing = this.scope.bindings.get(item.name)
+
+    if (existing !== null && typeof existing !== 'undefined') {
+      const overloads = existing.overloads ?? []
+      overloads.push(symbol)
+      existing.overloads = overloads
+      return
+    }
+
+    const firstOverload = this.importedFunctionDeclarationSymbol(item, item.loc)
+    symbol.overloads = [firstOverload]
+    this.scope.bindings.set(item.name, symbol)
+  }
+
+  declareLibraryGlobalVariable(libraryId: string, item: AnyNode): void {
+    const info = this.resolveDeclaredType(item.declaredType, item.loc)
+    const symbol: SymbolInfo = {
+      kind: 'global',
+      mutable: item.kind !== 'const',
+      valueType: info.valueType,
+      libraryId,
+      libraryBindingId: `global:${item.name}`,
+      loc: item.loc
+    }
+
+    this.applyResolvedTypeInfoToSymbol(symbol, info)
+    this.scope.bindings.set(item.name, symbol)
+  }
+
+  declareLibraryGlobalClass(libraryId: string, item: AnyNode): void {
+    const constructorMethods: AnyNode[] = []
+
+    for (let index = 0; index < item.methods.length; index = index + 1) {
+      const method = checkerNodeAt(item.methods, index)
+
+      if (method.name === 'constructor') {
+        constructorMethods.push(method)
+      }
+    }
+
+    const constructorMethod = constructorMethods[0] ?? null
+    let constructorParams: AnyNode[] = []
+
+    if (constructorMethod !== null && typeof constructorMethod !== 'undefined') {
+      constructorParams = this.resolveParams(constructorMethod.params)
+    }
+
+    const shape = this.resolveClassInstanceShape(item, constructorParams)
+    const constructorOverloads: SymbolInfo[] = []
+
+    if (constructorMethods.length === 0) {
+      constructorOverloads.push({
+        kind: 'function',
+        valueType: 'function',
+        params: [],
+        returnType: 'object',
+        returnShape: shape,
+        loc: item.loc
+      })
+    }
+
+    for (let index = 0; index < constructorMethods.length; index = index + 1) {
+      const method = constructorMethods[index]
+
+      constructorOverloads.push({
+        kind: 'function',
+        valueType: 'function',
+        params: this.resolveParams(method.params),
+        returnType: 'object',
+        returnShape: shape,
+        loc: method.loc
+      })
+    }
+
+    const symbol: SymbolInfo = {
+      kind: 'class',
+      mutable: false,
+      valueType: 'class',
+      libraryId,
+      libraryBindingId: `global:${item.name}`,
+      classMethods: item.methods,
+      constructorParams,
+      constructorOverloads,
+      shape,
+      loc: item.loc
+    }
+
+    item.shape = shape
+    this.scope.bindings.set(item.name, symbol)
+    this.typeSymbols.set(item.name, symbol)
   }
 
   collectTopLevelDeclarations(): void {
@@ -1741,10 +1900,12 @@ class Checker {
         }
       }
 
-      if (path.length === 1 && !this.scope.resolve(path[0])) {
-        const globalOperation = compilerLibraryOperationForGlobal(
-          resolveCompilerLibrarySet(this.options.libraries),
-          path,
+      if (
+        path.length === 1 &&
+        (symbol === null || typeof symbol === 'undefined' || symbol.kind !== 'import')
+      ) {
+        const globalOperation = this.compilerLibraryOperationForExpression(
+          expression,
           'member-read'
         )
 
@@ -3627,6 +3788,7 @@ class Checker {
       return null
     }
 
+    const declaredSymbol = this.compilerLibraryDeclarationCallableSymbol(expression.callee)
     const variant = this.compilerLibraryOperationVariant(expression, operation)
 
     this.applyCompilerLibraryOperation(expression, operation, variant)
@@ -3636,10 +3798,83 @@ class Checker {
       return 'unknown'
     }
 
-    this.checkCompilerLibraryOperationArguments(expression, operation, variant)
+    const argInfos = this.checkCompilerLibraryOperationArguments(expression, operation, variant)
+    let declaredType: ValueType | null = null
+
+    if (declaredSymbol !== null) {
+      declaredType = applyCallableSymbolCallInContext(
+        this.callableSymbolContext(),
+        expression,
+        declaredSymbol,
+        argInfos
+      )
+      this.applyCompilerLibraryOperation(expression, operation, variant)
+    }
+
     this.checkCompilerLibraryBackendConstraints(expression, operation)
 
-    return (variant?.valueType ?? operation.valueType ?? 'unknown') as ValueType
+    return (variant?.valueType ?? declaredType ?? operation.valueType ?? 'unknown') as ValueType
+  }
+
+  compilerLibraryDeclarationCallableSymbol(callee: AnyNode): SymbolInfo | null {
+    const path = memberExpressionPath(callee)
+
+    if (path.length === 0) {
+      return null
+    }
+
+    const root = this.scope.resolve(path[0])
+
+    if (
+      root === null ||
+      typeof root === 'undefined' ||
+      root.libraryId === null ||
+      typeof root.libraryId === 'undefined' ||
+      root.libraryBindingId === null ||
+      typeof root.libraryBindingId === 'undefined'
+    ) {
+      return null
+    }
+
+    this.checkExpression(callee)
+    return this.getCallableSymbol(callee)
+  }
+
+  compilerLibraryDeclarationConstructorSymbol(callee: AnyNode): SymbolInfo | null {
+    const path = memberExpressionPath(callee)
+
+    if (path.length !== 1) {
+      return null
+    }
+
+    const symbol = this.scope.resolve(path[0])
+
+    if (
+      symbol === null ||
+      typeof symbol === 'undefined' ||
+      symbol.libraryId === null ||
+      typeof symbol.libraryId === 'undefined' ||
+      symbol.libraryBindingId === null ||
+      typeof symbol.libraryBindingId === 'undefined'
+    ) {
+      return null
+    }
+
+    return this.constructorCallableSymbol(symbol)
+  }
+
+  constructorCallableSymbol(symbol: SymbolInfo): SymbolInfo | null {
+    const overloads = symbol.constructorOverloads ?? []
+    const first = overloads[0]
+
+    if (first === null || typeof first === 'undefined') {
+      return null
+    }
+
+    return {
+      ...first,
+      overloads
+    }
   }
 
   compilerLibraryOperationVariant(
@@ -3706,8 +3941,9 @@ class Checker {
   checkCompilerLibraryOperationArguments(
     expression: AnyNode,
     operation: LibraryOperationDescriptor,
-    variant: LibraryOperationVariantDescriptor | null = null
-  ): void {
+    variant: LibraryOperationVariantDescriptor | null = null,
+    knownArgInfos: CheckedCallArgInfo[] | null = null
+  ): CheckedCallArgInfo[] {
     const minArgs = operation.minArgs
     const maxArgs = operation.maxArgs
 
@@ -3744,15 +3980,17 @@ class Checker {
       }
     }
 
-    const argInfos: CheckedCallArgInfo[] = []
+    const argInfos: CheckedCallArgInfo[] = knownArgInfos ?? []
 
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const argument = expression.args[index]
+    if (knownArgInfos === null) {
+      for (let index = 0; index < expression.args.length; index = index + 1) {
+        const argument = expression.args[index]
 
-      if (contextuallyCheckedCallbacks.has(argument)) {
-        argInfos.push(this.checkedCallArgInfo(argument, 'function'))
-      } else {
-        argInfos.push(this.checkedCallArgInfo(argument))
+        if (contextuallyCheckedCallbacks.has(argument)) {
+          argInfos.push(this.checkedCallArgInfo(argument, 'function'))
+        } else {
+          argInfos.push(this.checkedCallArgInfo(argument))
+        }
       }
     }
 
@@ -3883,6 +4121,8 @@ class Checker {
         }
       }
     }
+
+    return argInfos
   }
 
   checkCompilerLibraryNamedCallbackArgument(
@@ -4239,6 +4479,26 @@ class Checker {
     }
 
     const symbol = scopedSymbol
+
+    if (
+      symbol.libraryId !== null &&
+      typeof symbol.libraryId !== 'undefined' &&
+      symbol.libraryBindingId !== null &&
+      typeof symbol.libraryBindingId !== 'undefined'
+    ) {
+      let bindingId = symbol.libraryBindingId
+
+      for (let index = 1; index < path.length; index = index + 1) {
+        bindingId = `${bindingId}.${path[index]}`
+      }
+
+      return compilerLibraryOperationForBinding(
+        resolveCompilerLibrarySet(this.options.libraries),
+        symbol.libraryId,
+        bindingId,
+        kind
+      )
+    }
 
     if (symbol === null || symbol.kind !== 'import') {
       return null
@@ -6083,14 +6343,17 @@ class Checker {
     }
 
     const argTypes: ValueType[] = []
+    const argInfos: CheckedCallArgInfo[] = []
 
     for (let index = 0; index < expression.args.length; index = index + 1) {
       const arg = checkerNodeAt(expression.args, index)
+      const argType = this.checkExpression(arg)
 
-      argTypes.push(this.checkExpression(arg))
+      argTypes.push(argType)
+      argInfos.push(this.checkedCallArgInfo(arg, argType))
     }
 
-    const libraryConstructorType = this.checkCompilerLibraryConstructOperation(expression)
+    const libraryConstructorType = this.checkCompilerLibraryConstructOperation(expression, argInfos)
 
     if (libraryConstructorType !== null) {
       return libraryConstructorType
@@ -6197,6 +6460,20 @@ class Checker {
       return 'object'
     }
 
+    const declarationConstructor = this.constructorCallableSymbol(symbol)
+
+    if (declarationConstructor !== null) {
+      applyCallableSymbolCallInContext(
+        this.callableSymbolContext(),
+        expression,
+        declarationConstructor,
+        argInfos
+      )
+      expression.className = constructorName
+      expression.shape = symbol.shape ?? expression.shape ?? null
+      return 'object'
+    }
+
     if (symbol.constructable) {
       this.checkImportedClassConstructorArguments(expression, symbol.constructorParams)
       return 'object'
@@ -6240,13 +6517,17 @@ class Checker {
     return 'object'
   }
 
-  checkCompilerLibraryConstructOperation(expression: AnyNode): ValueType | null {
+  checkCompilerLibraryConstructOperation(
+    expression: AnyNode,
+    argInfos: CheckedCallArgInfo[]
+  ): ValueType | null {
     const operation = this.compilerLibraryOperationForExpression(expression.callee, 'construct')
 
     if (operation === null) {
       return null
     }
 
+    const declaredSymbol = this.compilerLibraryDeclarationConstructorSymbol(expression.callee)
     const variant = this.compilerLibraryOperationVariant(expression, operation)
 
     this.applyCompilerLibraryOperation(expression, operation, variant)
@@ -6255,10 +6536,28 @@ class Checker {
       return 'unknown'
     }
 
-    this.checkCompilerLibraryOperationArguments(expression, operation, variant)
+    const checkedArgInfos = this.checkCompilerLibraryOperationArguments(
+      expression,
+      operation,
+      variant,
+      argInfos
+    )
+
+    let declaredType: ValueType | null = null
+
+    if (declaredSymbol !== null) {
+      declaredType = applyCallableSymbolCallInContext(
+        this.callableSymbolContext(),
+        expression,
+        declaredSymbol,
+        checkedArgInfos
+      )
+      this.applyCompilerLibraryOperation(expression, operation, variant)
+    }
+
     this.checkCompilerLibraryBackendConstraints(expression, operation)
 
-    return (variant?.valueType ?? operation.valueType ?? 'object') as ValueType
+    return (variant?.valueType ?? declaredType ?? operation.valueType ?? 'object') as ValueType
   }
 
   checkImportedClassConstructorArguments(
@@ -8509,7 +8808,13 @@ class Checker {
   }
 
   declareTypeAlias(item: TypeAliasDeclarationNode): void {
+    if (this.ambientTypeNames.has(item.name) && !this.localTypeNames.has(item.name)) {
+      this.types.delete(item.name)
+      this.resolvedDeclaredTypes.delete(item.name)
+    }
+
     declareTypeAliasInContext(this.declaredTypeContext(), item)
+    this.localTypeNames.add(item.name)
   }
 
   resolveDeclaredType(name: string | null | undefined, loc: SourceLocation): ResolvedTypeInfo {

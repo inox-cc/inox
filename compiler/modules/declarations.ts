@@ -210,6 +210,65 @@ export function parseModuleDeclarationContractResult(
   }
 }
 
+export function parseGlobalDeclarationContract(
+  source: string,
+  file: string | null = null
+): ProgramNode {
+  const result = parseGlobalDeclarationContractResult(source, file)
+
+  throwDiagnostics(result.diagnostics)
+
+  return result.program
+}
+
+export function parseGlobalDeclarationContractResult(
+  source: string,
+  file: string | null = null
+): ModuleDeclarationContractParseResult {
+  try {
+    const diagnostics: Diagnostic[] = []
+    const normalized = normalizeGlobalDeclarationContractSource(source, file, diagnostics)
+
+    if (diagnostics.length > 0) {
+      return {
+        program: emptyProgram(),
+        diagnostics
+      }
+    }
+
+    const tokens = tokenize(normalized, {
+      file: declarationContractFileName(file)
+    })
+    const program = parse(tokens)
+
+    markModuleDeclarationContractProgram(program)
+    validateGlobalDeclarationContractProgram(program, diagnostics)
+
+    if (diagnostics.length > 0) {
+      return {
+        program: emptyProgram(),
+        diagnostics
+      }
+    }
+
+    return {
+      program,
+      diagnostics
+    }
+  } catch (error) {
+    const diagnostics = diagnosticsFromCompileError(error)
+
+    if (diagnostics !== null) {
+      return {
+        program: emptyProgram(),
+        diagnostics
+      }
+    }
+
+    throw error
+  }
+}
+
 function appendModuleDeclarationContractNode(lines: string[], item: AnyNode, diagnostics: Diagnostic[]): void {
   if (item.type === 'ImportDeclaration') {
     appendModuleDeclarationImport(lines, item, diagnostics)
@@ -307,9 +366,28 @@ function appendModuleDeclarationClass(lines: string[], item: AnyNode): void {
   lines.push(`${exportPrefix(item)}class ${item.name}${extendsClause} {`)
 
   appendModuleDeclarationClassFields(lines, item.fields)
+  appendModuleDeclarationClassIndexSignatures(lines, item.indexSignatures)
   appendModuleDeclarationClassMethods(lines, item.methods)
 
   lines.push('}')
+}
+
+function appendModuleDeclarationClassIndexSignatures(
+  lines: string[],
+  signatures: AnyNode[] | null | undefined
+): void {
+  if (signatures === null || typeof signatures === 'undefined') {
+    return
+  }
+
+  for (const signature of signatures) {
+    const readonlyPrefix = signature.readonly === true ? 'readonly ' : ''
+    const name = stringMetadata(signature.name, 'index')
+    const keyType = stringMetadata(signature.keyType, 'unknown')
+    const valueType = stringMetadata(signature.valueType, 'unknown')
+
+    lines.push(`  ${readonlyPrefix}[${name}: ${keyType}]: ${valueType};`)
+  }
 }
 
 function appendModuleDeclarationClassFields(lines: string[], fields: AnyNode[] | null | undefined): void {
@@ -344,6 +422,39 @@ function appendModuleDeclarationClassMethods(lines: string[], methods: AnyNode[]
 function validateModuleDeclarationContractProgram(program: ProgramNode, diagnostics: Diagnostic[]): void {
   for (const item of program.body) {
     validateModuleDeclarationContractNode(item, diagnostics)
+  }
+}
+
+function validateGlobalDeclarationContractProgram(program: ProgramNode, diagnostics: Diagnostic[]): void {
+  for (const item of program.body) {
+    if (item.type === 'VariableDeclaration') {
+      if (declaredTypeName(item) === null) {
+        diagnostics.push(
+          diagnostic(
+            'INOX_DECLARATION_EXPLICIT_TYPE_REQUIRED',
+            `ambient ${stringMetadata(item.kind, 'const')} ${item.name} needs an explicit type in declaration contracts`,
+            item.loc
+          )
+        )
+      }
+      continue
+    }
+
+    if (
+      item.type === 'TypeAliasDeclaration' ||
+      item.type === 'FunctionDeclaration' ||
+      item.type === 'ClassDeclaration'
+    ) {
+      continue
+    }
+
+    diagnostics.push(
+      diagnostic(
+        'INOX_DECLARATION_UNSUPPORTED_NODE',
+        `global declaration contracts do not support ${stringMetadata(item.type, 'unknown')} nodes`,
+        item.loc
+      )
+    )
   }
 }
 
@@ -512,6 +623,116 @@ function normalizeModuleDeclarationContractSource(
     source: joinParts(parts),
     defaultExports
   }
+}
+
+function normalizeGlobalDeclarationContractSource(
+  source: string,
+  file: string | null,
+  diagnostics: Diagnostic[]
+): string {
+  const tokens = tokenize(source, {
+    file: declarationContractFileName(file)
+  })
+  const parts: string[] = []
+  let foundGlobalBlock = false
+  let position = 0
+
+  while (!tokenIs(tokens, position, 'eof', '<eof>')) {
+    if (isEmptyExportMarker(tokens, position)) {
+      position = position + 3
+
+      if (tokenValue(tokens, position) === ';') {
+        position = position + 1
+      }
+      continue
+    }
+
+    if (isDeclareGlobalStart(tokens, position)) {
+      const open = position + 2
+      const close = findBalancedClose(tokens, open, '{', '}')
+
+      if (tokenValue(tokens, close) !== '}') {
+        diagnostics.push(
+          diagnostic(
+            'INOX_DECLARATION_GLOBAL_BLOCK',
+            'global declaration contract has an unclosed declare global block',
+            tokenAt(tokens, position)
+          )
+        )
+        return ''
+      }
+
+      if (foundGlobalBlock) {
+        diagnostics.push(
+          diagnostic(
+            'INOX_DECLARATION_GLOBAL_BLOCK',
+            'global declaration contract must contain exactly one declare global block',
+            tokenAt(tokens, position)
+          )
+        )
+        return ''
+      }
+
+      foundGlobalBlock = true
+      const bodyParts: string[] = []
+
+      for (let index = open + 1; index < close; index = index + 1) {
+        bodyParts.push(tokenSource(tokenAt(tokens, index)))
+      }
+
+      const normalized = normalizeModuleDeclarationContractSource(
+        joinParts(bodyParts),
+        file,
+        diagnostics
+      )
+
+      parts.push(normalized.source)
+      position = close + 1
+
+      if (tokenValue(tokens, position) === ';') {
+        position = position + 1
+      }
+      continue
+    }
+
+    diagnostics.push(
+      diagnostic(
+        'INOX_DECLARATION_GLOBAL_WRAPPER',
+        'global declaration contracts support only export {} and declare global declarations',
+        tokenAt(tokens, position)
+      )
+    )
+    return ''
+  }
+
+  if (!foundGlobalBlock) {
+    diagnostics.push(
+      diagnostic(
+        'INOX_DECLARATION_GLOBAL_WRAPPER',
+        'global declaration contract requires a declare global block',
+        tokenAt(tokens, 0)
+      )
+    )
+    return ''
+  }
+
+  return joinParts(parts)
+}
+
+function isEmptyExportMarker(tokens: Token[], position: number): boolean {
+  return (
+    tokenValue(tokens, position) === 'export' &&
+    tokenValue(tokens, position + 1) === '{' &&
+    tokenValue(tokens, position + 2) === '}'
+  )
+}
+
+function isDeclareGlobalStart(tokens: Token[], position: number): boolean {
+  return (
+    tokenValue(tokens, position) === 'declare' &&
+    tokenValue(tokens, position + 1) === 'global' &&
+    tokenValue(tokens, position + 2) === '{'
+  )
 }
 
 function renameModuleDeclarationDefaultExports(
@@ -1566,8 +1787,30 @@ function cloneClassDeclaration(item: AnyNode): AnyNode {
     extendsLoc: nullableMetadata(item.extendsLoc),
     shape: nullableMetadata(item.shape),
     fields: cloneClassFields(item.fields),
+    indexSignatures: cloneClassIndexSignatures(item.indexSignatures),
     methods: cloneClassMethods(item.methods)
   }
+}
+
+function cloneClassIndexSignatures(signatures: AnyNode[] | null | undefined): AnyNode[] {
+  const cloned: AnyNode[] = []
+
+  if (signatures === null || typeof signatures === 'undefined') {
+    return cloned
+  }
+
+  for (const signature of signatures) {
+    cloned.push({
+      type: 'ClassIndexSignature',
+      name: signature.name,
+      keyType: signature.keyType,
+      valueType: signature.valueType,
+      readonly: signature.readonly === true,
+      loc: nullableMetadata(signature.loc)
+    })
+  }
+
+  return cloned
 }
 
 function cloneClassFields(fields: AnyNode[] | null | undefined): AnyNode[] {

@@ -155,16 +155,25 @@ function compilerLibraryDescriptor(library: DiscoveredCompilerLibrary): Compiler
 
   if (
     library.declarationSource !== null &&
-    library.declarationPath !== null &&
-    library.importSource !== null
+    library.declarationPath !== null
   ) {
-    declarations.push({
-      libraryId: library.id,
-      kind: 'module' as const,
-      source: library.importSource,
-      declarationSource: library.declarationSource,
-      compilerImplemented: compilerPackage !== null
-    })
+    if (library.kind === 'global') {
+      declarations.push({
+        libraryId: library.id,
+        kind: 'global' as const,
+        source: library.declarationPath,
+        declarationSource: library.declarationSource,
+        compilerImplemented: compilerPackage !== null
+      })
+    } else if (library.importSource !== null) {
+      declarations.push({
+        libraryId: library.id,
+        kind: 'module' as const,
+        source: library.importSource,
+        declarationSource: library.declarationSource,
+        compilerImplemented: compilerPackage !== null
+      })
+    }
   }
 
   return {

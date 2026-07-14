@@ -181,6 +181,8 @@ export type SymbolInfo = {
   kind: string
   mutable?: boolean
   valueType: ValueType
+  libraryId?: string | null
+  libraryBindingId?: string | null
   importedName?: string
   importSource?: string
   nullable?: boolean
@@ -209,6 +211,7 @@ export type SymbolInfo = {
   classMethods?: AnyNode[]
   constructable?: boolean
   constructorParams?: AnyNode[]
+  constructorOverloads?: CallableOverloadInfo[]
   functionType?: any
   overloads?: CallableOverloadInfo[]
   shape?: ObjectShapeInfo | null

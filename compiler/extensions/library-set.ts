@@ -168,10 +168,24 @@ export function compilerLibraryOperationForGlobal(
 
   const bindingId = `global:${globalPath.join('.')}`
 
+  return compilerLibraryOperationForBinding(libraries, null, bindingId, kind)
+}
+
+export function compilerLibraryOperationForBinding(
+  libraries: CompilerLibrarySet,
+  libraryId: string | null,
+  bindingId: string,
+  kind: LibraryOperationKind
+): LibraryOperationDescriptor | null {
+
   for (let index = 0; index < libraries.operations.length; index = index + 1) {
     const operation = libraries.operations[index]
 
-    if (operation.kind === kind && operationHasBinding(operation, bindingId)) {
+    if (
+      operation.kind === kind &&
+      (libraryId === null || operation.libraryId === libraryId) &&
+      operationHasBinding(operation, bindingId)
+    ) {
       return operation
     }
   }

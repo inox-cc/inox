@@ -733,6 +733,7 @@ class Parser {
   parseClassDeclaration(exported: boolean): AnyNode {
     const name = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected class name')
     const fields: AnyNode[] = []
+    const indexSignatures: AnyNode[] = []
     const methods: AnyNode[] = []
     let extendsName: string | null = null
 
@@ -750,6 +751,8 @@ class Parser {
 
       if (member.type === 'FieldDefinition') {
         fields.push(member)
+      } else if (member.type === 'ClassIndexSignature') {
+        indexSignatures.push(member)
       } else {
         methods.push(member)
       }
@@ -763,6 +766,7 @@ class Parser {
       extendsName,
       extendsToken,
       fields,
+      indexSignatures,
       methods
     })
   }
@@ -770,6 +774,15 @@ class Parser {
   parseClassMember(): AnyNode {
     const staticToken = this.matchClassStaticModifier()
     const modifiers = this.parseFieldModifiers()
+
+    if (this.isValue('[')) {
+      if (staticToken !== null) {
+        this.report('INOX_EXPECTED_TYPE', 'class index signatures cannot be static', staticToken)
+      }
+
+      return this.parseClassIndexSignature(modifiers.readOnly)
+    }
+
     const name = this.parseClassMemberName()
 
     if (!modifiers.readOnly && this.isValue('(')) {
@@ -794,6 +807,28 @@ class Parser {
       ownership: valueType.ownership,
       valueType: valueType.valueType
     })
+  }
+
+  parseClassIndexSignature(readOnly: boolean): AnyNode {
+    const start = this.expectValue('[', 'INOX_EXPECTED_TYPE', 'expected [ in class index signature')
+    const name = this.expectTypeParameterName('expected class index signature parameter name')
+    this.expectValue(':', 'INOX_EXPECTED_TYPE', 'expected : after class index signature parameter name')
+    const keyType = this.parseTypeAnnotation([']'], null)
+    this.expectValue(']', 'INOX_EXPECTED_TYPE', 'expected ] after class index signature')
+    this.expectValue(':', 'INOX_EXPECTED_TYPE', 'expected : after class index signature')
+    const valueType = this.parseTypeAnnotation([';', '}'], {
+      stopAtLineBreak: true
+    })
+    this.matchValue(';')
+
+    return {
+      type: 'ClassIndexSignature',
+      name: name.value,
+      keyType,
+      valueType,
+      readonly: readOnly,
+      loc: locFromToken(start)
+    }
   }
 
   parseFieldModifiers(): FieldModifiers {

@@ -11,6 +11,8 @@ import type {
   LibraryResultShapeFieldDescriptor,
   RuntimeRequirementDescriptor
 } from './types.ts'
+import { formatDiagnostics } from '../diagnostics.ts'
+import { parseCompilerLibraryGlobalDeclarations } from './global-declarations.ts'
 
 export function createCompilerLibrarySet(libraries: CompilerLibraryDescriptor[]): CompilerLibrarySet {
   const ordered = orderCompilerLibraries(libraries)
@@ -122,10 +124,19 @@ function validateCompilerLibrarySet(
   runtimeRequirements: RuntimeRequirementDescriptor[]
 ): void {
   validateUniqueDeclarationSources(declarations)
+  validateGlobalDeclarations(declarations)
   validateNativeTypes(nativeTypes)
   validateUniqueOperationIds(operations)
   validateUniqueIntrinsicRoles(intrinsicBindings)
   validateUniqueRuntimeRequirementIds(runtimeRequirements)
+}
+
+function validateGlobalDeclarations(declarations: LibraryDeclarationDescriptor[]): void {
+  const parsed = parseCompilerLibraryGlobalDeclarations(declarations)
+
+  if (parsed.diagnostics.length > 0) {
+    throw new Error(formatDiagnostics(parsed.diagnostics))
+  }
 }
 
 function validateNativeTypes(nativeTypes: LibraryNativeTypeDescriptor[]): void {

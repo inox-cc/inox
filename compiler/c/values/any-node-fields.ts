@@ -89,6 +89,7 @@ export const compilerAnyNodeArrayFields: readonly string[] = [
   'libraryCResultShapeFields',
   'libraryRuntimeRequirements',
   'fields',
+  'indexSignatures',
   'methods',
   'params',
   'path',

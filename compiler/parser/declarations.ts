@@ -18,6 +18,7 @@ type ClassDeclarationOptions = {
   extendsName: string | null
   extendsToken: Token | null
   fields: AnyNode[]
+  indexSignatures: AnyNode[]
   methods: AnyNode[]
 }
 
@@ -208,6 +209,7 @@ export function createClassDeclaration(options: ClassDeclarationOptions): AnyNod
     extendsName: options.extendsName,
     extendsLoc: nullableTokenLocation(options.extendsToken),
     fields: options.fields,
+    indexSignatures: options.indexSignatures,
     methods: options.methods
   }
 }
