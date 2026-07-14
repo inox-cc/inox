@@ -744,6 +744,10 @@ function compilerLibraryScalarType(valueType: string | null | undefined): string
     return 'bool'
   }
 
+  if (valueType === 'void') {
+    return 'void'
+  }
+
   return undefined
 }
 

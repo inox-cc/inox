@@ -1,7 +1,9 @@
 import type {
   CompilerLibraryPackageDescriptor,
   LibraryArgumentCheckDescriptor,
-  LibraryOperationDescriptor
+  LibraryOperationDescriptor,
+  NominalTypeRef,
+  PrimitiveTypeRef
 } from '../../../../compiler/extensions/types.ts'
 
 const libraryId = 'node:timers'
@@ -10,6 +12,13 @@ const runtimeRequirements = [runtimeRequirement]
 const asyncCallbackDiagnosticCode = 'INOX_ASYNC_TIMER_CALLBACK'
 const asyncCallbackDiagnosticMessage =
   'async timer callbacks are not supported in the MVP; use a synchronous timer callback and handle Promise work explicitly'
+const voidTypeRef: PrimitiveTypeRef = {
+  kind: 'primitive',
+  name: 'void',
+  nullable: false,
+  ownership: 'value',
+  traits: []
+}
 
 const handleTypes = [
   ['ImmediateHandle', 'clearImmediate'],
@@ -82,11 +91,7 @@ function startOperation(
     minArgs: argumentChecks.length,
     maxArgs: argumentChecks.length,
     argumentChecks,
-    resultTypeId: handleTypeId(handleName),
-    cppType: handleName,
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    resultTypeRef: handleTypeRef(handleName)
   }
 }
 
@@ -109,8 +114,7 @@ function clearOperation(
     minArgs: 1,
     maxArgs: 1,
     argumentChecks: [{ valueTypes: ['object'], objectTypeIds: [typeId] }],
-    cppType: 'void',
-    valueType: 'void'
+    resultTypeRef: voidTypeRef
   }
 }
 
@@ -152,6 +156,17 @@ function callbackArgument(): LibraryArgumentCheckDescriptor {
 
 function handleTypeId(handleName: string): string {
   return `${libraryId}#${handleName}`
+}
+
+function handleTypeRef(handleName: string): NominalTypeRef {
+  return {
+    kind: 'nominal',
+    typeId: handleTypeId(handleName),
+    args: [],
+    nullable: false,
+    ownership: 'value',
+    traits: []
+  }
 }
 
 function moduleBinding(name: string): string {

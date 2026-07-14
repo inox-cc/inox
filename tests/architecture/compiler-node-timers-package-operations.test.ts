@@ -10,7 +10,6 @@ import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-di
 type StartOperation = {
   name: string
   typeId: string
-  cppType: string
   argumentKinds: string[]
   minArgs: number
   maxArgs: number
@@ -20,7 +19,6 @@ const startOperations: StartOperation[] = [
   {
     name: 'setImmediate',
     typeId: 'node:timers#ImmediateHandle',
-    cppType: 'ImmediateHandle',
     argumentKinds: ['runtime-callback'],
     minArgs: 1,
     maxArgs: 1
@@ -28,7 +26,6 @@ const startOperations: StartOperation[] = [
   {
     name: 'setInterval',
     typeId: 'node:timers#IntervalHandle',
-    cppType: 'IntervalHandle',
     argumentKinds: ['runtime-callback', 'number'],
     minArgs: 2,
     maxArgs: 2
@@ -36,7 +33,6 @@ const startOperations: StartOperation[] = [
   {
     name: 'setTimeout',
     typeId: 'node:timers#TimeoutHandle',
-    cppType: 'TimeoutHandle',
     argumentKinds: ['runtime-callback', 'number'],
     minArgs: 2,
     maxArgs: 2
@@ -104,10 +100,14 @@ test('node:timers объявляет global, named, default и handle operations
     assert.equal(descriptor.cFailureMode, 'thrown')
     assert.equal(descriptor.minArgs, item.minArgs)
     assert.equal(descriptor.maxArgs, item.maxArgs)
-    assert.equal(descriptor.resultTypeId, item.typeId)
-    assert.equal(descriptor.cppType, item.cppType)
-    assert.equal(descriptor.valueType, 'object')
-    assert.equal(descriptor.nullable, false)
+    assert.deepEqual(descriptor.resultTypeRef, {
+      kind: 'nominal',
+      typeId: item.typeId,
+      args: [],
+      nullable: false,
+      ownership: 'value',
+      traits: []
+    })
 
     const callback = argumentCheck(descriptor, 0)
 
@@ -137,8 +137,13 @@ test('node:timers объявляет global, named, default и handle operations
       valueTypes: ['object'],
       objectTypeIds: [item.typeId]
     })
-    assert.equal(descriptor.cppType, 'void')
-    assert.equal(descriptor.valueType, 'void')
+    assert.deepEqual(descriptor.resultTypeRef, {
+      kind: 'primitive',
+      name: 'void',
+      nullable: false,
+      ownership: 'value',
+      traits: []
+    })
   }
 
   for (const typeId of [
