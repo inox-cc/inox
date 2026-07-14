@@ -163,7 +163,12 @@ function operation(
     minArgs: cArgumentKinds.length,
     maxArgs: cArgumentKinds.length,
     argumentChecks,
-    valueType: 'number',
-    owned: false
+    resultTypeRef: {
+      kind: 'primitive',
+      name: 'number',
+      nullable: false,
+      ownership: 'value',
+      traits: []
+    }
   }
 }

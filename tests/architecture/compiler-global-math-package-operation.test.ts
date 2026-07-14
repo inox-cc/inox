@@ -21,9 +21,12 @@ test('global:math владеет declaration, operations, options и initializer
 
   const libraries = createCompilerLibrarySetFromDiscovered(discovered)
   const result = compileSource('const value = Math.min(2, 3)\n', { libraries })
+  const call = result.ir.body[0].init
 
-  assert.equal(result.ir.body[0].init.libraryOperationId, 'global:math#min')
-  assert.deepEqual(result.ir.body[0].init.libraryRuntimeRequirements, ['global:math'])
+  assert.equal(call.libraryOperationId, 'global:math#min')
+  assert.equal(call.typeRef?.kind, 'primitive')
+  assert.equal(call.typeRef?.name, 'number')
+  assert.deepEqual(call.libraryRuntimeRequirements, ['global:math'])
   assert.match(result.code, /#include "inox\/math\.h"/)
   assert.match(result.code, /MathObject Math\(/)
   assert.match(result.code, /Math\.min\(2, 3\)/)
