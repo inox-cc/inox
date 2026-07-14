@@ -2,31 +2,56 @@ import type {
   CompilerLibraryPackageDescriptor,
   LibraryArgumentCheckDescriptor,
   LibraryCArgumentKind,
+  LibraryCResultMappingDescriptor,
+  LibraryCResultMode,
   LibraryOperationDescriptor,
-  LibraryOperationVariantDescriptor
+  LibraryOperationVariantDescriptor,
+  NominalTypeRef,
+  PrimitiveTypeRef,
+  TypeRef
 } from '../../../../compiler/extensions/types.ts'
 
 const libraryId = 'global:binary'
 const runtimeRequirement = libraryId
 const uint8ArrayTypeId = `${libraryId}#Uint8Array`
+const uint8ArrayTypeRef: NominalTypeRef = {
+  kind: 'nominal',
+  typeId: uint8ArrayTypeId,
+  args: [],
+  nullable: false,
+  ownership: 'value',
+  traits: []
+}
+const numberTypeRef: PrimitiveTypeRef = primitiveTypeRef('number')
+const stringTypeRef: PrimitiveTypeRef = primitiveTypeRef('string')
 
 const operations: LibraryOperationDescriptor[] = [
   uint8ArrayConstructor(),
-  receiverMemberRead('length', 'length', 'double', 'number'),
+  receiverMemberRead('length', 'length', numberTypeRef),
   receiverIndexRead(),
   receiverIndexWrite(),
   receiverCall(
     'slice',
     ['receiver', 'number', 'optional-number'],
     'slice',
-    'Uint8Array',
-    'bytes',
+    uint8ArrayTypeRef,
+    null,
+    'value',
     1,
     2,
-    [numberArgument(), numberArgument()],
-    uint8ArrayTypeId
+    [numberArgument(), numberArgument()]
   ),
-  receiverCall('toString', ['receiver'], 'toString', 'inox::String', 'string', 0, 0, [])
+  receiverCall(
+    'toString',
+    ['receiver'],
+    'toString',
+    stringTypeRef,
+    { cppType: 'inox::String', fields: [] },
+    null,
+    0,
+    0,
+    []
+  )
 ]
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
@@ -76,11 +101,7 @@ function uint8ArrayConstructor(): LibraryOperationDescriptor {
       constructorVariant('number', ['number']),
       constructorVariant('array', ['value'])
     ],
-    resultTypeId: uint8ArrayTypeId,
-    cppType: 'Uint8Array',
-    valueType: 'bytes',
-    nullable: false,
-    owned: false
+    resultTypeRef: uint8ArrayTypeRef
   }
 }
 
@@ -95,20 +116,14 @@ function constructorVariant(
     argumentValueTypes: [valueType],
     cExpression: 'Uint8Array',
     cArgumentKinds,
-    cResultMode: 'value',
-    resultTypeId: uint8ArrayTypeId,
-    cppType: 'Uint8Array',
-    valueType: 'bytes',
-    nullable: false,
-    owned: false
+    cResultMode: 'value'
   }
 }
 
 function receiverMemberRead(
   name: string,
   cExpression: string,
-  cppType: string,
-  valueType: string
+  resultTypeRef: TypeRef
 ): LibraryOperationDescriptor {
   return {
     libraryId,
@@ -122,10 +137,7 @@ function receiverMemberRead(
     cReceiverAdapter: 'Uint8Array($value)',
     cCallStyle: 'member',
     cFailureMode: 'thrown',
-    cppType,
-    valueType,
-    nullable: false,
-    owned: false
+    resultTypeRef
   }
 }
 
@@ -133,12 +145,12 @@ function receiverCall(
   name: string,
   cArgumentKinds: LibraryCArgumentKind[],
   cExpression: string,
-  cppType: string,
-  valueType: string,
+  resultTypeRef: TypeRef,
+  cResultMapping: LibraryCResultMappingDescriptor | null,
+  cResultMode: LibraryCResultMode | null,
   minArgs: number,
   maxArgs: number,
-  argumentChecks: LibraryArgumentCheckDescriptor[],
-  resultTypeId?: string
+  argumentChecks: LibraryArgumentCheckDescriptor[]
 ): LibraryOperationDescriptor {
   return {
     libraryId,
@@ -150,17 +162,14 @@ function receiverCall(
     cExpression,
     cArgumentKinds,
     cReceiverAdapter: 'Uint8Array($value)',
-    cResultMode: resultTypeId ? 'value' : null,
-    resultTypeId,
+    cResultMapping,
+    cResultMode,
     cCallStyle: 'member',
     cFailureMode: 'thrown',
     minArgs,
     maxArgs,
     argumentChecks,
-    cppType,
-    valueType,
-    nullable: false,
-    owned: false
+    resultTypeRef
   }
 }
 
@@ -180,10 +189,7 @@ function receiverIndexRead(): LibraryOperationDescriptor {
     minArgs: 1,
     maxArgs: 1,
     argumentChecks: [numberArgument()],
-    cppType: 'double',
-    valueType: 'number',
-    nullable: false,
-    owned: false
+    resultTypeRef: numberTypeRef
   }
 }
 
@@ -203,15 +209,22 @@ function receiverIndexWrite(): LibraryOperationDescriptor {
     minArgs: 2,
     maxArgs: 2,
     argumentChecks: [numberArgument(), numberArgument()],
-    cppType: 'double',
-    valueType: 'number',
-    nullable: false,
-    owned: false
+    resultTypeRef: numberTypeRef
   }
 }
 
 function numberArgument(): LibraryArgumentCheckDescriptor {
   return { valueTypes: ['number'] }
+}
+
+function primitiveTypeRef(name: 'number' | 'string'): PrimitiveTypeRef {
+  return {
+    kind: 'primitive',
+    name,
+    nullable: false,
+    ownership: 'value',
+    traits: []
+  }
 }
 
 function receiverBinding(name: string): string {

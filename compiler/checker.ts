@@ -3760,7 +3760,9 @@ class Checker {
 
     this.checkCompilerLibraryBackendConstraints(expression, operation)
 
-    return (variant?.valueType ?? declaredType ?? operation.valueType ?? 'unknown') as ValueType
+    return typeof expression.valueType === 'string'
+      ? expression.valueType as ValueType
+      : (variant?.valueType ?? declaredType ?? operation.valueType ?? 'unknown') as ValueType
   }
 
   compilerLibraryDeclarationCallableSymbol(callee: AnyNode): SymbolInfo | null {
@@ -4354,9 +4356,9 @@ class Checker {
         return 'unknown'
       }
 
-      const valueType = operation.valueType
+      const valueType = expression.valueType
 
-      if (valueType !== null && typeof valueType !== 'undefined') {
+      if (typeof valueType === 'string') {
         return valueType as ValueType
       }
     }
@@ -6404,7 +6406,9 @@ class Checker {
 
     this.checkCompilerLibraryBackendConstraints(expression, operation)
 
-    return (variant?.valueType ?? declaredType ?? operation.valueType ?? 'object') as ValueType
+    return typeof expression.valueType === 'string'
+      ? expression.valueType as ValueType
+      : (variant?.valueType ?? declaredType ?? operation.valueType ?? 'object') as ValueType
   }
 
   checkImportedClassConstructorArguments(expression: AnyNode, rawParams: AnyNode[] | null | undefined): void {

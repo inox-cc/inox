@@ -748,12 +748,16 @@ function validateCResultMapping(
     throw new Error(`${label} C++ result mapping requires resultTypeRef`)
   }
 
-  if (resultTypeRef.kind !== 'object') {
-    throw new Error(`${label} C++ result mapping requires object resultTypeRef`)
-  }
-
   if (mapping.cppType.length === 0) {
     throw new Error(`${label} C++ result mapping requires cppType`)
+  }
+
+  if (resultTypeRef.kind !== 'object') {
+    if (mapping.fields.length > 0) {
+      throw new Error(`${label} C++ result field mappings require object resultTypeRef`)
+    }
+
+    return
   }
 
   validateCResultFieldMappings(label, mapping.fields, resultTypeRef)

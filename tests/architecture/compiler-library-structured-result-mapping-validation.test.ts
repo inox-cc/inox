@@ -22,7 +22,7 @@ test('builder validates structural C++ result mappings against TypeRef fields', 
     {
       typeRef: primitiveTypeRef(),
       mapping: validMapping,
-      message: /C\+\+ result mapping requires object resultTypeRef/
+      message: /C\+\+ result field mappings require object resultTypeRef/
     },
     {
       typeRef: objectTypeRef(),

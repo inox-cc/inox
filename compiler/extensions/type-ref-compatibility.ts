@@ -146,13 +146,17 @@ function applyCResultMapping(
     return
   }
 
+  metadata.libraryCppType = mapping.cppType
   const shape = metadata.shape
 
   if (shape === null) {
-    throw new Error('C++ result mapping requires object compatibility metadata')
+    if (mapping.fields.length > 0) {
+      throw new Error('C++ result field mappings require object compatibility metadata')
+    }
+
+    return
   }
 
-  metadata.libraryCppType = mapping.cppType
   shape.libraryCppType = mapping.cppType
   applyCResultFieldMappings(shape.fields, mapping.fields)
 }
