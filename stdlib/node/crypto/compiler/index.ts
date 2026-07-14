@@ -1,10 +1,18 @@
 import type {
   CompilerLibraryPackageDescriptor,
+  CorePrimitiveType,
   LibraryArgumentCheckDescriptor,
   LibraryCArgumentKind,
+  LibraryCResultMappingDescriptor,
+  LibraryCResultMode,
   LibraryOperationDescriptor,
-  LibraryOperationVariantDescriptor
+  LibraryOperationVariantDescriptor,
+  NominalTypeRef,
+  PrimitiveTypeRef,
+  TypeOwnership,
+  TypeRef
 } from '../../../../compiler/extensions/types.ts'
+import { arrayTypeRef } from '../../../global/collections/compiler/index.ts'
 
 const libraryId = 'node:crypto'
 const runtimeRequirement = 'node:crypto'
@@ -16,93 +24,68 @@ const bufferTypeId = 'node:buffer#Buffer'
 
 const randomRequirements = [runtimeRequirement]
 const hashRequirements = [runtimeRequirement, hashRuntimeRequirement]
+const stringTypeRef = primitiveTypeRef('string')
 
 const operations: LibraryOperationDescriptor[] = [
-  moduleCall('getHashes', [], [], 'Array', 'array', 0, 0, [], hashRequirements, {
-    resultArrayElementType: 'string'
+  moduleCall('getHashes', [], [], 0, 0, [], hashRequirements, {
+    resultTypeRef: arrayTypeRef(stringTypeRef),
+    cResultMode: 'value'
   }),
-  moduleCall(
-    'getRandomValues',
-    ['value'],
-    ['Uint8Array($value)'],
-    'Uint8Array',
-    'bytes',
-    1,
-    1,
-    [bytesArgument()],
-    randomRequirements,
-    { resultTypeId: uint8ArrayTypeId }
-  ),
-  moduleCall(
-    'randomBytes',
-    ['number'],
-    [],
-    'Buffer',
-    'bytes',
-    1,
-    1,
-    [numberArgument()],
-    randomRequirements,
-    { resultTypeId: bufferTypeId }
-  ),
+  moduleCall('getRandomValues', ['value'], ['Uint8Array($value)'], 1, 1, [bytesArgument()], randomRequirements, {
+    resultTypeRef: nominalTypeRef(uint8ArrayTypeId),
+    cResultMode: 'value'
+  }),
+  moduleCall('randomBytes', ['number'], [], 1, 1, [numberArgument()], randomRequirements, {
+    resultTypeRef: nominalTypeRef(bufferTypeId),
+    cResultMode: 'value'
+  }),
   moduleCall(
     'randomFillSync',
     ['value', 'optional-number', 'optional-number'],
     ['Uint8Array($value)'],
-    'Uint8Array',
-    'bytes',
     1,
     3,
     [bytesArgument(), numberArgument(), numberArgument()],
     randomRequirements,
-    { resultTypeId: uint8ArrayTypeId }
+    { resultTypeRef: nominalTypeRef(uint8ArrayTypeId), cResultMode: 'value' }
   ),
   moduleCall(
     'randomInt',
     ['number', 'optional-number'],
     [],
-    'double',
-    'number',
     1,
     2,
     [numberArgument(), numberArgument()],
-    randomRequirements
+    randomRequirements,
+    { resultTypeRef: primitiveTypeRef('number') }
   ),
-  moduleCall('randomUUID', [], [], 'inox::String', 'string', 0, 0, [], randomRequirements),
+  moduleCall('randomUUID', [], [], 0, 0, [], randomRequirements, {
+    resultTypeRef: stringTypeRef,
+    cResultMapping: stringResultMapping()
+  }),
   moduleCall(
     'timingSafeEqual',
     ['value', 'value'],
     ['Uint8Array($value)', 'Uint8Array($value)'],
-    'bool',
-    'boolean',
     2,
     2,
     [bytesArgument(), bytesArgument()],
-    randomRequirements
+    randomRequirements,
+    { resultTypeRef: primitiveTypeRef('boolean') }
   ),
-  moduleCall(
-    'createHash',
-    ['string-view'],
-    [],
-    'Hash',
-    'object',
-    1,
-    1,
-    [sha256Argument('createHash')],
-    hashRequirements,
-    { resultTypeId: hashTypeId }
-  ),
+  moduleCall('createHash', ['string-view'], [], 1, 1, [sha256Argument('createHash')], hashRequirements, {
+    resultTypeRef: nominalTypeRef(hashTypeId),
+    cResultMode: 'value'
+  }),
   moduleCall(
     'createHmac',
     ['string-view', 'string-view-or-value'],
     [],
-    'Hmac',
-    'object',
     2,
     2,
     [sha256Argument('createHmac'), stringOrBytesArgument()],
     hashRequirements,
-    { resultTypeId: hmacTypeId }
+    { resultTypeRef: nominalTypeRef(hmacTypeId), cResultMode: 'value' }
   ),
   hashOperation(),
   updateOperation(hashTypeId, 'Hash'),
@@ -114,7 +97,8 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:crypto', 'global:binary', 'node:buffer'],
+  dependencies: ['global:crypto', 'global:binary', 'global:collections', 'node:buffer'],
+  nativeTypes: [nativeType(hashTypeId, 'Hash'), nativeType(hmacTypeId, 'Hmac')],
   operations,
   intrinsicBindings: [],
   runtimeRequirements: [
@@ -152,21 +136,20 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
 }
 
 type ModuleCallOptions = {
-  resultArrayElementType?: string
-  resultTypeId?: string
+  resultTypeRef: TypeRef
+  cResultMapping?: LibraryCResultMappingDescriptor | null
+  cResultMode?: LibraryCResultMode | null
 }
 
 function moduleCall(
   name: string,
   cArgumentKinds: LibraryCArgumentKind[],
   cArgumentAdapters: string[],
-  cppType: string,
-  valueType: string,
   minArgs: number,
   maxArgs: number,
   argumentChecks: LibraryArgumentCheckDescriptor[],
   requirements: string[],
-  options: ModuleCallOptions = {}
+  options: ModuleCallOptions
 ): LibraryOperationDescriptor {
   return {
     libraryId,
@@ -178,17 +161,13 @@ function moduleCall(
     cExpression: `crypto.${name}`,
     cArgumentKinds,
     cArgumentAdapters,
-    cResultMode: options.resultTypeId ? 'value' : null,
-    resultArrayElementType: options.resultArrayElementType,
-    resultTypeId: options.resultTypeId,
+    cResultMode: options.cResultMode ?? null,
+    cResultMapping: options.cResultMapping ?? null,
+    resultTypeRef: options.resultTypeRef,
     cFailureMode: 'thrown',
     minArgs,
     maxArgs,
-    argumentChecks,
-    cppType,
-    valueType,
-    nullable: false,
-    owned: false
+    argumentChecks
   }
 }
 
@@ -212,17 +191,17 @@ function hashOperation(): LibraryOperationDescriptor {
       )
     ],
     variants: [
-      callVariant(2, 2, null, [], ['string-view', 'string-view-or-value'], 'inox::String', 'string'),
-      callVariant(3, 3, 2, ['hex'], ['string-view', 'string-view-or-value'], 'inox::String', 'string'),
+      callVariant(2, 2, null, [], ['string-view', 'string-view-or-value'], stringTypeRef, stringResultMapping()),
+      callVariant(3, 3, 2, ['hex'], ['string-view', 'string-view-or-value'], stringTypeRef, stringResultMapping()),
       callVariant(
         3,
         3,
         2,
         ['buffer'],
         ['string-view', 'string-view-or-value', 'string-view'],
-        'Buffer',
-        'bytes',
-        bufferTypeId
+        nominalTypeRef(bufferTypeId),
+        null,
+        'value'
       )
     ]
   }
@@ -240,7 +219,7 @@ function updateOperation(receiverTypeId: string, label: string): LibraryOperatio
     cCallStyle: 'member',
     cFailureMode: 'thrown',
     cResultMode: 'borrowed',
-    resultTypeId: receiverTypeId,
+    resultTypeRef: nominalTypeRef(receiverTypeId, 'borrowed'),
     minArgs: 1,
     maxArgs: 2,
     argumentChecks: [
@@ -251,20 +230,9 @@ function updateOperation(receiverTypeId: string, label: string): LibraryOperatio
       )
     ],
     variants: [
-      receiverVariant(1, 1, ['receiver', 'string-view-or-value'], label, receiverTypeId, 'borrowed'),
-      receiverVariant(
-        2,
-        2,
-        ['receiver', 'string-view-or-value', 'string-view'],
-        label,
-        receiverTypeId,
-        'borrowed'
-      )
-    ],
-    cppType: label,
-    valueType: 'object',
-    nullable: false,
-    owned: false
+      receiverVariant(1, 1, ['receiver', 'string-view-or-value']),
+      receiverVariant(2, 2, ['receiver', 'string-view-or-value', 'string-view'])
+    ]
   }
 }
 
@@ -288,8 +256,8 @@ function digestOperation(receiverTypeId: string, label: string): LibraryOperatio
       )
     ],
     variants: [
-      receiverScalarVariant(0, 0, null, [], ['receiver'], 'Buffer', 'bytes', bufferTypeId),
-      receiverScalarVariant(1, 1, 0, ['hex'], ['receiver', 'string-view'], 'inox::String', 'string')
+      receiverScalarVariant(0, 0, null, [], ['receiver'], nominalTypeRef(bufferTypeId), null, 'value'),
+      receiverScalarVariant(1, 1, 0, ['hex'], ['receiver', 'string-view'], stringTypeRef, stringResultMapping())
     ]
   }
 }
@@ -300,9 +268,9 @@ function callVariant(
   argumentIndex: number | null,
   stringLiterals: string[],
   cArgumentKinds: LibraryCArgumentKind[],
-  cppType: string,
-  valueType: string,
-  resultTypeId?: string
+  resultTypeRef: TypeRef,
+  cResultMapping: LibraryCResultMappingDescriptor | null,
+  cResultMode: LibraryCResultMode | null = null
 ): LibraryOperationVariantDescriptor {
   return {
     minArgs,
@@ -311,34 +279,22 @@ function callVariant(
     stringLiterals,
     cExpression: 'crypto.hash',
     cArgumentKinds,
-    cResultMode: resultTypeId ? 'value' : null,
-    resultTypeId,
-    cppType,
-    valueType,
-    nullable: false,
-    owned: false
+    cResultMode,
+    cResultMapping,
+    resultTypeRef
   }
 }
 
 function receiverVariant(
   minArgs: number,
   maxArgs: number,
-  cArgumentKinds: LibraryCArgumentKind[],
-  cppType: string,
-  resultTypeId: string,
-  cResultMode: 'borrowed'
+  cArgumentKinds: LibraryCArgumentKind[]
 ): LibraryOperationVariantDescriptor {
   return {
     minArgs,
     maxArgs,
     cExpression: 'update',
-    cArgumentKinds,
-    cResultMode,
-    resultTypeId,
-    cppType,
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    cArgumentKinds
   }
 }
 
@@ -348,9 +304,9 @@ function receiverScalarVariant(
   argumentIndex: number | null,
   stringLiterals: string[],
   cArgumentKinds: LibraryCArgumentKind[],
-  cppType: string,
-  valueType: string,
-  resultTypeId?: string
+  resultTypeRef: TypeRef,
+  cResultMapping: LibraryCResultMappingDescriptor | null,
+  cResultMode: LibraryCResultMode | null = null
 ): LibraryOperationVariantDescriptor {
   return {
     minArgs,
@@ -359,13 +315,47 @@ function receiverScalarVariant(
     stringLiterals,
     cExpression: 'digest',
     cArgumentKinds,
-    cResultMode: resultTypeId ? 'value' : null,
-    resultTypeId,
-    cppType,
-    valueType,
-    nullable: false,
-    owned: false
+    cResultMode,
+    cResultMapping,
+    resultTypeRef
   }
+}
+
+function nativeType(typeId: string, cppType: string) {
+  return {
+    libraryId,
+    typeId,
+    declarationNames: [cppType],
+    valueType: 'object',
+    cppType,
+    baseTypeIds: [],
+    runtimeRequirements: hashRequirements
+  }
+}
+
+function nominalTypeRef(typeId: string, ownership: TypeOwnership = 'value'): NominalTypeRef {
+  return {
+    kind: 'nominal',
+    typeId,
+    args: [],
+    nullable: false,
+    ownership,
+    traits: []
+  }
+}
+
+function primitiveTypeRef(name: CorePrimitiveType): PrimitiveTypeRef {
+  return {
+    kind: 'primitive',
+    name,
+    nullable: false,
+    ownership: 'value',
+    traits: []
+  }
+}
+
+function stringResultMapping(): LibraryCResultMappingDescriptor {
+  return { cppType: 'inox::String', fields: [] }
 }
 
 function unsupportedOperation(name: string): LibraryOperationDescriptor {

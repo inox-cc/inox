@@ -22,6 +22,7 @@ export function assertCryptoMethodsLowerToCppObject(): void {
 import { Buffer } from 'node:buffer'
 import crypto from 'node:crypto'
 
+const hashes = crypto.getHashes()
 const bytes = crypto.randomBytes(8)
 const filled = crypto.randomFillSync(bytes, 0, 4)
 const value = crypto.randomInt(5, 10)
@@ -37,7 +38,7 @@ hmac.update('test')
 const hmacDigest = hmac.digest('hex')
 const same = crypto.timingSafeEqual(Buffer.from('a'), Buffer.from('a'))
 
-console.log(bytes.length, filled.length, value, small, uuid.length, digest, digestHex, chainedDigest, hmacDigest, same)
+console.log(hashes.length, bytes.length, filled.length, value, small, uuid.length, digest, digestHex, chainedDigest, hmacDigest, same)
 `
       }
     ],
@@ -55,6 +56,7 @@ console.log(bytes.length, filled.length, value, small, uuid.length, digest, dige
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
+  assert.match(source, /crypto\.getHashes\(\)/)
   assert.match(source, /crypto\.randomBytes\(8\)/)
   assert.match(source, /crypto\.randomFillSync\((?:bytes|Uint8Array\(bytes\)), 0, 4\)/)
   assert.match(source, /crypto\.randomInt\(5, 10\)/)

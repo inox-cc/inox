@@ -377,6 +377,8 @@ class Checker {
   narrowedNullableNames: Set<string>
   resolvedDeclaredTypes: Map<string, ResolvedTypeInfo>
   resolvingDeclaredTypes: Set<string>
+  functionDeclarations: Map<string, AnyNode>
+  inferringFunctionReturns: Set<string>
 
   constructor(program: ProgramNode, options: CompileOptions = {}) {
     this.program = program
@@ -401,6 +403,8 @@ class Checker {
     this.narrowedNullableNames = new Set()
     this.resolvedDeclaredTypes = new Map()
     this.resolvingDeclaredTypes = new Set()
+    this.functionDeclarations = new Map()
+    this.inferringFunctionReturns = new Set()
   }
 
   check(): void {
@@ -653,6 +657,7 @@ class Checker {
       }
 
       if (item.type === 'FunctionDeclaration') {
+        this.functionDeclarations.set(item.name, item)
         const typeParameterState = this.pushFunctionTypeParameters(item)
 
         try {
@@ -964,6 +969,7 @@ class Checker {
     }
 
     if (item.type === 'FunctionDeclaration') {
+      this.inferFunctionDeclarationReturn(item)
       const scopeState = this.pushScope()
       const typeParameterState = this.pushFunctionTypeParameters(item)
 
@@ -3697,6 +3703,7 @@ class Checker {
       return objectValuesType
     }
 
+    this.inferCalledFunctionReturn(expression.callee)
     this.checkExpression(expression.callee)
     const argInfos = this.checkedCallArgInfos(expression)
 
@@ -6679,6 +6686,111 @@ class Checker {
     }
 
     return this.checkExpression(expression)
+  }
+
+  inferCalledFunctionReturn(callee: AnyNode): void {
+    if (callee.type !== 'Reference' || callee.path.length !== 1) {
+      return
+    }
+
+    const name = firstPathSegment(callee.path)
+    const declaration = this.functionDeclarations.get(name) ?? null
+
+    if (declaration !== null) {
+      this.inferFunctionDeclarationReturn(declaration)
+    }
+  }
+
+  inferFunctionDeclarationReturn(declaration: AnyNode): void {
+    if (
+      declaration.async === true ||
+      (declaration.declaredReturnType !== null && typeof declaration.declaredReturnType !== 'undefined') ||
+      declaration.returnType !== 'unknown' ||
+      this.inferringFunctionReturns.has(declaration.name)
+    ) {
+      return
+    }
+
+    const symbol = this.scope.resolve(declaration.name)
+
+    if (symbol === null || symbol.kind !== 'function') {
+      return
+    }
+
+    const returnExpression = resolveSingleReturnExpression(declaration.body)
+
+    if (returnExpression === null) {
+      declaration.returnType = 'void'
+      symbol.returnType = 'void'
+      return
+    }
+
+    const diagnosticsLength = this.diagnostics.length
+    const scopeState = this.pushScope()
+    const typeParameterState = this.pushFunctionTypeParameters(declaration)
+    this.inferringFunctionReturns.add(declaration.name)
+
+    try {
+      for (let index = 0; index < declaration.params.length; index = index + 1) {
+        const param = checkerNodeAt(declaration.params, index)
+        const paramInfo = this.resolveParam(param)
+
+        this.declare(
+          param.name,
+          {
+            kind: 'param',
+            mutable: true,
+            valueType: paramInfo.valueType,
+            nullable: paramInfo.nullable,
+            arrayElementType: paramInfo.arrayElementType,
+            arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
+            mapKeyType: paramInfo.mapKeyType,
+            mapValueType: paramInfo.mapValueType,
+            mapValueShape: paramInfo.mapValueShape,
+            mapValueArrayElementType: paramInfo.mapValueArrayElementType,
+            mapValueArrayElementDeclaredType: paramInfo.mapValueArrayElementDeclaredType,
+            promiseValueType: paramInfo.promiseValueType,
+            setElementType: paramInfo.setElementType,
+            functionType: paramInfo.functionType,
+            shape: paramInfo.shape,
+            loc: param.loc
+          },
+          param.loc
+        )
+      }
+
+      const returnType = this.checkExpression(returnExpression)
+      const mapType = this.resolveExpressionMapType(returnExpression)
+      const returnShape = this.resolveExpressionShape(returnExpression)
+
+      declaration.returnType = returnType
+      declaration.returnNullable = this.expressionCanBeNull(returnExpression)
+      declaration.returnArrayElementType = this.resolveExpressionArrayElementType(returnExpression)
+      declaration.returnArrayElementDeclaredType = this.resolveExpressionArrayElementDeclaredType(returnExpression)
+      declaration.returnMapKeyType = mapType?.key ?? null
+      declaration.returnMapValueType = mapType?.value ?? null
+      declaration.returnPromiseValueType = this.resolveExpressionPromiseValueType(returnExpression)
+      declaration.returnSetElementType = this.resolveExpressionSetElementType(returnExpression)
+      declaration.returnShape = returnShape
+
+      symbol.returnType = returnType
+      symbol.returnNullable = declaration.returnNullable === true
+      symbol.returnArrayElementType = declaration.returnArrayElementType
+      symbol.returnArrayElementDeclaredType = declaration.returnArrayElementDeclaredType
+      symbol.returnMapKeyType = declaration.returnMapKeyType
+      symbol.returnMapValueType = declaration.returnMapValueType
+      symbol.returnPromiseValueType = declaration.returnPromiseValueType
+      symbol.returnSetElementType = declaration.returnSetElementType
+      symbol.returnShape = returnShape
+    } finally {
+      while (this.diagnostics.length > diagnosticsLength) {
+        this.diagnostics.pop()
+      }
+
+      this.inferringFunctionReturns.delete(declaration.name)
+      this.restoreFunctionTypeParameters(typeParameterState)
+      this.restoreScope(scopeState)
+    }
   }
 
   checkErrorConstructorExpression(expression: AnyNode, argTypes: ValueType[]): void {

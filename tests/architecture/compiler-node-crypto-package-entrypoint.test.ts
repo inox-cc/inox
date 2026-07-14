@@ -10,31 +10,34 @@ test('entrypoint package node:crypto владеет operations и backend requir
   assert.ok(cryptoPackage)
   assert.equal(cryptoPackage.compilerEntrypoint, 'stdlib/node/crypto/compiler/index.ts')
   assert.ok(cryptoPackage.compilerPackage)
-  assert.deepEqual(
-    cryptoPackage.compilerPackage.dependencies,
-    ['global:crypto', 'global:binary', 'node:buffer']
-  )
+  assert.deepEqual(cryptoPackage.compilerPackage.dependencies, [
+    'global:crypto',
+    'global:binary',
+    'global:collections',
+    'node:buffer'
+  ])
 
   const operations = cryptoPackage.compilerPackage.operations
   const createHash = operations.find((operation) => operation.operationId === 'node:crypto#createHash')
   const hash = operations.find((operation) => operation.operationId === 'node:crypto#hash')
   const update = operations.find((operation) => operation.operationId === 'node:crypto#Hash#update')
   const digest = operations.find((operation) => operation.operationId === 'node:crypto#Hash#digest')
-  const randomFillSync = operations.find(
-    (operation) => operation.operationId === 'node:crypto#randomFillSync'
-  )
+  const randomFillSync = operations.find((operation) => operation.operationId === 'node:crypto#randomFillSync')
 
-  assert.equal(createHash?.resultTypeId, 'node:crypto#Hash')
+  assert.equal(createHash?.resultTypeRef?.kind, 'nominal')
+  assert.equal(
+    createHash?.resultTypeRef?.kind === 'nominal' ? createHash.resultTypeRef.typeId : null,
+    'node:crypto#Hash'
+  )
   assert.deepEqual(createHash?.runtimeRequirements, ['node:crypto', 'node:crypto:hash'])
   assert.ok(createHash?.bindingAliases?.includes('node:crypto#module:node:crypto:default.createHash'))
-  assert.equal(hash?.variants?.[0].valueType, 'string')
-  assert.equal(hash?.variants?.[2].valueType, 'bytes')
-  assert.equal(hash?.variants?.[2].resultTypeId, 'node:buffer#Buffer')
+  assert.equal(hash?.variants?.[0].resultTypeRef?.kind, 'primitive')
+  assert.equal(hash?.variants?.[0].cResultMapping?.cppType, 'inox::String')
+  assert.equal(hash?.variants?.[2].resultTypeRef?.kind, 'nominal')
   assert.equal(update?.receiverTypeId, 'node:crypto#Hash')
   assert.equal(update?.cResultMode, 'borrowed')
-  assert.equal(digest?.variants?.[0].cppType, 'Buffer')
-  assert.equal(digest?.variants?.[0].resultTypeId, 'node:buffer#Buffer')
-  assert.equal(digest?.variants?.[1].cppType, 'inox::String')
+  assert.equal(digest?.variants?.[0].resultTypeRef?.kind, 'nominal')
+  assert.equal(digest?.variants?.[1].cResultMapping?.cppType, 'inox::String')
   assert.deepEqual(randomFillSync?.cArgumentKinds, ['value', 'optional-number', 'optional-number'])
   assert.deepEqual(randomFillSync?.cArgumentAdapters, ['Uint8Array($value)'])
 

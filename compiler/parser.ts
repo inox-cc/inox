@@ -415,7 +415,8 @@ class Parser {
     }
 
     this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after function parameters')
-    let returnType = 'void'
+    let declaredReturnType: string | null = null
+    let returnType = isAsync ? 'void' : 'unknown'
     let returnShape: AnyNode | null = null
 
     if (this.matchValue(':')) {
@@ -433,6 +434,8 @@ class Parser {
       } else {
         returnType = this.parseTypeAnnotation(['{'], null)
       }
+
+      declaredReturnType = returnType
     }
 
     return createFunctionDeclaration({
@@ -441,6 +444,7 @@ class Parser {
       name,
       typeParameters,
       params,
+      declaredReturnType,
       returnType,
       returnShape,
       body: this.parseBlock()

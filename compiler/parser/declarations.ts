@@ -7,6 +7,7 @@ type FunctionDeclarationOptions = {
   name: Token
   typeParameters: AnyNode[]
   params: AnyNode[]
+  declaredReturnType: string | null
   returnType: string
   returnShape: AnyNode | null
   body: AnyNode[]
@@ -119,6 +120,7 @@ export function createFunctionDeclaration(options: FunctionDeclarationOptions): 
     name: options.name.value,
     loc: locFromToken(options.name),
     params: options.params,
+    declaredReturnType: options.declaredReturnType,
     returnType: options.returnType,
     body: options.body
   }
