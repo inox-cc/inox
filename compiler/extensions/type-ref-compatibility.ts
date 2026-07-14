@@ -161,10 +161,7 @@ function applyCResultMapping(
   applyCResultFieldMappings(shape.fields, mapping.fields)
 }
 
-function applyCResultFieldMappings(
-  shapeFields: AnyNode[],
-  mappings: LibraryCResultFieldMappingDescriptor[]
-): void {
+function applyCResultFieldMappings(shapeFields: AnyNode[], mappings: LibraryCResultFieldMappingDescriptor[]): void {
   for (let index = 0; index < mappings.length; index = index + 1) {
     const mapping = mappings[index]
     let shapeField: AnyNode | null = null
@@ -234,7 +231,17 @@ function applyTypeTraits(
     }
 
     if (trait.traitId === 'awaitable' && trait.args.length > 0) {
-      metadata.promiseValueType = typeRefCompatibilityMetadata(trait.args[0], libraries, loc).valueType
+      const fulfilled = typeRefCompatibilityMetadata(trait.args[0], libraries, loc)
+
+      metadata.promiseValueType = fulfilled.valueType
+      metadata.libraryResultTypeId = fulfilled.libraryResultTypeId
+      metadata.shape = fulfilled.shape
+      metadata.arrayElementType = fulfilled.arrayElementType
+      metadata.arrayElementTypeId = fulfilled.arrayElementTypeId
+      metadata.arrayElementDeclaredType = fulfilled.arrayElementDeclaredType
+      metadata.mapKeyType = fulfilled.mapKeyType
+      metadata.mapValueType = fulfilled.mapValueType
+      metadata.setElementType = fulfilled.setElementType
 
       if (trait.args.length > 1) {
         metadata.promiseRejectionValueType = typeRefCompatibilityMetadata(trait.args[1], libraries, loc).valueType
