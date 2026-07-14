@@ -454,7 +454,6 @@ export function emitCModuleSource(
       prelude.needsSetRuntime,
       prelude.needsObjectRuntime,
       prelude.needsJsonRuntime,
-      prelude.needsRegexpRuntime,
       prelude.needsConsoleRuntime,
       prelude.needsFetchRuntime,
       prelude.libraryCPreludeIncludes
@@ -1585,16 +1584,6 @@ function collectCModuleValueDeclarations(plan: CModulePlan, context?: CEmitConte
       continue
     }
 
-    if (
-      context !== null &&
-      typeof context !== 'undefined' &&
-      item.valueType === 'regexp' &&
-      item.init !== null &&
-      typeof item.init !== 'undefined'
-    ) {
-      context.regexpLiterals.set(item.name, item.init)
-    }
-
     const valueType = cModuleValueType(item, context)
 
     values.push({
@@ -2198,10 +2187,6 @@ function cModuleValueGlobalInitializer(valueType: string): string {
 
   if (valueType === 'string') {
     return '""'
-  }
-
-  if (valueType === 'regexp') {
-    return ''
   }
 
   if (valueType === 'promise') {

@@ -15,9 +15,6 @@ import {
   numericCastsFeature
 } from '../conversions/compiler/feature.ts'
 import { collectJsonIrFeatures, jsonFeature } from '../json/compiler/feature.ts'
-import { collectRegExpIrFeatures, emitCRegExpPreludeHelpers, regexpFeature } from '../regexp/compiler/feature.ts'
-
-export { emitCRegExpFlags } from '../regexp/compiler/feature.ts'
 
 export const globalStdlibFeatures: CompilerFeatureDescriptor[] = [
   arrayPopNullFeature,
@@ -25,8 +22,7 @@ export const globalStdlibFeatures: CompilerFeatureDescriptor[] = [
   mapGetNullFeature,
   mapIndexSetFeature,
   numberFromStringNullFeature,
-  numericCastsFeature,
-  regexpFeature
+  numericCastsFeature
 ]
 
 export function collectGlobalStdlibIrFeatures(node: AnyNode, features: Set<IrFeature>): void {
@@ -36,13 +32,8 @@ export function collectGlobalStdlibIrFeatures(node: AnyNode, features: Set<IrFea
   collectMapIndexSetIrFeatures(node, features)
   collectNumberFromStringNullIrFeatures(node, features)
   collectNumericCastsIrFeatures(node, features)
-  collectRegExpIrFeatures(node, features)
 }
 
-export function emitGlobalStdlibCPreludeHelpers(featureName: IrFeature): string[] {
-  if (featureName === 'regexp') {
-    return emitCRegExpPreludeHelpers()
-  }
-
+export function emitGlobalStdlibCPreludeHelpers(_featureName: IrFeature): string[] {
   return []
 }

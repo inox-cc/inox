@@ -1,6 +1,3 @@
-import {
-  irProgramsUseCPreludeFeature
-} from '../features/index.ts'
 import type { AnyNode, IrGlobalUsage, IrProgram, IrRuntimeRequirement } from '../types.ts'
 import { isSupportedCFetchGlobalUsage } from './diagnostics.ts'
 import { irProgramsUseConsoleRuntime } from '../../stdlib/global/compiler/c.ts'
@@ -22,7 +19,6 @@ export type CRuntimePreludeRequirements = {
   needsSetRuntime: boolean
   needsObjectRuntime: boolean
   needsJsonRuntime: boolean
-  needsRegexpRuntime: boolean
   needsConsoleRuntime: boolean
   needsFetchRuntime: boolean
   runtimeEntrypointAdapter: RuntimeEntrypointAdapterDescriptor | null
@@ -56,7 +52,6 @@ export function resolveCRuntimePreludeRequirements(
     runtimeRequirements.has('callback-values') ||
     signatureRuntimeTypes.has('function')
   const needsJsonRuntime = runtimeRequirements.has('json')
-  const needsRegexpRuntime = irProgramsUseCPreludeFeature(input.irPrograms, 'regexp')
   const needsFetchRuntime = runtimePlanHasSupportedFetchGlobalUsage(input.globalUsages)
   const needsAsyncRuntime =
     runtimeRequirements.has('async-runtime') ||
@@ -118,7 +113,6 @@ export function resolveCRuntimePreludeRequirements(
     needsSetRuntime,
     needsObjectRuntime,
     needsJsonRuntime,
-    needsRegexpRuntime,
     needsConsoleRuntime,
     needsFetchRuntime,
     runtimeEntrypointAdapter: libraryRuntime.entrypointAdapter,

@@ -1,5 +1,4 @@
 import { diagnostic } from '../../diagnostics.ts'
-import { emitCRegExpFlags } from '../../../stdlib/global/compiler/feature.ts'
 import { isNumericCastName, stringRuntimeReturnType } from '../../../stdlib/global/compiler/descriptor.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import {
@@ -201,7 +200,6 @@ type CFunctionContext = CEmitContext & {
   ownedValues: string[]
   cppStringValues: CStringSet
   cppValueTypes: CStringMap
-  regexpLiterals: Map<string, CValueNode>
   returnType?: string
   runtimeFunctionParams: CFunctionTypeMap
   runtimeArrayElementTypes: CStringMap
@@ -2964,12 +2962,6 @@ export function emitPreparedNumberExpression(
       return numericCast
     }
 
-    const regexpTest = emitPreparedRegExpTestExpression(expression, context, deps)
-
-    if (regexpTest !== null && typeof regexpTest !== 'undefined') {
-      return regexpTest
-    }
-
     if (deps.isStringPredicateCall(expression, context)) {
       return deps.emitPreparedStringPredicateCall(expression, context)
     }
@@ -4757,89 +4749,6 @@ function isNumericCastCall(
   }
 
   return deps.inferExpressionType(expression.args[0], context) === 'number'
-}
-
-function emitPreparedRegExpTestExpression(
-  expression: CValueNode,
-  context: CFunctionContext,
-  deps: CScalarExpressionDependencies
-): PreparedExpression | null {
-  if (
-    expression.type !== 'CallExpression' ||
-    expression.callee.type !== 'MemberExpression' ||
-    expression.callee.property !== 'test' ||
-    expression.args.length !== 1
-  ) {
-    return null
-  }
-
-  const literal = resolveRegExpLiteralExpression(expression.callee.object, context)
-
-  if (literal === null || typeof literal === 'undefined') {
-    pushDiagnostic(
-      context,
-      diagnostic(
-        'INOX_C_REGEXP_EXPR',
-        'regular expression value is not supported by the current C backend slice',
-        expression.loc
-      )
-    )
-
-    return {
-      lines: [],
-      expression: '0'
-    }
-  }
-
-  const value = deps.emitPreparedCppStringArgument(expression.args[0], context, 'inox_regexp_value')
-  const lines: string[] = []
-
-  if (value === null || typeof value === 'undefined') {
-    return {
-      lines: [],
-      expression: '0'
-    }
-  }
-
-  appendLines(lines, value.lines)
-
-  return {
-    lines,
-    expression: `${emitPreparedRegExpExpression(expression.callee.object, literal, context, deps)}.test(${value.expression})`
-  }
-}
-
-function emitPreparedRegExpExpression(
-  expression: CValueNode,
-  literal: CValueNode,
-  context: CFunctionContext,
-  deps: CScalarExpressionDependencies
-): string {
-  if (
-    expression.type === 'Reference' &&
-    expression.path.length === 1 &&
-    context.regexpLiterals.has(expression.path[0])
-  ) {
-    return deps.emitReference(expression, context)
-  }
-
-  return `RegExp(${cStringLiteral(literal.pattern)}, ${emitCRegExpFlags(literal.flags)})`
-}
-
-function resolveRegExpLiteralExpression(expression: CValueNode, context: CFunctionContext): CValueNode | null {
-  if (expression.type === 'RegExpLiteral') {
-    return expression
-  }
-
-  if (expression.type === 'Reference' && expression.path.length === 1) {
-    const literal = context.regexpLiterals.get(expression.path[0])
-
-    if (literal !== null && typeof literal !== 'undefined') {
-      return literal
-    }
-  }
-
-  return null
 }
 
 function numericIntegerCastLimits(cast: string): NumericIntegerCastLimits | null {

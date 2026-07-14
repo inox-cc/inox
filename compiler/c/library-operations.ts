@@ -239,7 +239,8 @@ export function emitPreparedCompilerLibraryCallExpression(
       expression.type !== 'NewExpression' &&
       expression.type !== 'AssignmentExpression' &&
       expression.type !== 'MemberExpression' &&
-      expression.type !== 'IndexExpression') ||
+      expression.type !== 'IndexExpression' &&
+      expression.type !== 'RegExpLiteral') ||
     target === null ||
     typeof target === 'undefined' ||
     argumentKinds === null ||

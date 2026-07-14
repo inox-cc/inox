@@ -1,5 +1,3 @@
-import { emitCompilerFeatureCPreludeHelpers, emitCompilerFeatureCPreludeIncludes } from '../features/index.ts'
-
 function pushCPreludeLines(target: string[], source: string[]): void {
   for (let index = 0; index < source.length; index = index + 1) {
     target.push(source[index])
@@ -165,7 +163,6 @@ export function emitCPrelude(
   needsSetRuntime: boolean,
   needsObjectRuntime: boolean,
   needsJsonRuntime: boolean,
-  needsRegexpRuntime: boolean,
   needsConsoleRuntime: boolean,
   needsFetchRuntime: boolean,
   libraryCPreludeIncludes: string[]
@@ -187,10 +184,6 @@ export function emitCPrelude(
 
   if (needsClassDescriptorRuntime) {
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/class_runtime.h"')
-  }
-
-  if (needsRegexpRuntime) {
-    pushCPreludeIncludes(systemIncludes, localIncludes, emitCompilerFeatureCPreludeIncludes('regexp'))
   }
 
   if (needsFetchRuntime) {
@@ -235,11 +228,6 @@ export function emitCPrelude(
   const lines = emitCPreludeIncludeLines(systemIncludes, localIncludes)
 
   lines.push('')
-
-  if (needsRegexpRuntime) {
-    pushCPreludeLines(lines, emitCompilerFeatureCPreludeHelpers('regexp'))
-    lines.push('')
-  }
 
   return lines
 }

@@ -205,7 +205,6 @@ export function isConditionValueType(valueType: ValueType): boolean {
     valueType === 'boolean' ||
     valueType === 'number' ||
     valueType === 'unknown' ||
-    valueType === 'regexp' ||
     valueType === 'string' ||
     valueType === 'object' ||
     valueType === 'array' ||
@@ -215,16 +214,6 @@ export function isConditionValueType(valueType: ValueType): boolean {
     valueType === 'promise' ||
     valueType === 'function'
   )
-}
-
-export function regexpFlags(expression: AnyNode): string {
-  const flags = expression.flags
-
-  if (typeof flags === 'string') {
-    return flags
-  }
-
-  return ''
 }
 
 export function isNonNullNarrowingLiteral(expression: AnyNode): boolean {

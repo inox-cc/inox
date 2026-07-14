@@ -65,34 +65,6 @@ function cValueTypeOrUnknown(expression: AnyNode): string {
   return 'unknown'
 }
 
-function isRegExpTestCall(expression: AnyNode, context: CFunctionContext): boolean {
-  if (
-    expression.type !== 'CallExpression' ||
-    expression.callee.type !== 'MemberExpression' ||
-    expression.callee.property !== 'test'
-  ) {
-    return false
-  }
-
-  if (expression.regexpRuntimeMethod === 'test') {
-    return true
-  }
-
-  return isRegExpLiteralExpression(expression.callee.object, context)
-}
-
-function isRegExpLiteralExpression(expression: AnyNode, context: CFunctionContext): boolean {
-  if (expression.type === 'RegExpLiteral') {
-    return true
-  }
-
-  if (expression.type === 'Reference' && expression.path.length === 1) {
-    return context.regexpLiterals.has(expression.path[0])
-  }
-
-  return false
-}
-
 function cStringAt(values: string[], index: number): string {
   return values[index]
 }
@@ -535,10 +507,6 @@ export function inferExpressionType(
     typeof expression.libraryOperationId !== 'undefined'
   ) {
     return cValueTypeOrUnknown(expression)
-  }
-
-  if (isRegExpTestCall(expression, context)) {
-    return 'boolean'
   }
 
   if (expression.type === 'CallExpression' && deps.cFetchRuntimeExpressionMethod(expression)) {

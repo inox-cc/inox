@@ -173,6 +173,7 @@ function validateCompilerLibrarySet(
   validateNativeTypes(nativeTypes)
   validateUniqueOperationIds(operations)
   validateUniqueIntrinsicRoles(intrinsicBindings)
+  validateIntrinsicOperationBindings(intrinsicBindings, operations)
 }
 
 function validateCompilerLibraryDescriptorOwnership(library: CompilerLibraryDescriptor): void {
@@ -709,6 +710,31 @@ function validateUniqueIntrinsicRoles(bindings: IntrinsicRoleBinding[]): void {
     }
 
     seen.add(role)
+  }
+}
+
+function validateIntrinsicOperationBindings(
+  bindings: IntrinsicRoleBinding[],
+  operations: LibraryOperationDescriptor[]
+): void {
+  for (let bindingIndex = 0; bindingIndex < bindings.length; bindingIndex = bindingIndex + 1) {
+    const binding = bindings[bindingIndex]
+    let found = false
+
+    for (let operationIndex = 0; operationIndex < operations.length; operationIndex = operationIndex + 1) {
+      const operation = operations[operationIndex]
+
+      if (operation.bindingId === binding.bindingId || (operation.bindingAliases ?? []).includes(binding.bindingId)) {
+        found = true
+        break
+      }
+    }
+
+    if (!found) {
+      throw new Error(
+        `Compiler library intrinsic provider ${binding.role} references missing operation ${binding.bindingId}`
+      )
+    }
   }
 }
 

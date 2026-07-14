@@ -421,10 +421,6 @@ export function isBuiltinValueType(name: string): boolean {
     return true
   }
 
-  if (name === 'regexp') {
-    return true
-  }
-
   if (name === 'string') {
     return true
   }

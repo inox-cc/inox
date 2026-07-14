@@ -281,7 +281,6 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('functionType', 'object', null, true, loc),
       anyNodeField('shape', 'object', null, true, loc, { shape: objectShapeMetadata }),
       anyNodeField('rest', 'boolean', null, false, loc),
-      anyNodeField('regexpRuntimeMethod', 'string', null, true, loc),
       anyNodeField('libraryReceiverTypeId', 'string', null, true, loc),
       anyNodeField('libraryResultTypeId', 'string', null, true, loc),
       anyNodeField('libraryCCallStyle', 'string', null, true, loc),

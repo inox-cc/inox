@@ -1,5 +1,6 @@
 import type {
   CompilerLibrarySet,
+  IntrinsicRole,
   LibraryNativeTypeDescriptor,
   LibraryOperationDescriptor,
   LibraryOperationKind
@@ -187,6 +188,22 @@ export function compilerLibraryOperationForBinding(
       operationHasBinding(operation, bindingId)
     ) {
       return operation
+    }
+  }
+
+  return null
+}
+
+export function compilerLibraryOperationForIntrinsic(
+  libraries: CompilerLibrarySet,
+  role: IntrinsicRole,
+  kind: LibraryOperationKind
+): LibraryOperationDescriptor | null {
+  for (let index = 0; index < libraries.intrinsicBindings.length; index = index + 1) {
+    const binding = libraries.intrinsicBindings[index]
+
+    if (binding.role === role) {
+      return compilerLibraryOperationForBinding(libraries, null, binding.bindingId, kind)
     }
   }
 

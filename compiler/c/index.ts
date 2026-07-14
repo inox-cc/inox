@@ -1,5 +1,4 @@
 import { diagnostic } from '../diagnostics.ts'
-import { emitCRegExpFlags } from '../../stdlib/global/compiler/feature.ts'
 import { collectIrLocalThrowValueTypes, collectIrPrograms } from '../ir.ts'
 import type { IrLocalThrowValueTypeOptions } from '../ir/effects.ts'
 import type { IrModuleRecord } from '../ir/top-level.ts'
@@ -1537,7 +1536,6 @@ function createBaseContext(
     promiseChainArrowWrappers: new Map(),
     promiseChainWrappers: new Map(),
     runtimeEntrypointAdapter: null,
-    regexpLiterals: new Map(),
     runtimeFunctionParams: new Map(),
     runtimeEntryPath: null,
     externalEventLoopFunctions: new Set(),
@@ -2736,12 +2734,6 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
   const variableType = inferred === 'function' ? 'function' : declared ?? inferred
   context.variables.set(statement.name, variableType)
 
-  const regexpDeclaration = emitRegExpLiteralVariableDeclaration(statement, context, variableType)
-
-  if (regexpDeclaration !== null && typeof regexpDeclaration !== 'undefined') {
-    return regexpDeclaration
-  }
-
   const functionScalarDeclaration = emitFunctionScalarVariableDeclaration(statement, context, variableType)
 
   if (functionScalarDeclaration !== null && typeof functionScalarDeclaration !== 'undefined') {
@@ -2790,33 +2782,6 @@ function inferScalarDeclarationValueType(statement: CDynamicObjectFieldNode, con
   }
 
   return inferred
-}
-
-function emitRegExpLiteralVariableDeclaration(
-  statement: AnyNode,
-  context: CFunctionContext,
-  variableType: string
-): string[] | null {
-  if (variableType !== 'regexp' || statement.init.type !== 'RegExpLiteral') {
-    return null
-  }
-
-  context.variables.set(statement.name, 'regexp')
-  context.regexpLiterals.set(statement.name, statement.init)
-
-  return [
-      `${regexpVariableConstPrefix(statement)}RegExp ${emitCIdentifier(statement.name)}(${cStringLiteral(
-      statement.init.pattern
-    )}, ${emitCRegExpFlags(statement.init.flags)});`
-  ]
-}
-
-function regexpVariableConstPrefix(statement: AnyNode): string {
-  if (statement.kind === 'const') {
-    return 'const '
-  }
-
-  return ''
 }
 
 function inferModuleValueAssignmentType(statement: AnyNode, context: CFunctionContext): string {
@@ -2974,14 +2939,6 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
       context.classInstanceTypes.set(statement.name, moduleClassName)
       return emitCNativeClassAssignmentLines(name, statement.init, info, context)
     }
-  }
-
-  if (inferred === 'regexp' && statement.init.type === 'RegExpLiteral') {
-    context.moduleValueTypes.set(statement.name, 'regexp')
-    context.regexpLiterals.set(statement.name, statement.init)
-    return [
-      `${name} = RegExp(${cStringLiteral(statement.init.pattern)}, ${emitCRegExpFlags(statement.init.flags)});`
-    ]
   }
 
   if (inferred === 'number' || inferred === 'boolean') {

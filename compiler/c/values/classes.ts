@@ -495,8 +495,7 @@ function classFieldSupportsNativeLowering(field: CObjectShapeField): boolean {
   if (
     field.valueType === 'number' ||
     field.valueType === 'boolean' ||
-    field.valueType === 'string' ||
-    field.valueType === 'regexp'
+    field.valueType === 'string'
   ) {
     return true
   }
@@ -540,10 +539,6 @@ function emitCClassFieldDefaultValue(field: CObjectShapeField, context: ClassInf
 
   if (field.className !== null && typeof field.className !== 'undefined') {
     return 'inox_undefined_value()'
-  }
-
-  if (field.valueType === 'regexp') {
-    return '{ 0, 0 }'
   }
 
   return '0'

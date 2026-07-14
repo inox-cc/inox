@@ -252,10 +252,6 @@ function collectCUnitValueDeclarations(programs: IrProgram[], context: CEmitCont
       continue
     }
 
-    if (item.valueType === 'regexp' && item.init !== null && typeof item.init !== 'undefined') {
-      context.regexpLiterals.set(item.name, item.init)
-    }
-
     const valueType = cUnitValueType(item, context)
 
     values.push({
@@ -681,10 +677,6 @@ function cUnitValueGlobalInitializer(valueType: string): string {
 
   if (valueType === 'string') {
     return '""'
-  }
-
-  if (valueType === 'regexp') {
-    return ''
   }
 
   if (valueType === 'promise') {
@@ -1305,7 +1297,6 @@ export function emitCUnit(
   const needsSetRuntime: boolean = preludeRequirements.needsSetRuntime
   const needsObjectRuntime: boolean = preludeRequirements.needsObjectRuntime
   const needsJsonRuntime: boolean = preludeRequirements.needsJsonRuntime
-  const needsRegexpRuntime: boolean = preludeRequirements.needsRegexpRuntime
   const needsConsoleRuntime: boolean = preludeRequirements.needsConsoleRuntime
   const needsFetchRuntime: boolean = preludeRequirements.needsFetchRuntime
   baseContext.runtimeEntrypointAdapter = preludeRequirements.runtimeEntrypointAdapter
@@ -1334,7 +1325,6 @@ export function emitCUnit(
     needsSetRuntime,
     needsObjectRuntime,
     needsJsonRuntime,
-    needsRegexpRuntime,
     needsConsoleRuntime,
     needsFetchRuntime,
     preludeRequirements.libraryCPreludeIncludes

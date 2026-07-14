@@ -9,7 +9,6 @@ import type { AnyNode, Diagnostic, SourceLocation, ValueType } from '../types.ts
 import { isAssignableType } from './assignability.ts'
 import {
   isStringTrimMethod,
-  regexpFlags,
   stringPredicateArgCountMessage
 } from './helpers.ts'
 import { firstPathSegment } from './resolved-types.ts'
@@ -90,73 +89,6 @@ export function checkStringConversionCall(
   }
 
   return 'string'
-}
-
-export function checkRegExpLiteral(context: PrimitiveCallCheckerContext, expression: AnyNode): ValueType {
-  expression.valueType = 'regexp'
-  checkRegExpFlags(context, expression)
-
-  return 'regexp'
-}
-
-export function checkRegExpFlags(context: PrimitiveCallCheckerContext, expression: AnyNode): void {
-  const flags = regexpFlags(expression)
-  const seen: Set<string> = new Set()
-
-  for (let index = 0; index < flags.length; index = index + 1) {
-    const flag = flags[index]
-
-    if (seen.has(flag)) {
-      report(context, 'INOX_REGEXP_FLAG', `duplicate regular expression flag ${flag}`, expression.loc)
-      continue
-    }
-
-    seen.add(flag)
-
-    if (flag !== 'i') {
-      report(
-        context,
-        'INOX_REGEXP_FLAG',
-        `regular expression flag ${flag} is not supported in the current C backend slice`,
-        expression.loc
-      )
-    }
-  }
-}
-
-export function isRegExpTestCall(expression: AnyNode): boolean {
-  return expression.callee.type === 'MemberExpression' && expression.callee.property === 'test'
-}
-
-export function checkRegExpTestCall(
-  context: PrimitiveCallCheckerContext,
-  expression: AnyNode,
-  objectType: ValueType,
-  argTypes: ValueType[]
-): ValueType | null {
-  if (objectType !== 'regexp') {
-    return null
-  }
-
-  if (expression.args.length !== 1) {
-    report(context, 'INOX_ARG_COUNT', `regexp.test expects 1 argument(s), got ${expression.args.length}`, expression.loc)
-  }
-
-  if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-    checkAssignableType(
-      context,
-      argTypes[0],
-      'string',
-      expression.args[0].loc,
-      false,
-      expressionCanBeNull(expression.args[0])
-    )
-  }
-
-  expression.valueType = 'boolean'
-  expression.regexpRuntimeMethod = 'test'
-
-  return 'boolean'
 }
 
 export function isArrayFromCall(expression: AnyNode, arrayShadowed: boolean): boolean {

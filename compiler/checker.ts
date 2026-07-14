@@ -33,6 +33,7 @@ import {
   compilerLibraryHasModuleDeclaration,
   compilerLibraryNativeTypeForId,
   compilerLibraryNativeTypeIsAssignable,
+  compilerLibraryOperationForIntrinsic,
   compilerLibraryOperationForBinding,
   compilerLibraryOperationForGlobal,
   compilerLibraryOperationForImport,
@@ -45,6 +46,7 @@ import {
 } from './extensions/global-declarations.ts'
 import { compilerLibraryCapabilities } from './extensions/library-options.ts'
 import type {
+  IntrinsicRole,
   LibraryOperationDescriptor,
   LibraryOperationKind,
   LibraryArgumentCheckDescriptor,
@@ -138,9 +140,6 @@ import {
   checkNumberConversionCall as checkNumberConversionCallInContext,
   checkNumberToStringCall as checkNumberToStringCallInContext,
   checkNumericCastCall as checkNumericCastCallInContext,
-  checkRegExpFlags as checkRegExpFlagsInContext,
-  checkRegExpLiteral as checkRegExpLiteralInContext,
-  checkRegExpTestCall as checkRegExpTestCallInContext,
   checkStringCaseCall as checkStringCaseCallInContext,
   checkStringCharCodeAtCall as checkStringCharCodeAtCallInContext,
   checkStringConversionCall as checkStringConversionCallInContext,
@@ -153,7 +152,6 @@ import {
   isArrayFromCall,
   isNumberConversionCall,
   isNumberToStringCall,
-  isRegExpTestCall,
   isStringCaseCall,
   isStringCharCodeAtCall,
   isStringConversionCall,
@@ -3553,12 +3551,6 @@ class Checker {
       return stringConversionType
     }
 
-    const regexpTestType = this.checkRegExpTestCall(expression)
-
-    if (regexpTestType !== null && typeof regexpTestType !== 'undefined') {
-      return regexpTestType
-    }
-
     const numberConversionType = this.checkNumberConversionCall(expression)
 
     if (numberConversionType !== null && typeof numberConversionType !== 'undefined') {
@@ -5973,22 +5965,50 @@ class Checker {
   }
 
   checkRegExpLiteral(expression: AnyNode): ValueType {
-    return checkRegExpLiteralInContext(this.primitiveCallContext(), expression)
-  }
-
-  checkRegExpFlags(expression: AnyNode): void {
-    checkRegExpFlagsInContext(this.primitiveCallContext(), expression)
-  }
-
-  checkRegExpTestCall(expression: AnyNode): ValueType | null {
-    if (!isRegExpTestCall(expression)) {
-      return null
+    if (Array.isArray(expression.args) && typeof expression.valueType === 'string') {
+      return expression.valueType as ValueType
     }
 
-    const objectType = this.checkExpression(expression.callee.object)
-    const argTypes = this.checkCallArgumentTypes(expression)
+    const pattern = typeof expression.pattern === 'string' ? expression.pattern : ''
+    const flags = typeof expression.flags === 'string' ? expression.flags : ''
 
-    return checkRegExpTestCallInContext(this.primitiveCallContext(), expression, objectType, argTypes)
+    expression.args = [
+      { type: 'StringLiteral', value: pattern, valueType: 'string', loc: expression.loc },
+      { type: 'StringLiteral', value: flags, valueType: 'string', loc: expression.loc }
+    ]
+
+    return this.checkCompilerLibraryIntrinsicOperation(expression, 'regexp-literal', 'construct')
+  }
+
+  checkCompilerLibraryIntrinsicOperation(
+    expression: AnyNode,
+    role: IntrinsicRole,
+    kind: LibraryOperationKind
+  ): ValueType {
+    const libraries = resolveCompilerLibrarySet(this.options.libraries)
+    const operation = compilerLibraryOperationForIntrinsic(libraries, role, kind)
+
+    if (operation === null) {
+      this.report(
+        'INOX_MISSING_INTRINSIC_PROVIDER',
+        `missing compiler library intrinsic provider ${role}`,
+        expression.loc
+      )
+      expression.valueType = 'unknown'
+      return 'unknown'
+    }
+
+    const variant = this.compilerLibraryOperationVariant(expression, operation)
+    this.applyCompilerLibraryOperation(expression, operation, variant)
+
+    if (this.reportCompilerLibraryOperationDiagnostic(expression, operation)) {
+      return 'unknown'
+    }
+
+    this.checkCompilerLibraryOperationArguments(expression, operation, variant)
+    this.checkCompilerLibraryBackendConstraints(expression, operation)
+
+    return (variant?.valueType ?? operation.valueType ?? 'unknown') as ValueType
   }
 
   checkArrayFromCall(expression: AnyNode): ValueType | null {

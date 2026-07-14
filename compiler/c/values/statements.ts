@@ -1,5 +1,4 @@
 import { diagnostic } from '../../diagnostics.ts'
-import { emitCRegExpFlags } from '../../../stdlib/global/compiler/feature.ts'
 import type { RuntimeEntrypointAdapterDescriptor } from '../../extensions/types.ts'
 import type { AnyNode, Diagnostic, IrFunctionEffect, SourceLocation } from '../../types.ts'
 import { isRuntimeFunctionType, normalizeFunctionType } from '../async/callbacks.ts'
@@ -192,7 +191,6 @@ type CFunctionContext = {
   promiseConstructorHandlers: Map<string, CPromiseConstructorHandler>
   promiseRejectionValueTypes: CStringMap
   promiseValueTypes: CStringMap
-  regexpLiterals: Map<string, StatementNode>
   returnFlowUsed: boolean
   returnNullable: boolean
   returnShape?: CObjectShape | null
@@ -2799,15 +2797,6 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
 
   context.variables.set(statement.name, variableType)
 
-  if (variableType === 'regexp' && statement.init.type === 'RegExpLiteral') {
-    context.regexpLiterals.set(statement.name, statement.init)
-
-    return {
-      lines: [],
-      expression: emitRegExpLiteralVariableInitializer(statement)
-    }
-  }
-
   if (variableType === 'function') {
     let runtimeFunctionType: CFunctionType | null = null
     const functionType = scalarDeclarationFunctionType(statement)
@@ -2909,23 +2898,6 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
     lines: value.lines,
     expression: `double ${emitCIdentifier(statement.name)} = ${value.expression}`
   }
-}
-
-function emitRegExpLiteralVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] | null {
-  if (statement.init.type !== 'RegExpLiteral') {
-    return null
-  }
-
-  context.variables.set(statement.name, 'regexp')
-  context.regexpLiterals.set(statement.name, statement.init)
-
-  return [`${emitRegExpLiteralVariableInitializer(statement)};`]
-}
-
-function emitRegExpLiteralVariableInitializer(statement: StatementNode): string {
-  return `${constPrefix(statement.kind === 'const')}RegExp ${emitCIdentifier(statement.name)}(${cStringLiteral(
-    statement.init.pattern
-  )}, ${emitCRegExpFlags(statement.init.flags)})`
 }
 
 function registerPromiseVariableMetadata(
@@ -4109,12 +4081,6 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
 
   if (deps.isCollectionConstructorExpression(statement.init)) {
     return emitCollectionVariableDeclaration(statement, context)
-  }
-
-  const regexpDeclaration = emitRegExpLiteralVariableDeclaration(statement, context)
-
-  if (regexpDeclaration !== null && typeof regexpDeclaration !== 'undefined') {
-    return regexpDeclaration
   }
 
   const arrayFromCall = deps.emitPreparedArrayFromCallExpression(statement.init, context)

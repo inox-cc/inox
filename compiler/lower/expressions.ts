@@ -449,11 +449,6 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.stringRuntimeMethod = stringRuntimeMethod
   }
 
-  const regexpRuntimeMethod = nullableString(source.regexpRuntimeMethod)
-  if (regexpRuntimeMethod !== null && typeof regexpRuntimeMethod !== 'undefined') {
-    target.regexpRuntimeMethod = regexpRuntimeMethod
-  }
-
   const numericCast = nullableString(source.numericCast)
   if (numericCast !== null && typeof numericCast !== 'undefined') {
     target.numericCast = numericCast
@@ -561,13 +556,22 @@ function cloneStringLiteral(expression: LowerExpressionNode): LowerExpressionNod
 }
 
 function cloneRegExpLiteral(expression: LowerExpressionNode): LowerExpressionNode {
+  const pattern = typeof expression.pattern === 'string' ? expression.pattern : ''
+  const flags = typeof expression.flags === 'string' ? expression.flags : ''
+
   return copyRuntimeMetadata(
     {
       type: 'RegExpLiteral',
       raw: expression.raw,
-      pattern: expression.pattern,
-      flags: expression.flags,
-      valueType: 'regexp',
+      pattern,
+      flags,
+      args: [
+        { type: 'StringLiteral', value: pattern, valueType: 'string', loc: expression.loc },
+        { type: 'StringLiteral', value: flags, valueType: 'string', loc: expression.loc }
+      ],
+      valueType: expression.valueType,
+      shape: expression.shape,
+      nullable: expression.nullable === true,
       loc: expression.loc
     },
     expression

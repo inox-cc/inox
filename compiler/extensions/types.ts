@@ -247,6 +247,7 @@ export type IntrinsicRole =
   | 'async-result'
   | 'exception-value'
   | 'dynamic-object'
+  | 'regexp-literal'
 
 export type IntrinsicRoleBinding = {
   role: IntrinsicRole
