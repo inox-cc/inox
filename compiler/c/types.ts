@@ -1,5 +1,5 @@
 import type { CompilerHost } from '../host.ts'
-import type { CompilerLibraryOptionValue, CompilerLibrarySet } from '../extensions/types.ts'
+import type { CompilerLibraryOptionValue, CompilerLibrarySet, TypeRef } from '../extensions/types.ts'
 import type { AnyNode, IrProgram, ModuleRecord } from '../types.ts'
 
 export type CEmitOptions = {
@@ -68,6 +68,7 @@ export type CObjectShapeField = CShapeValueMetadata & {
   readonlyField?: boolean
   shapeOwnership?: 'weak'
   shape?: CObjectShape | null
+  typeRef?: TypeRef | null
   [key: string]: any
 }
 

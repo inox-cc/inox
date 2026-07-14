@@ -48,7 +48,7 @@ import type {
 } from './resolved-types.ts'
 import { mergeShapeFields } from './helpers.ts'
 import { compilerLibraryNativeTypeForName } from '../extensions/library-set.ts'
-import type { CompilerLibrarySet } from '../extensions/types.ts'
+import type { CompilerLibrarySet, TypeOwnership, TypeRef } from '../extensions/types.ts'
 import type { LibraryResultShapeFieldDescriptor } from '../extensions/types.ts'
 
 export type DeclaredTypeResolverContext = {
@@ -103,6 +103,14 @@ export function resolveDeclaredType(
     }
 
     info.valueType = nativeType.valueType as ValueType
+    info.typeRef = {
+      kind: 'nominal',
+      typeId: nativeType.typeId,
+      args: [],
+      nullable: false,
+      ownership: 'value',
+      traits: []
+    }
     info.shape = {
       kind: 'object',
       baseTypes: nativeType.baseTypeIds,
@@ -121,6 +129,7 @@ export function resolveDeclaredType(
     return {
       valueType: inner.valueType,
       nullable: true,
+      typeRef: qualifiedTypeRef(inner.typeRef, true, null),
       functionType: inner.functionType,
       shape: inner.shape,
       arrayElementType: inner.arrayElementType,
@@ -604,6 +613,7 @@ export function resolveObjectShapeField(
     weakTypeValidated: field.weakTypeValidated,
     loc: field.loc,
     declaredType,
+    typeRef: qualifiedFieldTypeRef(fieldInfo.typeRef, weakField, field.optional === true),
     valueType: fieldInfo.valueType,
     nullable: fieldInfo.nullable || weakField || field.optional === true,
     arrayElementType: fieldInfo.arrayElementType,
@@ -736,6 +746,7 @@ function resolvedSyntheticFieldType(field: AnyNode): ResolvedTypeInfo {
   }
 
   info.nullable = field.nullable === true
+  info.typeRef = field.typeRef ?? null
   info.functionType = field.functionType ?? null
   info.shape = field.shape ?? null
   info.arrayElementType = field.arrayElementType ?? null
@@ -789,6 +800,7 @@ export function resolveWeakFieldDeclaredType(
   field.weakTypeValidated = true
 
   fieldInfo.nullable = true
+  fieldInfo.typeRef = qualifiedTypeRef(fieldInfo.typeRef, true, 'weak')
 
   return fieldInfo
 }
@@ -937,6 +949,7 @@ export function resolveWeakTargetShapeTypeName(
     return {
       valueType: inner.valueType,
       nullable: true,
+      typeRef: qualifiedTypeRef(inner.typeRef, true, null),
       functionType: inner.functionType,
       shape: inner.shape,
       arrayElementType: inner.arrayElementType,
@@ -1041,6 +1054,7 @@ export function cloneResolvedTypeInfo(info: ResolvedTypeInfo): ResolvedTypeInfo 
   return {
     valueType: info.valueType,
     nullable: info.nullable,
+    typeRef: info.typeRef,
     functionType: info.functionType,
     shape: info.shape,
     arrayElementType: info.arrayElementType,
@@ -1060,6 +1074,7 @@ export function unresolvedTypeInfo(): ResolvedTypeInfo {
   return {
     valueType: 'unknown',
     nullable: false,
+    typeRef: null,
     functionType: null,
     shape: null,
     arrayElementType: null,
@@ -1069,5 +1084,78 @@ export function unresolvedTypeInfo(): ResolvedTypeInfo {
     mapValueShape: null,
     promiseValueType: null,
     setElementType: null
+  }
+}
+
+function qualifiedFieldTypeRef(typeRef: TypeRef | null, weak: boolean, optional: boolean): TypeRef | null {
+  if (weak) {
+    return qualifiedTypeRef(typeRef, true, 'weak')
+  }
+
+  if (optional) {
+    return qualifiedTypeRef(typeRef, true, null)
+  }
+
+  return typeRef
+}
+
+function qualifiedTypeRef(
+  typeRef: TypeRef | null,
+  nullable: boolean,
+  ownership: TypeOwnership | null
+): TypeRef | null {
+  if (typeRef === null) {
+    return null
+  }
+
+  const resolvedOwnership = ownership ?? typeRef.ownership
+
+  if (typeRef.kind === 'primitive') {
+    return {
+      kind: 'primitive',
+      name: typeRef.name,
+      nullable,
+      ownership: resolvedOwnership,
+      traits: typeRef.traits
+    }
+  }
+
+  if (typeRef.kind === 'nominal') {
+    return {
+      kind: 'nominal',
+      typeId: typeRef.typeId,
+      args: typeRef.args,
+      nullable,
+      ownership: resolvedOwnership,
+      traits: typeRef.traits
+    }
+  }
+
+  if (typeRef.kind === 'function') {
+    return {
+      kind: 'function',
+      params: typeRef.params,
+      result: typeRef.result,
+      nullable,
+      ownership: resolvedOwnership,
+      traits: typeRef.traits
+    }
+  }
+
+  if (typeRef.kind === 'object') {
+    return {
+      kind: 'object',
+      fields: typeRef.fields,
+      nullable,
+      ownership: resolvedOwnership,
+      traits: typeRef.traits
+    }
+  }
+
+  return {
+    kind: 'unknown',
+    nullable,
+    ownership: resolvedOwnership,
+    traits: typeRef.traits
   }
 }

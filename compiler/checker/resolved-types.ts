@@ -1,10 +1,12 @@
 import { commonValueType } from './assignability.ts'
 import { memberExpressionPath } from '../member-paths.ts'
+import type { TypeRef } from '../extensions/types.ts'
 import type { AnyNode, ObjectShapeInfo, ProgramNode, SourceLocation, TypeAliasInfo, ValueType } from '../types.ts'
 
 export type ResolvedTypeInfo = {
   valueType: ValueType
   nullable: boolean
+  typeRef: TypeRef | null
   functionType: FunctionTypeMetadata | null
   shape: ObjectShapeInfo | null
   arrayElementType: ValueType | null
@@ -163,6 +165,7 @@ export function anyNodeResolvedTypeInfo(loc: SourceLocation): ResolvedTypeInfo {
   return {
     valueType: 'object',
     nullable: false,
+    typeRef: null,
     functionType: null,
     shape: anyNodeObjectShape(loc),
     arrayElementType: null,

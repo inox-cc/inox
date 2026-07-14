@@ -448,6 +448,7 @@ function commonJsonArrayElementShape(elements: JsonParseLiteralTypeInfo[]): Obje
     infos.push({
       valueType: element.valueType,
       nullable: false,
+      typeRef: null,
       functionType: null,
       shape: element.shape,
       arrayElementType: element.arrayElementType,

@@ -900,6 +900,7 @@ class Checker {
       weakTypeValidated: field.weakTypeValidated,
       loc: field.loc,
       declaredType,
+      typeRef: fieldInfo.typeRef,
       className: this.declaredClassName(declaredType),
       valueType: fieldInfo.valueType,
       nullable: fieldInfo.nullable,
@@ -6882,6 +6883,7 @@ class Checker {
           paramInfo = {
             valueType: expectedValueType,
             nullable: expected.nullable === true,
+            typeRef: expected.typeRef ?? null,
             arrayElementType,
             arrayElementDeclaredType,
             mapKeyType,

@@ -365,6 +365,10 @@ function classFieldUsesRuntimeValueStorage(field: CObjectShapeField): boolean {
     return false
   }
 
+  if (classFieldLibraryNativeCppType(field) !== null) {
+    return false
+  }
+
   if (classFieldUsesCppStringStorage(field)) {
     return false
   }
@@ -477,6 +481,28 @@ function classFieldUsesNativeClassStorage(field: CObjectShapeField): boolean {
   )
 }
 
+function classFieldLibraryNativeCppType(field: CObjectShapeField): string | null {
+  const typeRef = field.typeRef
+
+  if (
+    typeRef === null ||
+    typeof typeRef === 'undefined' ||
+    typeRef.kind !== 'nominal' ||
+    typeRef.nullable ||
+    typeRef.ownership === 'weak'
+  ) {
+    return null
+  }
+
+  const shapeTypeId = field.shape?.libraryTypeId
+
+  if (shapeTypeId !== typeRef.typeId) {
+    return null
+  }
+
+  return libraryNativeCppType(field.shape)
+}
+
 function classCanUseNativeLowering(fields: CObjectShapeField[]): boolean {
   for (const field of fields) {
     if (!classFieldSupportsNativeLowering(field)) {
@@ -489,6 +515,10 @@ function classCanUseNativeLowering(fields: CObjectShapeField[]): boolean {
 
 function classFieldSupportsNativeLowering(field: CObjectShapeField): boolean {
   if (classFieldUsesNativeClassStorage(field)) {
+    return true
+  }
+
+  if (classFieldLibraryNativeCppType(field) !== null) {
     return true
   }
 
@@ -513,6 +543,12 @@ function emitCClassFieldType(field: CObjectShapeField, context: ClassInfoLookupC
     return emitCClassTypeNameForClassName(context, field.className)
   }
 
+  const libraryCppType = classFieldLibraryNativeCppType(field)
+
+  if (libraryCppType !== null) {
+    return libraryCppType
+  }
+
   if (classFieldUsesCppStringStorage(field)) {
     return 'inox::String'
   }
@@ -527,6 +563,12 @@ function emitCClassFieldType(field: CObjectShapeField, context: ClassInfoLookupC
 function emitCClassFieldDefaultValue(field: CObjectShapeField, context: ClassInfoLookupContext): string {
   if (classFieldUsesNativeClassStorage(field)) {
     return emitCClassTypeNameForClassName(context, field.className) + '()'
+  }
+
+  const libraryCppType = classFieldLibraryNativeCppType(field)
+
+  if (libraryCppType !== null) {
+    return libraryCppType + '()'
   }
 
   if (classFieldUsesRuntimeValueStorage(field)) {
@@ -2155,6 +2197,7 @@ function resolveClassShapeField(field: CObjectShapeField): CObjectShapeField {
     mapValueType: field.mapValueType,
     setElementType: field.setElementType,
     shape: field.shape,
+    typeRef: field.typeRef,
     functionType: field.functionType,
     nullable: field.nullable
   }
@@ -2421,6 +2464,7 @@ export function registerClassObjectShape(context: ClassFunctionContext, name: st
       mapValueType: field.mapValueType,
       setElementType: field.setElementType,
       shape: field.shape,
+      typeRef: field.typeRef,
       functionType: field.functionType,
       nullable: field.nullable
     })
@@ -3467,6 +3511,17 @@ export function emitPreparedNativeClassFieldValueExpression(
       expression: access.reference,
       cppType: 'inox::String',
       valueType: 'string'
+    }
+  }
+
+  const libraryCppType = classFieldLibraryNativeCppType(access.field)
+
+  if (libraryCppType !== null) {
+    return {
+      lines: [],
+      expression: access.reference,
+      cppType: libraryCppType,
+      valueType: access.field.valueType
     }
   }
 
