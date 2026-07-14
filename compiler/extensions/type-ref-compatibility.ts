@@ -1,6 +1,8 @@
 import { compilerLibraryNativeTypeForId } from './library-set.ts'
 import type {
   CompilerLibrarySet,
+  LibraryCResultFieldMappingDescriptor,
+  LibraryCResultMappingDescriptor,
   LibraryResultShapeFieldDescriptor,
   TypeRef,
   TypeTraitRef
@@ -27,11 +29,13 @@ export type TypeRefCompatibilityMetadata = {
 export function typeRefCompatibilityMetadata(
   typeRef: TypeRef,
   libraries: CompilerLibrarySet,
-  loc: SourceLocation
+  loc: SourceLocation,
+  cResultMapping: LibraryCResultMappingDescriptor | null = null
 ): TypeRefCompatibilityMetadata {
   const metadata = baseTypeRefCompatibilityMetadata(typeRef, libraries, loc)
 
   applyTypeTraits(metadata, typeRef.traits, libraries, loc)
+  applyCResultMapping(metadata, cResultMapping)
   return metadata
 }
 
@@ -130,6 +134,71 @@ function emptyCompatibilityMetadata(
     promiseValueType: null,
     promiseRejectionValueType: null,
     setElementType: null
+  }
+}
+
+function applyCResultMapping(
+  metadata: TypeRefCompatibilityMetadata,
+  mapping: LibraryCResultMappingDescriptor | null
+): void {
+  if (mapping === null) {
+    return
+  }
+
+  const shape = metadata.shape
+
+  if (shape === null) {
+    throw new Error('C++ result mapping requires object compatibility metadata')
+  }
+
+  metadata.libraryCppType = mapping.cppType
+  shape.libraryCppType = mapping.cppType
+  applyCResultFieldMappings(shape.fields, mapping.fields)
+}
+
+function applyCResultFieldMappings(
+  shapeFields: AnyNode[],
+  mappings: LibraryCResultFieldMappingDescriptor[]
+): void {
+  for (let index = 0; index < mappings.length; index = index + 1) {
+    const mapping = mappings[index]
+    let shapeField: AnyNode | null = null
+
+    for (let fieldIndex = 0; fieldIndex < shapeFields.length; fieldIndex = fieldIndex + 1) {
+      if (shapeFields[fieldIndex].name === mapping.name) {
+        shapeField = shapeFields[fieldIndex]
+        break
+      }
+    }
+
+    if (shapeField === null) {
+      throw new Error(`Missing compatibility field for C++ result mapping ${mapping.name}`)
+    }
+
+    shapeField.libraryCMember = mapping.cMember
+    const cppType = mapping.cppType
+
+    if (typeof cppType === 'string') {
+      shapeField.libraryCppType = cppType
+
+      if (shapeField.shape !== null && typeof shapeField.shape !== 'undefined') {
+        shapeField.shape.libraryCppType = cppType
+      }
+    }
+
+    const nestedMappings = mapping.fields
+
+    if (nestedMappings === null || typeof nestedMappings === 'undefined') {
+      continue
+    }
+
+    const nestedFields = shapeField.shape?.fields
+
+    if (nestedFields === null || typeof nestedFields === 'undefined') {
+      throw new Error(`Missing nested compatibility fields for C++ result mapping ${mapping.name}`)
+    }
+
+    applyCResultFieldMappings(nestedFields, nestedMappings)
   }
 }
 

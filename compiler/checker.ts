@@ -4479,7 +4479,8 @@ class Checker {
     const resultTypeRef = variant?.resultTypeRef ?? operation.resultTypeRef
 
     if (resultTypeRef !== null && typeof resultTypeRef !== 'undefined') {
-      const metadata = typeRefCompatibilityMetadata(resultTypeRef, libraries, expression.loc)
+      const cResultMapping = variant?.cResultMapping ?? operation.cResultMapping ?? null
+      const metadata = typeRefCompatibilityMetadata(resultTypeRef, libraries, expression.loc, cResultMapping)
       const cResultShapeFields: string[] = []
 
       expression.typeRef = resultTypeRef

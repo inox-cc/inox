@@ -181,6 +181,19 @@ export type LibraryCallbackLifetime = 'call' | 'event-loop'
 
 export type LibraryCResultMode = 'value' | 'borrowed'
 
+export type LibraryCResultFieldMappingDescriptor = {
+  name: string
+  cMember: string
+  cppType?: string | null
+  fields?: LibraryCResultFieldMappingDescriptor[]
+  fieldsOwnership?: 'weak'
+}
+
+export type LibraryCResultMappingDescriptor = {
+  cppType: string
+  fields: LibraryCResultFieldMappingDescriptor[]
+}
+
 export type LibraryBackendConstraintDescriptor = {
   option: 'loopBackend' | 'tlsBackend'
   allowedValues: string[]
@@ -256,6 +269,7 @@ export type LibraryOperationVariantDescriptor = {
   cArgumentSources?: Array<LibraryCArgumentSourceDescriptor | null>
   cReceiverAdapter?: string | null
   cResultMode?: LibraryCResultMode | null
+  cResultMapping?: LibraryCResultMappingDescriptor | null
   resultTypeRef?: TypeRef | null
   resultShapeFields?: LibraryResultShapeFieldDescriptor[]
   resultArrayElementType?: string | null
@@ -283,6 +297,7 @@ export type LibraryOperationDescriptor = {
   cArgumentSources?: Array<LibraryCArgumentSourceDescriptor | null>
   cReceiverAdapter?: string | null
   cResultMode?: LibraryCResultMode | null
+  cResultMapping?: LibraryCResultMappingDescriptor | null
   resultTypeRef?: TypeRef | null
   resultShapeFields?: LibraryResultShapeFieldDescriptor[]
   resultArrayElementType?: string | null

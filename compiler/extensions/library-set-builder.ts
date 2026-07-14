@@ -3,6 +3,8 @@ import type {
   CompilerLibrarySet,
   IntrinsicRoleBinding,
   LibraryArgumentCheckDescriptor,
+  LibraryCResultFieldMappingDescriptor,
+  LibraryCResultMappingDescriptor,
   LibraryCValueMappingDescriptor,
   LibraryDeclarationDescriptor,
   LibraryCallbackParameterDescriptor,
@@ -16,6 +18,7 @@ import type {
   LibraryRuntimeInitializerArgumentDescriptor,
   LibraryRuntimeInitializerDescriptor,
   RuntimeRequirementDescriptor,
+  ObjectTypeRef,
   TypeRef
 } from './types.ts'
 import { formatDiagnostics } from '../diagnostics.ts'
@@ -692,6 +695,12 @@ function validateOperationTypeRefs(
       validateTypeRefHasNoLegacyResultMetadata(operation.operationId, operation, null)
     }
 
+    validateCResultMapping(
+      `operation ${operation.operationId}`,
+      operation.cResultMapping,
+      operationTypeRef
+    )
+
     const variants = operation.variants ?? []
 
     for (let variantIndex = 0; variantIndex < variants.length; variantIndex = variantIndex + 1) {
@@ -700,6 +709,11 @@ function validateOperationTypeRefs(
       const resultTypeRef = variantTypeRef ?? operationTypeRef
 
       if (resultTypeRef === null || typeof resultTypeRef === 'undefined') {
+        validateCResultMapping(
+          `operation ${operation.operationId} variant ${variantIndex}`,
+          variant.cResultMapping ?? operation.cResultMapping,
+          resultTypeRef
+        )
         continue
       }
 
@@ -712,7 +726,91 @@ function validateOperationTypeRefs(
       }
 
       validateTypeRefHasNoLegacyResultMetadata(operation.operationId, operation, variant, variantIndex)
+      validateCResultMapping(
+        `operation ${operation.operationId} variant ${variantIndex}`,
+        variant.cResultMapping ?? operation.cResultMapping,
+        resultTypeRef
+      )
     }
+  }
+}
+
+function validateCResultMapping(
+  label: string,
+  mapping: LibraryCResultMappingDescriptor | null | undefined,
+  resultTypeRef: TypeRef | null | undefined
+): void {
+  if (mapping === null || typeof mapping === 'undefined') {
+    return
+  }
+
+  if (resultTypeRef === null || typeof resultTypeRef === 'undefined') {
+    throw new Error(`${label} C++ result mapping requires resultTypeRef`)
+  }
+
+  if (resultTypeRef.kind !== 'object') {
+    throw new Error(`${label} C++ result mapping requires object resultTypeRef`)
+  }
+
+  if (mapping.cppType.length === 0) {
+    throw new Error(`${label} C++ result mapping requires cppType`)
+  }
+
+  validateCResultFieldMappings(label, mapping.fields, resultTypeRef)
+}
+
+function validateCResultFieldMappings(
+  label: string,
+  mappings: LibraryCResultFieldMappingDescriptor[],
+  resultTypeRef: ObjectTypeRef
+): void {
+  const seen: Set<string> = new Set()
+
+  for (let index = 0; index < mappings.length; index = index + 1) {
+    const mapping = mappings[index]
+
+    if (seen.has(mapping.name)) {
+      throw new Error(`${label} has duplicate C++ result field mapping ${mapping.name}`)
+    }
+
+    seen.add(mapping.name)
+
+    let semanticField: ObjectTypeRef['fields'][number] | null = null
+
+    for (let fieldIndex = 0; fieldIndex < resultTypeRef.fields.length; fieldIndex = fieldIndex + 1) {
+      const candidate = resultTypeRef.fields[fieldIndex]
+
+      if (candidate.name === mapping.name) {
+        semanticField = candidate
+        break
+      }
+    }
+
+    if (semanticField === null) {
+      throw new Error(`${label} has unknown C++ result field mapping ${mapping.name}`)
+    }
+
+    if (mapping.cMember.length === 0) {
+      throw new Error(`${label} C++ result field mapping ${mapping.name} requires cMember`)
+    }
+
+    const cppType = mapping.cppType
+
+    if (typeof cppType === 'string' && cppType.length === 0) {
+      throw new Error(`${label} C++ result field mapping ${mapping.name} has empty cppType`)
+    }
+
+    const nestedMappings = mapping.fields
+
+    if (nestedMappings === null || typeof nestedMappings === 'undefined') {
+      continue
+    }
+
+    if (semanticField.typeRef.kind !== 'object') {
+      throw new Error(`${label} C++ result field mapping ${mapping.name} requires object field TypeRef`)
+    }
+
+    validateCResultFieldMappings(`${label} field ${mapping.name}`, nestedMappings, semanticField.typeRef)
   }
 }
 
@@ -978,6 +1076,7 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           (item.cArgumentAdapters ?? []).join(',') + ':' + operationArgumentSourcesFingerprint(item.cArgumentSources) + ':' +
           (item.callbackLifetime ?? '') + ':' +
           (item.cResultMode ?? '') + ':' +
+          cResultMappingFingerprint(item.cResultMapping) + ':' +
           (item.cReceiverAdapter ?? '') + ':' +
           typeRefFingerprintOrEmpty(item.resultTypeRef) + ':' +
           operationResultShapeFingerprint(item) + ':' + (item.resultArrayElementType ?? '') + ':' +
@@ -1155,6 +1254,7 @@ function operationVariantsFingerprint(operation: LibraryOperationDescriptor): st
         (variant.cArgumentAdapters ?? []).join(',') + ':' + operationArgumentSourcesFingerprint(variant.cArgumentSources) + ':' +
         (variant.callbackLifetime ?? '') + ':' +
         (variant.cResultMode ?? '') + ':' +
+        cResultMappingFingerprint(variant.cResultMapping) + ':' +
         (variant.cReceiverAdapter ?? '') + ':' +
         typeRefFingerprintOrEmpty(variant.resultTypeRef) + ':' +
         resultShapeFieldsFingerprint(variant.resultShapeFields ?? []) + ':' +
@@ -1326,6 +1426,35 @@ function operationResultShapeFingerprint(operation: LibraryOperationDescriptor):
   }
 
   return resultShapeFieldsFingerprint(fields)
+}
+
+function cResultMappingFingerprint(
+  mapping: LibraryCResultMappingDescriptor | null | undefined
+): string {
+  if (mapping === null || typeof mapping === 'undefined') {
+    return ''
+  }
+
+  return mapping.cppType + ':fields=' + cResultFieldMappingsFingerprint(mapping.fields)
+}
+
+function cResultFieldMappingsFingerprint(
+  fields: LibraryCResultFieldMappingDescriptor[]
+): string {
+  const rows: string[] = []
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    const field = fields[index]
+    const nestedFields = field.fields
+    rows.push(
+      `${field.name}=${field.cMember}:${field.cppType ?? ''}:` +
+        (nestedFields === null || typeof nestedFields === 'undefined'
+          ? ''
+          : `{${cResultFieldMappingsFingerprint(nestedFields)}}`)
+    )
+  }
+
+  return rows.join(',')
 }
 
 function resultShapeFieldsFingerprint(
