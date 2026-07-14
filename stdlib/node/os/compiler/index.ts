@@ -1,9 +1,22 @@
 import type {
   CompilerLibraryPackageDescriptor,
-  LibraryOperationDescriptor
+  LibraryCResultMappingDescriptor,
+  LibraryOperationDescriptor,
+  PrimitiveTypeRef
 } from '../../../../compiler/extensions/types.ts'
 const nodeOsLibraryId = 'node:os'
 const nodeOsRuntimeRequirement = 'node:os'
+const stringTypeRef: PrimitiveTypeRef = {
+  kind: 'primitive',
+  name: 'string',
+  nullable: false,
+  ownership: 'value',
+  traits: []
+}
+const stringCResultMapping: LibraryCResultMappingDescriptor = {
+  cppType: 'inox::String',
+  fields: []
+}
 const unsupportedOsRuntimeMethods = [
   'availableParallelism',
   'cpus',
@@ -66,9 +79,8 @@ function operation(name: string, kind: 'call' | 'member-read'): LibraryOperation
     kind,
     runtimeRequirements: [nodeOsRuntimeRequirement],
     cExpression,
-    cppType: 'inox::String',
-    valueType: 'string',
-    owned: false,
+    resultTypeRef: stringTypeRef,
+    cResultMapping: stringCResultMapping,
     constantValue
   }
 }
