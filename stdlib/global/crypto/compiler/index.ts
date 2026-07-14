@@ -18,15 +18,18 @@ const operations: LibraryOperationDescriptor[] = [
     cArgumentKinds: ['value'],
     cArgumentAdapters: ['Uint8Array($value)'],
     cResultMode: 'value',
-    resultTypeId: uint8ArrayTypeId,
+    resultTypeRef: {
+      kind: 'nominal',
+      typeId: uint8ArrayTypeId,
+      args: [],
+      nullable: false,
+      ownership: 'value',
+      traits: []
+    },
     cFailureMode: 'thrown',
     minArgs: 1,
     maxArgs: 1,
-    argumentChecks: [{ valueTypes: ['bytes'] }],
-    cppType: 'Uint8Array',
-    valueType: 'bytes',
-    owned: false,
-    nullable: false
+    argumentChecks: [{ valueTypes: ['bytes'] }]
   }
 ]
 

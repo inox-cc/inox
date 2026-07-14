@@ -58,6 +58,8 @@ test('global:crypto владеет getRandomValues operation, runtime requiremen
   const call = result.ir.body[1].init
 
   assert.equal(call.libraryOperationId, 'global:crypto#getRandomValues')
+  assert.equal(call.typeRef?.kind, 'nominal')
+  assert.equal(call.typeRef?.typeId, 'global:binary#Uint8Array')
   assert.deepEqual(call.libraryRuntimeRequirements, ['global:crypto'])
   assert.deepEqual(call.libraryCapabilities, ['entropy'])
   assert.deepEqual(call.libraryCArgumentAdapters, ['Uint8Array($value)'])
