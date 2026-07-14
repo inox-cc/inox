@@ -1,31 +1,54 @@
 import type {
   CompilerLibraryPackageDescriptor,
   LibraryCArgumentKind,
-  LibraryOperationDescriptor
+  LibraryCResultMappingDescriptor,
+  LibraryOperationDescriptor,
+  ObjectTypeRef,
+  PrimitiveTypeRef,
+  TypeRef
 } from '../../../../compiler/extensions/types.ts'
 
 const libraryId = 'node:path'
 const runtimeRequirement = 'node:path'
-const resultShapeFields = [
-  resultStringField('root'),
-  resultStringField('dir'),
-  resultStringField('base'),
-  resultStringField('ext'),
-  resultStringField('name')
-]
+const booleanTypeRef: PrimitiveTypeRef = primitiveTypeRef('boolean')
+const stringTypeRef: PrimitiveTypeRef = primitiveTypeRef('string')
+const stringCResultMapping: LibraryCResultMappingDescriptor = {
+  cppType: 'inox::String',
+  fields: []
+}
+const parseTypeRef: ObjectTypeRef = {
+  kind: 'object',
+  fields: ['root', 'dir', 'base', 'ext', 'name'].map((name) => ({
+    name,
+    typeRef: stringTypeRef,
+    readonly: true
+  })),
+  nullable: false,
+  ownership: 'value',
+  traits: []
+}
+const parseCResultMapping: LibraryCResultMappingDescriptor = {
+  cppType: 'inox::Value',
+  fields: []
+}
 const operations: LibraryOperationDescriptor[] = [
   constantOperation('delimiter', ':'),
   constantOperation('sep', '/'),
-  callOperation('basename', ['string-view', 'optional-string-view', 'argument-presence'], 'inox::String', 'string'),
-  callOperation('dirname', ['string-view'], 'inox::String', 'string'),
-  callOperation('extname', ['string-view'], 'inox::String', 'string'),
-  callOperation('format', ['value'], 'inox::String', 'string'),
-  callOperation('isAbsolute', ['string-view'], 'bool', 'boolean'),
-  callOperation('join', ['variadic-string-view-array', 'variadic-count'], 'inox::String', 'string'),
-  callOperation('normalize', ['string-view'], 'inox::String', 'string'),
-  callOperation('parse', ['string-view', 'result-shape'], 'inox::Value', 'object', resultShapeFields),
-  callOperation('relative', ['string-view', 'string-view'], 'inox::String', 'string'),
-  callOperation('resolve', ['variadic-string-view-array', 'variadic-count'], 'inox::String', 'string'),
+  callOperation(
+    'basename',
+    ['string-view', 'optional-string-view', 'argument-presence'],
+    stringTypeRef,
+    stringCResultMapping
+  ),
+  callOperation('dirname', ['string-view'], stringTypeRef, stringCResultMapping),
+  callOperation('extname', ['string-view'], stringTypeRef, stringCResultMapping),
+  callOperation('format', ['value'], stringTypeRef, stringCResultMapping),
+  callOperation('isAbsolute', ['string-view'], booleanTypeRef),
+  callOperation('join', ['variadic-string-view-array', 'variadic-count'], stringTypeRef, stringCResultMapping),
+  callOperation('normalize', ['string-view'], stringTypeRef, stringCResultMapping),
+  callOperation('parse', ['string-view', 'result-shape'], parseTypeRef, parseCResultMapping),
+  callOperation('relative', ['string-view', 'string-view'], stringTypeRef, stringCResultMapping),
+  callOperation('resolve', ['variadic-string-view-array', 'variadic-count'], stringTypeRef, stringCResultMapping),
   unsupportedOperation('matchesGlob', 'call'),
   unsupportedOperation('toNamespacedPath', 'call'),
   unsupportedOperation('win32', 'member-read')
@@ -49,9 +72,8 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
 function callOperation(
   name: string,
   cArgumentKinds: LibraryCArgumentKind[],
-  cppType: string,
-  valueType: string,
-  resultShapeFields?: { name: string; valueType: string; readonly: boolean }[]
+  resultTypeRef: TypeRef,
+  cResultMapping?: LibraryCResultMappingDescriptor
 ): LibraryOperationDescriptor {
   return {
     libraryId,
@@ -62,19 +84,19 @@ function callOperation(
     runtimeRequirements: [runtimeRequirement],
     cExpression: `path.${name}`,
     cArgumentKinds,
-    resultShapeFields,
-    cppType,
-    valueType,
-    owned: false,
+    resultTypeRef,
+    cResultMapping,
     constantValue: null
   }
 }
 
-function resultStringField(name: string): { name: string; valueType: string; readonly: boolean } {
+function primitiveTypeRef(name: 'boolean' | 'string'): PrimitiveTypeRef {
   return {
+    kind: 'primitive',
     name,
-    valueType: 'string',
-    readonly: true
+    nullable: false,
+    ownership: 'value',
+    traits: []
   }
 }
 
@@ -87,9 +109,8 @@ function constantOperation(name: string, value: string): LibraryOperationDescrip
     kind: 'member-read',
     runtimeRequirements: [runtimeRequirement],
     cExpression: `path.${name}`,
-    cppType: 'inox::String',
-    valueType: 'string',
-    owned: false,
+    resultTypeRef: stringTypeRef,
+    cResultMapping: stringCResultMapping,
     constantValue: value
   }
 }
