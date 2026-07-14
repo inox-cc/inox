@@ -3769,8 +3769,17 @@ function emitPreparedConditionalNumberExpression(
   deps: CScalarExpressionDependencies
 ): PreparedExpression {
   const test = emitPreparedBooleanOperandExpression(expression.test, context, deps)
+  const narrowing = resolveNullableScalarConditionNarrowing(expression.test, context)
+  const consequentSnapshot = pushNullableScalarNarrowing(context, narrowing.trueNames)
   const consequent = emitPreparedNumberExpression(expression.consequent, context, deps)
+
+  restoreNullableScalarNarrowing(context, consequentSnapshot)
+
+  const alternateSnapshot = pushNullableScalarNarrowing(context, narrowing.falseNames)
   const alternate = emitPreparedNumberExpression(expression.alternate, context, deps)
+
+  restoreNullableScalarNarrowing(context, alternateSnapshot)
+
   const temp = nextCName(context, 'inox_conditional')
   const lines: string[] = []
 
@@ -5641,8 +5650,17 @@ function emitCConditionalValueExpression(
   if (test === null || typeof test === 'undefined') {
     test = deps.emitPreparedNumberExpression(expression.test, context)
   }
+  const narrowing = resolveNullableScalarConditionNarrowing(expression.test, context)
+  const consequentSnapshot = pushNullableScalarNarrowing(context, narrowing.trueNames)
   const consequent = emitCConditionalBranchValueExpression(expression.consequent, expression, context, deps)
+
+  restoreNullableScalarNarrowing(context, consequentSnapshot)
+
+  const alternateSnapshot = pushNullableScalarNarrowing(context, narrowing.falseNames)
   const alternate = emitCConditionalBranchValueExpression(expression.alternate, expression, context, deps)
+
+  restoreNullableScalarNarrowing(context, alternateSnapshot)
+
   const temp = nextCName(context, 'inox_conditional_value')
   const valueType = deps.inferExpressionType(expression, context)
   const tag = cRuntimeValueTag(valueType)

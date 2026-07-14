@@ -40,6 +40,7 @@ import {
   compilerLibraryOperationForReceiver,
   resolveCompilerLibrarySet
 } from './extensions/library-set.ts'
+import { typeRefCompatibilityMetadata } from './extensions/type-ref-compatibility.ts'
 import {
   parseCompilerLibraryGlobalDeclarations,
   type ParsedCompilerLibraryGlobalDeclaration
@@ -4474,69 +4475,101 @@ class Checker {
     expression.libraryCReceiverAdapter = variant?.cReceiverAdapter ?? operation.cReceiverAdapter ?? null
     expression.libraryCallbackLifetime = variant?.callbackLifetime ?? operation.callbackLifetime ?? null
 
-    const resultTypeId = variant?.resultTypeId ?? operation.resultTypeId
-    const cppType = variant?.cppType ?? operation.cppType
-    const valueType = variant?.valueType ?? operation.valueType
-    const nativeResultType =
-      resultTypeId === null || typeof resultTypeId === 'undefined'
-        ? null
-        : compilerLibraryNativeTypeForId(libraries, resultTypeId)
-    const resultShapeFields = variant?.resultShapeFields ?? operation.resultShapeFields ?? nativeResultType?.fields
-    const resultCppType = valueType === 'promise' && nativeResultType !== null ? nativeResultType.cppType : cppType
+    const resultTypeRef = variant?.resultTypeRef ?? operation.resultTypeRef
 
-    if (
-      (resultShapeFields !== null && typeof resultShapeFields !== 'undefined') ||
-      (resultTypeId !== null && typeof resultTypeId !== 'undefined')
-    ) {
-      const shapeFields: AnyNode[] = []
+    if (resultTypeRef !== null && typeof resultTypeRef !== 'undefined') {
+      const metadata = typeRefCompatibilityMetadata(resultTypeRef, libraries, expression.loc)
       const cResultShapeFields: string[] = []
 
-      const fields = resultShapeFields ?? []
+      expression.typeRef = resultTypeRef
+      expression.valueType = metadata.valueType
+      expression.shape = metadata.shape
+      expression.libraryCppType = metadata.libraryCppType
+      expression.arrayElementType = metadata.arrayElementType
+      expression.arrayElementTypeId = metadata.arrayElementTypeId
+      expression.arrayElementDeclaredType = metadata.arrayElementDeclaredType
+      expression.mapKeyType = metadata.mapKeyType
+      expression.mapValueType = metadata.mapValueType
+      expression.promiseValueType = metadata.promiseValueType
+      expression.promiseRejectionValueType = metadata.promiseRejectionValueType
+      expression.setElementType = metadata.setElementType
+      expression.libraryOwned = metadata.owned
+      expression.libraryResultTypeId = metadata.libraryResultTypeId
+      expression.nullable = metadata.nullable
 
-      for (let index = 0; index < fields.length; index = index + 1) {
-        const field = fields[index]
+      const shapeFields = metadata.shape?.fields ?? []
 
-        shapeFields.push(this.compilerLibraryResultShapeField(field, expression.loc))
-        cResultShapeFields.push(field.name)
+      for (let index = 0; index < shapeFields.length; index = index + 1) {
+        cResultShapeFields.push(shapeFields[index].name)
       }
 
-      expression.shape = {
-        kind: 'object',
-        fields: shapeFields,
-        libraryTypeId: resultTypeId ?? null,
-        libraryCppType: resultCppType ?? null
-      }
       expression.libraryCResultShapeFields = cResultShapeFields
-    }
-    expression.libraryCppType = cppType ?? null
+    } else {
+      const resultTypeId = variant?.resultTypeId ?? operation.resultTypeId
+      const cppType = variant?.cppType ?? operation.cppType
+      const valueType = variant?.valueType ?? operation.valueType
+      const nativeResultType =
+        resultTypeId === null || typeof resultTypeId === 'undefined'
+          ? null
+          : compilerLibraryNativeTypeForId(libraries, resultTypeId)
+      const resultShapeFields = variant?.resultShapeFields ?? operation.resultShapeFields ?? nativeResultType?.fields
+      const resultCppType = valueType === 'promise' && nativeResultType !== null ? nativeResultType.cppType : cppType
 
-    if (valueType !== null && typeof valueType !== 'undefined') {
-      expression.valueType = valueType
-    }
+      if (
+        (resultShapeFields !== null && typeof resultShapeFields !== 'undefined') ||
+        (resultTypeId !== null && typeof resultTypeId !== 'undefined')
+      ) {
+        const shapeFields: AnyNode[] = []
+        const cResultShapeFields: string[] = []
 
-    expression.arrayElementType = variant?.resultArrayElementType ?? operation.resultArrayElementType ?? null
-    const arrayElementTypeId = variant?.resultArrayElementTypeId ?? operation.resultArrayElementTypeId
+        const fields = resultShapeFields ?? []
 
-    if (arrayElementTypeId !== null && typeof arrayElementTypeId !== 'undefined') {
-      expression.arrayElementTypeId = arrayElementTypeId
-      const nativeArrayElementType = compilerLibraryNativeTypeForId(libraries, arrayElementTypeId)
+        for (let index = 0; index < fields.length; index = index + 1) {
+          const field = fields[index]
 
-      if (nativeArrayElementType !== null && nativeArrayElementType.declarationNames.length > 0) {
-        expression.arrayElementDeclaredType = nativeArrayElementType.declarationNames[0]
+          shapeFields.push(this.compilerLibraryResultShapeField(field, expression.loc))
+          cResultShapeFields.push(field.name)
+        }
+
+        expression.shape = {
+          kind: 'object',
+          fields: shapeFields,
+          libraryTypeId: resultTypeId ?? null,
+          libraryCppType: resultCppType ?? null
+        }
+        expression.libraryCResultShapeFields = cResultShapeFields
       }
+      expression.libraryCppType = cppType ?? null
+
+      if (valueType !== null && typeof valueType !== 'undefined') {
+        expression.valueType = valueType
+      }
+
+      expression.arrayElementType = variant?.resultArrayElementType ?? operation.resultArrayElementType ?? null
+      const arrayElementTypeId = variant?.resultArrayElementTypeId ?? operation.resultArrayElementTypeId
+
+      if (arrayElementTypeId !== null && typeof arrayElementTypeId !== 'undefined') {
+        expression.arrayElementTypeId = arrayElementTypeId
+        const nativeArrayElementType = compilerLibraryNativeTypeForId(libraries, arrayElementTypeId)
+
+        if (nativeArrayElementType !== null && nativeArrayElementType.declarationNames.length > 0) {
+          expression.arrayElementDeclaredType = nativeArrayElementType.declarationNames[0]
+        }
+      }
+
+      expression.promiseValueType = variant?.promiseValueType ?? operation.promiseValueType ?? null
+      expression.promiseRejectionValueType =
+        variant?.promiseRejectionValueType ?? operation.promiseRejectionValueType ?? null
+
+      expression.libraryOwned = (variant?.owned ?? operation.owned) === true
+      expression.libraryResultTypeId = resultTypeId ?? null
+      expression.nullable = (variant?.nullable ?? operation.nullable) === true
     }
 
-    expression.promiseValueType = variant?.promiseValueType ?? operation.promiseValueType ?? null
-    expression.promiseRejectionValueType =
-      variant?.promiseRejectionValueType ?? operation.promiseRejectionValueType ?? null
-
-    expression.libraryOwned = (variant?.owned ?? operation.owned) === true
     expression.libraryConstantValue = operation.constantValue ?? null
     expression.libraryReceiverTypeId = operation.receiverTypeId ?? null
-    expression.libraryResultTypeId = resultTypeId ?? null
     expression.libraryCCallStyle = operation.cCallStyle ?? null
     expression.libraryCFailureMode = operation.cFailureMode ?? null
-    expression.nullable = (variant?.nullable ?? operation.nullable) === true
   }
 
   reportCompilerLibraryOperationDiagnostic(expression: AnyNode, operation: LibraryOperationDescriptor): boolean {

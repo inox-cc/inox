@@ -350,6 +350,11 @@ function nullableNode(value: LowerExpressionNode | null | undefined): LowerExpre
 }
 
 function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressionNode): LowerExpressionNode {
+  const typeRef = source.typeRef
+  if (typeRef !== null && typeof typeRef === 'object') {
+    target.typeRef = typeRef
+  }
+
   const fetchRuntimeMethod = nullableString(source.fetchRuntimeMethod)
   if (fetchRuntimeMethod !== null && typeof fetchRuntimeMethod !== 'undefined') {
     target.fetchRuntimeMethod = fetchRuntimeMethod

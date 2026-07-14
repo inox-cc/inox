@@ -11,10 +11,12 @@ import type {
   LibraryOptionScalar,
   LibraryNestedResultShapeFieldDescriptor,
   LibraryOperationDescriptor,
+  LibraryOperationVariantDescriptor,
   LibraryResultShapeFieldDescriptor,
   LibraryRuntimeInitializerArgumentDescriptor,
   LibraryRuntimeInitializerDescriptor,
-  RuntimeRequirementDescriptor
+  RuntimeRequirementDescriptor,
+  TypeRef
 } from './types.ts'
 import { formatDiagnostics } from '../diagnostics.ts'
 import { parseCompilerLibraryGlobalDeclarations } from './global-declarations.ts'
@@ -171,6 +173,7 @@ function validateCompilerLibrarySet(
   validateRuntimeOptionConditions(runtimeRequirements, options)
   validateRuntimeRequirementReferences(operations, nativeTypes, runtimeRequirements)
   validateNativeTypes(nativeTypes)
+  validateOperationTypeRefs(operations, nativeTypes)
   validateUniqueOperationIds(operations)
   validateUniqueIntrinsicRoles(intrinsicBindings)
   validateIntrinsicOperationBindings(intrinsicBindings, operations)
@@ -670,6 +673,194 @@ function validateNativeTypes(nativeTypes: LibraryNativeTypeDescriptor[]): void {
   }
 }
 
+function validateOperationTypeRefs(
+  operations: LibraryOperationDescriptor[],
+  nativeTypes: LibraryNativeTypeDescriptor[]
+): void {
+  const nativeTypeIds: Set<string> = new Set()
+
+  for (let index = 0; index < nativeTypes.length; index = index + 1) {
+    nativeTypeIds.add(nativeTypes[index].typeId)
+  }
+
+  for (let index = 0; index < operations.length; index = index + 1) {
+    const operation = operations[index]
+    const operationTypeRef = operation.resultTypeRef
+
+    if (operationTypeRef !== null && typeof operationTypeRef !== 'undefined') {
+      validateTypeRef(`operation ${operation.operationId} result`, operationTypeRef, nativeTypeIds)
+      validateTypeRefHasNoLegacyResultMetadata(operation.operationId, operation, null)
+    }
+
+    const variants = operation.variants ?? []
+
+    for (let variantIndex = 0; variantIndex < variants.length; variantIndex = variantIndex + 1) {
+      const variant = variants[variantIndex]
+      const variantTypeRef = variant.resultTypeRef
+      const resultTypeRef = variantTypeRef ?? operationTypeRef
+
+      if (resultTypeRef === null || typeof resultTypeRef === 'undefined') {
+        continue
+      }
+
+      if (variantTypeRef !== null && typeof variantTypeRef !== 'undefined') {
+        validateTypeRef(
+          `operation ${operation.operationId} variant ${variantIndex} result`,
+          variantTypeRef,
+          nativeTypeIds
+        )
+      }
+
+      validateTypeRefHasNoLegacyResultMetadata(operation.operationId, operation, variant, variantIndex)
+    }
+  }
+}
+
+function validateTypeRefHasNoLegacyResultMetadata(
+  operationId: string,
+  operation: LibraryOperationDescriptor,
+  variant: LibraryOperationVariantDescriptor | null,
+  variantIndex: number | null = null
+): void {
+  const field = legacyResultMetadataField(operation, variant)
+
+  if (field === null) {
+    return
+  }
+
+  const label = variantIndex === null
+    ? `operation ${operationId}`
+    : `operation ${operationId} variant ${variantIndex}`
+
+  throw new Error(`${label} cannot combine resultTypeRef with legacy result metadata ${field}`)
+}
+
+function legacyResultMetadataField(
+  operation: LibraryOperationDescriptor,
+  variant: LibraryOperationVariantDescriptor | null
+): string | null {
+  if (legacyMetadataIsPresent(variant?.resultShapeFields ?? operation.resultShapeFields)) {
+    return 'resultShapeFields'
+  }
+  if (legacyMetadataIsPresent(variant?.resultArrayElementType ?? operation.resultArrayElementType)) {
+    return 'resultArrayElementType'
+  }
+  if (legacyMetadataIsPresent(variant?.resultArrayElementTypeId ?? operation.resultArrayElementTypeId)) {
+    return 'resultArrayElementTypeId'
+  }
+  if (legacyMetadataIsPresent(variant?.resultTypeId ?? operation.resultTypeId)) {
+    return 'resultTypeId'
+  }
+  if (legacyMetadataIsPresent(variant?.cppType ?? operation.cppType)) {
+    return 'cppType'
+  }
+  if (legacyMetadataIsPresent(variant?.valueType ?? operation.valueType)) {
+    return 'valueType'
+  }
+  if (legacyMetadataIsPresent(variant?.promiseValueType ?? operation.promiseValueType)) {
+    return 'promiseValueType'
+  }
+  if (legacyMetadataIsPresent(variant?.promiseRejectionValueType ?? operation.promiseRejectionValueType)) {
+    return 'promiseRejectionValueType'
+  }
+  if (legacyMetadataIsPresent(variant?.nullable ?? operation.nullable)) {
+    return 'nullable'
+  }
+  if (legacyMetadataIsPresent(variant?.owned ?? operation.owned)) {
+    return 'owned'
+  }
+
+  return null
+}
+
+function legacyMetadataIsPresent(value: unknown): boolean {
+  return value !== null && typeof value !== 'undefined'
+}
+
+function validateTypeRef(label: string, typeRef: TypeRef, nativeTypeIds: Set<string>): void {
+  validateTypeRefCommon(label, typeRef, nativeTypeIds)
+
+  if (typeRef.kind === 'primitive') {
+    if (!isCorePrimitiveType(typeRef.name)) {
+      throw new Error(`${label} has unknown primitive ${typeRef.name}`)
+    }
+    return
+  }
+
+  if (typeRef.kind === 'nominal') {
+    if (!nativeTypeIds.has(typeRef.typeId)) {
+      throw new Error(`${label} references unknown nominal type ${typeRef.typeId}`)
+    }
+    validateTypeRefList(`${label} generic argument`, typeRef.args, nativeTypeIds)
+    return
+  }
+
+  if (typeRef.kind === 'function') {
+    validateTypeRefList(`${label} parameter`, typeRef.params, nativeTypeIds)
+    validateTypeRef(`${label} result`, typeRef.result, nativeTypeIds)
+    return
+  }
+
+  if (typeRef.kind === 'object') {
+    const names: Set<string> = new Set()
+
+    for (let index = 0; index < typeRef.fields.length; index = index + 1) {
+      const field = typeRef.fields[index]
+
+      if (names.has(field.name)) {
+        throw new Error(`${label} has duplicate object field ${field.name}`)
+      }
+
+      names.add(field.name)
+      validateTypeRef(`${label} field ${field.name}`, field.typeRef, nativeTypeIds)
+    }
+
+    return
+  }
+}
+
+function validateTypeRefCommon(label: string, typeRef: TypeRef, nativeTypeIds: Set<string>): void {
+  if (!isTypeOwnership(typeRef.ownership)) {
+    throw new Error(`${label} has unknown ownership ${typeRef.ownership}`)
+  }
+
+  const traitIds: Set<string> = new Set()
+
+  for (let index = 0; index < typeRef.traits.length; index = index + 1) {
+    const trait = typeRef.traits[index]
+
+    if (!isTypeTraitId(trait.traitId)) {
+      throw new Error(`${label} has unknown trait ${trait.traitId}`)
+    }
+
+    if (traitIds.has(trait.traitId)) {
+      throw new Error(`${label} has duplicate trait ${trait.traitId}`)
+    }
+
+    traitIds.add(trait.traitId)
+    validateTypeRefList(`${label} trait ${trait.traitId} argument`, trait.args, nativeTypeIds)
+  }
+}
+
+function validateTypeRefList(label: string, refs: TypeRef[], nativeTypeIds: Set<string>): void {
+  for (let index = 0; index < refs.length; index = index + 1) {
+    validateTypeRef(`${label} ${index}`, refs[index], nativeTypeIds)
+  }
+}
+
+function isCorePrimitiveType(value: string): boolean {
+  return value === 'boolean' || value === 'bytes' || value === 'null' || value === 'number' ||
+    value === 'string' || value === 'void'
+}
+
+function isTypeOwnership(value: string): boolean {
+  return value === 'value' || value === 'owned' || value === 'borrowed' || value === 'weak'
+}
+
+function isTypeTraitId(value: string): boolean {
+  return value === 'iterable' || value === 'indexable' || value === 'awaitable'
+}
+
 function validateUniqueDeclarationSources(declarations: LibraryDeclarationDescriptor[]): void {
   const seen: Set<string> = new Set()
 
@@ -788,6 +979,7 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           (item.callbackLifetime ?? '') + ':' +
           (item.cResultMode ?? '') + ':' +
           (item.cReceiverAdapter ?? '') + ':' +
+          typeRefFingerprintOrEmpty(item.resultTypeRef) + ':' +
           operationResultShapeFingerprint(item) + ':' + (item.resultArrayElementType ?? '') + ':' +
           (item.resultArrayElementTypeId ?? '') + ':' +
           (item.receiverTypeId ?? '') + ':' +
@@ -964,6 +1156,7 @@ function operationVariantsFingerprint(operation: LibraryOperationDescriptor): st
         (variant.callbackLifetime ?? '') + ':' +
         (variant.cResultMode ?? '') + ':' +
         (variant.cReceiverAdapter ?? '') + ':' +
+        typeRefFingerprintOrEmpty(variant.resultTypeRef) + ':' +
         resultShapeFieldsFingerprint(variant.resultShapeFields ?? []) + ':' +
         (variant.resultArrayElementType ?? '') + ':' + (variant.resultArrayElementTypeId ?? '') + ':' +
         (variant.resultTypeId ?? '') + ':' +
@@ -975,6 +1168,74 @@ function operationVariantsFingerprint(operation: LibraryOperationDescriptor): st
   }
 
   return rows.join(';')
+}
+
+function typeRefFingerprintOrEmpty(typeRef: TypeRef | null | undefined): string {
+  if (typeRef === null || typeof typeRef === 'undefined') {
+    return ''
+  }
+
+  return typeRefFingerprint(typeRef)
+}
+
+function typeRefFingerprint(typeRef: TypeRef): string {
+  const common = ':' + (typeRef.nullable ? 'nullable' : 'required') + ':' +
+    fingerprintAtom(typeRef.ownership) + ':traits[' + typeTraitRefsFingerprint(typeRef) + ']'
+
+  if (typeRef.kind === 'primitive') {
+    return 'primitive(' + fingerprintAtom(typeRef.name) + ')' + common
+  }
+
+  if (typeRef.kind === 'nominal') {
+    return 'nominal(' + fingerprintAtom(typeRef.typeId) + ')[' + typeRefListFingerprint(typeRef.args) + ']' + common
+  }
+
+  if (typeRef.kind === 'function') {
+    return 'function(' + typeRefListFingerprint(typeRef.params) + ')->' + typeRefFingerprint(typeRef.result) + common
+  }
+
+  if (typeRef.kind === 'object') {
+    const fields: string[] = []
+
+    for (let index = 0; index < typeRef.fields.length; index = index + 1) {
+      const field = typeRef.fields[index]
+      fields.push(
+        fingerprintAtom(field.name) + ':' + (field.readonly ? 'readonly' : 'mutable') + ':' +
+          typeRefFingerprint(field.typeRef)
+      )
+    }
+
+    fields.sort()
+    return 'object{' + fields.join(',') + '}' + common
+  }
+
+  return 'unknown' + common
+}
+
+function typeTraitRefsFingerprint(typeRef: TypeRef): string {
+  const traits: string[] = []
+
+  for (let index = 0; index < typeRef.traits.length; index = index + 1) {
+    const trait = typeRef.traits[index]
+    traits.push(fingerprintAtom(trait.traitId) + '[' + typeRefListFingerprint(trait.args) + ']')
+  }
+
+  traits.sort()
+  return traits.join(',')
+}
+
+function typeRefListFingerprint(typeRefs: TypeRef[]): string {
+  const refs: string[] = []
+
+  for (let index = 0; index < typeRefs.length; index = index + 1) {
+    refs.push(typeRefFingerprint(typeRefs[index]))
+  }
+
+  return refs.join(',')
+}
+
+function fingerprintAtom(value: string): string {
+  return `${value.length}:${value}`
 }
 
 function objectLiteralFieldsFingerprint(fields: { name: string; valueTypes: string[]; booleanLiterals?: boolean[]; stringLiterals?: string[]; optional?: boolean }[]): string {

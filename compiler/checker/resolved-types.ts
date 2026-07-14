@@ -255,6 +255,7 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('pattern', 'string', null, false, loc),
       anyNodeField('flags', 'string', null, false, loc),
       anyNodeField('declaredType', 'string', null, true, loc),
+      anyNodeField('typeRef', 'object', null, true, loc),
       anyNodeField('valueType', 'string', null, true, loc),
       anyNodeField('arrayElementType', 'string', null, true, loc),
       anyNodeField('arrayElementDeclaredType', 'string', null, true, loc),
@@ -682,7 +683,7 @@ export function commonResolvedObjectShapeField(name: string, infos: ResolvedType
 
   const valueType = commonValueType(valueTypes)
 
-  if (valueTypes.length === 0 || valueType === 'unknown') {
+  if (valueTypes.length === 0) {
     return null
   }
 

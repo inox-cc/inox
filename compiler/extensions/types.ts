@@ -7,6 +7,69 @@ export type RuntimeRequirementId = string
 export type PlatformCapabilityId = string
 export type LibraryOptionScalar = string | number | boolean
 
+export type CorePrimitiveType = 'boolean' | 'bytes' | 'null' | 'number' | 'string' | 'void'
+export type TypeOwnership = 'value' | 'owned' | 'borrowed' | 'weak'
+export type TypeTraitId = 'iterable' | 'indexable' | 'awaitable'
+
+export type TypeTraitRef = {
+  traitId: TypeTraitId
+  args: TypeRef[]
+}
+
+export type PrimitiveTypeRef = {
+  kind: 'primitive'
+  name: CorePrimitiveType
+  nullable: boolean
+  ownership: TypeOwnership
+  traits: TypeTraitRef[]
+}
+
+export type NominalTypeRef = {
+  kind: 'nominal'
+  typeId: LibraryNativeTypeId
+  args: TypeRef[]
+  nullable: boolean
+  ownership: TypeOwnership
+  traits: TypeTraitRef[]
+}
+
+export type FunctionTypeRef = {
+  kind: 'function'
+  params: TypeRef[]
+  result: TypeRef
+  nullable: boolean
+  ownership: TypeOwnership
+  traits: TypeTraitRef[]
+}
+
+export type ObjectTypeRefField = {
+  name: string
+  typeRef: TypeRef
+  readonly: boolean
+}
+
+export type ObjectTypeRef = {
+  kind: 'object'
+  fields: ObjectTypeRefField[]
+  nullable: boolean
+  ownership: TypeOwnership
+  traits: TypeTraitRef[]
+}
+
+export type UnknownTypeRef = {
+  kind: 'unknown'
+  nullable: boolean
+  ownership: TypeOwnership
+  traits: TypeTraitRef[]
+}
+
+export type TypeRef =
+  | PrimitiveTypeRef
+  | NominalTypeRef
+  | FunctionTypeRef
+  | ObjectTypeRef
+  | UnknownTypeRef
+
 export type CompilerLibraryOptionValue = {
   optionId: string
   value: LibraryOptionScalar
@@ -193,6 +256,7 @@ export type LibraryOperationVariantDescriptor = {
   cArgumentSources?: Array<LibraryCArgumentSourceDescriptor | null>
   cReceiverAdapter?: string | null
   cResultMode?: LibraryCResultMode | null
+  resultTypeRef?: TypeRef | null
   resultShapeFields?: LibraryResultShapeFieldDescriptor[]
   resultArrayElementType?: string | null
   resultArrayElementTypeId?: LibraryNativeTypeId | null
@@ -219,6 +283,7 @@ export type LibraryOperationDescriptor = {
   cArgumentSources?: Array<LibraryCArgumentSourceDescriptor | null>
   cReceiverAdapter?: string | null
   cResultMode?: LibraryCResultMode | null
+  resultTypeRef?: TypeRef | null
   resultShapeFields?: LibraryResultShapeFieldDescriptor[]
   resultArrayElementType?: string | null
   resultArrayElementTypeId?: LibraryNativeTypeId | null
