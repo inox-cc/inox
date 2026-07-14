@@ -2,28 +2,47 @@ import type {
   CompilerLibraryPackageDescriptor,
   LibraryArgumentCheckDescriptor,
   LibraryCArgumentKind,
+  LibraryCResultMappingDescriptor,
   LibraryOperationDescriptor,
-  LibraryResultShapeFieldDescriptor
+  ObjectTypeRef,
+  PrimitiveTypeRef,
+  TypeRef
 } from '../../../../compiler/extensions/types.ts'
 
 const libraryId = 'node:child_process'
 const runtimeRequirement = 'node:child_process'
-const spawnSyncResultFields: LibraryResultShapeFieldDescriptor[] = [
-  resultField('status', 'number'),
-  resultField('stdout', 'string'),
-  resultField('stderr', 'string')
-]
+const numberTypeRef: PrimitiveTypeRef = primitiveTypeRef('number')
+const stringTypeRef: PrimitiveTypeRef = primitiveTypeRef('string')
+const stringCResultMapping: LibraryCResultMappingDescriptor = {
+  cppType: 'inox::String',
+  fields: []
+}
+const spawnSyncTypeRef: ObjectTypeRef = {
+  kind: 'object',
+  fields: [
+    { name: 'status', typeRef: numberTypeRef, readonly: true },
+    { name: 'stdout', typeRef: stringTypeRef, readonly: true },
+    { name: 'stderr', typeRef: stringTypeRef, readonly: true }
+  ],
+  nullable: false,
+  ownership: 'value',
+  traits: []
+}
+const spawnSyncCResultMapping: LibraryCResultMappingDescriptor = {
+  cppType: 'inox::Value',
+  fields: []
+}
 
 const operations: LibraryOperationDescriptor[] = [
-  callOperation('execSync', ['string-view', 'value'], 'inox::String', 'string', 2, 2, [
+  callOperation('execSync', ['string-view', 'value'], stringTypeRef, stringCResultMapping, 2, 2, [
     stringArgument(),
     objectArgument()
   ]),
   callOperation(
     'execFileSync',
     ['string-view', 'optional-string-view-array', 'string-view-array-count', 'value'],
-    'inox::String',
-    'string',
+    stringTypeRef,
+    stringCResultMapping,
     2,
     3,
     [stringArgument(), stringArrayOrObjectArgument(), objectArgument()]
@@ -31,12 +50,11 @@ const operations: LibraryOperationDescriptor[] = [
   callOperation(
     'spawnSync',
     ['string-view', 'string-view-array', 'string-view-array-count', 'value'],
-    'inox::Value',
-    'object',
+    spawnSyncTypeRef,
+    spawnSyncCResultMapping,
     3,
     3,
-    [stringArgument(), stringArrayArgument(), objectArgument()],
-    spawnSyncResultFields
+    [stringArgument(), stringArrayArgument(), objectArgument()]
   ),
   unsupportedOperation('exec'),
   unsupportedOperation('execFile'),
@@ -62,12 +80,11 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
 function callOperation(
   name: string,
   cArgumentKinds: LibraryCArgumentKind[],
-  cppType: string,
-  valueType: string,
+  resultTypeRef: TypeRef,
+  cResultMapping: LibraryCResultMappingDescriptor,
   minArgs: number,
   maxArgs: number,
-  argumentChecks: LibraryArgumentCheckDescriptor[],
-  resultShapeFields?: LibraryResultShapeFieldDescriptor[]
+  argumentChecks: LibraryArgumentCheckDescriptor[]
 ): LibraryOperationDescriptor {
   return {
     libraryId,
@@ -78,16 +95,13 @@ function callOperation(
     runtimeRequirements: [runtimeRequirement],
     cExpression: `child_process.${name}`,
     cArgumentKinds,
-    resultShapeFields,
     cCallStyle: 'function',
     cFailureMode: 'thrown',
     minArgs,
     maxArgs,
     argumentChecks,
-    cppType,
-    valueType,
-    owned: false,
-    nullable: false
+    resultTypeRef,
+    cResultMapping
   }
 }
 
@@ -132,8 +146,14 @@ function stringArrayOrObjectArgument(): LibraryArgumentCheckDescriptor {
   }
 }
 
-function resultField(name: string, valueType: string): LibraryResultShapeFieldDescriptor {
-  return { name, valueType, readonly: true }
+function primitiveTypeRef(name: 'number' | 'string'): PrimitiveTypeRef {
+  return {
+    kind: 'primitive',
+    name,
+    nullable: false,
+    ownership: 'value',
+    traits: []
+  }
 }
 
 function binding(name: string): string {
