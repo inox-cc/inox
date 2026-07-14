@@ -166,6 +166,12 @@ async function createFixture(): Promise<void> {
     resolve(fixtureRoot, 'stdlib/global/collections'),
     { recursive: true }
   )
+  await cp(resolve('stdlib/global/error'), resolve(fixtureRoot, 'stdlib/global/error'), {
+    recursive: true
+  })
+  await cp(resolve('stdlib/global/promise'), resolve(fixtureRoot, 'stdlib/global/promise'), {
+    recursive: true
+  })
   await cp(resolve('stdlib/node/buffer'), resolve(fixtureRoot, 'stdlib/node/buffer'), {
     recursive: true
   })

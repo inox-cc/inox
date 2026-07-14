@@ -312,8 +312,14 @@ function objectShapeFieldAt(fields: CObjectShapeField[], expectedIndex: number):
 }
 
 function findObjectProperty(properties: ObjectPropertyNode[], key: string): ObjectPropertyNode | null {
-  for (const property of properties) {
+  for (let index = properties.length - 1; index >= 0; index = index - 1) {
+    const property = properties[index]
+
     if (property.spread === true) {
+      if (objectSpreadPropertyHasField(property, key)) {
+        return null
+      }
+
       continue
     }
 
@@ -1872,7 +1878,7 @@ export function emitObjectVariableDeclaration(
         )
       )
     } else {
-      const spread = preparedObjectVariableSpreadForField(spreads, field.name)
+      const spread = preparedObjectVariableSpreadForField(spreads, properties, field.name)
 
       if (spread !== null && typeof spread !== 'undefined') {
         const spreadValue = nextCName(context, 'inox_spread_value')
@@ -1920,24 +1926,48 @@ function prepareObjectVariableSpreads(
 
 function preparedObjectVariableSpreadForField(
   spreads: PreparedObjectSpread[],
+  properties: ObjectPropertyNode[],
   fieldName: string
 ): PreparedObjectSpread | null {
-  for (let index = spreads.length - 1; index >= 0; index = index - 1) {
-    const spread = spreads[index]
-    const shape = spread.property.value.shape
+  for (let index = properties.length - 1; index >= 0; index = index - 1) {
+    const property = properties[index]
 
-    if (shape === null || typeof shape === 'undefined' || shape.dynamic === true) {
+    if (property.spread !== true) {
+      if (property.key === fieldName) {
+        return null
+      }
+
       continue
     }
 
-    for (const field of shape.fields) {
-      if (field.name === fieldName) {
-        return spread
+    if (!objectSpreadPropertyHasField(property, fieldName)) {
+      continue
+    }
+
+    for (let spreadIndex = spreads.length - 1; spreadIndex >= 0; spreadIndex = spreadIndex - 1) {
+      if (spreads[spreadIndex].property === property) {
+        return spreads[spreadIndex]
       }
     }
   }
 
   return null
+}
+
+function objectSpreadPropertyHasField(property: ObjectPropertyNode, fieldName: string): boolean {
+  const shape = property.value.shape
+
+  if (shape === null || typeof shape === 'undefined' || shape.dynamic === true) {
+    return false
+  }
+
+  for (const field of shape.fields) {
+    if (field.name === fieldName) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function isSupportedObjectFunctionField(field: CObjectShapeField): boolean {

@@ -350,6 +350,41 @@ export function anyNodeField(
   }
 }
 
+export function cloneObjectShapeField(field: AnyNode): AnyNode {
+  return {
+    name: field.name,
+    optional: field.optional === true,
+    readonly: field.readonly === true,
+    ownership: field.ownership ?? null,
+    weakLoc: field.weakLoc ?? null,
+    static: field.static === true,
+    staticLoc: field.staticLoc ?? null,
+    weakTypeValidated: field.weakTypeValidated === true,
+    loc: field.loc,
+    declaredType: field.declaredType ?? null,
+    typeRef: field.typeRef ?? null,
+    valueType: field.valueType ?? 'unknown',
+    nullable: field.nullable === true,
+    arrayElementType: field.arrayElementType ?? null,
+    arrayElementDeclaredType: field.arrayElementDeclaredType ?? null,
+    arrayElementFunctionType: field.arrayElementFunctionType ?? null,
+    mapKeyType: field.mapKeyType ?? null,
+    mapValueType: field.mapValueType ?? null,
+    mapValueShape: field.mapValueShape ?? null,
+    mapValueArrayElementType: field.mapValueArrayElementType ?? null,
+    mapValueArrayElementDeclaredType: field.mapValueArrayElementDeclaredType ?? null,
+    promiseValueType: field.promiseValueType ?? null,
+    promiseRejectionValueType: field.promiseRejectionValueType ?? null,
+    setElementType: field.setElementType ?? null,
+    functionType: field.functionType ?? null,
+    functionOverloads: field.functionOverloads ?? null,
+    className: field.className ?? null,
+    shape: field.shape ?? null,
+    libraryCMember: field.libraryCMember ?? null,
+    libraryCppType: field.libraryCppType ?? null
+  }
+}
+
 export function resolvedValueTypeMetadata(
   value: ValueType | null | undefined,
   fallback: ValueType | null | undefined

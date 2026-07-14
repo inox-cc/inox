@@ -433,10 +433,6 @@ export function resolveArrayIterableElementShape(
   context: ExpressionMetadataResolverContext,
   expression: AnyNode
 ): ObjectShapeInfo | null {
-  if (expression.shape !== null && typeof expression.shape !== 'undefined') {
-    return expression.shape
-  }
-
   const elementType = resolveExpressionArrayElementType(context, expression)
   const elementDeclaredType = resolveExpressionArrayElementDeclaredType(context, expression)
 
@@ -446,6 +442,10 @@ export function resolveArrayIterableElementShape(
     if (elementShape !== null && typeof elementShape !== 'undefined') {
       return elementShape
     }
+  }
+
+  if (expression.shape !== null && typeof expression.shape !== 'undefined') {
+    return expression.shape
   }
 
   if (expression.type === 'MemberExpression') {

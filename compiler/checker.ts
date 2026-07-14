@@ -217,6 +217,7 @@ import type {
 import {
   anyNodeLocObjectShape,
   checkerNodeAt,
+  cloneObjectShapeField,
   cloneStringSet,
   commonExpressionFunctionType,
   conditionalExpressionValueType,
@@ -2309,14 +2310,59 @@ class Checker {
     }
 
     if (valueType === 'object') {
-      expression.shape =
-        this.resolveExpressionShape(expression.consequent) ?? this.resolveExpressionShape(expression.alternate)
+      expression.shape = this.conditionalExpressionObjectShape(expression)
       return
     }
 
     if (valueType === 'function') {
       expression.functionType = expression.consequent.functionType ?? expression.alternate.functionType ?? null
     }
+  }
+
+  conditionalExpressionObjectShape(expression: AnyNode): ObjectShapeInfo | null {
+    const consequentShape = this.resolveExpressionShape(expression.consequent)
+    const alternateShape = this.resolveExpressionShape(expression.alternate)
+
+    if (consequentShape === null || typeof consequentShape === 'undefined') {
+      return alternateShape
+    }
+
+    if (alternateShape === null || typeof alternateShape === 'undefined') {
+      return consequentShape
+    }
+
+    const fields: AnyNode[] = []
+    const names = new Set()
+    const shapes = [consequentShape, alternateShape]
+
+    for (const shape of shapes) {
+      for (const sourceField of shape.fields) {
+        if (names.has(sourceField.name)) {
+          continue
+        }
+
+        names.add(sourceField.name)
+        const consequentField = this.findShapeField(consequentShape, sourceField.name)
+        const alternateField = this.findShapeField(alternateShape, sourceField.name)
+        const field = cloneObjectShapeField(sourceField)
+
+        field.optional =
+          sourceField.optional === true || consequentField === null || alternateField === null
+        field.nullable =
+          consequentField?.nullable === true || alternateField?.nullable === true
+
+        if (consequentField !== null && alternateField !== null) {
+          field.valueType = conditionalExpressionValueType(
+            nodeValueTypeOrUnknown(consequentField),
+            nodeValueTypeOrUnknown(alternateField)
+          )
+        }
+
+        fields.push(field)
+      }
+    }
+
+    return { kind: 'object', fields }
   }
 
   checkAssignment(expression: AnyNode): ValueType {
@@ -7472,29 +7518,23 @@ class Checker {
     expression.shape = shape
 
     const properties = new Map()
-    const spreadShapes: ObjectShapeInfo[] = []
-    let hasExplicitProperty = false
+    const spreadFields = new Map()
 
     for (const property of expression.properties) {
       if (property.spread === true) {
-        if (hasExplicitProperty) {
-          this.report(
-            'INOX_NOT_IMPLEMENTED',
-            'object spread after an explicit property is not supported by the current C backend slice',
-            property.loc
-          )
-        }
-
         const spreadShape = this.checkPlainObjectSpreadProperty(property)
 
         if (spreadShape !== null && typeof spreadShape !== 'undefined') {
-          spreadShapes.push(spreadShape)
+          for (const field of spreadShape.fields) {
+            properties.delete(field.name)
+            spreadFields.set(field.name, field)
+          }
         }
 
         continue
       }
 
-      hasExplicitProperty = true
+      spreadFields.delete(property.key)
       properties.set(property.key, property)
     }
 
@@ -7502,7 +7542,7 @@ class Checker {
       const property = properties.get(field.name)
 
       if (property === null || typeof property === 'undefined') {
-        const spreadField = this.findObjectSpreadShapeField(spreadShapes, field.name)
+        const spreadField = spreadFields.get(field.name)
 
         if (spreadField !== null && typeof spreadField !== 'undefined') {
           const spreadFieldType = this.resolveFieldDeclaredType(spreadField)
@@ -7625,18 +7665,6 @@ class Checker {
         this.report('INOX_UNKNOWN_FIELD', `unknown field ${property.key}`, property.loc)
       }
     }
-  }
-
-  findObjectSpreadShapeField(shapes: ObjectShapeInfo[], name: string): AnyNode | null {
-    for (let index = shapes.length - 1; index >= 0; index = index - 1) {
-      const field = this.findShapeField(shapes[index], name)
-
-      if (field !== null && typeof field !== 'undefined') {
-        return field
-      }
-    }
-
-    return null
   }
 
   checkPlainObjectSpreadProperty(property: AnyNode): ObjectShapeInfo | null {
@@ -7805,18 +7833,9 @@ class Checker {
   checkObjectLiteral(expression: AnyNode): void {
     const keys = new Set()
     const fields: AnyNode[] = []
-    let hasExplicitProperty = false
 
     for (const property of expression.properties) {
       if (property.spread === true) {
-        if (hasExplicitProperty) {
-          this.report(
-            'INOX_NOT_IMPLEMENTED',
-            'object spread after an explicit property is not supported by the current C backend slice',
-            property.loc
-          )
-        }
-
         const spreadShape = this.checkPlainObjectSpreadProperty(property)
 
         if (spreadShape !== null && typeof spreadShape !== 'undefined') {
@@ -7827,8 +7846,6 @@ class Checker {
 
         continue
       }
-
-      hasExplicitProperty = true
 
       if (keys.has(property.key)) {
         this.report('INOX_DUPLICATE_OBJECT_KEY', `duplicate object property ${property.key}`, property.loc)

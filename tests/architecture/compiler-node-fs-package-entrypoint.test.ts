@@ -25,7 +25,7 @@ test('node:fs и node:fs/promises имеют отдельные compiler entrypo
   assert.equal(fs.id, 'node:fs')
   assert.deepEqual(fs.dependencies, ['global:collections', 'node:buffer'])
   assert.equal(promises.id, 'node:fs/promises')
-  assert.deepEqual(promises.dependencies, ['node:fs'])
+  assert.deepEqual(promises.dependencies, ['global:error', 'global:promise', 'node:fs'])
   assert.deepEqual(discoveredFs.nativeSources, ['stdlib/node/fs/src/fs.cc'])
   assert.deepEqual(discoveredFs.nativeIncludeDirs, ['stdlib/node/fs/include'])
   assert.deepEqual(discoveredPromises.nativeSources, [])
@@ -48,13 +48,15 @@ test('node:fs и node:fs/promises имеют отдельные compiler entrypo
   const constant = operation(fs, 'node:fs#constants.F_OK')
   assert.equal(constant.kind, 'member-read')
   assert.equal(constant.cExpression, 'fs.constants.F_OK')
-  assert.equal(constant.valueType, 'number')
+  assert.deepEqual(constant.resultTypeRef, primitiveTypeRef('number'))
+  assert.equal(constant.valueType, undefined)
 
   const statsIsFile = operation(fs, 'node:fs#Stats.isFile')
   assert.equal(statsIsFile.receiverTypeId, 'node:fs#Stats')
   assert.equal(statsIsFile.cExpression, 'isFile')
   assert.equal(statsIsFile.cCallStyle, 'member')
-  assert.equal(statsIsFile.valueType, 'boolean')
+  assert.deepEqual(statsIsFile.resultTypeRef, primitiveTypeRef('boolean'))
+  assert.equal(statsIsFile.valueType, undefined)
 
   const readFile = operation(promises, 'node:fs/promises#readFile')
   assert.equal(readFile.libraryId, 'node:fs/promises')
@@ -103,4 +105,8 @@ function assertNativeType(
   assert.equal(nativeType.valueType, 'object')
   assert.equal(nativeType.cppType, cppType)
   assert.deepEqual(nativeType.runtimeRequirements, ['node:fs'])
+}
+
+function primitiveTypeRef(name: 'boolean' | 'number') {
+  return { kind: 'primitive', name, nullable: false, ownership: 'value', traits: [] }
 }

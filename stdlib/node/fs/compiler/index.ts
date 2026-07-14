@@ -2,10 +2,17 @@ import type {
   CompilerLibraryPackageDescriptor,
   LibraryArgumentCheckDescriptor,
   LibraryCArgumentKind,
+  LibraryCResultMappingDescriptor,
   LibraryObjectLiteralFieldDescriptor,
   LibraryOperationDescriptor,
-  LibraryOperationVariantDescriptor
+  LibraryOperationVariantDescriptor,
+  NominalTypeRef,
+  PrimitiveTypeRef,
+  TypeRef
 } from '../../../../compiler/extensions/types.ts'
+import { arrayTypeRef } from '../../../global/collections/compiler/index.ts'
+import { errorTypeRef } from '../../../global/error/compiler/index.ts'
+import { promiseTypeRef } from '../../../global/promise/compiler/index.ts'
 
 const libraryId = 'node:fs'
 const promisesLibraryId = 'node:fs/promises'
@@ -13,21 +20,32 @@ const runtimeRequirement = libraryId
 const statsTypeId = `${libraryId}#Stats`
 const direntTypeId = `${libraryId}#Dirent`
 const bufferTypeId = 'node:buffer#Buffer'
+const statsTypeRef = nominalTypeRef(statsTypeId)
+const direntTypeRef = nominalTypeRef(direntTypeId)
+const bufferTypeRef = nominalTypeRef(bufferTypeId)
+const booleanTypeRef: PrimitiveTypeRef = primitiveTypeRef('boolean')
+const numberTypeRef: PrimitiveTypeRef = primitiveTypeRef('number')
+const stringTypeRef: PrimitiveTypeRef = primitiveTypeRef('string')
+const voidTypeRef: PrimitiveTypeRef = primitiveTypeRef('void')
+const stringCResultMapping: LibraryCResultMappingDescriptor = {
+  cppType: 'inox::String',
+  fields: []
+}
 
 const operations: LibraryOperationDescriptor[] = [
   accessOperation('accessSync', false, libraryId),
   writeOperation('appendFileSync', false, libraryId),
-  twoPathOperation('copyFileSync', false, libraryId, 'void'),
+  twoPathOperation('copyFileSync', false, libraryId),
   statsOperation('lstatSync', false, libraryId),
   mkdirOperation('mkdirSync', false, libraryId),
   readFileOperation('readFileSync', false, libraryId),
   readdirOperation('readdirSync', false, libraryId),
   stringPathOperation('readlinkSync', false, libraryId),
   stringPathOperation('realpathSync', false, libraryId),
-  twoPathOperation('renameSync', false, libraryId, 'void'),
+  twoPathOperation('renameSync', false, libraryId),
   rmOperation('rmSync', false, libraryId),
   statsOperation('statSync', false, libraryId),
-  twoPathOperation('symlinkSync', false, libraryId, 'void'),
+  twoPathOperation('symlinkSync', false, libraryId),
   voidPathOperation('unlinkSync', false, libraryId),
   writeOperation('writeFileSync', false, libraryId),
   constantOperation('F_OK'),
@@ -67,9 +85,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       cppType: 'FsDirent',
       baseTypeIds: [],
       runtimeRequirements: [runtimeRequirement],
-      fields: [
-        { name: 'name', valueType: 'string', readonly: true }
-      ]
+      fields: [{ name: 'name', valueType: 'string', readonly: true }]
     }
   ],
   operations,
@@ -88,256 +104,223 @@ export function createFsPromiseOperations(): LibraryOperationDescriptor[] {
   return [
     accessOperation('access', true, promisesLibraryId),
     writeOperation('appendFile', true, promisesLibraryId),
-    twoPathOperation('copyFile', true, promisesLibraryId, 'void'),
+    twoPathOperation('copyFile', true, promisesLibraryId),
     statsOperation('lstat', true, promisesLibraryId),
     mkdirOperation('mkdir', true, promisesLibraryId),
     readFileOperation('readFile', true, promisesLibraryId),
     readdirOperation('readdir', true, promisesLibraryId),
     stringPathOperation('readlink', true, promisesLibraryId),
     stringPathOperation('realpath', true, promisesLibraryId),
-    twoPathOperation('rename', true, promisesLibraryId, 'void'),
+    twoPathOperation('rename', true, promisesLibraryId),
     rmOperation('rm', true, promisesLibraryId),
     statsOperation('stat', true, promisesLibraryId),
-    twoPathOperation('symlink', true, promisesLibraryId, 'void'),
+    twoPathOperation('symlink', true, promisesLibraryId),
     voidPathOperation('unlink', true, promisesLibraryId),
     writeOperation('writeFile', true, promisesLibraryId)
   ]
 }
 
-function accessOperation(
-  name: string,
-  promise: boolean,
-  ownerLibraryId: string
-): LibraryOperationDescriptor {
-  return operationWithVariants(name, promise, ownerLibraryId, 1, 2, [stringArgument(), numberArgument()], [
-    variant(name, promise, 1, 1, ['string-view'], promise ? 'inox::Promise' : 'void', promise ? 'promise' : 'void', {
-      promiseValueType: promise ? 'void' : null
-    }),
-    variant(name, promise, 2, 2, ['string-view', 'number'], promise ? 'inox::Promise' : 'void', promise ? 'promise' : 'void', {
-      promiseValueType: promise ? 'void' : null
-    })
-  ])
+function accessOperation(name: string, promise: boolean, ownerLibraryId: string): LibraryOperationDescriptor {
+  return operationWithVariants(
+    name,
+    promise,
+    ownerLibraryId,
+    1,
+    2,
+    [stringArgument(), numberArgument()],
+    [
+      variant(name, promise, 1, 1, ['string-view'], fsResultTypeRef(promise, voidTypeRef)),
+      variant(name, promise, 2, 2, ['string-view', 'number'], fsResultTypeRef(promise, voidTypeRef))
+    ]
+  )
 }
 
-function mkdirOperation(
-  name: string,
-  promise: boolean,
-  ownerLibraryId: string
-): LibraryOperationDescriptor {
-  return callOperation(name, promise, ownerLibraryId, [
-    'string-view',
-    'object-boolean-field'
-  ], promise ? 'inox::Promise' : 'void', promise ? 'promise' : 'void', 1, 2, [
-    stringArgument(),
-    objectArgument([booleanOption('recursive')])
-  ], {
-    cArgumentSources: [null, optionSource(1, 'recursive')],
-    promiseValueType: promise ? 'void' : null
-  })
-}
-
-function rmOperation(
-  name: string,
-  promise: boolean,
-  ownerLibraryId: string
-): LibraryOperationDescriptor {
-  return callOperation(name, promise, ownerLibraryId, [
-    'string-view',
-    'object-boolean-field',
-    'object-boolean-field'
-  ], promise ? 'inox::Promise' : 'void', promise ? 'promise' : 'void', 1, 2, [
-    stringArgument(),
-    objectArgument([booleanOption('recursive'), booleanOption('force')])
-  ], {
-    cArgumentSources: [null, optionSource(1, 'recursive'), optionSource(1, 'force')],
-    promiseValueType: promise ? 'void' : null
-  })
-}
-
-function readFileOperation(
-  name: string,
-  promise: boolean,
-  ownerLibraryId: string
-): LibraryOperationDescriptor {
-  return operationWithVariants(name, promise, ownerLibraryId, 1, 2, [
-    stringArgument(),
-    utf8Argument(name)
-  ], [
-    variant(name, promise, 1, 1, ['string-view'], promise ? 'inox::Promise' : 'Buffer', promise ? 'promise' : 'bytes', {
-      promiseValueType: promise ? 'bytes' : null,
-      resultTypeId: bufferTypeId
-    }),
-    variant(name, promise, 2, 2, ['string-view', 'string-view'], promise ? 'inox::Promise' : 'inox::String', promise ? 'promise' : 'string', {
-      promiseValueType: promise ? 'string' : null
-    })
-  ])
-}
-
-function readdirOperation(
-  name: string,
-  promise: boolean,
-  ownerLibraryId: string
-): LibraryOperationDescriptor {
-  const cppType = promise ? 'inox::Promise' : 'ArrayClass'
-  const valueType = promise ? 'promise' : 'array'
-
-  return operationWithVariants(name, promise, ownerLibraryId, 1, 2, [
-    stringArgument(),
-    readdirArgument(name)
-  ], [
-    {
-      ...variant(name, promise, 2, 2, ['string-view', 'object-boolean-field'], cppType, valueType, {
-        promiseValueType: promise ? 'array' : null,
-        resultArrayElementType: 'object',
-        resultArrayElementTypeId: direntTypeId
-      }),
-      argumentIndex: 1,
-      argumentValueTypes: ['object'],
-      objectFieldName: 'withFileTypes',
-      booleanLiterals: [true],
-      cArgumentAdapters: ['', 'FsReadDirOptions{$value}'],
-      cArgumentSources: [null, optionSource(1, 'withFileTypes')]
-    },
-    {
-      ...variant(name, promise, 2, 2, ['string-view', 'string-view'], cppType, valueType, {
-        promiseValueType: promise ? 'array' : null,
-        resultArrayElementType: 'string'
-      }),
-      argumentIndex: 1,
-      argumentValueTypes: ['string']
-    },
-    {
-      ...variant(name, promise, 2, 2, ['string-view'], cppType, valueType, {
-        promiseValueType: promise ? 'array' : null,
-        resultArrayElementType: 'string'
-      }),
-      argumentIndex: 1,
-      argumentValueTypes: ['object']
-    },
-    variant(name, promise, 1, 1, ['string-view'], cppType, valueType, {
-      promiseValueType: promise ? 'array' : null,
-      resultArrayElementType: 'string'
-    })
-  ])
-}
-
-function writeOperation(
-  name: string,
-  promise: boolean,
-  ownerLibraryId: string
-): LibraryOperationDescriptor {
-  const cppType = promise ? 'inox::Promise' : 'void'
-  const valueType = promise ? 'promise' : 'void'
-
-  return operationWithVariants(name, promise, ownerLibraryId, 2, 3, [
-    stringArgument(),
-    { valueTypes: ['string', 'bytes'] },
-    utf8Argument(name)
-  ], [
-    {
-      ...variant(name, promise, 2, 3, ['string-view', 'string-view'], cppType, valueType, {
-        promiseValueType: promise ? 'void' : null
-      }),
-      argumentIndex: 1,
-      argumentValueTypes: ['string']
-    },
-    {
-      ...variant(name, promise, 2, 3, ['string-view', 'value'], cppType, valueType, {
-        promiseValueType: promise ? 'void' : null
-      }),
-      argumentIndex: 1,
-      argumentValueTypes: ['bytes'],
-      cArgumentAdapters: ['', 'Uint8Array($value)']
-    }
-  ])
-}
-
-function statsOperation(
-  name: string,
-  promise: boolean,
-  ownerLibraryId: string
-): LibraryOperationDescriptor {
+function mkdirOperation(name: string, promise: boolean, ownerLibraryId: string): LibraryOperationDescriptor {
   return callOperation(
     name,
     promise,
     ownerLibraryId,
-    ['string-view'],
-    promise ? 'inox::Promise' : 'FsStats',
-    promise ? 'promise' : 'object',
+    ['string-view', 'object-boolean-field'],
+    fsResultTypeRef(promise, voidTypeRef),
+    null,
     1,
-    1,
-    [stringArgument()],
+    2,
+    [stringArgument(), objectArgument([booleanOption('recursive')])],
     {
-      resultTypeId: statsTypeId,
-      promiseValueType: promise ? 'object' : null
+      cArgumentSources: [null, optionSource(1, 'recursive')]
     }
   )
 }
 
-function stringPathOperation(
-  name: string,
-  promise: boolean,
-  ownerLibraryId: string
-): LibraryOperationDescriptor {
+function rmOperation(name: string, promise: boolean, ownerLibraryId: string): LibraryOperationDescriptor {
+  return callOperation(
+    name,
+    promise,
+    ownerLibraryId,
+    ['string-view', 'object-boolean-field', 'object-boolean-field'],
+    fsResultTypeRef(promise, voidTypeRef),
+    null,
+    1,
+    2,
+    [stringArgument(), objectArgument([booleanOption('recursive'), booleanOption('force')])],
+    {
+      cArgumentSources: [null, optionSource(1, 'recursive'), optionSource(1, 'force')]
+    }
+  )
+}
+
+function readFileOperation(name: string, promise: boolean, ownerLibraryId: string): LibraryOperationDescriptor {
+  return operationWithVariants(
+    name,
+    promise,
+    ownerLibraryId,
+    1,
+    2,
+    [stringArgument(), utf8Argument(name)],
+    [
+      variant(name, promise, 1, 1, ['string-view'], fsResultTypeRef(promise, bufferTypeRef)),
+      variant(
+        name,
+        promise,
+        2,
+        2,
+        ['string-view', 'string-view'],
+        fsResultTypeRef(promise, stringTypeRef),
+        syncStringResultMapping(promise)
+      )
+    ]
+  )
+}
+
+function readdirOperation(name: string, promise: boolean, ownerLibraryId: string): LibraryOperationDescriptor {
+  return operationWithVariants(
+    name,
+    promise,
+    ownerLibraryId,
+    1,
+    2,
+    [stringArgument(), readdirArgument(name)],
+    [
+      {
+        ...variant(
+          name,
+          promise,
+          2,
+          2,
+          ['string-view', 'object-boolean-field'],
+          fsResultTypeRef(promise, arrayTypeRef(direntTypeRef))
+        ),
+        argumentIndex: 1,
+        argumentValueTypes: ['object'],
+        objectFieldName: 'withFileTypes',
+        booleanLiterals: [true],
+        cArgumentAdapters: ['', 'FsReadDirOptions{$value}'],
+        cArgumentSources: [null, optionSource(1, 'withFileTypes')]
+      },
+      {
+        ...variant(
+          name,
+          promise,
+          2,
+          2,
+          ['string-view', 'string-view'],
+          fsResultTypeRef(promise, arrayTypeRef(stringTypeRef))
+        ),
+        argumentIndex: 1,
+        argumentValueTypes: ['string']
+      },
+      {
+        ...variant(name, promise, 2, 2, ['string-view'], fsResultTypeRef(promise, arrayTypeRef(stringTypeRef))),
+        argumentIndex: 1,
+        argumentValueTypes: ['object']
+      },
+      variant(name, promise, 1, 1, ['string-view'], fsResultTypeRef(promise, arrayTypeRef(stringTypeRef)))
+    ]
+  )
+}
+
+function writeOperation(name: string, promise: boolean, ownerLibraryId: string): LibraryOperationDescriptor {
+  return operationWithVariants(
+    name,
+    promise,
+    ownerLibraryId,
+    2,
+    3,
+    [stringArgument(), { valueTypes: ['string', 'bytes'] }, utf8Argument(name)],
+    [
+      {
+        ...variant(name, promise, 2, 3, ['string-view', 'string-view'], fsResultTypeRef(promise, voidTypeRef)),
+        argumentIndex: 1,
+        argumentValueTypes: ['string']
+      },
+      {
+        ...variant(name, promise, 2, 3, ['string-view', 'value'], fsResultTypeRef(promise, voidTypeRef)),
+        argumentIndex: 1,
+        argumentValueTypes: ['bytes'],
+        cArgumentAdapters: ['', 'Uint8Array($value)']
+      }
+    ]
+  )
+}
+
+function statsOperation(name: string, promise: boolean, ownerLibraryId: string): LibraryOperationDescriptor {
   return callOperation(
     name,
     promise,
     ownerLibraryId,
     ['string-view'],
-    promise ? 'inox::Promise' : 'inox::String',
-    promise ? 'promise' : 'string',
+    fsResultTypeRef(promise, statsTypeRef),
+    null,
     1,
     1,
-    [stringArgument()],
-    { promiseValueType: promise ? 'string' : null }
+    [stringArgument()]
   )
 }
 
-function voidPathOperation(
-  name: string,
-  promise: boolean,
-  ownerLibraryId: string
-): LibraryOperationDescriptor {
+function stringPathOperation(name: string, promise: boolean, ownerLibraryId: string): LibraryOperationDescriptor {
   return callOperation(
     name,
     promise,
     ownerLibraryId,
     ['string-view'],
-    promise ? 'inox::Promise' : 'void',
-    promise ? 'promise' : 'void',
+    fsResultTypeRef(promise, stringTypeRef),
+    syncStringResultMapping(promise),
     1,
     1,
-    [stringArgument()],
-    { promiseValueType: promise ? 'void' : null }
+    [stringArgument()]
   )
 }
 
-function twoPathOperation(
-  name: string,
-  promise: boolean,
-  ownerLibraryId: string,
-  fulfilledType: string
-): LibraryOperationDescriptor {
+function voidPathOperation(name: string, promise: boolean, ownerLibraryId: string): LibraryOperationDescriptor {
+  return callOperation(
+    name,
+    promise,
+    ownerLibraryId,
+    ['string-view'],
+    fsResultTypeRef(promise, voidTypeRef),
+    null,
+    1,
+    1,
+    [stringArgument()]
+  )
+}
+
+function twoPathOperation(name: string, promise: boolean, ownerLibraryId: string): LibraryOperationDescriptor {
   return callOperation(
     name,
     promise,
     ownerLibraryId,
     ['string-view', 'string-view'],
-    promise ? 'inox::Promise' : fulfilledType === 'void' ? 'void' : 'inox::String',
-    promise ? 'promise' : fulfilledType,
+    fsResultTypeRef(promise, voidTypeRef),
+    null,
     2,
     2,
-    [stringArgument(), stringArgument()],
-    { promiseValueType: promise ? fulfilledType : null }
+    [stringArgument(), stringArgument()]
   )
 }
 
 type CallOptions = {
   cArgumentSources?: Array<{ argumentIndex: number; objectFieldName: string } | null>
-  promiseValueType?: string | null
-  resultArrayElementType?: string | null
-  resultArrayElementTypeId?: string | null
-  resultTypeId?: string | null
 }
 
 function callOperation(
@@ -345,8 +328,8 @@ function callOperation(
   promise: boolean,
   ownerLibraryId: string,
   cArgumentKinds: LibraryCArgumentKind[],
-  cppType: string,
-  valueType: string,
+  resultTypeRef: TypeRef,
+  cResultMapping: LibraryCResultMappingDescriptor | null,
   minArgs: number,
   maxArgs: number,
   argumentChecks: LibraryArgumentCheckDescriptor[],
@@ -366,15 +349,8 @@ function callOperation(
     minArgs,
     maxArgs,
     argumentChecks,
-    resultArrayElementType: options.resultArrayElementType,
-    resultArrayElementTypeId: options.resultArrayElementTypeId,
-    resultTypeId: options.resultTypeId,
-    cppType,
-    valueType,
-    promiseValueType: options.promiseValueType,
-    promiseRejectionValueType: promise ? 'error' : null,
-    nullable: false,
-    owned: false
+    resultTypeRef,
+    ...(cResultMapping ? { cResultMapping } : {})
   }
 }
 
@@ -398,9 +374,7 @@ function operationWithVariants(
     minArgs,
     maxArgs,
     argumentChecks,
-    variants,
-    nullable: false,
-    owned: false
+    variants
   }
 }
 
@@ -410,25 +384,16 @@ function variant(
   minArgs: number,
   maxArgs: number,
   cArgumentKinds: LibraryCArgumentKind[],
-  cppType: string,
-  valueType: string,
-  options: CallOptions = {}
+  resultTypeRef: TypeRef,
+  cResultMapping: LibraryCResultMappingDescriptor | null = null
 ): LibraryOperationVariantDescriptor {
   return {
     minArgs,
     maxArgs,
     cExpression: promise ? `fs.promises.${name}` : `fs.${name}`,
     cArgumentKinds,
-    cArgumentSources: options.cArgumentSources,
-    resultArrayElementType: options.resultArrayElementType,
-    resultArrayElementTypeId: options.resultArrayElementTypeId,
-    resultTypeId: options.resultTypeId,
-    cppType,
-    valueType,
-    promiseValueType: options.promiseValueType,
-    promiseRejectionValueType: promise ? 'error' : null,
-    nullable: false,
-    owned: false
+    resultTypeRef,
+    ...(cResultMapping ? { cResultMapping } : {})
   }
 }
 
@@ -441,10 +406,7 @@ function constantOperation(name: string): LibraryOperationDescriptor {
     kind: 'member-read',
     runtimeRequirements: [runtimeRequirement],
     cExpression: `fs.constants.${name}`,
-    cppType: 'double',
-    valueType: 'number',
-    nullable: false,
-    owned: false
+    resultTypeRef: numberTypeRef
   }
 }
 
@@ -468,11 +430,24 @@ function receiverBooleanOperation(
     minArgs: 0,
     maxArgs: 0,
     argumentChecks: [],
-    cppType: 'bool',
-    valueType: 'boolean',
-    nullable: false,
-    owned: false
+    resultTypeRef: booleanTypeRef
   }
+}
+
+function fsResultTypeRef(promise: boolean, fulfilledType: TypeRef): TypeRef {
+  return promise ? promiseTypeRef(fulfilledType, errorTypeRef()) : fulfilledType
+}
+
+function syncStringResultMapping(promise: boolean): LibraryCResultMappingDescriptor | null {
+  return promise ? null : stringCResultMapping
+}
+
+function primitiveTypeRef(name: 'boolean' | 'number' | 'string' | 'void'): PrimitiveTypeRef {
+  return { kind: 'primitive', name, nullable: false, ownership: 'value', traits: [] }
+}
+
+function nominalTypeRef(typeId: string): NominalTypeRef {
+  return { kind: 'nominal', typeId, args: [], nullable: false, ownership: 'value', traits: [] }
 }
 
 function unsupportedCallbackOperation(name: string): LibraryOperationDescriptor {
@@ -505,7 +480,10 @@ function binding(ownerLibraryId: string, name: string): string {
   return `${ownerLibraryId}#module:${source}:${name}`
 }
 
-function optionSource(argumentIndex: number, objectFieldName: string): {
+function optionSource(
+  argumentIndex: number,
+  objectFieldName: string
+): {
   argumentIndex: number
   objectFieldName: string
 } {
@@ -547,9 +525,7 @@ function readdirArgument(label: string): LibraryArgumentCheckDescriptor {
   }
 }
 
-function objectArgument(
-  objectLiteralFields: LibraryObjectLiteralFieldDescriptor[]
-): LibraryArgumentCheckDescriptor {
+function objectArgument(objectLiteralFields: LibraryObjectLiteralFieldDescriptor[]): LibraryArgumentCheckDescriptor {
   return {
     valueTypes: ['object'],
     objectLiteralFields

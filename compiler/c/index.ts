@@ -2356,8 +2356,14 @@ function findObjectLiteralPropertyValue(expression: AnyNode, key: string): AnyNo
 
   const properties: CObjectLiteralPropertyNode[] = expression.properties
 
-  for (const property of properties) {
+  for (let index = properties.length - 1; index >= 0; index = index - 1) {
+    const property = properties[index]
+
     if (property.spread === true) {
+      if (objectSpreadPropertyHasField(property, key)) {
+        return null
+      }
+
       continue
     }
 
@@ -4017,7 +4023,7 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
     const propertyValue = findObjectLiteralPropertyValue(statement.init, field.name)
 
     if (propertyValue === null || typeof propertyValue === 'undefined') {
-      const spread = preparedObjectSpreadForField(spreads, field.name)
+      const spread = preparedObjectSpreadForField(spreads, statement.init.properties, field.name)
 
       if (spread !== null && typeof spread !== 'undefined') {
         const spreadValue = nextCName(context, 'inox_spread_value')
@@ -5243,7 +5249,7 @@ function emitCObjectLiteralValueExpression(
     }
 
     if (propertyValue === null || typeof propertyValue === 'undefined') {
-      const spread = preparedObjectSpreadForField(spreads, field.name)
+      const spread = preparedObjectSpreadForField(spreads, expression.properties, field.name)
 
       if (spread !== null && typeof spread !== 'undefined') {
         const spreadValue = nextCName(context, 'inox_spread_value')
@@ -5302,24 +5308,48 @@ function prepareObjectLiteralSpreads(
 
 function preparedObjectSpreadForField(
   spreads: CPreparedObjectSpread[],
+  properties: CObjectLiteralPropertyNode[],
   fieldName: string
 ): CPreparedObjectSpread | null {
-  for (let index = spreads.length - 1; index >= 0; index = index - 1) {
-    const spread = spreads[index]
-    const shape = spread.property.value.shape
+  for (let index = properties.length - 1; index >= 0; index = index - 1) {
+    const property = properties[index]
 
-    if (shape === null || typeof shape === 'undefined' || shape.dynamic === true) {
+    if (property.spread !== true) {
+      if (property.key === fieldName) {
+        return null
+      }
+
       continue
     }
 
-    for (const field of shape.fields) {
-      if (field.name === fieldName) {
-        return spread
+    if (!objectSpreadPropertyHasField(property, fieldName)) {
+      continue
+    }
+
+    for (let spreadIndex = spreads.length - 1; spreadIndex >= 0; spreadIndex = spreadIndex - 1) {
+      if (spreads[spreadIndex].property === property) {
+        return spreads[spreadIndex]
       }
     }
   }
 
   return null
+}
+
+function objectSpreadPropertyHasField(property: CObjectLiteralPropertyNode, fieldName: string): boolean {
+  const shape = property.value.shape
+
+  if (shape === null || typeof shape === 'undefined' || shape.dynamic === true) {
+    return false
+  }
+
+  for (const field of shape.fields) {
+    if (field.name === fieldName) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function objectLiteralExpressionRuntimeShape(expression: AnyNode): CObjectShape | null {
