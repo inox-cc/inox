@@ -4,9 +4,6 @@ import { collectIrLocalThrowValueTypes, collectIrPrograms } from '../ir.ts'
 import type { IrLocalThrowValueTypeOptions } from '../ir/effects.ts'
 import type { IrModuleRecord } from '../ir/top-level.ts'
 import { memberExpressionPath } from '../member-paths.ts'
-import {
-  debugMemoryStatsFields
-} from '../../stdlib/global/compiler/descriptor.ts'
 import type {
   AnyNode,
   Diagnostic,
@@ -18,10 +15,6 @@ import type {
   SourceLocation
 } from '../types.ts'
 
-type DebugMemoryStatsField = {
-  name: string
-  cField: string
-}
 import type { CallbackLoweringDependencies, RuntimeCallbackArgumentInfo } from './async/callbacks.ts'
 import {
   callbackContextWrapperCaptures,
@@ -151,7 +144,6 @@ import {
 } from '../../stdlib/global/compiler/c.ts'
 import type { JsonClassInstanceOperand, JsonDeclarationDependencies } from '../../stdlib/global/compiler/c.ts'
 import {
-  cDebugRuntimeMethodName,
   cJsonRuntimeCallName,
   emitJsonParseVariableDeclaration,
   emitPreparedJsonCallExpression,
@@ -456,12 +448,6 @@ function firstKnownValueTypeOrUnknown(
   return 'unknown'
 }
 
-function debugMemoryStatsFieldAt(index: number): DebugMemoryStatsField {
-  const fields: DebugMemoryStatsField[] = debugMemoryStatsFields
-
-  return fields[index]
-}
-
 let objectVariableDeclarationDependencies = {} as ObjectVariableDeclarationDependencies
 let objectExpressionFieldDependencies: ObjectExpressionFieldDependencies = {
   emitCValueExpression,
@@ -531,7 +517,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitPreparedCallExpression,
   emitPreparedClassMethodCallExpression,
   emitPreparedCollectionCallExpression,
-  emitPreparedDebugMemoryCallExpression,
   emitPreparedFetchCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedFetchCallExpression(expression, context, fetchLoweringDependencies, options),
   emitPreparedFetchHeadersCallExpression: (
@@ -1011,7 +996,6 @@ const declarationEmissionDependencies = {
 }
 
 const expressionTypeDependencies = {
-  cDebugRuntimeMethodName,
   cFetchRuntimeExpressionMethod,
   cJsonRuntimeCallName,
   cPromiseRuntimeCallName,
@@ -1195,7 +1179,6 @@ const cValueExpressionDependencies = {
   emitPreparedCollectionCallExpression,
   emitPreparedCollectionConstructorValueExpression,
   emitPreparedCollectionSizeExpression,
-  emitPreparedDebugMemoryCallExpression,
   emitPreparedFetchHeadersCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedFetchHeadersCallExpression(expression, context, fetchLoweringDependencies),
   emitPreparedJsonCallExpression: (expression: AnyNode, context: CFunctionContext) =>
@@ -7409,62 +7392,6 @@ function emitFetchAbortControllerAbortStatement(expression: AnyNode, context: CF
   pushAll(lines, emitThrownCheckLines(context))
 
   return lines
-}
-
-function emitPreparedDebugMemoryCallExpression(
-  expression: AnyNode,
-  context: CFunctionContext,
-  options: PreparedCallOptions = {}
-): PreparedExpression | null {
-  if (cDebugRuntimeMethodName(expression) !== 'memory') {
-    return null
-  }
-
-  if (options.discard === true) {
-    return {
-      lines: [],
-      expression: ''
-    }
-  }
-
-  const out = nextCName(context, 'inox_debug_memory')
-  const stats = nextCName(context, 'inox_debug_stats')
-  const shapeName = nextCName(context, 'inox_shape_debug_memory')
-  const fieldsName = `${shapeName}_fields`
-  const lines = [`static const inox_field_info ${fieldsName}[] = {`]
-  const fields: DebugMemoryStatsField[] = debugMemoryStatsFields
-
-  for (const field of fields) {
-    lines.push(`  { ${cStringLiteral(field.name)}, INOX_FIELD_READONLY },`)
-  }
-
-  lines.push('};')
-  lines.push(`static const inox_shape ${shapeName} = {`)
-  lines.push(`  ${debugMemoryStatsFields.length},`)
-  lines.push(`  ${fieldsName}`)
-  lines.push('};')
-  lines.push(`inox::DebugMemoryStats ${stats};`)
-  lines.push('inox_ensure_debug_memory_allocator();')
-  lines.push(`${stats} = inox::debugMemory.snapshot();`)
-  registerOwnedValue(context, out)
-  pushAll(lines, emitPrepareOwnedValueWrite(out))
-  lines.push(emitStatusCheck(`inox_object_new(&inox_default_allocator, &${shapeName}, &${out})`, context))
-
-  for (let index = 0; index < debugMemoryStatsFields.length; index++) {
-    const field = debugMemoryStatsFieldAt(index)
-
-    lines.push(
-      emitStatusCheck(
-        `inox_object_init_known(${out}, ${index}, inox_number_value((inox_number)${stats}.${field.cField}))`,
-        context
-      )
-    )
-  }
-
-  return {
-    lines,
-    expression: out
-  }
 }
 
 function emitPreparedAsyncFunctionPromiseCallExpression(

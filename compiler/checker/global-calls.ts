@@ -1,12 +1,7 @@
-import {
-  debugRuntimeMethodNameFromKnownPath,
-  isDebugRuntimeMethodPath
-} from '../../stdlib/global/compiler/descriptor.ts'
 import { diagnostic } from '../diagnostics.ts'
 import { memberExpressionPath } from '../member-paths.ts'
 import type { AnyNode, Diagnostic, ObjectShapeInfo, SourceLocation, ValueType } from '../types.ts'
 import { isAssignableType } from './assignability.ts'
-import { debugMemoryStatsObjectShape } from './builtins.ts'
 import { objectValuesElementTypeFromShape } from './expression-helpers.ts'
 import { isConsoleMethod } from './helpers.ts'
 
@@ -173,29 +168,4 @@ export function checkObjectStaticCall(
   }
 
   return 'array'
-}
-
-export function checkDebugMemoryCall(context: GlobalCallCheckerContext, expression: AnyNode): ValueType | null {
-  const path = memberExpressionPath(expression.callee)
-
-  if (!isDebugRuntimeMethodPath(path)) {
-    return null
-  }
-
-  const method = debugRuntimeMethodNameFromKnownPath(path)
-
-  expression.valueType = 'object'
-  expression.shape = debugMemoryStatsObjectShape
-  expression.debugRuntimeMethod = method
-
-  if (expression.args.length !== 0) {
-    report(
-      context,
-      'INOX_ARG_COUNT',
-      `function inox.__debug.memory expects 0 argument(s), got ${expression.args.length}`,
-      expression.loc
-    )
-  }
-
-  return 'object'
 }

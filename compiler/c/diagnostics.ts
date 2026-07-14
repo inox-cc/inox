@@ -1,7 +1,6 @@
 import { diagnostic } from '../diagnostics.ts'
 import {
   isCollectionConstructorGlobalUsagePath,
-  isDebugRuntimeMethodPath,
   isFetchGlobalRoot,
   jsonRuntimeMethodNameFromPath
 } from '../../stdlib/global/compiler/descriptor.ts'
@@ -40,8 +39,7 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
     path === 'Object.values' ||
     !!jsonRuntimeMethodNameFromPath(usage.path) ||
     isCollectionConstructorGlobalUsagePath(usage.path) ||
-    isSupportedCFetchGlobalUsage(usage) ||
-    isSupportedCDebugGlobalUsage(usage)
+    isSupportedCFetchGlobalUsage(usage)
   )
 }
 
@@ -61,10 +59,6 @@ function joinStrings(values: string[], separator: string): string {
 
 export function isSupportedCFetchGlobalUsage(usage: IrGlobalUsage): boolean {
   return usage.path.length === 1 && isFetchGlobalRoot(usage.path[0])
-}
-
-export function isSupportedCDebugGlobalUsage(usage: IrGlobalUsage): boolean {
-  return isDebugRuntimeMethodPath(usage.path)
 }
 
 export function reportCJsGlobalDiagnostic(diagnostics: Diagnostic[], loc: SourceLocation | null | undefined): void {

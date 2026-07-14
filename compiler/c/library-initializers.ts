@@ -49,7 +49,11 @@ export function emitCompilerLibraryRuntimeInitializerDefinitions(
       args.push(emitCompilerLibraryInitializerArgument(argument, optionValue))
     }
 
-    lines.push(`inline ${initializer.cType} ${initializer.cName}(${args.join(', ')});`)
+    if (args.length === 0) {
+      lines.push(`inline ${initializer.cType} ${initializer.cName}{};`)
+    } else {
+      lines.push(`inline ${initializer.cType} ${initializer.cName}(${args.join(', ')});`)
+    }
   }
 
   return lines

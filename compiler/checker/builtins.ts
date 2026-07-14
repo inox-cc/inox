@@ -1,11 +1,5 @@
-import { debugMemoryStatsFields } from '../../stdlib/global/compiler/descriptor.ts'
 import { stdlibModuleLibuvRuntimeFeature } from '../stdlib/node/modules.ts'
 import type { AnyNode, ObjectShapeInfo, SymbolInfo } from '../types.ts'
-
-type DebugMemoryStatsField = {
-  name: string
-  cField: string
-}
 
 function readonlyStringFields(names: string[]): AnyNode[] {
   const fields: AnyNode[] = []
@@ -14,22 +8,6 @@ function readonlyStringFields(names: string[]): AnyNode[] {
     fields.push({
       name,
       valueType: 'string',
-      readonly: true
-    })
-  }
-
-  return fields
-}
-
-function readonlyDebugMemoryStatsFields(names: DebugMemoryStatsField[]): AnyNode[] {
-  const fields: AnyNode[] = []
-
-  for (let index = 0; index < names.length; index = index + 1) {
-    const field = names[index] as DebugMemoryStatsField
-
-    fields.push({
-      name: field.name,
-      valueType: 'number',
       readonly: true
     })
   }
@@ -137,25 +115,11 @@ export const fetchAbortControllerObjectShape: ObjectShapeInfo = {
   ]
 }
 
-export const debugMemoryStatsObjectShape: ObjectShapeInfo = {
-  kind: 'object',
-  builtin: 'inox.DebugMemoryStats',
-  fields: readonlyDebugMemoryStatsFields(debugMemoryStatsFields)
-}
-
 export function libuvOnlyRuntimeImportFeature(source: string): string | null {
   return stdlibModuleLibuvRuntimeFeature(source)
 }
 
 export const globals: Map<string, SymbolInfo> = new Map([
-  [
-    'inox',
-    {
-      kind: 'global',
-      mutable: false,
-      valueType: 'object'
-    }
-  ],
   [
     'console',
     {
@@ -320,7 +284,6 @@ export function builtinGlobalSymbol(name: string): SymbolInfo | null {
   }
 
   if (
-    name === 'inox' ||
     name === 'console' ||
     name === 'Object' ||
     name === 'JSON'

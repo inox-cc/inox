@@ -1295,7 +1295,6 @@ export function emitCUnit(
     throwingFunctionCount: baseContext.throwingFunctions.size
   })
   const needsRuntime: boolean = preludeRequirements.needsRuntime
-  const needsDebugMemoryRuntime: boolean = preludeRequirements.needsDebugMemoryRuntime
   const needsAsyncRuntime: boolean = preludeRequirements.needsAsyncRuntime
   const needsCallbackRuntime: boolean = preludeRequirements.needsCallbackRuntime
   const needsClassDescriptorRuntime: boolean = preludeRequirements.needsClassDescriptorRuntime
@@ -1325,7 +1324,6 @@ export function emitCUnit(
   const lines = emitCPrelude(
     needsRuntime,
     true,
-    needsDebugMemoryRuntime,
     needsAsyncRuntime,
     needsCallbackRuntime,
     needsClassDescriptorRuntime,

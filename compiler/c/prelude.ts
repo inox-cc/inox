@@ -155,7 +155,6 @@ function cPreludeBodyUsesCStdioHeader(body: string): boolean {
 export function emitCPrelude(
   needsRuntime: boolean,
   needsMainRuntime: boolean,
-  needsDebugMemoryRuntime: boolean,
   needsAsyncRuntime: boolean,
   needsCallbackRuntime: boolean,
   needsClassDescriptorRuntime: boolean,
@@ -192,10 +191,6 @@ export function emitCPrelude(
 
   if (needsRegexpRuntime) {
     pushCPreludeIncludes(systemIncludes, localIncludes, emitCompilerFeatureCPreludeIncludes('regexp'))
-  }
-
-  if (needsDebugMemoryRuntime) {
-    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/debug.h"')
   }
 
   if (needsFetchRuntime) {
@@ -244,20 +239,6 @@ export function emitCPrelude(
   if (needsRegexpRuntime) {
     pushCPreludeLines(lines, emitCompilerFeatureCPreludeHelpers('regexp'))
     lines.push('')
-  }
-
-  if (needsRuntime) {
-    if (needsDebugMemoryRuntime) {
-      lines.push('static int inox_debugMemoryAllocatorInitialized = 0;')
-      lines.push('')
-      lines.push('static void inox_ensure_debug_memory_allocator(void) {')
-      lines.push('  if (inox_debugMemoryAllocatorInitialized) return;')
-      lines.push('  inox_debugMemoryAllocatorInitialized = 1;')
-      lines.push('  inox_default_allocator = inox::debugMemory.allocator(&inox_default_base_allocator);')
-      lines.push('}')
-      lines.push('')
-    }
-
   }
 
   return lines

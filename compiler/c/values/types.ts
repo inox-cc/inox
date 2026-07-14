@@ -22,7 +22,6 @@ import {
 import { isMemberAccessExpression, resolveKnownObjectMember, resolveObjectExpressionMember, isIndexAccessExpression, resolveKnownObjectIndex, resolveObjectExpressionIndex } from './objects.ts'
 
 export type CExpressionTypeDependencies = {
-  cDebugRuntimeMethodName: (expression: AnyNode) => string | null
   cFetchRuntimeExpressionMethod: (expression: AnyNode) => string | null
   cJsonRuntimeCallName: (callee: AnyNode) => string | null
   cPromiseRuntimeCallName: (callee: AnyNode) => string | null
@@ -564,10 +563,6 @@ export function inferExpressionType(
 
       return 'string'
     }
-  }
-
-  if (deps.cDebugRuntimeMethodName(expression) === 'memory') {
-    return 'object'
   }
 
   if (

@@ -115,7 +115,6 @@ import type {
 import {
   checkArrayIsArrayCall as checkArrayIsArrayCallInContext,
   checkConsoleCall as checkConsoleCallInContext,
-  checkDebugMemoryCall as checkDebugMemoryCallInContext,
   checkObjectStaticCall as checkObjectStaticCallInContext,
   isObjectStaticCall as isObjectStaticCallInContext
 } from './checker/global-calls.ts'
@@ -3680,12 +3679,6 @@ class Checker {
       return jsonType
     }
 
-    const debugMemoryType = this.checkDebugMemoryCall(expression)
-
-    if (debugMemoryType !== null && typeof debugMemoryType !== 'undefined') {
-      return debugMemoryType
-    }
-
     const promiseStaticType = this.checkPromiseStaticCall(expression)
 
     if (promiseStaticType !== null && typeof promiseStaticType !== 'undefined') {
@@ -4603,10 +4596,6 @@ class Checker {
     }
 
     return result
-  }
-
-  checkDebugMemoryCall(expression: AnyNode): ValueType | null {
-    return checkDebugMemoryCallInContext(this.globalCallContext(), expression)
   }
 
   checkClassMethodCall(expression: AnyNode): ValueType | null {

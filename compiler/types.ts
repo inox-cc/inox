@@ -40,7 +40,6 @@ export type IrFeature =
   | 'async-runtime'
   | 'callback-values'
   | 'collections'
-  | 'debug-memory'
   | 'json'
   | 'map-index-set'
   | 'map-get-null'

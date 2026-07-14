@@ -17,12 +17,6 @@ export {
   stringRuntimeReturnType
 } from '../strings/compiler/descriptor.ts'
 export {
-  debugMemoryStatsFields,
-  debugRuntimeMethodNameFromKnownPath,
-  debugRuntimeMethodNameFromPath,
-  isDebugRuntimeMethodPath
-} from '../debug/compiler/descriptor.ts'
-export {
   fetchGlobalRoots,
   fetchHeadersMethods,
   fetchInitOptions,

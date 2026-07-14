@@ -444,7 +444,6 @@ export function emitCModuleSource(
     emitCPrelude(
       prelude.needsRuntime,
       emitsMain,
-      prelude.needsDebugMemoryRuntime,
       prelude.needsAsyncRuntime,
       prelude.needsCallbackRuntime,
       prelude.needsClassDescriptorRuntime,

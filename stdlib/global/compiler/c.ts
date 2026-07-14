@@ -1,7 +1,6 @@
 export type { FetchLoweringDependencies } from '../fetch/compiler/c.ts'
 export type { JsonClassInstanceOperand, JsonDeclarationDependencies } from '../json/compiler/c.ts'
 export { irProgramsUseConsoleRuntime, isConsoleLog } from '../console/compiler/c.ts'
-export { cDebugRuntimeMethodName } from '../debug/compiler/c.ts'
 export {
   cFetchRuntimeExpressionMethod,
   emitFetchStringArgument,

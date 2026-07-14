@@ -399,11 +399,6 @@ export type StatementLoweringDependencies = {
     options?: PreparedCallOptions
   ): PreparedExpression | null
   emitPreparedCollectionCallExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedDebugMemoryCallExpression(
-    expression: StatementNode,
-    context: CFunctionContext,
-    options?: PreparedCallOptions
-  ): PreparedExpression | null
   emitPreparedFetchCallExpression(
     expression: StatementNode,
     context: CFunctionContext,
@@ -4656,12 +4651,6 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
 
     if (collectionCall !== null && typeof collectionCall !== 'undefined') {
       return collectionCall.lines
-    }
-
-    const debugMemoryCall = deps.emitPreparedDebugMemoryCallExpression(expression, context, preparedCallDiscard())
-
-    if (debugMemoryCall !== null && typeof debugMemoryCall !== 'undefined') {
-      return debugMemoryCall.lines
     }
 
     const fetchCall = deps.emitPreparedFetchCallExpression(expression, context)

@@ -12,7 +12,6 @@ import type {
 
 export type CRuntimePreludeRequirements = {
   needsRuntime: boolean
-  needsDebugMemoryRuntime: boolean
   needsAsyncRuntime: boolean
   needsCallbackRuntime: boolean
   needsClassDescriptorRuntime: boolean
@@ -58,7 +57,6 @@ export function resolveCRuntimePreludeRequirements(
     signatureRuntimeTypes.has('function')
   const needsJsonRuntime = runtimeRequirements.has('json')
   const needsRegexpRuntime = irProgramsUseCPreludeFeature(input.irPrograms, 'regexp')
-  const needsDebugMemoryRuntime = runtimeRequirements.has('debug-memory')
   const needsFetchRuntime = runtimePlanHasSupportedFetchGlobalUsage(input.globalUsages)
   const needsAsyncRuntime =
     runtimeRequirements.has('async-runtime') ||
@@ -110,7 +108,6 @@ export function resolveCRuntimePreludeRequirements(
 
   return {
     needsRuntime,
-    needsDebugMemoryRuntime,
     needsAsyncRuntime,
     needsCallbackRuntime,
     needsClassDescriptorRuntime,

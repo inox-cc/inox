@@ -46,6 +46,11 @@ public:
 
 extern DebugMemory debugMemory;
 
+class DebugMemoryRuntime final {
+public:
+  DebugMemoryRuntime();
+};
+
 } // namespace inox
 #endif
 

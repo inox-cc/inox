@@ -5009,7 +5009,6 @@ export type CValueExpressionDependencies = {
     context: CFunctionContext
   ): PreparedExpression | null
   emitPreparedCollectionSizeExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedDebugMemoryCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedFetchHeadersCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedJsonCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedKnownArrayIndexValueExpression(
@@ -5126,12 +5125,6 @@ export function emitCValueExpression(
 
   if (jsonCall !== null && typeof jsonCall !== 'undefined') {
     return jsonCall
-  }
-
-  const debugMemoryCall = deps.emitPreparedDebugMemoryCallExpression(expression, context)
-
-  if (debugMemoryCall !== null && typeof debugMemoryCall !== 'undefined') {
-    return debugMemoryCall
   }
 
   const arrayPopCall = deps.emitPreparedArrayPopCallExpression(expression, context, null)

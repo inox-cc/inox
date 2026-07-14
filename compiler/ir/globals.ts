@@ -302,7 +302,6 @@ function appendString(values: string[], value: string): string[] {
 function isJsStdGlobalRootName(name: string): boolean {
   return (
     name === 'Array' ||
-    name === 'inox' ||
     name === 'Error' ||
     name === 'Int8Array' ||
     name === 'Int16Array' ||
@@ -356,7 +355,6 @@ function sortedStringSet(values: StringSet): string[] {
   pushStringIfPresent(values, result, 'Uint16Array')
   pushStringIfPresent(values, result, 'Uint32Array')
   pushStringIfPresent(values, result, 'fetch')
-  pushStringIfPresent(values, result, 'inox')
 
   return result
 }

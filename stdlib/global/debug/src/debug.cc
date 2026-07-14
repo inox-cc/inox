@@ -103,6 +103,10 @@ namespace inox {
 
 DebugMemory debugMemory;
 
+DebugMemoryRuntime::DebugMemoryRuntime() {
+  inox_default_allocator = debugMemory.allocator(&inox_default_base_allocator);
+}
+
 inox_allocator DebugMemory::allocator(inox_allocator* inner) const {
 #ifdef INOX_DEBUG_MEMORY
   inox_allocator allocator = { inner, inox_debug_alloc, inox_debug_realloc, inox_debug_free };

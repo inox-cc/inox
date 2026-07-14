@@ -14,7 +14,6 @@ import {
   numberFromStringNullFeature,
   numericCastsFeature
 } from '../conversions/compiler/feature.ts'
-import { collectDebugMemoryIrFeatures, debugMemoryFeature } from '../debug/compiler/feature.ts'
 import { collectJsonIrFeatures, jsonFeature } from '../json/compiler/feature.ts'
 import { collectRegExpIrFeatures, emitCRegExpPreludeHelpers, regexpFeature } from '../regexp/compiler/feature.ts'
 
@@ -22,7 +21,6 @@ export { emitCRegExpFlags } from '../regexp/compiler/feature.ts'
 
 export const globalStdlibFeatures: CompilerFeatureDescriptor[] = [
   arrayPopNullFeature,
-  debugMemoryFeature,
   jsonFeature,
   mapGetNullFeature,
   mapIndexSetFeature,
@@ -33,7 +31,6 @@ export const globalStdlibFeatures: CompilerFeatureDescriptor[] = [
 
 export function collectGlobalStdlibIrFeatures(node: AnyNode, features: Set<IrFeature>): void {
   collectArrayPopNullIrFeatures(node, features)
-  collectDebugMemoryIrFeatures(node, features)
   collectJsonIrFeatures(node, features)
   collectMapGetNullIrFeatures(node, features)
   collectMapIndexSetIrFeatures(node, features)

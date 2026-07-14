@@ -30,7 +30,6 @@ const compilerCoreRuntimeRequirementIds = [
   'async-runtime',
   'callback-values',
   'collections',
-  'debug-memory',
   'json',
   'managed-values',
   'objects',

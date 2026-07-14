@@ -24,6 +24,23 @@ type DeclarationContractNormalizeResult = {
   defaultExports: DeclarationContractDefaultExport[]
 }
 
+type AmbientNamespaceNode = {
+  name: string
+  typeName: string
+  methods: string[][]
+  namespaceIndexes: number[]
+}
+
+type AmbientNamespaceParseResult = {
+  nodeIndex: number
+  position: number
+}
+
+type AmbientNamespaceNormalizeState = {
+  nextId: number
+  nodes: AmbientNamespaceNode[]
+}
+
 type DeclareConstDeclaration = {
   name: string
   valueType: string
@@ -680,7 +697,7 @@ function normalizeGlobalDeclarationContractSource(
         bodyParts.push(tokenSource(tokenAt(tokens, index)))
       }
 
-      const normalized = normalizeModuleDeclarationContractSource(
+      const normalized = normalizeGlobalDeclarationBlockSource(
         joinParts(bodyParts),
         file,
         diagnostics
@@ -717,6 +734,274 @@ function normalizeGlobalDeclarationContractSource(
   }
 
   return joinParts(parts)
+}
+
+function normalizeGlobalDeclarationBlockSource(
+  source: string,
+  file: string | null,
+  diagnostics: Diagnostic[]
+): DeclarationContractNormalizeResult {
+  const tokens = tokenize(source, {
+    file: declarationContractFileName(file)
+  })
+  const parts: string[] = []
+  const namespaceIndexes: number[] = []
+  const state: AmbientNamespaceNormalizeState = { nextId: 0, nodes: [] }
+  let position = 0
+
+  while (!tokenIs(tokens, position, 'eof', '<eof>')) {
+    const parsed = readAmbientNamespaceDeclaration(tokens, position, state, diagnostics)
+
+    if (parsed !== null) {
+      namespaceIndexes.push(parsed.nodeIndex)
+      position = parsed.position
+      continue
+    }
+
+    parts.push(tokenSource(tokenAt(tokens, position)))
+    position = position + 1
+  }
+
+  for (let index = 0; index < namespaceIndexes.length; index = index + 1) {
+    const node = ambientNamespaceNodeAt(state, namespaceIndexes[index])
+
+    appendAmbientNamespaceSource(parts, state, namespaceIndexes[index])
+    parts.push('const')
+    parts.push(node.name)
+    parts.push(':')
+    parts.push(node.typeName)
+    parts.push(';')
+  }
+
+  return normalizeModuleDeclarationContractSource(joinParts(parts), file, diagnostics)
+}
+
+function readAmbientNamespaceDeclaration(
+  tokens: Token[],
+  position: number,
+  state: AmbientNamespaceNormalizeState,
+  diagnostics: Diagnostic[]
+): AmbientNamespaceParseResult | null {
+  let current = position
+
+  if (tokenValue(tokens, current) === 'export' || tokenValue(tokens, current) === 'declare') {
+    current = current + 1
+  }
+
+  if (tokenValue(tokens, current) !== 'namespace') {
+    return null
+  }
+
+  const namespaceToken = tokenAt(tokens, current)
+  const nameToken = tokenAt(tokens, current + 1)
+
+  if (!isDeclarationLocalNameToken(nameToken)) {
+    diagnostics.push(
+      diagnostic(
+        'INOX_DECLARATION_UNSUPPORTED_NAMESPACE',
+        'ambient namespace declaration requires a simple identifier name',
+        namespaceToken
+      )
+    )
+    return {
+      nodeIndex: pushEmptyAmbientNamespaceNode(state),
+      position: skipToStatementEnd(tokens, current)
+    }
+  }
+
+  current = current + 2
+
+  if (tokenValue(tokens, current) !== '{') {
+    diagnostics.push(
+      diagnostic(
+        'INOX_DECLARATION_UNSUPPORTED_NAMESPACE',
+        `ambient namespace ${nameToken.value} requires a declaration block`,
+        namespaceToken
+      )
+    )
+    return {
+      nodeIndex: pushEmptyAmbientNamespaceNode(state),
+      position: skipToStatementEnd(tokens, current)
+    }
+  }
+
+  const close = findBalancedClose(tokens, current, '{', '}')
+
+  if (tokenValue(tokens, close) !== '}') {
+    diagnostics.push(
+      diagnostic(
+        'INOX_DECLARATION_UNSUPPORTED_NAMESPACE',
+        `ambient namespace ${nameToken.value} has an unclosed declaration block`,
+        namespaceToken
+      )
+    )
+    return {
+      nodeIndex: pushEmptyAmbientNamespaceNode(state),
+      position: close
+    }
+  }
+
+  const node: AmbientNamespaceNode = {
+    name: nameToken.value,
+    typeName: nextAmbientNamespaceTypeName(state),
+    methods: [],
+    namespaceIndexes: []
+  }
+  const nodeIndex = state.nodes.length
+  state.nodes.push(node)
+
+  current = current + 1
+
+  while (current < close && !tokenIs(tokens, current, 'eof', '<eof>')) {
+    if (tokenValue(tokens, current) === ';') {
+      current = current + 1
+      continue
+    }
+
+    const nested = readAmbientNamespaceDeclaration(tokens, current, state, diagnostics)
+
+    if (nested !== null) {
+      node.namespaceIndexes.push(nested.nodeIndex)
+      current = nested.position
+      continue
+    }
+
+    if (isFunctionSignatureStart(tokens, current)) {
+      const method = readAmbientNamespaceFunction(tokens, current, diagnostics)
+
+      if (method !== null) {
+        node.methods.push(method.parts)
+        current = method.position
+        continue
+      }
+    }
+
+    diagnostics.push(
+      diagnostic(
+        'INOX_DECLARATION_UNSUPPORTED_NAMESPACE_MEMBER',
+        'ambient namespace declarations support only nested namespaces and function signatures',
+        tokenAt(tokens, current)
+      )
+    )
+    current = skipToStatementEnd(tokens, current)
+  }
+
+  let nextPosition = close + 1
+
+  if (tokenValue(tokens, nextPosition) === ';') {
+    nextPosition = nextPosition + 1
+  }
+
+  return { nodeIndex, position: nextPosition }
+}
+
+function readAmbientNamespaceFunction(
+  tokens: Token[],
+  position: number,
+  diagnostics: Diagnostic[]
+): { parts: string[]; position: number } | null {
+  const end = findFunctionSignatureEnd(tokens, position)
+
+  if (end === -1) {
+    diagnostics.push(
+      diagnostic(
+        'INOX_DECLARATION_UNSUPPORTED_NAMESPACE_MEMBER',
+        'ambient namespace function requires a declaration signature',
+        tokenAt(tokens, position)
+      )
+    )
+    return null
+  }
+
+  let current = position
+
+  if (tokenValue(tokens, current) === 'export') {
+    current = current + 1
+  }
+
+  if (tokenValue(tokens, current) === 'async') {
+    diagnostics.push(
+      diagnostic(
+        'INOX_DECLARATION_UNSUPPORTED_NAMESPACE_MEMBER',
+        'ambient namespace function uses its return type instead of the async modifier',
+        tokenAt(tokens, current)
+      )
+    )
+    return {
+      parts: [],
+      position: end + 1
+    }
+  }
+
+  current = current + 1
+  const parts: string[] = []
+
+  while (current <= end) {
+    parts.push(tokenSource(tokenAt(tokens, current)))
+    current = current + 1
+  }
+
+  return { parts, position: end + 1 }
+}
+
+function appendAmbientNamespaceSource(
+  parts: string[],
+  state: AmbientNamespaceNormalizeState,
+  nodeIndex: number
+): void {
+  const node = ambientNamespaceNodeAt(state, nodeIndex)
+
+  for (let index = 0; index < node.namespaceIndexes.length; index = index + 1) {
+    appendAmbientNamespaceSource(parts, state, node.namespaceIndexes[index])
+  }
+
+  parts.push('interface')
+  parts.push(node.typeName)
+  parts.push('{')
+
+  for (let index = 0; index < node.namespaceIndexes.length; index = index + 1) {
+    const nested = ambientNamespaceNodeAt(state, node.namespaceIndexes[index])
+
+    parts.push('readonly')
+    parts.push(nested.name)
+    parts.push(':')
+    parts.push(nested.typeName)
+    parts.push(';')
+  }
+
+  for (let methodIndex = 0; methodIndex < node.methods.length; methodIndex = methodIndex + 1) {
+    const method = node.methods[methodIndex]
+
+    for (let partIndex = 0; partIndex < method.length; partIndex = partIndex + 1) {
+      parts.push(method[partIndex])
+    }
+  }
+
+  parts.push('}')
+}
+
+function pushEmptyAmbientNamespaceNode(state: AmbientNamespaceNormalizeState): number {
+  const index = state.nodes.length
+
+  state.nodes.push({
+    name: '__invalid_namespace',
+    typeName: nextAmbientNamespaceTypeName(state),
+    methods: [],
+    namespaceIndexes: []
+  })
+
+  return index
+}
+
+function ambientNamespaceNodeAt(state: AmbientNamespaceNormalizeState, index: number): AmbientNamespaceNode {
+  return state.nodes[index] as AmbientNamespaceNode
+}
+
+function nextAmbientNamespaceTypeName(state: AmbientNamespaceNormalizeState): string {
+  const name = '__inox_ambient_namespace_' + state.nextId
+
+  state.nextId = state.nextId + 1
+  return name
 }
 
 function isEmptyExportMarker(tokens: Token[], position: number): boolean {
