@@ -1,11 +1,18 @@
 import type {
   CompilerLibraryPackageDescriptor,
+  CorePrimitiveType,
   LibraryArgumentCheckDescriptor,
   LibraryCArgumentKind,
+  LibraryCResultMappingDescriptor,
+  LibraryNativeTypeDescriptor,
   LibraryOperationDescriptor,
   LibraryOperationKind,
-  LibraryResultShapeFieldDescriptor
+  LibraryResultShapeFieldDescriptor,
+  NominalTypeRef,
+  PrimitiveTypeRef,
+  TypeRef
 } from '../../../../compiler/extensions/types.ts'
+import { arrayTypeRef } from '../../../global/collections/compiler/index.ts'
 
 const libraryId = 'node:process'
 const runtimeRequirement = 'node:process'
@@ -14,10 +21,13 @@ const argvTypeId = `${libraryId}#ProcessArgv`
 const envTypeId = `${libraryId}#ProcessEnv`
 const versionsTypeId = `${libraryId}#ProcessVersions`
 const memoryUsageTypeId = `${libraryId}#ProcessMemoryUsage`
+const stringTypeRef = primitiveTypeRef('string')
+const numberTypeRef = primitiveTypeRef('number')
+const voidTypeRef = primitiveTypeRef('void')
+const stringResultMapping = cResultMapping('inox::String')
+const valueResultMapping = cResultMapping('inox::Value')
 
-const versionsFields: LibraryResultShapeFieldDescriptor[] = [
-  resultField('node', 'string')
-]
+const versionsFields: LibraryResultShapeFieldDescriptor[] = [resultField('node', 'string')]
 const processFields: LibraryResultShapeFieldDescriptor[] = [
   resultField('version', 'string'),
   {
@@ -29,9 +39,7 @@ const processFields: LibraryResultShapeFieldDescriptor[] = [
     cppType: 'inox::Value'
   }
 ]
-const argvFields: LibraryResultShapeFieldDescriptor[] = [
-  resultField('length', 'number')
-]
+const argvFields: LibraryResultShapeFieldDescriptor[] = [resultField('length', 'number')]
 const memoryUsageFields: LibraryResultShapeFieldDescriptor[] = [
   resultField('rss', 'number'),
   resultField('heapTotal', 'number'),
@@ -41,43 +49,36 @@ const memoryUsageFields: LibraryResultShapeFieldDescriptor[] = [
 ]
 
 const operations: LibraryOperationDescriptor[] = [
-  objectRead('process', 'process', 'inox::Value', processTypeId, processFields, rootBindings()),
-  propertyRead('arch', 'process.arch', 'inox::String', 'string'),
-  objectRead('argv', 'process.argv', 'process_argv', argvTypeId, argvFields),
-  propertyRead('argv.length', 'process.argv.length', 'double', 'number'),
-  propertyRead('argv0', 'process.argv0', 'inox::String', 'string'),
-  objectRead('env', 'process.env', 'process_env', envTypeId, []),
-  propertyRead('execPath', 'process.execPath', 'inox::String', 'string'),
-  propertyRead('exitCode', 'process.exitCode', 'double', 'number'),
-  propertyRead('pid', 'process.pid', 'double', 'number'),
-  propertyRead('platform', 'process.platform', 'inox::String', 'string'),
-  propertyRead('version', 'process.version', 'inox::String', 'string'),
-  objectRead('versions', 'process.versions', 'inox::Value', versionsTypeId, versionsFields),
-  propertyRead('versions.node', 'process.versions.node', 'inox::String', 'string'),
-  callOperation('cwd', [], 'process.cwd', 'inox::String', 'string', 0, 0, []),
-  callOperation('exit', ['optional-number'], 'process.exit', 'void', 'void', 0, 1, [numberArgument()]),
+  objectRead('process', 'process', nominalTypeRef(processTypeId), rootBindings()),
+  propertyRead('arch', 'process.arch', stringTypeRef, stringResultMapping),
+  objectRead('argv', 'process.argv', nominalTypeRef(argvTypeId)),
+  propertyRead('argv.length', 'process.argv.length', numberTypeRef),
+  propertyRead('argv0', 'process.argv0', stringTypeRef, stringResultMapping),
+  objectRead('env', 'process.env', nominalTypeRef(envTypeId)),
+  propertyRead('execPath', 'process.execPath', stringTypeRef, stringResultMapping),
+  propertyRead('exitCode', 'process.exitCode', numberTypeRef),
+  propertyRead('pid', 'process.pid', numberTypeRef),
+  propertyRead('platform', 'process.platform', stringTypeRef, stringResultMapping),
+  propertyRead('version', 'process.version', stringTypeRef, stringResultMapping),
+  objectRead('versions', 'process.versions', nominalTypeRef(versionsTypeId)),
+  propertyRead('versions.node', 'process.versions.node', stringTypeRef, stringResultMapping),
+  callOperation('cwd', [], 'process.cwd', stringTypeRef, 0, 0, [], {
+    cResultMapping: stringResultMapping
+  }),
+  callOperation('exit', ['optional-number'], 'process.exit', voidTypeRef, 0, 1, [numberArgument()]),
   callOperation(
     'hrtime',
     ['optional-argument'],
     'process.hrtime',
-    'inox::Value',
-    'array',
+    arrayTypeRef(numberTypeRef),
     0,
     1,
     [arrayArgument()],
-    { resultArrayElementType: 'number' }
+    { cResultMapping: valueResultMapping }
   ),
-  callOperation(
-    'memoryUsage',
-    [],
-    'process.memoryUsage',
-    'inox::Value',
-    'object',
-    0,
-    0,
-    [],
-    { resultTypeId: memoryUsageTypeId, resultShapeFields: memoryUsageFields }
-  ),
+  callOperation('memoryUsage', [], 'process.memoryUsage', nominalTypeRef(memoryUsageTypeId), 0, 0, [], {
+    cFailureMode: 'thrown'
+  }),
   {
     libraryId,
     bindingId: moduleBinding('exitCode'),
@@ -92,10 +93,7 @@ const operations: LibraryOperationDescriptor[] = [
     minArgs: 1,
     maxArgs: 1,
     argumentChecks: [numberArgument()],
-    cppType: 'double',
-    valueType: 'number',
-    owned: false,
-    nullable: false
+    resultTypeRef: numberTypeRef
   },
   {
     libraryId,
@@ -110,10 +108,8 @@ const operations: LibraryOperationDescriptor[] = [
     minArgs: 1,
     maxArgs: 1,
     argumentChecks: [numberArgument()],
-    cppType: 'inox::String',
-    valueType: 'string',
-    owned: false,
-    nullable: false
+    resultTypeRef: stringTypeRef,
+    cResultMapping: stringResultMapping
   },
   {
     libraryId,
@@ -125,10 +121,8 @@ const operations: LibraryOperationDescriptor[] = [
     cExpression: 'operator[]',
     cArgumentKinds: ['receiver', 'member-name-string-view'],
     cCallStyle: 'index',
-    cppType: 'inox::String',
-    valueType: 'string',
-    owned: false,
-    nullable: false
+    resultTypeRef: stringTypeRef,
+    cResultMapping: stringResultMapping
   },
   {
     libraryId,
@@ -143,22 +137,27 @@ const operations: LibraryOperationDescriptor[] = [
     minArgs: 1,
     maxArgs: 1,
     argumentChecks: [{ valueTypes: ['string'] }],
-    cppType: 'inox::String',
-    valueType: 'string',
-    owned: false,
-    nullable: false
+    resultTypeRef: stringTypeRef,
+    cResultMapping: stringResultMapping
   },
-  receiverMemberRead(processTypeId, 'version', 'string', 'inox::String'),
-  receiverObjectRead(processTypeId, 'versions', versionsTypeId, versionsFields),
-  receiverMemberRead(versionsTypeId, 'node', 'string', 'inox::String'),
-  receiverMemberRead(argvTypeId, 'length', 'number', 'double'),
+  receiverMemberRead(processTypeId, 'version', stringTypeRef, stringResultMapping),
+  receiverMemberRead(processTypeId, 'versions', nominalTypeRef(versionsTypeId)),
+  receiverMemberRead(versionsTypeId, 'node', stringTypeRef, stringResultMapping),
+  receiverMemberRead(argvTypeId, 'length', numberTypeRef),
   ...unsupportedMethods().map((name) => unsupportedOperation(name, 'call')),
   ...unsupportedProperties().map((name) => unsupportedOperation(name, 'member-read'))
 ]
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: [],
+  dependencies: ['global:collections'],
+  nativeTypes: [
+    nativeType(processTypeId, ['ProcessModule'], 'inox::Value', processFields),
+    nativeType(argvTypeId, ['ProcessArgv'], 'process_argv', argvFields),
+    nativeType(envTypeId, ['ProcessEnv'], 'process_env', []),
+    nativeType(versionsTypeId, ['ProcessVersions'], 'inox::Value', versionsFields),
+    nativeType(memoryUsageTypeId, ['ProcessMemoryUsage'], 'inox::Value', memoryUsageFields)
+  ],
   operations,
   intrinsicBindings: [],
   runtimeRequirements: [
@@ -176,17 +175,15 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
 }
 
 type CallResultOptions = {
-  resultArrayElementType?: string
-  resultTypeId?: string
-  resultShapeFields?: LibraryResultShapeFieldDescriptor[]
+  cResultMapping?: LibraryCResultMappingDescriptor
+  cFailureMode?: LibraryOperationDescriptor['cFailureMode']
 }
 
 function callOperation(
   name: string,
   cArgumentKinds: LibraryCArgumentKind[],
   cExpression: string,
-  cppType: string,
-  valueType: string,
+  resultTypeRef: TypeRef,
   minArgs: number,
   maxArgs: number,
   argumentChecks: LibraryArgumentCheckDescriptor[],
@@ -201,26 +198,21 @@ function callOperation(
     runtimeRequirements: [runtimeRequirement],
     cExpression,
     cArgumentKinds,
-    resultShapeFields: options.resultShapeFields,
-    resultArrayElementType: options.resultArrayElementType,
-    resultTypeId: options.resultTypeId,
+    resultTypeRef,
+    cResultMapping: options.cResultMapping,
     cCallStyle: 'function',
-    cFailureMode: valueType === 'object' ? 'thrown' : null,
+    cFailureMode: options.cFailureMode ?? null,
     minArgs,
     maxArgs,
-    argumentChecks,
-    cppType,
-    valueType,
-    owned: false,
-    nullable: false
+    argumentChecks
   }
 }
 
 function propertyRead(
   name: string,
   cExpression: string,
-  cppType: string,
-  valueType: string
+  resultTypeRef: TypeRef,
+  cResultMapping?: LibraryCResultMappingDescriptor
 ): LibraryOperationDescriptor {
   return {
     libraryId,
@@ -230,19 +222,15 @@ function propertyRead(
     kind: 'member-read',
     runtimeRequirements: [runtimeRequirement],
     cExpression,
-    cppType,
-    valueType,
-    owned: false,
-    nullable: false
+    resultTypeRef,
+    cResultMapping
   }
 }
 
 function objectRead(
   name: string,
   cExpression: string,
-  cppType: string,
-  resultTypeId: string,
-  resultShapeFields: LibraryResultShapeFieldDescriptor[],
+  resultTypeRef: NominalTypeRef,
   bindingAliases?: string[]
 ): LibraryOperationDescriptor {
   return {
@@ -253,20 +241,15 @@ function objectRead(
     kind: 'member-read',
     runtimeRequirements: [runtimeRequirement],
     cExpression,
-    resultTypeId,
-    resultShapeFields,
-    cppType,
-    valueType: 'object',
-    owned: false,
-    nullable: false
+    resultTypeRef
   }
 }
 
 function receiverMemberRead(
   receiverTypeId: string,
   name: string,
-  valueType: string,
-  cppType: string
+  resultTypeRef: TypeRef,
+  cResultMapping?: LibraryCResultMappingDescriptor
 ): LibraryOperationDescriptor {
   return {
     libraryId,
@@ -276,24 +259,52 @@ function receiverMemberRead(
     runtimeRequirements: [runtimeRequirement],
     receiverTypeId,
     cExpression: null,
-    cppType,
-    valueType,
-    owned: false,
-    nullable: false
+    resultTypeRef,
+    cResultMapping
   }
 }
 
-function receiverObjectRead(
-  receiverTypeId: string,
-  name: string,
-  resultTypeId: string,
-  resultShapeFields: LibraryResultShapeFieldDescriptor[]
-): LibraryOperationDescriptor {
+function nativeType(
+  typeId: string,
+  declarationNames: string[],
+  cppType: string,
+  fields: LibraryResultShapeFieldDescriptor[]
+): LibraryNativeTypeDescriptor {
   return {
-    ...receiverMemberRead(receiverTypeId, name, 'object', 'inox::Value'),
-    resultTypeId,
-    resultShapeFields
+    libraryId,
+    typeId,
+    declarationNames,
+    valueType: 'object',
+    cppType,
+    baseTypeIds: [],
+    runtimeRequirements: [runtimeRequirement],
+    fields
   }
+}
+
+function primitiveTypeRef(name: CorePrimitiveType): PrimitiveTypeRef {
+  return {
+    kind: 'primitive',
+    name,
+    nullable: false,
+    ownership: 'value',
+    traits: []
+  }
+}
+
+function nominalTypeRef(typeId: string): NominalTypeRef {
+  return {
+    kind: 'nominal',
+    typeId,
+    args: [],
+    nullable: false,
+    ownership: 'value',
+    traits: []
+  }
+}
+
+function cResultMapping(cppType: string): LibraryCResultMappingDescriptor {
+  return { cppType, fields: [] }
 }
 
 function unsupportedOperation(name: string, kind: LibraryOperationKind): LibraryOperationDescriptor {
@@ -342,10 +353,7 @@ function memberBindingAliases(name: string): string[] {
 }
 
 function rootBindings(): string[] {
-  return [
-    `${libraryId}#module:${libraryId}:process`,
-    'global:process'
-  ]
+  return [`${libraryId}#module:${libraryId}:process`, 'global:process']
 }
 
 function receiverBinding(receiverTypeId: string, name: string): string {
