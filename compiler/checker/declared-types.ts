@@ -363,6 +363,7 @@ function libraryNativeTypeField(
     name: field.name,
     valueType: field.valueType,
     readonly: field.readonly,
+    nullable: field.nullable ?? false,
     libraryCMember: field.cMember ?? null,
     libraryCppType: field.cppType ?? null,
     loc
@@ -382,6 +383,7 @@ function libraryNativeTypeField(
         name: nestedField.name,
         valueType: nestedField.valueType,
         readonly: nestedField.readonly,
+        nullable: nestedField.nullable ?? false,
         libraryCMember: nestedField.cMember ?? null,
         libraryCppType: nestedField.cppType ?? null,
         loc

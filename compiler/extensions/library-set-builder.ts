@@ -1471,6 +1471,7 @@ function resultShapeFieldsFingerprint(
     const nestedFields = field.resultShapeFields
     rows.push(
       `${field.name}=${field.valueType}:${field.readonly ? 'readonly' : 'mutable'}:` +
+        `${field.nullable ? 'nullable' : 'required'}:` +
         `${field.cMember ?? ''}:${field.resultTypeId ?? ''}:${field.cppType ?? ''}:` +
         (nestedFields === null || typeof nestedFields === 'undefined'
           ? ''
@@ -1490,6 +1491,7 @@ function nestedResultShapeFieldsFingerprint(
     const field = fields[index]
     rows.push(
       `${field.name}=${field.valueType}:${field.readonly ? 'readonly' : 'mutable'}:` +
+        `${field.nullable ? 'nullable' : 'required'}:` +
         `${field.cMember ?? ''}:${field.resultTypeId ?? ''}:${field.cppType ?? ''}`
     )
   }

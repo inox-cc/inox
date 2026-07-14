@@ -205,6 +205,7 @@ export type LibraryResultShapeFieldDescriptor = {
   name: string
   valueType: string
   readonly: boolean
+  nullable?: boolean
   cMember?: string | null
   resultTypeId?: LibraryObjectTypeId | null
   resultShapeFields?: LibraryNestedResultShapeFieldDescriptor[]
@@ -215,6 +216,7 @@ export type LibraryNestedResultShapeFieldDescriptor = {
   name: string
   valueType: string
   readonly: boolean
+  nullable?: boolean
   cMember?: string | null
   resultTypeId?: LibraryObjectTypeId | null
   cppType?: string | null

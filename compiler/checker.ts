@@ -4606,6 +4606,7 @@ class Checker {
       name: field.name,
       valueType: field.valueType,
       readonly: field.readonly,
+      nullable: field.nullable ?? false,
       libraryCMember: field.cMember ?? null,
       libraryCppType: field.cppType ?? null,
       loc
