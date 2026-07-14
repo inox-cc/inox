@@ -3,7 +3,8 @@ import type {
   LibraryArgumentCheckDescriptor,
   LibraryCArgumentKind,
   LibraryOperationDescriptor,
-  LibraryOperationVariantDescriptor
+  LibraryOperationVariantDescriptor,
+  TypeRef
 } from '../../../../compiler/extensions/types.ts'
 
 const libraryId = 'node:dgram'
@@ -12,25 +13,30 @@ const socketTypeId = `${libraryId}#Socket`
 const addressTypeId = `${libraryId}#AddressInfo`
 const remoteInfoTypeId = `${libraryId}#RemoteInfo`
 const runtimeRequirements = [runtimeRequirement]
+const socketValueTypeRef = nominalTypeRef(socketTypeId, 'value')
+const socketBorrowedTypeRef = nominalTypeRef(socketTypeId, 'borrowed')
+const addressTypeRef = nominalTypeRef(addressTypeId, 'value')
+const numberTypeRef = primitiveTypeRef('number')
+const voidTypeRef = primitiveTypeRef('void')
 
 const operations: LibraryOperationDescriptor[] = [
   createSocketOperation(),
-  socketResultOperation('address', 'DgramAddress', 'object', addressTypeId),
+  socketResultOperation('address', addressTypeRef),
   bindOperation(),
   closeOperation(),
   connectOperation(),
-  socketResultOperation('disconnect', 'DgramSocket', 'object', socketTypeId, true),
-  socketResultOperation('getRecvBufferSize', 'double', 'number'),
-  socketResultOperation('getSendBufferSize', 'double', 'number'),
+  socketResultOperation('disconnect', socketBorrowedTypeRef, true),
+  socketResultOperation('getRecvBufferSize', numberTypeRef),
+  socketResultOperation('getSendBufferSize', numberTypeRef),
   onOperation(),
-  socketResultOperation('ref', 'DgramSocket', 'object', socketTypeId, true),
-  socketResultOperation('remoteAddress', 'DgramAddress', 'object', addressTypeId),
+  socketResultOperation('ref', socketBorrowedTypeRef, true),
+  socketResultOperation('remoteAddress', addressTypeRef),
   sendOperation(),
   scalarSocketOperation('setBroadcast', 'number', booleanArgument()),
   scalarSocketOperation('setRecvBufferSize', 'number', numberArgument()),
   scalarSocketOperation('setSendBufferSize', 'number', numberArgument()),
   scalarSocketOperation('setTTL', 'number', numberArgument()),
-  socketResultOperation('unref', 'DgramSocket', 'object', socketTypeId, true)
+  socketResultOperation('unref', socketBorrowedTypeRef, true)
 ]
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
@@ -76,14 +82,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: [
-        'async-runtime',
-        'callback-values',
-        'managed-values',
-        'node:buffer',
-        'objects',
-        'string-bytes'
-      ],
+      dependencies: ['async-runtime', 'callback-values', 'managed-values', 'node:buffer', 'objects', 'string-bytes'],
       cPreludeIncludes: ['inox/dgram.h'],
       capabilities: ['udp'],
       backendConstraints: [
@@ -113,98 +112,100 @@ function createSocketOperation(): LibraryOperationDescriptor {
     maxArgs: 2,
     argumentChecks: [socketOptionsArgument(), messageCallbackArgument()],
     variants: [
-      callVariant(1, 1, ['string-view'], 'DgramSocket', 'object', {
+      callVariant(1, 1, ['string-view'], {
         argumentIndex: 0,
-        argumentValueTypes: ['string'],
-        resultTypeId: socketTypeId
+        argumentValueTypes: ['string']
       }),
-      callVariant(2, 2, ['string-view', 'runtime-callback'], 'DgramSocket', 'object', {
+      callVariant(2, 2, ['string-view', 'runtime-callback'], {
         argumentIndex: 0,
         argumentValueTypes: ['string'],
         cArgumentSources: [null, { argumentIndex: 1 }],
-        resultTypeId: socketTypeId,
         callbackLifetime: 'event-loop'
       }),
-      callVariant(1, 1, ['value'], 'DgramSocket', 'object', {
+      callVariant(1, 1, ['value'], {
         argumentIndex: 0,
         argumentValueTypes: ['object'],
-        cArgumentAdapters: ['DgramSocketOptions($value)'],
-        resultTypeId: socketTypeId
+        cArgumentAdapters: ['DgramSocketOptions($value)']
       }),
-      callVariant(2, 2, ['value', 'runtime-callback'], 'DgramSocket', 'object', {
+      callVariant(2, 2, ['value', 'runtime-callback'], {
         argumentIndex: 0,
         argumentValueTypes: ['object'],
         cArgumentAdapters: ['DgramSocketOptions($value)'],
         cArgumentSources: [null, { argumentIndex: 1 }],
-        resultTypeId: socketTypeId,
         callbackLifetime: 'event-loop'
       })
     ],
-    resultTypeId: socketTypeId,
-    cppType: 'DgramSocket',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    resultTypeRef: socketValueTypeRef
   }
 }
 
 function bindOperation(): LibraryOperationDescriptor {
-  return receiverVariants('bind', 0, 3, [
-    { valueTypes: ['number', 'object'] },
-    { valueTypes: ['string', 'function'] },
-    callbackArgument()
-  ], [
-    memberVariant(0, 0, ['receiver']),
-    memberVariant(1, 1, ['receiver', 'number'], {
-      argumentIndex: 0,
-      argumentValueTypes: ['number']
-    }),
-    memberVariant(1, 1, ['receiver', 'value'], {
-      argumentIndex: 0,
-      argumentValueTypes: ['object'],
-      cArgumentAdapters: ['DgramBindOptions($value)']
-    }),
-    memberVariant(2, 2, ['receiver', 'number', 'string-view'], {
-      argumentIndex: 0,
-      argumentValueTypes: ['number']
-    }),
-    memberVariant(2, 2, ['receiver', 'value', 'runtime-callback'], {
-      argumentIndex: 0,
-      argumentValueTypes: ['object'],
-      cArgumentAdapters: ['DgramBindOptions($value)', ''],
-      cArgumentSources: [null, null, { argumentIndex: 1 }],
-      callbackLifetime: 'event-loop'
-    }),
-    memberVariant(3, 3, ['receiver', 'number', 'string-view', 'runtime-callback'], {
-      cArgumentSources: [null, null, null, { argumentIndex: 2 }],
-      callbackLifetime: 'event-loop'
-    })
-  ])
+  return receiverVariants(
+    'bind',
+    0,
+    3,
+    [{ valueTypes: ['number', 'object'] }, { valueTypes: ['string', 'function'] }, callbackArgument()],
+    [
+      memberVariant(0, 0, ['receiver']),
+      memberVariant(1, 1, ['receiver', 'number'], {
+        argumentIndex: 0,
+        argumentValueTypes: ['number']
+      }),
+      memberVariant(1, 1, ['receiver', 'value'], {
+        argumentIndex: 0,
+        argumentValueTypes: ['object'],
+        cArgumentAdapters: ['DgramBindOptions($value)']
+      }),
+      memberVariant(2, 2, ['receiver', 'number', 'string-view'], {
+        argumentIndex: 0,
+        argumentValueTypes: ['number']
+      }),
+      memberVariant(2, 2, ['receiver', 'value', 'runtime-callback'], {
+        argumentIndex: 0,
+        argumentValueTypes: ['object'],
+        cArgumentAdapters: ['DgramBindOptions($value)', ''],
+        cArgumentSources: [null, null, { argumentIndex: 1 }],
+        callbackLifetime: 'event-loop'
+      }),
+      memberVariant(3, 3, ['receiver', 'number', 'string-view', 'runtime-callback'], {
+        cArgumentSources: [null, null, null, { argumentIndex: 2 }],
+        callbackLifetime: 'event-loop'
+      })
+    ]
+  )
 }
 
 function closeOperation(): LibraryOperationDescriptor {
-  return receiverVariants('close', 0, 1, [callbackArgument()], [
-    memberVariant(0, 0, ['receiver']),
-    memberVariant(1, 1, ['receiver', 'runtime-callback'], {
-      cArgumentSources: [null, { argumentIndex: 0 }],
-      callbackLifetime: 'event-loop'
-    })
-  ])
+  return receiverVariants(
+    'close',
+    0,
+    1,
+    [callbackArgument()],
+    [
+      memberVariant(0, 0, ['receiver']),
+      memberVariant(1, 1, ['receiver', 'runtime-callback'], {
+        cArgumentSources: [null, { argumentIndex: 0 }],
+        callbackLifetime: 'event-loop'
+      })
+    ]
+  )
 }
 
 function connectOperation(): LibraryOperationDescriptor {
-  return receiverVariants('connect', 1, 3, [
-    numberArgument(),
-    stringArgument(),
-    callbackArgument()
-  ], [
-    memberVariant(1, 1, ['receiver', 'number']),
-    memberVariant(2, 2, ['receiver', 'number', 'string-view']),
-    memberVariant(3, 3, ['receiver', 'number', 'string-view', 'runtime-callback'], {
-      cArgumentSources: [null, null, null, { argumentIndex: 2 }],
-      callbackLifetime: 'event-loop'
-    })
-  ])
+  return receiverVariants(
+    'connect',
+    1,
+    3,
+    [numberArgument(), stringArgument(), callbackArgument()],
+    [
+      memberVariant(1, 1, ['receiver', 'number']),
+      memberVariant(2, 2, ['receiver', 'number', 'string-view']),
+      memberVariant(3, 3, ['receiver', 'number', 'string-view', 'runtime-callback'], {
+        cArgumentSources: [null, null, null, { argumentIndex: 2 }],
+        callbackLifetime: 'event-loop'
+      })
+    ]
+  )
 }
 
 function onOperation(): LibraryOperationDescriptor {
@@ -216,11 +217,7 @@ function onOperation(): LibraryOperationDescriptor {
     minArgs: 2,
     maxArgs: 2,
     argumentChecks: [messageEventArgument(), messageCallbackArgument()],
-    resultTypeId: socketTypeId,
-    cppType: 'DgramSocket',
-    valueType: 'object',
-    nullable: false,
-    owned: false,
+    resultTypeRef: socketBorrowedTypeRef,
     callbackLifetime: 'event-loop'
   }
 }
@@ -248,10 +245,7 @@ function sendOperation(): LibraryOperationDescriptor {
       sendCallbackArgument()
     ],
     variants,
-    cppType: 'void',
-    valueType: 'void',
-    nullable: false,
-    owned: false
+    resultTypeRef: voidTypeRef
   }
 }
 
@@ -299,10 +293,6 @@ function sendVariant(
     cArgumentAdapters: adapters,
     cArgumentSources: sources,
     cResultMode: null,
-    cppType: 'void',
-    valueType: 'void',
-    nullable: false,
-    owned: false,
     callbackLifetime: callback ? 'event-loop' : null
   }
 }
@@ -319,19 +309,13 @@ function scalarSocketOperation(
     minArgs: 1,
     maxArgs: 1,
     argumentChecks: [argumentCheck],
-    resultTypeId: socketTypeId,
-    cppType: 'DgramSocket',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    resultTypeRef: socketBorrowedTypeRef
   }
 }
 
 function socketResultOperation(
   name: string,
-  cppType: string,
-  valueType: string,
-  resultTypeId?: string,
+  resultTypeRef: TypeRef,
   borrowed: boolean = false
 ): LibraryOperationDescriptor {
   return {
@@ -341,11 +325,7 @@ function socketResultOperation(
     minArgs: 0,
     maxArgs: 0,
     argumentChecks: [],
-    resultTypeId,
-    cppType,
-    valueType,
-    nullable: false,
-    owned: false
+    resultTypeRef
   }
 }
 
@@ -362,11 +342,7 @@ function receiverVariants(
     maxArgs,
     argumentChecks,
     variants,
-    resultTypeId: socketTypeId,
-    cppType: 'DgramSocket',
-    valueType: 'object',
-    nullable: false,
-    owned: false
+    resultTypeRef: socketBorrowedTypeRef
   }
 }
 
@@ -389,7 +365,6 @@ type VariantOptions = {
   argumentValueTypes?: string[]
   cArgumentAdapters?: string[]
   cArgumentSources?: Array<{ argumentIndex: number } | null>
-  resultTypeId?: string
   callbackLifetime?: 'call' | 'event-loop'
 }
 
@@ -397,8 +372,6 @@ function callVariant(
   minArgs: number,
   maxArgs: number,
   cArgumentKinds: LibraryCArgumentKind[],
-  cppType: string,
-  valueType: string,
   options: VariantOptions = {}
 ): LibraryOperationVariantDescriptor {
   return {
@@ -410,11 +383,6 @@ function callVariant(
     cArgumentKinds,
     cArgumentAdapters: options.cArgumentAdapters,
     cArgumentSources: options.cArgumentSources,
-    resultTypeId: options.resultTypeId,
-    cppType,
-    valueType,
-    nullable: false,
-    owned: false,
     callbackLifetime: options.callbackLifetime
   }
 }
@@ -434,12 +402,28 @@ function memberVariant(
     cArgumentAdapters: options.cArgumentAdapters,
     cArgumentSources: options.cArgumentSources,
     cResultMode: 'borrowed',
-    resultTypeId: socketTypeId,
-    cppType: 'DgramSocket',
-    valueType: 'object',
-    nullable: false,
-    owned: false,
     callbackLifetime: options.callbackLifetime
+  }
+}
+
+function nominalTypeRef(typeId: string, ownership: 'borrowed' | 'value'): TypeRef {
+  return {
+    kind: 'nominal',
+    typeId,
+    args: [],
+    nullable: false,
+    ownership,
+    traits: []
+  }
+}
+
+function primitiveTypeRef(name: 'number' | 'void'): TypeRef {
+  return {
+    kind: 'primitive',
+    name,
+    nullable: false,
+    ownership: 'value',
+    traits: []
   }
 }
 

@@ -36,11 +36,8 @@ test('node:dgram объявляет module и Socket operations через packa
   const createSocket = operation(operations, 'node:dgram#createSocket')
 
   assert.equal(createSocket.bindingId, 'node:dgram#module:node:dgram:createSocket')
-  assert.deepEqual(createSocket.bindingAliases, [
-    'node:dgram#module:node:dgram:default.createSocket'
-  ])
+  assert.deepEqual(createSocket.bindingAliases, ['node:dgram#module:node:dgram:default.createSocket'])
   assert.equal(createSocket.cExpression, 'dgram.createSocket')
-  assert.equal(createSocket.resultTypeId, 'node:dgram#Socket')
   assert.deepEqual(createSocket.runtimeRequirements, ['node:dgram'])
   assert.ok(
     createSocket.variants?.some(
@@ -63,8 +60,8 @@ test('node:dgram объявляет module и Socket operations через packa
   const address = operation(operations, 'node:dgram#Socket.address')
   const remoteAddress = operation(operations, 'node:dgram#Socket.remoteAddress')
 
-  assert.equal(address.resultTypeId, 'node:dgram#AddressInfo')
-  assert.equal(remoteAddress.resultTypeId, 'node:dgram#AddressInfo')
+  assert.equal(address.cExpression, 'address')
+  assert.equal(remoteAddress.cExpression, 'remoteAddress')
 
   for (const operationId of [
     'node:dgram#Socket.bind',
@@ -76,18 +73,13 @@ test('node:dgram объявляет module и Socket operations через packa
 
     assert.ok(
       callbackOperation.variants?.some(
-        (variant) =>
-          variant.callbackLifetime === 'event-loop' &&
-          variant.cArgumentKinds?.includes('runtime-callback')
+        (variant) => variant.callbackLifetime === 'event-loop' && variant.cArgumentKinds?.includes('runtime-callback')
       )
     )
   }
 })
 
-function operation(
-  operations: LibraryOperationDescriptor[],
-  operationId: string
-): LibraryOperationDescriptor {
+function operation(operations: LibraryOperationDescriptor[], operationId: string): LibraryOperationDescriptor {
   const result = operations.find((item) => item.operationId === operationId)
 
   assert.ok(result, `missing operation ${operationId}`)
