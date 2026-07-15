@@ -735,6 +735,9 @@ class Checker {
 
   applyResolvedTypeInfoToSymbol(symbol: SymbolInfo, info: ResolvedTypeInfo): void {
     symbol.valueType = info.valueType
+    if (info.typeRef) {
+      symbol.typeRef = info.typeRef
+    }
     symbol.nullable = info.nullable
     symbol.arrayElementType = info.arrayElementType
     symbol.arrayElementDeclaredType = info.arrayElementDeclaredType
@@ -1817,6 +1820,7 @@ class Checker {
 
       expression.nullable = false
       expression.valueType = valueType
+      expression.typeRef = null
       expression.shape = null
       expression.className = null
 
@@ -1824,6 +1828,7 @@ class Checker {
         valueType = symbol.valueType
         expression.nullable = symbol.nullable === true
         expression.valueType = valueType
+        expression.typeRef = symbol.typeRef ?? null
 
         if (symbol.shape !== null && typeof symbol.shape !== 'undefined') {
           expression.shape = symbol.shape
@@ -1845,6 +1850,7 @@ class Checker {
 
       expression.nullable = false
       expression.valueType = valueType
+      expression.typeRef = null
       expression.arrayElementType = null
       expression.arrayElementDeclaredType = null
       expression.arrayElementFunctionType = null
@@ -1868,6 +1874,7 @@ class Checker {
         valueType = this.narrowedValueTypes.get(path[0]) ?? symbol.valueType
         expression.nullable = symbol.nullable === true && !this.narrowedNullableNames.has(path[0])
         expression.valueType = valueType
+        expression.typeRef = symbol.typeRef ?? null
         expression.narrowingTrueNames = symbol.narrowingTrueNames ?? []
         expression.narrowingFalseNames = symbol.narrowingFalseNames ?? []
 

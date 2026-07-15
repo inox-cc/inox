@@ -2,8 +2,10 @@ import {
   compilerLibraryIntrinsicRoleForTypeId,
   compilerLibraryNativeTypeForId
 } from './library-set.ts'
+import { instantiateNativeTypeTraits } from './type-ref-substitution.ts'
 import type {
   CompilerLibrarySet,
+  ConcreteTypeRef,
   IntrinsicRole,
   LibraryCResultFieldMappingDescriptor,
   LibraryCResultMappingDescriptor,
@@ -38,15 +40,55 @@ export function typeRefCompatibilityMetadata(
   loc: SourceLocation,
   cResultMapping: LibraryCResultMappingDescriptor | null = null
 ): TypeRefCompatibilityMetadata {
+  if (typeRef.kind === 'parameter') {
+    throw new Error(`unresolved TypeRef parameter ${typeRef.name}`)
+  }
+
   const metadata = baseTypeRefCompatibilityMetadata(typeRef, libraries, loc)
 
-  applyTypeTraits(metadata, typeRef.traits, libraries, loc)
+  applyTypeTraits(metadata, effectiveTypeTraits(typeRef, libraries), libraries, loc)
   applyCResultMapping(metadata, cResultMapping)
   return metadata
 }
 
+function effectiveTypeTraits(typeRef: ConcreteTypeRef, libraries: CompilerLibrarySet): TypeTraitRef[] {
+  if (typeRef.kind !== 'nominal') {
+    return typeRef.traits
+  }
+
+  const nativeType = compilerLibraryNativeTypeForId(libraries, typeRef.typeId)
+
+  if (nativeType === null) {
+    return typeRef.traits
+  }
+
+  const traitTemplates = nativeType.traits ?? []
+
+  if (traitTemplates.length === 0) {
+    return typeRef.traits
+  }
+
+  const result: TypeTraitRef[] = []
+  const explicitTraitIds: Set<string> = new Set<string>()
+
+  for (let index = 0; index < typeRef.traits.length; index = index + 1) {
+    result.push(typeRef.traits[index])
+    explicitTraitIds.add(typeRef.traits[index].traitId)
+  }
+
+  const nativeTraits = instantiateNativeTypeTraits(nativeType, typeRef.args)
+
+  for (let index = 0; index < nativeTraits.length; index = index + 1) {
+    if (!explicitTraitIds.has(nativeTraits[index].traitId)) {
+      result.push(nativeTraits[index])
+    }
+  }
+
+  return result
+}
+
 function baseTypeRefCompatibilityMetadata(
-  typeRef: TypeRef,
+  typeRef: ConcreteTypeRef,
   libraries: CompilerLibrarySet,
   loc: SourceLocation
 ): TypeRefCompatibilityMetadata {

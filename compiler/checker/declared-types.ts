@@ -50,7 +50,9 @@ import type {
 } from './resolved-types.ts'
 import { mergeShapeFields } from './helpers.ts'
 import { compilerLibraryNativeTypeForName } from '../extensions/library-set.ts'
-import type { CompilerLibrarySet, TypeOwnership, TypeRef } from '../extensions/types.ts'
+import { instantiateNativeTypeRef } from '../extensions/type-ref-substitution.ts'
+import { typeRefCompatibilityMetadata } from '../extensions/type-ref-compatibility.ts'
+import type { CompilerLibrarySet, CorePrimitiveType, TypeOwnership, TypeRef } from '../extensions/types.ts'
 import type { LibraryResultShapeFieldDescriptor } from '../extensions/types.ts'
 
 export type DeclaredTypeResolverContext = {
@@ -463,11 +465,98 @@ function resolveGenericDeclaredType(
       resolved.shape = resolveObjectShape(child, definition)
     }
 
+    applyGenericNativeType(context, applicationName, argumentNames, resolved, loc)
     context.resolvedDeclaredTypes.set(applicationName, cloneResolvedTypeInfo(resolved))
     return resolved
   } finally {
     context.resolvingDeclaredTypes.delete(applicationName)
   }
+}
+
+function applyGenericNativeType(
+  context: DeclaredTypeResolverContext,
+  applicationName: string,
+  argumentNames: string[],
+  resolved: ResolvedTypeInfo,
+  loc: SourceLocation
+): void {
+  const application = genericTypeApplicationFromTypeName(applicationName)
+
+  if (application === null) {
+    return
+  }
+
+  const nativeType = compilerLibraryNativeTypeForName(context.libraries, application.name)
+
+  if (nativeType === null || nativeType.typeParameters === null || typeof nativeType.typeParameters === 'undefined') {
+    return
+  }
+
+  const typeArguments: TypeRef[] = []
+
+  for (let index = 0; index < argumentNames.length; index = index + 1) {
+    typeArguments.push(typeRefFromResolvedType(resolveDeclaredType(context, argumentNames[index], loc)))
+  }
+
+  const typeRef = instantiateNativeTypeRef(nativeType, typeArguments)
+  const metadata = typeRefCompatibilityMetadata(typeRef, context.libraries, loc)
+
+  resolved.valueType = metadata.valueType
+  resolved.typeRef = typeRef
+  resolved.arrayElementType = metadata.arrayElementType
+  resolved.arrayElementDeclaredType = metadata.arrayElementDeclaredType
+  resolved.mapKeyType = metadata.mapKeyType
+  resolved.mapValueType = metadata.mapValueType
+  resolved.promiseValueType = metadata.promiseValueType
+  resolved.setElementType = metadata.setElementType
+
+  if (resolved.shape === null) {
+    resolved.shape = metadata.shape
+  } else {
+    resolved.shape.baseTypes = nativeType.baseTypeIds
+    resolved.shape.libraryTypeId = nativeType.typeId
+    resolved.shape.libraryCppType = nativeType.cppType
+  }
+}
+
+function typeRefFromResolvedType(info: ResolvedTypeInfo): TypeRef {
+  if (info.typeRef !== null) {
+    return info.typeRef
+  }
+
+  const primitive = corePrimitiveTypeName(info.valueType)
+
+  if (primitive !== null) {
+    return {
+      kind: 'primitive',
+      name: primitive,
+      nullable: info.nullable,
+      ownership: 'value',
+      traits: []
+    }
+  }
+
+  return {
+    kind: 'unknown',
+    nullable: info.nullable,
+    ownership: 'value',
+    traits: []
+  }
+}
+
+function corePrimitiveTypeName(valueType: ValueType): CorePrimitiveType | null {
+  if (
+    valueType === 'boolean' ||
+    valueType === 'bytes' ||
+    valueType === 'null' ||
+    valueType === 'number' ||
+    valueType === 'string' ||
+    valueType === 'void'
+  ) {
+    return valueType
+  }
+
+  return null
 }
 
 function resolveIndexedAccessDeclaredType(
@@ -630,7 +719,7 @@ function resolveDeclaredFunctionAlias(
 
   try {
     const returnInfo = resolveDeclaredType(context, shape.returnType, loc)
-    const params = resolveFunctionTypeParams(context, shape.params)
+    const params = resolveFunctionTypeParams(context, shape.params, loc)
     const resolved = unresolvedTypeInfo()
     let returnPromiseValueType: ValueType | null = null
 
@@ -664,13 +753,15 @@ function resolveDeclaredFunctionAlias(
 
 function resolveFunctionTypeParams(
   context: DeclaredTypeResolverContext,
-  params: AnyNode[]
+  params: AnyNode[],
+  loc: SourceLocation
 ): FunctionTypeParamMetadata[] {
   const resolvedParams: FunctionTypeParamMetadata[] = []
 
   for (const param of params) {
     const declaredType = nodeDeclaredTypeOrValueType(param)
-    const paramInfo = resolveDeclaredType(context, declaredType, param.loc)
+    const paramLoc: SourceLocation = param.loc ?? loc
+    const paramInfo = resolveDeclaredType(context, declaredType, paramLoc)
     let paramPromiseValueType: ValueType | null = null
 
     if (paramInfo.promiseValueType !== null && typeof paramInfo.promiseValueType !== 'undefined') {
@@ -679,7 +770,7 @@ function resolveFunctionTypeParams(
 
     resolvedParams.push({
       name: param.name,
-      loc: param.loc,
+      loc: paramLoc,
       optional: isOptionalParam(param),
       rest: param.rest === true,
       declaredType,
@@ -880,7 +971,7 @@ export function resolveFunctionTypeMetadata(
 
   const typeLoc: SourceLocation = { line: typeLine, column: typeColumn }
   const returnInfo = resolveDeclaredType(context, functionType.returnType, typeLoc)
-  const params = resolveFunctionTypeParams(context, functionType.params)
+  const params = resolveFunctionTypeParams(context, functionType.params, typeLoc)
   let returnPromiseValueType: ValueType | null = null
 
   if (returnInfo.promiseValueType !== null && typeof returnInfo.promiseValueType !== 'undefined') {
@@ -1356,6 +1447,10 @@ function qualifiedFieldTypeRef(typeRef: TypeRef | null, weak: boolean, optional:
 function qualifiedTypeRef(typeRef: TypeRef | null, nullable: boolean, ownership: TypeOwnership | null): TypeRef | null {
   if (typeRef === null) {
     return null
+  }
+
+  if (typeRef.kind === 'parameter') {
+    return typeRef
   }
 
   const resolvedOwnership = ownership ?? typeRef.ownership

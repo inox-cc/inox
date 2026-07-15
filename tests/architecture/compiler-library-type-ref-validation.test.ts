@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
-import type { CompilerLibraryDescriptor, TypeRef } from '../../compiler/extensions/types.ts'
+import type { CompilerLibraryDescriptor, NominalTypeRef, TypeRef } from '../../compiler/extensions/types.ts'
 
 test('builder validates recursive TypeRef contracts', () => {
   const invalidRefs: Array<{ typeRef: TypeRef; message: RegExp; legacyValueType?: string }> = [
@@ -81,7 +81,7 @@ function fixtureLibrary(resultTypeRef: TypeRef, valueType?: string): CompilerLib
   }
 }
 
-function nominalTypeRef(typeId: string): TypeRef {
+function nominalTypeRef(typeId: string): NominalTypeRef {
   return {
     kind: 'nominal',
     typeId,

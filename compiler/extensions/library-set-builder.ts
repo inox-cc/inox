@@ -1,6 +1,7 @@
 import type {
   CompilerLibraryDescriptor,
   CompilerLibrarySet,
+  ConcreteTypeRef,
   IntrinsicRoleBinding,
   LibraryArgumentCheckDescriptor,
   LibraryCResultFieldMappingDescriptor,
@@ -20,7 +21,8 @@ import type {
   LibraryRuntimeInitializerDescriptor,
   RuntimeRequirementDescriptor,
   ObjectTypeRef,
-  TypeRef
+  TypeRef,
+  TypeTraitRef
 } from './types.ts'
 import { formatDiagnostics } from '../diagnostics.ts'
 import { parseCompilerLibraryGlobalDeclarations } from './global-declarations.ts'
@@ -632,6 +634,9 @@ function validateNativeTypes(nativeTypes: LibraryNativeTypeDescriptor[]): void {
 
   for (let index = 0; index < nativeTypes.length; index = index + 1) {
     const nativeType = nativeTypes[index]
+    const typeParameters = validateNativeTypeParameters(nativeType)
+
+    validateTypeTraits(`native type ${nativeType.typeId}`, nativeType.traits ?? [], nativeTypes, typeParameters)
 
     for (let baseIndex = 0; baseIndex < nativeType.baseTypeIds.length; baseIndex = baseIndex + 1) {
       const baseTypeId = nativeType.baseTypeIds[baseIndex]
@@ -643,22 +648,37 @@ function validateNativeTypes(nativeTypes: LibraryNativeTypeDescriptor[]): void {
   }
 }
 
+function validateNativeTypeParameters(nativeType: LibraryNativeTypeDescriptor): Set<string> {
+  const result: Set<string> = new Set()
+  const typeParameters = nativeType.typeParameters ?? []
+
+  for (let index = 0; index < typeParameters.length; index = index + 1) {
+    const name = typeParameters[index]
+
+    if (name.length === 0) {
+      throw new Error(`native type ${nativeType.typeId} has empty type parameter`)
+    }
+
+    if (result.has(name)) {
+      throw new Error(`native type ${nativeType.typeId} has duplicate type parameter ${name}`)
+    }
+
+    result.add(name)
+  }
+
+  return result
+}
+
 function validateOperationTypeRefs(
   operations: LibraryOperationDescriptor[],
   nativeTypes: LibraryNativeTypeDescriptor[]
 ): void {
-  const nativeTypeIds: Set<string> = new Set()
-
-  for (let index = 0; index < nativeTypes.length; index = index + 1) {
-    nativeTypeIds.add(nativeTypes[index].typeId)
-  }
-
   for (let index = 0; index < operations.length; index = index + 1) {
     const operation = operations[index]
     const operationTypeRef = operation.resultTypeRef
 
     if (operationTypeRef !== null && typeof operationTypeRef !== 'undefined') {
-      validateTypeRef(`operation ${operation.operationId} result`, operationTypeRef, nativeTypeIds)
+      validateTypeRef(`operation ${operation.operationId} result`, operationTypeRef, nativeTypes)
       validateTypeRefHasNoLegacyResultMetadata(operation.operationId, operation, null)
     }
 
@@ -684,7 +704,7 @@ function validateOperationTypeRefs(
         validateTypeRef(
           `operation ${operation.operationId} variant ${variantIndex} result`,
           variantTypeRef,
-          nativeTypeIds
+          nativeTypes
         )
       }
 
@@ -925,8 +945,25 @@ function legacyMetadataIsPresent(value: unknown): boolean {
   return value !== null && typeof value !== 'undefined'
 }
 
-function validateTypeRef(label: string, typeRef: TypeRef, nativeTypeIds: Set<string>): void {
-  validateTypeRefCommon(label, typeRef, nativeTypeIds)
+function validateTypeRef(
+  label: string,
+  typeRef: TypeRef,
+  nativeTypes: LibraryNativeTypeDescriptor[],
+  typeParameters: Set<string> | null = null
+): void {
+  if (typeRef.kind === 'parameter') {
+    if (typeParameters === null) {
+      throw new Error(`${label} uses type parameter ${typeRef.name} outside template scope`)
+    }
+
+    if (!typeParameters.has(typeRef.name)) {
+      throw new Error(`${label} references unknown type parameter ${typeRef.name}`)
+    }
+
+    return
+  }
+
+  validateTypeRefCommon(label, typeRef, nativeTypes, typeParameters)
 
   if (typeRef.kind === 'primitive') {
     if (!isCorePrimitiveType(typeRef.name)) {
@@ -936,16 +973,32 @@ function validateTypeRef(label: string, typeRef: TypeRef, nativeTypeIds: Set<str
   }
 
   if (typeRef.kind === 'nominal') {
-    if (!nativeTypeIds.has(typeRef.typeId)) {
+    const nativeType = nativeTypeForValidation(nativeTypes, typeRef.typeId)
+
+    if (nativeType === null) {
       throw new Error(`${label} references unknown nominal type ${typeRef.typeId}`)
     }
-    validateTypeRefList(`${label} generic argument`, typeRef.args, nativeTypeIds)
+
+    const nativeTypeParameters = nativeType.typeParameters
+
+    if (
+      nativeTypeParameters !== null &&
+      typeof nativeTypeParameters !== 'undefined' &&
+      nativeTypeParameters.length !== typeRef.args.length
+    ) {
+      throw new Error(
+        `${label} nominal type ${typeRef.typeId} expects ${nativeTypeParameters.length} type argument(s), ` +
+          `got ${typeRef.args.length}`
+      )
+    }
+
+    validateTypeRefList(`${label} generic argument`, typeRef.args, nativeTypes, typeParameters)
     return
   }
 
   if (typeRef.kind === 'function') {
-    validateTypeRefList(`${label} parameter`, typeRef.params, nativeTypeIds)
-    validateTypeRef(`${label} result`, typeRef.result, nativeTypeIds)
+    validateTypeRefList(`${label} parameter`, typeRef.params, nativeTypes, typeParameters)
+    validateTypeRef(`${label} result`, typeRef.result, nativeTypes, typeParameters)
     return
   }
 
@@ -960,22 +1013,36 @@ function validateTypeRef(label: string, typeRef: TypeRef, nativeTypeIds: Set<str
       }
 
       names.add(field.name)
-      validateTypeRef(`${label} field ${field.name}`, field.typeRef, nativeTypeIds)
+      validateTypeRef(`${label} field ${field.name}`, field.typeRef, nativeTypes, typeParameters)
     }
 
     return
   }
 }
 
-function validateTypeRefCommon(label: string, typeRef: TypeRef, nativeTypeIds: Set<string>): void {
+function validateTypeRefCommon(
+  label: string,
+  typeRef: ConcreteTypeRef,
+  nativeTypes: LibraryNativeTypeDescriptor[],
+  typeParameters: Set<string> | null
+): void {
   if (!isTypeOwnership(typeRef.ownership)) {
     throw new Error(`${label} has unknown ownership ${typeRef.ownership}`)
   }
 
+  validateTypeTraits(label, typeRef.traits, nativeTypes, typeParameters)
+}
+
+function validateTypeTraits(
+  label: string,
+  traits: TypeTraitRef[],
+  nativeTypes: LibraryNativeTypeDescriptor[],
+  typeParameters: Set<string> | null
+): void {
   const traitIds: Set<string> = new Set()
 
-  for (let index = 0; index < typeRef.traits.length; index = index + 1) {
-    const trait = typeRef.traits[index]
+  for (let index = 0; index < traits.length; index = index + 1) {
+    const trait = traits[index]
 
     if (!isTypeTraitId(trait.traitId)) {
       throw new Error(`${label} has unknown trait ${trait.traitId}`)
@@ -986,14 +1053,32 @@ function validateTypeRefCommon(label: string, typeRef: TypeRef, nativeTypeIds: S
     }
 
     traitIds.add(trait.traitId)
-    validateTypeRefList(`${label} trait ${trait.traitId} argument`, trait.args, nativeTypeIds)
+    validateTypeRefList(`${label} trait ${trait.traitId} argument`, trait.args, nativeTypes, typeParameters)
   }
 }
 
-function validateTypeRefList(label: string, refs: TypeRef[], nativeTypeIds: Set<string>): void {
+function validateTypeRefList(
+  label: string,
+  refs: TypeRef[],
+  nativeTypes: LibraryNativeTypeDescriptor[],
+  typeParameters: Set<string> | null
+): void {
   for (let index = 0; index < refs.length; index = index + 1) {
-    validateTypeRef(`${label} ${index}`, refs[index], nativeTypeIds)
+    validateTypeRef(`${label} ${index}`, refs[index], nativeTypes, typeParameters)
   }
+}
+
+function nativeTypeForValidation(
+  nativeTypes: LibraryNativeTypeDescriptor[],
+  typeId: string
+): LibraryNativeTypeDescriptor | null {
+  for (let index = 0; index < nativeTypes.length; index = index + 1) {
+    if (nativeTypes[index].typeId === typeId) {
+      return nativeTypes[index]
+    }
+  }
+
+  return null
 }
 
 function isCorePrimitiveType(value: string): boolean {
@@ -1299,6 +1384,10 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           sortedStrings(item.baseTypeIds).join(',') +
           ':requirements=' +
           sortedStrings(item.runtimeRequirements).join(',') +
+          ':parameters=' +
+          (item.typeParameters ?? []).map(fingerprintAtom).join(',') +
+          ':traits=' +
+          typeTraitRefsFingerprint(item.traits ?? []) +
           ':fields=' +
           resultShapeFieldsFingerprint(item.fields ?? [])
       )
@@ -1540,13 +1629,17 @@ function resultInferenceFingerprint(inference: LibraryOperationDescriptor['resul
 }
 
 function typeRefFingerprint(typeRef: TypeRef): string {
+  if (typeRef.kind === 'parameter') {
+    return 'parameter(' + fingerprintAtom(typeRef.name) + ')'
+  }
+
   const common =
     ':' +
     (typeRef.nullable ? 'nullable' : 'required') +
     ':' +
     fingerprintAtom(typeRef.ownership) +
     ':traits[' +
-    typeTraitRefsFingerprint(typeRef) +
+    typeTraitRefsFingerprint(typeRef.traits) +
     ']'
 
   if (typeRef.kind === 'primitive') {
@@ -1582,11 +1675,11 @@ function typeRefFingerprint(typeRef: TypeRef): string {
   return 'unknown' + common
 }
 
-function typeTraitRefsFingerprint(typeRef: TypeRef): string {
+function typeTraitRefsFingerprint(typeTraits: TypeTraitRef[]): string {
   const traits: string[] = []
 
-  for (let index = 0; index < typeRef.traits.length; index = index + 1) {
-    const trait = typeRef.traits[index]
+  for (let index = 0; index < typeTraits.length; index = index + 1) {
+    const trait = typeTraits[index]
     traits.push(fingerprintAtom(trait.traitId) + '[' + typeRefListFingerprint(trait.args) + ']')
   }
 

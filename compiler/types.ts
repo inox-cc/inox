@@ -1,5 +1,5 @@
 import type { CompilerHost } from './host.ts'
-import type { CompilerLibraryOptionValue, CompilerLibrarySet, IntrinsicRole } from './extensions/types.ts'
+import type { CompilerLibraryOptionValue, CompilerLibrarySet, IntrinsicRole, TypeRef } from './extensions/types.ts'
 
 export type SourceLocation = {
   file?: string
@@ -179,6 +179,7 @@ export type SymbolInfo = {
   kind: string
   mutable?: boolean
   valueType: ValueType
+  typeRef?: TypeRef | null
   libraryId?: string | null
   libraryBindingId?: string | null
   libraryIntrinsicRole?: IntrinsicRole | null

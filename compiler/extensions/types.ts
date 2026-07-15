@@ -16,6 +16,11 @@ export type TypeTraitRef = {
   args: TypeRef[]
 }
 
+export type ParameterTypeRef = {
+  kind: 'parameter'
+  name: string
+}
+
 export type PrimitiveTypeRef = {
   kind: 'primitive'
   name: CorePrimitiveType
@@ -63,7 +68,8 @@ export type UnknownTypeRef = {
   traits: TypeTraitRef[]
 }
 
-export type TypeRef = PrimitiveTypeRef | NominalTypeRef | FunctionTypeRef | ObjectTypeRef | UnknownTypeRef
+export type ConcreteTypeRef = PrimitiveTypeRef | NominalTypeRef | FunctionTypeRef | ObjectTypeRef | UnknownTypeRef
+export type TypeRef = ParameterTypeRef | ConcreteTypeRef
 
 export type CompilerLibraryOptionValue = {
   optionId: string
@@ -132,6 +138,8 @@ export type LibraryNativeTypeDescriptor = {
   cppType: string
   baseTypeIds: LibraryNativeTypeId[]
   runtimeRequirements: RuntimeRequirementId[]
+  typeParameters?: string[]
+  traits?: TypeTraitRef[]
   fields?: LibraryResultShapeFieldDescriptor[]
 }
 
