@@ -55,6 +55,11 @@ export type ClassLoweringDependencies = {
   emitCFieldFlags(field: CObjectShapeField): string
   emitCValueExpression(expression: AnyNode, context: ClassFunctionContext): PreparedExpression
   emitPreparedCallArgs(expression: AnyNode, params: CFunctionParam[], context: ClassFunctionContext): PreparedCallArgs
+  emitRuntimeCallbackValue(
+    expression: AnyNode,
+    functionType: CFunctionType | null | undefined,
+    context: ClassFunctionContext
+  ): PreparedExpression
 }
 
 type ClassMethodCallInfo = {
@@ -186,6 +191,22 @@ function emitClassValueExpression(context: ClassFunctionContext, expression: Cla
 
   if (deps !== null && typeof deps !== 'undefined') {
     return deps.emitCValueExpression(expression, context)
+  }
+
+  context.diagnostics.push(diagnostic('INOX_C_CLASS', 'class lowering dependencies are not configured'))
+
+  return emitFallbackClassValueExpression(expression, context)
+}
+
+function emitClassRuntimeCallbackValue(
+  context: ClassFunctionContext,
+  expression: ClassExpressionNode,
+  functionType: CFunctionType | null | undefined
+): PreparedExpression {
+  const deps = context.classLoweringDependencies
+
+  if (deps !== null && typeof deps !== 'undefined') {
+    return deps.emitRuntimeCallbackValue(expression, functionType, context)
   }
 
   context.diagnostics.push(diagnostic('INOX_C_CLASS', 'class lowering dependencies are not configured'))
@@ -522,11 +543,7 @@ function classFieldSupportsNativeLowering(field: CObjectShapeField): boolean {
     return true
   }
 
-  if (
-    field.valueType === 'number' ||
-    field.valueType === 'boolean' ||
-    field.valueType === 'string'
-  ) {
+  if (field.valueType === 'number' || field.valueType === 'boolean' || field.valueType === 'string') {
     return true
   }
 
@@ -1374,8 +1391,8 @@ function scanClassDescriptorCallLikeExpression(
     addClassDescriptorExpressionNames(expression.args, classInfos, scope, names)
   } else if (isClassDescriptorObjectRuntimeCall(expression)) {
     addClassDescriptorExpressionName(firstClassDescriptorArgument(expression), classInfos, scope, names)
-  } else if (isClassDescriptorJsonStringifyCall(expression)) {
-    addClassDescriptorExpressionName(firstClassDescriptorArgument(expression), classInfos, scope, names)
+  } else if (hasClassDescriptorRuntimeValueArguments(expression)) {
+    addClassDescriptorExpressionNames(expression.args, classInfos, scope, names)
   } else if (isClassDescriptorPromiseValueCall(expression)) {
     addClassDescriptorExpressionName(firstClassDescriptorArgument(expression), classInfos, scope, names)
   }
@@ -1419,28 +1436,14 @@ function isClassDescriptorObjectRuntimeCall(expression: AnyNode): boolean {
   )
 }
 
-function isClassDescriptorJsonStringifyCall(expression: AnyNode): boolean {
-  const callee = expression.callee
+function hasClassDescriptorRuntimeValueArguments(expression: AnyNode): boolean {
+  const argumentKinds = expression.libraryCArgumentKinds
 
-  if (
-    expression.type !== 'CallExpression' ||
-    callee === null ||
-    typeof callee === 'undefined' ||
-    callee.type !== 'MemberExpression'
-  ) {
+  if (!Array.isArray(argumentKinds)) {
     return false
   }
 
-  const object = callee.object
-
-  return (
-    object !== null &&
-    typeof object !== 'undefined' &&
-    object.type === 'Reference' &&
-    object.path.length === 1 &&
-    object.path[0] === 'JSON' &&
-    callee.property === 'stringify'
-  )
+  return argumentKinds.includes('runtime-value')
 }
 
 function isClassDescriptorPromiseValueCall(expression: AnyNode): boolean {
@@ -2410,7 +2413,10 @@ function emitCClassRuntimeObjectInitLines(
     }
 
     const valueExpression = substituteClassConstructorParams(assignment.value, constructorArgs, target)
-    let value = emitClassValueExpression(context, valueExpression)
+    const field = info.fields[fieldIndex]
+    let value = isRuntimeFunctionType(field.functionType)
+      ? emitClassRuntimeCallbackValue(context, valueExpression, field.functionType)
+      : emitClassValueExpression(context, valueExpression)
     const classInstance = emitPreparedClassInstanceRefValueExpression(value, context)
 
     if (classInstance !== null && typeof classInstance !== 'undefined') {
@@ -2852,11 +2858,15 @@ function emitPreparedResolvedClassMethodCallExpression(
   context: ClassFunctionContext,
   call: ClassMethodCallInfo,
   options: PreparedCallOptions
-): PreparedExpression {
+): PreparedExpression | null {
   const method = resolveClassMethod(call.info, call.methodName)
 
   if (method !== null && typeof method !== 'undefined') {
     return emitKnownPreparedClassMethodCallExpression(expression, context, call, method, options)
+  }
+
+  if (isClassFunctionField(call.info, call.methodName)) {
+    return null
   }
 
   context.diagnostics.push(
@@ -2871,6 +2881,21 @@ function emitPreparedResolvedClassMethodCallExpression(
     lines: [],
     expression: ''
   }
+}
+
+function isClassFunctionField(info: CClassInfo, name: string): boolean {
+  for (const field of info.fields) {
+    if (
+      field.name === name &&
+      field.valueType === 'function' &&
+      field.functionType !== null &&
+      typeof field.functionType !== 'undefined'
+    ) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function emitKnownPreparedClassMethodCallExpression(

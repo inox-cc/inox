@@ -2,6 +2,7 @@ import { checkProgram } from '../checker.ts'
 import { diagnostic, throwDiagnostics } from '../diagnostics.ts'
 import { resolveCompilerLibrarySet } from '../extensions/library-set.ts'
 import { compilerLibraryOptionsFingerprint } from '../extensions/library-options.ts'
+import type { CompilerLibraryLiteralTypeInference } from '../extensions/types.ts'
 import type { CompilerHost } from '../host.ts'
 import { lowerHirToIr } from '../ir.ts'
 import { tokenize } from '../lexer.ts'
@@ -59,19 +60,32 @@ type ModuleGraphDeclarationImport = {
   program: ProgramNode | null
 }
 
-export async function buildModuleGraph(entry: string, options: CompileOptions = {}): Promise<ModuleGraph> {
-  return buildModuleGraphSync(entry, options)
+export async function buildModuleGraph(
+  entry: string,
+  options: CompileOptions = {},
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
+): Promise<ModuleGraph> {
+  return buildModuleGraphSync(entry, options, libraryLiteralTypeInference)
 }
 
-export function buildModuleGraphSync(entry: string, options: CompileOptions = {}): ModuleGraph {
+export function buildModuleGraphSync(
+  entry: string,
+  options: CompileOptions = {},
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
+): ModuleGraph {
   if (options.host === null || typeof options.host === 'undefined') {
     throw new Error('buildModuleGraph requires a compiler host')
   }
 
-  return buildModuleGraphWithHostSync(entry, options, options.host)
+  return buildModuleGraphWithHostSync(entry, options, options.host, libraryLiteralTypeInference)
 }
 
-export function buildModuleGraphWithHostSync(entry: string, options: CompileOptions, host: CompilerHost): ModuleGraph {
+export function buildModuleGraphWithHostSync(
+  entry: string,
+  options: CompileOptions,
+  host: CompilerHost,
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
+): ModuleGraph {
   const entryPath = resolveExistingSource(entry, host)
   const context: ModuleGraphContext = {
     entry: entryPath,
@@ -98,7 +112,7 @@ export function buildModuleGraphWithHostSync(entry: string, options: CompileOpti
     diagnostics: []
   }
 
-  visitModuleGraphFile(context, entryPath)
+  visitModuleGraphFile(context, entryPath, libraryLiteralTypeInference)
 
   throwDiagnostics(context.diagnostics)
 
@@ -108,7 +122,11 @@ export function buildModuleGraphWithHostSync(entry: string, options: CompileOpti
   }
 }
 
-function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolean {
+function visitModuleGraphFile(
+  context: ModuleGraphContext,
+  file: string,
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null
+): boolean {
   const path = resolveModuleGraphVisitPath(context, file)
 
   if (context.modules.has(path)) {
@@ -123,7 +141,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
     const declarationImport = context.declarationImports.get(path)
 
     if (declarationImport !== null && typeof declarationImport !== 'undefined') {
-      return visitModuleGraphDeclarationImport(context, path, declarationImport)
+      return visitModuleGraphDeclarationImport(context, path, declarationImport, libraryLiteralTypeInference)
     }
   }
 
@@ -178,7 +196,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
   const reexportAliasDeclarations: AnyNode[] = []
   const reexportTypeNames: Set<string> = new Set()
 
-  prepareModuleTypeImportDeclarations(context, module)
+  prepareModuleTypeImportDeclarations(context, module, libraryLiteralTypeInference)
 
   let importIndex = 0
 
@@ -213,7 +231,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
       continue
     }
 
-    const importedOk = visitModuleGraphFile(context, importedPath)
+    const importedOk = visitModuleGraphFile(context, importedPath, libraryLiteralTypeInference)
 
     if (!importedOk) {
       continue
@@ -340,7 +358,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
       continue
     }
 
-    const importedOk = visitModuleGraphFile(context, importedPath)
+    const importedOk = visitModuleGraphFile(context, importedPath, libraryLiteralTypeInference)
 
     if (!importedOk) {
       continue
@@ -426,7 +444,11 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
     }
   }
 
-  const checked = checkProgram(insertImportSyntheticDeclarations(ast, importTypeDeclarations), context.options)
+  const checked = checkProgram(
+    insertImportSyntheticDeclarations(ast, importTypeDeclarations),
+    context.options,
+    libraryLiteralTypeInference
+  )
   module.hir = appendSyntheticDeclarations(
     insertImportSyntheticDeclarations(lowerProgram(checked.ast, context.options.libraries), importAliasDeclarations),
     reexportAliasDeclarations
@@ -458,7 +480,8 @@ function resolveModuleGraphVisitPath(context: ModuleGraphContext, file: string):
 function visitModuleGraphDeclarationImport(
   context: ModuleGraphContext,
   path: string,
-  declarationImport: ModuleGraphDeclarationImport
+  declarationImport: ModuleGraphDeclarationImport,
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null
 ): boolean {
   context.visiting.add(path)
 
@@ -502,10 +525,11 @@ function visitModuleGraphDeclarationImport(
   }
 
   context.modules.set(path, module)
-  prepareModuleTypeImportDeclarations(context, module)
+  prepareModuleTypeImportDeclarations(context, module, libraryLiteralTypeInference)
   const checked = checkProgram(
     insertImportSyntheticDeclarations(program, module.typeImportDeclarations),
-    context.options
+    context.options,
+    libraryLiteralTypeInference
   )
   module.hir = lowerProgram(checked.ast, context.options.libraries)
   module.declarationProgram = createModuleDeclarationProgram(module.hir)
@@ -623,7 +647,11 @@ function moduleGraphDeclarationImportFunctionEffects(
   return result.functionEffects
 }
 
-function prepareModuleTypeImportDeclarations(context: ModuleGraphContext, module: ModuleRecord): void {
+function prepareModuleTypeImportDeclarations(
+  context: ModuleGraphContext,
+  module: ModuleRecord,
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null
+): void {
   if (module.typeImportDeclarations.size > 0) {
     return
   }
@@ -659,7 +687,7 @@ function prepareModuleTypeImportDeclarations(context: ModuleGraphContext, module
       continue
     }
 
-    const importedOk = visitModuleGraphFile(context, importedPath)
+    const importedOk = visitModuleGraphFile(context, importedPath, libraryLiteralTypeInference)
     const importedModule = context.modules.get(importedPath)
 
     if (!importedOk && (importedModule === null || typeof importedModule === 'undefined')) {
@@ -760,11 +788,7 @@ function prepareStdlibRuntimeImportDeclarations(
 
     const declarations = createValueImportTypeDeclarations(specifier, importedProgram)
 
-    for (
-      let declarationIndex = 0;
-      declarationIndex < declarations.length;
-      declarationIndex = declarationIndex + 1
-    ) {
+    for (let declarationIndex = 0; declarationIndex < declarations.length; declarationIndex = declarationIndex + 1) {
       const declaration = declarations[declarationIndex]
 
       if (!typeNames.has(declaration.name)) {
@@ -923,11 +947,7 @@ function applyImportedFunctionMetadata(specifier: AnyNode, importedProgram: Prog
   applyImportedFunctionDeclarationMetadata(specifier, declaration)
 }
 
-function applyImportedDeclarationMetadata(
-  specifier: AnyNode,
-  declaration: AnyNode,
-  program: ProgramNode
-): void {
+function applyImportedDeclarationMetadata(specifier: AnyNode, declaration: AnyNode, program: ProgramNode): void {
   if (declaration.type === 'FunctionDeclaration') {
     applyImportedFunctionDeclarationMetadata(specifier, declaration)
     specifier.functionOverloads = findExportedFunctionDeclarations(program, declaration.name)

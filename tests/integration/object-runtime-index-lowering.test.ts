@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
-import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
+import { defaultCompilerLibraryLiteralTypeInference, defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 type GeneratedTextFile = {
   path: string
@@ -29,12 +29,16 @@ for (const a of foo.v) {
       root: '/'
     }
   )
-  const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
-    callMain: true,
-    host,
-    libraries: defaultCompilerLibrarySet,
-    sourceRoot: '/pkg'
-  }) as GeneratedTextFile[]
+  const files = compileFileToCModuleTextsSync(
+    '/pkg/src/index.ts',
+    {
+      callMain: true,
+      host,
+      libraries: defaultCompilerLibrarySet,
+      sourceRoot: '/pkg'
+    },
+    defaultCompilerLibraryLiteralTypeInference
+  ) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
   assert.match(
@@ -56,7 +60,10 @@ for (const a of foo.v) {
     /for \(size_t inox_for_index_\d+ = 0; inox_for_index_\d+ < inox_for_array_\d+->length; \+\+inox_for_index_\d+\) \{\n\s+inox::Value a = inox_for_array_\d+->items\[inox_for_index_\d+\];/
   )
   assert.doesNotMatch(source, /if \(\(a\.tag != INOX_TAG_OBJECT && a\.tag != INOX_TAG_CLASS_INSTANCE\)/)
-  assert.doesNotMatch(source, /if \(\(inox_for_value_\d+\.tag != INOX_TAG_OBJECT && inox_for_value_\d+\.tag != INOX_TAG_CLASS_INSTANCE\)/)
+  assert.doesNotMatch(
+    source,
+    /if \(\(inox_for_value_\d+\.tag != INOX_TAG_OBJECT && inox_for_value_\d+\.tag != INOX_TAG_CLASS_INSTANCE\)/
+  )
   assert.doesNotMatch(source, /inox_object_values\(&inox_default_allocator, a, &inox_object_values_\d+\)/)
   assert.doesNotMatch(source, /inox_object_entries\(&inox_default_allocator, a, &inox_object_entries_\d+\)/)
   assert.doesNotMatch(source, /inox_status inox_object_values_status_\d+/)

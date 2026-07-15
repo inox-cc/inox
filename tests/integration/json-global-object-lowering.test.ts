@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
-import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
+import { defaultCompilerLibraryLiteralTypeInference, defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 type GeneratedTextFile = {
   path: string
@@ -28,12 +28,16 @@ console.log(text)
       root: '/'
     }
   )
-  const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
-    callMain: true,
-    host,
-    libraries: defaultCompilerLibrarySet,
-    sourceRoot: '/pkg'
-  }) as GeneratedTextFile[]
+  const files = compileFileToCModuleTextsSync(
+    '/pkg/src/index.ts',
+    {
+      callMain: true,
+      host,
+      libraries: defaultCompilerLibrarySet,
+      sourceRoot: '/pkg'
+    },
+    defaultCompilerLibraryLiteralTypeInference
+  ) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
   assert.match(source, /auto data = JSON\.parse\("\{\\"name\\":\\"Ada\\"\}"\);/)
@@ -47,7 +51,7 @@ console.log(text)
 
   const header = readFileSync(resolve('stdlib/global/json/include/inox/json.h'), 'utf8')
   assert.match(header, /inox::String stringify\(const inox::Value& value\) const;/)
-  assert.match(header, /inox::String stringify\(const inox_class_descriptor& descriptor, const void\* instance\) const;/)
+  assert.doesNotMatch(header, /stringify\(const inox_class_descriptor&/)
   assert.doesNotMatch(header, /stringify\(inox_value value\)/)
   assert.doesNotMatch(header, /stringify\(const inox_class_descriptor\* descriptor/)
 }

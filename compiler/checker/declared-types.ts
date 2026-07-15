@@ -3,6 +3,7 @@ import {
   arrayElementTypeNameFromKnownTypeName,
   isArrayTypeName,
   isBuiltinValueType,
+  indexedAccessTypeNameFromTypeName,
   isNullableTypeName,
   isPromiseTypeName,
   isSetTypeName,
@@ -90,6 +91,12 @@ export function resolveDeclaredType(
     info.valueType = 'string'
 
     return info
+  }
+
+  const indexedAccess = indexedAccessTypeNameFromTypeName(name)
+
+  if (indexedAccess !== null) {
+    return resolveIndexedAccessDeclaredType(context, indexedAccess.base, indexedAccess.indexes, loc)
   }
 
   const nativeType = compilerLibraryNativeTypeForName(context.libraries, name)
@@ -278,10 +285,7 @@ export function resolveDeclaredType(
     }
   }
 
-  if (
-    classKnown ||
-    (classSymbol !== null && typeof classSymbol !== 'undefined' && classSymbol.kind === 'class')
-  ) {
+  if (classKnown || (classSymbol !== null && typeof classSymbol !== 'undefined' && classSymbol.kind === 'class')) {
     const info = unresolvedTypeInfo()
     info.valueType = 'object'
 
@@ -355,10 +359,114 @@ export function resolveDeclaredType(
   return unresolvedTypeInfo()
 }
 
-function libraryNativeTypeField(
-  field: LibraryResultShapeFieldDescriptor,
+function resolveIndexedAccessDeclaredType(
+  context: DeclaredTypeResolverContext,
+  baseName: string,
+  indexes: string[],
   loc: SourceLocation
-): AnyNode {
+): ResolvedTypeInfo {
+  let current = resolveDeclaredType(context, baseName, loc)
+
+  for (let index = 0; index < indexes.length; index = index + 1) {
+    current = resolveDeclaredTypeIndex(context, current, indexes[index], loc)
+  }
+
+  return current
+}
+
+function resolveDeclaredTypeIndex(
+  context: DeclaredTypeResolverContext,
+  source: ResolvedTypeInfo,
+  indexName: string,
+  loc: SourceLocation
+): ResolvedTypeInfo {
+  if (indexName === 'number' && source.valueType === 'array') {
+    if (source.arrayElementDeclaredType !== null && typeof source.arrayElementDeclaredType !== 'undefined') {
+      return resolveDeclaredType(context, source.arrayElementDeclaredType, loc)
+    }
+
+    const element = unresolvedTypeInfo()
+    element.valueType = source.arrayElementType ?? 'unknown'
+    element.functionType = source.arrayElementFunctionType ?? null
+    return element
+  }
+
+  const shape = source.shape
+
+  if (shape === null || typeof shape === 'undefined') {
+    return unresolvedTypeInfo()
+  }
+
+  if (indexName === 'string') {
+    const dynamicField = shape.dynamicField
+
+    if (dynamicField !== null && typeof dynamicField !== 'undefined') {
+      return resolveIndexedAccessField(context, dynamicField)
+    }
+
+    return unresolvedTypeInfo()
+  }
+
+  const propertyName = indexedAccessPropertyName(indexName)
+
+  if (propertyName === null) {
+    return unresolvedTypeInfo()
+  }
+
+  for (let index = 0; index < shape.fields.length; index = index + 1) {
+    const field = shape.fields[index]
+
+    if (field.name === propertyName) {
+      return resolveIndexedAccessField(context, field)
+    }
+  }
+
+  if (shape.dynamicField !== null && typeof shape.dynamicField !== 'undefined') {
+    return resolveIndexedAccessField(context, shape.dynamicField)
+  }
+
+  return unresolvedTypeInfo()
+}
+
+function resolveIndexedAccessField(context: DeclaredTypeResolverContext, field: AnyNode): ResolvedTypeInfo {
+  const resolved = resolveFieldDeclaredType(context, field)
+
+  if (field.optional === true || field.nullable === true) {
+    resolved.nullable = true
+  }
+
+  return resolved
+}
+
+function indexedAccessPropertyName(indexName: string): string | null {
+  if (indexName.length < 2 || indexName.slice(0, 1) !== "'" || indexName.slice(indexName.length - 1) !== "'") {
+    return null
+  }
+
+  let value = ''
+  let escaped = false
+
+  for (let index = 1; index < indexName.length - 1; index = index + 1) {
+    const unit = indexName.slice(index, index + 1)
+
+    if (escaped) {
+      value = value + unit
+      escaped = false
+    } else if (unit === '\\') {
+      escaped = true
+    } else {
+      value = value + unit
+    }
+  }
+
+  if (escaped) {
+    return null
+  }
+
+  return value
+}
+
+function libraryNativeTypeField(field: LibraryResultShapeFieldDescriptor, loc: SourceLocation): AnyNode {
   const result: AnyNode = {
     name: field.name,
     valueType: field.valueType,
@@ -757,10 +865,7 @@ function resolveObjectShapeBase(context: DeclaredTypeResolverContext, name: stri
   return null
 }
 
-export function resolveFieldDeclaredType(
-  context: DeclaredTypeResolverContext,
-  field: AnyNode
-): ResolvedTypeInfo {
+export function resolveFieldDeclaredType(context: DeclaredTypeResolverContext, field: AnyNode): ResolvedTypeInfo {
   if (field.ownership === 'weak') {
     return resolveWeakFieldDeclaredType(context, field)
   }
@@ -802,10 +907,7 @@ function resolvedSyntheticFieldType(field: AnyNode): ResolvedTypeInfo {
   return info
 }
 
-export function resolveWeakFieldDeclaredType(
-  context: DeclaredTypeResolverContext,
-  field: AnyNode
-): ResolvedTypeInfo {
+export function resolveWeakFieldDeclaredType(context: DeclaredTypeResolverContext, field: AnyNode): ResolvedTypeInfo {
   const declaredName = nodeDeclaredTypeOrValueType(field)
 
   let targetName = declaredName
@@ -1140,11 +1242,7 @@ function qualifiedFieldTypeRef(typeRef: TypeRef | null, weak: boolean, optional:
   return typeRef
 }
 
-function qualifiedTypeRef(
-  typeRef: TypeRef | null,
-  nullable: boolean,
-  ownership: TypeOwnership | null
-): TypeRef | null {
+function qualifiedTypeRef(typeRef: TypeRef | null, nullable: boolean, ownership: TypeOwnership | null): TypeRef | null {
   if (typeRef === null) {
     return null
   }

@@ -1205,9 +1205,17 @@ function appendNormalizedInterfaceDeclaration(parts: string[], tokens: Token[], 
   }
 
   const close = findBalancedClose(tokens, current, '{', '}')
+  let previousLine = tokenAt(tokens, current).line
 
   while (current <= close && !tokenIs(tokens, current, 'eof', '<eof>')) {
-    parts.push(tokenSource(tokenAt(tokens, current)))
+    const token = tokenAt(tokens, current)
+
+    if (token.line > previousLine) {
+      parts.push('\n')
+    }
+
+    parts.push(tokenSource(token))
+    previousLine = token.line
     current = current + 1
   }
 

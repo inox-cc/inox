@@ -19,10 +19,16 @@ import {
   compilerAnyNodeObjectFields,
   compilerAnyNodeStringFields
 } from './any-node-fields.ts'
-import { isMemberAccessExpression, resolveKnownObjectMember, resolveObjectExpressionMember, isIndexAccessExpression, resolveKnownObjectIndex, resolveObjectExpressionIndex } from './objects.ts'
+import {
+  isMemberAccessExpression,
+  resolveKnownObjectMember,
+  resolveObjectExpressionMember,
+  isIndexAccessExpression,
+  resolveKnownObjectIndex,
+  resolveObjectExpressionIndex
+} from './objects.ts'
 
 export type CExpressionTypeDependencies = {
-  cJsonRuntimeCallName: (callee: AnyNode) => string | null
   cPromiseRuntimeCallName: (callee: AnyNode) => string | null
   collectionConstructorName: (expression: AnyNode) => string | null
   isArrayIncludesCall: (expression: AnyNode) => boolean
@@ -396,11 +402,7 @@ function cReferenceExpressionType(
         return variableType
       }
 
-      if (
-        metadataType !== null &&
-        typeof metadataType !== 'undefined' &&
-        isConcreteContextValueType(metadataType)
-      ) {
+      if (metadataType !== null && typeof metadataType !== 'undefined' && isConcreteContextValueType(metadataType)) {
         return metadataType
       }
     }
@@ -485,10 +487,7 @@ function isUnionMetadataType(valueType: string | null | undefined): boolean {
 
 function isConcreteContextValueType(valueType: string | null | undefined): boolean {
   return (
-    valueType !== null &&
-    typeof valueType !== 'undefined' &&
-    valueType !== 'unknown' &&
-    !isUnionMetadataType(valueType)
+    valueType !== null && typeof valueType !== 'undefined' && valueType !== 'unknown' && !isUnionMetadataType(valueType)
   )
 }
 
@@ -497,27 +496,8 @@ export function inferExpressionType(
   context: CFunctionContext,
   deps: CExpressionTypeDependencies
 ): string {
-  if (
-    expression.libraryOperationId !== null &&
-    typeof expression.libraryOperationId !== 'undefined'
-  ) {
+  if (expression.libraryOperationId !== null && typeof expression.libraryOperationId !== 'undefined') {
     return cValueTypeOrUnknown(expression)
-  }
-
-  if (expression.type === 'CallExpression') {
-    const jsonCall = deps.cJsonRuntimeCallName(expression.callee)
-
-    if (jsonCall !== null && typeof jsonCall !== 'undefined') {
-      if (expression.valueType !== null && typeof expression.valueType !== 'undefined') {
-        return expression.valueType
-      }
-
-      if (jsonCall === 'parse') {
-        return 'object'
-      }
-
-      return 'string'
-    }
   }
 
   if (

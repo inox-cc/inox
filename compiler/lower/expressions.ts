@@ -180,12 +180,7 @@ function lowerExpressionWithContext(
   if (expression.type === 'ArrayLiteral') {
     const elements = lowerExpressionList(expression.elements, context)
     const elementType = commonArrayElementTypeFromElements(elements)
-    const loweredArray = cloneArrayLiteralExpression(
-      expression,
-      elements,
-      elementType,
-      elementType
-    )
+    const loweredArray = cloneArrayLiteralExpression(expression, elements, elementType, elementType)
 
     return loweredArray
   }
@@ -355,11 +350,6 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.typeRef = typeRef
   }
 
-  const jsonRuntimeMethod = nullableString(source.jsonRuntimeMethod)
-  if (jsonRuntimeMethod !== null && typeof jsonRuntimeMethod !== 'undefined') {
-    target.jsonRuntimeMethod = jsonRuntimeMethod
-  }
-
   const libraryBindingId = nullableString(source.libraryBindingId)
   if (libraryBindingId !== null && typeof libraryBindingId !== 'undefined') {
     target.libraryBindingId = libraryBindingId
@@ -427,6 +417,7 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
 
   copyStringMetadataArray(target, source, 'libraryCArgumentAdapters')
   copyStringMetadataArray(target, source, 'libraryCArgumentKinds')
+  copyStringMetadataArray(target, source, 'libraryCArgumentMethodNames')
   copyStringMetadataArray(target, source, 'libraryCResultShapeFields')
   copyMetadataArray(target, source, 'libraryCArgumentSources')
 
@@ -602,10 +593,7 @@ function cloneRegExpLiteral(expression: LowerExpressionNode): LowerExpressionNod
   )
 }
 
-function cloneTemplateLiteral(
-  expression: LowerExpressionNode,
-  context: LowerExpressionContext
-): LowerExpressionNode {
+function cloneTemplateLiteral(expression: LowerExpressionNode, context: LowerExpressionContext): LowerExpressionNode {
   let expressions: LowerExpressionNode[] = []
 
   if (Array.isArray(expression.expressions)) {
@@ -697,7 +685,7 @@ function cloneReferenceExpression(
 ): LowerExpressionNode {
   const path = cloneReferencePath(expression.path)
   const valueType = referenceValueType(expression, variable)
-  const nullable = expression.nullable === true || referenceVariableNullable(variable)
+  const nullable = referenceNullable(expression, variable)
   const arrayElementType = referenceArrayElementType(expression, variable)
   const arrayElementDeclaredType = referenceArrayElementDeclaredType(expression, variable)
   const arrayElementFunctionType = referenceArrayElementFunctionType(expression, variable)
@@ -731,6 +719,14 @@ function cloneReferenceExpression(
   const result = copyRuntimeMetadata(target, expression)
 
   return result
+}
+
+function referenceNullable(expression: LowerExpressionNode, variable: LowerExpressionNode | null): boolean {
+  if (typeof expression.nullable === 'boolean') {
+    return expression.nullable
+  }
+
+  return referenceVariableNullable(variable)
 }
 
 function cloneReferencePath(source: string[]): string[] {

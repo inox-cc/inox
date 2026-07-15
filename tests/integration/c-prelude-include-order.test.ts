@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
-import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
+import { defaultCompilerLibraryLiteralTypeInference, defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 type GeneratedTextFile = {
   path: string
@@ -113,12 +113,16 @@ for (const a of foo.v) {
       root: '/'
     }
   )
-  const facadeFiles = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
-    callMain: true,
-    host: facadeHost,
-    libraries: defaultCompilerLibrarySet,
-    sourceRoot: '/pkg'
-  }) as GeneratedTextFile[]
+  const facadeFiles = compileFileToCModuleTextsSync(
+    '/pkg/src/index.ts',
+    {
+      callMain: true,
+      host: facadeHost,
+      libraries: defaultCompilerLibrarySet,
+      sourceRoot: '/pkg'
+    },
+    defaultCompilerLibraryLiteralTypeInference
+  ) as GeneratedTextFile[]
   const facadeSource = generatedTextFile(facadeFiles, 'src/index.cc').code
 
   assert.match(facadeSource, /#include "inox\/process\.h"/)

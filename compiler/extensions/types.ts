@@ -63,12 +63,7 @@ export type UnknownTypeRef = {
   traits: TypeTraitRef[]
 }
 
-export type TypeRef =
-  | PrimitiveTypeRef
-  | NominalTypeRef
-  | FunctionTypeRef
-  | ObjectTypeRef
-  | UnknownTypeRef
+export type TypeRef = PrimitiveTypeRef | NominalTypeRef | FunctionTypeRef | ObjectTypeRef | UnknownTypeRef
 
 export type CompilerLibraryOptionValue = {
   optionId: string
@@ -140,13 +135,7 @@ export type LibraryNativeTypeDescriptor = {
   fields?: LibraryResultShapeFieldDescriptor[]
 }
 
-export type LibraryOperationKind =
-  | 'call'
-  | 'construct'
-  | 'member-read'
-  | 'member-write'
-  | 'index-read'
-  | 'index-write'
+export type LibraryOperationKind = 'call' | 'construct' | 'member-read' | 'member-write' | 'index-read' | 'index-write'
 
 export type LibraryCArgumentKind =
   | 'receiver'
@@ -158,6 +147,7 @@ export type LibraryCArgumentKind =
   | 'optional-value'
   | 'argument-presence'
   | 'value'
+  | 'runtime-value'
   | 'number'
   | 'string-view-array'
   | 'optional-string-view-array'
@@ -173,9 +163,7 @@ export type LibraryCArgumentKind =
   | 'runtime-callback'
   | 'optional-runtime-callback'
 
-export type LibraryCLoweringKind =
-  | 'number-from-string'
-  | 'string-conversion'
+export type LibraryCLoweringKind = 'number-from-string' | 'string-conversion'
 
 export type LibraryCArgumentSourceDescriptor = {
   argumentIndex: number
@@ -198,6 +186,16 @@ export type LibraryCResultMappingDescriptor = {
   cppType: string
   fields: LibraryCResultFieldMappingDescriptor[]
 }
+
+export type LibraryResultInferenceDescriptor = {
+  fingerprint: string
+  literalProviderId: string
+  argumentIndex: number
+  contextualValueTypes: string[]
+  dynamicObjectShapes: boolean
+}
+
+export type CompilerLibraryLiteralTypeInference = (providerId: string, source: string) => TypeRef | null
 
 export type LibraryBackendConstraintDescriptor = {
   option: 'loopBackend' | 'tlsBackend'
@@ -291,11 +289,13 @@ export type LibraryOperationVariantDescriptor = {
   cClassFormatExpression?: string | null
   cArgumentKinds?: LibraryCArgumentKind[]
   cArgumentAdapters?: string[]
+  cArgumentMethodNames?: string[]
   cArgumentSources?: Array<LibraryCArgumentSourceDescriptor | null>
   cReceiverAdapter?: string | null
   cResultMode?: LibraryCResultMode | null
   cResultMapping?: LibraryCResultMappingDescriptor | null
   resultTypeRef?: TypeRef | null
+  resultInference?: LibraryResultInferenceDescriptor | null
   resultShapeFields?: LibraryResultShapeFieldDescriptor[]
   resultArrayElementType?: string | null
   resultArrayElementTypeId?: LibraryNativeTypeId | null
@@ -321,11 +321,13 @@ export type LibraryOperationDescriptor = {
   cClassFormatExpression?: string | null
   cArgumentKinds?: LibraryCArgumentKind[]
   cArgumentAdapters?: string[]
+  cArgumentMethodNames?: string[]
   cArgumentSources?: Array<LibraryCArgumentSourceDescriptor | null>
   cReceiverAdapter?: string | null
   cResultMode?: LibraryCResultMode | null
   cResultMapping?: LibraryCResultMappingDescriptor | null
   resultTypeRef?: TypeRef | null
+  resultInference?: LibraryResultInferenceDescriptor | null
   resultShapeFields?: LibraryResultShapeFieldDescriptor[]
   resultArrayElementType?: string | null
   resultArrayElementTypeId?: LibraryNativeTypeId | null
@@ -349,12 +351,7 @@ export type LibraryOperationDescriptor = {
   callbackLifetime?: LibraryCallbackLifetime | null
 }
 
-export type IntrinsicRole =
-  | 'array-literal'
-  | 'async-result'
-  | 'exception-value'
-  | 'dynamic-object'
-  | 'regexp-literal'
+export type IntrinsicRole = 'array-literal' | 'async-result' | 'exception-value' | 'dynamic-object' | 'regexp-literal'
 
 export type IntrinsicRoleBinding = {
   role: IntrinsicRole

@@ -36,7 +36,6 @@ const compilerCoreRuntimeRequirementIds = [
   'async-runtime',
   'callback-values',
   'collections',
-  'json',
   'managed-values',
   'objects',
   'string-bytes',
@@ -178,6 +177,7 @@ function validateCompilerLibrarySet(
   validateRuntimeRequirementReferences(operations, nativeTypes, runtimeRequirements)
   validateNativeTypes(nativeTypes)
   validateOperationTypeRefs(operations, nativeTypes)
+  validateOperationResultInferences(operations)
   validateUniqueOperationIds(operations)
   validateUniqueIntrinsicRoles(intrinsicBindings)
   validateIntrinsicOperationBindings(intrinsicBindings, operations)
@@ -195,11 +195,7 @@ function validateCompilerLibraryDescriptorOwnership(library: CompilerLibraryDesc
   const options = library.options ?? []
 
   for (let index = 0; index < options.length; index = index + 1) {
-    validateCompilerLibraryItemOwner(
-      library.id,
-      options[index].libraryId,
-      `option ${options[index].optionId}`
-    )
+    validateCompilerLibraryItemOwner(library.id, options[index].libraryId, `option ${options[index].optionId}`)
   }
 
   const initializers = library.runtimeInitializers ?? []
@@ -231,11 +227,7 @@ function validateCompilerLibraryDescriptorOwnership(library: CompilerLibraryDesc
   }
 }
 
-function validateCompilerLibraryItemOwner(
-  expectedLibraryId: string,
-  actualLibraryId: string,
-  label: string
-): void {
+function validateCompilerLibraryItemOwner(expectedLibraryId: string, actualLibraryId: string, label: string): void {
   if (actualLibraryId !== expectedLibraryId) {
     throw new Error(`${label} is owned by ${actualLibraryId}, expected ${expectedLibraryId}`)
   }
@@ -256,9 +248,7 @@ function validateRuntimeOptionConditions(
         const condition = capability.conditions[conditionIndex]
 
         if (libraryOptionDescriptor(options, condition.optionId) === null) {
-          throw new Error(
-            `runtime requirement ${requirement.id} references missing option ${condition.optionId}`
-          )
+          throw new Error(`runtime requirement ${requirement.id} references missing option ${condition.optionId}`)
         }
 
         const option = libraryOptionDescriptor(options, condition.optionId)
@@ -277,9 +267,7 @@ function validateRuntimeOptionCondition(
   option: LibraryOptionDescriptor
 ): void {
   if (condition.values.length === 0) {
-    throw new Error(
-      `runtime requirement ${requirement.id} option ${condition.optionId} condition has no values`
-    )
+    throw new Error(`runtime requirement ${requirement.id} option ${condition.optionId} condition has no values`)
   }
 
   for (let index = 0; index < condition.values.length; index = index + 1) {
@@ -335,9 +323,7 @@ function validateRuntimeInitializers(
     }
 
     if (cNames.has(initializer.cName)) {
-      throw new Error(
-        `duplicate compiler library runtime initializer C++ name ${initializer.cName}`
-      )
+      throw new Error(`duplicate compiler library runtime initializer C++ name ${initializer.cName}`)
     }
 
     cNames.add(initializer.cName)
@@ -390,9 +376,7 @@ function validateRuntimeInitializerArgument(
 
   if (argument.cValueKind === 'boolean') {
     if (argumentValueType !== 'boolean') {
-      throw new Error(
-        `runtime initializer ${initializer.initializerId} boolean argument requires boolean option`
-      )
+      throw new Error(`runtime initializer ${initializer.initializerId} boolean argument requires boolean option`)
     }
 
     return
@@ -400,9 +384,7 @@ function validateRuntimeInitializerArgument(
 
   if (argument.cValueKind === 'number') {
     if (argument.source !== 'value' || option.valueType !== 'number') {
-      throw new Error(
-        `runtime initializer ${initializer.initializerId} number argument requires numeric option value`
-      )
+      throw new Error(`runtime initializer ${initializer.initializerId} number argument requires numeric option value`)
     }
 
     return
@@ -415,10 +397,7 @@ function validateRuntimeInitializerArgument(
   }
 }
 
-function runtimeInitializerOptionFitsUint32(
-  option: LibraryOptionDescriptor,
-  source: 'value' | 'present'
-): boolean {
+function runtimeInitializerOptionFitsUint32(option: LibraryOptionDescriptor, source: 'value' | 'present'): boolean {
   const minimum = option.minimum
   const maximum = option.maximum
 
@@ -459,9 +438,7 @@ function validateRuntimeInitializerMappings(
 
     if (argument.source === 'present') {
       if (typeof mapping.value !== 'boolean') {
-        throw new Error(
-          `runtime initializer ${initializer.initializerId} present mapping expects boolean values`
-        )
+        throw new Error(`runtime initializer ${initializer.initializerId} present mapping expects boolean values`)
       }
     } else {
       validateCompilerLibraryOptionValue(option, mapping.value)
@@ -532,13 +509,15 @@ function validateRuntimeRequirementReferences(
   for (let index = 0; index < requirements.length; index = index + 1) {
     const requirement = requirements[index]
 
-    for (let dependencyIndex = 0; dependencyIndex < requirement.dependencies.length; dependencyIndex = dependencyIndex + 1) {
+    for (
+      let dependencyIndex = 0;
+      dependencyIndex < requirement.dependencies.length;
+      dependencyIndex = dependencyIndex + 1
+    ) {
       const dependency = requirement.dependencies[dependencyIndex]
 
       if (!runtimeRequirementReferenceExists(requirements, dependency)) {
-        throw new Error(
-          `runtime requirement ${requirement.id} references unknown dependency ${dependency}`
-        )
+        throw new Error(`runtime requirement ${requirement.id} references unknown dependency ${dependency}`)
       }
     }
   }
@@ -546,11 +525,7 @@ function validateRuntimeRequirementReferences(
   for (let index = 0; index < operations.length; index = index + 1) {
     const operation = operations[index]
 
-    validateRuntimeRequirementList(
-      `operation ${operation.operationId}`,
-      operation.runtimeRequirements,
-      requirements
-    )
+    validateRuntimeRequirementList(`operation ${operation.operationId}`, operation.runtimeRequirements, requirements)
 
     const variants = operation.variants ?? []
 
@@ -588,10 +563,7 @@ function validateRuntimeRequirementList(
   }
 }
 
-function runtimeRequirementReferenceExists(
-  requirements: RuntimeRequirementDescriptor[],
-  id: string
-): boolean {
+function runtimeRequirementReferenceExists(requirements: RuntimeRequirementDescriptor[], id: string): boolean {
   if (runtimeRequirementDescriptorExists(requirements, id)) {
     return true
   }
@@ -605,10 +577,7 @@ function runtimeRequirementReferenceExists(
   return false
 }
 
-function runtimeRequirementDescriptorExists(
-  requirements: RuntimeRequirementDescriptor[],
-  id: string
-): boolean {
+function runtimeRequirementDescriptorExists(requirements: RuntimeRequirementDescriptor[], id: string): boolean {
   for (let index = 0; index < requirements.length; index = index + 1) {
     if (requirements[index].id === id) {
       return true
@@ -618,10 +587,7 @@ function runtimeRequirementDescriptorExists(
   return false
 }
 
-function libraryOptionDescriptor(
-  options: LibraryOptionDescriptor[],
-  optionId: string
-): LibraryOptionDescriptor | null {
+function libraryOptionDescriptor(options: LibraryOptionDescriptor[], optionId: string): LibraryOptionDescriptor | null {
   for (let index = 0; index < options.length; index = index + 1) {
     if (options[index].optionId === optionId) {
       return options[index]
@@ -696,11 +662,7 @@ function validateOperationTypeRefs(
       validateTypeRefHasNoLegacyResultMetadata(operation.operationId, operation, null)
     }
 
-    validateCResultMapping(
-      `operation ${operation.operationId}`,
-      operation.cResultMapping,
-      operationTypeRef
-    )
+    validateCResultMapping(`operation ${operation.operationId}`, operation.cResultMapping, operationTypeRef)
 
     const variants = operation.variants ?? []
 
@@ -733,6 +695,91 @@ function validateOperationTypeRefs(
         resultTypeRef
       )
     }
+  }
+}
+
+function validateOperationResultInferences(operations: LibraryOperationDescriptor[]): void {
+  for (let index = 0; index < operations.length; index = index + 1) {
+    const operation = operations[index]
+
+    validateOperationResultInference(
+      `operation ${operation.operationId}`,
+      operation.resultInference,
+      operation.cArgumentKinds,
+      operation.cArgumentMethodNames
+    )
+
+    const variants = operation.variants ?? []
+
+    for (let variantIndex = 0; variantIndex < variants.length; variantIndex = variantIndex + 1) {
+      const variant = variants[variantIndex]
+
+      validateOperationResultInference(
+        `operation ${operation.operationId} variant ${variantIndex}`,
+        variant.resultInference,
+        variant.cArgumentKinds ?? operation.cArgumentKinds,
+        variant.cArgumentMethodNames ?? operation.cArgumentMethodNames
+      )
+    }
+  }
+}
+
+function validateOperationResultInference(
+  label: string,
+  inference: LibraryOperationDescriptor['resultInference'],
+  argumentKinds: LibraryOperationDescriptor['cArgumentKinds'],
+  argumentMethodNames: LibraryOperationDescriptor['cArgumentMethodNames']
+): void {
+  if (argumentMethodNames !== null && typeof argumentMethodNames !== 'undefined') {
+    if (argumentKinds === null || typeof argumentKinds === 'undefined') {
+      throw new Error(`${label} C++ argument method names require argument kinds`)
+    }
+
+    if (argumentMethodNames.length > argumentKinds.length) {
+      throw new Error(`${label} has more C++ argument method names than argument kinds`)
+    }
+
+    for (let index = 0; index < argumentMethodNames.length; index = index + 1) {
+      if (argumentMethodNames[index].length === 0) {
+        throw new Error(`${label} has empty C++ argument method name ${index}`)
+      }
+
+      if (argumentKinds[index] !== 'runtime-value') {
+        throw new Error(`${label} C++ argument method ${index} requires runtime-value kind`)
+      }
+    }
+  }
+
+  if (inference === null || typeof inference === 'undefined') {
+    return
+  }
+
+  if (inference.fingerprint.length === 0) {
+    throw new Error(`${label} result inference requires fingerprint`)
+  }
+
+  if (inference.argumentIndex < 0 || Math.floor(inference.argumentIndex) !== inference.argumentIndex) {
+    throw new Error(`${label} result inference has invalid argument index ${inference.argumentIndex}`)
+  }
+
+  if (inference.literalProviderId.length === 0) {
+    throw new Error(`${label} result inference requires literal provider id`)
+  }
+
+  const contextualTypes: Set<string> = new Set()
+
+  for (let index = 0; index < inference.contextualValueTypes.length; index = index + 1) {
+    const valueType = inference.contextualValueTypes[index]
+
+    if (valueType.length === 0) {
+      throw new Error(`${label} result inference has empty contextual value type`)
+    }
+
+    if (contextualTypes.has(valueType)) {
+      throw new Error(`${label} result inference has duplicate contextual value type ${valueType}`)
+    }
+
+    contextualTypes.add(valueType)
   }
 }
 
@@ -831,9 +878,7 @@ function validateTypeRefHasNoLegacyResultMetadata(
     return
   }
 
-  const label = variantIndex === null
-    ? `operation ${operationId}`
-    : `operation ${operationId} variant ${variantIndex}`
+  const label = variantIndex === null ? `operation ${operationId}` : `operation ${operationId} variant ${variantIndex}`
 
   throw new Error(`${label} cannot combine resultTypeRef with legacy result metadata ${field}`)
 }
@@ -952,8 +997,14 @@ function validateTypeRefList(label: string, refs: TypeRef[], nativeTypeIds: Set<
 }
 
 function isCorePrimitiveType(value: string): boolean {
-  return value === 'boolean' || value === 'bytes' || value === 'null' || value === 'number' ||
-    value === 'string' || value === 'void'
+  return (
+    value === 'boolean' ||
+    value === 'bytes' ||
+    value === 'null' ||
+    value === 'number' ||
+    value === 'string' ||
+    value === 'void'
+  )
 }
 
 function isTypeOwnership(value: string): boolean {
@@ -1064,8 +1115,14 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
       const item = library.declarations[itemIndex]
       insertSortedString(
         declarationIds,
-        item.kind + ':' + item.source + ':' + item.libraryId + ':' +
-          (item.compilerImplemented === true ? 'implemented' : 'declaration-only') + ':' +
+        item.kind +
+          ':' +
+          item.source +
+          ':' +
+          item.libraryId +
+          ':' +
+          (item.compilerImplemented === true ? 'implemented' : 'declaration-only') +
+          ':' +
           item.declarationSource
       )
     }
@@ -1074,28 +1131,82 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
       const item = library.operations[itemIndex]
       insertSortedString(
         operationIds,
-        item.libraryId + ':' + item.bindingId + ':' + item.operationId + ':' + item.kind + ':' +
-          sortedStrings(item.bindingAliases ?? []).join(',') + ':' +
-          sortedStrings(item.runtimeRequirements).join(',') + ':' +
-          (item.cExpression ?? '') + ':' + (item.cLowering ?? '') + ':' +
-          (item.cClassFormatExpression ?? '') + ':' +
-          (item.cArgumentKinds ?? []).join(',') + ':' +
-          (item.cArgumentAdapters ?? []).join(',') + ':' + operationArgumentSourcesFingerprint(item.cArgumentSources) + ':' +
-          (item.callbackLifetime ?? '') + ':' +
-          (item.cResultMode ?? '') + ':' +
-          cResultMappingFingerprint(item.cResultMapping) + ':' +
-          (item.cReceiverAdapter ?? '') + ':' +
-          typeRefFingerprintOrEmpty(item.resultTypeRef) + ':' +
-          operationResultShapeFingerprint(item) + ':' + (item.resultArrayElementType ?? '') + ':' +
-          (item.resultArrayElementTypeId ?? '') + ':' +
-          (item.receiverTypeId ?? '') + ':' +
-          (item.resultTypeId ?? '') + ':' + (item.cCallStyle ?? '') + ':' + (item.cFailureMode ?? '') + ':' +
-          (item.minArgs ?? '') + ':' + (item.maxArgs ?? '') + ':' + operationArgumentChecksFingerprint(item) + ':' +
-          (item.cppType ?? '') + ':' + (item.valueType ?? '') + ':' +
-          (item.promiseValueType ?? '') + ':' + (item.promiseRejectionValueType ?? '') + ':' +
-          (item.nullable === true ? 'nullable' : 'required') + ':' +
-          (item.owned === true ? 'owned' : 'borrowed') + ':' + (item.constantValue ?? '') + ':' +
-          (item.diagnosticCode ?? '') + ':' + (item.diagnosticMessage ?? '') + ':' +
+        item.libraryId +
+          ':' +
+          item.bindingId +
+          ':' +
+          item.operationId +
+          ':' +
+          item.kind +
+          ':' +
+          sortedStrings(item.bindingAliases ?? []).join(',') +
+          ':' +
+          sortedStrings(item.runtimeRequirements).join(',') +
+          ':' +
+          (item.cExpression ?? '') +
+          ':' +
+          (item.cLowering ?? '') +
+          ':' +
+          (item.cClassFormatExpression ?? '') +
+          ':' +
+          (item.cArgumentKinds ?? []).join(',') +
+          ':' +
+          (item.cArgumentAdapters ?? []).join(',') +
+          ':' +
+          (item.cArgumentMethodNames ?? []).join(',') +
+          ':' +
+          operationArgumentSourcesFingerprint(item.cArgumentSources) +
+          ':' +
+          (item.callbackLifetime ?? '') +
+          ':' +
+          (item.cResultMode ?? '') +
+          ':' +
+          cResultMappingFingerprint(item.cResultMapping) +
+          ':' +
+          (item.cReceiverAdapter ?? '') +
+          ':' +
+          typeRefFingerprintOrEmpty(item.resultTypeRef) +
+          ':' +
+          resultInferenceFingerprint(item.resultInference) +
+          ':' +
+          operationResultShapeFingerprint(item) +
+          ':' +
+          (item.resultArrayElementType ?? '') +
+          ':' +
+          (item.resultArrayElementTypeId ?? '') +
+          ':' +
+          (item.receiverTypeId ?? '') +
+          ':' +
+          (item.resultTypeId ?? '') +
+          ':' +
+          (item.cCallStyle ?? '') +
+          ':' +
+          (item.cFailureMode ?? '') +
+          ':' +
+          (item.minArgs ?? '') +
+          ':' +
+          (item.maxArgs ?? '') +
+          ':' +
+          operationArgumentChecksFingerprint(item) +
+          ':' +
+          (item.cppType ?? '') +
+          ':' +
+          (item.valueType ?? '') +
+          ':' +
+          (item.promiseValueType ?? '') +
+          ':' +
+          (item.promiseRejectionValueType ?? '') +
+          ':' +
+          (item.nullable === true ? 'nullable' : 'required') +
+          ':' +
+          (item.owned === true ? 'owned' : 'borrowed') +
+          ':' +
+          (item.constantValue ?? '') +
+          ':' +
+          (item.diagnosticCode ?? '') +
+          ':' +
+          (item.diagnosticMessage ?? '') +
+          ':' +
           operationVariantsFingerprint(item)
       )
     }
@@ -1106,11 +1217,23 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
       const item = libraryOptions[itemIndex]
       insertSortedString(
         optionIds,
-        item.libraryId + ':' + item.optionId + ':' + sortedStrings(item.cliAliases).join(',') + ':' +
-          item.valueType + ':' + compilerLibraryOptionScalarText(item.defaultValue) + ':' +
-          sortedOptionScalars(item.allowedValues ?? []).join(',') + ':' +
-          (item.integer === true ? 'integer' : '') + ':' +
-          (item.minimum ?? '') + ':' + (item.maximum ?? '')
+        item.libraryId +
+          ':' +
+          item.optionId +
+          ':' +
+          sortedStrings(item.cliAliases).join(',') +
+          ':' +
+          item.valueType +
+          ':' +
+          compilerLibraryOptionScalarText(item.defaultValue) +
+          ':' +
+          sortedOptionScalars(item.allowedValues ?? []).join(',') +
+          ':' +
+          (item.integer === true ? 'integer' : '') +
+          ':' +
+          (item.minimum ?? '') +
+          ':' +
+          (item.maximum ?? '')
       )
     }
 
@@ -1128,8 +1251,11 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
         for (let mappingIndex = 0; mappingIndex < valueMap.length; mappingIndex = mappingIndex + 1) {
           const mappingValue = valueMap[mappingIndex].value
           mappings.push(
-            compilerLibraryOptionScalarType(mappingValue) + ':' + compilerLibraryOptionScalarText(mappingValue) +
-              '=' + valueMap[mappingIndex].cExpression
+            compilerLibraryOptionScalarType(mappingValue) +
+              ':' +
+              compilerLibraryOptionScalarText(mappingValue) +
+              '=' +
+              valueMap[mappingIndex].cExpression
           )
         }
 
@@ -1140,8 +1266,17 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
 
       insertSortedString(
         initializerIds,
-        item.libraryId + ':' + item.initializerId + ':' + item.runtimeRequirement + ':' +
-          item.cType + ':' + item.cName + ':' + argumentsFingerprint.join(';')
+        item.libraryId +
+          ':' +
+          item.initializerId +
+          ':' +
+          item.runtimeRequirement +
+          ':' +
+          item.cType +
+          ':' +
+          item.cName +
+          ':' +
+          argumentsFingerprint.join(';')
       )
     }
 
@@ -1151,11 +1286,21 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
       const item = libraryNativeTypes[itemIndex]
       insertSortedString(
         nativeTypeIds,
-        item.libraryId + ':' + item.typeId + ':names=' + sortedStrings(item.declarationNames).join(',') +
-          ':value=' + item.valueType + ':cpp=' + item.cppType +
-          ':bases=' + sortedStrings(item.baseTypeIds).join(',') +
-          ':requirements=' + sortedStrings(item.runtimeRequirements).join(',') +
-          ':fields=' + resultShapeFieldsFingerprint(item.fields ?? [])
+        item.libraryId +
+          ':' +
+          item.typeId +
+          ':names=' +
+          sortedStrings(item.declarationNames).join(',') +
+          ':value=' +
+          item.valueType +
+          ':cpp=' +
+          item.cppType +
+          ':bases=' +
+          sortedStrings(item.baseTypeIds).join(',') +
+          ':requirements=' +
+          sortedStrings(item.runtimeRequirements).join(',') +
+          ':fields=' +
+          resultShapeFieldsFingerprint(item.fields ?? [])
       )
     }
 
@@ -1168,25 +1313,40 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
       const item = library.runtimeRequirements[itemIndex]
       insertSortedString(
         requirementIds,
-        item.id + ':deps=' + sortedStrings(item.dependencies).join(',') +
-          ':includes=' + sortedStrings(item.cPreludeIncludes).join(',') +
-          ':capabilities=' + sortedStrings(item.capabilities).join(',') +
-          ':conditional=' + runtimeConditionalCapabilitiesFingerprint(item) +
-          ':backend=' + runtimeBackendConstraintsFingerprint(item) +
-          ':entrypoint=' + runtimeEntrypointAdapterFingerprint(item)
+        item.id +
+          ':deps=' +
+          sortedStrings(item.dependencies).join(',') +
+          ':includes=' +
+          sortedStrings(item.cPreludeIncludes).join(',') +
+          ':capabilities=' +
+          sortedStrings(item.capabilities).join(',') +
+          ':conditional=' +
+          runtimeConditionalCapabilitiesFingerprint(item) +
+          ':backend=' +
+          runtimeBackendConstraintsFingerprint(item) +
+          ':entrypoint=' +
+          runtimeEntrypointAdapterFingerprint(item)
       )
     }
 
     rows.push(
       library.id +
-        '|deps=' + dependencyIds.join(',') +
-        '|decl=' + declarationIds.join(',') +
-        '|options=' + optionIds.join(',') +
-        '|initializers=' + initializerIds.join(',') +
-        '|types=' + nativeTypeIds.join(',') +
-        '|ops=' + operationIds.join(',') +
-        '|intrinsics=' + intrinsicIds.join(',') +
-        '|requirements=' + requirementIds.join(',')
+        '|deps=' +
+        dependencyIds.join(',') +
+        '|decl=' +
+        declarationIds.join(',') +
+        '|options=' +
+        optionIds.join(',') +
+        '|initializers=' +
+        initializerIds.join(',') +
+        '|types=' +
+        nativeTypeIds.join(',') +
+        '|ops=' +
+        operationIds.join(',') +
+        '|intrinsics=' +
+        intrinsicIds.join(',') +
+        '|requirements=' +
+        requirementIds.join(',')
     )
   }
 
@@ -1199,29 +1359,43 @@ function pushNativeTypes(target: LibraryNativeTypeDescriptor[], values: LibraryN
   }
 }
 
-function operationArgumentChecksFingerprint(
-  operation: { argumentChecks?: LibraryArgumentCheckDescriptor[] }
-): string {
+function operationArgumentChecksFingerprint(operation: { argumentChecks?: LibraryArgumentCheckDescriptor[] }): string {
   const checks = operation.argumentChecks ?? []
   const rows: string[] = []
 
   for (let index = 0; index < checks.length; index = index + 1) {
     const check = checks[index]
     rows.push(
-      sortedStrings(check.valueTypes).join(',') + ':' +
-        sortedStrings(check.objectTypeIds ?? []).join(',') + ':' +
-        (check.objectFieldValueType ?? '') + ':' +
-        (check.arrayLiteralRequired === true ? 'literal' : '') + ':' +
-        sortedStrings(check.arrayElementValueTypes ?? []).join(',') + ':' +
-        sortedStrings(check.stringLiterals ?? []).join(',') + ':' +
-        stringPrefixBackendConstraintsFingerprint(check.stringPrefixBackendConstraints ?? []) + ':' +
-        (check.literalDiagnosticCode ?? '') + ':' + (check.literalDiagnosticMessage ?? '')
-        + ':' + objectLiteralFieldsFingerprint(check.objectLiteralFields ?? []) + ':' +
-        callbackParametersFingerprint(check.functionParameters ?? []) + ':' +
-        (check.functionReturnType ?? '') + ':' +
-        (check.functionAsync === true ? 'async' : check.functionAsync === false ? 'sync' : '') + ':' +
-        (check.functionAsyncDiagnosticCode ?? '') + ':' +
-        (check.functionAsyncDiagnosticMessage ?? '') + ':' +
+      sortedStrings(check.valueTypes).join(',') +
+        ':' +
+        sortedStrings(check.objectTypeIds ?? []).join(',') +
+        ':' +
+        (check.objectFieldValueType ?? '') +
+        ':' +
+        (check.arrayLiteralRequired === true ? 'literal' : '') +
+        ':' +
+        sortedStrings(check.arrayElementValueTypes ?? []).join(',') +
+        ':' +
+        sortedStrings(check.stringLiterals ?? []).join(',') +
+        ':' +
+        stringPrefixBackendConstraintsFingerprint(check.stringPrefixBackendConstraints ?? []) +
+        ':' +
+        (check.literalDiagnosticCode ?? '') +
+        ':' +
+        (check.literalDiagnosticMessage ?? '') +
+        ':' +
+        objectLiteralFieldsFingerprint(check.objectLiteralFields ?? []) +
+        ':' +
+        callbackParametersFingerprint(check.functionParameters ?? []) +
+        ':' +
+        (check.functionReturnType ?? '') +
+        ':' +
+        (check.functionAsync === true ? 'async' : check.functionAsync === false ? 'sync' : '') +
+        ':' +
+        (check.functionAsyncDiagnosticCode ?? '') +
+        ':' +
+        (check.functionAsyncDiagnosticMessage ?? '') +
+        ':' +
         objectMethodChecksFingerprint(check.objectMethods ?? [])
     )
   }
@@ -1229,32 +1403,33 @@ function operationArgumentChecksFingerprint(
   return rows.join(';')
 }
 
-function objectMethodChecksFingerprint(
-  checks: NonNullable<LibraryArgumentCheckDescriptor['objectMethods']>
-): string {
+function objectMethodChecksFingerprint(checks: NonNullable<LibraryArgumentCheckDescriptor['objectMethods']>): string {
   const rows: string[] = []
 
   for (let index = 0; index < checks.length; index = index + 1) {
     const check = checks[index]
     rows.push(
-      check.name + ':' + check.minArgs + ':' + check.maxArgs + ':' +
-        sortedStrings(check.returnValueTypes).join(',')
+      check.name + ':' + check.minArgs + ':' + check.maxArgs + ':' + sortedStrings(check.returnValueTypes).join(',')
     )
   }
 
   return rows.join(',')
 }
 
-function callbackParametersFingerprint(
-  parameters: LibraryCallbackParameterDescriptor[]
-): string {
+function callbackParametersFingerprint(parameters: LibraryCallbackParameterDescriptor[]): string {
   const rows: string[] = []
 
   for (let index = 0; index < parameters.length; index = index + 1) {
     const parameter = parameters[index]
     rows.push(
-      parameter.name + ':' + parameter.valueType + ':' + (parameter.nullable === true ? 'nullable' : '') + ':' +
-        (parameter.resultTypeId ?? '') + ':' +
+      parameter.name +
+        ':' +
+        parameter.valueType +
+        ':' +
+        (parameter.nullable === true ? 'nullable' : '') +
+        ':' +
+        (parameter.resultTypeId ?? '') +
+        ':' +
         resultShapeFieldsFingerprint(parameter.shapeFields ?? [])
     )
   }
@@ -1269,27 +1444,68 @@ function operationVariantsFingerprint(operation: LibraryOperationDescriptor): st
   for (let index = 0; index < variants.length; index = index + 1) {
     const variant = variants[index]
     rows.push(
-      sortedStrings(variant.runtimeRequirements ?? []).join(',') + ':' +
-        (variant.minArgs ?? '') + ':' + (variant.maxArgs ?? '') + ':' +
-        operationArgumentChecksFingerprint(variant) + ':' +
-        (variant.argumentIndex ?? '') + ':' + sortedStrings(variant.stringLiterals ?? []).join(',') + ':' +
-        sortedStrings(variant.argumentValueTypes ?? []).join(',') + ':' +
-        (variant.objectFieldName ?? '') + ':' + sortedBooleans(variant.booleanLiterals ?? []).join(',') + ':' +
-        (variant.cExpression ?? '') + ':' + (variant.cLowering ?? '') + ':' +
-        (variant.cClassFormatExpression ?? '') + ':' +
-        (variant.cArgumentKinds ?? []).join(',') + ':' +
-        (variant.cArgumentAdapters ?? []).join(',') + ':' + operationArgumentSourcesFingerprint(variant.cArgumentSources) + ':' +
-        (variant.callbackLifetime ?? '') + ':' +
-        (variant.cResultMode ?? '') + ':' +
-        cResultMappingFingerprint(variant.cResultMapping) + ':' +
-        (variant.cReceiverAdapter ?? '') + ':' +
-        typeRefFingerprintOrEmpty(variant.resultTypeRef) + ':' +
-        resultShapeFieldsFingerprint(variant.resultShapeFields ?? []) + ':' +
-        (variant.resultArrayElementType ?? '') + ':' + (variant.resultArrayElementTypeId ?? '') + ':' +
-        (variant.resultTypeId ?? '') + ':' +
-        (variant.cppType ?? '') + ':' + (variant.valueType ?? '') + ':' +
-        (variant.promiseValueType ?? '') + ':' + (variant.promiseRejectionValueType ?? '') + ':' +
-        (variant.nullable === true ? 'nullable' : 'required') + ':' +
+      sortedStrings(variant.runtimeRequirements ?? []).join(',') +
+        ':' +
+        (variant.minArgs ?? '') +
+        ':' +
+        (variant.maxArgs ?? '') +
+        ':' +
+        operationArgumentChecksFingerprint(variant) +
+        ':' +
+        (variant.argumentIndex ?? '') +
+        ':' +
+        sortedStrings(variant.stringLiterals ?? []).join(',') +
+        ':' +
+        sortedStrings(variant.argumentValueTypes ?? []).join(',') +
+        ':' +
+        (variant.objectFieldName ?? '') +
+        ':' +
+        sortedBooleans(variant.booleanLiterals ?? []).join(',') +
+        ':' +
+        (variant.cExpression ?? '') +
+        ':' +
+        (variant.cLowering ?? '') +
+        ':' +
+        (variant.cClassFormatExpression ?? '') +
+        ':' +
+        (variant.cArgumentKinds ?? []).join(',') +
+        ':' +
+        (variant.cArgumentAdapters ?? []).join(',') +
+        ':' +
+        (variant.cArgumentMethodNames ?? []).join(',') +
+        ':' +
+        operationArgumentSourcesFingerprint(variant.cArgumentSources) +
+        ':' +
+        (variant.callbackLifetime ?? '') +
+        ':' +
+        (variant.cResultMode ?? '') +
+        ':' +
+        cResultMappingFingerprint(variant.cResultMapping) +
+        ':' +
+        (variant.cReceiverAdapter ?? '') +
+        ':' +
+        typeRefFingerprintOrEmpty(variant.resultTypeRef) +
+        ':' +
+        resultInferenceFingerprint(variant.resultInference) +
+        ':' +
+        resultShapeFieldsFingerprint(variant.resultShapeFields ?? []) +
+        ':' +
+        (variant.resultArrayElementType ?? '') +
+        ':' +
+        (variant.resultArrayElementTypeId ?? '') +
+        ':' +
+        (variant.resultTypeId ?? '') +
+        ':' +
+        (variant.cppType ?? '') +
+        ':' +
+        (variant.valueType ?? '') +
+        ':' +
+        (variant.promiseValueType ?? '') +
+        ':' +
+        (variant.promiseRejectionValueType ?? '') +
+        ':' +
+        (variant.nullable === true ? 'nullable' : 'required') +
+        ':' +
         (variant.owned === true ? 'owned' : 'borrowed')
     )
   }
@@ -1305,9 +1521,33 @@ function typeRefFingerprintOrEmpty(typeRef: TypeRef | null | undefined): string 
   return typeRefFingerprint(typeRef)
 }
 
+function resultInferenceFingerprint(inference: LibraryOperationDescriptor['resultInference']): string {
+  if (inference === null || typeof inference === 'undefined') {
+    return ''
+  }
+
+  return (
+    fingerprintAtom(inference.fingerprint) +
+    ':' +
+    fingerprintAtom(inference.literalProviderId) +
+    ':' +
+    inference.argumentIndex +
+    ':' +
+    sortedStrings(inference.contextualValueTypes).join(',') +
+    ':' +
+    (inference.dynamicObjectShapes ? 'dynamic' : 'fixed')
+  )
+}
+
 function typeRefFingerprint(typeRef: TypeRef): string {
-  const common = ':' + (typeRef.nullable ? 'nullable' : 'required') + ':' +
-    fingerprintAtom(typeRef.ownership) + ':traits[' + typeTraitRefsFingerprint(typeRef) + ']'
+  const common =
+    ':' +
+    (typeRef.nullable ? 'nullable' : 'required') +
+    ':' +
+    fingerprintAtom(typeRef.ownership) +
+    ':traits[' +
+    typeTraitRefsFingerprint(typeRef) +
+    ']'
 
   if (typeRef.kind === 'primitive') {
     return 'primitive(' + fingerprintAtom(typeRef.name) + ')' + common
@@ -1327,7 +1567,10 @@ function typeRefFingerprint(typeRef: TypeRef): string {
     for (let index = 0; index < typeRef.fields.length; index = index + 1) {
       const field = typeRef.fields[index]
       fields.push(
-        fingerprintAtom(field.name) + ':' + (field.readonly ? 'readonly' : 'mutable') + ':' +
+        fingerprintAtom(field.name) +
+          ':' +
+          (field.readonly ? 'readonly' : 'mutable') +
+          ':' +
           typeRefFingerprint(field.typeRef)
       )
     }
@@ -1371,12 +1614,20 @@ function objectLiteralFieldsFingerprint(fields: LibraryObjectLiteralFieldDescrip
   for (let index = 0; index < fields.length; index = index + 1) {
     const field = fields[index]
     rows.push(
-      field.name + ':' + sortedStrings(field.valueTypes).join(',') + ':' +
-        sortedBooleans(field.booleanLiterals ?? []).join(',') + ':' +
-        sortedStrings(field.stringLiterals ?? []).join(',') + ':' +
-        (field.objectLiteralRequired === true ? 'literal' : '') + ':' +
-        (field.objectFieldValueType ?? '') + ':' +
-        sortedStrings(field.objectTypeIds ?? []).join(',') + ':' +
+      field.name +
+        ':' +
+        sortedStrings(field.valueTypes).join(',') +
+        ':' +
+        sortedBooleans(field.booleanLiterals ?? []).join(',') +
+        ':' +
+        sortedStrings(field.stringLiterals ?? []).join(',') +
+        ':' +
+        (field.objectLiteralRequired === true ? 'literal' : '') +
+        ':' +
+        (field.objectFieldValueType ?? '') +
+        ':' +
+        sortedStrings(field.objectTypeIds ?? []).join(',') +
+        ':' +
         (field.optional === true ? 'optional' : 'required')
     )
   }
@@ -1399,9 +1650,15 @@ function stringPrefixBackendConstraintsFingerprint(
   for (let index = 0; index < constraints.length; index = index + 1) {
     const constraint = constraints[index]
     rows.push(
-      sortedStrings(constraint.prefixes).join(',') + ':' + constraint.option + ':' +
-        sortedStrings(constraint.allowedValues).join(',') + ':' +
-        constraint.diagnosticCode + ':' + constraint.diagnosticMessage
+      sortedStrings(constraint.prefixes).join(',') +
+        ':' +
+        constraint.option +
+        ':' +
+        sortedStrings(constraint.allowedValues).join(',') +
+        ':' +
+        constraint.diagnosticCode +
+        ':' +
+        constraint.diagnosticMessage
     )
   }
 
@@ -1440,8 +1697,13 @@ function runtimeBackendConstraintsFingerprint(requirement: RuntimeRequirementDes
   for (let index = 0; index < constraints.length; index = index + 1) {
     const constraint = constraints[index]
     rows.push(
-      constraint.option + ':' + sortedStrings(constraint.allowedValues).join(',') + ':' +
-        constraint.diagnosticCode + ':' + constraint.diagnosticMessage
+      constraint.option +
+        ':' +
+        sortedStrings(constraint.allowedValues).join(',') +
+        ':' +
+        constraint.diagnosticCode +
+        ':' +
+        constraint.diagnosticMessage
     )
   }
 
@@ -1460,8 +1722,7 @@ function runtimeConditionalCapabilitiesFingerprint(requirement: RuntimeRequireme
     for (let conditionIndex = 0; conditionIndex < item.conditions.length; conditionIndex = conditionIndex + 1) {
       const condition = item.conditions[conditionIndex]
       conditions.push(
-        condition.optionId + ':' + condition.source + ':' +
-          sortedOptionScalars(condition.values).join(',')
+        condition.optionId + ':' + condition.source + ':' + sortedOptionScalars(condition.values).join(',')
       )
     }
 
@@ -1482,9 +1743,7 @@ function operationResultShapeFingerprint(operation: LibraryOperationDescriptor):
   return resultShapeFieldsFingerprint(fields)
 }
 
-function cResultMappingFingerprint(
-  mapping: LibraryCResultMappingDescriptor | null | undefined
-): string {
+function cResultMappingFingerprint(mapping: LibraryCResultMappingDescriptor | null | undefined): string {
   if (mapping === null || typeof mapping === 'undefined') {
     return ''
   }
@@ -1492,9 +1751,7 @@ function cResultMappingFingerprint(
   return mapping.cppType + ':fields=' + cResultFieldMappingsFingerprint(mapping.fields)
 }
 
-function cResultFieldMappingsFingerprint(
-  fields: LibraryCResultFieldMappingDescriptor[]
-): string {
+function cResultFieldMappingsFingerprint(fields: LibraryCResultFieldMappingDescriptor[]): string {
   const rows: string[] = []
 
   for (let index = 0; index < fields.length; index = index + 1) {
@@ -1511,9 +1768,7 @@ function cResultFieldMappingsFingerprint(
   return rows.join(',')
 }
 
-function resultShapeFieldsFingerprint(
-  fields: LibraryResultShapeFieldDescriptor[]
-): string {
+function resultShapeFieldsFingerprint(fields: LibraryResultShapeFieldDescriptor[]): string {
   const rows: string[] = []
 
   for (let index = 0; index < fields.length; index = index + 1) {
@@ -1532,9 +1787,7 @@ function resultShapeFieldsFingerprint(
   return rows.join(',')
 }
 
-function nestedResultShapeFieldsFingerprint(
-  fields: LibraryNestedResultShapeFieldDescriptor[]
-): string {
+function nestedResultShapeFieldsFingerprint(fields: LibraryNestedResultShapeFieldDescriptor[]): string {
   const rows: string[] = []
 
   for (let index = 0; index < fields.length; index = index + 1) {
@@ -1594,10 +1847,7 @@ function remainingLibraryIds(ids: string[], completed: Set<string>): string[] {
   return result
 }
 
-function requireLibrary(
-  libraries: Map<string, CompilerLibraryDescriptor>,
-  id: string
-): CompilerLibraryDescriptor {
+function requireLibrary(libraries: Map<string, CompilerLibraryDescriptor>, id: string): CompilerLibraryDescriptor {
   const library = libraries.get(id)
 
   if (library === null || typeof library === 'undefined') {
@@ -1675,10 +1925,7 @@ function pushIntrinsicBindings(target: IntrinsicRoleBinding[], values: Intrinsic
   }
 }
 
-function pushRuntimeRequirements(
-  target: RuntimeRequirementDescriptor[],
-  values: RuntimeRequirementDescriptor[]
-): void {
+function pushRuntimeRequirements(target: RuntimeRequirementDescriptor[], values: RuntimeRequirementDescriptor[]): void {
   for (let index = 0; index < values.length; index = index + 1) {
     target.push(values[index])
   }

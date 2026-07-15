@@ -51,14 +51,6 @@ export const globals: Map<string, SymbolInfo> = new Map([
     }
   ],
   [
-    'JSON',
-    {
-      kind: 'global',
-      mutable: false,
-      valueType: 'object'
-    }
-  ],
-  [
     'Int8Array',
     {
       kind: 'global',
@@ -125,7 +117,7 @@ export function builtinGlobalSymbol(name: string): SymbolInfo | null {
     }
   }
 
-  if (name === 'Object' || name === 'JSON') {
+  if (name === 'Object') {
     return {
       kind: 'global',
       mutable: false,

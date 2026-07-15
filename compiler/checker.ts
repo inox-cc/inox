@@ -9,18 +9,11 @@ import {
   isSwitchableType
 } from './checker/assignability.ts'
 import { builtinGlobalSymbol, libuvOnlyRuntimeImportFeature } from './checker/builtins.ts'
-import {
-  isJsonParseDeclaredType,
-  jsonRuntimeMethodName
-} from '../stdlib/global/compiler/checker.ts'
 import { applyCallableSymbolCall as applyCallableSymbolCallInContext } from './checker/callable-symbols.ts'
 import type { CallableSymbolCheckerContext } from './checker/callable-symbols.ts'
 import { runtimeImportValueType } from './stdlib/node/runtime-imports.ts'
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
-import {
-  parseTemplateLiteralParts,
-  parseTemplatePlaceholderExpression
-} from './template-literals.ts'
+import { parseTemplateLiteralParts, parseTemplatePlaceholderExpression } from './template-literals.ts'
 import {
   compilerLibraryHasModuleDeclaration,
   compilerLibraryIntrinsicRoleForBinding,
@@ -41,14 +34,18 @@ import {
 } from './extensions/global-declarations.ts'
 import { compilerLibraryCapabilities } from './extensions/library-options.ts'
 import type {
+  CompilerLibraryLiteralTypeInference,
   IntrinsicRole,
+  LibraryCResultMappingDescriptor,
   LibraryOperationDescriptor,
   LibraryOperationKind,
   LibraryArgumentCheckDescriptor,
   LibraryObjectMethodCheckDescriptor,
   LibraryObjectLiteralFieldDescriptor,
   LibraryOperationVariantDescriptor,
-  LibraryResultShapeFieldDescriptor
+  LibraryResultInferenceDescriptor,
+  LibraryResultShapeFieldDescriptor,
+  TypeRef
 } from './extensions/types.ts'
 import {
   cloneResolvedTypeInfo as cloneResolvedTypeInfoInContext,
@@ -162,7 +159,6 @@ import {
   statementAlwaysExits,
   uniqueNames
 } from './checker/helpers.ts'
-import { inferJsonParseLiteralType } from './checker/json-literals.ts'
 import { ownershipCycleDiagnostics } from './checker/ownership.ts'
 import { memberExpressionPath } from './member-paths.ts'
 import { collectionConstructorNameFromPath, isArrayMethod } from '../stdlib/global/compiler/descriptor.ts'
@@ -283,6 +279,7 @@ class CheckerScope {
 type CheckerScopeState = {
   scope: CheckerScope
   narrowedNullableNames: Set<string>
+  narrowedValueTypes: Map<string, ValueType>
 }
 
 type CheckerTypeParameterState = {
@@ -293,6 +290,17 @@ type CheckerTypeParameterState = {
 
 type CheckerNarrowingState = {
   narrowedNullableNames: Set<string>
+  narrowedValueTypes: Map<string, ValueType>
+}
+
+type CheckerValueTypeNarrowing = {
+  name: string
+  valueType: ValueType
+}
+
+type CheckerValueTypeConditionNarrowing = {
+  trueTypes: CheckerValueTypeNarrowing[]
+  falseTypes: CheckerValueTypeNarrowing[]
 }
 
 type CheckerReturnContextState = {
@@ -308,8 +316,12 @@ type CheckerLoopDepthState = {
   continueDepth: number
 }
 
-export function checkProgram(program: ProgramNode, options: CompileOptions = {}): CheckProgramResult {
-  const checker = new Checker(program, options)
+export function checkProgram(
+  program: ProgramNode,
+  options: CompileOptions = {},
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
+): CheckProgramResult {
+  const checker = new Checker(program, options, libraryLiteralTypeInference)
   checker.check()
 
   return {
@@ -352,12 +364,18 @@ class Checker {
   asyncDepth: number
   functionDepth: number
   narrowedNullableNames: Set<string>
+  narrowedValueTypes: Map<string, ValueType>
   resolvedDeclaredTypes: Map<string, ResolvedTypeInfo>
   resolvingDeclaredTypes: Set<string>
   functionDeclarations: Map<string, AnyNode>
   inferringFunctionReturns: Set<string>
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null
 
-  constructor(program: ProgramNode, options: CompileOptions = {}) {
+  constructor(
+    program: ProgramNode,
+    options: CompileOptions = {},
+    libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
+  ) {
     this.program = program
     this.options = options
     this.diagnostics = []
@@ -378,10 +396,12 @@ class Checker {
     this.asyncDepth = 0
     this.functionDepth = 0
     this.narrowedNullableNames = new Set()
+    this.narrowedValueTypes = new Map()
     this.resolvedDeclaredTypes = new Map()
     this.resolvingDeclaredTypes = new Set()
     this.functionDeclarations = new Map()
     this.inferringFunctionReturns = new Set()
+    this.libraryLiteralTypeInference = libraryLiteralTypeInference
   }
 
   check(): void {
@@ -869,6 +889,12 @@ class Checker {
   resolveClassField(field: AnyNode): AnyNode {
     const fieldInfo = this.resolveFieldDeclaredType(field)
     const declaredType = nodeDeclaredTypeOrValueType(field)
+    const declaredFunctionType = this.resolveFunctionTypeMetadata(field.functionType, field.loc)
+
+    if (declaredFunctionType !== null) {
+      fieldInfo.valueType = 'function'
+      fieldInfo.functionType = declaredFunctionType
+    }
 
     return {
       type: field.type,
@@ -1075,9 +1101,10 @@ class Checker {
     if (statement.type === 'IfStatement') {
       this.checkBooleanCondition(statement.condition)
       const narrowing = this.resolveNullableConditionNarrowing(statement.condition)
+      const valueTypeNarrowing = this.resolveValueTypeConditionNarrowing(statement.condition)
       let consequentNarrowedNames: Set<string> | null = null
 
-      const trueNarrowingState = this.pushBranchNarrowedNullableNames(narrowing.trueNames)
+      const trueNarrowingState = this.pushBranchNarrowedNullableNames(narrowing.trueNames, valueTypeNarrowing.trueTypes)
 
       try {
         this.checkFlowScopedBody(statement.consequent)
@@ -1088,7 +1115,10 @@ class Checker {
 
       if (statement.alternate !== null && typeof statement.alternate !== 'undefined') {
         let alternateNarrowedNames: Set<string> | null = null
-        const falseNarrowingState = this.pushBranchNarrowedNullableNames(narrowing.falseNames)
+        const falseNarrowingState = this.pushBranchNarrowedNullableNames(
+          narrowing.falseNames,
+          valueTypeNarrowing.falseTypes
+        )
 
         try {
           this.checkFlowScopedBody(statement.alternate)
@@ -1140,11 +1170,12 @@ class Checker {
     if (statement.type === 'WhileStatement') {
       this.checkBooleanCondition(statement.condition)
       const narrowing = this.resolveNullableConditionNarrowing(statement.condition)
+      const valueTypeNarrowing = this.resolveValueTypeConditionNarrowing(statement.condition)
 
       const loopState = this.pushLoop()
 
       try {
-        const narrowingState = this.pushNarrowedNullableNames(narrowing.trueNames)
+        const narrowingState = this.pushNarrowedNullableNames(narrowing.trueNames, valueTypeNarrowing.trueTypes)
 
         try {
           this.checkScopedBody(statement.body)
@@ -1833,7 +1864,7 @@ class Checker {
       }
 
       if (symbol !== null && typeof symbol !== 'undefined') {
-        valueType = symbol.valueType
+        valueType = this.narrowedValueTypes.get(path[0]) ?? symbol.valueType
         expression.nullable = symbol.nullable === true && !this.narrowedNullableNames.has(path[0])
         expression.valueType = valueType
         expression.narrowingTrueNames = symbol.narrowingTrueNames ?? []
@@ -2290,10 +2321,11 @@ class Checker {
   checkConditionalExpression(expression: AnyNode): ValueType {
     this.checkExpression(expression.test)
     const narrowing = this.resolveNullableConditionNarrowing(expression.test)
+    const valueTypeNarrowing = this.resolveValueTypeConditionNarrowing(expression.test)
     let consequentType: ValueType = 'unknown'
     let alternateType: ValueType = 'unknown'
 
-    const consequentNarrowingState = this.pushNarrowedNullableNames(narrowing.trueNames)
+    const consequentNarrowingState = this.pushNarrowedNullableNames(narrowing.trueNames, valueTypeNarrowing.trueTypes)
 
     try {
       consequentType = this.checkExpression(expression.consequent)
@@ -2301,7 +2333,7 @@ class Checker {
       this.restoreNarrowedNullableNames(consequentNarrowingState)
     }
 
-    const alternateNarrowingState = this.pushNarrowedNullableNames(narrowing.falseNames)
+    const alternateNarrowingState = this.pushNarrowedNullableNames(narrowing.falseNames, valueTypeNarrowing.falseTypes)
 
     try {
       alternateType = this.checkExpression(expression.alternate)
@@ -2400,10 +2432,8 @@ class Checker {
         const alternateField = this.findShapeField(alternateShape, sourceField.name)
         const field = cloneObjectShapeField(sourceField)
 
-        field.optional =
-          sourceField.optional === true || consequentField === null || alternateField === null
-        field.nullable =
-          consequentField?.nullable === true || alternateField?.nullable === true
+        field.optional = sourceField.optional === true || consequentField === null || alternateField === null
+        field.nullable = consequentField?.nullable === true || alternateField?.nullable === true
 
         if (consequentField !== null && alternateField !== null) {
           field.valueType = conditionalExpressionValueType(
@@ -2522,15 +2552,16 @@ class Checker {
   checkBinaryExpression(expression: AnyNode): ValueType {
     const left = this.checkExpression(expression.left)
     const leftNarrowing = this.resolveNullableConditionNarrowing(expression.left)
+    const leftValueTypeNarrowing = this.resolveValueTypeConditionNarrowing(expression.left)
     let right = 'unknown'
 
     if (expression.operator === '&&') {
-      const narrowingState = this.pushNarrowedNullableNames(leftNarrowing.trueNames)
+      const narrowingState = this.pushNarrowedNullableNames(leftNarrowing.trueNames, leftValueTypeNarrowing.trueTypes)
 
       right = this.checkExpression(expression.right)
       this.restoreNarrowedNullableNames(narrowingState)
     } else if (expression.operator === '||') {
-      const narrowingState = this.pushNarrowedNullableNames(leftNarrowing.falseNames)
+      const narrowingState = this.pushNarrowedNullableNames(leftNarrowing.falseNames, leftValueTypeNarrowing.falseTypes)
 
       right = this.checkExpression(expression.right)
       this.restoreNarrowedNullableNames(narrowingState)
@@ -3536,10 +3567,7 @@ class Checker {
     return className !== null && typeof className !== 'undefined'
   }
 
-  classMethodMatchesLibraryCheck(
-    expression: AnyNode,
-    check: LibraryObjectMethodCheckDescriptor
-  ): boolean {
+  classMethodMatchesLibraryCheck(expression: AnyNode, check: LibraryObjectMethodCheckDescriptor): boolean {
     const className = this.resolveClassMethodReceiverClassName(expression)
 
     if (className === null || typeof className === 'undefined') {
@@ -3740,12 +3768,6 @@ class Checker {
       return promiseMethodType
     }
 
-    const jsonType = this.checkJsonCall(expression, null)
-
-    if (jsonType !== null && typeof jsonType !== 'undefined') {
-      return jsonType
-    }
-
     const promiseStaticType = this.checkPromiseStaticCall(expression)
 
     if (promiseStaticType !== null && typeof promiseStaticType !== 'undefined') {
@@ -3783,7 +3805,10 @@ class Checker {
     return applyCallableSymbolCallInContext(this.callableSymbolContext(), expression, symbol, argInfos)
   }
 
-  checkCompilerLibraryCallOperation(expression: AnyNode): ValueType | null {
+  checkCompilerLibraryCallOperation(
+    expression: AnyNode,
+    contextualResult: ResolvedTypeInfo | null = null
+  ): ValueType | null {
     let operation = this.compilerLibraryOperationForExpression(expression.callee, 'call')
 
     if (operation === null && expression.callee.type === 'MemberExpression') {
@@ -3819,10 +3844,84 @@ class Checker {
     }
 
     this.checkCompilerLibraryBackendConstraints(expression, operation)
+    this.applyCompilerLibraryResultInference(expression, operation, variant, contextualResult)
 
     return typeof expression.valueType === 'string'
-      ? expression.valueType as ValueType
-      : (variant?.valueType ?? declaredType ?? operation.valueType ?? 'unknown') as ValueType
+      ? (expression.valueType as ValueType)
+      : ((variant?.valueType ?? declaredType ?? operation.valueType ?? 'unknown') as ValueType)
+  }
+
+  applyCompilerLibraryResultInference(
+    expression: AnyNode,
+    operation: LibraryOperationDescriptor,
+    variant: LibraryOperationVariantDescriptor | null,
+    contextualResult: ResolvedTypeInfo | null
+  ): void {
+    const inference = variant?.resultInference ?? operation.resultInference
+
+    if (inference === null || typeof inference === 'undefined') {
+      return
+    }
+
+    const cResultMapping = variant?.cResultMapping ?? operation.cResultMapping ?? null
+
+    if (contextualResult !== null && inference.contextualValueTypes.includes(contextualResult.valueType)) {
+      this.applyCompilerLibraryContextualResult(expression, contextualResult, cResultMapping, inference)
+      return
+    }
+
+    const argument = compilerLibraryCallArgument(expression, inference.argumentIndex)
+
+    if (argument === null || argument.type !== 'StringLiteral') {
+      return
+    }
+
+    if (this.libraryLiteralTypeInference === null || typeof this.libraryLiteralTypeInference === 'undefined') {
+      return
+    }
+
+    const inferredTypeRef = this.libraryLiteralTypeInference(inference.literalProviderId, argument.value)
+
+    if (inferredTypeRef === null) {
+      return
+    }
+
+    this.applyCompilerLibraryTypeRef(expression, inferredTypeRef, cResultMapping)
+    this.applyCompilerLibraryDynamicObjectShapes(expression, inference)
+  }
+
+  applyCompilerLibraryContextualResult(
+    expression: AnyNode,
+    contextualResult: ResolvedTypeInfo,
+    cResultMapping: LibraryCResultMappingDescriptor | null,
+    inference: LibraryResultInferenceDescriptor
+  ): void {
+    if (contextualResult.typeRef !== null) {
+      this.applyCompilerLibraryTypeRef(expression, contextualResult.typeRef, cResultMapping)
+    } else {
+      expression.valueType = contextualResult.valueType
+      expression.nullable = contextualResult.nullable
+      expression.typeRef = null
+      expression.shape = contextualResult.shape
+      expression.arrayElementType = contextualResult.arrayElementType
+      expression.arrayElementDeclaredType = contextualResult.arrayElementDeclaredType
+      expression.mapKeyType = contextualResult.mapKeyType
+      expression.mapValueType = contextualResult.mapValueType
+      expression.promiseValueType = contextualResult.promiseValueType
+      expression.setElementType = contextualResult.setElementType
+      expression.libraryCppType = cResultMapping?.cppType ?? expression.libraryCppType ?? null
+      this.applyCompilerLibraryCResultShapeFields(expression)
+    }
+
+    this.applyCompilerLibraryDynamicObjectShapes(expression, inference)
+  }
+
+  applyCompilerLibraryDynamicObjectShapes(expression: AnyNode, inference: LibraryResultInferenceDescriptor): void {
+    if (inference.dynamicObjectShapes !== true) {
+      return
+    }
+
+    markObjectShapeDynamic(expression.shape)
   }
 
   compilerLibraryDeclarationCallableSymbol(callee: AnyNode): SymbolInfo | null {
@@ -4434,10 +4533,7 @@ class Checker {
     }
   }
 
-  checkCompilerLibraryStringPrefixBackendConstraints(
-    argument: AnyNode,
-    check: LibraryArgumentCheckDescriptor
-  ): void {
+  checkCompilerLibraryStringPrefixBackendConstraints(argument: AnyNode, check: LibraryArgumentCheckDescriptor): void {
     if (argument.type !== 'StringLiteral') {
       return
     }
@@ -4459,9 +4555,10 @@ class Checker {
         continue
       }
 
-      const actual = constraint.option === 'tlsBackend'
-        ? this.options.tlsBackend ?? 'none'
-        : this.options.loopBackend ?? 'embedded'
+      const actual =
+        constraint.option === 'tlsBackend'
+          ? (this.options.tlsBackend ?? 'none')
+          : (this.options.loopBackend ?? 'embedded')
 
       if (!constraint.allowedValues.includes(actual)) {
         this.report(constraint.diagnosticCode, constraint.diagnosticMessage, argument.loc)
@@ -4660,6 +4757,12 @@ class Checker {
       expression.libraryCArgumentAdapters = cArgumentAdapters
     }
 
+    const cArgumentMethodNames = variant?.cArgumentMethodNames ?? operation.cArgumentMethodNames
+
+    if (cArgumentMethodNames !== null && typeof cArgumentMethodNames !== 'undefined') {
+      expression.libraryCArgumentMethodNames = cArgumentMethodNames
+    }
+
     const cArgumentSources = variant?.cArgumentSources ?? operation.cArgumentSources
 
     if (cArgumentSources !== null && typeof cArgumentSources !== 'undefined') {
@@ -4674,34 +4777,7 @@ class Checker {
 
     if (resultTypeRef !== null && typeof resultTypeRef !== 'undefined') {
       const cResultMapping = variant?.cResultMapping ?? operation.cResultMapping ?? null
-      const metadata = typeRefCompatibilityMetadata(resultTypeRef, libraries, expression.loc, cResultMapping)
-      const cResultShapeFields: string[] = []
-
-      expression.typeRef = resultTypeRef
-      expression.valueType = metadata.valueType
-      expression.shape = metadata.shape
-      expression.libraryCppType = metadata.libraryCppType
-      expression.arrayElementType = metadata.arrayElementType
-      expression.arrayElementTypeId = metadata.arrayElementTypeId
-      expression.arrayElementDeclaredType = metadata.arrayElementDeclaredType
-      expression.mapKeyType = metadata.mapKeyType
-      expression.mapValueType = metadata.mapValueType
-      expression.promiseValueType = metadata.promiseValueType
-      expression.promiseRejectionValueType = metadata.promiseRejectionValueType
-      expression.promiseRejectionIntrinsicRole = metadata.promiseRejectionIntrinsicRole
-      expression.libraryIntrinsicRole = metadata.intrinsicRole ?? expression.libraryIntrinsicRole
-      expression.setElementType = metadata.setElementType
-      expression.libraryOwned = metadata.owned
-      expression.libraryResultTypeId = metadata.libraryResultTypeId
-      expression.nullable = metadata.nullable
-
-      const shapeFields = metadata.shape?.fields ?? []
-
-      for (let index = 0; index < shapeFields.length; index = index + 1) {
-        cResultShapeFields.push(shapeFields[index].name)
-      }
-
-      expression.libraryCResultShapeFields = cResultShapeFields
+      this.applyCompilerLibraryTypeRef(expression, resultTypeRef, cResultMapping)
     } else {
       const resultTypeId = variant?.resultTypeId ?? operation.resultTypeId
       const cppType = variant?.cppType ?? operation.cppType
@@ -4768,6 +4844,45 @@ class Checker {
     expression.libraryReceiverTypeId = operation.receiverTypeId ?? null
     expression.libraryCCallStyle = operation.cCallStyle ?? null
     expression.libraryCFailureMode = operation.cFailureMode ?? null
+  }
+
+  applyCompilerLibraryTypeRef(
+    expression: AnyNode,
+    resultTypeRef: TypeRef,
+    cResultMapping: LibraryCResultMappingDescriptor | null
+  ): void {
+    const libraries = resolveCompilerLibrarySet(this.options.libraries)
+    const metadata = typeRefCompatibilityMetadata(resultTypeRef, libraries, expression.loc, cResultMapping)
+
+    expression.typeRef = resultTypeRef
+    expression.valueType = metadata.valueType
+    expression.shape = metadata.shape
+    expression.libraryCppType = metadata.libraryCppType
+    expression.arrayElementType = metadata.arrayElementType
+    expression.arrayElementTypeId = metadata.arrayElementTypeId
+    expression.arrayElementDeclaredType = metadata.arrayElementDeclaredType
+    expression.mapKeyType = metadata.mapKeyType
+    expression.mapValueType = metadata.mapValueType
+    expression.promiseValueType = metadata.promiseValueType
+    expression.promiseRejectionValueType = metadata.promiseRejectionValueType
+    expression.promiseRejectionIntrinsicRole = metadata.promiseRejectionIntrinsicRole
+    expression.libraryIntrinsicRole = metadata.intrinsicRole ?? expression.libraryIntrinsicRole
+    expression.setElementType = metadata.setElementType
+    expression.libraryOwned = metadata.owned
+    expression.libraryResultTypeId = metadata.libraryResultTypeId
+    expression.nullable = metadata.nullable
+    this.applyCompilerLibraryCResultShapeFields(expression)
+  }
+
+  applyCompilerLibraryCResultShapeFields(expression: AnyNode): void {
+    const shapeFields = expression.shape?.fields ?? []
+    const cResultShapeFields: string[] = []
+
+    for (let index = 0; index < shapeFields.length; index = index + 1) {
+      cResultShapeFields.push(shapeFields[index].name)
+    }
+
+    expression.libraryCResultShapeFields = cResultShapeFields
   }
 
   reportCompilerLibraryOperationDiagnostic(expression: AnyNode, operation: LibraryOperationDescriptor): boolean {
@@ -4852,18 +4967,29 @@ class Checker {
       }
     }
 
+    if (method === null || typeof method === 'undefined') {
+      const fieldValueType = this.checkMemberExpression(expression.callee)
+
+      if (fieldValueType === 'function') {
+        return null
+      }
+
+      if (fieldValueType === 'unknown') {
+        expression.valueType = 'unknown'
+        return 'unknown'
+      }
+
+      this.report('INOX_UNKNOWN_FIELD', `unknown method ${expression.callee.property}`, expression.callee.loc)
+      expression.valueType = 'unknown'
+      return 'unknown'
+    }
+
     const argTypes: ValueType[] = []
 
     for (let index = 0; index < expression.args.length; index = index + 1) {
       const arg = checkerNodeAt(expression.args, index)
 
       argTypes.push(this.checkExpression(arg))
-    }
-
-    if (method === null || typeof method === 'undefined') {
-      this.report('INOX_UNKNOWN_FIELD', `unknown method ${expression.callee.property}`, expression.callee.loc)
-      expression.valueType = 'unknown'
-      return 'unknown'
     }
 
     const params: AnyNode[] = []
@@ -5065,95 +5191,6 @@ class Checker {
     }
 
     return null
-  }
-
-  checkJsonCall(expression: AnyNode, declared?: ResolvedTypeInfo | null): ValueType | null {
-    const method = jsonRuntimeMethodName(expression.callee)
-
-    if (method === null || typeof method === 'undefined') {
-      return null
-    }
-
-    if (this.scope.resolve('JSON')) {
-      return null
-    }
-
-    expression.jsonRuntimeMethod = method
-
-    if (expression.args.length !== 1) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function JSON.${method} expects 1 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    if (method === 'parse') {
-      this.checkJsonStringArg(expression, 0)
-
-      const literalType = inferJsonParseLiteralType(expression)
-      let valueType: ValueType = 'object'
-
-      if (declared !== null && typeof declared !== 'undefined' && isJsonParseDeclaredType(declared.valueType)) {
-        valueType = declared.valueType
-      } else if (literalType !== null && typeof literalType !== 'undefined') {
-        valueType = literalType.valueType
-      }
-
-      expression.valueType = valueType
-      expression.arrayElementType = null
-      expression.arrayElementDeclaredType = null
-      expression.mapKeyType = null
-      expression.mapValueType = null
-      expression.promiseValueType = null
-      expression.setElementType = null
-      expression.shape = null
-
-      if (declared !== null && typeof declared !== 'undefined') {
-        expression.arrayElementType = declared.arrayElementType
-        expression.arrayElementDeclaredType = declared.arrayElementDeclaredType
-        expression.mapKeyType = declared.mapKeyType
-        expression.mapValueType = declared.mapValueType
-        expression.promiseValueType = null
-
-        if (declared.promiseValueType !== null && typeof declared.promiseValueType !== 'undefined') {
-          expression.promiseValueType = declared.promiseValueType
-        }
-
-        expression.setElementType = declared.setElementType
-
-        if (valueType === 'object') {
-          expression.shape = declared.shape
-        }
-      } else if (literalType !== null && typeof literalType !== 'undefined') {
-        expression.arrayElementType = literalType.arrayElementType
-        expression.arrayElementDeclaredType = literalType.arrayElementDeclaredType
-
-        if (valueType === 'object') {
-          expression.shape = literalType.shape
-        }
-      }
-
-      return valueType
-    }
-
-    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-      this.checkExpression(expression.args[0])
-    }
-
-    expression.valueType = 'string'
-
-    return 'string'
-  }
-
-  checkJsonStringArg(expression: AnyNode, index: number): void {
-    const arg = expression.args[index]
-
-    if (arg === null || typeof arg === 'undefined') {
-      return
-    }
-
-    this.checkAssignableType(this.checkExpression(arg), 'string', arg.loc, false, this.expressionCanBeNull(arg))
   }
 
   checkPromiseStaticCall(expression: AnyNode): ValueType | null {
@@ -5641,6 +5678,31 @@ class Checker {
       return 'array'
     }
 
+    if (method === 'some') {
+      expression.valueType = 'boolean'
+      expression.nullable = false
+      expression.shape = null
+      expression.arrayElementType = null
+      expression.arrayElementDeclaredType = null
+      expression.mapKeyType = null
+      expression.mapValueType = null
+      expression.promiseValueType = null
+      expression.setElementType = null
+      expression.functionType = null
+
+      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
+        if (!this.isBooleanReference(expression.args[0])) {
+          this.checkArrayCallback(expression.args[0], [elementType, 'number'], 'boolean')
+        }
+      }
+
+      for (let index = 1; index < expression.args.length; index++) {
+        this.checkExpression(expression.args[index])
+      }
+
+      return 'boolean'
+    }
+
     if (method === 'find') {
       expression.valueType = elementType
       expression.nullable = true
@@ -6073,9 +6135,7 @@ class Checker {
     this.checkCompilerLibraryOperationArguments(expression, operation, variant)
     this.checkCompilerLibraryBackendConstraints(expression, operation)
 
-    return typeof expression.valueType === 'string'
-      ? expression.valueType as ValueType
-      : 'unknown'
+    return typeof expression.valueType === 'string' ? (expression.valueType as ValueType) : 'unknown'
   }
 
   checkArrayFromCall(expression: AnyNode): ValueType | null {
@@ -6396,8 +6456,8 @@ class Checker {
     this.checkCompilerLibraryBackendConstraints(expression, operation)
 
     return typeof expression.valueType === 'string'
-      ? expression.valueType as ValueType
-      : (variant?.valueType ?? declaredType ?? operation.valueType ?? 'object') as ValueType
+      ? (expression.valueType as ValueType)
+      : ((variant?.valueType ?? declaredType ?? operation.valueType ?? 'object') as ValueType)
   }
 
   checkImportedClassConstructorArguments(expression: AnyNode, rawParams: AnyNode[] | null | undefined): void {
@@ -6775,7 +6835,6 @@ class Checker {
     }
   }
 
-
   checkVariableInitializer(expression: AnyNode, declared: ResolvedTypeInfo | null): ValueType {
     if (
       expression.type === 'ArrowFunctionExpression' &&
@@ -6792,10 +6851,10 @@ class Checker {
     }
 
     if (expression.type === 'CallExpression') {
-      const jsonType = this.checkJsonCall(expression, declared)
+      const libraryType = this.checkCompilerLibraryCallOperation(expression, declared)
 
-      if (jsonType !== null && typeof jsonType !== 'undefined') {
-        return jsonType
+      if (libraryType !== null) {
+        return libraryType
       }
     }
 
@@ -7331,7 +7390,7 @@ class Checker {
         for (let index = 0; index < method.params.length; index = index + 1) {
           const param = checkerNodeAt(method.params, index)
           const declaredType = nodeDeclaredTypeOrValueType(param)
-          const paramInfo = this.resolveDeclaredType(declaredType, param.loc)
+          const paramInfo = this.resolveParam(param)
           param.declaredType = declaredType
           param.valueType = paramInfo.valueType
           param.nullable = paramInfo.nullable
@@ -7545,7 +7604,11 @@ class Checker {
     this.checkAssignableType(spreadType, 'object', property.loc, false, this.expressionCanBeNull(property.value))
     const spreadShape = this.resolveExpressionShape(property.value)
 
-    if (spreadShape === null || typeof spreadShape === 'undefined' || spreadShape.dynamic === true) {
+    if (
+      spreadShape === null ||
+      typeof spreadShape === 'undefined' ||
+      (spreadShape.dynamic === true && spreadShape.fields.length === 0)
+    ) {
       this.report(
         'INOX_NOT_IMPLEMENTED',
         'object spread requires a plain object with a compiler-known fixed shape',
@@ -7786,7 +7849,8 @@ class Checker {
 
       try {
         const narrowing = this.resolveNullableConditionNarrowing(statement.test)
-        const narrowingState = this.pushNarrowedNullableNames(narrowing.trueNames)
+        const valueTypeNarrowing = this.resolveValueTypeConditionNarrowing(statement.test)
+        const narrowingState = this.pushNarrowedNullableNames(narrowing.trueNames, valueTypeNarrowing.trueTypes)
 
         try {
           this.checkScopedBody(statement.body)
@@ -8432,6 +8496,63 @@ class Checker {
     }
   }
 
+  resolveValueTypeConditionNarrowing(expression: AnyNode | null | undefined): CheckerValueTypeConditionNarrowing {
+    const empty: CheckerValueTypeConditionNarrowing = {
+      trueTypes: [],
+      falseTypes: []
+    }
+
+    if (
+      expression === null ||
+      typeof expression === 'undefined' ||
+      expression.type !== 'BinaryExpression' ||
+      (expression.operator !== '===' && expression.operator !== '!==')
+    ) {
+      return empty
+    }
+
+    let typeofExpression = expression.left
+    let typeName = expression.right
+
+    if (expression.right.type === 'UnaryExpression' && expression.right.operator === 'typeof') {
+      typeofExpression = expression.right
+      typeName = expression.left
+    }
+
+    if (
+      typeofExpression.type !== 'UnaryExpression' ||
+      typeofExpression.operator !== 'typeof' ||
+      typeofExpression.argument.type !== 'Reference' ||
+      typeofExpression.argument.path.length !== 1 ||
+      typeName.type !== 'StringLiteral'
+    ) {
+      return empty
+    }
+
+    const narrowedType = typeofValueType(typeName.value)
+
+    if (narrowedType === null) {
+      return empty
+    }
+
+    const narrowing = {
+      name: firstPathSegment(typeofExpression.argument.path),
+      valueType: narrowedType
+    }
+
+    if (expression.operator === '===') {
+      return {
+        trueTypes: [narrowing],
+        falseTypes: []
+      }
+    }
+
+    return {
+      trueTypes: [],
+      falseTypes: [narrowing]
+    }
+  }
+
   reportNullableRuntimeAccess(receiver: AnyNode, loc: SourceLocation): void {
     if (receiver.nullable !== true) {
       return
@@ -8483,23 +8604,35 @@ class Checker {
     return null
   }
 
-  pushNarrowedNullableNames(names: string[]): CheckerNarrowingState | null {
-    if (names.length === 0) {
+  pushNarrowedNullableNames(
+    names: string[],
+    valueTypes: CheckerValueTypeNarrowing[] = []
+  ): CheckerNarrowingState | null {
+    if (names.length === 0 && valueTypes.length === 0) {
       return null
     }
 
-    return this.pushBranchNarrowedNullableNames(names)
+    return this.pushBranchNarrowedNullableNames(names, valueTypes)
   }
 
-  pushBranchNarrowedNullableNames(names: string[]): CheckerNarrowingState {
+  pushBranchNarrowedNullableNames(
+    names: string[],
+    valueTypes: CheckerValueTypeNarrowing[] = []
+  ): CheckerNarrowingState {
     const previous = {
-      narrowedNullableNames: this.narrowedNullableNames
+      narrowedNullableNames: this.narrowedNullableNames,
+      narrowedValueTypes: this.narrowedValueTypes
     }
 
     this.narrowedNullableNames = cloneStringSet(previous.narrowedNullableNames)
+    this.narrowedValueTypes = new Map(previous.narrowedValueTypes)
 
     for (const name of names) {
       this.narrowedNullableNames.add(name)
+    }
+
+    for (const narrowing of valueTypes) {
+      this.narrowedValueTypes.set(narrowing.name, narrowing.valueType)
     }
 
     return previous
@@ -8508,6 +8641,7 @@ class Checker {
   restoreNarrowedNullableNames(previous: CheckerNarrowingState | null): void {
     if (previous !== null && typeof previous !== 'undefined') {
       this.narrowedNullableNames = previous.narrowedNullableNames
+      this.narrowedValueTypes = previous.narrowedValueTypes
     }
   }
 
@@ -8849,16 +8983,19 @@ class Checker {
       this.typeSymbols.set(name, symbol)
     }
     deleteNullableNarrowingKey(this.narrowedNullableNames, name)
+    this.narrowedValueTypes.delete(name)
   }
 
   pushScope(): CheckerScopeState {
     const previous = {
       scope: this.scope,
-      narrowedNullableNames: this.narrowedNullableNames
+      narrowedNullableNames: this.narrowedNullableNames,
+      narrowedValueTypes: this.narrowedValueTypes
     }
 
     this.scope = new CheckerScope(previous.scope)
     this.narrowedNullableNames = cloneStringSet(previous.narrowedNullableNames)
+    this.narrowedValueTypes = new Map(previous.narrowedValueTypes)
 
     return previous
   }
@@ -8866,6 +9003,7 @@ class Checker {
   restoreScope(previous: CheckerScopeState): void {
     this.scope = previous.scope
     this.narrowedNullableNames = previous.narrowedNullableNames
+    this.narrowedValueTypes = previous.narrowedValueTypes
   }
 
   restoreScopeWithOuterNarrowing(previous: CheckerScopeState): void {
@@ -8891,6 +9029,7 @@ class Checker {
 
     this.scope = previous.scope
     this.narrowedNullableNames = restoredNarrowedNames
+    this.narrowedValueTypes = previous.narrowedValueTypes
   }
 
   narrowingRootName(name: string): string {
@@ -9026,9 +9165,31 @@ class Checker {
   }
 }
 
-function templatePlaceholderHasLibraryOperation(
-  value: AnyNode | AnyNode[] | null | undefined
-): boolean {
+function compilerLibraryCallArgument(expression: AnyNode, index: number): AnyNode | null {
+  if (
+    (expression.type !== 'CallExpression' && expression.type !== 'NewExpression') ||
+    !Array.isArray(expression.args) ||
+    index >= expression.args.length
+  ) {
+    return null
+  }
+
+  return expression.args[index]
+}
+
+function markObjectShapeDynamic(shape: ObjectShapeInfo | null | undefined): void {
+  if (shape === null || typeof shape === 'undefined') {
+    return
+  }
+
+  shape.dynamic = true
+
+  for (let index = 0; index < shape.fields.length; index = index + 1) {
+    markObjectShapeDynamic(shape.fields[index].shape)
+  }
+}
+
+function templatePlaceholderHasLibraryOperation(value: AnyNode | AnyNode[] | null | undefined): boolean {
   if (Array.isArray(value)) {
     for (const item of value) {
       if (templatePlaceholderHasLibraryOperation(item)) {
@@ -9099,6 +9260,14 @@ function markTemplatePlaceholderNodes(value: AnyNode | AnyNode[] | null | undefi
 
 function isNonNullableTypeofName(value: string): boolean {
   return value === 'string' || value === 'number' || value === 'boolean' || value === 'function'
+}
+
+function typeofValueType(value: string): ValueType | null {
+  if (value === 'string' || value === 'number' || value === 'boolean' || value === 'function') {
+    return value
+  }
+
+  return null
 }
 
 function optionalChainNarrowingKeys(expression: AnyNode): string[] {

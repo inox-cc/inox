@@ -322,7 +322,6 @@ export type StatementLoweringDependencies = {
     functionType: CFunctionType | null | undefined,
     loc: CSourceLocation
   ): string
-  emitJsonParseVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] | null
   emitKnownArrayIndexAssignment(
     expression: StatementNode,
     element: CKnownArrayElement,
@@ -3965,9 +3964,13 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
   ) {
     const lines: string[] = []
     pushAllLines(lines, libraryObject.lines)
-    lines.push(
-      `${constPrefix(statement.kind === 'const')}auto ${emitCIdentifier(statement.name)} = ${libraryObject.expression};`
-    )
+
+    if (libraryObject.cppDeclaredName === null || typeof libraryObject.cppDeclaredName === 'undefined') {
+      lines.push(
+        `${constPrefix(statement.kind === 'const')}auto ${emitCIdentifier(statement.name)} = ${libraryObject.expression};`
+      )
+    }
+
     context.variables.set(statement.name, libraryObject.valueType)
     context.cppValueTypes.set(statement.name, libraryObject.cppType)
     registerRuntimeValueMetadata(statement.name, libraryObject.valueType, statement, statement.init, context)
@@ -4095,12 +4098,6 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
 
   if (nativeClassValueDeclaration !== null && typeof nativeClassValueDeclaration !== 'undefined') {
     return nativeClassValueDeclaration
-  }
-
-  const jsonParseDeclaration = deps.emitJsonParseVariableDeclaration(statement, context)
-
-  if (jsonParseDeclaration !== null && typeof jsonParseDeclaration !== 'undefined') {
-    return jsonParseDeclaration
   }
 
   if (statement.init !== null && typeof statement.init !== 'undefined' && statement.init.type === 'ObjectLiteral') {

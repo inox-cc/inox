@@ -90,7 +90,6 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
         params: lowerParamList(item.params, context),
         declaredReturnType: item.returnType,
         returnType: resolvedValueType(returnType.valueType, returnTypeName),
-        libraryRuntimeRequirements: returnType.libraryRuntimeRequirements,
         returnNullable: returnType.nullable,
         returnArrayElementType: returnType.arrayElementType,
         returnArrayElementDeclaredType: returnType.arrayElementDeclaredType,
@@ -100,6 +99,11 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
         returnSetElementType: returnType.setElementType,
         returnShape: returnType.shape,
         body: lowerStatementList(item.body, context)
+      }
+      const libraryRuntimeRequirements = returnType.libraryRuntimeRequirements
+
+      if (libraryRuntimeRequirements !== null && typeof libraryRuntimeRequirements !== 'undefined') {
+        lowered.libraryRuntimeRequirements = libraryRuntimeRequirements
       }
       const typeParameters = cloneLowerTypeParameters(item.typeParameters)
 

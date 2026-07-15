@@ -6,7 +6,7 @@ import { emitCBundleFromIrModules, emitCFromIr, emitCModuleFilesFromGraph } from
 import type { CompilerHost } from './host.ts'
 import { resolveCompilerLibrarySet } from './extensions/library-set.ts'
 import { compilerLibraryOptionsFingerprint } from './extensions/library-options.ts'
-import type { CompilerLibrarySet } from './extensions/types.ts'
+import type { CompilerLibraryLiteralTypeInference, CompilerLibrarySet } from './extensions/types.ts'
 import type { CompilerLibraryOptionValue } from './extensions/types.ts'
 import { collectIrModuleRecords, collectIrRuntimeRequirements, lowerHirToIr } from './ir.ts'
 import type { IrModuleRecord } from './ir/top-level.ts'
@@ -100,8 +100,12 @@ export type GraphIrCompileResult = {
   irModules: IrModuleRecord[]
 }
 
-export function compileSource(source: string, options: CompileOptions = {}): SourceCompileResult {
-  const compiled = compileSourceToIr(source, options)
+export function compileSource(
+  source: string,
+  options: CompileOptions = {},
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
+): SourceCompileResult {
+  const compiled = compileSourceToIr(source, options, libraryLiteralTypeInference)
 
   runCStaticChecks([compiled.ir], options)
 
@@ -114,12 +118,20 @@ export function compileSource(source: string, options: CompileOptions = {}): Sou
   }
 }
 
-export function compileSourceToIr(source: string, options: CompileOptions = {}): SourceIrCompileResult {
+export function compileSourceToIr(
+  source: string,
+  options: CompileOptions = {},
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
+): SourceIrCompileResult {
   const target = resolveCompileTarget(options)
   const libraries = resolveCompilerLibrarySet(options.libraries)
   const tokens = tokenize(source, {})
   const ast = parse(tokens)
-  const checked = checkProgram(ast, compileOptionsWithTargetAndLibraries(options, target, libraries))
+  const checked = checkProgram(
+    ast,
+    compileOptionsWithTargetAndLibraries(options, target, libraries),
+    libraryLiteralTypeInference
+  )
   const hir = lowerProgram(checked.ast, libraries)
   const ir = lowerHirToIr(
     hir,
@@ -147,20 +159,33 @@ export function emitTargetFromIr(target: CompileTarget, ir: IrProgram, options: 
   throw new Error(`Unsupported target ${target}`)
 }
 
-export async function compileFile(entry: string, options: CompileOptions = {}): Promise<FileCompileResult> {
-  const compiled = await compileGraphToIrModules(entry, options)
+export async function compileFile(
+  entry: string,
+  options: CompileOptions = {},
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
+): Promise<FileCompileResult> {
+  const compiled = await compileGraphToIrModules(entry, options, libraryLiteralTypeInference)
 
   return emitFileCompileResult(compiled, options)
 }
 
-export function compileFileSync(entry: string, options: CompileOptions = {}): FileCompileResult {
-  const compiled = compileGraphToIrModulesSync(entry, options)
+export function compileFileSync(
+  entry: string,
+  options: CompileOptions = {},
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
+): FileCompileResult {
+  const compiled = compileGraphToIrModulesSync(entry, options, libraryLiteralTypeInference)
 
   return emitFileCompileResult(compiled, options)
 }
 
-export function compileFileWithHostSync(entry: string, options: CompileOptions, host: CompilerHost): FileCompileResult {
-  const compiled = compileGraphToIrModulesWithHostSync(entry, options, host)
+export function compileFileWithHostSync(
+  entry: string,
+  options: CompileOptions,
+  host: CompilerHost,
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
+): FileCompileResult {
+  const compiled = compileGraphToIrModulesWithHostSync(entry, options, host, libraryLiteralTypeInference)
 
   return emitFileCompileResult(compiled, compileOptionsWithHostAndTarget(options, host, compiled.target))
 }
@@ -187,25 +212,36 @@ function emitFileCompileResult(compiled: GraphIrCompileResult, options: CompileO
 
 export async function compileFileToCModules(
   entry: string,
-  options: CModuleCompileOptions = {}
+  options: CModuleCompileOptions = {},
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
 ): Promise<CModuleCompileResult> {
-  return compileFileToCModulesSync(entry, options)
+  return compileFileToCModulesSync(entry, options, libraryLiteralTypeInference)
 }
 
-export function compileFileToCModulesSync(entry: string, options: CModuleCompileOptions = {}): CModuleCompileResult {
+export function compileFileToCModulesSync(
+  entry: string,
+  options: CModuleCompileOptions = {},
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
+): CModuleCompileResult {
   if (options.host === null || typeof options.host === 'undefined') {
     throw new Error('compileFileToCModules requires a compiler host')
   }
 
-  return compileFileToCModulesWithHostSync(entry, options, options.host)
+  return compileFileToCModulesWithHostSync(entry, options, options.host, libraryLiteralTypeInference)
 }
 
 export function compileFileToCModulesWithHostSync(
   entry: string,
   options: CModuleCompileOptions,
-  host: CompilerHost
+  host: CompilerHost,
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
 ): CModuleCompileResult {
-  const compiled = compileGraphToIrModulesWithHostSync(entry, cModuleOptionsWithHostAndTarget(options, host, 'cc'), host)
+  const compiled = compileGraphToIrModulesWithHostSync(
+    entry,
+    cModuleOptionsWithHostAndTarget(options, host, 'cc'),
+    host,
+    libraryLiteralTypeInference
+  )
   const irModules: IrProgram[] = []
 
   for (let moduleIndex = 0; moduleIndex < compiled.irModules.length; moduleIndex = moduleIndex + 1) {
@@ -233,21 +269,28 @@ export function compileFileToCModulesWithHostSync(
 
 export function compileFileToCModuleTextsSync(
   entry: string,
-  options: CModuleCompileOptions = {}
+  options: CModuleCompileOptions = {},
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
 ): any[] {
   if (options.host === null || typeof options.host === 'undefined') {
     throw new Error('compileFileToCModuleTexts requires a compiler host')
   }
 
-  return compileFileToCModuleTextsWithHostSync(entry, options, options.host)
+  return compileFileToCModuleTextsWithHostSync(entry, options, options.host, libraryLiteralTypeInference)
 }
 
 export function compileFileToCModuleTextsWithHostSync(
   entry: string,
   options: CModuleCompileOptions,
-  host: CompilerHost
+  host: CompilerHost,
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
 ): any[] {
-  const compiled = compileGraphToIrModulesWithHostSync(entry, cModuleOptionsWithHostAndTarget(options, host, 'cc'), host)
+  const compiled = compileGraphToIrModulesWithHostSync(
+    entry,
+    cModuleOptionsWithHostAndTarget(options, host, 'cc'),
+    host,
+    libraryLiteralTypeInference
+  )
   const irModules: IrProgram[] = []
 
   for (let moduleIndex = 0; moduleIndex < compiled.irModules.length; moduleIndex = moduleIndex + 1) {
@@ -283,45 +326,58 @@ export function compileFileToCModuleTextsWithHostSync(
 export async function compileMemoryPackageToIrModules(
   entry: string,
   files: MemoryCompilerSourceFile[],
-  options: MemoryCompileOptions = {}
+  options: MemoryCompileOptions = {},
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
 ): Promise<GraphIrCompileResult> {
   const host = createMemoryCompilerHost(files, { root: options.root })
 
-  return compileGraphToIrModules(entry, memoryCompileOptions(options, host))
+  return compileGraphToIrModules(entry, memoryCompileOptions(options, host), libraryLiteralTypeInference)
 }
 
 export async function compileMemoryPackageToCModules(
   entry: string,
   files: MemoryCompilerSourceFile[],
-  options: MemoryCModuleCompileOptions = {}
+  options: MemoryCModuleCompileOptions = {},
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
 ): Promise<CModuleCompileResult> {
   const host = createMemoryCompilerHost(files, { root: options.root })
 
-  return compileFileToCModules(entry, memoryCModuleCompileOptions(options, host))
+  return compileFileToCModules(entry, memoryCModuleCompileOptions(options, host), libraryLiteralTypeInference)
 }
 
 export async function compileGraphToIrModules(
   entry: string,
-  options: CompileOptions = {}
+  options: CompileOptions = {},
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
 ): Promise<GraphIrCompileResult> {
-  return compileGraphToIrModulesSync(entry, options)
+  return compileGraphToIrModulesSync(entry, options, libraryLiteralTypeInference)
 }
 
-export function compileGraphToIrModulesSync(entry: string, options: CompileOptions = {}): GraphIrCompileResult {
+export function compileGraphToIrModulesSync(
+  entry: string,
+  options: CompileOptions = {},
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
+): GraphIrCompileResult {
   if (options.host === null || typeof options.host === 'undefined') {
     throw new Error('compileGraphToIrModules requires a compiler host')
   }
 
-  return compileGraphToIrModulesWithHostSync(entry, options, options.host)
+  return compileGraphToIrModulesWithHostSync(entry, options, options.host, libraryLiteralTypeInference)
 }
 
 export function compileGraphToIrModulesWithHostSync(
   entry: string,
   options: CompileOptions,
-  host: CompilerHost
+  host: CompilerHost,
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
 ): GraphIrCompileResult {
   const target = resolveCompileTarget(options)
-  const graph = buildModuleGraphWithHostSync(entry, compileOptionsWithHostAndTarget(options, host, target), host)
+  const graph = buildModuleGraphWithHostSync(
+    entry,
+    compileOptionsWithHostAndTarget(options, host, target),
+    host,
+    libraryLiteralTypeInference
+  )
   const irModules = collectIrModuleRecords(graph)
 
   return {

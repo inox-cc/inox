@@ -1113,6 +1113,14 @@ function resolveNullableOptionalRuntimeArrayIndex(
 }
 
 function resolveNullableRuntimeArrayElementType(expression: AnyNode, context: NullableFunctionContext): string | null {
+  if (
+    expression.valueType === 'array' &&
+    expression.arrayElementType !== null &&
+    typeof expression.arrayElementType !== 'undefined'
+  ) {
+    return expression.arrayElementType
+  }
+
   if (expression.type === 'Reference' && expression.path.length === 1) {
     const name = nullableStringAt(expression.path, 0)
     const runtimeElementType = context.runtimeArrayElementTypes.get(name)

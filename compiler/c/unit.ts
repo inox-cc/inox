@@ -55,12 +55,7 @@ import {
   emitAsyncTaskWrapperDeclaration,
   emitAsyncTaskWrapperPrototypes
 } from './async/tasks.ts'
-import type {
-  CAsyncTaskWrapperMap,
-  CCallbackWrapperMap,
-  CEmitContext,
-  CPromiseChainWrapperMap
-} from './context.ts'
+import type { CAsyncTaskWrapperMap, CCallbackWrapperMap, CEmitContext, CPromiseChainWrapperMap } from './context.ts'
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
 import { emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { emitCompilerLibraryRuntimeInitializerDefinitions } from './library-initializers.ts'
@@ -321,11 +316,7 @@ function registerCUnitSyntheticImportNames(context: CEmitContext, programs: IrPr
         const specifier = unitNodeAt(specifiers, specifierIndex)
         const syntheticName = specifier.syntheticValueImportName
 
-        if (
-          syntheticName === null ||
-          typeof syntheticName === 'undefined' ||
-          typeof specifier.imported !== 'string'
-        ) {
+        if (syntheticName === null || typeof syntheticName === 'undefined' || typeof specifier.imported !== 'string') {
           continue
         }
 
@@ -1306,7 +1297,6 @@ export function emitCUnit(
   const needsMapRuntime: boolean = preludeRequirements.needsMapRuntime
   const needsSetRuntime: boolean = preludeRequirements.needsSetRuntime
   const needsObjectRuntime: boolean = preludeRequirements.needsObjectRuntime
-  const needsJsonRuntime: boolean = preludeRequirements.needsJsonRuntime
   baseContext.runtimeEntrypointAdapter = preludeRequirements.runtimeEntrypointAdapter
   baseContext.runtimeInitializerDefinitions = emitCompilerLibraryRuntimeInitializerDefinitions(
     resolveCompilerLibrarySet(options.libraries),
@@ -1332,7 +1322,6 @@ export function emitCUnit(
     needsMapRuntime,
     needsSetRuntime,
     needsObjectRuntime,
-    needsJsonRuntime,
     preludeRequirements.libraryCPreludeIncludes
   )
   pushUnitLines(lines, baseContext.runtimeInitializerDefinitions)
@@ -1357,7 +1346,14 @@ export function emitCUnit(
 
   emitCUnitNativeClassForwardDeclarations(lines, baseContext, declarationLines)
   pushUnitLines(lines, declarationLines)
-  pushUnitLines(lines, emitCNativeClassDeclarations(baseContext, collectCUnitClassMethodPrototypes(baseContext, deps), classDescriptorNames))
+  pushUnitLines(
+    lines,
+    emitCNativeClassDeclarations(
+      baseContext,
+      collectCUnitClassMethodPrototypes(baseContext, deps),
+      classDescriptorNames
+    )
+  )
   const arrowCallbackWrappers: CRuntimeArrowCallbackWrapper[] = []
   const promiseChainCallbackWrappers: CPromiseChainWrapper[] = []
   const callbackWrappers: CCallbackWrapperMap = baseContext.callbackWrappers
@@ -1582,6 +1578,12 @@ function collectCUnitNeededFunctionPrototypeNames(
   const functionNames = collectCUnitFunctionNames(functions)
   const functionIndexes = collectCUnitFunctionIndexes(functions)
 
+  for (const wrapper of context.callbackWrappers.values()) {
+    if (wrapper.kind === 'named') {
+      prototypeNames.add(wrapper.target)
+    }
+  }
+
   for (const info of context.classInfos.values()) {
     if (info.constructor !== null && typeof info.constructor !== 'undefined') {
       collectCReferencedFunctionPrototypeNames(info.constructor, functionNames, prototypeNames)
@@ -1601,11 +1603,7 @@ function collectCUnitNeededFunctionPrototypeNames(
     for (const name of referenced) {
       const referencedIndex = functionIndexes.get(name)
 
-      if (
-        referencedIndex !== null &&
-        typeof referencedIndex !== 'undefined' &&
-        referencedIndex > functionIndex
-      ) {
+      if (referencedIndex !== null && typeof referencedIndex !== 'undefined' && referencedIndex > functionIndex) {
         prototypeNames.add(name)
       }
     }

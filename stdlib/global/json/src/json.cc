@@ -1254,7 +1254,14 @@ inox::Value Json::parse(inox::StringView text) const {
   return inox::adopt(out);
 }
 
-inox::String Json::stringify(const inox::Value& value) const {
+static inox::String inox_json_stringify_value(const inox::Value& value, const inox::Value* replacer, double space) {
+  (void)space;
+
+  if (replacer != 0 && replacer->tag != INOX_TAG_UNDEFINED && replacer->tag != INOX_TAG_NULL) {
+    inox::throw_value(inox::String("JSON.stringify replacer is not supported"));
+    return inox::String();
+  }
+
   inox_allocator* allocator = &inox_default_allocator;
 
   if (allocator->alloc == 0 || allocator->realloc == 0 || allocator->free == 0) {
@@ -1282,32 +1289,16 @@ inox::String Json::stringify(const inox::Value& value) const {
   return out;
 }
 
-inox::String Json::stringify(const inox_class_descriptor& descriptor, const void* instance) const {
-  inox_allocator* allocator = &inox_default_allocator;
+inox::String Json::stringify(const inox::Value& value) const {
+  return inox_json_stringify_value(value, 0, 0);
+}
 
-  if (allocator->alloc == 0 || allocator->realloc == 0 || allocator->free == 0) {
-    inox::throw_value(inox::String("JSON.stringify failed"));
-    return inox::String();
-  }
+inox::String Json::stringify(const inox::Value& value, const inox::Value& replacer) const {
+  return inox_json_stringify_value(value, std::addressof(replacer), 0);
+}
 
-  JsonBuffer buffer = { allocator, 0, 0, 0 };
-  JsonStringifyStack stack = { 0 };
-  inox_status status = inox_json_stringify_class_instance_value(&buffer, &stack, &descriptor, instance, 0);
-
-  inox::String out;
-
-  if (status == INOX_OK) {
-    out = inox::String(buffer.bytes == 0 ? "" : buffer.bytes, buffer.length);
-  }
-
-  inox_json_buffer_dispose(&buffer);
-
-  if (status != INOX_OK || !out.valid()) {
-    inox::throw_value(inox::String("JSON.stringify failed"));
-    return inox::String();
-  }
-
-  return out;
+inox::String Json::stringify(const inox::Value& value, const inox::Value& replacer, double space) const {
+  return inox_json_stringify_value(value, std::addressof(replacer), space);
 }
 
 Json JSON;

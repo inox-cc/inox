@@ -96,7 +96,12 @@ import type {
   CPromiseChainWrapper,
   CRuntimeArrowCallbackWrapper
 } from './types.ts'
-import { emitCType, isManagedRuntimeReturnType, isOpaqueRuntimeValueType, isRuntimeNullableType } from './value-types.ts'
+import {
+  emitCType,
+  isManagedRuntimeReturnType,
+  isOpaqueRuntimeValueType,
+  isRuntimeNullableType
+} from './value-types.ts'
 import type { ArrayLoweringDependencies } from './values/arrays.ts'
 import type { CClassMethodPrototypeMap, ClassLoweringDependencies } from './values/classes.ts'
 import {
@@ -463,7 +468,6 @@ export function emitCModuleSource(
       prelude.needsMapRuntime,
       prelude.needsSetRuntime,
       prelude.needsObjectRuntime,
-      prelude.needsJsonRuntime,
       prelude.libraryCPreludeIncludes
     )
   )
@@ -827,11 +831,7 @@ function collectCModuleNeededFunctionPrototypeNames(
     for (const name of referenced) {
       const referencedIndex = functionIndexes.get(name)
 
-      if (
-        referencedIndex !== null &&
-        typeof referencedIndex !== 'undefined' &&
-        referencedIndex > functionIndex
-      ) {
+      if (referencedIndex !== null && typeof referencedIndex !== 'undefined' && referencedIndex > functionIndex) {
         prototypeNames.add(name)
       }
     }
@@ -1075,10 +1075,7 @@ function isThrowingFunctionPointerAdapterTarget(adapter: CFunctionPointerAdapter
   return false
 }
 
-function cFunctionPointerAdapterTargetSourceNames(
-  adapter: CFunctionPointerAdapter,
-  context: CEmitContext
-): string[] {
+function cFunctionPointerAdapterTargetSourceNames(adapter: CFunctionPointerAdapter, context: CEmitContext): string[] {
   const names: string[] = []
 
   for (const name of context.functionNames.keys()) {
@@ -1261,11 +1258,7 @@ function emitFunctionPointerAdapterDefaultTargetArg(
     return null
   }
 
-  for (
-    let index = adapter.functionType.params.length;
-    index < targetFunctionType.params.length;
-    index = index + 1
-  ) {
+  for (let index = adapter.functionType.params.length; index < targetFunctionType.params.length; index = index + 1) {
     if (name !== `inox_arg_${index}`) {
       continue
     }
@@ -1375,12 +1368,7 @@ function createCModuleBaseContext(
   registerImportedCModuleValueDeclarations(context, plan)
 
   context.functionNames = createCModuleFunctionNames(plan)
-  context.externalEventLoopFunctions = collectCModuleExternalEventLoopFunctionNames(
-    plan,
-    deps,
-    new Map(),
-    new Set()
-  )
+  context.externalEventLoopFunctions = collectCModuleExternalEventLoopFunctionNames(plan, deps, new Map(), new Set())
   context.callbackWrappers = collectCallbackWrappers(irPrograms, context, deps.callbackLoweringDependencies)
   context.promiseChainWrappers = collectPromiseChainWrappers(irPrograms, context, deps.promiseChainLoweringDependencies)
   context.asyncTaskWrappers = collectAsyncTaskWrappers(functionEntries, context, deps.asyncTaskLoweringDependencies)
@@ -1544,7 +1532,11 @@ function registerImportedCModuleValueDeclarations(context: CEmitContext, plan: C
           const valueType = cModuleValueType(exported)
           context.moduleValueTypes.set(syntheticName, valueType)
 
-          if (valueType === 'unknown' || isOpaqueRuntimeValueType(valueType) || (valueType !== 'string' && isManagedRuntimeReturnType(valueType))) {
+          if (
+            valueType === 'unknown' ||
+            isOpaqueRuntimeValueType(valueType) ||
+            (valueType !== 'string' && isManagedRuntimeReturnType(valueType))
+          ) {
             context.moduleRuntimeValueNames.add(syntheticName)
           }
         }
@@ -1557,7 +1549,11 @@ function registerImportedCModuleValueDeclarations(context: CEmitContext, plan: C
         const valueType = cModuleValueType(exported)
         context.moduleValueTypes.set(localName, valueType)
 
-        if (valueType === 'unknown' || isOpaqueRuntimeValueType(valueType) || (valueType !== 'string' && isManagedRuntimeReturnType(valueType))) {
+        if (
+          valueType === 'unknown' ||
+          isOpaqueRuntimeValueType(valueType) ||
+          (valueType !== 'string' && isManagedRuntimeReturnType(valueType))
+        ) {
           context.moduleRuntimeValueNames.add(localName)
         }
       }
@@ -1675,10 +1671,7 @@ function shouldEmitCModuleStaticValueDeclaration(
 }
 
 function isCModuleEntryLocalValueType(valueType: string): boolean {
-  return (
-    valueType !== 'function' &&
-    valueType !== 'promise'
-  )
+  return valueType !== 'function' && valueType !== 'promise'
 }
 
 function cModuleObjectShapeHasFunctionFields(fields: CObjectShapeField[], seen: Set<CObjectShapeField[]>): boolean {
@@ -1735,7 +1728,10 @@ function collectCModuleNestedReferenceNames(ir: IrProgram): Set<string> {
   return names
 }
 
-function addCModuleNestedFunctionReferenceNames(names: Set<string>, node: AnyNode | AnyNode[] | null | undefined): void {
+function addCModuleNestedFunctionReferenceNames(
+  names: Set<string>,
+  node: AnyNode | AnyNode[] | null | undefined
+): void {
   if (node === null || typeof node === 'undefined') {
     return
   }

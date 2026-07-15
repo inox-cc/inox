@@ -349,6 +349,12 @@ export function lowerParam(param: LowerNode, context: LowerContext): LowerNode {
   const declared = resolveDeclaredType(declaredType, context)
   const promiseValueType = nullableString(declared.promiseValueType)
   const shape = lowerParamShape(param, declared)
+  let functionType = declared.functionType
+
+  if (param.functionType !== null && typeof param.functionType !== 'undefined') {
+    functionType = param.functionType
+  }
+
   const loweredParam: LowerNode = {
     name: param.name,
     loc: param.loc,
@@ -357,7 +363,6 @@ export function lowerParam(param: LowerNode, context: LowerContext): LowerNode {
     rest: param.rest === true,
     valueType: fallbackString(declared.valueType, fallbackString(param.valueType, 'unknown')),
     nullable: declared.nullable,
-    libraryRuntimeRequirements: declared.libraryRuntimeRequirements,
     arrayElementType: declared.arrayElementType,
     arrayElementDeclaredType: declared.arrayElementDeclaredType,
     arrayElementFunctionType: nullableNode(declared.arrayElementFunctionType),
@@ -365,8 +370,13 @@ export function lowerParam(param: LowerNode, context: LowerContext): LowerNode {
     mapValueType: declared.mapValueType,
     promiseValueType,
     setElementType: declared.setElementType,
-    functionType: declared.functionType,
+    functionType,
     shape
+  }
+  const libraryRuntimeRequirements = declared.libraryRuntimeRequirements
+
+  if (libraryRuntimeRequirements !== null && typeof libraryRuntimeRequirements !== 'undefined') {
+    loweredParam.libraryRuntimeRequirements = libraryRuntimeRequirements
   }
 
   if (param.defaultValue !== null && typeof param.defaultValue !== 'undefined') {
@@ -512,11 +522,7 @@ function forOfBindingLowerVariable(binding: ArrayBindingElement): LowerNode {
   }
 }
 
-function forOfBindingDeclaration(
-  statement: LowerNode,
-  binding: ArrayBindingElement,
-  variable: LowerNode
-): LowerNode {
+function forOfBindingDeclaration(statement: LowerNode, binding: ArrayBindingElement, variable: LowerNode): LowerNode {
   const valueType = fallbackString(variable.valueType, 'unknown')
 
   return {
@@ -591,9 +597,7 @@ function prependForOfBindingDeclarations(body: LowerNode, declarations: LowerNod
   }
 }
 
-function lowerForOfBindingElements(
-  elements: ArrayBindingElement[] | null | undefined
-): ArrayBindingElement[] | null {
+function lowerForOfBindingElements(elements: ArrayBindingElement[] | null | undefined): ArrayBindingElement[] | null {
   if (elements === null || typeof elements === 'undefined') {
     return null
   }
@@ -890,19 +894,13 @@ function variableDeclarationArrayElementFunctionType(
 ): LowerNode | null {
   const declaredArrayElementFunctionType = nullableNode(declared.arrayElementFunctionType)
 
-  if (
-    declaredArrayElementFunctionType !== null &&
-    typeof declaredArrayElementFunctionType !== 'undefined'
-  ) {
+  if (declaredArrayElementFunctionType !== null && typeof declaredArrayElementFunctionType !== 'undefined') {
     return declaredArrayElementFunctionType
   }
 
   const statementArrayElementFunctionType = nullableNode(statement.arrayElementFunctionType)
 
-  if (
-    statementArrayElementFunctionType !== null &&
-    typeof statementArrayElementFunctionType !== 'undefined'
-  ) {
+  if (statementArrayElementFunctionType !== null && typeof statementArrayElementFunctionType !== 'undefined') {
     return statementArrayElementFunctionType
   }
 
@@ -960,7 +958,12 @@ function variableDeclarationMapValueShape(declared: LowerResolvedType, init: Low
     return declared.mapValueShape
   }
 
-  if (init !== null && typeof init !== 'undefined' && init.mapValueShape !== null && typeof init.mapValueShape !== 'undefined') {
+  if (
+    init !== null &&
+    typeof init !== 'undefined' &&
+    init.mapValueShape !== null &&
+    typeof init.mapValueShape !== 'undefined'
+  ) {
     return init.mapValueShape
   }
 
@@ -1138,6 +1141,8 @@ function lowerArrayMethodVariableDeclaration(
     expanded = lowerArrayFilterVariableDeclaration(statement, expandedInit, context)
   } else if (init.callee.property === 'find') {
     expanded = lowerArrayFindVariableDeclaration(statement, expandedInit, context)
+  } else if (init.callee.property === 'some') {
+    expanded = lowerArraySomeVariableDeclaration(statement, expandedInit, context)
   } else {
     expanded = lowerArrayMapVariableDeclaration(statement, expandedInit, context)
   }
@@ -1190,6 +1195,10 @@ function lowerArrayMethodExpressionToTemp(expression: LowerNode, context: LowerC
     return lowerArrayFindMethodExpressionToTemp(expression, context)
   }
 
+  if (isArraySomeMethodExpansionCall(expression)) {
+    return lowerArraySomeMethodExpressionToTemp(expression, context)
+  }
+
   return lowerArrayOutputMethodExpressionToTemp(expression, context)
 }
 
@@ -1231,6 +1240,34 @@ function lowerArrayFindMethodExpressionToTemp(
 
   const name = nextLowerName(context, 'inox_find_expr')
   const target = createFindTempDeclaration(name, expression, expression.loc)
+  const statements = lowerArrayMethodVariableDeclaration(target, expression, context)
+
+  if (statements === null || typeof statements === 'undefined') {
+    return null
+  }
+
+  const output = findVariableDeclaration(statements, name)
+
+  if (output === null || typeof output === 'undefined') {
+    return null
+  }
+
+  return {
+    statements,
+    expression: createValueReferenceFromDeclaration(output, expression.loc)
+  }
+}
+
+function lowerArraySomeMethodExpressionToTemp(
+  expression: LowerNode,
+  context: LowerContext
+): ArrayExpressionHoist | null {
+  if (!isArraySomeMethodExpansionCall(expression)) {
+    return null
+  }
+
+  const name = nextLowerName(context, 'inox_some_expr')
+  const target = createSomeTempDeclaration(name, expression, expression.loc)
   const statements = lowerArrayMethodVariableDeclaration(target, expression, context)
 
   if (statements === null || typeof statements === 'undefined') {
@@ -1754,7 +1791,8 @@ function isArrayMethodExpansionCall(expression: LowerNode): boolean {
   return (
     expression.callee.property === 'filter' ||
     expression.callee.property === 'find' ||
-    expression.callee.property === 'map'
+    expression.callee.property === 'map' ||
+    expression.callee.property === 'some'
   )
 }
 
@@ -1772,6 +1810,14 @@ function isArrayFindMethodExpansionCall(expression: LowerNode): boolean {
   }
 
   return expression.callee.property === 'find'
+}
+
+function isArraySomeMethodExpansionCall(expression: LowerNode): boolean {
+  if (!isArrayMethodExpansionCall(expression)) {
+    return false
+  }
+
+  return expression.callee.property === 'some'
 }
 
 function lowerArrayFilterVariableDeclaration(
@@ -1879,7 +1925,7 @@ function lowerArrayFindVariableDeclaration(
   const output = createArrayFindOutputDeclaration(statement, receiverElement)
   const foundValue = createReference(itemName, receiverElement, receiver.loc)
 
-  return createArrayFindLoopStatements(output, receiver, receiverElement, indexName, itemName, [
+  return createArrayScalarLoopStatements(output, receiver, receiverElement, indexName, itemName, [
     {
       type: 'IfStatement',
       condition: lowerStatementExpression(predicate, context),
@@ -1889,6 +1935,77 @@ function lowerArrayFindVariableDeclaration(
           createAssignmentStatement(
             createNullableReference(statement.name, receiverElement, init.loc),
             foundValue,
+            init.loc
+          ),
+          {
+            type: 'BreakStatement',
+            loc: init.loc
+          }
+        ],
+        loc: init.loc
+      },
+      alternate: null,
+      loc: init.loc
+    }
+  ])
+}
+
+function lowerArraySomeVariableDeclaration(
+  statement: LowerNode,
+  init: LowerNode,
+  context: LowerContext
+): LowerNode[] | null {
+  const callback = init.args[0]
+  const receiver = init.callee.object
+  const receiverElement = resolveReceiverElementInfo(receiver, callback, context)
+
+  if (receiverElement.valueType === 'unknown' || receiverElement.valueType === 'void') {
+    return null
+  }
+
+  const indexName = nextLowerName(context, 'inox_some_index')
+  const valueParam = arrowCallbackParam(callback, 0)
+  const indexParam = arrowCallbackParam(callback, 1)
+  const itemName = arrayMethodItemName(valueParam, statement.name, context, 'inox_some_item')
+  const replacements = createCallbackReplacements(valueParam, itemName, indexParam, indexName)
+  let predicate: LowerNode | null = null
+
+  if (isBooleanFilterCallback(callback)) {
+    predicate = createTruthyCondition(
+      createReference(itemName, receiverElement, receiver.loc),
+      receiverElement.valueType
+    )
+  } else if (isArrowCallbackWithMaxParams(callback, 2)) {
+    const returned = resolveSimpleArrowReturnExpression(callback)
+
+    if (returned === null || typeof returned === 'undefined') {
+      return null
+    }
+
+    predicate = replaceExpressionReferences(returned, replacements)
+  }
+
+  if (predicate === null || typeof predicate === 'undefined') {
+    return null
+  }
+
+  const output = createArraySomeOutputDeclaration(statement)
+
+  return createArrayScalarLoopStatements(output, receiver, receiverElement, indexName, itemName, [
+    {
+      type: 'IfStatement',
+      condition: lowerStatementExpression(predicate, context),
+      consequent: {
+        type: 'BlockStatement',
+        body: [
+          createAssignmentStatement(
+            createValueReferenceFromDeclaration(output, init.loc),
+            {
+              type: 'BooleanLiteral',
+              value: true,
+              valueType: 'boolean',
+              loc: init.loc
+            },
             init.loc
           ),
           {
@@ -2208,7 +2325,7 @@ function createArrayLoopStatements(
   ]
 }
 
-function createArrayFindLoopStatements(
+function createArrayScalarLoopStatements(
   statement: LowerNode,
   receiver: LowerNode,
   receiverElement: ArrayElementInfo,
@@ -2552,6 +2669,34 @@ function createArrayFindOutputDeclaration(statement: LowerNode, element: ArrayEl
   }
 }
 
+function createArraySomeOutputDeclaration(statement: LowerNode): LowerNode {
+  return {
+    type: 'VariableDeclaration',
+    kind: 'let',
+    exported: statement.exported,
+    name: statement.name,
+    loc: statement.loc,
+    declaredType: statement.declaredType,
+    nullable: false,
+    valueType: 'boolean',
+    shape: null,
+    functionType: null,
+    arrayElementType: null,
+    arrayElementDeclaredType: null,
+    mapKeyType: null,
+    mapValueType: null,
+    promiseValueType: null,
+    setElementType: null,
+    className: null,
+    init: {
+      type: 'BooleanLiteral',
+      value: false,
+      valueType: 'boolean',
+      loc: statement.loc
+    }
+  }
+}
+
 function createArrayTempDeclaration(name: string, init: LowerNode, loc: LowerNode['loc']): LowerNode {
   const elementType = arrayTempElementType(init)
   const elementDeclaredType = arrayTempElementDeclaredType(init, elementType)
@@ -2623,6 +2768,28 @@ function createFindTempDeclaration(name: string, init: LowerNode, loc: LowerNode
     promiseValueType: nullableString(init.promiseValueType),
     setElementType: nullableString(init.setElementType),
     valueType: fallbackString(init.valueType, 'unknown'),
+    init
+  }
+}
+
+function createSomeTempDeclaration(name: string, init: LowerNode, loc: LowerNode['loc']): LowerNode {
+  return {
+    type: 'VariableDeclaration',
+    kind: 'let',
+    exported: false,
+    name,
+    loc,
+    declaredType: null,
+    nullable: false,
+    shape: null,
+    functionType: null,
+    arrayElementType: null,
+    arrayElementDeclaredType: null,
+    mapKeyType: null,
+    mapValueType: null,
+    promiseValueType: null,
+    setElementType: null,
+    valueType: 'boolean',
     init
   }
 }

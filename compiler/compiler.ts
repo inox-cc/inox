@@ -31,6 +31,7 @@ import {
   shortHashNodeCompilerHost
 } from './node-host.ts'
 import type { CompileOptions, FileCompileResult } from './types.ts'
+import type { CompilerLibraryLiteralTypeInference } from './extensions/types.ts'
 
 export {
   compileMemoryPackageToCModules,
@@ -50,136 +51,172 @@ export type {
   SourceIrCompileResult
 } from './core.ts'
 
-export async function compileFile(entry: string, options: CompileOptions = {}): Promise<FileCompileResult> {
-  return compileFileCore(entry, compileOptionsWithNodeHost(options))
+export async function compileFile(
+  entry: string,
+  options: CompileOptions = {},
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
+): Promise<FileCompileResult> {
+  return compileFileCore(entry, compileOptionsWithNodeHost(options), libraryLiteralTypeInference)
 }
 
-export function compileFileSync(entry: string, options: CompileOptions = {}): FileCompileResult {
+export function compileFileSync(
+  entry: string,
+  options: CompileOptions = {},
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
+): FileCompileResult {
   if (options.host !== null && typeof options.host !== 'undefined') {
-    return compileFileSyncCore(entry, options)
+    return compileFileSyncCore(entry, options, libraryLiteralTypeInference)
   }
 
-  return compileFileWithHostSyncCore(entry, options, {
-    pathSeparator: '/',
-    posixPath: {
-      basename: basenameNodePosixPath,
-      dirname: dirnameNodePosixPath,
-      extname: extnameNodePosixPath,
-      relative: relativeNodePosixPath
+  return compileFileWithHostSyncCore(
+    entry,
+    options,
+    {
+      pathSeparator: '/',
+      posixPath: {
+        basename: basenameNodePosixPath,
+        dirname: dirnameNodePosixPath,
+        extname: extnameNodePosixPath,
+        relative: relativeNodePosixPath
+      },
+      dirname: dirnameNodeCompilerHost,
+      extname: extnameNodeCompilerHost,
+      isAbsolutePath: isAbsoluteNodeCompilerHost,
+      joinPath: joinNodeCompilerHost,
+      normalizePath: normalizeNodeCompilerHost,
+      pathToFileUrl: pathToFileUrlNodeCompilerHost,
+      readFile: readFileNodeCompilerHost,
+      readFileSync: readFileSyncNodeCompilerHost,
+      relativePath: relativeNodeCompilerHost,
+      resolvePath: resolveNodeCompilerHost,
+      shortHash: shortHashNodeCompilerHost
     },
-    dirname: dirnameNodeCompilerHost,
-    extname: extnameNodeCompilerHost,
-    isAbsolutePath: isAbsoluteNodeCompilerHost,
-    joinPath: joinNodeCompilerHost,
-    normalizePath: normalizeNodeCompilerHost,
-    pathToFileUrl: pathToFileUrlNodeCompilerHost,
-    readFile: readFileNodeCompilerHost,
-    readFileSync: readFileSyncNodeCompilerHost,
-    relativePath: relativeNodeCompilerHost,
-    resolvePath: resolveNodeCompilerHost,
-    shortHash: shortHashNodeCompilerHost
-  })
+    libraryLiteralTypeInference
+  )
 }
 
 export async function compileFileToCModules(
   entry: string,
-  options: CModuleCompileOptions = {}
+  options: CModuleCompileOptions = {},
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
 ): Promise<CModuleCompileResult> {
-  return compileFileToCModulesCore(entry, cModuleOptionsWithNodeHost(options))
+  return compileFileToCModulesCore(entry, cModuleOptionsWithNodeHost(options), libraryLiteralTypeInference)
 }
 
 export function compileFileToCModulesSync(
   entry: string,
-  options: CModuleCompileOptions = {}
+  options: CModuleCompileOptions = {},
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
 ): CModuleCompileResult {
   if (options.host !== null && typeof options.host !== 'undefined') {
-    return compileFileToCModulesSyncCore(entry, options)
+    return compileFileToCModulesSyncCore(entry, options, libraryLiteralTypeInference)
   }
 
-  return compileFileToCModulesWithHostSyncCore(entry, options, {
-    pathSeparator: '/',
-    posixPath: {
-      basename: basenameNodePosixPath,
-      dirname: dirnameNodePosixPath,
-      extname: extnameNodePosixPath,
-      relative: relativeNodePosixPath
+  return compileFileToCModulesWithHostSyncCore(
+    entry,
+    options,
+    {
+      pathSeparator: '/',
+      posixPath: {
+        basename: basenameNodePosixPath,
+        dirname: dirnameNodePosixPath,
+        extname: extnameNodePosixPath,
+        relative: relativeNodePosixPath
+      },
+      dirname: dirnameNodeCompilerHost,
+      extname: extnameNodeCompilerHost,
+      isAbsolutePath: isAbsoluteNodeCompilerHost,
+      joinPath: joinNodeCompilerHost,
+      normalizePath: normalizeNodeCompilerHost,
+      pathToFileUrl: pathToFileUrlNodeCompilerHost,
+      readFile: readFileNodeCompilerHost,
+      readFileSync: readFileSyncNodeCompilerHost,
+      relativePath: relativeNodeCompilerHost,
+      resolvePath: resolveNodeCompilerHost,
+      shortHash: shortHashNodeCompilerHost
     },
-    dirname: dirnameNodeCompilerHost,
-    extname: extnameNodeCompilerHost,
-    isAbsolutePath: isAbsoluteNodeCompilerHost,
-    joinPath: joinNodeCompilerHost,
-    normalizePath: normalizeNodeCompilerHost,
-    pathToFileUrl: pathToFileUrlNodeCompilerHost,
-    readFile: readFileNodeCompilerHost,
-    readFileSync: readFileSyncNodeCompilerHost,
-    relativePath: relativeNodeCompilerHost,
-    resolvePath: resolveNodeCompilerHost,
-    shortHash: shortHashNodeCompilerHost
-  })
+    libraryLiteralTypeInference
+  )
 }
 
 export function compileFileToCModuleTextsSync(
   entry: string,
-  options: CModuleCompileOptions = {}
+  options: CModuleCompileOptions = {},
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
 ): any[] {
   if (options.host !== null && typeof options.host !== 'undefined') {
-    return compileFileToCModuleTextsSyncCore(entry, options)
+    return compileFileToCModuleTextsSyncCore(entry, options, libraryLiteralTypeInference)
   }
 
-  return compileFileToCModuleTextsWithHostSyncCore(entry, options, {
-    pathSeparator: '/',
-    posixPath: {
-      basename: basenameNodePosixPath,
-      dirname: dirnameNodePosixPath,
-      extname: extnameNodePosixPath,
-      relative: relativeNodePosixPath
+  return compileFileToCModuleTextsWithHostSyncCore(
+    entry,
+    options,
+    {
+      pathSeparator: '/',
+      posixPath: {
+        basename: basenameNodePosixPath,
+        dirname: dirnameNodePosixPath,
+        extname: extnameNodePosixPath,
+        relative: relativeNodePosixPath
+      },
+      dirname: dirnameNodeCompilerHost,
+      extname: extnameNodeCompilerHost,
+      isAbsolutePath: isAbsoluteNodeCompilerHost,
+      joinPath: joinNodeCompilerHost,
+      normalizePath: normalizeNodeCompilerHost,
+      pathToFileUrl: pathToFileUrlNodeCompilerHost,
+      readFile: readFileNodeCompilerHost,
+      readFileSync: readFileSyncNodeCompilerHost,
+      relativePath: relativeNodeCompilerHost,
+      resolvePath: resolveNodeCompilerHost,
+      shortHash: shortHashNodeCompilerHost
     },
-    dirname: dirnameNodeCompilerHost,
-    extname: extnameNodeCompilerHost,
-    isAbsolutePath: isAbsoluteNodeCompilerHost,
-    joinPath: joinNodeCompilerHost,
-    normalizePath: normalizeNodeCompilerHost,
-    pathToFileUrl: pathToFileUrlNodeCompilerHost,
-    readFile: readFileNodeCompilerHost,
-    readFileSync: readFileSyncNodeCompilerHost,
-    relativePath: relativeNodeCompilerHost,
-    resolvePath: resolveNodeCompilerHost,
-    shortHash: shortHashNodeCompilerHost
-  })
+    libraryLiteralTypeInference
+  )
 }
 
 export async function compileGraphToIrModules(
   entry: string,
-  options: CompileOptions = {}
+  options: CompileOptions = {},
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
 ): Promise<GraphIrCompileResult> {
-  return compileGraphToIrModulesCore(entry, compileOptionsWithNodeHost(options))
+  return compileGraphToIrModulesCore(entry, compileOptionsWithNodeHost(options), libraryLiteralTypeInference)
 }
 
-export function compileGraphToIrModulesSync(entry: string, options: CompileOptions = {}): GraphIrCompileResult {
+export function compileGraphToIrModulesSync(
+  entry: string,
+  options: CompileOptions = {},
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
+): GraphIrCompileResult {
   if (options.host !== null && typeof options.host !== 'undefined') {
-    return compileGraphToIrModulesSyncCore(entry, options)
+    return compileGraphToIrModulesSyncCore(entry, options, libraryLiteralTypeInference)
   }
 
-  return compileGraphToIrModulesWithHostSyncCore(entry, options, {
-    pathSeparator: '/',
-    posixPath: {
-      basename: basenameNodePosixPath,
-      dirname: dirnameNodePosixPath,
-      extname: extnameNodePosixPath,
-      relative: relativeNodePosixPath
+  return compileGraphToIrModulesWithHostSyncCore(
+    entry,
+    options,
+    {
+      pathSeparator: '/',
+      posixPath: {
+        basename: basenameNodePosixPath,
+        dirname: dirnameNodePosixPath,
+        extname: extnameNodePosixPath,
+        relative: relativeNodePosixPath
+      },
+      dirname: dirnameNodeCompilerHost,
+      extname: extnameNodeCompilerHost,
+      isAbsolutePath: isAbsoluteNodeCompilerHost,
+      joinPath: joinNodeCompilerHost,
+      normalizePath: normalizeNodeCompilerHost,
+      pathToFileUrl: pathToFileUrlNodeCompilerHost,
+      readFile: readFileNodeCompilerHost,
+      readFileSync: readFileSyncNodeCompilerHost,
+      relativePath: relativeNodeCompilerHost,
+      resolvePath: resolveNodeCompilerHost,
+      shortHash: shortHashNodeCompilerHost
     },
-    dirname: dirnameNodeCompilerHost,
-    extname: extnameNodeCompilerHost,
-    isAbsolutePath: isAbsoluteNodeCompilerHost,
-    joinPath: joinNodeCompilerHost,
-    normalizePath: normalizeNodeCompilerHost,
-    pathToFileUrl: pathToFileUrlNodeCompilerHost,
-    readFile: readFileNodeCompilerHost,
-    readFileSync: readFileSyncNodeCompilerHost,
-    relativePath: relativeNodeCompilerHost,
-    resolvePath: resolveNodeCompilerHost,
-    shortHash: shortHashNodeCompilerHost
-  })
+    libraryLiteralTypeInference
+  )
 }
 
 function compileOptionsWithNodeHost(options: CompileOptions): CompileOptions {

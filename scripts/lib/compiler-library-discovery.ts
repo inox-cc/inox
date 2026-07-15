@@ -2,7 +2,10 @@ import { readdir, readFile, stat } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-import type { CompilerLibraryPackageDescriptor } from '../../compiler/extensions/types.ts'
+import type {
+  CompilerLibraryLiteralTypeInference,
+  CompilerLibraryPackageDescriptor
+} from '../../compiler/extensions/types.ts'
 import { rootDir } from './repo-root.ts'
 
 export type DiscoveredCompilerLibraryKind = 'global' | 'node'
@@ -16,6 +19,7 @@ export type DiscoveredCompilerLibrary = {
   declarationSource: string | null
   compilerEntrypoint: string | null
   compilerPackage: CompilerLibraryPackageDescriptor | null
+  literalTypeInference: CompilerLibraryLiteralTypeInference | null
   nativeSources: string[]
   nativeIncludeDirs: string[]
 }
@@ -32,10 +36,7 @@ export async function discoverCompilerLibraries(projectRoot: string = rootDir): 
   return libraries
 }
 
-async function discoverGlobalLibraries(
-  projectRoot: string,
-  libraries: DiscoveredCompilerLibrary[]
-): Promise<void> {
+async function discoverGlobalLibraries(projectRoot: string, libraries: DiscoveredCompilerLibrary[]): Promise<void> {
   const globalRoot = join(projectRoot, 'stdlib/global')
   const entries = await readdir(globalRoot, { withFileTypes: true })
 
@@ -52,10 +53,7 @@ async function discoverGlobalLibraries(
   }
 }
 
-async function discoverNodeLibraries(
-  projectRoot: string,
-  libraries: DiscoveredCompilerLibrary[]
-): Promise<void> {
+async function discoverNodeLibraries(projectRoot: string, libraries: DiscoveredCompilerLibrary[]): Promise<void> {
   const nodeRoot = join(projectRoot, 'stdlib/node')
 
   await discoverNodeDirectory(projectRoot, nodeRoot, '', libraries)
@@ -103,6 +101,7 @@ async function discoverPackage(
   let declarationSource: string | null = null
   let compilerEntrypoint: string | null = null
   let compilerPackage: CompilerLibraryPackageDescriptor | null = null
+  let literalTypeInference: CompilerLibraryLiteralTypeInference | null = null
   const nativeSources: string[] = []
   const nativeIncludeDirs: string[] = []
 
@@ -113,7 +112,9 @@ async function discoverPackage(
 
   if (await isFile(compilerFile)) {
     compilerEntrypoint = projectPath(projectRoot, compilerFile)
-    compilerPackage = await loadCompilerLibraryPackage(compilerFile, id)
+    const loaded = await loadCompilerLibraryPackage(compilerFile, id)
+    compilerPackage = loaded.descriptor
+    literalTypeInference = loaded.literalTypeInference
   }
 
   if (await isDirectory(sourceRoot)) {
@@ -133,6 +134,7 @@ async function discoverPackage(
     declarationSource,
     compilerEntrypoint,
     compilerPackage,
+    literalTypeInference,
     nativeSources,
     nativeIncludeDirs
   }
@@ -141,9 +143,10 @@ async function discoverPackage(
 async function loadCompilerLibraryPackage(
   compilerFile: string,
   expectedId: string
-): Promise<CompilerLibraryPackageDescriptor> {
+): Promise<LoadedCompilerLibraryPackage> {
   const module = (await import(pathToFileURL(compilerFile).href)) as {
     compilerLibraryPackage?: unknown
+    inferCompilerLibraryLiteralTypeRef?: unknown
   }
   const descriptor = module.compilerLibraryPackage
 
@@ -155,7 +158,49 @@ async function loadCompilerLibraryPackage(
     throw new Error(`Compiler library package id mismatch ${expectedId} != ${descriptor.id}`)
   }
 
-  return descriptor
+  const hasLiteralProviders = compilerLibraryPackageHasLiteralProviders(descriptor)
+  const inference = module.inferCompilerLibraryLiteralTypeRef
+
+  if (hasLiteralProviders && typeof inference !== 'function') {
+    throw new Error(`Compiler library package ${expectedId} requires literal type inference export`)
+  }
+
+  if (!hasLiteralProviders && typeof inference === 'function') {
+    throw new Error(`Compiler library package ${expectedId} exports unused literal type inference`)
+  }
+
+  return {
+    descriptor,
+    literalTypeInference: typeof inference === 'function' ? (inference as CompilerLibraryLiteralTypeInference) : null
+  }
+}
+
+type LoadedCompilerLibraryPackage = {
+  descriptor: CompilerLibraryPackageDescriptor
+  literalTypeInference: CompilerLibraryLiteralTypeInference | null
+}
+
+function compilerLibraryPackageHasLiteralProviders(descriptor: CompilerLibraryPackageDescriptor): boolean {
+  for (let operationIndex = 0; operationIndex < descriptor.operations.length; operationIndex = operationIndex + 1) {
+    const operation = descriptor.operations[operationIndex]
+
+    if (operation.resultInference !== null && typeof operation.resultInference !== 'undefined') {
+      return true
+    }
+
+    const variants = operation.variants ?? []
+
+    for (let variantIndex = 0; variantIndex < variants.length; variantIndex = variantIndex + 1) {
+      if (
+        variants[variantIndex].resultInference !== null &&
+        typeof variants[variantIndex].resultInference !== 'undefined'
+      ) {
+        return true
+      }
+    }
+  }
+
+  return false
 }
 
 function isCompilerLibraryPackageDescriptor(value: unknown): value is CompilerLibraryPackageDescriptor {

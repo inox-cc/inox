@@ -10,6 +10,7 @@ export const arrayMethods = [
   'push',
   'reduce',
   'slice',
+  'some',
   'sort',
   'unshift'
 ]

@@ -3,11 +3,12 @@
 import { compileFileSync, compileFileToCModuleTextsSync } from './compiler.ts'
 import type { CModuleCompileOptions } from './core.ts'
 import { formatDiagnostics } from './diagnostics.ts'
-import {
-  compilerLibraryOptionForCliAlias,
-  parseCompilerLibraryOptionCliValue
-} from './extensions/library-options.ts'
-import type { CompilerLibraryOptionValue, CompilerLibrarySet } from './extensions/types.ts'
+import { compilerLibraryOptionForCliAlias, parseCompilerLibraryOptionCliValue } from './extensions/library-options.ts'
+import type {
+  CompilerLibraryLiteralTypeInference,
+  CompilerLibraryOptionValue,
+  CompilerLibrarySet
+} from './extensions/types.ts'
 import type { CompileOptions, Diagnostic, RuntimeLoopBackend, TlsBackend } from './types.ts'
 
 type DiagnosticError = {
@@ -68,7 +69,8 @@ function defaultOutputPath(input: string): string {
 }
 
 function usage(libraries: CompilerLibrarySet): string {
-  let source = 'Usage:\n  inox --help\n  inox input.ts [output.cc]\n  inox input.ts --emit cc [-o output.cc] [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]\n  inox input.ts --emit cc --out-dir generated --entry [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]\n\nCompiles a TypeScript entry file to C++ source.\nIf output.cc is omitted, inox writes input.cc.'
+  let source =
+    'Usage:\n  inox --help\n  inox input.ts [output.cc]\n  inox input.ts --emit cc [-o output.cc] [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]\n  inox input.ts --emit cc --out-dir generated --entry [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]\n\nCompiles a TypeScript entry file to C++ source.\nIf output.cc is omitted, inox writes input.cc.'
   const options = libraries.options ?? []
 
   if (options.length > 0) {
@@ -296,10 +298,11 @@ function cModuleCompileOptions(
 function writeBundledC(
   plan: CliPlan,
   libraries: CompilerLibrarySet,
-  environment: CliEnvironment
+  environment: CliEnvironment,
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null
 ): void {
   const output = plan.hasOutput ? plan.output : defaultOutputPath(plan.input)
-  const result = compileFileSync(plan.input, compileOptions(plan, libraries))
+  const result = compileFileSync(plan.input, compileOptions(plan, libraries), libraryLiteralTypeInference)
 
   ensureParentDirectory(output, environment)
   environment.writeFileSync(output, `${result.code}\n`)
@@ -309,12 +312,14 @@ function writeBundledC(
 function writeCModules(
   plan: CliPlan,
   libraries: CompilerLibrarySet,
-  environment: CliEnvironment
+  environment: CliEnvironment,
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null
 ): void {
   const outDir = outputDir(plan)
   const files = compileFileToCModuleTextsSync(
     plan.input,
-    cModuleCompileOptions(plan, libraries, environment)
+    cModuleCompileOptions(plan, libraries, environment),
+    libraryLiteralTypeInference
   )
 
   for (let index = 0; index < files.length; index = index + 1) {
@@ -408,7 +413,11 @@ function errorMessage(error: unknown): string | null {
   return null
 }
 
-function executeCompilerCli(libraries: CompilerLibrarySet, environment: CliEnvironment): boolean {
+function executeCompilerCli(
+  libraries: CompilerLibrarySet,
+  environment: CliEnvironment,
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null
+): boolean {
   try {
     const parsed = parseCliArgs(userArgs(environment.args), libraries)
 
@@ -422,9 +431,9 @@ function executeCompilerCli(libraries: CompilerLibrarySet, environment: CliEnvir
     } else if (parsed.help) {
       environment.log(usage(libraries))
     } else if (parsed.plan !== null && parsed.plan.hasOutDir) {
-      writeCModules(parsed.plan, libraries, environment)
+      writeCModules(parsed.plan, libraries, environment, libraryLiteralTypeInference)
     } else if (parsed.plan !== null) {
-      writeBundledC(parsed.plan, libraries, environment)
+      writeBundledC(parsed.plan, libraries, environment, libraryLiteralTypeInference)
     }
 
     return true
@@ -447,8 +456,12 @@ function executeCompilerCli(libraries: CompilerLibrarySet, environment: CliEnvir
   }
 }
 
-export function runCompilerCli(libraries: CompilerLibrarySet, environment: CliEnvironment): void {
-  if (!executeCompilerCli(libraries, environment)) {
+export function runCompilerCli(
+  libraries: CompilerLibrarySet,
+  environment: CliEnvironment,
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
+): void {
+  if (!executeCompilerCli(libraries, environment, libraryLiteralTypeInference)) {
     environment.setExitCode(1)
   }
 }

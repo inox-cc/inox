@@ -33,11 +33,7 @@ function pushCPreludeIncludes(systemIncludes: string[], localIncludes: string[],
   }
 }
 
-function pushLibraryCPreludeIncludes(
-  systemIncludes: string[],
-  localIncludes: string[],
-  includes: string[]
-): void {
+function pushLibraryCPreludeIncludes(systemIncludes: string[], localIncludes: string[], includes: string[]): void {
   for (let index = 0; index < includes.length; index = index + 1) {
     const include = includes[index]
 
@@ -162,7 +158,6 @@ export function emitCPrelude(
   needsMapRuntime: boolean,
   needsSetRuntime: boolean,
   needsObjectRuntime: boolean,
-  needsJsonRuntime: boolean,
   libraryCPreludeIncludes: string[]
 ): string[] {
   const systemIncludes = ['#include <stdio.h>', '#include <math.h>']
@@ -197,9 +192,6 @@ export function emitCPrelude(
     }
     if (needsCallbackRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/callback.h"')
-    }
-    if (needsJsonRuntime) {
-      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/json.h"')
     }
     if (needsMapRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/map.h"')

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
 import { cStringLiteral, escapeCPrintfFormatText } from '../../compiler/c/identifiers.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
-import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
+import { defaultCompilerLibraryLiteralTypeInference, defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 type GeneratedTextFile = {
   path: string
@@ -176,12 +176,16 @@ console.log(data.v)
       root: '/'
     }
   )
-  const jsonLocalFiles = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
-    callMain: true,
-    host: jsonLocalHost,
-    libraries: defaultCompilerLibrarySet,
-    sourceRoot: '/pkg'
-  }) as GeneratedTextFile[]
+  const jsonLocalFiles = compileFileToCModuleTextsSync(
+    '/pkg/src/index.ts',
+    {
+      callMain: true,
+      host: jsonLocalHost,
+      libraries: defaultCompilerLibrarySet,
+      sourceRoot: '/pkg'
+    },
+    defaultCompilerLibraryLiteralTypeInference
+  ) as GeneratedTextFile[]
   const jsonLocalSource = generatedTextFile(jsonLocalFiles, 'src/index.cc').code
 
   assert.match(jsonLocalSource, /auto data = JSON\.parse\("\{\\"v\\":\[1\]\}"\);/)
@@ -213,10 +217,7 @@ console.log(response.status)
   }) as GeneratedTextFile[]
   const fetchSource = generatedTextFile(fetchFiles, 'src/index.cc').code
 
-  assert.match(
-    fetchSource,
-    /inox::fetch\("http:\/\/127\.0\.0\.1"\)/
-  )
+  assert.match(fetchSource, /inox::fetch\("http:\/\/127\.0\.0\.1"\)/)
   assert.doesNotMatch(fetchSource, /inox::fetch\(inox::StringView/)
 
   const processEntryHost = createMemoryCompilerHost(

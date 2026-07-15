@@ -130,13 +130,6 @@ import {
   emitRuntimeValueCheck,
   runtimeObjectLikeValueMismatchCondition
 } from './runtime-values.ts'
-import type { JsonClassInstanceOperand, JsonDeclarationDependencies } from '../../stdlib/global/compiler/c.ts'
-import {
-  cJsonRuntimeCallName,
-  emitJsonParseVariableDeclaration,
-  emitPreparedJsonCallExpression,
-  emitPreparedJsonScalarParseExpression
-} from '../../stdlib/global/compiler/c.ts'
 import { cUnsupportedExpressionCode, isCoalesceExpression } from './syntax.ts'
 import type {
   CArrayElementInfo,
@@ -434,7 +427,6 @@ let objectExpressionFieldDependencies: ObjectExpressionFieldDependencies = {
   emitPreparedStringBytesOperand,
   inferExpressionType
 }
-let jsonDeclarationDependencies = {} as JsonDeclarationDependencies
 let compilerLibraryLoweringDependencies = {} as CompilerLibraryLoweringDependencies
 let promiseLoweringDependencies = {} as PromiseLoweringDependencies
 
@@ -467,8 +459,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
     emitDynamicObjectFieldAssignment(expression, context, objectExpressionFieldDependencies),
   emitFailureStatement,
   emitFunctionPointerVariable,
-  emitJsonParseVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
-    emitJsonParseVariableDeclaration(statement, context, jsonDeclarationDependencies),
   emitKnownArrayIndexAssignment,
   emitKnownArrayIndexVariableDeclaration,
   emitKnownObjectMemberAssignment,
@@ -560,7 +550,8 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
 const classLoweringDependencies: ClassLoweringDependencies = {
   emitCFieldFlags,
   emitCValueExpression,
-  emitPreparedCallArgs
+  emitPreparedCallArgs,
+  emitRuntimeCallbackValue
 }
 
 function emitClassObjectVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
@@ -625,43 +616,6 @@ objectVariableDeclarationDependencies = {
   resolveFunctionValueType: (expression, context) => resolveFunctionValueType(expression, context as CFunctionContext)
 }
 
-jsonDeclarationDependencies = {
-  emitCFieldFlags,
-  emitCValueExpression,
-  emitPreparedClassInstanceOperand: emitPreparedJsonClassInstanceOperand,
-  emitPreparedClassToJsonExpression: emitPreparedJsonClassToJsonExpression,
-  emitPreparedStringBytesOperand,
-  inferExpressionType,
-  registerObjectShape,
-  registerRuntimeValueMetadata
-}
-
-function emitPreparedJsonClassToJsonExpression(
-  expression: AnyNode,
-  context: CFunctionContext
-): PreparedExpression | null {
-  if (!hasNativeClassInstanceMethod(expression, 'toJSON', 0, context)) {
-    return null
-  }
-
-  return emitPreparedClassMethodCallExpression(
-    {
-      type: 'CallExpression',
-      callee: {
-        type: 'MemberExpression',
-        object: expression,
-        property: 'toJSON',
-        loc: expression.loc
-      },
-      args: [],
-      loc: expression.loc,
-      valueType: 'unknown'
-    },
-    context,
-    {}
-  )
-}
-
 function hasPreparedClassToStringExpression(expression: AnyNode, context: CFunctionContext): boolean {
   return hasNativeClassInstanceMethodReturnType(expression, 'toString', 0, 'string', context)
 }
@@ -705,31 +659,18 @@ function emitPreparedNativeClassStringFieldExpression(
   return field
 }
 
-function emitPreparedJsonClassInstanceOperand(
-  expression: AnyNode,
-  context: CFunctionContext
-): JsonClassInstanceOperand | null {
-  const instance = emitPreparedNativeClassInstanceExpression(expression, context)
-
-  if (instance === null || typeof instance === 'undefined') {
-    return null
-  }
-
-  return {
-    descriptor: emitCClassInfoDescriptorName(instance.info),
-    instance: instance.expression,
-    lines: instance.lines
-  }
-}
-
 compilerLibraryLoweringDependencies = {
   emitCValueExpression,
+  emitPreparedClassInstanceRefValueExpression,
+  emitPreparedClassMethodCallExpression: (expression: AnyNode, context: CFunctionContext) =>
+    emitPreparedClassMethodCallExpression(expression, context, {}),
   emitPreparedNumberFromStringExpression,
   emitPreparedNumberExpression,
   emitPreparedStringConversionExpression,
   emitPreparedStringBytesOperand,
   emitRuntimeCallbackValue,
   emitThrownCheckLines,
+  hasClassInstanceMethod: hasNativeClassInstanceMethod,
   inferExpressionType,
   registerObjectShape
 }
@@ -843,9 +784,7 @@ function emitPreparedCompilerLibraryCallExpression(
         expression.libraryCExpression,
         expression.args,
         context,
-        typeof expression.libraryCClassFormatExpression === 'string'
-          ? expression.libraryCClassFormatExpression
-          : null
+        typeof expression.libraryCClassFormatExpression === 'string' ? expression.libraryCClassFormatExpression : null
       ),
       expression: '',
       valueType: 'void'
@@ -884,13 +823,8 @@ function runtimeCallbackArgumentInfoForNodeStdlibCall(expression: AnyNode): Runt
   return null
 }
 
-function isConfiguredExternalEventLoopCallExpression(
-  expression: AnyNode | null | undefined
-): boolean {
-  return (
-    isCompilerLibraryExternalEventLoopCallExpression(expression) ||
-    isCompilerLibraryPromiseExpression(expression)
-  )
+function isConfiguredExternalEventLoopCallExpression(expression: AnyNode | null | undefined): boolean {
+  return isCompilerLibraryExternalEventLoopCallExpression(expression) || isCompilerLibraryPromiseExpression(expression)
 }
 
 const callbackLoweringDependencies: CallbackLoweringDependencies = {
@@ -974,7 +908,6 @@ const declarationEmissionDependencies = {
 }
 
 const expressionTypeDependencies = {
-  cJsonRuntimeCallName,
   cPromiseRuntimeCallName,
   collectionConstructorName,
   isArrayIncludesCall,
@@ -1017,6 +950,7 @@ const cCallExpressionDependencies = {
   emitCExpression,
   emitCObjectLiteralValueExpression,
   emitCValueExpression,
+  emitObjectValueReference,
   emitFunctionPointerAdapter,
   emitFunctionValueExpression,
   emitNullableFunctionValueExpression,
@@ -1031,8 +965,6 @@ const cCallExpressionDependencies = {
   emitPreparedArraySortCallExpression,
   emitPreparedClassMethodCallExpression,
   emitPreparedCollectionCallExpression,
-  emitPreparedJsonCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedJsonCallExpression(expression, context, jsonDeclarationDependencies, null),
   emitPreparedNumberExpression,
   emitPreparedPromiseMethodExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedPromiseMethodExpression(expression, context, promiseLoweringDependencies),
@@ -1069,8 +1001,6 @@ const cScalarExpressionDependencies = {
   emitPreparedCollectionCallExpression,
   emitPreparedCollectionSizeExpression,
   emitNullableScalarValueExpression,
-  emitPreparedJsonScalarParseExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedJsonScalarParseExpression(expression, context, jsonDeclarationDependencies),
   emitPreparedNullableScalarRuntimeValueExpression,
   emitPreparedObjectExpressionScalarIndexValueExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedObjectExpressionScalarIndexValueExpression(expression, context, objectExpressionFieldDependencies),
@@ -1146,8 +1076,6 @@ const cValueExpressionDependencies = {
   emitPreparedCollectionCallExpression,
   emitPreparedCollectionConstructorValueExpression,
   emitPreparedCollectionSizeExpression,
-  emitPreparedJsonCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedJsonCallExpression(expression, context, jsonDeclarationDependencies, null),
   emitPreparedKnownArrayIndexValueExpression,
   emitPreparedKnownObjectIndexValueExpression,
   emitPreparedKnownObjectMemberValueExpression,
@@ -2681,14 +2609,16 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
 
     context.variables.set(statement.name, 'number')
     pushAll(lines, arrayReduceCall.lines)
-    lines.push(`${uninitializedDeclarationPrefix(statement)}double ${emitCIdentifier(statement.name)} = ${arrayReduceCall.expression};`)
+    lines.push(
+      `${uninitializedDeclarationPrefix(statement)}double ${emitCIdentifier(statement.name)} = ${arrayReduceCall.expression};`
+    )
 
     return lines
   }
 
   const inferred = inferScalarDeclarationValueType(statement, context)
   const declared = knownValueType(statement.valueType)
-  const variableType = inferred === 'function' ? 'function' : declared ?? inferred
+  const variableType = inferred === 'function' ? 'function' : (declared ?? inferred)
   context.variables.set(statement.name, variableType)
 
   const functionScalarDeclaration = emitFunctionScalarVariableDeclaration(statement, context, variableType)
@@ -2848,10 +2778,7 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
     context.variables.set(statement.name, 'promise')
     context.moduleValueTypes.set(statement.name, 'promise')
     context.promiseValueTypes.set(statement.name, libraryObject.valueType ?? 'unknown')
-    context.promiseRejectionValueTypes.set(
-      statement.name,
-      libraryObject.rejectionValueType ?? 'unknown'
-    )
+    context.promiseRejectionValueTypes.set(statement.name, libraryObject.rejectionValueType ?? 'unknown')
     return lines
   }
 
@@ -3007,7 +2934,14 @@ function emitModuleFunctionValueAssignment(statement: AnyNode, name: string, con
 
   const target = emitFunctionValueExpression(statement.init, context)
   const targetFunctionType = resolveFunctionValueType(statement.init, context)
-  const expression = emitAdaptedModuleFunctionPointerExpression(target, targetFunctionType, functionType, context, [], [])
+  const expression = emitAdaptedModuleFunctionPointerExpression(
+    target,
+    targetFunctionType,
+    functionType,
+    context,
+    [],
+    []
+  )
 
   return [`${name} = ${expression};`]
 }
@@ -3044,7 +2978,9 @@ function moduleFunctionValueUsesRuntimeCallback(statement: AnyNode, context: CFu
     return wrapper !== null && typeof wrapper !== 'undefined' && wrapper.kind === 'arrow'
   }
 
-  return isNullableFunctionType(statement.valueType, statement.nullable) || isRuntimeFunctionType(statement.functionType)
+  return (
+    isNullableFunctionType(statement.valueType, statement.nullable) || isRuntimeFunctionType(statement.functionType)
+  )
 }
 
 function moduleValueIsGenericFunctionDeclaration(statement: AnyNode): boolean {
@@ -3119,7 +3055,11 @@ function emitModuleNullableRuntimeValueAssignment(
   return lines
 }
 
-function registerModuleNullableRuntimeValueMetadata(statement: AnyNode, valueType: string, context: CFunctionContext): void {
+function registerModuleNullableRuntimeValueMetadata(
+  statement: AnyNode,
+  valueType: string,
+  context: CFunctionContext
+): void {
   if (valueType === 'object') {
     registerObjectShape(context, statement.name, statement.shape)
   } else if (valueType === 'array') {
@@ -3199,11 +3139,7 @@ function pushModuleRuntimeValueAssignment(
   context: CFunctionContext,
   targetCppType?: string | null
 ): void {
-  if (
-    value.cppType !== null &&
-    typeof value.cppType !== 'undefined' &&
-    isManagedRuntimeReturnType(value.valueType)
-  ) {
+  if (value.cppType !== null && typeof value.cppType !== 'undefined' && isManagedRuntimeReturnType(value.valueType)) {
     const temp = nextCName(context, 'inox_module_value')
 
     lines.push(`auto ${temp} = ${value.expression};`)
@@ -3272,7 +3208,9 @@ function emitModuleArrayLiteralAssignment(statement: AnyNode, name: string, cont
 
       pushAll(lines, spread.lines)
       lines.push(`ArrayClass ${spreadArray}(${spread.expression});`)
-      lines.push(`for (size_t ${spreadIndex} = 0; ${spreadIndex} < ${spreadArray}.length(); ${spreadIndex} = ${spreadIndex} + 1) {`)
+      lines.push(
+        `for (size_t ${spreadIndex} = 0; ${spreadIndex} < ${spreadArray}.length(); ${spreadIndex} = ${spreadIndex} + 1) {`
+      )
       lines.push(`  ArrayClass(${name}).push(${spreadArray}.get(${spreadIndex}));`)
       lines.push(`  ${emitRuntimeTypeCheck('inox::thrown()', context)}`)
       lines.push('}')
@@ -3554,7 +3492,12 @@ function emitModuleObjectFunctionFieldCopyAssignments(
       typeof field.shape.fields !== 'undefined'
     ) {
       const targetNestedFields = field.shape.fields
-      const sourceNestedFields = moduleObjectFunctionFieldNestedSourceFields(sourceObjectName, sourceField, field, context)
+      const sourceNestedFields = moduleObjectFunctionFieldNestedSourceFields(
+        sourceObjectName,
+        sourceField,
+        field,
+        context
+      )
 
       if (sourceNestedFields !== null && typeof sourceNestedFields !== 'undefined') {
         pushAll(
@@ -3569,7 +3512,10 @@ function emitModuleObjectFunctionFieldCopyAssignments(
           )
         )
       } else {
-        pushAll(lines, emitModuleObjectFunctionFieldDefaultAssignments(`${targetObjectName}_${field.name}`, targetNestedFields))
+        pushAll(
+          lines,
+          emitModuleObjectFunctionFieldDefaultAssignments(`${targetObjectName}_${field.name}`, targetNestedFields)
+        )
       }
     }
   }
@@ -3958,10 +3904,17 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
   }
 
   context.objectShapes.set(statement.name, objectShapeFields)
-  lines.push(`${emitCIdentifier(statement.name)} = (inox_value*)inox_default_alloc(0, sizeof(inox_value), _Alignof(inox_value));`)
+  lines.push(
+    `${emitCIdentifier(statement.name)} = (inox_value*)inox_default_alloc(0, sizeof(inox_value), _Alignof(inox_value));`
+  )
   lines.push(`if (${emitCIdentifier(statement.name)} == 0) ${emitFailureStatement(context)}`)
   lines.push(`*${emitCIdentifier(statement.name)} = inox_undefined_value();`)
-  lines.push(emitStatusCheck(`inox_object_new(&inox_default_allocator, &${shapeName}, ${emitCIdentifier(statement.name)})`, context))
+  lines.push(
+    emitStatusCheck(
+      `inox_object_new(&inox_default_allocator, &${shapeName}, ${emitCIdentifier(statement.name)})`,
+      context
+    )
+  )
   const spreads = prepareObjectLiteralSpreads(statement.init, context, lines)
   const seenTypes: string[] = []
 
@@ -4025,7 +3978,12 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
       lines.push(line)
     }
 
-    lines.push(emitStatusCheck(`inox_object_init_known(*${emitCIdentifier(statement.name)}, ${index}, ${value.expression})`, context))
+    lines.push(
+      emitStatusCheck(
+        `inox_object_init_known(*${emitCIdentifier(statement.name)}, ${index}, ${value.expression})`,
+        context
+      )
+    )
   }
 
   return lines
@@ -4038,13 +3996,7 @@ function emitKnownObjectMemberVariableDeclaration(
 ): string[] {
   const key = knownObjectMemberKey(member)
 
-  return emitObjectMemberVariableDeclaration(
-    statement,
-    member,
-    context,
-    member.objectName,
-    key
-  )
+  return emitObjectMemberVariableDeclaration(statement, member, context, member.objectName, key)
 }
 
 function emitDynamicObjectMemberVariableDeclaration(
@@ -4052,21 +4004,10 @@ function emitDynamicObjectMemberVariableDeclaration(
   member: CKnownObjectIndexField,
   context: CFunctionContext
 ): string[] {
-  return emitObjectMemberVariableDeclaration(
-    statement,
-    member,
-    context,
-    member.objectName,
-    member.key
-  )
+  return emitObjectMemberVariableDeclaration(statement, member, context, member.objectName, member.key)
 }
 
-function emitObjectMemberGetLines(
-  objectName: string,
-  key: string,
-  temp: string,
-  context: CFunctionContext
-): string[] {
+function emitObjectMemberGetLines(objectName: string, key: string, temp: string, context: CFunctionContext): string[] {
   const object = emitObjectValueReference(objectName, context)
   const lines = [`${temp} = inox::get(${object}, ${cStringLiteral(key)});`]
 
@@ -4145,7 +4086,12 @@ function emitObjectArrayMemberVariableDeclaration(
 
   pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
   pushAll(lines, emitObjectMemberGetLines(objectName, key, statement.name, context))
-  lines.push(emitRuntimeTypeCheck(`${emitCIdentifier(statement.name)}.tag != INOX_TAG_ARRAY || ${emitCIdentifier(statement.name)}.as.ref == 0`, context))
+  lines.push(
+    emitRuntimeTypeCheck(
+      `${emitCIdentifier(statement.name)}.tag != INOX_TAG_ARRAY || ${emitCIdentifier(statement.name)}.as.ref == 0`,
+      context
+    )
+  )
 
   context.variables.set(statement.name, 'array')
   let arrayElementType = 'unknown'
@@ -4178,7 +4124,12 @@ function emitObjectCollectionMemberVariableDeclaration(
 
   pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
   pushAll(lines, emitObjectMemberGetLines(objectName, key, statement.name, context))
-  lines.push(emitRuntimeTypeCheck(`${emitCIdentifier(statement.name)}.tag != ${tag} || ${emitCIdentifier(statement.name)}.as.ref == 0`, context))
+  lines.push(
+    emitRuntimeTypeCheck(
+      `${emitCIdentifier(statement.name)}.tag != ${tag} || ${emitCIdentifier(statement.name)}.as.ref == 0`,
+      context
+    )
+  )
 
   context.variables.set(statement.name, member.valueType)
 
@@ -4227,7 +4178,12 @@ function emitObjectBytesMemberVariableDeclaration(
 
   pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
   pushAll(lines, emitObjectMemberGetLines(objectName, key, statement.name, context))
-  lines.push(emitRuntimeTypeCheck(`${emitCIdentifier(statement.name)}.tag != INOX_TAG_BYTES || ${emitCIdentifier(statement.name)}.as.ref == 0`, context))
+  lines.push(
+    emitRuntimeTypeCheck(
+      `${emitCIdentifier(statement.name)}.tag != INOX_TAG_BYTES || ${emitCIdentifier(statement.name)}.as.ref == 0`,
+      context
+    )
+  )
 
   context.variables.set(statement.name, member.valueType)
 
@@ -4956,7 +4912,10 @@ function emitPreparedNullableConditionalValueExpression(
   }
 }
 
-function emitPreparedNullableConditionalTestExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
+function emitPreparedNullableConditionalTestExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression {
   const truthiness = emitPreparedStatementRuntimeTruthinessExpression(expression, context)
 
   if (truthiness !== null && typeof truthiness !== 'undefined') {
@@ -5088,7 +5047,9 @@ function emitCArrayLiteralValueExpression(expression: AnyNode, context: CFunctio
 
       pushAll(lines, spread.lines)
       lines.push(`ArrayClass ${spreadArray}(${spread.expression});`)
-      lines.push(`for (size_t ${spreadIndex} = 0; ${spreadIndex} < ${spreadArray}.length(); ${spreadIndex} = ${spreadIndex} + 1) {`)
+      lines.push(
+        `for (size_t ${spreadIndex} = 0; ${spreadIndex} < ${spreadArray}.length(); ${spreadIndex} = ${spreadIndex} + 1) {`
+      )
       lines.push(`  ArrayClass(${temp}).push(${spreadArray}.get(${spreadIndex}));`)
       lines.push(`  ${emitRuntimeTypeCheck('inox::thrown()', context)}`)
       lines.push('}')
@@ -5136,11 +5097,7 @@ function arrayLiteralElementFunctionType(arrayExpression: AnyNode, element: AnyN
 }
 
 function arrayDeclarationElementFunctionType(statement: AnyNode, element: AnyNode): CFunctionType | null {
-  if (
-    statement.init !== null &&
-    typeof statement.init !== 'undefined' &&
-    statement.init.type === 'ArrayLiteral'
-  ) {
+  if (statement.init !== null && typeof statement.init !== 'undefined' && statement.init.type === 'ArrayLiteral') {
     const elementFunctionType = arrayLiteralElementFunctionType(statement.init, element)
 
     if (elementFunctionType !== null && typeof elementFunctionType !== 'undefined') {
@@ -5288,7 +5245,7 @@ function preparedObjectSpreadForField(
 function objectSpreadPropertyHasField(property: CObjectLiteralPropertyNode, fieldName: string): boolean {
   const shape = property.value.shape
 
-  if (shape === null || typeof shape === 'undefined' || shape.dynamic === true) {
+  if (shape === null || typeof shape === 'undefined') {
     return false
   }
 
@@ -5763,11 +5720,7 @@ function isDirectRuntimeFormattedValueExpression(
   return isRuntimeLogValueType(valueType)
 }
 
-function emitFormattedLibraryCallStatement(
-  target: string,
-  format: string,
-  values: string[]
-): string {
+function emitFormattedLibraryCallStatement(target: string, format: string, values: string[]): string {
   if (values.length === 0) {
     return `${target}(${cStringLiteral(unescapeCPrintfFormatText(format))});`
   }
@@ -6205,7 +6158,9 @@ function emitNativeClassInstanceLogValue(
   const lines: string[] = []
 
   pushAll(lines, instance.lines)
-  lines.push(`auto ${temp} = ${classFormatExpression}(${emitCClassInfoDescriptorName(instance.info)}, ${instance.expression});`)
+  lines.push(
+    `auto ${temp} = ${classFormatExpression}(${emitCClassInfoDescriptorName(instance.info)}, ${instance.expression});`
+  )
   lines.push(emitRuntimeTypeCheck(`!${temp}.valid()`, context))
 
   return {
@@ -6223,9 +6178,8 @@ function emitPreparedCompilerLibraryNativeFieldValueExpression(
     return null
   }
 
-  const preparedObject = expression.object.type === 'Reference'
-    ? null
-    : emitCValueExpression(expression.object, context)
+  const preparedObject =
+    expression.object.type === 'Reference' ? null : emitCValueExpression(expression.object, context)
 
   return emitPreparedCompilerLibraryNativeFieldExpression(expression, context, preparedObject)
 }
@@ -6263,9 +6217,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): For
 
     if (context.variables.get(name) === 'string' && context.nullableVariables.has(name)) {
       return {
-        lines: [
-          emitRuntimeTypeCheck(`${reference}.tag != INOX_TAG_STRING || ${reference}.as.ref == 0`, context)
-        ],
+        lines: [emitRuntimeTypeCheck(`${reference}.tag != INOX_TAG_STRING || ${reference}.as.ref == 0`, context)],
         format: formattedOutputStringFormat,
         values: [`inox::String(inox::Value(${reference}))`]
       }
@@ -6418,15 +6370,13 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): For
   }
 }
 
-function emitNativeClassStringFieldLogValue(expression: AnyNode, context: CFunctionContext): FormattedOutputValue | null {
+function emitNativeClassStringFieldLogValue(
+  expression: AnyNode,
+  context: CFunctionContext
+): FormattedOutputValue | null {
   const field = resolveNativeClassFieldMetadata(expression, context)
 
-  if (
-    field === null ||
-    typeof field === 'undefined' ||
-    field.valueType !== 'string' ||
-    field.nullable === true
-  ) {
+  if (field === null || typeof field === 'undefined' || field.valueType !== 'string' || field.nullable === true) {
     return null
   }
 
@@ -6484,9 +6434,7 @@ function emitModuleRuntimeStringLogValue(expression: AnyNode, context: CFunction
   }
 
   return {
-    lines: [
-      emitRuntimeTypeCheck(`${storage}.tag != INOX_TAG_STRING || ${storage}.as.ref == 0`, context)
-    ],
+    lines: [emitRuntimeTypeCheck(`${storage}.tag != INOX_TAG_STRING || ${storage}.as.ref == 0`, context)],
     format: formattedOutputStringFormat,
     values: [`inox::String(inox::Value(${storage}))`]
   }
@@ -6667,11 +6615,7 @@ function emitBooleanLogValue(expression: AnyNode, context: CFunctionContext): Fo
 
     const runtimeElement = resolveRuntimeArrayIndex(expression, context)
 
-    if (
-      runtimeElement !== null &&
-      typeof runtimeElement !== 'undefined' &&
-      runtimeElement.valueType === 'boolean'
-    ) {
+    if (runtimeElement !== null && typeof runtimeElement !== 'undefined' && runtimeElement.valueType === 'boolean') {
       const value = emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'inox_log_value')
       const lines: string[] = []
 
@@ -7410,7 +7354,10 @@ function emitPreparedAwaitPromiseExpression(expression: AnyNode, context: CFunct
   return null
 }
 
-function emitPreparedAwaitValuePromiseExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null {
+function emitPreparedAwaitValuePromiseExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression | null {
   const promise = emitPreparedAwaitPromiseExpression(expression.argument, context)
 
   if (promise !== null && typeof promise !== 'undefined') {
@@ -7617,11 +7564,7 @@ function resolveAwaitResultCppValueInfo(
   const shape = expression.shape ?? expression.argument?.shape
   const libraryCppType = shape?.libraryCppType
 
-  if (
-    libraryCppType !== null &&
-    typeof libraryCppType !== 'undefined' &&
-    libraryCppType !== 'inox::Promise'
-  ) {
+  if (libraryCppType !== null && typeof libraryCppType !== 'undefined' && libraryCppType !== 'inox::Promise') {
     return {
       cppType: libraryCppType,
       runtimeTypeChecked: true,
@@ -7858,7 +7801,11 @@ function resolveRuntimeCallbackCalleeType(callee: AnyNode, context: CFunctionCon
   if (objectField !== null && typeof objectField !== 'undefined') {
     const functionType = objectField.field.functionType
 
-    if (!isPlainFunctionPointerType(functionType) && isRuntimeFunctionType(functionType)) {
+    if (
+      !context.classInstanceTypes.has(objectField.objectName) &&
+      !isPlainFunctionPointerType(functionType) &&
+      isRuntimeFunctionType(functionType)
+    ) {
       return normalizeFunctionType(functionType)
     }
   }
@@ -7949,6 +7896,24 @@ function emitRuntimeCallbackValueInto(
 
     pushAll(lines, emitPrepareOwnedValueWrite(out))
     lines.push(`${out} = ${name};`)
+    lines.push(`inox_retain(${out});`)
+
+    return lines
+  }
+
+  const objectField = objectFunctionFieldReference(expression, context)
+
+  if (
+    objectField !== null &&
+    typeof objectField !== 'undefined' &&
+    !context.classInstanceTypes.has(objectField.objectName) &&
+    !isPlainFunctionPointerType(objectField.field.functionType) &&
+    isRuntimeFunctionType(objectField.field.functionType)
+  ) {
+    const lines: string[] = []
+
+    pushAll(lines, emitPrepareOwnedValueWrite(out))
+    lines.push(`${out} = ${objectField.name};`)
     lines.push(`inox_retain(${out});`)
 
     return lines
@@ -8322,6 +8287,7 @@ type ObjectFunctionFieldReference = {
   field: CObjectShapeField
   fieldName: string
   name: string
+  objectName: string
 }
 
 function functionParamArgumentAt(args: CAccessorNode[], expectedIndex: number): CAccessorNode | null {
@@ -8474,7 +8440,8 @@ function objectFunctionFieldReference(
       return {
         field,
         fieldName,
-        name: emitCObjectFunctionFieldName(objectName, fieldName)
+        name: emitCObjectFunctionFieldName(objectName, fieldName),
+        objectName
       }
     }
   }
@@ -8595,7 +8562,8 @@ function emitPreparedInlineObjectRuntimeCallExpression(
     }
   }
 
-  const object = emitPreparedObjectRuntimeCallArgumentExpression(expression.args[0], context) ??
+  const object =
+    emitPreparedObjectRuntimeCallArgumentExpression(expression.args[0], context) ??
     emitCValueExpression(expression.args[0], context)
 
   return {
@@ -8623,7 +8591,9 @@ function emitPreparedObjectValuesCallExpression(
 
   if (classInstance !== null && typeof classInstance !== 'undefined') {
     pushAll(lines, classInstance.lines)
-    lines.push(`auto ${temp} = Object.${method}(${emitCClassInfoDescriptorName(classInstance.info)}, ${classInstance.expression});`)
+    lines.push(
+      `auto ${temp} = Object.${method}(${emitCClassInfoDescriptorName(classInstance.info)}, ${classInstance.expression});`
+    )
     pushAll(lines, emitThrownCheckLines(context))
 
     return {
@@ -8635,7 +8605,8 @@ function emitPreparedObjectValuesCallExpression(
     }
   }
 
-  const object = emitPreparedObjectRuntimeCallArgumentExpression(expression.args[0], context) ??
+  const object =
+    emitPreparedObjectRuntimeCallArgumentExpression(expression.args[0], context) ??
     emitCValueExpression(expression.args[0], context)
 
   pushAll(lines, object.lines)
@@ -8670,7 +8641,8 @@ function emitPreparedObjectRuntimeCallArgumentExpression(
     return null
   }
 
-  const object = emitPreparedObjectRuntimeCallArgumentExpression(expression.object, context) ??
+  const object =
+    emitPreparedObjectRuntimeCallArgumentExpression(expression.object, context) ??
     emitCValueExpression(expression.object, context)
 
   return {

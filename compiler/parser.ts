@@ -531,7 +531,7 @@ class Parser {
     return mergeUnionObjectTypes(variants)
   }
 
-  parseFunctionType(stopReturnAtLineBreak: boolean): AnyNode {
+  parseFunctionType(stopReturnAtLineBreak: boolean, returnStopValues: string[] = [';', ',', '}']): AnyNode {
     const params: AnyNode[] = []
 
     this.expectValue('(', 'INOX_EXPECTED_TYPE', 'expected ( in function type')
@@ -558,7 +558,7 @@ class Parser {
       returnTypeOptions = { stopAtLineBreak: true }
     }
 
-    const returnType = this.parseTypeAnnotation([';', ',', '}'], returnTypeOptions)
+    const returnType = this.parseTypeAnnotation(returnStopValues, returnTypeOptions)
     this.matchValue(';')
 
     return createFunctionType(params, returnType)
@@ -607,13 +607,7 @@ class Parser {
       const optional = this.matchValue('?')
 
       if (this.isValue('(')) {
-        const field = createObjectTypeField(
-          name,
-          modifiers.readOnly,
-          optional,
-          'function',
-          'strong'
-        )
+        const field = createObjectTypeField(name, modifiers.readOnly, optional, 'function', 'strong')
         field.functionType = this.parseObjectTypeMethodSignature()
         appendObjectTypeMethodField(fields, field)
         this.matchValue(',')
@@ -623,13 +617,7 @@ class Parser {
 
       this.expectValue(':', 'INOX_EXPECTED_TYPE', 'expected : after object type field name')
       if (this.isValue('(')) {
-        const field = createObjectTypeField(
-          name,
-          modifiers.readOnly,
-          optional,
-          'function',
-          'strong'
-        )
+        const field = createObjectTypeField(name, modifiers.readOnly, optional, 'function', 'strong')
 
         field.functionType = this.parseFunctionType(true)
         fields.push(field)
@@ -643,15 +631,7 @@ class Parser {
       })
       const valueType = fieldTypeAnnotation(parsedValueType)
 
-      fields.push(
-        createObjectTypeField(
-          name,
-          modifiers.readOnly,
-          optional,
-          valueType.valueType,
-          valueType.ownership
-        )
-      )
+      fields.push(createObjectTypeField(name, modifiers.readOnly, optional, valueType.valueType, valueType.ownership))
 
       this.matchValue(',')
       this.matchValue(';')
@@ -798,6 +778,21 @@ class Parser {
     }
 
     this.expectValue(':', 'INOX_EXPECTED_TYPE', 'expected : after class field name')
+
+    if (this.isValue('(')) {
+      const field = createFieldDefinition({
+        name,
+        staticToken,
+        readOnly: modifiers.readOnly,
+        ownership: 'strong',
+        valueType: 'function'
+      })
+
+      field.functionType = this.parseFunctionType(true)
+      this.matchValue(';')
+      return field
+    }
+
     const parsedValueType = this.parseTypeAnnotation([';', '}'], {
       stopAtLineBreak: true
     })
@@ -1453,10 +1448,16 @@ class Parser {
     }
     let optional = this.matchValue('?')
     let valueType = 'unknown'
+    let functionType: AnyNode | null = null
     let defaultValue: AnyNode | null = null
 
     if (this.matchValue(':')) {
-      valueType = this.parseTypeAnnotation([',', ')', '='], null)
+      if (this.isValue('(')) {
+        functionType = this.parseFunctionType(false, [',', ')', '='])
+        valueType = 'function'
+      } else {
+        valueType = this.parseTypeAnnotation([',', ')', '='], null)
+      }
     }
 
     if (this.matchValue('=')) {
@@ -1465,6 +1466,10 @@ class Parser {
     }
 
     const param = createParam(binding.name, valueType, optional, defaultValue, rest)
+
+    if (functionType !== null) {
+      param.functionType = functionType
+    }
 
     if (binding.bindingElements !== null) {
       param.bindingElements = binding.bindingElements
@@ -1501,26 +1506,14 @@ class Parser {
       }
 
       if (this.matchValue('...')) {
-        this.report(
-          'INOX_NOT_IMPLEMENTED',
-          'rest elements in array binding patterns are not supported yet',
-          null
-        )
+        this.report('INOX_NOT_IMPLEMENTED', 'rest elements in array binding patterns are not supported yet', null)
       }
 
       if (this.isValue('[')) {
-        this.report(
-          'INOX_NOT_IMPLEMENTED',
-          'nested array binding patterns are not supported yet',
-          null
-        )
+        this.report('INOX_NOT_IMPLEMENTED', 'nested array binding patterns are not supported yet', null)
         this.parseArrayBindingElements()
       } else if (this.isValue('{')) {
-        this.report(
-          'INOX_NOT_IMPLEMENTED',
-          'object binding patterns are not supported yet',
-          null
-        )
+        this.report('INOX_NOT_IMPLEMENTED', 'object binding patterns are not supported yet', null)
         this.skipBindingObjectPattern()
       } else {
         const name = this.expectParameterName('expected array binding element name')
@@ -1545,11 +1538,7 @@ class Parser {
         })
 
         if (this.matchValue('=')) {
-          this.report(
-            'INOX_NOT_IMPLEMENTED',
-            'default values in array binding patterns are not supported yet',
-            null
-          )
+          this.report('INOX_NOT_IMPLEMENTED', 'default values in array binding patterns are not supported yet', null)
           this.parseExpression()
         }
       }
@@ -1624,11 +1613,7 @@ class Parser {
       return false
     }
 
-    return (
-      this.current().value === 'type' ||
-      this.current().value === 'from' ||
-      this.current().value === 'readonly'
-    )
+    return this.current().value === 'type' || this.current().value === 'from' || this.current().value === 'readonly'
   }
 
   parseNullish(): AnyNode {
@@ -1707,7 +1692,7 @@ class Parser {
     }
 
     if (this.matchKeyword('new')) {
-      return this.parseNewExpression(this.previous())
+      return this.parsePostfixTail(this.parseNewExpression(this.previous()))
     }
 
     if (this.matchKeyword('typeof')) {
@@ -1760,7 +1745,11 @@ class Parser {
   }
 
   parsePostfix(): AnyNode {
-    let expression = this.parsePrimary()
+    return this.parsePostfixTail(this.parsePrimary())
+  }
+
+  parsePostfixTail(initial: AnyNode): AnyNode {
+    let expression = initial
 
     while (true) {
       if (this.matchValue('(')) {

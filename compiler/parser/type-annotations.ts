@@ -86,7 +86,7 @@ export function readTypeAnnotation(
     }
 
     if (token.type === 'string') {
-      parts.push('string')
+      parts.push(typeAnnotationStringToken(parts, token.value))
     } else if (token.type === 'number') {
       parts.push('number')
     } else {
@@ -101,6 +101,26 @@ export function readTypeAnnotation(
     typeName: normalizeTypeName(joinStrings(parts, '')),
     position
   }
+}
+
+function typeAnnotationStringToken(parts: string[], value: string): string {
+  if (parts.length === 0 || parts[parts.length - 1] !== '[') {
+    return 'string'
+  }
+
+  let escaped = ''
+
+  for (let index = 0; index < value.length; index = index + 1) {
+    const unit = value.slice(index, index + 1)
+
+    if (unit === '\\' || unit === "'") {
+      escaped = escaped + '\\'
+    }
+
+    escaped = escaped + unit
+  }
+
+  return `'${escaped}'`
 }
 
 function joinStrings(values: string[], separator: string): string {

@@ -16,7 +16,6 @@ export type CRuntimePreludeRequirements = {
   needsMapRuntime: boolean
   needsSetRuntime: boolean
   needsObjectRuntime: boolean
-  needsJsonRuntime: boolean
   runtimeEntrypointAdapter: RuntimeEntrypointAdapterDescriptor | null
   libraryCPreludeIncludes: string[]
   libraryRuntimeRequirements: string[]
@@ -37,20 +36,14 @@ export type CRuntimePreludeRequirementInput = {
 export function resolveCRuntimePreludeRequirements(
   input: CRuntimePreludeRequirementInput
 ): CRuntimePreludeRequirements {
-  const libraryRuntime = resolveLibraryRuntimeRequirements(
-    input.runtimeRequirements,
-    input.libraries
-  )
+  const libraryRuntime = resolveLibraryRuntimeRequirements(input.runtimeRequirements, input.libraries)
   const runtimeRequirements = libraryRuntime.requirements
   const signatureRuntimeTypes: Set<string> = input.signatureRuntimeTypes ?? new Set()
   const needsCallbackRuntime =
     input.hasRuntimeCallbackWrapper ||
     runtimeRequirements.has('callback-values') ||
     signatureRuntimeTypes.has('function')
-  const needsJsonRuntime = runtimeRequirements.has('json')
-  const needsAsyncRuntime =
-    runtimeRequirements.has('async-runtime') ||
-    signatureRuntimeTypes.has('promise')
+  const needsAsyncRuntime = runtimeRequirements.has('async-runtime') || signatureRuntimeTypes.has('promise')
   const needsCollectionRuntime =
     runtimeRequirements.has('collections') ||
     irProgramsUseArrayIsArray(input.irPrograms) ||
@@ -58,12 +51,8 @@ export function resolveCRuntimePreludeRequirements(
     signatureRuntimeTypes.has('array') ||
     signatureRuntimeTypes.has('map') ||
     signatureRuntimeTypes.has('set')
-  const needsMapRuntime =
-    signatureRuntimeTypes.has('map') ||
-    irProgramsUseCollectionKind(input.irPrograms, 'map')
-  const needsSetRuntime =
-    signatureRuntimeTypes.has('set') ||
-    irProgramsUseCollectionKind(input.irPrograms, 'set')
+  const needsMapRuntime = signatureRuntimeTypes.has('map') || irProgramsUseCollectionKind(input.irPrograms, 'map')
+  const needsSetRuntime = signatureRuntimeTypes.has('set') || irProgramsUseCollectionKind(input.irPrograms, 'set')
   const needsClassRuntime = input.classDescriptorCount > 0
   const needsClassDescriptorRuntime = needsClassRuntime
   const needsCppValueRuntime =
@@ -73,9 +62,7 @@ export function resolveCRuntimePreludeRequirements(
     needsAsyncRuntime ||
     signatureRuntimeTypes.size > 0
   const needsObjectRuntime =
-    runtimeRequirements.has('objects') ||
-    needsClassRuntime ||
-    signatureRuntimeTypes.has('object')
+    runtimeRequirements.has('objects') || needsClassRuntime || signatureRuntimeTypes.has('object')
   const needsRuntime =
     input.throwingFunctionCount > 0 ||
     needsAsyncRuntime ||
@@ -84,12 +71,9 @@ export function resolveCRuntimePreludeRequirements(
     needsObjectRuntime ||
     needsClassRuntime ||
     needsCppValueRuntime ||
-    needsJsonRuntime ||
     signatureRuntimeTypes.size > 0 ||
     runtimeRequirements.has('managed-values')
-  const needsStringHeader =
-    runtimeRequirements.has('string-bytes') ||
-    signatureRuntimeTypes.has('string')
+  const needsStringHeader = runtimeRequirements.has('string-bytes') || signatureRuntimeTypes.has('string')
 
   return {
     needsRuntime,
@@ -102,7 +86,6 @@ export function resolveCRuntimePreludeRequirements(
     needsMapRuntime,
     needsSetRuntime,
     needsObjectRuntime,
-    needsJsonRuntime,
     runtimeEntrypointAdapter: libraryRuntime.entrypointAdapter,
     libraryCPreludeIncludes: libraryRuntime.includes,
     libraryRuntimeRequirements: orderedRuntimeRequirementIds(libraryRuntime.requirements)
@@ -145,10 +128,8 @@ function resolveLibraryRuntimeRequirements(
     if (descriptorAdapter !== null && typeof descriptorAdapter !== 'undefined') {
       if (
         entrypointAdapter !== null &&
-        (
-          entrypointAdapter.cFunction !== descriptorAdapter.cFunction ||
-          entrypointAdapter.acceptsEntryPath !== descriptorAdapter.acceptsEntryPath
-        )
+        (entrypointAdapter.cFunction !== descriptorAdapter.cFunction ||
+          entrypointAdapter.acceptsEntryPath !== descriptorAdapter.acceptsEntryPath)
       ) {
         throw new Error(
           `runtime requirements select multiple entrypoint adapters: ${entrypointAdapter.cFunction}, ${descriptorAdapter.cFunction}`
@@ -171,11 +152,7 @@ function resolveLibraryRuntimeRequirements(
       }
     }
 
-    for (
-      let includeIndex = 0;
-      includeIndex < descriptor.cPreludeIncludes.length;
-      includeIndex = includeIndex + 1
-    ) {
+    for (let includeIndex = 0; includeIndex < descriptor.cPreludeIncludes.length; includeIndex = includeIndex + 1) {
       insertOrderedRuntimeRequirementId(includes, descriptor.cPreludeIncludes[includeIndex])
     }
   }
@@ -256,8 +233,7 @@ function nodeIsArrayIncludesCall(node: AnyNode): boolean {
   }
 
   return (
-    object.valueType === 'array' ||
-    object.arrayElementType !== null && typeof object.arrayElementType !== 'undefined'
+    object.valueType === 'array' || (object.arrayElementType !== null && typeof object.arrayElementType !== 'undefined')
   )
 }
 
@@ -300,11 +276,7 @@ function nodeIsCollectionConstructor(value: AnyNode, kind: string): boolean {
   return false
 }
 
-function irProgramsUseNode(
-  programs: IrProgram[],
-  kind: string,
-  collectionKind: string
-): boolean {
+function irProgramsUseNode(programs: IrProgram[], kind: string, collectionKind: string): boolean {
   for (let index = 0; index < programs.length; index = index + 1) {
     const program = programs[index] as IrProgram
 
@@ -316,11 +288,7 @@ function irProgramsUseNode(
   return false
 }
 
-function nodeTreeUses(
-  value: any,
-  kind: string,
-  collectionKind: string
-): boolean {
+function nodeTreeUses(value: any, kind: string, collectionKind: string): boolean {
   if (value === null || typeof value === 'undefined') {
     return false
   }
@@ -341,17 +309,10 @@ function nodeTreeUses(
 
   const node = value as AnyNode
 
-  return (
-    nodeMatchesRuntimePlanKind(node, kind, collectionKind) ||
-    nodeChildrenUse(node, kind, collectionKind)
-  )
+  return nodeMatchesRuntimePlanKind(node, kind, collectionKind) || nodeChildrenUse(node, kind, collectionKind)
 }
 
-function nodeChildrenUse(
-  node: AnyNode,
-  kind: string,
-  collectionKind: string
-): boolean {
+function nodeChildrenUse(node: AnyNode, kind: string, collectionKind: string): boolean {
   return (
     nodeTreeUses(node.body, kind, collectionKind) ||
     nodeTreeUses(node.params, kind, collectionKind) ||
@@ -386,11 +347,7 @@ function nodeChildrenUse(
   )
 }
 
-function nodeMatchesRuntimePlanKind(
-  node: AnyNode,
-  kind: string,
-  collectionKind: string
-): boolean {
+function nodeMatchesRuntimePlanKind(node: AnyNode, kind: string, collectionKind: string): boolean {
   if (kind === 'array-includes') {
     return nodeIsArrayIncludesCall(node)
   }

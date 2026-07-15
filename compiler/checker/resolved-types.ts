@@ -110,7 +110,6 @@ export type CheckerMapType = {
   valueArrayElementDeclaredType?: string | null
 }
 
-
 export type NullableConditionNarrowing = {
   trueNames: string[]
   falseNames: string[]
@@ -155,11 +154,7 @@ export function isAnyNodeChildFieldName(name: string): boolean {
 }
 
 export function isUnsupportedEqualityOperator(operator: string): boolean {
-  return (
-    operator.length === 2 &&
-    (operator[0] === '=' || operator[0] === '!') &&
-    operator[1] === '='
-  )
+  return operator.length === 2 && (operator[0] === '=' || operator[0] === '!') && operator[1] === '='
 }
 
 export function anyNodeResolvedTypeInfo(loc: SourceLocation): ResolvedTypeInfo {
@@ -287,14 +282,29 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('functionType', 'object', null, true, loc),
       anyNodeField('shape', 'object', null, true, loc, { shape: objectShapeMetadata }),
       anyNodeField('rest', 'boolean', null, false, loc),
+      anyNodeField('libraryBindingId', 'string', null, true, loc),
+      anyNodeField('libraryOperationId', 'string', null, true, loc),
       anyNodeField('libraryReceiverTypeId', 'string', null, true, loc),
       anyNodeField('libraryResultTypeId', 'string', null, true, loc),
       anyNodeField('libraryIntrinsicRole', 'string', null, true, loc),
       anyNodeField('libraryCCallStyle', 'string', null, true, loc),
       anyNodeField('libraryCFailureMode', 'string', null, true, loc),
+      anyNodeField('libraryCResultMode', 'string', null, true, loc),
+      anyNodeField('libraryCReceiverAdapter', 'string', null, true, loc),
+      anyNodeField('libraryCExpression', 'string', null, true, loc),
       anyNodeField('libraryCLowering', 'string', null, true, loc),
       anyNodeField('libraryCClassFormatExpression', 'string', null, true, loc),
-      anyNodeField('libraryCallbackLifetime', 'string', null, true, loc)
+      anyNodeField('libraryCppType', 'string', null, true, loc),
+      anyNodeField('libraryConstantValue', 'string', null, true, loc),
+      anyNodeField('libraryCallbackLifetime', 'string', null, true, loc),
+      anyNodeField('libraryOwned', 'boolean', null, false, loc),
+      anyNodeField('libraryCapabilities', 'array', null, false, loc, { arrayElementType: 'string' }),
+      anyNodeField('libraryCArgumentAdapters', 'array', null, false, loc, { arrayElementType: 'string' }),
+      anyNodeField('libraryCArgumentKinds', 'array', null, true, loc, { arrayElementType: 'string' }),
+      anyNodeField('libraryCArgumentMethodNames', 'array', null, false, loc, { arrayElementType: 'string' }),
+      anyNodeField('libraryCArgumentSources', 'array', null, false, loc, { arrayElementType: 'object' }),
+      anyNodeField('libraryCResultShapeFields', 'array', null, false, loc, { arrayElementType: 'string' }),
+      anyNodeField('libraryRuntimeRequirements', 'array', null, false, loc, { arrayElementType: 'string' })
     ]
   }
 }
@@ -308,7 +318,10 @@ function objectShapeInfoMetadataShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('builtin', 'string', null, true, loc),
       anyNodeField('dynamic', 'boolean', null, true, loc),
       anyNodeField('dynamicField', 'object', null, true, loc),
-      anyNodeField('fields', 'array', null, false, loc, { arrayElementType: 'object' }),
+      anyNodeField('fields', 'array', null, false, loc, {
+        arrayElementType: 'object',
+        arrayElementDeclaredType: 'AnyNode'
+      }),
       anyNodeField('libraryTypeId', 'string', null, true, loc),
       anyNodeField('libraryCppType', 'string', null, true, loc)
     ]
@@ -418,7 +431,10 @@ export function resolvedConcreteValueTypeMetadata(
   return 'unknown'
 }
 
-export function resolvedStringMetadata(value: string | null | undefined, fallback: string | null | undefined): string | null {
+export function resolvedStringMetadata(
+  value: string | null | undefined,
+  fallback: string | null | undefined
+): string | null {
   if (value !== null && typeof value !== 'undefined') {
     return value
   }
@@ -1047,7 +1063,10 @@ export function resolvedTypeInfoValue(info: ResolvedTypeInfo, kind: ResolvedType
   return info.setElementType
 }
 
-export function commonResolvedOptionalValueType(infos: ResolvedTypeInfo[], kind: ResolvedTypeInfoValueKind): ValueType | null {
+export function commonResolvedOptionalValueType(
+  infos: ResolvedTypeInfo[],
+  kind: ResolvedTypeInfoValueKind
+): ValueType | null {
   const values: ValueType[] = []
 
   for (let index = 0; index < infos.length; index = index + 1) {

@@ -6,6 +6,7 @@ import { runtimeObjectLikeValueMismatchCondition } from '../runtime-values.ts'
 import type {
   CCallbackContextWrapper,
   CCallbackWrapper,
+  CClassInfo,
   CFunctionParam,
   CFunctionType,
   CNamedCallbackWrapper,
@@ -60,6 +61,7 @@ type CallbackEmitContext = {
   boxedMutableCaptureDeclarations: CallbackMutableDeclarationSet
   callbackArrowWrappers: CallbackArrowWrapperMap
   callbackWrappers: CallbackWrapperMap
+  classInfos?: Map<string, CClassInfo>
   externalEventLoopFunctions: CallbackStringSet
   functionAsyncFlags: CallbackBooleanMap
   functionNames: CallbackStringMap
@@ -112,11 +114,7 @@ function callbackStringOrUnknown(value: string | null | undefined): string {
 }
 
 function callbackArrowFunctionType(expression: AnyNode | null | undefined): CFunctionType | null {
-  if (
-    expression === null ||
-    typeof expression === 'undefined' ||
-    expression.type !== 'ArrowFunctionExpression'
-  ) {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'ArrowFunctionExpression') {
     return null
   }
 
@@ -1086,11 +1084,7 @@ function registerPlainFunctionValueVariable(
     statement.init === null ||
     typeof statement.init === 'undefined' ||
     statement.init.type !== 'ArrowFunctionExpression' ||
-    functionUsesExternalEventLoop(
-      statement.init,
-      context.externalEventLoopFunctions,
-      deps
-    ) ||
+    functionUsesExternalEventLoop(statement.init, context.externalEventLoopFunctions, deps) ||
     callbackNodeMayContainReference(statement.init.body)
   ) {
     return
@@ -1099,7 +1093,14 @@ function registerPlainFunctionValueVariable(
   const functionType = callbackVariableFunctionType(statement)
 
   syncCallbackVariableFunctionType(statement, functionType)
-  registerPlainArrowCallbackWrapper(statement.init, normalizeFunctionType(functionType), scopes, wrappers, context, deps)
+  registerPlainArrowCallbackWrapper(
+    statement.init,
+    normalizeFunctionType(functionType),
+    scopes,
+    wrappers,
+    context,
+    deps
+  )
 }
 
 function callbackNodeMayContainReference(value: CallbackNode | CallbackNode[] | null | undefined): boolean {
@@ -1174,11 +1175,7 @@ function registerCallbackExpression(
     expression !== null &&
     typeof expression !== 'undefined' &&
     expression.type === 'ArrowFunctionExpression' &&
-    functionUsesExternalEventLoop(
-      expression,
-      context.externalEventLoopFunctions,
-      deps
-    )
+    functionUsesExternalEventLoop(expression, context.externalEventLoopFunctions, deps)
 
   if (isPlainFunctionPointerType(functionType)) {
     if (
@@ -1355,11 +1352,7 @@ function registerArrowCallbackWrapper(
     finalizerName: `inox_callback_context_${index}_finalize`,
     expression: expression,
     functionType: resolvedFunctionType,
-    needsEventLoop: functionUsesExternalEventLoop(
-      expression,
-      context.externalEventLoopFunctions,
-      deps
-    ),
+    needsEventLoop: functionUsesExternalEventLoop(expression, context.externalEventLoopFunctions, deps),
     captures: captures
   }
 
@@ -2258,7 +2251,12 @@ function visitCallbackExpression(
     return
   }
 
-  if (expression.type === 'OptionalCallExpression' || expression.type === 'NewExpression') {
+  if (expression.type === 'NewExpression') {
+    visitClassConstructorCallbackExpression(expression, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
+    return
+  }
+
+  if (expression.type === 'OptionalCallExpression') {
     visitCallbackExpression(expression.callee, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
 
     for (let index = 0; index < expression.args.length; index = index + 1) {
@@ -2298,6 +2296,57 @@ function visitCallbackExpression(
 
   if (expression.type === 'ArrowFunctionExpression') {
     visitNestedCallbackArrowExpression(expression, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
+  }
+}
+
+function visitClassConstructorCallbackExpression(
+  expression: AnyNode,
+  scopes: CallbackScope[],
+  wrappers: CallbackWrapperMap,
+  pendingPlainFunctionArgs: PendingPlainFunctionArg[],
+  context: CallbackEmitContext,
+  deps: CallbackLoweringDependencies
+): void {
+  visitCallbackExpression(expression.callee, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
+
+  let params: CFunctionParam[] | null = null
+
+  if (
+    expression.callee.type === 'Reference' &&
+    expression.callee.path.length === 1 &&
+    context.classInfos !== null &&
+    typeof context.classInfos !== 'undefined'
+  ) {
+    const info = context.classInfos.get(expression.callee.path[0])
+
+    if (
+      info !== null &&
+      typeof info !== 'undefined' &&
+      info.constructor !== null &&
+      typeof info.constructor !== 'undefined'
+    ) {
+      params = info.constructor.params
+    }
+  }
+
+  for (let index = 0; index < expression.args.length; index = index + 1) {
+    const arg = callbackNodeAt(expression.args, index)
+    const param = params === null ? null : params[index]
+
+    if (
+      param !== null &&
+      typeof param !== 'undefined' &&
+      param.functionType !== null &&
+      typeof param.functionType !== 'undefined'
+    ) {
+      if (isRuntimeFunctionType(param.functionType)) {
+        registerRuntimeCallbackExpression(arg, param.functionType, scopes, wrappers, context, deps)
+      } else {
+        registerCallbackExpression(arg, param.functionType, scopes, wrappers, context, deps)
+      }
+    }
+
+    visitCallbackExpression(arg, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
   }
 }
 
@@ -2962,7 +3011,11 @@ export function runtimeCallbackWrapperFor(
 }
 
 export function emitRuntimeCallbackWrapperHead(wrapper: CRuntimeCallbackWrapper): string {
-  return 'static inox_status ' + wrapper.name + '(void* inox_context, const inox_value* args, size_t arg_count, inox_value* out)'
+  return (
+    'static inox_status ' +
+    wrapper.name +
+    '(void* inox_context, const inox_value* args, size_t arg_count, inox_value* out)'
+  )
 }
 
 export function isRuntimeCallbackWrapper(wrapper: CCallbackWrapper): boolean {
@@ -3495,13 +3548,7 @@ export function emitRuntimeArrowCallbackContextFinalizerDeclaration(wrapper: CCa
     }
   }
 
-  lines.push(
-    '  inox_default_free(0, context, sizeof(' +
-      contextTypeName +
-      '), _Alignof(' +
-      contextTypeName +
-      '));'
-  )
+  lines.push('  inox_default_free(0, context, sizeof(' + contextTypeName + '), _Alignof(' + contextTypeName + '));')
   lines.push('}')
 
   return lines
@@ -3628,9 +3675,7 @@ export function emitRuntimeArrowCallbackContextLocals(
 
   const captures = callbackContextWrapperCaptures(wrapper)
   const contextTypeName = callbackContextWrapperContextTypeName(wrapper)
-  const lines = [
-    contextTypeName + '* captured = (' + contextTypeName + '*)' + contextParameterName + ';'
-  ]
+  const lines = [contextTypeName + '* captured = (' + contextTypeName + '*)' + contextParameterName + ';']
 
   if (callbackContextWrapperNeedsEventLoop(wrapper)) {
     context.eventLoopUsed = true
@@ -3671,7 +3716,12 @@ export function emitRuntimeArrowCallbackContextLocals(
       }
 
       lines.push(
-        emitRuntimeArrowCaptureCType(capture) + ' ' + capture.name + ' = captured->' + emitRuntimeArrowCaptureField(capture) + ';'
+        emitRuntimeArrowCaptureCType(capture) +
+          ' ' +
+          capture.name +
+          ' = captured->' +
+          emitRuntimeArrowCaptureField(capture) +
+          ';'
       )
       continue
     }
@@ -3697,7 +3747,12 @@ export function emitRuntimeArrowCallbackContextLocals(
     }
 
     lines.push(
-      emitRuntimeArrowCaptureCType(capture) + ' ' + capture.name + ' = captured->' + emitRuntimeArrowCaptureField(capture) + ';'
+      emitRuntimeArrowCaptureCType(capture) +
+        ' ' +
+        capture.name +
+        ' = captured->' +
+        emitRuntimeArrowCaptureField(capture) +
+        ';'
     )
   }
 

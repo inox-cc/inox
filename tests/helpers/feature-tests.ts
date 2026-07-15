@@ -7,7 +7,10 @@ import { fileURLToPath } from 'node:url'
 import { CompileError, formatDiagnostics } from '../../compiler/diagnostics.ts'
 import { compileFile } from '../../compiler/compiler.ts'
 import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
-import { createCompilerLibrarySetFromDiscovered } from '../../scripts/lib/compiler-library-registry.ts'
+import {
+  createCompilerLibraryLiteralTypeInferenceFromDiscovered,
+  createCompilerLibrarySetFromDiscovered
+} from '../../scripts/lib/compiler-library-registry.ts'
 import {
   compileRuntimeProgram,
   compileSource,
@@ -60,9 +63,10 @@ const featureRoots = [featureMainRoot, fileURLToPath(new URL('../../stdlib/', im
 const defaultFeatureTestCompiler: FeatureTestCompiler = {
   kind: 'hosted'
 }
-const defaultCompilerLibrarySetPromise = discoverCompilerLibraries().then((libraries) =>
-  createCompilerLibrarySetFromDiscovered(libraries)
-)
+const defaultCompilerLibraryProfilePromise = discoverCompilerLibraries().then((libraries) => ({
+  libraries: createCompilerLibrarySetFromDiscovered(libraries),
+  libraryLiteralTypeInference: createCompilerLibraryLiteralTypeInferenceFromDiscovered(libraries)
+}))
 
 export async function collectFeatureTestFiles(args: string[]): Promise<string[]> {
   const requestedArgs = args.filter((arg) => arg !== '--')
@@ -523,21 +527,29 @@ async function compileFeatureTestToC(featureFile: FeatureTestFile, compiler: Fea
     return await compileFeatureTestWithBinary(featureFile, compiler)
   }
 
-  const libraries = await defaultCompilerLibrarySetPromise
+  const profile = await defaultCompilerLibraryProfilePromise
 
   if (featureFile.usesModuleGraph) {
-    const result = await compileFile(featureFile.path, {
-      target: 'cc',
-      libraries
-    })
+    const result = await compileFile(
+      featureFile.path,
+      {
+        target: 'cc',
+        libraries: profile.libraries
+      },
+      profile.libraryLiteralTypeInference
+    )
 
     return result.code
   }
 
-  const result = compileSource(featureFile.source, {
-    target: 'cc',
-    libraries
-  })
+  const result = compileSource(
+    featureFile.source,
+    {
+      target: 'cc',
+      libraries: profile.libraries
+    },
+    profile.libraryLiteralTypeInference
+  )
 
   return result.code
 }

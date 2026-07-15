@@ -1,8 +1,5 @@
 import { diagnostic } from '../diagnostics.ts'
-import {
-  isCollectionConstructorGlobalUsagePath,
-  jsonRuntimeMethodNameFromPath
-} from '../../stdlib/global/compiler/descriptor.ts'
+import { isCollectionConstructorGlobalUsagePath } from '../../stdlib/global/compiler/descriptor.ts'
 import type { Diagnostic, IrGlobalUsage, IrSyntaxFeatureUsage, SourceLocation } from '../types.ts'
 
 export function reportUnsupportedCSyntaxFeatures(
@@ -10,10 +7,7 @@ export function reportUnsupportedCSyntaxFeatures(
   _diagnostics: Diagnostic[]
 ): void {}
 
-export function reportUnsupportedCGlobalUsages(
-  globalUsages: IrGlobalUsage[],
-  diagnostics: Diagnostic[]
-): void {
+export function reportUnsupportedCGlobalUsages(globalUsages: IrGlobalUsage[], diagnostics: Diagnostic[]): void {
   for (let index = 0; index < globalUsages.length; index = index + 1) {
     const usage = globalUsages[index] as IrGlobalUsage
 
@@ -35,7 +29,6 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
     path === 'Object.entries' ||
     path === 'Object.keys' ||
     path === 'Object.values' ||
-    !!jsonRuntimeMethodNameFromPath(usage.path) ||
     isCollectionConstructorGlobalUsagePath(usage.path)
   )
 }

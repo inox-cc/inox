@@ -112,8 +112,10 @@ type ObjectFunctionArgumentSource = {
 }
 
 type RuntimeObjectFunctionCallee = {
+  fieldIndex: number
   functionType: CFunctionType
   name: string
+  objectName: string
 }
 
 type ObjectFunctionFieldResolution = {
@@ -1495,14 +1497,44 @@ function runtimeObjectFunctionFieldCallee(
     return null
   }
 
-  if (!isRuntimeObjectFunctionField(resolved.field)) {
+  const fieldIndex = runtimeClassFunctionFieldIndex(resolved, context)
+
+  if (fieldIndex === -1 && !isRuntimeObjectFunctionField(resolved.field)) {
+    return null
+  }
+
+  if (fieldIndex !== -1 && !isRuntimeFunctionType(resolved.field.functionType)) {
     return null
   }
 
   return {
+    fieldIndex,
     functionType: resolved.field.functionType,
-    name: emitCObjectFunctionFieldName(resolved.objectName, resolved.fieldName)
+    name: fieldIndex === -1 ? emitCObjectFunctionFieldName(resolved.objectName, resolved.fieldName) : '',
+    objectName: fieldIndex === -1 ? '' : resolved.objectName
   }
+}
+
+function runtimeClassFunctionFieldIndex(resolved: ObjectFunctionFieldResolution, context: CFunctionContext): number {
+  const className = context.classInstanceTypes.get(resolved.objectName)
+
+  if (className === null || typeof className === 'undefined') {
+    return -1
+  }
+
+  const info = context.classInfos.get(className)
+
+  if (info === null || typeof info === 'undefined' || info.native) {
+    return -1
+  }
+
+  for (let index = 0; index < info.fields.length; index = index + 1) {
+    if (info.fields[index].name === resolved.fieldName) {
+      return index
+    }
+  }
+
+  return -1
 }
 
 function objectFunctionCalleeSeenTypes(object: CValueNode, context: CFunctionContext): string[] {
@@ -1708,6 +1740,19 @@ function emitRuntimeObjectFunctionFieldCall(
 ): PreparedExpression {
   const lines: string[] = []
   const args: string[] = []
+  let calleeName = callee.name
+
+  if (callee.fieldIndex !== -1) {
+    calleeName = nextCName(context, 'inox_callback')
+    registerOwnedValue(context, calleeName)
+    appendLines(lines, emitPrepareOwnedValueWrite(calleeName))
+    lines.push(
+      emitStatusCheck(
+        `inox_object_get_known(${deps.emitObjectValueReference(callee.objectName, context)}, ${callee.fieldIndex}, &${calleeName})`,
+        context
+      )
+    )
+  }
 
   for (const arg of expression.args) {
     const value = deps.emitCValueExpression(arg, context)
@@ -1721,12 +1766,12 @@ function emitRuntimeObjectFunctionFieldCall(
   appendLines(lines, emitPrepareOwnedValueWrite(out))
 
   if (args.length === 0) {
-    lines.push(emitStatusCheck(`inox_callback_call(${callee.name}, 0, 0, &${out})`, context))
+    lines.push(emitStatusCheck(`inox_callback_call(${calleeName}, 0, 0, &${out})`, context))
   } else {
     const argArray = nextCName(context, 'inox_callback_args')
 
     lines.push(`inox_value ${argArray}[] = { ${joinStrings(args, ', ')} };`)
-    lines.push(emitStatusCheck(`inox_callback_call(${callee.name}, ${argArray}, ${args.length}, &${out})`, context))
+    lines.push(emitStatusCheck(`inox_callback_call(${calleeName}, ${argArray}, ${args.length}, &${out})`, context))
   }
 
   return {
@@ -1809,7 +1854,6 @@ export type CScalarExpressionDependencies = {
   emitPreparedCollectionCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCollectionSizeExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitNullableScalarValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitPreparedJsonScalarParseExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNullableScalarRuntimeValueExpression(
     expression: CValueNode,
     context: CFunctionContext
@@ -1877,6 +1921,7 @@ export type CCallExpressionDependencies = {
     shape?: CObjectShape | null
   ): PreparedExpression
   emitCValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
+  emitObjectValueReference(name: string, context: CFunctionContext): string
   emitFunctionValueExpression(expression: CValueNode, context: CFunctionContext): string
   emitFunctionPointerAdapter(
     target: string,
@@ -1914,7 +1959,6 @@ export type CCallExpressionDependencies = {
     options?: PreparedCallOptions
   ): PreparedExpression | null
   emitPreparedCollectionCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedJsonCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNumberExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedPromiseMethodExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedPromiseStaticExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
@@ -2023,12 +2067,6 @@ export function emitPreparedCallExpression(
 
   if (collectionCall !== null && typeof collectionCall !== 'undefined') {
     return collectionCall
-  }
-
-  const jsonCall = deps.emitPreparedJsonCallExpression(expression, context)
-
-  if (jsonCall !== null && typeof jsonCall !== 'undefined') {
-    return jsonCall
   }
 
   const promise = deps.emitPreparedPromiseStaticExpression(expression, context)
@@ -2844,6 +2882,12 @@ export function emitPreparedNumberExpression(
       return dynamicObjectBooleanLiteralCompare
     }
 
+    const dynamicRuntimeValueCompare = emitPreparedDynamicRuntimeValueCompareExpression(expression, context, deps)
+
+    if (dynamicRuntimeValueCompare !== null && typeof dynamicRuntimeValueCompare !== 'undefined') {
+      return dynamicRuntimeValueCompare
+    }
+
     const typeofCompare = emitPreparedTypeofCompareExpression(expression, context, deps)
 
     if (typeofCompare !== null && typeof typeofCompare !== 'undefined') {
@@ -2935,12 +2979,6 @@ export function emitPreparedNumberExpression(
   }
 
   if (expression.type === 'CallExpression') {
-    const jsonScalarParse = deps.emitPreparedJsonScalarParseExpression(expression, context)
-
-    if (jsonScalarParse !== null && typeof jsonScalarParse !== 'undefined') {
-      return jsonScalarParse
-    }
-
     const numericCast = emitPreparedNumericCastExpression(expression, context, deps)
 
     if (numericCast !== null && typeof numericCast !== 'undefined') {
@@ -3587,6 +3625,20 @@ function runtimeStringValuesEqualExpression(left: string, right: string): string
   )
 }
 
+function runtimeValuesStrictEqualExpression(left: string, right: string): string {
+  const stringsEqual = runtimeStringValuesEqualExpression(left, right)
+
+  return (
+    `(${left}.tag == ${right}.tag && (` +
+    `${left}.tag == INOX_TAG_UNDEFINED || ${left}.tag == INOX_TAG_NULL || ` +
+    `(${left}.tag == INOX_TAG_BOOL && ${left}.as.boolean == ${right}.as.boolean) || ` +
+    `(${left}.tag == INOX_TAG_NUMBER && ${left}.as.number == ${right}.as.number) || ` +
+    `${stringsEqual} || ` +
+    `(${left}.tag != INOX_TAG_STRING && inox_is_ref_value(${left}) && ${left}.as.ref == ${right}.as.ref)` +
+    '))'
+  )
+}
+
 function runtimeStringValueEqualsBytesExpression(value: string, bytes: string, length: string): string {
   const string = `((inox_string*)${value}.as.ref)`
 
@@ -4041,6 +4093,55 @@ function emitPreparedRuntimeReferenceCompareExpression(
     lines,
     expression: result
   }
+}
+
+function emitPreparedDynamicRuntimeValueCompareExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): PreparedExpression | null {
+  if (!isEqualityOperator(expression.operator)) {
+    return null
+  }
+
+  const leftType = deps.inferExpressionType(expression.left, context)
+  const rightType = deps.inferExpressionType(expression.right, context)
+
+  if (isScalarValueType(leftType) && isScalarValueType(rightType)) {
+    return null
+  }
+
+  const left = emitPreparedDynamicRuntimeValueExpression(expression.left, context, deps)
+  const right = emitPreparedDynamicRuntimeValueExpression(expression.right, context, deps)
+
+  if (left === null || typeof left === 'undefined' || right === null || typeof right === 'undefined') {
+    return null
+  }
+
+  const leftName = nextCName(context, 'inox_strict_left')
+  const rightName = nextCName(context, 'inox_strict_right')
+  const lines: string[] = []
+
+  appendLines(lines, left.lines)
+  lines.push(`inox_value ${leftName} = ${left.expression};`)
+  appendLines(lines, right.lines)
+  lines.push(`inox_value ${rightName} = ${right.expression};`)
+
+  const equals = runtimeValuesStrictEqualExpression(leftName, rightName)
+  let result = `(!${equals})`
+
+  if (isPositiveEqualityOperator(expression.operator)) {
+    result = equals
+  }
+
+  return {
+    lines,
+    expression: result
+  }
+}
+
+function isScalarValueType(valueType: string): boolean {
+  return isNumberOrBooleanValueType(valueType) || valueType === 'string'
 }
 
 function emitPreparedDynamicObjectNullCompareExpression(
@@ -4859,7 +4960,6 @@ export type CValueExpressionDependencies = {
     context: CFunctionContext
   ): PreparedExpression | null
   emitPreparedCollectionSizeExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedJsonCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedKnownArrayIndexValueExpression(
     expression: CValueNode,
     context: CFunctionContext
@@ -4960,12 +5060,6 @@ export function emitCValueExpression(
 
   if (libraryExpression !== null) {
     return libraryExpression
-  }
-
-  const jsonCall = deps.emitPreparedJsonCallExpression(expression, context)
-
-  if (jsonCall !== null && typeof jsonCall !== 'undefined') {
-    return jsonCall
   }
 
   const arrayPopCall = deps.emitPreparedArrayPopCallExpression(expression, context, null)

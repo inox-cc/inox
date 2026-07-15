@@ -209,7 +209,8 @@ function emitObjectThrownCheckLines(context: ObjectFunctionContext): string[] {
     return [`if (inox::thrown()) ${emitFailureStatement(context)}`]
   }
 
-  const errorActiveNeeded = currentObjectErrorTargetRequiresActive(context) || (target === '' && context.throwingFunction)
+  const errorActiveNeeded =
+    currentObjectErrorTargetRequiresActive(context) || (target === '' && context.throwingFunction)
 
   if (errorActiveNeeded) {
     registerObjectErrorChannel(context)
@@ -695,10 +696,7 @@ function isCompilerAnyNodeExpression(expression: AnyNode | null | undefined): bo
   return expression.shape.builtin === 'compiler.AnyNode'
 }
 
-function objectShapeFieldsForLookup(
-  context: ObjectShapeContext,
-  objectName: string
-): CObjectShapeField[] | null {
+function objectShapeFieldsForLookup(context: ObjectShapeContext, objectName: string): CObjectShapeField[] | null {
   const fields = context.objectShapes.get(objectName)
 
   if (fields !== null && typeof fields !== 'undefined') {
@@ -1071,13 +1069,7 @@ export function emitDynamicObjectFieldAssignment(
   }
 
   if (target.type === 'IndexExpression') {
-    return emitDynamicObjectIndexAssignmentLines(
-      expression,
-      target.object,
-      target.index,
-      context,
-      dependencies
-    )
+    return emitDynamicObjectIndexAssignmentLines(expression, target.object, target.index, context, dependencies)
   }
 
   return null
@@ -1106,10 +1098,7 @@ function emitDynamicObjectIndexAssignmentLines(
   appendLines(lines, key.lines)
   appendLines(lines, value.lines)
   lines.push(
-    emitStatusCheck(
-      `inox_object_set(${object.expression}, ${key.bytes}, ${key.length}, ${value.expression})`,
-      context
-    )
+    emitStatusCheck(`inox_object_set(${object.expression}, ${key.bytes}, ${key.length}, ${value.expression})`, context)
   )
 
   return lines
@@ -1957,7 +1946,7 @@ function preparedObjectVariableSpreadForField(
 function objectSpreadPropertyHasField(property: ObjectPropertyNode, fieldName: string): boolean {
   const shape = property.value.shape
 
-  if (shape === null || typeof shape === 'undefined' || shape.dynamic === true) {
+  if (shape === null || typeof shape === 'undefined') {
     return false
   }
 
@@ -2239,12 +2228,7 @@ function isCompilerAnyNodeLikeObjectLiteral(expression: AnyNode | null | undefin
 }
 
 export function isCompilerObjectShapeInfoShape(shape: CObjectShape | null | undefined): boolean {
-  if (
-    shape === null ||
-    typeof shape === 'undefined' ||
-    shape.fields === null ||
-    typeof shape.fields === 'undefined'
-  ) {
+  if (shape === null || typeof shape === 'undefined' || shape.fields === null || typeof shape.fields === 'undefined') {
     return false
   }
 
@@ -2256,16 +2240,14 @@ export function isCompilerObjectShapeInfoShape(shape: CObjectShape | null | unde
 }
 
 function isCompilerObjectFieldInfoShape(shape: CObjectShape | null | undefined): boolean {
-  if (
-    shape === null ||
-    typeof shape === 'undefined' ||
-    shape.fields === null ||
-    typeof shape.fields === 'undefined'
-  ) {
+  if (shape === null || typeof shape === 'undefined' || shape.fields === null || typeof shape.fields === 'undefined') {
     return false
   }
 
-  return findObjectShapeFieldIndex(shape.fields, 'name') !== -1 && findObjectShapeFieldIndex(shape.fields, 'valueType') !== -1
+  return (
+    findObjectShapeFieldIndex(shape.fields, 'name') !== -1 &&
+    findObjectShapeFieldIndex(shape.fields, 'valueType') !== -1
+  )
 }
 
 function objectNodeProperties(node: ObjectFieldNode): ObjectPropertyNode[] {

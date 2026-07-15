@@ -8,6 +8,11 @@ export type RecordTypeNames = {
   value: string
 }
 
+export type IndexedAccessTypeName = {
+  base: string
+  indexes: string[]
+}
+
 export function arrayElementTypeNameFromTypeName(name: string): string | null {
   return genericTypeInner(name, 'array')
 }
@@ -177,6 +182,18 @@ export function normalizeTypeName(name: string): string {
 
   if (unionArgs.length > 1) {
     return normalizeUnionTypeNames(unionArgs)
+  }
+
+  const indexedAccess = indexedAccessTypeNameFromTypeName(name)
+
+  if (indexedAccess !== null) {
+    let normalized = normalizeTypeName(indexedAccess.base)
+
+    for (let index = 0; index < indexedAccess.indexes.length; index = index + 1) {
+      normalized = normalized + `[${indexedAccess.indexes[index]}]`
+    }
+
+    return normalized
   }
 
   const nullableInner = genericTypeInner(name, 'nullable')
@@ -358,6 +375,54 @@ export function normalizeTypeName(name: string): string {
   }
 
   return 'unknown'
+}
+
+export function indexedAccessTypeNameFromTypeName(name: string): IndexedAccessTypeName | null {
+  const indexes: string[] = []
+  let angleDepth = 0
+  let bracketStart = -1
+  let baseEnd = -1
+  let index = 0
+
+  while (index < name.length) {
+    const unit = name.slice(index, index + 1)
+
+    if (unit === '<') {
+      angleDepth = angleDepth + 1
+    } else if (unit === '>' && angleDepth > 0) {
+      angleDepth = angleDepth - 1
+    } else if (unit === '[' && angleDepth === 0) {
+      if (bracketStart !== -1) {
+        return null
+      }
+
+      if (baseEnd === -1) {
+        baseEnd = index
+      }
+
+      bracketStart = index + 1
+    } else if (unit === ']' && angleDepth === 0) {
+      if (bracketStart === -1 || bracketStart === index) {
+        return null
+      }
+
+      indexes.push(name.slice(bracketStart, index))
+      bracketStart = -1
+    } else if (bracketStart === -1 && baseEnd !== -1) {
+      return null
+    }
+
+    index = index + 1
+  }
+
+  if (baseEnd <= 0 || bracketStart !== -1 || indexes.length === 0) {
+    return null
+  }
+
+  return {
+    base: name.slice(0, baseEnd),
+    indexes
+  }
 }
 
 export function typeNameDependencyNames(typeName: string | null | undefined): string[] {

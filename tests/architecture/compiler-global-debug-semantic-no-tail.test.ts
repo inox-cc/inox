@@ -33,7 +33,6 @@ test('portable compiler не содержит inox.__debug semantic tails', asyn
   }
 
   const central = await Promise.all([
-    readFile('stdlib/global/compiler/c.ts', 'utf8'),
     readFile('stdlib/global/compiler/descriptor.ts', 'utf8'),
     readFile('stdlib/global/compiler/feature.ts', 'utf8')
   ])

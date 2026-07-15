@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
-import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
+import { defaultCompilerLibraryLiteralTypeInference, defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 type GeneratedTextFile = {
   path: string
@@ -46,13 +46,17 @@ for (const a of foo.v) {
       root: '/'
     }
   )
-  const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
-    callMain: true,
-    host,
-    libraries: defaultCompilerLibrarySet,
-    loopBackend: 'libuv',
-    sourceRoot: '/pkg'
-  }) as GeneratedTextFile[]
+  const files = compileFileToCModuleTextsSync(
+    '/pkg/src/index.ts',
+    {
+      callMain: true,
+      host,
+      libraries: defaultCompilerLibrarySet,
+      loopBackend: 'libuv',
+      sourceRoot: '/pkg'
+    },
+    defaultCompilerLibraryLiteralTypeInference
+  ) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
   assert.match(source, /auto res = inox::await_value<inox::FetchResponse>/)
@@ -68,12 +72,18 @@ for (const a of foo.v) {
   assert.doesNotMatch(source, /if \(\(foo\.tag != INOX_TAG_OBJECT/)
   assert.doesNotMatch(source, /if \(\(bad\.tag != INOX_TAG_OBJECT/)
   assert.match(source, /auto b = Object\.values\(a\);\n    if \(inox::thrown\(\)\) return;/)
-  assert.doesNotMatch(source, /auto inox_values_\d+ = Object\.values\(a\);\n    if \(inox::thrown\(\)\) return;\n    inox::Value b = inox_values_\d+;/)
+  assert.doesNotMatch(
+    source,
+    /auto inox_values_\d+ = Object\.values\(a\);\n    if \(inox::thrown\(\)\) return;\n    inox::Value b = inox_values_\d+;/
+  )
   assert.doesNotMatch(source, /inox::object_values\(a, inox_object_values_\d+\)/)
   assert.doesNotMatch(source, /inox_object_values\(&inox_default_allocator, a, &inox_object_values_\d+\)/)
   assert.doesNotMatch(source, /if \(b\.tag != INOX_TAG_ARRAY/)
   assert.match(source, /auto d = Object\.entries\(a\);\n    if \(inox::thrown\(\)\) return;/)
-  assert.doesNotMatch(source, /auto inox_entries_\d+ = Object\.entries\(a\);\n    if \(inox::thrown\(\)\) return;\n    inox::Value d = inox_entries_\d+;/)
+  assert.doesNotMatch(
+    source,
+    /auto inox_entries_\d+ = Object\.entries\(a\);\n    if \(inox::thrown\(\)\) return;\n    inox::Value d = inox_entries_\d+;/
+  )
   assert.doesNotMatch(source, /inox::object_entries\(a, inox_object_entries_\d+\)/)
   assert.doesNotMatch(source, /inox_object_entries\(&inox_default_allocator, a, &inox_object_entries_\d+\)/)
   assert.doesNotMatch(source, /if \(d\.tag != INOX_TAG_ARRAY/)

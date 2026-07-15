@@ -16,4 +16,3 @@ export {
   stringRuntimeMethodName,
   stringRuntimeReturnType
 } from '../strings/compiler/descriptor.ts'
-export { jsonRuntimeMethodNameFromPath } from '../json/compiler/descriptor.ts'

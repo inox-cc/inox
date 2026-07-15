@@ -157,12 +157,10 @@ function compilerLibraryOperationReceiver(item: GlobalUsageNode): AnyNode | null
     if (
       callee !== null &&
       typeof callee !== 'undefined' &&
-      (
-        callee.type === 'MemberExpression' ||
+      (callee.type === 'MemberExpression' ||
         callee.type === 'OptionalMemberExpression' ||
         callee.type === 'IndexExpression' ||
-        callee.type === 'OptionalIndexExpression'
-      )
+        callee.type === 'OptionalIndexExpression')
     ) {
       return callee.object ?? null
     }
@@ -306,7 +304,6 @@ function isJsStdGlobalRootName(name: string): boolean {
     name === 'Int8Array' ||
     name === 'Int16Array' ||
     name === 'Int32Array' ||
-    name === 'JSON' ||
     name === 'Map' ||
     name === 'Object' ||
     name === 'Promise' ||
@@ -345,7 +342,6 @@ function sortedStringSet(values: StringSet): string[] {
   pushStringIfPresent(values, result, 'Int16Array')
   pushStringIfPresent(values, result, 'Int32Array')
   pushStringIfPresent(values, result, 'Int8Array')
-  pushStringIfPresent(values, result, 'JSON')
   pushStringIfPresent(values, result, 'Map')
   pushStringIfPresent(values, result, 'Object')
   pushStringIfPresent(values, result, 'Promise')
