@@ -3364,6 +3364,7 @@ function expressionContext(context: LowerContext): LowerExpressionContext {
     nextId: context.nextId,
     variables: context.variables,
     resolvingTypes: context.resolvingTypes,
+    typeSubstitutions: context.typeSubstitutions,
     lowerStatement
   }
 

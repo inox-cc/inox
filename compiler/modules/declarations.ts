@@ -350,7 +350,9 @@ function appendModuleDeclarationImport(lines: string[], item: AnyNode, diagnosti
 }
 
 function appendModuleDeclarationTypeAlias(lines: string[], item: AnyNode): void {
-  lines.push(`${exportPrefix(item)}type ${item.name} = ${formatTypeAliasInfo(item.valueType)};`)
+  const typeParameters = formatTypeParameterList(item.typeParameters)
+
+  lines.push(`${exportPrefix(item)}type ${item.name}${typeParameters} = ${formatTypeAliasInfo(item.valueType)};`)
 }
 
 function appendModuleDeclarationFunction(lines: string[], item: AnyNode): void {
@@ -380,9 +382,10 @@ function appendModuleDeclarationVariable(lines: string[], item: AnyNode, diagnos
 }
 
 function appendModuleDeclarationClass(lines: string[], item: AnyNode): void {
+  const typeParameters = formatTypeParameterList(item.typeParameters)
   const extendsClause = classExtendsClause(item)
 
-  lines.push(`${exportPrefix(item)}class ${item.name}${extendsClause} {`)
+  lines.push(`${exportPrefix(item)}class ${item.name}${typeParameters}${extendsClause} {`)
 
   appendModuleDeclarationClassFields(lines, item.fields)
   appendModuleDeclarationClassIndexSignatures(lines, item.indexSignatures)
@@ -1184,6 +1187,16 @@ function appendNormalizedInterfaceDeclaration(parts: string[], tokens: Token[], 
 
   parts.push('type')
   parts.push(tokenSource(name))
+
+  while (
+    !tokenIs(tokens, current, 'eof', '<eof>') &&
+    tokenValue(tokens, current) !== 'extends' &&
+    tokenValue(tokens, current) !== '{'
+  ) {
+    parts.push(tokenSource(tokenAt(tokens, current)))
+    current = current + 1
+  }
+
   parts.push('=')
 
   if (tokenValue(tokens, current) === 'extends') {
@@ -2122,7 +2135,7 @@ function emptyDeclarationValueMetadata(): DeclarationValueMetadata {
 }
 
 function cloneClassDeclaration(item: AnyNode): AnyNode {
-  return {
+  const declaration: AnyNode = {
     type: 'ClassDeclaration',
     exported: true,
     declarationOnly: true,
@@ -2135,6 +2148,13 @@ function cloneClassDeclaration(item: AnyNode): AnyNode {
     indexSignatures: cloneClassIndexSignatures(item.indexSignatures),
     methods: cloneClassMethods(item.methods)
   }
+  const typeParameters = cloneTypeParameters(item.typeParameters)
+
+  if (typeParameters.length > 0) {
+    declaration.typeParameters = typeParameters
+  }
+
+  return declaration
 }
 
 function cloneClassIndexSignatures(signatures: AnyNode[] | null | undefined): AnyNode[] {

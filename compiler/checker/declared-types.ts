@@ -3,6 +3,7 @@ import {
   arrayElementTypeNameFromKnownTypeName,
   isArrayTypeName,
   isBuiltinValueType,
+  genericTypeApplicationFromTypeName,
   indexedAccessTypeNameFromTypeName,
   isNullableTypeName,
   isPromiseTypeName,
@@ -60,6 +61,7 @@ export type DeclaredTypeResolverContext = {
   resolvingDeclaredTypes: Set<string>
   symbols: Map<string, SymbolInfo>
   types: Map<string, TypeAliasInfo>
+  typeSubstitutions: Map<string, ResolvedTypeInfo>
 }
 
 export function declareTypeAlias(context: DeclaredTypeResolverContext, item: TypeAliasDeclarationNode): void {
@@ -69,8 +71,19 @@ export function declareTypeAlias(context: DeclaredTypeResolverContext, item: Typ
   }
 
   if (item.valueType.kind === 'alias' || item.valueType.kind === 'object' || item.valueType.kind === 'function') {
-    context.types.set(item.name, item.valueType)
+    context.types.set(item.name, typeAliasInfoFromDeclaration(item))
   }
+}
+
+export function typeAliasInfoFromDeclaration(item: TypeAliasDeclarationNode): TypeAliasInfo {
+  const info: TypeAliasInfo = { ...item.valueType }
+  const typeParameters = item.typeParameters ?? []
+
+  if (typeParameters.length > 0) {
+    info.typeParameters = typeParameters
+  }
+
+  return info
 }
 
 export function resolveDeclaredType(
@@ -80,6 +93,12 @@ export function resolveDeclaredType(
 ): ResolvedTypeInfo {
   if (name === null || typeof name === 'undefined' || name === 'unknown') {
     return unresolvedTypeInfo()
+  }
+
+  const substitution = context.typeSubstitutions.get(name)
+
+  if (substitution !== null && typeof substitution !== 'undefined') {
+    return cloneResolvedTypeInfo(substitution)
   }
 
   if (name === 'AnyNode') {
@@ -97,6 +116,28 @@ export function resolveDeclaredType(
 
   if (indexedAccess !== null) {
     return resolveIndexedAccessDeclaredType(context, indexedAccess.base, indexedAccess.indexes, loc)
+  }
+
+  const genericApplication = genericTypeApplicationFromTypeName(name)
+
+  if (genericApplication !== null) {
+    if (genericApplication.name === 'NonNullable' && genericApplication.args.length === 1) {
+      const resolved = resolveDeclaredType(context, genericApplication.args[0], loc)
+
+      resolved.nullable = false
+      resolved.typeRef = qualifiedTypeRef(resolved.typeRef, false, null)
+      return resolved
+    }
+
+    const definition = context.types.get(genericApplication.name)
+
+    if (
+      definition !== null &&
+      typeof definition !== 'undefined' &&
+      (definition.typeParameters ?? []).length > 0
+    ) {
+      return resolveGenericDeclaredType(context, name, definition, genericApplication.args, loc)
+    }
   }
 
   const nativeType = compilerLibraryNativeTypeForName(context.libraries, name)
@@ -357,6 +398,76 @@ export function resolveDeclaredType(
   context.diagnostics.push(diagnostic('INOX_UNKNOWN_TYPE', `unknown type ${name}`, loc))
 
   return unresolvedTypeInfo()
+}
+
+function resolveGenericDeclaredType(
+  context: DeclaredTypeResolverContext,
+  applicationName: string,
+  definition: TypeAliasInfo,
+  argumentNames: string[],
+  loc: SourceLocation
+): ResolvedTypeInfo {
+  const typeParameters = definition.typeParameters ?? []
+
+  if (typeParameters.length !== argumentNames.length) {
+    context.diagnostics.push(
+      diagnostic(
+        'INOX_TYPE_ARGUMENT_COUNT',
+        `generic type ${applicationName} expects ${typeParameters.length} type argument(s), got ${argumentNames.length}`,
+        loc
+      )
+    )
+    return unresolvedTypeInfo()
+  }
+
+  const cached = context.resolvedDeclaredTypes.get(applicationName)
+
+  if (cached !== null && typeof cached !== 'undefined') {
+    return cloneResolvedTypeInfo(cached)
+  }
+
+  if (context.resolvingDeclaredTypes.has(applicationName)) {
+    const recursive = unresolvedTypeInfo()
+
+    if (definition.kind === 'object') {
+      recursive.valueType = 'object'
+    } else if (definition.kind === 'function') {
+      recursive.valueType = 'function'
+    }
+
+    return recursive
+  }
+
+  const substitutions = new Map(context.typeSubstitutions)
+
+  for (let index = 0; index < typeParameters.length; index = index + 1) {
+    substitutions.set(typeParameters[index].name, resolveDeclaredType(context, argumentNames[index], loc))
+  }
+
+  const child: DeclaredTypeResolverContext = {
+    ...context,
+    typeSubstitutions: substitutions
+  }
+
+  context.resolvingDeclaredTypes.add(applicationName)
+
+  try {
+    let resolved = unresolvedTypeInfo()
+
+    if (definition.kind === 'alias') {
+      resolved = resolveDeclaredType(child, definition.valueType, loc)
+    } else if (definition.kind === 'function') {
+      resolved = resolveDeclaredFunctionAlias(child, applicationName, definition, loc)
+    } else {
+      resolved.valueType = 'object'
+      resolved.shape = resolveObjectShape(child, definition)
+    }
+
+    context.resolvedDeclaredTypes.set(applicationName, cloneResolvedTypeInfo(resolved))
+    return resolved
+  } finally {
+    context.resolvingDeclaredTypes.delete(applicationName)
+  }
 }
 
 function resolveIndexedAccessDeclaredType(

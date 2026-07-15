@@ -129,6 +129,7 @@ export type ValueType =
 
 export type FunctionTypeInfo = {
   kind: 'function'
+  typeParameters?: AnyNode[]
   params: AnyNode[]
   returnType: ValueType
   returnNullable?: boolean
@@ -138,6 +139,7 @@ export type FunctionTypeInfo = {
 
 export type ObjectShapeInfo = {
   kind: 'object'
+  typeParameters?: AnyNode[]
   baseTypes?: string[]
   builtin?: string | null
   dynamic?: boolean
@@ -151,6 +153,7 @@ export type ObjectShapeInfo = {
 export type AliasTypeInfo = {
   kind: 'alias'
   valueType: ValueType
+  typeParameters?: AnyNode[]
 }
 
 export type TypeAliasInfo = AliasTypeInfo | FunctionTypeInfo | ObjectShapeInfo

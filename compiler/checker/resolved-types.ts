@@ -51,6 +51,7 @@ export type NullableNode = AnyNode | null
 export type TypeAliasDeclarationNode = AnyNode & {
   name: string
   loc: SourceLocation
+  typeParameters?: AnyNode[]
   valueType: TypeAliasInfo
 }
 export type CheckerObjectPropertyNode = CheckerNode & {

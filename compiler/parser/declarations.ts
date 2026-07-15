@@ -16,6 +16,7 @@ type FunctionDeclarationOptions = {
 type ClassDeclarationOptions = {
   exported: boolean
   name: Token
+  typeParameters: AnyNode[]
   extendsName: string | null
   extendsToken: Token | null
   fields: AnyNode[]
@@ -144,12 +145,18 @@ export function createTypeParameter(name: Token, constraint: string | null): Any
   }
 }
 
-export function createTypeAliasDeclaration(exported: boolean, name: Token, valueType: AnyNode): AnyNode {
+export function createTypeAliasDeclaration(
+  exported: boolean,
+  name: Token,
+  typeParameters: AnyNode[],
+  valueType: AnyNode
+): AnyNode {
   return {
     type: 'TypeAliasDeclaration',
     exported,
     name: name.value,
     loc: locFromToken(name),
+    typeParameters,
     valueType
   }
 }
@@ -208,6 +215,7 @@ export function createClassDeclaration(options: ClassDeclarationOptions): AnyNod
     exported: options.exported,
     name: options.name.value,
     loc: locFromToken(options.name),
+    typeParameters: options.typeParameters,
     extendsName: options.extendsName,
     extendsLoc: nullableTokenLocation(options.extendsToken),
     fields: options.fields,

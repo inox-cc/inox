@@ -62,6 +62,7 @@ import {
   resolveWeakTargetObjectShape as resolveWeakTargetObjectShapeInContext,
   resolveWeakTargetShapeFieldType as resolveWeakTargetShapeFieldTypeInContext,
   resolveWeakTargetShapeTypeName as resolveWeakTargetShapeTypeNameInContext,
+  typeAliasInfoFromDeclaration,
   unresolvedTypeInfo as unresolvedTypeInfoInContext
 } from './checker/declared-types.ts'
 import type { DeclaredTypeResolverContext } from './checker/declared-types.ts'
@@ -439,7 +440,7 @@ class Checker {
         const item = checkerNodeAt(declaration.program.body, itemIndex)
 
         if (item.type === 'TypeAliasDeclaration') {
-          this.types.set(item.name, item.valueType)
+          this.types.set(item.name, typeAliasInfoFromDeclaration(item as TypeAliasDeclarationNode))
           this.ambientTypeNames.add(item.name)
         } else if (item.type === 'ClassDeclaration') {
           this.classNames.add(item.name)
@@ -8779,7 +8780,8 @@ class Checker {
       resolvedDeclaredTypes: this.resolvedDeclaredTypes,
       resolvingDeclaredTypes: this.resolvingDeclaredTypes,
       symbols: this.typeSymbols,
-      types: this.types
+      types: this.types,
+      typeSubstitutions: new Map()
     }
   }
 

@@ -488,22 +488,23 @@ class Parser {
 
   parseTypeAliasDeclaration(exported: boolean): AnyNode {
     const name = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected type alias name')
+    const typeParameters = this.parseFunctionTypeParameters()
     this.expectValue('=', 'INOX_EXPECTED_TYPE', 'expected = after type alias name')
 
     if (this.isValue('(')) {
-      return createTypeAliasDeclaration(exported, name, this.parseFunctionType(false))
+      return createTypeAliasDeclaration(exported, name, typeParameters, this.parseFunctionType(false))
     }
 
     if (this.is('identifier') && this.peek(1).value === '&') {
-      return createTypeAliasDeclaration(exported, name, this.parseIntersectionObjectType())
+      return createTypeAliasDeclaration(exported, name, typeParameters, this.parseIntersectionObjectType())
     }
 
     if (this.isValue('|') && this.peek(1).value === '{') {
-      return createTypeAliasDeclaration(exported, name, this.parseUnionObjectType())
+      return createTypeAliasDeclaration(exported, name, typeParameters, this.parseUnionObjectType())
     }
 
     if (this.isValue('{')) {
-      return createTypeAliasDeclaration(exported, name, this.parseObjectType(null))
+      return createTypeAliasDeclaration(exported, name, typeParameters, this.parseObjectType(null))
     }
 
     const valueType = this.parseTypeAnnotation([';'], {
@@ -511,7 +512,7 @@ class Parser {
     })
     this.matchValue(';')
 
-    return createTypeAliasDeclaration(exported, name, createAliasType(valueType))
+    return createTypeAliasDeclaration(exported, name, typeParameters, createAliasType(valueType))
   }
 
   parseUnionObjectType(): AnyNode {
@@ -716,6 +717,7 @@ class Parser {
 
   parseClassDeclaration(exported: boolean): AnyNode {
     const name = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected class name')
+    const typeParameters = this.parseFunctionTypeParameters()
     const fields: AnyNode[] = []
     const indexSignatures: AnyNode[] = []
     const methods: AnyNode[] = []
@@ -747,6 +749,7 @@ class Parser {
     return createClassDeclaration({
       exported,
       name,
+      typeParameters,
       extendsName,
       extendsToken,
       fields,
