@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModulesSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 type GeneratedFile = {
   kind: string
@@ -77,6 +78,7 @@ export function useMapContext(context: MapContext): void;
         }
       ],
       host,
+      libraries: defaultCompilerLibrarySet,
       sourceRoot: '/pkg'
     })
   )
@@ -104,6 +106,7 @@ function assertModuleDeclarationImportSkipsExternalEmission(): void {
       }
     ],
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   })
   const files = result.files as GeneratedFile[]
@@ -159,6 +162,7 @@ export function useContext(context: Context): string;
       }
     ],
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   })
   const externalModule = result.graph.modules.find((module) => module.path === '/pkg/src/lib.ts')
@@ -203,6 +207,7 @@ export type User = {
       }
     ],
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   })
   const externalModule = result.graph.modules.find((module) => module.path === '/pkg/src/types.ts')
@@ -251,6 +256,7 @@ export function formatUser(user: User): string;
       }
     ],
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   })
   const externalModule = result.graph.modules.find((module) => module.path === '/pkg/src/lib.ts')
@@ -301,6 +307,7 @@ export type User = {
       }
     ],
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   })
   const files = result.files as GeneratedFile[]
@@ -350,6 +357,7 @@ function assertModuleDeclarationFunctionEffectsPath(): void {
       }
     ],
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   })
   const externalModule = result.graph.modules.find((module) => module.path === '/pkg/src/lib.ts')
@@ -384,6 +392,7 @@ function assertModuleDeclarationUnsupportedReexportDiagnostic(): void {
           }
         ],
         host,
+        libraries: defaultCompilerLibrarySet,
         sourceRoot: '/pkg'
       }),
     (error) =>
@@ -416,6 +425,7 @@ function assertModuleDeclarationTypeReexport(): void {
   const result = compileFileToCModulesSync('/pkg/src/facade.ts', {
     callMain: false,
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   })
   const files = result.files as GeneratedFile[]

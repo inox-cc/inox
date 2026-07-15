@@ -1370,7 +1370,7 @@ function scanClassDescriptorCallLikeExpression(
   scope: ClassDescriptorScanScope,
   names: CClassDescriptorNameSet
 ): void {
-  if (isClassDescriptorConsoleLogCall(expression)) {
+  if (isClassDescriptorVariadicFormatCall(expression)) {
     addClassDescriptorExpressionNames(expression.args, classInfos, scope, names)
   } else if (isClassDescriptorObjectRuntimeCall(expression)) {
     addClassDescriptorExpressionName(firstClassDescriptorArgument(expression), classInfos, scope, names)
@@ -1383,30 +1383,15 @@ function scanClassDescriptorCallLikeExpression(
   addClassDescriptorRuntimeParameterNames(expression, classInfos, scope, names)
 }
 
-function isClassDescriptorConsoleLogCall(expression: AnyNode): boolean {
-  const callee = expression.callee
-
-  if (
-    expression.type !== 'CallExpression' ||
-    callee === null ||
-    typeof callee === 'undefined' ||
-    callee.type !== 'MemberExpression'
-  ) {
-    return false
-  }
-
-  const object = callee.object
+function isClassDescriptorVariadicFormatCall(expression: AnyNode): boolean {
+  const argumentKinds = expression.libraryCArgumentKinds
 
   return (
-    object !== null &&
-    typeof object !== 'undefined' &&
-    object.type === 'Reference' &&
-    object.path.length === 1 &&
-    object.path[0] === 'console' &&
-    (callee.property === 'log' ||
-      callee.property === 'info' ||
-      callee.property === 'warn' ||
-      callee.property === 'error')
+    expression.type === 'CallExpression' &&
+    argumentKinds !== null &&
+    typeof argumentKinds !== 'undefined' &&
+    argumentKinds.length === 1 &&
+    argumentKinds[0] === 'variadic-format-values'
   )
 }
 

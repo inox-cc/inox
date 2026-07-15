@@ -9,6 +9,7 @@ import {
   emitModuleDeclarationContract
 } from '../../compiler/modules/declarations.ts'
 import { parse } from '../../compiler/parser.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 export function assertModuleDeclarationImportedOptionalFields(): void {
   const declarationSource = emitModuleDeclarationContract(
@@ -85,6 +86,7 @@ checker.checkOperation({
       callMain: true,
       declarationImports: [{ sourcePath: '/pkg/types.ts', declarationSource }],
       host,
+      libraries: defaultCompilerLibrarySet,
       sourceRoot: '/pkg'
     })
   )

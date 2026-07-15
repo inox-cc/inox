@@ -415,6 +415,11 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.libraryCExpression = libraryCExpression
   }
 
+  const libraryCClassFormatExpression = nullableString(source.libraryCClassFormatExpression)
+  if (libraryCClassFormatExpression !== null && typeof libraryCClassFormatExpression !== 'undefined') {
+    target.libraryCClassFormatExpression = libraryCClassFormatExpression
+  }
+
   const libraryCallbackLifetime = nullableString(source.libraryCallbackLifetime)
   if (libraryCallbackLifetime !== null && typeof libraryCallbackLifetime !== 'undefined') {
     target.libraryCallbackLifetime = libraryCallbackLifetime

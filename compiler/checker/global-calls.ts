@@ -3,7 +3,6 @@ import { memberExpressionPath } from '../member-paths.ts'
 import type { AnyNode, Diagnostic, ObjectShapeInfo, SourceLocation, ValueType } from '../types.ts'
 import { isAssignableType } from './assignability.ts'
 import { objectValuesElementTypeFromShape } from './expression-helpers.ts'
-import { isConsoleMethod } from './helpers.ts'
 
 export type GlobalCallCheckerContext = {
   diagnostics: Diagnostic[]
@@ -49,31 +48,6 @@ function checkAssignableType(
   }
 
   report(context, 'INOX_TYPE_MISMATCH', `cannot assign ${actualLabel} to ${expected}`, loc)
-}
-
-export function checkConsoleCall(
-  _context: GlobalCallCheckerContext,
-  expression: AnyNode,
-  consoleShadowed: boolean
-): ValueType | null {
-  if (expression.callee.type !== 'MemberExpression') {
-    return null
-  }
-
-  const path = memberExpressionPath(expression.callee)
-
-  if (
-    path.length !== 2 ||
-    path[0] !== 'console' ||
-    !isConsoleMethod(path[1]) ||
-    consoleShadowed
-  ) {
-    return null
-  }
-
-  expression.valueType = 'void'
-
-  return 'void'
 }
 
 export function checkArrayIsArrayCall(

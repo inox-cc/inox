@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
-import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
+import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('library variants задают callback contract по literal discriminator', () => {
@@ -12,7 +12,7 @@ const channel = bridge.open()
 channel.on('data', (chunk) => console.log(chunk.length))
 channel.on('close', (hadError) => console.log(hadError))
 `,
-    { libraries: createCompilerLibrarySet([bridgeLibrary()]), target: 'cc' }
+    { libraries: createCompilerLibrarySetWithConsole([bridgeLibrary()]), target: 'cc' }
   )
 
   assert.match(result.code, /args\[0\]\.tag != INOX_TAG_STRING/)
@@ -25,8 +25,8 @@ channel.on('close', (hadError) => console.log(hadError))
 })
 
 test('variant callback contract входит в fingerprint library set', () => {
-  const stringSet = createCompilerLibrarySet([bridgeLibrary('string')])
-  const numberSet = createCompilerLibrarySet([bridgeLibrary('number')])
+  const stringSet = createCompilerLibrarySetWithConsole([bridgeLibrary('string')])
+  const numberSet = createCompilerLibrarySetWithConsole([bridgeLibrary('number')])
 
   assert.notEqual(stringSet.fingerprint, numberSet.fingerprint)
 })

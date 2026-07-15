@@ -34,6 +34,7 @@ export const compilerAnyNodeStringFields: readonly string[] = [
   'libraryCResultMode',
   'libraryCReceiverAdapter',
   'libraryCExpression',
+  'libraryCClassFormatExpression',
   'libraryCppType',
   'libraryConstantValue',
   'libraryCallbackLifetime',

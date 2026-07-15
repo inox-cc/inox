@@ -2,12 +2,12 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
-import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
+import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('library callback descriptor поддерживает nullable object параметры', () => {
   const source = "bridge.run((error) => { if (error) console.log(error.message) })\n"
-  const result = compileSource(source, { libraries: createCompilerLibrarySet([bridgeLibrary()]), target: 'cc' })
+  const result = compileSource(source, { libraries: createCompilerLibrarySetWithConsole([bridgeLibrary()]), target: 'cc' })
 
   assert.match(result.code, /args\[0\]\.tag != INOX_TAG_NULL &&/)
   assert.match(result.code, /inox_value error = args\[0\];/)

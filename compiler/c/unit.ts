@@ -1307,7 +1307,6 @@ export function emitCUnit(
   const needsSetRuntime: boolean = preludeRequirements.needsSetRuntime
   const needsObjectRuntime: boolean = preludeRequirements.needsObjectRuntime
   const needsJsonRuntime: boolean = preludeRequirements.needsJsonRuntime
-  const needsConsoleRuntime: boolean = preludeRequirements.needsConsoleRuntime
   const needsFetchRuntime: boolean = preludeRequirements.needsFetchRuntime
   baseContext.runtimeEntrypointAdapter = preludeRequirements.runtimeEntrypointAdapter
   baseContext.runtimeInitializerDefinitions = emitCompilerLibraryRuntimeInitializerDefinitions(
@@ -1335,7 +1334,6 @@ export function emitCUnit(
     needsSetRuntime,
     needsObjectRuntime,
     needsJsonRuntime,
-    needsConsoleRuntime,
     needsFetchRuntime,
     preludeRequirements.libraryCPreludeIncludes
   )

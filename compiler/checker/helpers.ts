@@ -310,10 +310,6 @@ export function stringPredicateArgCountMessage(method: string, actual: number): 
   return `string.${method} expects 1 argument(s), got ${actual}`
 }
 
-export function isConsoleMethod(name: string): boolean {
-  return name === 'log' || name === 'info' || name === 'warn' || name === 'error'
-}
-
 export function isRelativeImportSource(source: string): boolean {
   return source.startsWith('./') || source.startsWith('../')
 }

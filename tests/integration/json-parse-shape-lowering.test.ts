@@ -7,6 +7,7 @@ import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { rootDir } from '../../scripts/lib/repo-root.ts'
 import { runCommand } from '../../scripts/lib/run-command.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 type GeneratedTextFile = {
   path: string
@@ -31,6 +32,7 @@ console.log(Object.entries(foo.v)[0][0])
   const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
@@ -67,6 +69,7 @@ try {
   const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code

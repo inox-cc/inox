@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 type GeneratedTextFile = {
   path: string
@@ -86,6 +87,7 @@ function compileSource(source: string): string {
   const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
 

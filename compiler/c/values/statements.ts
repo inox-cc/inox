@@ -460,7 +460,6 @@ export type StatementLoweringDependencies = {
   isArrayMethodCall(expression: StatementNode): boolean
   isBoxedRuntimeValueAssignment(expression: StatementNode, context: CFunctionContext): boolean
   isClassConstructorExpression(expression: StatementNode, context: CFunctionContext): boolean
-  isConsoleLog(expression: StatementNode): boolean
   isCollectionConstructorExpression(expression: StatementNode): boolean
   isExceptionValueExpression(expression: StatementNode, context: CFunctionContext): boolean
   isObjectRuntimeCallExpression(expression: StatementNode): boolean
@@ -486,7 +485,6 @@ export type StatementLoweringDependencies = {
   resolveRuntimeForOfMapValues(expression: StatementNode, context: CFunctionContext): RuntimeForOfMapValues | null
   resolveRuntimeForOfSet(expression: StatementNode, context: CFunctionContext): RuntimeForOfSet | null
   emitBoxedRuntimeValueAssignment(expression: StatementNode, context: CFunctionContext): string[]
-  emitConsoleLogStatement(method: string, args: StatementNode[], context: CFunctionContext): string[]
 }
 
 function statementDeps(context: CFunctionContext): StatementLoweringDependencies {
@@ -4514,15 +4512,6 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
 
   if (expression.type === 'Reference') {
     return []
-  }
-
-  if (deps.isConsoleLog(expression)) {
-    const callee = expression.callee
-    const method: string = callee.property
-    const args: StatementNode[] = expression.args
-    const lines = deps.emitConsoleLogStatement(method, args, context)
-
-    return lines
   }
 
   const promiseSettlement = deps.emitPromiseConstructorSettlementCall(expression, context)

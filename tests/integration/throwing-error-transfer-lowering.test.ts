@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 
 import { compileSource } from '../../compiler/core.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 export function assertThrowingErrorTransferUsesValueRelease(): void {
   const result = compileSource(
@@ -16,6 +17,7 @@ try {
 }
 `,
     {
+      libraries: defaultCompilerLibrarySet,
       target: 'cc'
     }
   )

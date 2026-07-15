@@ -138,8 +138,7 @@ import {
   emitPreparedFetchCallExpression,
   emitPreparedFetchHeadersCallExpression,
   emitPreparedFetchInitOperand,
-  isAsyncFetchRuntimeCallExpression,
-  isConsoleLog
+  isAsyncFetchRuntimeCallExpression
 } from '../../stdlib/global/compiler/c.ts'
 import type { JsonClassInstanceOperand, JsonDeclarationDependencies } from '../../stdlib/global/compiler/c.ts'
 import {
@@ -557,7 +556,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   isArrayMethodCall,
   isBoxedRuntimeValueAssignment,
   isClassConstructorExpression,
-  isConsoleLog,
   isCollectionConstructorExpression,
   isExceptionValueExpression,
   isObjectRuntimeCallExpression,
@@ -579,8 +577,7 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   resolveRuntimeForOfMapValues,
   resolveRuntimeStringReference,
   resolveRuntimeForOfSet,
-  emitBoxedRuntimeValueAssignment,
-  emitConsoleLogStatement
+  emitBoxedRuntimeValueAssignment
 }
 
 const classLoweringDependencies: ClassLoweringDependencies = {
@@ -861,6 +858,30 @@ function emitPreparedCompilerLibraryCallExpression(
   context: CFunctionContext,
   options?: PreparedCallOptions | null
 ): PreparedExpression | null {
+  const argumentKinds = expression.libraryCArgumentKinds
+
+  if (
+    expression.type === 'CallExpression' &&
+    argumentKinds !== null &&
+    typeof argumentKinds !== 'undefined' &&
+    argumentKinds.length === 1 &&
+    argumentKinds[0] === 'variadic-format-values' &&
+    typeof expression.libraryCExpression === 'string'
+  ) {
+    return {
+      lines: emitVariadicFormattedLibraryCallStatement(
+        expression.libraryCExpression,
+        expression.args,
+        context,
+        typeof expression.libraryCClassFormatExpression === 'string'
+          ? expression.libraryCClassFormatExpression
+          : null
+      ),
+      expression: '',
+      valueType: 'void'
+    }
+  }
+
   return emitPreparedCompilerLibraryCallExpressionWithDependencies(
     expression,
     context,
@@ -5594,25 +5615,25 @@ function emitCNullishCoalescingValueExpression(expression: AnyNode, context: CFu
   }
 }
 
-type ConsoleLogValue = {
+type FormattedOutputValue = {
   lines: string[]
   format: string
   values: string[]
 }
 
-const consoleLogNumberFormat = '%.17g'
-const consoleLogBooleanFormat = '%d'
-const consoleLogStringFormat = '%s'
+const formattedOutputNumberFormat = '%.17g'
+const formattedOutputBooleanFormat = '%d'
+const formattedOutputStringFormat = '%s'
 
-function emitConsoleStringView(bytes: string, length: string): string {
+function emitFormattedOutputStringView(bytes: string, length: string): string {
   return `inox::StringView(${bytes}, ${length})`
 }
 
-function emitConsoleRuntimeStringView(name: string): string {
-  return emitConsoleStringView(`${name}->bytes`, `${name}->len`)
+function emitFormattedOutputRuntimeStringView(name: string): string {
+  return emitFormattedOutputStringView(`${name}->bytes`, `${name}->len`)
 }
 
-function emitConsolePreparedStringValue(value: PreparedExpression): string {
+function emitFormattedOutputPreparedStringValue(value: PreparedExpression): string {
   if (value.cppType === 'inox::String') {
     return value.expression
   }
@@ -5620,18 +5641,23 @@ function emitConsolePreparedStringValue(value: PreparedExpression): string {
   return `inox::String(inox::Value(${value.expression}))`
 }
 
-function emitConsoleLogStatement(method: string, args: AnyNode[], context: CFunctionContext): string[] {
+function emitVariadicFormattedLibraryCallStatement(
+  target: string,
+  args: AnyNode[],
+  context: CFunctionContext,
+  classFormatExpression: string | null
+): string[] {
   if (args.length === 0) {
-    return [`console.${method}();`]
+    return [`${target}();`]
   }
 
-  const directSingleRuntimeValue = emitDirectSingleRuntimeValueConsoleLogStatement(args, method, context)
+  const directSingleRuntimeValue = emitDirectSingleRuntimeValueFormattedLibraryCallStatement(args, target, context)
 
   if (directSingleRuntimeValue !== null && typeof directSingleRuntimeValue !== 'undefined') {
     return directSingleRuntimeValue
   }
 
-  const directRuntimeValue = emitDirectRuntimeValueConsoleLogStatement(args, method, context)
+  const directRuntimeValue = emitDirectRuntimeValueFormattedLibraryCallStatement(args, target, context)
 
   if (directRuntimeValue !== null && typeof directRuntimeValue !== 'undefined') {
     return directRuntimeValue
@@ -5642,7 +5668,7 @@ function emitConsoleLogStatement(method: string, args: AnyNode[], context: CFunc
   const values: string[] = []
 
   for (const arg of args) {
-    const value = emitConsoleLogValue(arg, context)
+    const value = emitFormattedOutputValue(arg, context, classFormatExpression)
 
     pushAll(lines, value.lines)
     parts.push(value.format)
@@ -5651,14 +5677,14 @@ function emitConsoleLogStatement(method: string, args: AnyNode[], context: CFunc
 
   const format = joinStrings(parts, ' ')
 
-  lines.push(emitConsoleMethodCallStatement(method, format, values))
+  lines.push(emitFormattedLibraryCallStatement(target, format, values))
 
   return lines
 }
 
-function emitDirectSingleRuntimeValueConsoleLogStatement(
+function emitDirectSingleRuntimeValueFormattedLibraryCallStatement(
   args: AnyNode[],
-  method: string,
+  target: string,
   context: CFunctionContext
 ): string[] | null {
   if (args.length !== 1 || !isRuntimeValueLogExpression(args[0], context)) {
@@ -5669,34 +5695,34 @@ function emitDirectSingleRuntimeValueConsoleLogStatement(
   const lines: string[] = []
 
   pushAll(lines, value.lines)
-  lines.push(`console.${method}(${value.expression});`)
+  lines.push(`${target}(${value.expression});`)
 
   return lines
 }
 
-function emitDirectRuntimeValueConsoleLogStatement(
+function emitDirectRuntimeValueFormattedLibraryCallStatement(
   args: AnyNode[],
-  method: string,
+  target: string,
   context: CFunctionContext
 ): string[] | null {
-  if (!hasDirectRuntimeConsoleLogArgument(args, context)) {
+  if (!hasDirectRuntimeFormattedArgument(args, context)) {
     return null
   }
 
   const lines: string[] = []
 
   if (args.length === 1) {
-    const objectExpression = emitDirectConsoleObjectExpression(args[0])
+    const objectExpression = emitDirectFormattedObjectExpression(args[0])
 
     if (objectExpression !== null && typeof objectExpression !== 'undefined') {
-      return [`console.${method}(${objectExpression});`]
+      return [`${target}(${objectExpression});`]
     }
 
     const objectRuntimeCall = emitPreparedInlineObjectRuntimeCallExpression(args[0], context)
 
     if (objectRuntimeCall !== null && typeof objectRuntimeCall !== 'undefined') {
       pushAll(lines, objectRuntimeCall.lines)
-      lines.push(`console.${method}(${objectRuntimeCall.expression});`)
+      lines.push(`${target}(${objectRuntimeCall.expression});`)
       pushAll(lines, emitThrownCheckLines(context))
       return lines
     }
@@ -5704,23 +5730,23 @@ function emitDirectRuntimeValueConsoleLogStatement(
     const value = emitCValueExpression(args[0], context)
 
     pushAll(lines, value.lines)
-    lines.push(`console.${method}(${value.expression});`)
+    lines.push(`${target}(${value.expression});`)
 
     return lines
   }
 
-  if (args.length === 2 && args[0].type === 'StringLiteral' && isDirectRuntimeConsoleLogArgument(args[1], context)) {
-    const objectExpression = emitDirectConsoleObjectExpression(args[1])
+  if (args.length === 2 && args[0].type === 'StringLiteral' && isDirectRuntimeFormattedArgument(args[1], context)) {
+    const objectExpression = emitDirectFormattedObjectExpression(args[1])
 
     if (objectExpression !== null && typeof objectExpression !== 'undefined') {
-      return [`console.${method}(${cStringLiteral(args[0].value)}, ${objectExpression});`]
+      return [`${target}(${cStringLiteral(args[0].value)}, ${objectExpression});`]
     }
 
     const objectRuntimeCall = emitPreparedInlineObjectRuntimeCallExpression(args[1], context)
 
     if (objectRuntimeCall !== null && typeof objectRuntimeCall !== 'undefined') {
       pushAll(lines, objectRuntimeCall.lines)
-      lines.push(`console.${method}(${cStringLiteral(args[0].value)}, ${objectRuntimeCall.expression});`)
+      lines.push(`${target}(${cStringLiteral(args[0].value)}, ${objectRuntimeCall.expression});`)
       pushAll(lines, emitThrownCheckLines(context))
       return lines
     }
@@ -5728,7 +5754,7 @@ function emitDirectRuntimeValueConsoleLogStatement(
     const value = emitCValueExpression(args[1], context)
 
     pushAll(lines, value.lines)
-    lines.push(`console.${method}(${cStringLiteral(args[0].value)}, ${value.expression});`)
+    lines.push(`${target}(${cStringLiteral(args[0].value)}, ${value.expression});`)
 
     return lines
   }
@@ -5736,13 +5762,13 @@ function emitDirectRuntimeValueConsoleLogStatement(
   return null
 }
 
-function emitDirectConsoleObjectExpression(expression: AnyNode): string | null {
+function emitDirectFormattedObjectExpression(expression: AnyNode): string | null {
   return null
 }
 
-function hasDirectRuntimeConsoleLogArgument(args: AnyNode[], context: CFunctionContext): boolean {
+function hasDirectRuntimeFormattedArgument(args: AnyNode[], context: CFunctionContext): boolean {
   for (const arg of args) {
-    if (isDirectRuntimeConsoleLogArgument(arg, context)) {
+    if (isDirectRuntimeFormattedArgument(arg, context)) {
       return true
     }
   }
@@ -5750,17 +5776,17 @@ function hasDirectRuntimeConsoleLogArgument(args: AnyNode[], context: CFunctionC
   return false
 }
 
-function isDirectRuntimeConsoleLogArgument(expression: AnyNode, context: CFunctionContext): boolean {
+function isDirectRuntimeFormattedArgument(expression: AnyNode, context: CFunctionContext): boolean {
   const valueType = inferExpressionType(expression, context)
 
   if (valueType === 'array' && hasSupportedKnownArrayShapeLogValue(expression, context)) {
     return false
   }
 
-  return isDirectRuntimeConsoleValueExpression(expression, valueType, context)
+  return isDirectRuntimeFormattedValueExpression(expression, valueType, context)
 }
 
-function isDirectRuntimeConsoleValueExpression(
+function isDirectRuntimeFormattedValueExpression(
   expression: AnyNode,
   valueType: string,
   context: CFunctionContext
@@ -5794,16 +5820,16 @@ function isDirectRuntimeConsoleValueExpression(
   return isRuntimeLogValueType(valueType)
 }
 
-function emitConsoleMethodCallStatement(
-  method: string,
+function emitFormattedLibraryCallStatement(
+  target: string,
   format: string,
   values: string[]
 ): string {
   if (values.length === 0) {
-    return `console.${method}(${cStringLiteral(unescapeCPrintfFormatText(format))});`
+    return `${target}(${cStringLiteral(unescapeCPrintfFormatText(format))});`
   }
 
-  return `console.${method}(${cStringLiteral(format)}, ${joinStrings(values, ', ')});`
+  return `${target}(${cStringLiteral(format)}, ${joinStrings(values, ', ')});`
 }
 
 function unescapeCPrintfFormatText(value: string): string {
@@ -5823,7 +5849,11 @@ function unescapeCPrintfFormatText(value: string): string {
   return result
 }
 
-function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
+function emitFormattedOutputValue(
+  expression: AnyNode,
+  context: CFunctionContext,
+  classFormatExpression: string | null
+): FormattedOutputValue {
   const valueType = inferExpressionType(expression, context)
   const directString = emitDirectStringLogValue(expression, context)
 
@@ -5831,7 +5861,7 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
     return directString
   }
 
-  const directObject = emitDirectConsoleObjectLogValue(expression)
+  const directObject = emitDirectFormattedObjectValue(expression)
 
   if (directObject !== null && typeof directObject !== 'undefined') {
     return directObject
@@ -5845,7 +5875,7 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
     return emitRuntimeValueLogValue(expression, context)
   }
 
-  const nativeClassInstance = emitNativeClassInstanceLogValue(expression, context)
+  const nativeClassInstance = emitNativeClassInstanceLogValue(expression, context, classFormatExpression)
 
   if (nativeClassInstance !== null && typeof nativeClassInstance !== 'undefined') {
     return nativeClassInstance
@@ -5860,7 +5890,7 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
   }
 
   if (valueType === 'object' && isExceptionValueExpression(expression, context)) {
-    return emitRuntimeErrorLogValue(expression, context)
+    return emitRuntimeExceptionValue(expression, context)
   }
 
   if (valueType === 'array') {
@@ -5897,20 +5927,20 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
     context,
     diagnostic(
       cUnsupportedExpressionCode(valueType),
-      'this console.log argument is not supported by the current C backend slice',
+      'this formatted library call argument is not supported by the current C backend slice',
       expression.loc
     )
   )
 
   return {
     lines: [],
-    format: consoleLogNumberFormat,
+    format: formattedOutputNumberFormat,
     values: ['0']
   }
 }
 
-function emitDirectConsoleObjectLogValue(expression: AnyNode): ConsoleLogValue | null {
-  const objectExpression = emitDirectConsoleObjectExpression(expression)
+function emitDirectFormattedObjectValue(expression: AnyNode): FormattedOutputValue | null {
+  const objectExpression = emitDirectFormattedObjectExpression(expression)
 
   if (objectExpression === null || typeof objectExpression === 'undefined') {
     return null
@@ -5923,7 +5953,7 @@ function emitDirectConsoleObjectLogValue(expression: AnyNode): ConsoleLogValue |
   }
 }
 
-function emitDirectStringLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+function emitDirectStringLogValue(expression: AnyNode, context: CFunctionContext): FormattedOutputValue | null {
   if (expression.type === 'StringLiteral') {
     return {
       lines: [],
@@ -5949,7 +5979,7 @@ function emitDirectStringLogValue(expression: AnyNode, context: CFunctionContext
   }
 }
 
-function emitKnownArrayShapeLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+function emitKnownArrayShapeLogValue(expression: AnyNode, context: CFunctionContext): FormattedOutputValue | null {
   if (expression.type !== 'Reference' || expression.path.length !== 1) {
     return null
   }
@@ -5994,7 +6024,7 @@ function emitKnownArrayShapeLogValue(expression: AnyNode, context: CFunctionCont
       lines.push(emitRuntimeValueCheck(value, 'INOX_TAG_STRING', context))
       lines.push(`inox_string* ${string} = (inox_string*)${value}.as.ref;`)
       parts.push("'%.*s'")
-      values.push(emitConsoleRuntimeStringView(string))
+      values.push(emitFormattedOutputRuntimeStringView(string))
     } else if (field.valueType === 'number') {
       const value = nextCName(context, 'inox_log_value')
 
@@ -6003,7 +6033,7 @@ function emitKnownArrayShapeLogValue(expression: AnyNode, context: CFunctionCont
       lines.push(`${value} = ArrayClass(${name}).get(${index});`)
       lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
       lines.push(emitRuntimeValueCheck(value, 'INOX_TAG_NUMBER', context))
-      parts.push(consoleLogNumberFormat)
+      parts.push(formattedOutputNumberFormat)
       values.push(`${value}.as.number`)
     } else if (field.valueType === 'boolean') {
       const value = nextCName(context, 'inox_log_value')
@@ -6125,7 +6155,7 @@ function isRuntimeValueLogExpression(expression: AnyNode, context: CFunctionCont
   return runtimeElement !== null && typeof runtimeElement !== 'undefined' && runtimeElement.valueType === 'unknown'
 }
 
-function emitRuntimeValueLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
+function emitRuntimeValueLogValue(expression: AnyNode, context: CFunctionContext): FormattedOutputValue {
   const value = emitCValueExpression(expression, context)
   const lines: string[] = []
 
@@ -6138,7 +6168,7 @@ function emitRuntimeValueLogValue(expression: AnyNode, context: CFunctionContext
   }
 }
 
-function emitKnownRuntimeStringLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+function emitKnownRuntimeStringLogValue(expression: AnyNode, context: CFunctionContext): FormattedOutputValue | null {
   if (isMemberAccessExpression(expression)) {
     const member = resolveKnownObjectMember(expression, context)
 
@@ -6158,7 +6188,7 @@ function emitKnownRuntimeStringLogValue(expression: AnyNode, context: CFunctionC
   return null
 }
 
-function emitRuntimeObjectMemberLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+function emitRuntimeObjectMemberLogValue(expression: AnyNode, context: CFunctionContext): FormattedOutputValue | null {
   let value: PreparedExpression | null = null
 
   if (isMemberAccessExpression(expression)) {
@@ -6182,7 +6212,7 @@ function emitRuntimeObjectMemberLogValue(expression: AnyNode, context: CFunction
   }
 }
 
-function emitRuntimeStringCallLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+function emitRuntimeStringCallLogValue(expression: AnyNode, context: CFunctionContext): FormattedOutputValue | null {
   if (
     expression.type !== 'CallExpression' ||
     expression.libraryOperationId === null ||
@@ -6201,19 +6231,27 @@ function emitRuntimeStringCallLogValue(expression: AnyNode, context: CFunctionCo
   return emitPreparedStringLogValue(value, context)
 }
 
-function emitPreparedStringLogValue(value: PreparedExpression, context: CFunctionContext): ConsoleLogValue {
+function emitPreparedStringLogValue(value: PreparedExpression, context: CFunctionContext): FormattedOutputValue {
   const lines: string[] = []
 
   pushAll(lines, value.lines)
 
   return {
     lines,
-    format: consoleLogStringFormat,
-    values: [emitConsolePreparedStringValue(value)]
+    format: formattedOutputStringFormat,
+    values: [emitFormattedOutputPreparedStringValue(value)]
   }
 }
 
-function emitNativeClassInstanceLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+function emitNativeClassInstanceLogValue(
+  expression: AnyNode,
+  context: CFunctionContext,
+  classFormatExpression: string | null
+): FormattedOutputValue | null {
+  if (classFormatExpression === null) {
+    return null
+  }
+
   const instance = emitPreparedNativeClassInstanceExpression(expression, context)
 
   if (instance === null || typeof instance === 'undefined') {
@@ -6224,12 +6262,12 @@ function emitNativeClassInstanceLogValue(expression: AnyNode, context: CFunction
   const lines: string[] = []
 
   pushAll(lines, instance.lines)
-  lines.push(`auto ${temp} = inox::console_format_class_instance(${emitCClassInfoDescriptorName(instance.info)}, ${instance.expression});`)
+  lines.push(`auto ${temp} = ${classFormatExpression}(${emitCClassInfoDescriptorName(instance.info)}, ${instance.expression});`)
   lines.push(emitRuntimeTypeCheck(`!${temp}.valid()`, context))
 
   return {
     lines,
-    format: consoleLogStringFormat,
+    format: formattedOutputStringFormat,
     values: [temp]
   }
 }
@@ -6249,7 +6287,7 @@ function emitPreparedCompilerLibraryNativeFieldValueExpression(
   return emitPreparedCompilerLibraryNativeFieldExpression(expression, context, preparedObject)
 }
 
-function emitStringLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
+function emitStringLogValue(expression: AnyNode, context: CFunctionContext): FormattedOutputValue {
   if (expression !== null && typeof expression !== 'undefined' && expression.type === 'Reference') {
     const name = joinStrings(expression.path, '_')
     const emittedName = emitCIdentifier(name)
@@ -6259,7 +6297,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
         lines: [
           emitRuntimeTypeCheck(`(*${emittedName}).tag != INOX_TAG_STRING || (*${emittedName}).as.ref == 0`, context)
         ],
-        format: consoleLogStringFormat,
+        format: formattedOutputStringFormat,
         values: [`inox::String(inox::Value(*${emittedName}))`]
       }
     }
@@ -6275,7 +6313,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
     if (context.cppStringValues.has(name)) {
       return {
         lines: [],
-        format: consoleLogStringFormat,
+        format: formattedOutputStringFormat,
         values: [reference]
       }
     }
@@ -6285,7 +6323,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
         lines: [
           emitRuntimeTypeCheck(`${reference}.tag != INOX_TAG_STRING || ${reference}.as.ref == 0`, context)
         ],
-        format: consoleLogStringFormat,
+        format: formattedOutputStringFormat,
         values: [`inox::String(inox::Value(${reference}))`]
       }
     }
@@ -6293,8 +6331,8 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
     if (context.runtimeStrings.has(name)) {
       return {
         lines: [],
-        format: consoleLogStringFormat,
-        values: [emitConsoleRuntimeStringView(reference)]
+        format: formattedOutputStringFormat,
+        values: [emitFormattedOutputRuntimeStringView(reference)]
       }
     }
   }
@@ -6305,7 +6343,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
     if (libraryNativeField !== null && libraryNativeField.valueType === 'string') {
       return {
         lines: libraryNativeField.lines,
-        format: consoleLogStringFormat,
+        format: formattedOutputStringFormat,
         values: [libraryNativeField.expression]
       }
     }
@@ -6335,8 +6373,8 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
 
       return {
         lines,
-        format: consoleLogStringFormat,
-        values: [emitConsolePreparedStringValue(nativeClassField)]
+        format: formattedOutputStringFormat,
+        values: [emitFormattedOutputPreparedStringValue(nativeClassField)]
       }
     }
 
@@ -6373,8 +6411,8 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
 
       return {
         lines,
-        format: consoleLogStringFormat,
-        values: [emitConsolePreparedStringValue(value)]
+        format: formattedOutputStringFormat,
+        values: [emitFormattedOutputPreparedStringValue(value)]
       }
     }
   }
@@ -6389,8 +6427,8 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
 
       return {
         lines,
-        format: consoleLogStringFormat,
-        values: [emitConsolePreparedStringValue(classMethodCall)]
+        format: formattedOutputStringFormat,
+        values: [emitFormattedOutputPreparedStringValue(classMethodCall)]
       }
     }
   }
@@ -6409,8 +6447,8 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
 
     return {
       lines,
-      format: consoleLogStringFormat,
-      values: [emitConsolePreparedStringValue(value)]
+      format: formattedOutputStringFormat,
+      values: [emitFormattedOutputPreparedStringValue(value)]
     }
   }
 
@@ -6425,8 +6463,8 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
 
     return {
       lines,
-      format: consoleLogStringFormat,
-      values: [emitConsolePreparedStringValue(value)]
+      format: formattedOutputStringFormat,
+      values: [emitFormattedOutputPreparedStringValue(value)]
     }
   }
 
@@ -6437,7 +6475,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
   }
 }
 
-function emitNativeClassStringFieldLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+function emitNativeClassStringFieldLogValue(expression: AnyNode, context: CFunctionContext): FormattedOutputValue | null {
   const field = resolveNativeClassFieldMetadata(expression, context)
 
   if (
@@ -6462,19 +6500,19 @@ function emitNativeClassStringFieldLogValue(expression: AnyNode, context: CFunct
   if (value.cppType === 'inox::String') {
     return {
       lines,
-      format: consoleLogStringFormat,
+      format: formattedOutputStringFormat,
       values: [value.expression]
     }
   }
 
   return {
     lines,
-    format: consoleLogStringFormat,
-    values: [emitConsolePreparedStringValue(value)]
+    format: formattedOutputStringFormat,
+    values: [emitFormattedOutputPreparedStringValue(value)]
   }
 }
 
-function emitModuleRuntimeStringLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+function emitModuleRuntimeStringLogValue(expression: AnyNode, context: CFunctionContext): FormattedOutputValue | null {
   if (
     expression === null ||
     typeof expression === 'undefined' ||
@@ -6506,12 +6544,12 @@ function emitModuleRuntimeStringLogValue(expression: AnyNode, context: CFunction
     lines: [
       emitRuntimeTypeCheck(`${storage}.tag != INOX_TAG_STRING || ${storage}.as.ref == 0`, context)
     ],
-    format: consoleLogStringFormat,
+    format: formattedOutputStringFormat,
     values: [`inox::String(inox::Value(${storage}))`]
   }
 }
 
-function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
+function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): FormattedOutputValue {
   const moduleRuntimeScalar = emitModuleRuntimeScalarLogValue(expression, context)
 
   if (moduleRuntimeScalar !== null && typeof moduleRuntimeScalar !== 'undefined') {
@@ -6524,7 +6562,7 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): Con
     if (libraryNativeField !== null && libraryNativeField.valueType === 'number') {
       return {
         lines: libraryNativeField.lines,
-        format: consoleLogNumberFormat,
+        format: formattedOutputNumberFormat,
         values: [`((double)${libraryNativeField.expression})`]
       }
     }
@@ -6534,7 +6572,7 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): Con
     if (stringLength !== null && typeof stringLength !== 'undefined') {
       return {
         lines: stringLength.lines,
-        format: consoleLogNumberFormat,
+        format: formattedOutputNumberFormat,
         values: [`((double)${stringLength.expression})`]
       }
     }
@@ -6548,7 +6586,7 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): Con
     if (length !== null && typeof length !== 'undefined') {
       return {
         lines: length.lines,
-        format: consoleLogNumberFormat,
+        format: formattedOutputNumberFormat,
         values: [`((double)${length.expression})`]
       }
     }
@@ -6558,7 +6596,7 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): Con
     if (nativeClassField !== null && typeof nativeClassField !== 'undefined') {
       return {
         lines: nativeClassField.lines,
-        format: consoleLogNumberFormat,
+        format: formattedOutputNumberFormat,
         values: [`((double)${nativeClassField.expression})`]
       }
     }
@@ -6605,7 +6643,7 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): Con
 
       return {
         lines: value.lines,
-        format: consoleLogNumberFormat,
+        format: formattedOutputNumberFormat,
         values: [formattedValue]
       }
     }
@@ -6615,12 +6653,12 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): Con
 
   return {
     lines: value.lines,
-    format: consoleLogNumberFormat,
-    values: [emitConsoleNumberValue(value)]
+    format: formattedOutputNumberFormat,
+    values: [emitFormattedOutputNumberValue(value)]
   }
 }
 
-function emitConsoleNumberValue(value: PreparedExpression): string {
+function emitFormattedOutputNumberValue(value: PreparedExpression): string {
   if (value.scalarType === 'double') {
     return value.expression
   }
@@ -6628,7 +6666,7 @@ function emitConsoleNumberValue(value: PreparedExpression): string {
   return `((double)${value.expression})`
 }
 
-function emitBooleanLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
+function emitBooleanLogValue(expression: AnyNode, context: CFunctionContext): FormattedOutputValue {
   if (expression.type === 'BooleanLiteral') {
     let value = 'false'
 
@@ -6638,7 +6676,7 @@ function emitBooleanLogValue(expression: AnyNode, context: CFunctionContext): Co
 
     return {
       lines: [],
-      format: consoleLogBooleanFormat,
+      format: formattedOutputBooleanFormat,
       values: [value]
     }
   }
@@ -6655,7 +6693,7 @@ function emitBooleanLogValue(expression: AnyNode, context: CFunctionContext): Co
     if (libraryNativeField !== null && libraryNativeField.valueType === 'boolean') {
       return {
         lines: libraryNativeField.lines,
-        format: consoleLogBooleanFormat,
+        format: formattedOutputBooleanFormat,
         values: [libraryNativeField.expression]
       }
     }
@@ -6665,7 +6703,7 @@ function emitBooleanLogValue(expression: AnyNode, context: CFunctionContext): Co
     if (nativeClassField !== null && typeof nativeClassField !== 'undefined') {
       return {
         lines: nativeClassField.lines,
-        format: consoleLogBooleanFormat,
+        format: formattedOutputBooleanFormat,
         values: [nativeClassField.expression]
       }
     }
@@ -6711,7 +6749,7 @@ function emitBooleanLogValue(expression: AnyNode, context: CFunctionContext): Co
 
       return {
         lines,
-        format: consoleLogBooleanFormat,
+        format: formattedOutputBooleanFormat,
         values: [`${value.expression}.as.boolean`]
       }
     }
@@ -6721,12 +6759,12 @@ function emitBooleanLogValue(expression: AnyNode, context: CFunctionContext): Co
 
   return {
     lines: value.lines,
-    format: consoleLogBooleanFormat,
+    format: formattedOutputBooleanFormat,
     values: [value.expression]
   }
 }
 
-function emitFetchResponseScalarMemberLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+function emitFetchResponseScalarMemberLogValue(expression: AnyNode, context: CFunctionContext): FormattedOutputValue | null {
   if (expression.type !== 'MemberExpression' || expression.object.type !== 'Reference') {
     return null
   }
@@ -6746,7 +6784,7 @@ function emitFetchResponseScalarMemberLogValue(expression: AnyNode, context: CFu
   if (expression.property === 'status') {
     return {
       lines: [],
-      format: consoleLogNumberFormat,
+      format: formattedOutputNumberFormat,
       values: [`${reference}.status()`]
     }
   }
@@ -6754,7 +6792,7 @@ function emitFetchResponseScalarMemberLogValue(expression: AnyNode, context: CFu
   return null
 }
 
-function emitFetchResponseBooleanMemberLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+function emitFetchResponseBooleanMemberLogValue(expression: AnyNode, context: CFunctionContext): FormattedOutputValue | null {
   if (expression.type !== 'MemberExpression' || expression.object.type !== 'Reference') {
     return null
   }
@@ -6774,7 +6812,7 @@ function emitFetchResponseBooleanMemberLogValue(expression: AnyNode, context: CF
   if (expression.property === 'ok') {
     return {
       lines: [],
-      format: consoleLogBooleanFormat,
+      format: formattedOutputBooleanFormat,
       values: [`${reference}.ok()`]
     }
   }
@@ -6782,7 +6820,7 @@ function emitFetchResponseBooleanMemberLogValue(expression: AnyNode, context: CF
   if (expression.property === 'redirected') {
     return {
       lines: [],
-      format: consoleLogBooleanFormat,
+      format: formattedOutputBooleanFormat,
       values: [`${reference}.redirected()`]
     }
   }
@@ -6790,7 +6828,7 @@ function emitFetchResponseBooleanMemberLogValue(expression: AnyNode, context: CF
   return null
 }
 
-function emitModuleRuntimeScalarLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+function emitModuleRuntimeScalarLogValue(expression: AnyNode, context: CFunctionContext): FormattedOutputValue | null {
   if (
     expression === null ||
     typeof expression === 'undefined' ||
@@ -6828,12 +6866,12 @@ function emitModuleRuntimeScalarLogValue(expression: AnyNode, context: CFunction
 
   return {
     lines: [emitRuntimeValueCheck(storage, tag, context)],
-    format: consoleLogNumberFormat,
+    format: formattedOutputNumberFormat,
     values: [formattedValue]
   }
 }
 
-function emitModuleRuntimeBooleanLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+function emitModuleRuntimeBooleanLogValue(expression: AnyNode, context: CFunctionContext): FormattedOutputValue | null {
   if (
     expression === null ||
     typeof expression === 'undefined' ||
@@ -6861,12 +6899,12 @@ function emitModuleRuntimeBooleanLogValue(expression: AnyNode, context: CFunctio
 
   return {
     lines: [emitRuntimeValueCheck(storage, 'INOX_TAG_BOOL', context)],
-    format: consoleLogBooleanFormat,
+    format: formattedOutputBooleanFormat,
     values: [`${storage}.as.boolean`]
   }
 }
 
-function emitRuntimeStringLogValue(source: RuntimeLogGetSource, context: CFunctionContext): ConsoleLogValue {
+function emitRuntimeStringLogValue(source: RuntimeLogGetSource, context: CFunctionContext): FormattedOutputValue {
   const value = nextCName(context, 'inox_log_value')
   const lines: string[] = []
 
@@ -6878,7 +6916,7 @@ function emitRuntimeStringLogValue(source: RuntimeLogGetSource, context: CFuncti
 
   return {
     lines,
-    format: consoleLogStringFormat,
+    format: formattedOutputStringFormat,
     values: [`inox::String(inox::Value(${value}))`]
   }
 }
@@ -6887,7 +6925,7 @@ function emitRuntimeNumberLogValue(
   valueType: string,
   source: RuntimeLogGetSource,
   context: CFunctionContext
-): ConsoleLogValue {
+): FormattedOutputValue {
   const value = nextCName(context, 'inox_log_value')
   const lines: string[] = []
   let tag = 'INOX_TAG_NUMBER'
@@ -6906,12 +6944,12 @@ function emitRuntimeNumberLogValue(
 
   return {
     lines,
-    format: consoleLogNumberFormat,
+    format: formattedOutputNumberFormat,
     values: [formattedValue]
   }
 }
 
-function emitRuntimeBooleanLogValue(source: RuntimeLogGetSource, context: CFunctionContext): ConsoleLogValue {
+function emitRuntimeBooleanLogValue(source: RuntimeLogGetSource, context: CFunctionContext): FormattedOutputValue {
   const value = nextCName(context, 'inox_log_value')
   const lines: string[] = []
 
@@ -6923,7 +6961,7 @@ function emitRuntimeBooleanLogValue(source: RuntimeLogGetSource, context: CFunct
 
   return {
     lines,
-    format: consoleLogBooleanFormat,
+    format: formattedOutputBooleanFormat,
     values: [`${value}.as.boolean`]
   }
 }
@@ -6932,7 +6970,7 @@ function emitKnownArrayScalarLogValue(
   valueType: string,
   element: CKnownArrayElement,
   context: CFunctionContext
-): ConsoleLogValue {
+): FormattedOutputValue {
   const value = nextCName(context, 'inox_log_value')
   const lines: string[] = []
   let tag = 'INOX_TAG_NUMBER'
@@ -6952,12 +6990,12 @@ function emitKnownArrayScalarLogValue(
 
   return {
     lines,
-    format: consoleLogNumberFormat,
+    format: formattedOutputNumberFormat,
     values: [formattedValue]
   }
 }
 
-function emitKnownArrayBooleanLogValue(element: CKnownArrayElement, context: CFunctionContext): ConsoleLogValue {
+function emitKnownArrayBooleanLogValue(element: CKnownArrayElement, context: CFunctionContext): FormattedOutputValue {
   const value = nextCName(context, 'inox_log_value')
   const lines: string[] = []
 
@@ -6970,7 +7008,7 @@ function emitKnownArrayBooleanLogValue(element: CKnownArrayElement, context: CFu
 
   return {
     lines,
-    format: consoleLogBooleanFormat,
+    format: formattedOutputBooleanFormat,
     values: [`${value}.as.boolean`]
   }
 }
@@ -7020,8 +7058,8 @@ function emitRuntimeLogGetLines(source: RuntimeLogGetSource, temp: string, conte
   return lines
 }
 
-function emitRuntimeErrorLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
-  const object = emitErrorLogObjectExpression(expression, context)
+function emitRuntimeExceptionValue(expression: AnyNode, context: CFunctionContext): FormattedOutputValue {
+  const object = emitExceptionFormatObjectExpression(expression, context)
   const nameValue = nextCName(context, 'inox_log_value')
   const messageValue = nextCName(context, 'inox_log_value')
   const nameString = nextCName(context, 'inox_log_string')
@@ -7044,11 +7082,11 @@ function emitRuntimeErrorLogValue(expression: AnyNode, context: CFunctionContext
   return {
     lines,
     format: '%.*s: %.*s',
-    values: [emitConsoleRuntimeStringView(nameString), emitConsoleRuntimeStringView(messageString)]
+    values: [emitFormattedOutputRuntimeStringView(nameString), emitFormattedOutputRuntimeStringView(messageString)]
   }
 }
 
-function emitErrorLogObjectExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
+function emitExceptionFormatObjectExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   if (
     expression !== null &&
     typeof expression !== 'undefined' &&

@@ -9,6 +9,7 @@ import {
   emitModuleDeclarationContract
 } from '../../compiler/modules/declarations.ts'
 import { parse } from '../../compiler/parser.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 export function assertModuleDeclarationImportedNestedArrayShape(): void {
   const declarationSource = emitModuleDeclarationContract(
@@ -68,6 +69,7 @@ console.log(fingerprints([{ operations: [{ libraryId: 'url', bindingId: 'URL', o
       callMain: true,
       declarationImports: [{ sourcePath: '/pkg/types.ts', declarationSource }],
       host,
+      libraries: defaultCompilerLibrarySet,
       sourceRoot: '/pkg'
     })
   )

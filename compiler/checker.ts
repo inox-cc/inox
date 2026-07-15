@@ -119,7 +119,6 @@ import type {
 } from './checker/fetch-calls.ts'
 import {
   checkArrayIsArrayCall as checkArrayIsArrayCallInContext,
-  checkConsoleCall as checkConsoleCallInContext,
   checkObjectStaticCall as checkObjectStaticCallInContext,
   isObjectStaticCall as isObjectStaticCallInContext
 } from './checker/global-calls.ts'
@@ -174,7 +173,6 @@ import {
   findClassConstructorMethod,
   intersectNames,
   isConditionValueType,
-  isConsoleMethod,
   isNonNullNarrowingLiteral,
   isPromiseMethod,
   isRelativeImportSource,
@@ -3634,12 +3632,6 @@ class Checker {
       return libraryDiagnosticType
     }
 
-    const consoleType = this.checkConsoleCall(expression)
-
-    if (consoleType !== null && typeof consoleType !== 'undefined') {
-      return consoleType
-    }
-
     const stringConversionType = this.checkStringConversionCall(expression)
 
     if (stringConversionType !== null && typeof stringConversionType !== 'undefined') {
@@ -3801,20 +3793,6 @@ class Checker {
     }
 
     return applyCallableSymbolCallInContext(this.callableSymbolContext(), expression, symbol, argInfos)
-  }
-
-  checkConsoleCall(expression: AnyNode): ValueType | null {
-    const valueType = checkConsoleCallInContext(
-      this.globalCallContext(),
-      expression,
-      this.runtimeGlobalIsShadowed('console')
-    )
-
-    if (valueType !== null && typeof valueType !== 'undefined') {
-      this.checkCallArgumentTypes(expression)
-    }
-
-    return valueType
   }
 
   checkCompilerLibraryCallOperation(expression: AnyNode): ValueType | null {
@@ -4551,6 +4529,8 @@ class Checker {
     expression.libraryRuntimeRequirements = runtimeRequirements
     expression.libraryCapabilities = capabilities
     expression.libraryCExpression = variant?.cExpression ?? operation.cExpression ?? null
+    expression.libraryCClassFormatExpression =
+      variant?.cClassFormatExpression ?? operation.cClassFormatExpression ?? null
     const cArgumentKinds = variant?.cArgumentKinds ?? operation.cArgumentKinds
 
     if (cArgumentKinds !== null && typeof cArgumentKinds !== 'undefined') {

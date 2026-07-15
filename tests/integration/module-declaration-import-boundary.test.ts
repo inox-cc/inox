@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { compileFileToCModulesSync } from '../../compiler/core.ts'
 import type { CompilerHost } from '../../compiler/host.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 export function assertModuleDeclarationImportBoundary(): void {
   assertDeclarationImportDoesNotReadSourceBody()
@@ -38,6 +39,7 @@ function assertDeclarationImportDoesNotReadSourceBody(): void {
       }
     ],
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   })
   const externalModule = result.graph.modules.find((module) => module.path === '/pkg/src/lib.ts')
@@ -94,6 +96,7 @@ export type B = {
       }
     ],
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   })
   const aModule = result.graph.modules.find((module) => module.path === '/pkg/src/a.ts')
@@ -137,6 +140,7 @@ export type B = {
       }
     ],
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   })
   const entryModule = result.graph.modules.find((module) => module.path === '/pkg/src/index.ts')

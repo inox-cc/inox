@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
-import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
+import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-fixtures.ts'
 import type {
   CompilerLibraryDescriptor,
   LibraryOperationDescriptor
@@ -13,7 +13,7 @@ test('data-only library Promise operations preserve fulfilled metadata and lower
     'const pending = fixture.load()\n' +
       'const item = await pending\n' +
       'const entries = await fixture.list()\n',
-    { libraries: createCompilerLibrarySet([promiseLibrary()]), target: 'cc' }
+    { libraries: createCompilerLibrarySetWithConsole([promiseLibrary()]), target: 'cc' }
   )
   const pendingCall = result.ir.body[0].init
   const awaitedItem = result.ir.body[1].init
@@ -51,7 +51,7 @@ test('data-only library Promise operations preserve fulfilled metadata and lower
       '  console.log(item)\n' +
       '}\n' +
       'await consume()\n',
-    { libraries: createCompilerLibrarySet([promiseLibrary()]), target: 'cc' }
+    { libraries: createCompilerLibrarySetWithConsole([promiseLibrary()]), target: 'cc' }
   )
 
   assert.match(asyncResult.code, /inox_library_promise_\d+ = fixture\.load\(\);/)
@@ -60,8 +60,8 @@ test('data-only library Promise operations preserve fulfilled metadata and lower
   const changed = promiseLibrary()
   changed.operations[0].promiseRejectionValueType = 'string'
   assert.notEqual(
-    createCompilerLibrarySet([changed]).fingerprint,
-    createCompilerLibrarySet([promiseLibrary()]).fingerprint
+    createCompilerLibrarySetWithConsole([changed]).fingerprint,
+    createCompilerLibrarySetWithConsole([promiseLibrary()]).fingerprint
   )
 })
 

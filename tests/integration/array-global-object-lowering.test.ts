@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 type GeneratedTextFile = {
   path: string
@@ -44,6 +45,7 @@ console.log(Array.isArray([1]))
   const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code

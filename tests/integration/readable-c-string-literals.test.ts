@@ -38,6 +38,7 @@ console.log('label', text)
   const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
@@ -76,6 +77,7 @@ console.error('bad', user)
   const runtimeValueFiles = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host: runtimeValueHost,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const runtimeValueSource = generatedTextFile(runtimeValueFiles, 'src/index.cc').code
@@ -120,6 +122,7 @@ f.test()
   const entryLocalFiles = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host: entryLocalHost,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const entryLocalSource = generatedTextFile(entryLocalFiles, 'src/index.cc').code
@@ -151,6 +154,7 @@ console.log(read())
   const nestedReferenceFiles = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host: nestedReferenceHost,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const nestedReferenceSource = generatedTextFile(nestedReferenceFiles, 'src/index.cc').code
@@ -175,6 +179,7 @@ console.log(data.v)
   const jsonLocalFiles = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host: jsonLocalHost,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const jsonLocalSource = generatedTextFile(jsonLocalFiles, 'src/index.cc').code
@@ -202,6 +207,7 @@ console.log(response.status)
   const fetchFiles = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host: fetchHost,
+    libraries: defaultCompilerLibrarySet,
     loopBackend: 'libuv',
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]

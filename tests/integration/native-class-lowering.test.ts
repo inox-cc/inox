@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { compileFileToCModuleTextsSync, compileSource } from '../../compiler/core.ts'
 import { cStringLiteral } from '../../compiler/c/identifiers.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 type GeneratedTextFile = {
   path: string
@@ -24,6 +25,7 @@ console.log(box.value)
 `
 
   const result = compileSource(source, {
+    libraries: defaultCompilerLibrarySet,
     target: 'cc'
   })
 
@@ -53,6 +55,7 @@ console.log(box)
 `
 
   const result = compileSource(source, {
+    libraries: defaultCompilerLibrarySet,
     target: 'cc'
   })
 
@@ -94,6 +97,7 @@ console.log(box.payload)
 `
 
   const result = compileSource(source, {
+    libraries: defaultCompilerLibrarySet,
     target: 'cc'
   })
 
@@ -127,6 +131,7 @@ console.log(arrayBox.values.length)
 `
 
   const result = compileSource(source, {
+    libraries: defaultCompilerLibrarySet,
     target: 'cc'
   })
 
@@ -158,6 +163,7 @@ console.log(scoreBox.size())
 `
 
   const result = compileSource(source, {
+    libraries: defaultCompilerLibrarySet,
     target: 'cc'
   })
 
@@ -190,6 +196,7 @@ console.log(tagBox.size())
 `
 
   const result = compileSource(source, {
+    libraries: defaultCompilerLibrarySet,
     target: 'cc'
   })
 
@@ -233,6 +240,7 @@ console.log(parent.label())
 `
 
   const result = compileSource(source, {
+    libraries: defaultCompilerLibrarySet,
     target: 'cc'
   })
 
@@ -291,6 +299,7 @@ console.log(holder.label())
 `
 
   const result = compileSource(source, {
+    libraries: defaultCompilerLibrarySet,
     target: 'cc'
   })
 
@@ -322,6 +331,7 @@ console.log(f.isPromise())
 `
 
   const result = compileSource(source, {
+    libraries: defaultCompilerLibrarySet,
     target: 'cc'
   })
 
@@ -383,6 +393,7 @@ f.test()
 `
 
   const result = compileSource(source, {
+    libraries: defaultCompilerLibrarySet,
     target: 'cc'
   })
   const methodIndex = result.code.indexOf('void Foo::test()')
@@ -461,6 +472,7 @@ export function label(): string {
   const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const aSource = generatedTextFile(files, 'src/a.cc').code

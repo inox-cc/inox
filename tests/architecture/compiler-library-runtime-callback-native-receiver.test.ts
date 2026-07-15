@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
-import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
+import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('captured materializable library object сохраняет native receiver adapter', () => {
@@ -16,7 +16,7 @@ bridge.listen(() => {
   handle.close(() => console.log('closed'))
 })
 `,
-    { libraries: createCompilerLibrarySet([bridgeLibrary()]), target: 'cc' }
+    { libraries: createCompilerLibrarySetWithConsole([bridgeLibrary()]), target: 'cc' }
   )
 
   assert.match(result.code, /BridgeHandle direct;/)

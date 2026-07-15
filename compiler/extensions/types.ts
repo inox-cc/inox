@@ -163,6 +163,7 @@ export type LibraryCArgumentKind =
   | 'optional-string-view-array'
   | 'string-view-array-count'
   | 'variadic-string-view-array'
+  | 'variadic-format-values'
   | 'variadic-count'
   | 'result-shape'
   | 'string-view-or-value'
@@ -266,6 +267,7 @@ export type LibraryOperationVariantDescriptor = {
   objectFieldName?: string | null
   booleanLiterals?: boolean[]
   cExpression?: string | null
+  cClassFormatExpression?: string | null
   cArgumentKinds?: LibraryCArgumentKind[]
   cArgumentAdapters?: string[]
   cArgumentSources?: Array<LibraryCArgumentSourceDescriptor | null>
@@ -294,6 +296,7 @@ export type LibraryOperationDescriptor = {
   kind: LibraryOperationKind
   runtimeRequirements: RuntimeRequirementId[]
   cExpression?: string | null
+  cClassFormatExpression?: string | null
   cArgumentKinds?: LibraryCArgumentKind[]
   cArgumentAdapters?: string[]
   cArgumentSources?: Array<LibraryCArgumentSourceDescriptor | null>

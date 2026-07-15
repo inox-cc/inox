@@ -3,6 +3,7 @@ import { test } from 'node:test'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 test('split modules инициализируют переименованный object import в local alias storage', () => {
   const host = createMemoryCompilerHost(
@@ -21,6 +22,7 @@ test('split modules инициализируют переименованный 
   const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   })
   const entry = files.find((file) => file.path === 'src/index.cc')

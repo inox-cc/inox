@@ -1076,7 +1076,8 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
         item.libraryId + ':' + item.bindingId + ':' + item.operationId + ':' + item.kind + ':' +
           sortedStrings(item.bindingAliases ?? []).join(',') + ':' +
           sortedStrings(item.runtimeRequirements).join(',') + ':' +
-          (item.cExpression ?? '') + ':' + (item.cArgumentKinds ?? []).join(',') + ':' +
+          (item.cExpression ?? '') + ':' + (item.cClassFormatExpression ?? '') + ':' +
+          (item.cArgumentKinds ?? []).join(',') + ':' +
           (item.cArgumentAdapters ?? []).join(',') + ':' + operationArgumentSourcesFingerprint(item.cArgumentSources) + ':' +
           (item.callbackLifetime ?? '') + ':' +
           (item.cResultMode ?? '') + ':' +
@@ -1254,7 +1255,8 @@ function operationVariantsFingerprint(operation: LibraryOperationDescriptor): st
         (variant.argumentIndex ?? '') + ':' + sortedStrings(variant.stringLiterals ?? []).join(',') + ':' +
         sortedStrings(variant.argumentValueTypes ?? []).join(',') + ':' +
         (variant.objectFieldName ?? '') + ':' + sortedBooleans(variant.booleanLiterals ?? []).join(',') + ':' +
-        (variant.cExpression ?? '') + ':' + (variant.cArgumentKinds ?? []).join(',') + ':' +
+        (variant.cExpression ?? '') + ':' + (variant.cClassFormatExpression ?? '') + ':' +
+        (variant.cArgumentKinds ?? []).join(',') + ':' +
         (variant.cArgumentAdapters ?? []).join(',') + ':' + operationArgumentSourcesFingerprint(variant.cArgumentSources) + ':' +
         (variant.callbackLifetime ?? '') + ':' +
         (variant.cResultMode ?? '') + ':' +

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { compileSourceToIr } from '../../compiler/core.ts'
-import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
+import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('native type fields come only from library metadata', () => {
@@ -11,7 +11,7 @@ test('native type fields come only from library metadata', () => {
       'const entries = await fixture.list()\n' +
       'const entry = entries[0]\n' +
       'console.log(entry.name, entry.size)\n',
-    { libraries: createCompilerLibrarySet([nativeFieldLibrary()]) }
+    { libraries: createCompilerLibrarySetWithConsole([nativeFieldLibrary()]) }
   )
 
   const parameterField = result.ir.body[0].body[0].argument
@@ -30,8 +30,8 @@ test('native type fields come only from library metadata', () => {
   fields[0].readonly = false
 
   assert.notEqual(
-    createCompilerLibrarySet([changed]).fingerprint,
-    createCompilerLibrarySet([nativeFieldLibrary()]).fingerprint
+    createCompilerLibrarySetWithConsole([changed]).fingerprint,
+    createCompilerLibrarySetWithConsole([nativeFieldLibrary()]).fingerprint
   )
 })
 

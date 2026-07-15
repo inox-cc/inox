@@ -28,13 +28,14 @@ console.log(label)
   const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
   assert.match(
     source,
-    /^#include "index\.h"\n#include <string\.h>\n#include "inox\/console\.h"\n#include "inox\/main\.h"\n#include "inox\/value\.h"/
+    /^#include "index\.h"\n#include <string\.h>\n#include "inox\/main\.h"\n#include "inox\/value\.h"\n#include "inox\/console\.h"\n#include "inox\/loop\.h"\n#include "inox\/array\.h"\n#include "inox\/object\.h"/
   )
   assert.doesNotMatch(source, /#include "inox\/allocator\.h"/)
   assert.doesNotMatch(source, /#include <stdio\.h>/)
@@ -57,6 +58,7 @@ console.log(values.length)
   const arrayFiles = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host: arrayHost,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const arraySource = generatedTextFile(arrayFiles, 'src/index.cc').code
@@ -83,6 +85,7 @@ console.log(values.includes(2))
   const includesFiles = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host: includesHost,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const includesSource = generatedTextFile(includesFiles, 'src/index.cc').code

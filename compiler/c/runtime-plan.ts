@@ -1,6 +1,5 @@
 import type { AnyNode, IrGlobalUsage, IrProgram, IrRuntimeRequirement } from '../types.ts'
 import { isSupportedCFetchGlobalUsage } from './diagnostics.ts'
-import { irProgramsUseConsoleRuntime } from '../../stdlib/global/compiler/c.ts'
 import type {
   CompilerLibrarySet,
   RuntimeEntrypointAdapterDescriptor,
@@ -19,7 +18,6 @@ export type CRuntimePreludeRequirements = {
   needsSetRuntime: boolean
   needsObjectRuntime: boolean
   needsJsonRuntime: boolean
-  needsConsoleRuntime: boolean
   needsFetchRuntime: boolean
   runtimeEntrypointAdapter: RuntimeEntrypointAdapterDescriptor | null
   libraryCPreludeIncludes: string[]
@@ -95,7 +93,6 @@ export function resolveCRuntimePreludeRequirements(
     needsJsonRuntime ||
     signatureRuntimeTypes.size > 0 ||
     runtimeRequirements.has('managed-values')
-  const needsConsoleRuntime = irProgramsUseConsoleRuntime(input.irPrograms)
   const needsStringHeader =
     runtimeRequirements.has('string-bytes') ||
     needsFetchRuntime ||
@@ -113,7 +110,6 @@ export function resolveCRuntimePreludeRequirements(
     needsSetRuntime,
     needsObjectRuntime,
     needsJsonRuntime,
-    needsConsoleRuntime,
     needsFetchRuntime,
     runtimeEntrypointAdapter: libraryRuntime.entrypointAdapter,
     libraryCPreludeIncludes: libraryRuntime.includes,

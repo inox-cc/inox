@@ -18,6 +18,7 @@ const value = await Promise.resolve('ok')
 console.log(value)
 `,
     {
+      libraries: defaultCompilerLibrarySet,
       target: 'cc'
     }
   )
@@ -110,6 +111,7 @@ function main() {
 main()
 `,
     {
+      libraries: defaultCompilerLibrarySet,
       target: 'cc'
     }
   )

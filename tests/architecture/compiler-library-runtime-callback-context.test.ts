@@ -2,13 +2,13 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
-import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
+import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('library callback metadata contextually types unannotated arrow parameters', () => {
   const result = compileSource(
     'bridge.listen((data, info) => { console.log(info.size) })\n',
-    { libraries: createCompilerLibrarySet([bridgeLibrary()]), target: 'cc' }
+    { libraries: createCompilerLibrarySetWithConsole([bridgeLibrary()]), target: 'cc' }
   )
 
   assert.match(result.code, /args\[0\]\.tag != INOX_TAG_BYTES/)

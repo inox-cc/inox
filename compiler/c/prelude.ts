@@ -163,16 +163,11 @@ export function emitCPrelude(
   needsSetRuntime: boolean,
   needsObjectRuntime: boolean,
   needsJsonRuntime: boolean,
-  needsConsoleRuntime: boolean,
   needsFetchRuntime: boolean,
   libraryCPreludeIncludes: string[]
 ): string[] {
   const systemIncludes = ['#include <stdio.h>', '#include <math.h>']
   const localIncludes: string[] = []
-
-  if (needsConsoleRuntime) {
-    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/console.h"')
-  }
 
   if (needsMainRuntime) {
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/main.h"')

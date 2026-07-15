@@ -2,11 +2,11 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { compileSourceToIr } from '../../compiler/core.ts'
-import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
+import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('native type field сохраняет nullable metadata и fingerprint', () => {
-  const libraries = createCompilerLibrarySet([fixtureLibrary(true)])
+  const libraries = createCompilerLibrarySetWithConsole([fixtureLibrary(true)])
   const result = compileSourceToIr('const value = fixture.failure()\nconsole.log(value.cause)\n', {
     libraries
   })
@@ -14,7 +14,7 @@ test('native type field сохраняет nullable metadata и fingerprint', ()
 
   assert.equal(cause.valueType, 'object')
   assert.equal(cause.nullable, true)
-  assert.notEqual(libraries.fingerprint, createCompilerLibrarySet([fixtureLibrary(false)]).fingerprint)
+  assert.notEqual(libraries.fingerprint, createCompilerLibrarySetWithConsole([fixtureLibrary(false)]).fingerprint)
 })
 
 function fixtureLibrary(nullable: boolean): CompilerLibraryDescriptor {

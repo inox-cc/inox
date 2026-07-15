@@ -3,14 +3,14 @@ import { test } from 'node:test'
 
 import { compileSource, compileSourceToIr } from '../../compiler/core.ts'
 import { CompileError } from '../../compiler/diagnostics.ts'
-import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
+import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-fixtures.ts'
 import type {
   CompilerLibraryDescriptor,
   LibraryObjectLiteralFieldDescriptor
 } from '../../compiler/extensions/types.ts'
 
 test('library object options validate, lower and preserve nominal array elements', () => {
-  const libraries = createCompilerLibrarySet([objectOptionsLibrary()])
+  const libraries = createCompilerLibrarySetWithConsole([objectOptionsLibrary()])
 
   assert.deepEqual(
     [
@@ -51,12 +51,12 @@ test('library object options validate, lower and preserve nominal array elements
     { argumentIndex: 1, objectFieldName: 'recursive' }
   ]
   assert.notEqual(
-    createCompilerLibrarySet([changed]).fingerprint,
-    createCompilerLibrarySet([objectOptionsLibrary()]).fingerprint
+    createCompilerLibrarySetWithConsole([changed]).fingerprint,
+    createCompilerLibrarySetWithConsole([objectOptionsLibrary()]).fingerprint
   )
 })
 
-function compilationFails(source: string, libraries: ReturnType<typeof createCompilerLibrarySet>): boolean {
+function compilationFails(source: string, libraries: ReturnType<typeof createCompilerLibrarySetWithConsole>): boolean {
   try {
     compileSourceToIr(source, { libraries })
     return false

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 
 import { compileSource } from '../../compiler/core.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 export function assertNativeClassVoidStringFieldLogMethod(): void {
   const source = `
@@ -21,6 +22,7 @@ f.test()
 `
 
   const result = compileSource(source, {
+    libraries: defaultCompilerLibrarySet,
     target: 'cc'
   })
   const method = generatedMethodBody(result.code, 'void Foo::test()')
@@ -53,6 +55,7 @@ class Foo {
 `
 
   const result = compileSource(source, {
+    libraries: defaultCompilerLibrarySet,
     target: 'cc'
   })
 
@@ -72,6 +75,7 @@ class Foo {
 `
 
   const result = compileSource(source, {
+    libraries: defaultCompilerLibrarySet,
     target: 'cc'
   })
 

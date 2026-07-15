@@ -94,14 +94,6 @@ export function libuvOnlyRuntimeImportFeature(source: string): string | null {
 
 export const globals: Map<string, SymbolInfo> = new Map([
   [
-    'console',
-    {
-      kind: 'global',
-      mutable: false,
-      valueType: 'object'
-    }
-  ],
-  [
     'Promise',
     {
       kind: 'global',
@@ -246,11 +238,7 @@ export function builtinGlobalSymbol(name: string): SymbolInfo | null {
     }
   }
 
-  if (
-    name === 'console' ||
-    name === 'Object' ||
-    name === 'JSON'
-  ) {
+  if (name === 'Object' || name === 'JSON') {
     return {
       kind: 'global',
       mutable: false,

@@ -2,11 +2,11 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { compileSource, compileSourceToIr } from '../../compiler/core.ts'
-import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
+import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('library operation декларативно создаёт runtime callback с event-loop lifetime', () => {
-  const libraries = createCompilerLibrarySet([bridgeLibrary()])
+  const libraries = createCompilerLibrarySetWithConsole([bridgeLibrary()])
   const source = "bridge.listen(() => { console.log('tick') })\n"
   const ir = compileSourceToIr(source, { libraries, target: 'cc' }).ir
   const call = ir.body[0].expression
