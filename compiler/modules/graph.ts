@@ -112,9 +112,7 @@ export function buildModuleGraphWithHostSync(
     stdlibDeclarationPrograms: new Map(),
     visiting: new Set(),
     diagnostics: [],
-    libraryGlobalTypeNames: compilerLibraryGlobalTypeNames(
-      resolveCompilerLibrarySet(options.libraries).declarations
-    )
+    libraryGlobalTypeNames: compilerLibraryGlobalTypeNames(resolveCompilerLibrarySet(options.libraries).declarations)
   }
 
   visitModuleGraphFile(context, entryPath, libraryLiteralTypeInference)
@@ -276,11 +274,7 @@ function visitModuleGraphFile(
         }
 
         const importedProgram = moduleProgramForTypeImports(importedModule)
-        const declarations = createTypeImportDeclarations(
-          specifier,
-          importedProgram,
-          context.libraryGlobalTypeNames
-        )
+        const declarations = createTypeImportDeclarations(specifier, importedProgram, context.libraryGlobalTypeNames)
 
         for (
           let declarationIndex = 0;
@@ -811,11 +805,7 @@ function prepareStdlibRuntimeImportDeclarations(
       continue
     }
 
-    const declarations = createValueImportTypeDeclarations(
-      specifier,
-      importedProgram,
-      context.libraryGlobalTypeNames
-    )
+    const declarations = createValueImportTypeDeclarations(specifier, importedProgram, context.libraryGlobalTypeNames)
 
     for (let declarationIndex = 0; declarationIndex < declarations.length; declarationIndex = declarationIndex + 1) {
       const declaration = declarations[declarationIndex]
@@ -1028,6 +1018,7 @@ function applyImportedFunctionDeclarationMetadata(specifier: AnyNode, declaratio
   specifier.params = declaration.params
   specifier.declaredReturnType = declaration.declaredReturnType ?? declaration.returnType ?? null
   specifier.returnType = declaration.returnType ?? declaration.declaredReturnType ?? 'unknown'
+  specifier.returnTypeRef = declaration.returnTypeRef ?? null
   specifier.returnNullable = declaration.returnNullable === true
   specifier.returnArrayElementType = declaration.returnArrayElementType ?? null
   specifier.returnArrayElementDeclaredType = declaration.returnArrayElementDeclaredType ?? null

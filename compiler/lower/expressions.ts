@@ -1217,6 +1217,7 @@ function arrowFunctionType(
     kind: 'function',
     params,
     returnType,
+    returnTypeRef: nullableNode(expression.returnTypeRef),
     returnNullable: arrowFunctionReturnNullable(expression, body),
     returnArrayElementType: arrowFunctionReturnStringMetadata(expression, body, 'arrayElementType'),
     returnArrayElementDeclaredType: arrowFunctionReturnStringMetadata(expression, body, 'arrayElementDeclaredType'),
@@ -1458,16 +1459,19 @@ function cloneArrayLiteralExpression(
   arrayElementType: string,
   arrayElementDeclaredType: string
 ): LowerExpressionNode {
-  return {
-    type: 'ArrayLiteral',
-    elements,
-    valueType: 'array',
-    nullable: expression.nullable === true,
-    arrayElementType,
-    arrayElementDeclaredType,
-    arrayElementFunctionType: nullableNode(expression.arrayElementFunctionType),
-    loc: expression.loc
-  }
+  return copyRuntimeMetadata(
+    {
+      type: 'ArrayLiteral',
+      elements,
+      valueType: 'array',
+      nullable: expression.nullable === true,
+      arrayElementType,
+      arrayElementDeclaredType,
+      arrayElementFunctionType: nullableNode(expression.arrayElementFunctionType),
+      loc: expression.loc
+    },
+    expression
+  )
 }
 
 function commonArrayElementTypeFromElements(elements: LowerExpressionNode[]): string {

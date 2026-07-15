@@ -40,7 +40,7 @@ export const imports = new Map([
   const hir = lowerProgram(checked.ast, defaultCompilerLibrarySet)
   const refinedCode = emitModuleDeclarationContract(createModuleDeclarationProgram(hir))
 
-  assert.match(refinedCode, /export const methods: array<string>;/)
+  assert.match(refinedCode, /export const methods: Array<string>;/)
   assert.match(refinedCode, /export const names: Set<string>;/)
   assert.match(refinedCode, /export const constants: map<string,number>;/)
   assert.match(refinedCode, /export const imports: map<string,string>;/)

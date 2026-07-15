@@ -11,6 +11,7 @@ export type ResolvedTypeInfo = {
   shape: ObjectShapeInfo | null
   arrayElementType: ValueType | null
   arrayElementDeclaredType: string | null
+  arrayElementShape?: ObjectShapeInfo | null
   arrayElementFunctionType?: FunctionTypeMetadata | null
   mapKeyType: ValueType | null
   mapValueType: ValueType | null
@@ -69,6 +70,7 @@ export type FunctionTypeParamMetadata = {
   nullable?: boolean
   arrayElementType?: ValueType | null
   arrayElementDeclaredType?: string | null
+  arrayElementShape?: ObjectShapeInfo | null
   arrayElementFunctionType?: FunctionTypeMetadata | null
   arrayElementFunctionTypeOwnership?: 'weak'
   mapKeyType?: ValueType | null
@@ -256,6 +258,7 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('valueType', 'string', null, true, loc),
       anyNodeField('arrayElementType', 'string', null, true, loc),
       anyNodeField('arrayElementDeclaredType', 'string', null, true, loc),
+      anyNodeField('arrayElementShape', 'object', null, true, loc, { shape: objectShapeMetadata }),
       anyNodeField('arrayElementFunctionType', 'object', null, true, loc),
       anyNodeField('mapKeyType', 'string', null, true, loc),
       anyNodeField('mapValueType', 'string', null, true, loc),
@@ -267,6 +270,7 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('promiseRejectionIntrinsicRole', 'string', null, true, loc),
       anyNodeField('propertyValueType', 'string', null, true, loc),
       anyNodeField('returnType', 'string', null, true, loc),
+      anyNodeField('returnTypeRef', 'object', null, true, loc),
       anyNodeField('declaredReturnType', 'string', null, true, loc),
       anyNodeField('returnArrayElementType', 'string', null, true, loc),
       anyNodeField('returnArrayElementDeclaredType', 'string', null, true, loc),
@@ -353,6 +357,7 @@ export function anyNodeField(
     nullable,
     arrayElementType: options.arrayElementType ?? null,
     arrayElementDeclaredType: options.arrayElementDeclaredType ?? null,
+    arrayElementShape: null,
     arrayElementFunctionType: null,
     mapKeyType: null,
     mapValueType: null,
@@ -380,6 +385,7 @@ export function cloneObjectShapeField(field: AnyNode): AnyNode {
     nullable: field.nullable === true,
     arrayElementType: field.arrayElementType ?? null,
     arrayElementDeclaredType: field.arrayElementDeclaredType ?? null,
+    arrayElementShape: field.arrayElementShape ?? null,
     arrayElementFunctionType: field.arrayElementFunctionType ?? null,
     mapKeyType: field.mapKeyType ?? null,
     mapValueType: field.mapValueType ?? null,

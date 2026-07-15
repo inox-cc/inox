@@ -17,6 +17,7 @@ import { parseTemplateLiteralParts, parseTemplatePlaceholderExpression } from '.
 import {
   compilerLibraryHasModuleDeclaration,
   compilerLibraryIntrinsicRoleForBinding,
+  compilerLibraryNativeTypeForIntrinsic,
   compilerLibraryNativeTypeForId,
   compilerLibraryNativeTypeIsAssignable,
   compilerLibraryOperationForIntrinsic,
@@ -32,6 +33,7 @@ import {
   instantiateLibraryOperationTypeRef,
   type LibraryOperationTypeRefContext
 } from './extensions/operation-type-refs.ts'
+import { instantiateNativeTypeRef } from './extensions/type-ref-substitution.ts'
 import {
   parseCompilerLibraryGlobalDeclarations,
   type ParsedCompilerLibraryGlobalDeclaration
@@ -658,6 +660,7 @@ class Checker {
             symbol.valueType = 'function'
             symbol.params = this.resolveImportedParams(specifier.params ?? [])
             symbol.returnType = specifier.returnType
+            symbol.returnTypeRef = specifier.returnTypeRef ?? null
             symbol.returnNullable = specifier.returnNullable === true
             symbol.returnArrayElementType = specifier.returnArrayElementType ?? null
             symbol.returnArrayElementDeclaredType = specifier.returnArrayElementDeclaredType ?? null
@@ -827,6 +830,7 @@ class Checker {
       valueType: 'function',
       params: this.resolveImportedParams(declaration.params ?? []),
       returnType: declaration.returnType ?? declaration.declaredReturnType ?? 'unknown',
+      returnTypeRef: declaration.returnTypeRef ?? null,
       returnNullable: declaration.returnNullable === true,
       returnArrayElementType: declaration.returnArrayElementType ?? null,
       returnArrayElementDeclaredType: declaration.returnArrayElementDeclaredType ?? null,
@@ -867,8 +871,7 @@ class Checker {
       typeRef: paramInfo.typeRef,
       nullable:
         paramInfo.nullable ||
-        (param.optional === true &&
-          (param.defaultValue === null || typeof param.defaultValue === 'undefined')),
+        (param.optional === true && (param.defaultValue === null || typeof param.defaultValue === 'undefined')),
       arrayElementType: paramInfo.arrayElementType,
       arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
       mapKeyType: paramInfo.mapKeyType,
@@ -1060,8 +1063,7 @@ class Checker {
           param.typeRef = paramInfo.typeRef
           param.nullable =
             paramInfo.nullable ||
-            (param.optional === true &&
-              (param.defaultValue === null || typeof param.defaultValue === 'undefined'))
+            (param.optional === true && (param.defaultValue === null || typeof param.defaultValue === 'undefined'))
           param.arrayElementType = paramInfo.arrayElementType
           param.arrayElementDeclaredType = paramInfo.arrayElementDeclaredType
           param.mapKeyType = paramInfo.mapKeyType
@@ -1344,6 +1346,26 @@ class Checker {
         arrayElementDeclaredType = declared.arrayElementDeclaredType
       }
 
+      let arrayElementShape: ObjectShapeInfo | null = null
+
+      if (
+        statement.init !== null &&
+        typeof statement.init !== 'undefined' &&
+        statement.init.arrayElementShape !== null &&
+        typeof statement.init.arrayElementShape !== 'undefined'
+      ) {
+        arrayElementShape = statement.init.arrayElementShape
+      }
+
+      if (
+        declared !== null &&
+        typeof declared !== 'undefined' &&
+        declared.arrayElementShape !== null &&
+        typeof declared.arrayElementShape !== 'undefined'
+      ) {
+        arrayElementShape = declared.arrayElementShape
+      }
+
       let arrayElementFunctionType = this.resolveExpressionArrayElementFunctionType(statement.init)
 
       if (
@@ -1436,10 +1458,7 @@ class Checker {
       }
 
       if (declared !== null && typeof declared !== 'undefined') {
-        if (
-          declared.mapValueArrayElementType !== null &&
-          typeof declared.mapValueArrayElementType !== 'undefined'
-        ) {
+        if (declared.mapValueArrayElementType !== null && typeof declared.mapValueArrayElementType !== 'undefined') {
           mapValueArrayElementType = declared.mapValueArrayElementType
         }
 
@@ -1544,6 +1563,7 @@ class Checker {
       statement.nullable = nullable
       statement.arrayElementType = arrayElementType
       statement.arrayElementDeclaredType = statementArrayElementDeclaredType
+      statement.arrayElementShape = arrayElementShape
       statement.arrayElementFunctionType = arrayElementFunctionType
       statement.mapKeyType = mapKeyType
       statement.mapValueType = mapValueType
@@ -1584,6 +1604,7 @@ class Checker {
           narrowingFalseNames,
           arrayElementType,
           arrayElementDeclaredType,
+          arrayElementShape,
           arrayElementFunctionType,
           mapKeyType,
           mapValueType,
@@ -1974,6 +1995,10 @@ class Checker {
           expression.arrayElementDeclaredType = symbol.arrayElementDeclaredType
         }
 
+        if (symbol.arrayElementShape !== null && typeof symbol.arrayElementShape !== 'undefined') {
+          expression.arrayElementShape = symbol.arrayElementShape
+        }
+
         if (symbol.arrayElementFunctionType !== null && typeof symbol.arrayElementFunctionType !== 'undefined') {
           expression.arrayElementFunctionType = symbol.arrayElementFunctionType
         }
@@ -2019,6 +2044,7 @@ class Checker {
             resolved: true,
             params,
             returnType: symbol.returnType,
+            returnTypeRef: symbol.returnTypeRef ?? null,
             returnNullable: symbol.returnNullable === true,
             returnArrayElementType: symbol.returnArrayElementType ?? null,
             returnArrayElementDeclaredType: symbol.returnArrayElementDeclaredType ?? null,
@@ -2313,6 +2339,20 @@ class Checker {
 
       if (expression.arrayElementType === 'function') {
         expression.arrayElementFunctionType = commonExpressionFunctionType(expression.elements)
+      }
+
+      const arrayTypeRef = this.compilerLibraryArrayTypeRef(expression)
+
+      if (arrayTypeRef !== null) {
+        const metadata = typeRefCompatibilityMetadata(
+          arrayTypeRef,
+          resolveCompilerLibrarySet(this.options.libraries),
+          expression.loc
+        )
+
+        expression.typeRef = arrayTypeRef
+        expression.shape = metadata.shape
+        expression.arrayElementShape = metadata.arrayElementShape
       }
 
       return 'array'
@@ -2820,6 +2860,7 @@ class Checker {
       field.arrayElementDeclaredType,
       fieldType.arrayElementDeclaredType
     )
+    expression.arrayElementShape = resolvedObjectShapeMetadata(field.arrayElementShape, fieldType.arrayElementShape)
     expression.mapKeyType = resolvedValueTypeMetadata(field.mapKeyType, fieldType.mapKeyType)
     expression.mapValueType = resolvedValueTypeMetadata(field.mapValueType, fieldType.mapValueType)
     expression.mapValueArrayElementType = field.mapValueArrayElementType ?? fieldType.mapValueArrayElementType ?? null
@@ -2897,10 +2938,24 @@ class Checker {
   }
 
   checkOptionalMemberExpression(expression: AnyNode): ValueType {
-    this.checkExpression(expression.object)
+    const objectType = this.checkExpression(expression.object)
 
     if (this.reportUnsupportedClassPrototypeAccess(expression, true)) {
       return 'unknown'
+    }
+
+    if (
+      (objectType === 'array' || objectType === 'bytes' || objectType === 'string') &&
+      expression.property === 'length'
+    ) {
+      expression.nullable = true
+      expression.valueType = 'number'
+
+      if (objectType === 'string') {
+        expression.stringRuntimeMethod = 'length'
+      }
+
+      return 'number'
     }
 
     const shape = this.resolveExpressionShape(expression.object)
@@ -2932,6 +2987,7 @@ class Checker {
       field.arrayElementDeclaredType,
       fieldType.arrayElementDeclaredType
     )
+    expression.arrayElementShape = resolvedObjectShapeMetadata(field.arrayElementShape, fieldType.arrayElementShape)
     expression.mapKeyType = resolvedValueTypeMetadata(field.mapKeyType, fieldType.mapKeyType)
     expression.mapValueType = resolvedValueTypeMetadata(field.mapValueType, fieldType.mapValueType)
     expression.mapValueArrayElementType = field.mapValueArrayElementType ?? fieldType.mapValueArrayElementType ?? null
@@ -5082,6 +5138,7 @@ class Checker {
     expression.arrayElementType = metadata.arrayElementType
     expression.arrayElementTypeId = metadata.arrayElementTypeId
     expression.arrayElementDeclaredType = metadata.arrayElementDeclaredType
+    expression.arrayElementShape = metadata.arrayElementShape
     expression.mapKeyType = metadata.mapKeyType
     expression.mapValueType = metadata.mapValueType
     expression.promiseValueType = metadata.promiseValueType
@@ -5245,6 +5302,7 @@ class Checker {
     }
 
     expression.valueType = returnInfo.valueType
+    expression.typeRef = returnInfo.typeRef
     expression.nullable = returnInfo.nullable
     expression.arrayElementType = returnInfo.arrayElementType
     expression.arrayElementDeclaredType = returnInfo.arrayElementDeclaredType
@@ -6370,6 +6428,18 @@ class Checker {
       return primitive
     }
 
+    if (valueType === 'object') {
+      const shape = this.resolveExpressionShape(expression)
+
+      if (shape !== null) {
+        const info = this.unresolvedTypeInfo()
+        info.valueType = 'object'
+        info.nullable = this.expressionCanBeNull(expression)
+        info.shape = shape
+        return typeRefFromResolvedTypeInContext(info)
+      }
+    }
+
     let iterableElementType: ValueType | null = null
 
     if (valueType === 'array') {
@@ -6391,6 +6461,45 @@ class Checker {
       ownership: 'value',
       traits
     }
+  }
+
+  compilerLibraryArrayTypeRef(expression: AnyNode): TypeRef | null {
+    const libraries = resolveCompilerLibrarySet(this.options.libraries)
+    const providerType = compilerLibraryNativeTypeForIntrinsic(libraries, 'array-literal', 'construct')
+
+    if (providerType === null || (providerType.typeParameters ?? []).length !== 1) {
+      return null
+    }
+
+    let elementTypeRef = this.compilerLibraryUnknownTypeRef()
+    const elementType = this.resolveExpressionArrayElementType(expression)
+
+    if (elementType !== null && elementType !== 'unknown') {
+      for (let index = 0; index < expression.elements.length; index = index + 1) {
+        const element = checkerNodeAt(expression.elements, index)
+
+        if (element.type === 'SpreadElement') {
+          const spreadTypeRef = this.compilerLibraryExpressionTypeRef(element.argument)
+
+          if (spreadTypeRef.kind !== 'parameter') {
+            const traits = typeRefTraits(spreadTypeRef, libraries)
+
+            for (let traitIndex = 0; traitIndex < traits.length; traitIndex = traitIndex + 1) {
+              if (traits[traitIndex].traitId === 'iterable' && traits[traitIndex].args.length > 0) {
+                elementTypeRef = traits[traitIndex].args[0]
+                break
+              }
+            }
+          }
+        } else {
+          elementTypeRef = this.compilerLibraryExpressionTypeRef(element, elementType)
+        }
+
+        break
+      }
+    }
+
+    return instantiateNativeTypeRef(providerType, [elementTypeRef])
   }
 
   compilerLibraryPrimitiveTypeRef(valueType: ValueType, nullable: boolean): TypeRef | null {
@@ -7348,8 +7457,7 @@ class Checker {
         param.typeRef = paramInfo.typeRef
         param.nullable =
           paramInfo.nullable ||
-          (param.optional === true &&
-            (param.defaultValue === null || typeof param.defaultValue === 'undefined'))
+          (param.optional === true && (param.defaultValue === null || typeof param.defaultValue === 'undefined'))
         param.arrayElementType = paramInfo.arrayElementType
         param.arrayElementDeclaredType = paramInfo.arrayElementDeclaredType
         param.mapKeyType = paramInfo.mapKeyType
@@ -7503,6 +7611,25 @@ class Checker {
       expression.declaredReturnType = functionType.declaredReturnType
     }
 
+    expression.returnTypeRef = null
+
+    if (
+      functionType !== null &&
+      typeof functionType !== 'undefined' &&
+      functionType.returnTypeRef !== null &&
+      typeof functionType.returnTypeRef !== 'undefined'
+    ) {
+      expression.returnTypeRef = functionType.returnTypeRef
+    } else if (
+      expression.expressionBody &&
+      expression.body !== null &&
+      typeof expression.body !== 'undefined' &&
+      expression.body.typeRef !== null &&
+      typeof expression.body.typeRef !== 'undefined'
+    ) {
+      expression.returnTypeRef = expression.body.typeRef
+    }
+
     expression.returnNullable = false
 
     if (functionType !== null && typeof functionType !== 'undefined' && functionType.returnNullable === true) {
@@ -7614,8 +7741,14 @@ class Checker {
     }
 
     for (const field of fields) {
+      let fieldLoc = statement.loc
+
+      if (field.loc !== null && typeof field.loc !== 'undefined') {
+        fieldLoc = field.loc
+      }
+
       if (field.static) {
-        let fieldStaticLoc = field.loc
+        let fieldStaticLoc = fieldLoc
 
         if (field.staticLoc !== null && typeof field.staticLoc !== 'undefined') {
           fieldStaticLoc = field.staticLoc
@@ -7625,15 +7758,21 @@ class Checker {
       }
 
       if (fieldNames.has(field.name)) {
-        this.report('INOX_REDECLARED_NAME', `field ${field.name} is already declared in this class`, field.loc)
+        this.report('INOX_REDECLARED_NAME', `field ${field.name} is already declared in this class`, fieldLoc)
       }
 
       fieldNames.add(field.name)
     }
 
     for (const method of statement.methods) {
+      let methodLoc = statement.loc
+
+      if (method.loc !== null && typeof method.loc !== 'undefined') {
+        methodLoc = method.loc
+      }
+
       if (method.static) {
-        let methodStaticLoc = method.loc
+        let methodStaticLoc = methodLoc
 
         if (method.staticLoc !== null && typeof method.staticLoc !== 'undefined') {
           methodStaticLoc = method.staticLoc
@@ -7643,11 +7782,11 @@ class Checker {
       }
 
       if (methodNames.has(method.name)) {
-        this.report('INOX_REDECLARED_NAME', `method ${method.name} is already declared in this class`, method.loc)
+        this.report('INOX_REDECLARED_NAME', `method ${method.name} is already declared in this class`, methodLoc)
       }
 
       if (fieldNames.has(method.name)) {
-        this.report('INOX_REDECLARED_NAME', `method ${method.name} conflicts with a class field`, method.loc)
+        this.report('INOX_REDECLARED_NAME', `method ${method.name} conflicts with a class field`, methodLoc)
       }
 
       methodNames.add(method.name)
@@ -7662,6 +7801,7 @@ class Checker {
         const previousReturnPromiseValueType = this.currentReturnPromiseValueType
         const previousReturnShape = this.currentReturnShape
         this.currentReturnShape = methodReturnInfo.shape
+        method.returnTypeRef = methodReturnInfo.typeRef
         method.returnShape = methodReturnInfo.shape
         this.currentReturnPromiseValueType = null
 
@@ -7931,6 +8071,10 @@ class Checker {
   }
 
   resolveArrayIterableElementShape(expression: AnyNode): ObjectShapeInfo | null {
+    if (expression.arrayElementShape !== null && typeof expression.arrayElementShape !== 'undefined') {
+      return expression.arrayElementShape
+    }
+
     return resolveArrayIterableElementShapeInContext(this.expressionMetadataContext(), expression)
   }
 
@@ -8030,6 +8174,7 @@ class Checker {
       valueType: 'function',
       params: resolvedFunctionType.params,
       returnType: resolvedFunctionType.returnType,
+      returnTypeRef: resolvedFunctionType.returnTypeRef ?? null,
       returnNullable: resolvedFunctionType.returnNullable,
       returnArrayElementType: resolvedFunctionType.returnArrayElementType,
       returnArrayElementDeclaredType: resolvedFunctionType.returnArrayElementDeclaredType,
@@ -9550,10 +9695,6 @@ class Checker {
     loc: SourceLocation,
     actualValueType: ValueType | null | undefined = null
   ): void {
-    if (actualValueType === 'null') {
-      return
-    }
-
     const expectedTypeId = expectedShape?.libraryTypeId
 
     if (expectedTypeId === null || typeof expectedTypeId === 'undefined') {
@@ -9561,6 +9702,13 @@ class Checker {
     }
 
     const actualTypeId = actualShape?.libraryTypeId
+
+    if (
+      actualValueType !== 'object' &&
+      (actualTypeId === null || typeof actualTypeId === 'undefined')
+    ) {
+      return
+    }
 
     if (
       compilerLibraryNativeTypeIsAssignable(

@@ -1,10 +1,4 @@
-import type {
-  LibraryNativeTypeDescriptor,
-  NominalTypeRef,
-  ObjectTypeRefField,
-  TypeRef,
-  TypeTraitRef
-} from './types.ts'
+import type { LibraryNativeTypeDescriptor, NominalTypeRef, ObjectTypeRefField, TypeRef, TypeTraitRef } from './types.ts'
 
 export type TypeRefSubstitution = {
   name: string
@@ -38,7 +32,11 @@ export function instantiateNativeTypeTraits(
 ): TypeTraitRef[] {
   const typeParameters = nativeType.typeParameters
 
-  if (typeParameters !== null && typeof typeParameters !== 'undefined' && typeParameters.length !== typeArguments.length) {
+  if (
+    typeParameters !== null &&
+    typeof typeParameters !== 'undefined' &&
+    typeParameters.length !== typeArguments.length
+  ) {
     throw new Error(
       `native type ${nativeType.typeId} expects ${typeParameters.length} type argument(s), got ${typeArguments.length}`
     )
@@ -72,7 +70,13 @@ function substituteTypeRefInScope(
     resolving.add(typeRef.name)
 
     try {
-      return substituteTypeRefInScope(substitution.typeRef, substitutions, resolving)
+      const resolved = substituteTypeRefInScope(substitution.typeRef, substitutions, resolving)
+
+      if (typeRef.nullable === true) {
+        return nullableTypeRef(resolved)
+      }
+
+      return resolved
     } finally {
       resolving.delete(typeRef.name)
     }
@@ -118,17 +122,23 @@ function substituteTypeRefInScope(
     for (let index = 0; index < typeRef.fields.length; index = index + 1) {
       const field = typeRef.fields[index]
       fields.push({
-        name: field.name,
-        typeRef: substituteTypeRefInScope(field.typeRef, substitutions, resolving),
-        readonly: field.readonly
+        ...field,
+        typeRef: substituteTypeRefInScope(field.typeRef, substitutions, resolving)
       })
     }
 
+    if (typeRef.dynamicField !== null && typeof typeRef.dynamicField !== 'undefined') {
+      return {
+        ...typeRef,
+        fields,
+        dynamicField: substituteTypeRefInScope(typeRef.dynamicField, substitutions, resolving),
+        traits
+      }
+    }
+
     return {
-      kind: 'object',
+      ...typeRef,
       fields,
-      nullable: typeRef.nullable,
-      ownership: typeRef.ownership,
       traits
     }
   }
@@ -139,6 +149,14 @@ function substituteTypeRefInScope(
     ownership: typeRef.ownership,
     traits
   }
+}
+
+function nullableTypeRef(typeRef: TypeRef): TypeRef {
+  if (typeRef.kind === 'parameter') {
+    return { kind: 'parameter', name: typeRef.name, nullable: true }
+  }
+
+  return { ...typeRef, nullable: true }
 }
 
 function substituteTypeRefs(

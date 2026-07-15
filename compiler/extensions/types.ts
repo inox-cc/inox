@@ -19,6 +19,7 @@ export type TypeTraitRef = {
 export type ParameterTypeRef = {
   kind: 'parameter'
   name: string
+  nullable?: boolean
 }
 
 export type PrimitiveTypeRef = {
@@ -51,11 +52,14 @@ export type ObjectTypeRefField = {
   name: string
   typeRef: TypeRef
   readonly: boolean
+  optional?: boolean
 }
 
 export type ObjectTypeRef = {
   kind: 'object'
   fields: ObjectTypeRefField[]
+  dynamic?: boolean
+  dynamicField?: TypeRef | null
   nullable: boolean
   ownership: TypeOwnership
   traits: TypeTraitRef[]
@@ -149,6 +153,7 @@ export type LibraryNativeTypeDescriptor = {
   baseTypeIds: LibraryNativeTypeId[]
   runtimeRequirements: RuntimeRequirementId[]
   cValueAdapter?: string | null
+  cRuntimeValueExpression?: string | null
   typeParameters?: string[]
   traits?: TypeTraitRef[]
   fields?: LibraryResultShapeFieldDescriptor[]

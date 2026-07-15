@@ -6,12 +6,14 @@ import type {
 } from '../../../../compiler/extensions/types.ts'
 
 const libraryId = 'global:collections'
+export const arrayRuntimeRequirement = `${libraryId}#array`
 const setRuntimeRequirement = `${libraryId}#set`
 
 export const arrayNativeTypeId = `${libraryId}#Array`
 export const setNativeTypeId = `${libraryId}#Set`
 
 const parameterTypeRef: TypeRef = { kind: 'parameter', name: 'T' }
+const arrayIntrinsicBindingId = `${arrayNativeTypeId}.intrinsic`
 const booleanTypeRef = primitiveTypeRef('boolean')
 const numberTypeRef = primitiveTypeRef('number')
 const voidTypeRef = primitiveTypeRef('void')
@@ -48,6 +50,19 @@ export function setTypeRef(elementType: TypeRef): NominalTypeRef {
       }
     ]
   }
+}
+
+const arrayIntrinsicOperation: LibraryOperationDescriptor = {
+  libraryId,
+  bindingId: arrayIntrinsicBindingId,
+  operationId: arrayIntrinsicBindingId,
+  kind: 'construct',
+  runtimeRequirements: [arrayRuntimeRequirement],
+  typeParameters: [{ name: 'T', sources: [{ source: 'contextual-type-argument', argumentIndex: 0 }] }],
+  resultTypeRef: arrayTypeRef(parameterTypeRef),
+  minArgs: 0,
+  maxArgs: 0,
+  argumentChecks: []
 }
 
 const setOperations: LibraryOperationDescriptor[] = [
@@ -114,7 +129,10 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       valueType: 'array',
       cppType: 'ArrayClass',
       baseTypeIds: [],
-      runtimeRequirements: ['collections', 'managed-values']
+      runtimeRequirements: [arrayRuntimeRequirement],
+      cRuntimeValueExpression: '$value.raw()',
+      typeParameters: ['T'],
+      traits: [{ traitId: 'iterable', args: [parameterTypeRef] }]
     },
     {
       libraryId,
@@ -125,6 +143,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       baseTypeIds: [],
       runtimeRequirements: [setRuntimeRequirement],
       cValueAdapter: 'Set($value)',
+      cRuntimeValueExpression: '$value.raw()',
       typeParameters: ['T'],
       traits: [{ traitId: 'iterable', args: [parameterTypeRef] }],
       cIteration: {
@@ -138,9 +157,15 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       }
     }
   ],
-  operations: setOperations,
-  intrinsicBindings: [],
+  operations: [arrayIntrinsicOperation, ...setOperations],
+  intrinsicBindings: [{ role: 'array-literal', bindingId: arrayIntrinsicBindingId }],
   runtimeRequirements: [
+    {
+      id: arrayRuntimeRequirement,
+      dependencies: ['collections', 'managed-values'],
+      cPreludeIncludes: ['inox/array.h'],
+      capabilities: []
+    },
     {
       id: setRuntimeRequirement,
       dependencies: ['collections', 'managed-values'],

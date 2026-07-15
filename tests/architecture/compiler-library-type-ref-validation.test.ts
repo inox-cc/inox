@@ -14,8 +14,8 @@ test('builder validates recursive TypeRef contracts', () => {
       typeRef: {
         ...nominalTypeRef('fixture#Box'),
         traits: [
-          { traitId: 'iterable', args: [primitiveTypeRef('string')] },
-          { traitId: 'iterable', args: [primitiveTypeRef('number')] }
+          { traitId: 'iterable' as const, args: [primitiveTypeRef('string')] },
+          { traitId: 'iterable' as const, args: [primitiveTypeRef('number')] }
         ]
       },
       message: /duplicate trait iterable/

@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
 import {
   arrayNativeTypeId,
+  arrayRuntimeRequirement,
   arrayTypeRef,
   compilerLibraryPackage as collectionsPackage,
   setNativeTypeId,
@@ -23,7 +24,8 @@ test('Array, Set и Promise принадлежат discoverable global packages 
 
   assert.equal(collections?.compilerEntrypoint, 'stdlib/global/collections/compiler/index.ts')
   assert.equal(promise?.compilerEntrypoint, 'stdlib/global/promise/compiler/index.ts')
-  assert.deepEqual(collectionsPackage.nativeTypes, [
+  assert.deepEqual(
+    (collectionsPackage.nativeTypes ?? []).find((item) => item.typeId === arrayNativeTypeId),
     {
       libraryId: 'global:collections',
       typeId: 'global:collections#Array',
@@ -31,8 +33,14 @@ test('Array, Set и Promise принадлежат discoverable global packages 
       valueType: 'array',
       cppType: 'ArrayClass',
       baseTypeIds: [],
-      runtimeRequirements: ['collections', 'managed-values']
-    },
+      runtimeRequirements: [arrayRuntimeRequirement],
+      cRuntimeValueExpression: '$value.raw()',
+      typeParameters: ['T'],
+      traits: [{ traitId: 'iterable', args: [{ kind: 'parameter', name: 'T' }] }]
+    }
+  )
+  assert.deepEqual(
+    (collectionsPackage.nativeTypes ?? []).find((item) => item.typeId === setNativeTypeId),
     {
       libraryId: 'global:collections',
       typeId: 'global:collections#Set',
@@ -40,6 +48,7 @@ test('Array, Set и Promise принадлежат discoverable global packages 
       valueType: 'object',
       cppType: 'Set',
       cValueAdapter: 'Set($value)',
+      cRuntimeValueExpression: '$value.raw()',
       baseTypeIds: [],
       runtimeRequirements: ['global:collections#set'],
       typeParameters: ['T'],
@@ -54,7 +63,16 @@ test('Array, Set и Promise принадлежат discoverable global packages 
         failureMode: 'thrown'
       }
     }
+  )
+  assert.deepEqual(collectionsPackage.intrinsicBindings, [
+    { role: 'array-literal', bindingId: 'global:collections#Array.intrinsic' }
   ])
+  assert.deepEqual(collectionsPackage.runtimeRequirements[0], {
+    id: arrayRuntimeRequirement,
+    dependencies: ['collections', 'managed-values'],
+    cPreludeIncludes: ['inox/array.h'],
+    capabilities: []
+  })
   assert.deepEqual(promisePackage.nativeTypes, [
     {
       libraryId: 'global:promise',
