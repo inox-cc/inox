@@ -46,12 +46,12 @@ export function typeRefCompatibilityMetadata(
 
   const metadata = baseTypeRefCompatibilityMetadata(typeRef, libraries, loc)
 
-  applyTypeTraits(metadata, effectiveTypeTraits(typeRef, libraries), libraries, loc)
+  applyTypeTraits(metadata, typeRefTraits(typeRef, libraries), libraries, loc)
   applyCResultMapping(metadata, cResultMapping)
   return metadata
 }
 
-function effectiveTypeTraits(typeRef: ConcreteTypeRef, libraries: CompilerLibrarySet): TypeTraitRef[] {
+export function typeRefTraits(typeRef: ConcreteTypeRef, libraries: CompilerLibrarySet): TypeTraitRef[] {
   if (typeRef.kind !== 'nominal') {
     return typeRef.traits
   }

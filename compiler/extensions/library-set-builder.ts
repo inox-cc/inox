@@ -675,12 +675,15 @@ function validateOperationTypeRefs(
 ): void {
   for (let index = 0; index < operations.length; index = index + 1) {
     const operation = operations[index]
+    const typeParameters = validateOperationTypeParameters(operation)
     const operationTypeRef = operation.resultTypeRef
 
     if (operationTypeRef !== null && typeof operationTypeRef !== 'undefined') {
-      validateTypeRef(`operation ${operation.operationId} result`, operationTypeRef, nativeTypes)
+      validateTypeRef(`operation ${operation.operationId} result`, operationTypeRef, nativeTypes, typeParameters)
       validateTypeRefHasNoLegacyResultMetadata(operation.operationId, operation, null)
     }
+
+    validateOperationArgumentTypeRefs(operation.operationId, operation.argumentChecks, nativeTypes, typeParameters)
 
     validateCResultMapping(`operation ${operation.operationId}`, operation.cResultMapping, operationTypeRef)
 
@@ -690,6 +693,13 @@ function validateOperationTypeRefs(
       const variant = variants[variantIndex]
       const variantTypeRef = variant.resultTypeRef
       const resultTypeRef = variantTypeRef ?? operationTypeRef
+
+      validateOperationArgumentTypeRefs(
+        `${operation.operationId} variant ${variantIndex}`,
+        variant.argumentChecks,
+        nativeTypes,
+        typeParameters
+      )
 
       if (resultTypeRef === null || typeof resultTypeRef === 'undefined') {
         validateCResultMapping(
@@ -704,7 +714,8 @@ function validateOperationTypeRefs(
         validateTypeRef(
           `operation ${operation.operationId} variant ${variantIndex} result`,
           variantTypeRef,
-          nativeTypes
+          nativeTypes,
+          typeParameters
         )
       }
 
@@ -714,6 +725,86 @@ function validateOperationTypeRefs(
         variant.cResultMapping ?? operation.cResultMapping,
         resultTypeRef
       )
+    }
+  }
+}
+
+function validateOperationTypeParameters(operation: LibraryOperationDescriptor): Set<string> | null {
+  const parameters = operation.typeParameters ?? []
+
+  if (parameters.length === 0) {
+    return null
+  }
+
+  const names: Set<string> = new Set()
+
+  for (let index = 0; index < parameters.length; index = index + 1) {
+    const parameter = parameters[index]
+
+    if (parameter.name.length === 0) {
+      throw new Error(`operation ${operation.operationId} has empty type parameter`)
+    }
+
+    if (names.has(parameter.name)) {
+      throw new Error(`operation ${operation.operationId} has duplicate type parameter ${parameter.name}`)
+    }
+
+    if (parameter.sources.length === 0) {
+      throw new Error(`operation ${operation.operationId} type parameter ${parameter.name} has no sources`)
+    }
+
+    names.add(parameter.name)
+
+    for (let sourceIndex = 0; sourceIndex < parameter.sources.length; sourceIndex = sourceIndex + 1) {
+      validateOperationTypeParameterSource(operation.operationId, parameter.name, parameter.sources[sourceIndex])
+    }
+  }
+
+  return names
+}
+
+function validateOperationTypeParameterSource(
+  operationId: string,
+  parameterName: string,
+  source: NonNullable<LibraryOperationDescriptor['typeParameters']>[number]['sources'][number]
+): void {
+  if (source.argumentIndex < 0 || Math.floor(source.argumentIndex) !== source.argumentIndex) {
+    throw new Error(
+      `operation ${operationId} type parameter ${parameterName} has invalid source argument index ${source.argumentIndex}`
+    )
+  }
+
+  if (source.source !== 'argument-trait') {
+    return
+  }
+
+  const traitArgumentIndex = source.traitArgumentIndex
+
+  if (
+    typeof traitArgumentIndex !== 'number' ||
+    traitArgumentIndex < 0 ||
+    Math.floor(traitArgumentIndex) !== traitArgumentIndex
+  ) {
+    throw new Error(
+      `operation ${operationId} type parameter ${parameterName} has invalid trait argument index ` +
+        `${traitArgumentIndex}`
+    )
+  }
+}
+
+function validateOperationArgumentTypeRefs(
+  label: string,
+  checks: LibraryArgumentCheckDescriptor[] | null | undefined,
+  nativeTypes: LibraryNativeTypeDescriptor[],
+  typeParameters: Set<string> | null
+): void {
+  const values = checks ?? []
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    const typeRef = values[index].typeRef
+
+    if (typeRef !== null && typeof typeRef !== 'undefined') {
+      validateTypeRef(`operation ${label} argument ${index}`, typeRef, nativeTypes, typeParameters)
     }
   }
 }
@@ -1228,6 +1319,8 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           ':' +
           sortedStrings(item.runtimeRequirements).join(',') +
           ':' +
+          operationTypeParametersFingerprint(item) +
+          ':' +
           (item.cExpression ?? '') +
           ':' +
           (item.cLowering ?? '') +
@@ -1457,6 +1550,8 @@ function operationArgumentChecksFingerprint(operation: { argumentChecks?: Librar
     rows.push(
       sortedStrings(check.valueTypes).join(',') +
         ':' +
+        typeRefFingerprintOrEmpty(check.typeRef) +
+        ':' +
         sortedStrings(check.objectTypeIds ?? []).join(',') +
         ':' +
         (check.objectFieldValueType ?? '') +
@@ -1487,6 +1582,31 @@ function operationArgumentChecksFingerprint(operation: { argumentChecks?: Librar
         ':' +
         objectMethodChecksFingerprint(check.objectMethods ?? [])
     )
+  }
+
+  return rows.join(';')
+}
+
+function operationTypeParametersFingerprint(operation: LibraryOperationDescriptor): string {
+  const parameters = operation.typeParameters ?? []
+  const rows: string[] = []
+
+  for (let index = 0; index < parameters.length; index = index + 1) {
+    const parameter = parameters[index]
+    const sources: string[] = []
+
+    for (let sourceIndex = 0; sourceIndex < parameter.sources.length; sourceIndex = sourceIndex + 1) {
+      const source = parameter.sources[sourceIndex]
+      let row = source.source + ':' + source.argumentIndex
+
+      if (source.source === 'argument-trait') {
+        row = row + ':' + source.traitId + ':' + source.traitArgumentIndex
+      }
+
+      sources.push(row)
+    }
+
+    rows.push(fingerprintAtom(parameter.name) + '[' + sources.join(',') + ']')
   }
 
   return rows.join(';')

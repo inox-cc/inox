@@ -98,6 +98,7 @@ export const compilerAnyNodeArrayFields: readonly string[] = [
   'path',
   'properties',
   'specifiers',
+  'typeArguments',
   'typeParameters'
 ]
 

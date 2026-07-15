@@ -29,6 +29,10 @@ import {
 import { compilerLibraryIntrinsicResultMetadata } from './extensions/intrinsic-metadata.ts'
 import { typeRefCompatibilityMetadata } from './extensions/type-ref-compatibility.ts'
 import {
+  instantiateLibraryOperationTypeRef,
+  type LibraryOperationTypeRefContext
+} from './extensions/operation-type-refs.ts'
+import {
   parseCompilerLibraryGlobalDeclarations,
   type ParsedCompilerLibraryGlobalDeclaration
 } from './extensions/global-declarations.ts'
@@ -45,7 +49,8 @@ import type {
   LibraryOperationVariantDescriptor,
   LibraryResultInferenceDescriptor,
   LibraryResultShapeFieldDescriptor,
-  TypeRef
+  TypeRef,
+  TypeTraitRef
 } from './extensions/types.ts'
 import {
   cloneResolvedTypeInfo as cloneResolvedTypeInfoInContext,
@@ -62,6 +67,7 @@ import {
   resolveWeakTargetObjectShape as resolveWeakTargetObjectShapeInContext,
   resolveWeakTargetShapeFieldType as resolveWeakTargetShapeFieldTypeInContext,
   resolveWeakTargetShapeTypeName as resolveWeakTargetShapeTypeNameInContext,
+  typeRefFromResolvedType as typeRefFromResolvedTypeInContext,
   typeAliasInfoFromDeclaration,
   unresolvedTypeInfo as unresolvedTypeInfoInContext
 } from './checker/declared-types.ts'
@@ -1418,6 +1424,18 @@ class Checker {
 
       let className: string | null = null
       let libraryIntrinsicRole: IntrinsicRole | null = null
+      let typeRef: TypeRef | null = null
+
+      if (declared !== null && declared.typeRef !== null) {
+        typeRef = declared.typeRef
+      } else if (
+        statement.init !== null &&
+        typeof statement.init !== 'undefined' &&
+        statement.init.typeRef !== null &&
+        typeof statement.init.typeRef !== 'undefined'
+      ) {
+        typeRef = statement.init.typeRef
+      }
 
       if (
         statement.init !== null &&
@@ -1452,6 +1470,7 @@ class Checker {
       statement.shape = shape
       statement.className = className
       statement.libraryIntrinsicRole = libraryIntrinsicRole
+      statement.typeRef = typeRef
 
       if (
         declared !== null &&
@@ -1488,6 +1507,7 @@ class Checker {
           functionType,
           className: statement.className,
           libraryIntrinsicRole,
+          typeRef,
           shape,
           loc: statement.loc
         },
@@ -3831,14 +3851,15 @@ class Checker {
     const declaredSymbol = this.compilerLibraryDeclarationCallableSymbol(expression.callee)
     const variant = this.compilerLibraryOperationVariant(expression, operation)
 
-    this.applyCompilerLibraryOperation(expression, operation, variant)
+    this.checkCompilerLibraryOperationTypeArgumentCount(expression, operation)
+    this.applyCompilerLibraryOperation(expression, operation, variant, contextualResult)
 
     if (this.reportCompilerLibraryOperationDiagnostic(expression, operation)) {
       this.checkedCallArgInfos(expression)
       return 'unknown'
     }
 
-    const argInfos = this.checkCompilerLibraryOperationArguments(expression, operation, variant)
+    const argInfos = this.checkCompilerLibraryOperationArguments(expression, operation, variant, null, contextualResult)
     let declaredType: ValueType | null = null
 
     if (declaredSymbol !== null) {
@@ -3848,8 +3869,9 @@ class Checker {
         declaredSymbol,
         argInfos
       )
-      this.applyCompilerLibraryOperation(expression, operation, variant)
     }
+
+    this.applyCompilerLibraryOperation(expression, operation, variant, contextualResult, argInfos)
 
     this.checkCompilerLibraryBackendConstraints(expression, operation)
     this.applyCompilerLibraryResultInference(expression, operation, variant, contextualResult)
@@ -4048,11 +4070,33 @@ class Checker {
     return null
   }
 
+  checkCompilerLibraryOperationTypeArgumentCount(
+    expression: AnyNode,
+    operation: LibraryOperationDescriptor
+  ): void {
+    const typeArguments: string[] = expression.typeArguments ?? []
+
+    if (typeArguments.length === 0) {
+      return
+    }
+
+    const expected = operation.typeParameters?.length ?? 0
+
+    if (typeArguments.length !== expected) {
+      this.report(
+        'INOX_TYPE_ARG_COUNT',
+        `library operation ${operation.operationId} expects ${expected} type argument(s), got ${typeArguments.length}`,
+        expression.loc
+      )
+    }
+  }
+
   checkCompilerLibraryOperationArguments(
     expression: AnyNode,
     operation: LibraryOperationDescriptor,
     variant: LibraryOperationVariantDescriptor | null = null,
-    knownArgInfos: CheckedCallArgInfo[] | null = null
+    knownArgInfos: CheckedCallArgInfo[] | null = null,
+    contextualResult: ResolvedTypeInfo | null = null
   ): CheckedCallArgInfo[] {
     const minArgs = operation.minArgs
     const maxArgs = operation.maxArgs
@@ -4108,6 +4152,24 @@ class Checker {
       const check = checks[index]
       const info = argInfos[index]
       const argument = expression.args[index]
+      const typeRefTemplate = check.typeRef
+
+      if (typeRefTemplate !== null && typeof typeRefTemplate !== 'undefined') {
+        const libraries = resolveCompilerLibrarySet(this.options.libraries)
+        let expectedTypeRef = typeRefTemplate
+
+        if ((operation.typeParameters ?? []).length > 0) {
+          expectedTypeRef = instantiateLibraryOperationTypeRef(
+            operation,
+            typeRefTemplate,
+            this.compilerLibraryOperationTypeRefContext(expression, contextualResult, argInfos),
+            libraries
+          )
+        }
+        const expected = typeRefCompatibilityMetadata(expectedTypeRef, libraries, info.loc)
+
+        this.checkAssignableType(info.valueType, expected.valueType, info.loc, expected.nullable, info.nullable)
+      }
 
       if (
         argument.type !== 'ArrowFunctionExpression' &&
@@ -4118,7 +4180,10 @@ class Checker {
         continue
       }
 
-      if (!check.valueTypes.includes(info.valueType)) {
+      if (
+        (typeRefTemplate === null || typeof typeRefTemplate === 'undefined') &&
+        !check.valueTypes.includes(info.valueType)
+      ) {
         this.report(
           'INOX_TYPE_MISMATCH',
           `library operation ${operation.operationId} does not accept ${info.valueType}`,
@@ -4738,7 +4803,9 @@ class Checker {
   applyCompilerLibraryOperation(
     expression: AnyNode,
     operation: LibraryOperationDescriptor,
-    variant: LibraryOperationVariantDescriptor | null = null
+    variant: LibraryOperationVariantDescriptor | null = null,
+    contextualResult: ResolvedTypeInfo | null = null,
+    argInfos: CheckedCallArgInfo[] | null = null
   ): void {
     const libraries = resolveCompilerLibrarySet(this.options.libraries)
     const runtimeRequirements = variant?.runtimeRequirements ?? operation.runtimeRequirements
@@ -4781,10 +4848,20 @@ class Checker {
     expression.libraryCReceiverAdapter = variant?.cReceiverAdapter ?? operation.cReceiverAdapter ?? null
     expression.libraryCallbackLifetime = variant?.callbackLifetime ?? operation.callbackLifetime ?? null
 
-    const resultTypeRef = variant?.resultTypeRef ?? operation.resultTypeRef
+    const resultTypeRefTemplate = variant?.resultTypeRef ?? operation.resultTypeRef
 
-    if (resultTypeRef !== null && typeof resultTypeRef !== 'undefined') {
+    if (resultTypeRefTemplate !== null && typeof resultTypeRefTemplate !== 'undefined') {
       const cResultMapping = variant?.cResultMapping ?? operation.cResultMapping ?? null
+      let resultTypeRef = resultTypeRefTemplate
+
+      if ((operation.typeParameters ?? []).length > 0) {
+        resultTypeRef = instantiateLibraryOperationTypeRef(
+          operation,
+          resultTypeRefTemplate,
+          this.compilerLibraryOperationTypeRefContext(expression, contextualResult, argInfos),
+          libraries
+        )
+      }
       this.applyCompilerLibraryTypeRef(expression, resultTypeRef, cResultMapping)
     } else {
       const resultTypeId = variant?.resultTypeId ?? operation.resultTypeId
@@ -6095,7 +6172,132 @@ class Checker {
       nullable: this.expressionCanBeNull(argument),
       loc: argument.loc,
       arrayElementType: this.resolveExpressionArrayElementType(argument),
-      shape: this.resolveExpressionShape(argument)
+      shape: this.resolveExpressionShape(argument),
+      typeRef: this.compilerLibraryExpressionTypeRef(argument, valueType)
+    }
+  }
+
+  compilerLibraryOperationTypeRefContext(
+    expression: AnyNode,
+    contextualResult: ResolvedTypeInfo | null,
+    argInfos: CheckedCallArgInfo[] | null
+  ): LibraryOperationTypeRefContext {
+    const explicitTypeArguments: TypeRef[] = []
+    const typeArgumentNames: string[] = expression.typeArguments ?? []
+
+    for (let index = 0; index < typeArgumentNames.length; index = index + 1) {
+      explicitTypeArguments.push(
+        typeRefFromResolvedTypeInContext(this.resolveDeclaredType(typeArgumentNames[index], expression.loc))
+      )
+    }
+
+    const argumentTypeRefs: TypeRef[] = []
+
+    for (let index = 0; index < (argInfos ?? []).length; index = index + 1) {
+      argumentTypeRefs.push((argInfos ?? [])[index].typeRef)
+    }
+
+    let receiverTypeRef: TypeRef | null = null
+    const receiver = this.compilerLibraryOperationReceiverExpression(expression)
+
+    if (receiver !== null) {
+      receiverTypeRef = this.compilerLibraryExpressionTypeRef(receiver)
+    }
+
+    return {
+      explicitTypeArguments,
+      receiverTypeRef,
+      contextualTypeRef: contextualResult?.typeRef ?? null,
+      argumentTypeRefs
+    }
+  }
+
+  compilerLibraryOperationReceiverExpression(expression: AnyNode): AnyNode | null {
+    if (
+      (expression.type === 'CallExpression' || expression.type === 'OptionalCallExpression') &&
+      expression.callee.type === 'MemberExpression'
+    ) {
+      return expression.callee.object
+    }
+
+    if (
+      expression.type === 'MemberExpression' ||
+      expression.type === 'OptionalMemberExpression' ||
+      expression.type === 'IndexExpression' ||
+      expression.type === 'OptionalIndexExpression'
+    ) {
+      return expression.object
+    }
+
+    return null
+  }
+
+  compilerLibraryExpressionTypeRef(expression: AnyNode, knownValueType?: ValueType): TypeRef {
+    const expressionTypeRef = expression.typeRef
+
+    if (expressionTypeRef !== null && typeof expressionTypeRef !== 'undefined') {
+      return expressionTypeRef
+    }
+
+    const valueType = knownValueType ?? this.inferCheckedExpressionType(expression)
+    const primitive = this.compilerLibraryPrimitiveTypeRef(valueType, this.expressionCanBeNull(expression))
+
+    if (primitive !== null) {
+      return primitive
+    }
+
+    let iterableElementType: ValueType | null = null
+
+    if (valueType === 'array') {
+      iterableElementType = this.resolveExpressionArrayElementType(expression)
+    } else if (valueType === 'set') {
+      iterableElementType = this.resolveExpressionSetElementType(expression)
+    }
+
+    const traits: TypeTraitRef[] = []
+
+    if (iterableElementType !== null && typeof iterableElementType !== 'undefined') {
+      traits.push({
+        traitId: 'iterable' as const,
+        args: [this.compilerLibraryPrimitiveTypeRef(iterableElementType, false) ?? this.compilerLibraryUnknownTypeRef()]
+      })
+    }
+
+    return {
+      kind: 'unknown',
+      nullable: this.expressionCanBeNull(expression),
+      ownership: 'value',
+      traits
+    }
+  }
+
+  compilerLibraryPrimitiveTypeRef(valueType: ValueType, nullable: boolean): TypeRef | null {
+    if (
+      valueType !== 'boolean' &&
+      valueType !== 'bytes' &&
+      valueType !== 'null' &&
+      valueType !== 'number' &&
+      valueType !== 'string' &&
+      valueType !== 'void'
+    ) {
+      return null
+    }
+
+    return {
+      kind: 'primitive',
+      name: valueType,
+      nullable,
+      ownership: 'value',
+      traits: []
+    }
+  }
+
+  compilerLibraryUnknownTypeRef(): TypeRef {
+    return {
+      kind: 'unknown',
+      nullable: false,
+      ownership: 'value',
+      traits: []
     }
   }
 
@@ -6283,7 +6485,7 @@ class Checker {
     return checkStringPredicateCallInContext(this.primitiveCallContext(), expression, objectType, argTypes)
   }
 
-  checkNewExpression(expression: AnyNode): ValueType {
+  checkNewExpression(expression: AnyNode, contextualResult: ResolvedTypeInfo | null = null): ValueType {
     const argTypes: ValueType[] = []
     const argInfos: CheckedCallArgInfo[] = []
 
@@ -6295,7 +6497,7 @@ class Checker {
       argInfos.push(this.checkedCallArgInfo(arg, argType))
     }
 
-    const libraryConstructorType = this.checkCompilerLibraryConstructOperation(expression, argInfos)
+    const libraryConstructorType = this.checkCompilerLibraryConstructOperation(expression, argInfos, contextualResult)
 
     if (libraryConstructorType !== null) {
       return libraryConstructorType
@@ -6431,7 +6633,11 @@ class Checker {
     return 'object'
   }
 
-  checkCompilerLibraryConstructOperation(expression: AnyNode, argInfos: CheckedCallArgInfo[]): ValueType | null {
+  checkCompilerLibraryConstructOperation(
+    expression: AnyNode,
+    argInfos: CheckedCallArgInfo[],
+    contextualResult: ResolvedTypeInfo | null
+  ): ValueType | null {
     const operation = this.compilerLibraryOperationForExpression(expression.callee, 'construct')
 
     if (operation === null) {
@@ -6441,13 +6647,20 @@ class Checker {
     const declaredSymbol = this.compilerLibraryDeclarationConstructorSymbol(expression.callee)
     const variant = this.compilerLibraryOperationVariant(expression, operation)
 
-    this.applyCompilerLibraryOperation(expression, operation, variant)
+    this.checkCompilerLibraryOperationTypeArgumentCount(expression, operation)
+    this.applyCompilerLibraryOperation(expression, operation, variant, contextualResult, argInfos)
 
     if (this.reportCompilerLibraryOperationDiagnostic(expression, operation)) {
       return 'unknown'
     }
 
-    const checkedArgInfos = this.checkCompilerLibraryOperationArguments(expression, operation, variant, argInfos)
+    const checkedArgInfos = this.checkCompilerLibraryOperationArguments(
+      expression,
+      operation,
+      variant,
+      argInfos,
+      contextualResult
+    )
 
     let declaredType: ValueType | null = null
 
@@ -6458,8 +6671,9 @@ class Checker {
         declaredSymbol,
         checkedArgInfos
       )
-      this.applyCompilerLibraryOperation(expression, operation, variant)
     }
+
+    this.applyCompilerLibraryOperation(expression, operation, variant, contextualResult, checkedArgInfos)
 
     this.checkCompilerLibraryBackendConstraints(expression, operation)
 
@@ -6864,6 +7078,10 @@ class Checker {
       if (libraryType !== null) {
         return libraryType
       }
+    }
+
+    if (expression.type === 'NewExpression') {
+      return this.checkNewExpression(expression, declared)
     }
 
     return this.checkExpression(expression)

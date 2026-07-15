@@ -239,6 +239,7 @@ export type LibraryNestedResultShapeFieldDescriptor = {
 
 export type LibraryArgumentCheckDescriptor = {
   valueTypes: string[]
+  typeRef?: TypeRef | null
   objectMethods?: LibraryObjectMethodCheckDescriptor[]
   objectTypeIds?: LibraryObjectTypeId[]
   objectFieldValueType?: string | null
@@ -254,6 +255,23 @@ export type LibraryArgumentCheckDescriptor = {
   functionAsync?: boolean | null
   functionAsyncDiagnosticCode?: string | null
   functionAsyncDiagnosticMessage?: string | null
+}
+
+export type LibraryOperationTypeParameterSourceDescriptor =
+  | {
+      source: 'explicit-type-argument' | 'receiver-type-argument' | 'contextual-type-argument'
+      argumentIndex: number
+    }
+  | {
+      source: 'argument-trait'
+      argumentIndex: number
+      traitId: TypeTraitId
+      traitArgumentIndex: number
+    }
+
+export type LibraryOperationTypeParameterDescriptor = {
+  name: string
+  sources: LibraryOperationTypeParameterSourceDescriptor[]
 }
 
 export type LibraryObjectMethodCheckDescriptor = {
@@ -324,6 +342,7 @@ export type LibraryOperationDescriptor = {
   operationId: LibraryOperationId
   kind: LibraryOperationKind
   runtimeRequirements: RuntimeRequirementId[]
+  typeParameters?: LibraryOperationTypeParameterDescriptor[]
   cExpression?: string | null
   cLowering?: LibraryCLoweringKind | null
   cClassFormatExpression?: string | null

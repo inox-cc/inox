@@ -1,5 +1,6 @@
 import { diagnostic } from '../diagnostics.ts'
 import { memberExpressionPath } from '../member-paths.ts'
+import type { TypeRef } from '../extensions/types.ts'
 import type { AnyNode, Diagnostic, ObjectShapeInfo, SourceLocation, ValueType } from '../types.ts'
 import { isAssignableType } from './assignability.ts'
 import { objectValuesElementTypeFromShape } from './expression-helpers.ts'
@@ -14,6 +15,7 @@ export type CheckedCallArgInfo = {
   loc: SourceLocation
   arrayElementType: ValueType | null
   shape: ObjectShapeInfo | null
+  typeRef: TypeRef
 }
 
 function report(context: GlobalCallCheckerContext, code: string, message: string, loc: SourceLocation): void {

@@ -1730,7 +1730,7 @@ class Parser {
       callee = createMemberExpression(callee, property)
     }
 
-    this.skipTypeArgumentsBeforeCall()
+    const typeArguments = this.parseTypeArgumentsBeforeCall()
 
     if (this.matchValue('(')) {
       while (!this.isValue(')') && !this.is('eof')) {
@@ -1744,7 +1744,7 @@ class Parser {
       this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after constructor arguments')
     }
 
-    return createNewExpression(start, callee, args)
+    return createNewExpression(start, callee, args, typeArguments)
   }
 
   parsePostfix(): AnyNode {
@@ -1755,6 +1755,13 @@ class Parser {
     let expression = initial
 
     while (true) {
+      if (this.isTypeArgumentsBeforeCall()) {
+        const typeArguments = this.parseTypeArgumentsBeforeCall()
+        this.expectValue('(', 'INOX_EXPECTED_PAREN', 'expected ( after call type arguments')
+        expression = this.finishCallExpression(expression, typeArguments)
+        continue
+      }
+
       if (this.matchValue('(')) {
         expression = this.finishCallExpression(expression)
         continue
@@ -1807,7 +1814,7 @@ class Parser {
     return createOptionalMemberExpression(object, property)
   }
 
-  finishCallExpression(callee: AnyNode): AnyNode {
+  finishCallExpression(callee: AnyNode, typeArguments: string[] = []): AnyNode {
     const args: AnyNode[] = []
 
     while (!this.isValue(')') && !this.is('eof')) {
@@ -1820,7 +1827,7 @@ class Parser {
 
     this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after call arguments')
 
-    return createCallExpression(callee, args)
+    return createCallExpression(callee, args, typeArguments)
   }
 
   parsePrimary(): AnyNode {
@@ -2021,23 +2028,24 @@ class Parser {
     return this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected property name')
   }
 
-  skipTypeArgumentsBeforeCall(): void {
+  parseTypeArgumentsBeforeCall(): string[] {
     if (!this.isTypeArgumentsBeforeCall()) {
-      return
+      return []
     }
 
-    this.advance()
-    let depth = 1
+    this.expectValue('<', 'INOX_EXPECTED_TYPE', 'expected < before call type arguments')
+    const typeArguments: string[] = []
 
-    while (!this.is('eof') && depth > 0) {
-      if (this.isValue('<')) {
-        depth = depth + 1
-      } else if (this.isValue('>')) {
-        depth = depth - 1
+    while (!this.isValue('>') && !this.is('eof')) {
+      typeArguments.push(this.parseTypeAnnotation([',', '>'], null))
+
+      if (!this.matchValue(',')) {
+        break
       }
-
-      this.advance()
     }
+
+    this.expectValue('>', 'INOX_EXPECTED_TYPE', 'expected > after call type arguments')
+    return typeArguments
   }
 
   isTypeArgumentsBeforeCall(): boolean {
@@ -2047,9 +2055,14 @@ class Parser {
 
     let offset = 0
     let depth = 0
+    const line = this.current().line
 
     while (this.peek(offset).type !== 'eof') {
       const token = this.peek(offset)
+
+      if (token.line !== line || this.isInvalidCallTypeArgumentToken(token.value)) {
+        return false
+      }
 
       if (token.value === '<') {
         depth = depth + 1
@@ -2069,6 +2082,19 @@ class Parser {
     }
 
     return false
+  }
+
+  isInvalidCallTypeArgumentToken(value: string): boolean {
+    return (
+      value === '&&' ||
+      value === '||' ||
+      value === '===' ||
+      value === '!==' ||
+      value === '=' ||
+      value === ';' ||
+      value === '{' ||
+      value === '}'
+    )
   }
 
   skipTypeUntil(values: string[]): void {

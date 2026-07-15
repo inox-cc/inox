@@ -519,7 +519,7 @@ function applyGenericNativeType(
   }
 }
 
-function typeRefFromResolvedType(info: ResolvedTypeInfo): TypeRef {
+export function typeRefFromResolvedType(info: ResolvedTypeInfo): TypeRef {
   if (info.typeRef !== null) {
     return info.typeRef
   }
