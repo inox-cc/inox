@@ -31,7 +31,6 @@ export type CExpressionTypeDependencies = {
   isArrayJoinCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isArrayLengthExpression: (expression: AnyNode, context: CFunctionContext) => boolean
   isClassConstructorExpression: (expression: AnyNode, context: CFunctionContext) => boolean
-  isErrorConstructorExpression: (expression: AnyNode) => boolean
   isFetchAbortControllerConstructorExpression: (expression: AnyNode) => boolean
   isIndexAccessExpression: (expression: AnyNode) => boolean
   isMemberAccessExpression: (expression: AnyNode) => boolean
@@ -583,10 +582,6 @@ export function inferExpressionType(
 
   if (deps.isNumberToStringCall(expression, context)) {
     return 'string'
-  }
-
-  if (deps.isErrorConstructorExpression(expression)) {
-    return 'object'
   }
 
   if (deps.isFetchAbortControllerConstructorExpression(expression)) {

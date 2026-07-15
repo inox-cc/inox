@@ -10,7 +10,6 @@ import {
 } from './checker/assignability.ts'
 import {
   builtinGlobalSymbol,
-  errorObjectShape,
   fetchAbortControllerObjectShape,
   libuvOnlyRuntimeImportFeature
 } from './checker/builtins.ts'
@@ -31,6 +30,7 @@ import { runtimeImportValueType } from './stdlib/node/runtime-imports.ts'
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
 import {
   compilerLibraryHasModuleDeclaration,
+  compilerLibraryIntrinsicRoleForBinding,
   compilerLibraryNativeTypeForId,
   compilerLibraryNativeTypeIsAssignable,
   compilerLibraryOperationForIntrinsic,
@@ -40,6 +40,7 @@ import {
   compilerLibraryOperationForReceiver,
   resolveCompilerLibrarySet
 } from './extensions/library-set.ts'
+import { compilerLibraryIntrinsicResultMetadata } from './extensions/intrinsic-metadata.ts'
 import { typeRefCompatibilityMetadata } from './extensions/type-ref-compatibility.ts'
 import {
   parseCompilerLibraryGlobalDeclarations,
@@ -84,6 +85,7 @@ import {
   createArrowFunctionTypeMetadata,
   createMapEntryShape,
   knownCheckedExpressionType,
+  resolveExpressionPromiseRejectionIntrinsicRole,
   resolveExpressionPromiseRejectionValueType,
   resolveMapEntryArrayType
 } from './checker/expression-helpers.ts'
@@ -124,7 +126,6 @@ import {
 import type { CheckedCallArgInfo, GlobalCallCheckerContext } from './checker/global-calls.ts'
 import {
   findShapeField as findShapeFieldInContext,
-  isErrorObjectExpression as isErrorObjectExpressionInContext,
   resolveArrayElementObjectShape as resolveArrayElementObjectShapeInContext,
   resolveArrayIterableElementShape as resolveArrayIterableElementShapeInContext,
   resolveExpressionArrayElementDeclaredType as resolveExpressionArrayElementDeclaredTypeInContext,
@@ -134,6 +135,7 @@ import {
   resolveExpressionMapType as resolveExpressionMapTypeInContext,
   resolveExpressionPromiseValueType as resolveExpressionPromiseValueTypeInContext,
   resolveExpressionSetElementType as resolveExpressionSetElementTypeInContext,
+  resolveRejectedExpressionIntrinsicRole as resolveRejectedExpressionIntrinsicRoleInContext,
   resolveRejectedExpressionValueType as resolveRejectedExpressionValueTypeInContext
 } from './checker/expression-metadata.ts'
 import {
@@ -1298,9 +1300,11 @@ class Checker {
       }
 
       let promiseValueType = this.resolveExpressionPromiseValueType(statement.init)
+      let promiseRejectionIntrinsicRole = resolveExpressionPromiseRejectionIntrinsicRole(statement.init)
 
       if (declared !== null && typeof declared !== 'undefined' && declared.valueType === 'promise') {
         promiseValueType = null
+        promiseRejectionIntrinsicRole = null
 
         if (declared.promiseValueType !== null && typeof declared.promiseValueType !== 'undefined') {
           promiseValueType = declared.promiseValueType
@@ -1404,6 +1408,7 @@ class Checker {
       }
 
       let className: string | null = null
+      let libraryIntrinsicRole: IntrinsicRole | null = null
 
       if (
         statement.init !== null &&
@@ -1412,6 +1417,15 @@ class Checker {
         typeof statement.init.className !== 'undefined'
       ) {
         className = statement.init.className
+      }
+
+      if (
+        statement.init !== null &&
+        typeof statement.init !== 'undefined' &&
+        statement.init.libraryIntrinsicRole !== null &&
+        typeof statement.init.libraryIntrinsicRole !== 'undefined'
+      ) {
+        libraryIntrinsicRole = statement.init.libraryIntrinsicRole
       }
 
       statement.valueType = valueType
@@ -1423,10 +1437,12 @@ class Checker {
       statement.mapValueType = mapValueType
       statement.mapValueShape = mapValueShape
       statement.promiseValueType = promiseValueType
+      statement.promiseRejectionIntrinsicRole = promiseRejectionIntrinsicRole
       statement.setElementType = setElementType
       statement.functionType = functionType
       statement.shape = shape
       statement.className = className
+      statement.libraryIntrinsicRole = libraryIntrinsicRole
 
       if (
         declared !== null &&
@@ -1458,9 +1474,11 @@ class Checker {
           mapValueType,
           mapValueShape,
           promiseValueType,
+          promiseRejectionIntrinsicRole,
           setElementType,
           functionType,
           className: statement.className,
+          libraryIntrinsicRole,
           shape,
           loc: statement.loc
         },
@@ -1698,10 +1716,12 @@ class Checker {
         expression.mapKeyType = asserted.mapKeyType
         expression.mapValueType = asserted.mapValueType
         expression.promiseValueType = asserted.promiseValueType
+        expression.promiseRejectionIntrinsicRole = asserted.promiseRejectionIntrinsicRole
         expression.setElementType = asserted.setElementType
         expression.functionType = asserted.functionType
         expression.shape = asserted.shape
         expression.className = asserted.className
+        expression.libraryIntrinsicRole = asserted.libraryIntrinsicRole
 
         return sourceValueType
       }
@@ -1822,10 +1842,12 @@ class Checker {
       expression.mapValueType = null
       expression.mapValueShape = null
       expression.promiseValueType = null
+      expression.promiseRejectionIntrinsicRole = null
       expression.setElementType = null
       expression.functionType = null
       expression.shape = null
       expression.className = null
+      expression.libraryIntrinsicRole = null
 
       if (isUndefinedValue) {
         expression.nullable = true
@@ -1867,6 +1889,13 @@ class Checker {
           expression.promiseValueType = symbol.promiseValueType
         }
 
+        if (
+          symbol.promiseRejectionIntrinsicRole !== null &&
+          typeof symbol.promiseRejectionIntrinsicRole !== 'undefined'
+        ) {
+          expression.promiseRejectionIntrinsicRole = symbol.promiseRejectionIntrinsicRole
+        }
+
         if (symbol.setElementType !== null && typeof symbol.setElementType !== 'undefined') {
           expression.setElementType = symbol.setElementType
         }
@@ -1906,6 +1935,10 @@ class Checker {
 
         if (symbol.className !== null && typeof symbol.className !== 'undefined') {
           expression.className = symbol.className
+        }
+
+        if (symbol.libraryIntrinsicRole !== null && typeof symbol.libraryIntrinsicRole !== 'undefined') {
+          expression.libraryIntrinsicRole = symbol.libraryIntrinsicRole
         }
       }
 
@@ -2708,6 +2741,14 @@ class Checker {
     }
 
     if (expression.property === 'loc') {
+      if (shape !== null && typeof shape !== 'undefined') {
+        const field = this.findShapeField(shape, 'loc')
+
+        if (field !== null && field.declaredType !== null && typeof field.declaredType !== 'undefined') {
+          return null
+        }
+      }
+
       expression.valueType = 'object'
       expression.nullable = false
       expression.shape = anyNodeLocObjectShape(expression.loc)
@@ -4506,6 +4547,7 @@ class Checker {
 
     expression.libraryBindingId = operation.bindingId
     expression.libraryOperationId = operation.operationId
+    expression.libraryIntrinsicRole = compilerLibraryIntrinsicRoleForBinding(libraries, operation.bindingId)
     expression.libraryRuntimeRequirements = runtimeRequirements
     expression.libraryCapabilities = capabilities
     expression.libraryCExpression = variant?.cExpression ?? operation.cExpression ?? null
@@ -4549,6 +4591,8 @@ class Checker {
       expression.mapValueType = metadata.mapValueType
       expression.promiseValueType = metadata.promiseValueType
       expression.promiseRejectionValueType = metadata.promiseRejectionValueType
+      expression.promiseRejectionIntrinsicRole = metadata.promiseRejectionIntrinsicRole
+      expression.libraryIntrinsicRole = metadata.intrinsicRole ?? expression.libraryIntrinsicRole
       expression.setElementType = metadata.setElementType
       expression.libraryOwned = metadata.owned
       expression.libraryResultTypeId = metadata.libraryResultTypeId
@@ -5207,6 +5251,7 @@ class Checker {
     expression.valueType = 'promise'
     expression.promiseValueType = 'unknown'
     expression.promiseRejectionValueType = 'unknown'
+    expression.promiseRejectionIntrinsicRole = null
     expression.shape = null
 
     if (method === 'resolve') {
@@ -5218,6 +5263,7 @@ class Checker {
       }
     } else {
       expression.promiseRejectionValueType = this.resolveRejectedExpressionValueType(expression.args[0])
+      expression.promiseRejectionIntrinsicRole = resolveRejectedExpressionIntrinsicRoleInContext(expression.args[0])
     }
 
     return 'promise'
@@ -5289,10 +5335,18 @@ class Checker {
         }
       ]
       const rejectionValueType = resolveExpressionPromiseRejectionValueType(expression.callee.object)
+      const rejectionIntrinsicRole = resolveExpressionPromiseRejectionIntrinsicRole(expression.callee.object)
 
-      if (rejectionValueType === 'error') {
+      if (rejectionIntrinsicRole === 'exception-value' || rejectionValueType === 'error') {
+        const metadata = compilerLibraryIntrinsicResultMetadata(
+          resolveCompilerLibrarySet(this.options.libraries),
+          'exception-value',
+          'construct',
+          expression.loc
+        )
+
         catchParamTypes[0] = 'object'
-        catchParamMetadata[0].shape = errorObjectShape
+        catchParamMetadata[0].shape = metadata?.shape ?? null
       }
 
       this.checkPromiseCallback(
@@ -6350,13 +6404,6 @@ class Checker {
       return 'object'
     }
 
-    if (constructorName === 'Error') {
-      this.checkErrorConstructorExpression(expression, argTypes)
-      expression.valueType = 'object'
-      expression.shape = errorObjectShape
-      return 'object'
-    }
-
     let symbol = this.scope.resolve(constructorName)
 
     if (symbol === null || typeof symbol === 'undefined') {
@@ -6840,69 +6887,6 @@ class Checker {
     }
   }
 
-  checkErrorConstructorExpression(expression: AnyNode, argTypes: ValueType[]): void {
-    if (expression.args.length > 2) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `Error constructor expects at most 2 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-      this.checkAssignableType(
-        argTypes[0],
-        'string',
-        expression.args[0].loc,
-        false,
-        this.expressionCanBeNull(expression.args[0])
-      )
-    }
-
-    const options = expression.args[1]
-
-    if (options === null || typeof options === 'undefined') {
-      return
-    }
-
-    if (options.type !== 'ObjectLiteral') {
-      this.report(
-        'INOX_TYPE_MISMATCH',
-        'Error options must be an object literal in the current compiler slice',
-        options.loc
-      )
-      return
-    }
-
-    const properties: CheckerObjectPropertyNode[] = options.properties
-
-    for (const property of properties) {
-      if (property.key !== 'code' && property.key !== 'cause') {
-        this.report('INOX_UNKNOWN_FIELD', `unknown Error option ${property.key}`, property.loc)
-        continue
-      }
-
-      if (property.key === 'code') {
-        this.checkAssignableType(
-          property.value.valueType ?? this.checkExpression(property.value),
-          'string',
-          property.value.loc,
-          false,
-          this.expressionCanBeNull(property.value)
-        )
-      } else {
-        const causeType = property.value.valueType ?? this.checkExpression(property.value)
-
-        if (property.value.type !== 'NullLiteral' && causeType !== 'object') {
-          this.report(
-            'INOX_TYPE_MISMATCH',
-            'Error cause must be an Error object or null in the current compiler slice',
-            property.value.loc
-          )
-        }
-      }
-    }
-  }
 
   checkVariableInitializer(expression: AnyNode, declared: ResolvedTypeInfo | null): ValueType {
     if (
@@ -8443,16 +8427,19 @@ class Checker {
     }
 
     if (isNonNullNarrowingLiteral(maybeNull)) {
+      const optionalNames = optionalChainNarrowingKeys(nullable)
+      const narrowingNames = optionalNames.length > 0 ? optionalNames : [key]
+
       if (expression.operator === '===') {
         return {
-          trueNames: [key],
+          trueNames: narrowingNames,
           falseNames: []
         }
       }
 
       return {
         trueNames: [],
-        falseNames: [key]
+        falseNames: narrowingNames
       }
     }
 
@@ -8967,10 +8954,6 @@ class Checker {
 
   resolveRejectedExpressionValueType(expression: AnyNode | null | undefined): ValueType {
     return resolveRejectedExpressionValueTypeInContext(this.expressionMetadataContext(), expression)
-  }
-
-  isErrorObjectExpression(expression: AnyNode): boolean {
-    return isErrorObjectExpressionInContext(this.expressionMetadataContext(), expression)
   }
 
   declare(name: string, symbol: SymbolInfo, loc: SourceLocation): void {

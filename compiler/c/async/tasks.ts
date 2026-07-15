@@ -118,7 +118,7 @@ type AsyncTaskFunctionContext = AsyncTaskEmitContext & {
   continueFlowUsed: boolean
   continueTargets: AsyncTaskLoopFlowTarget[]
   errorChannelUsed: boolean
-  errorObjectNames: AsyncTaskStringSet
+  exceptionValueNames: AsyncTaskStringSet
   errorTargets: string[]
   eventLoopUsed: boolean
   explicitEventLoop: boolean
@@ -176,7 +176,7 @@ type AsyncTaskVariableScopeSnapshot = {
   arrayShapes: AsyncTaskArrayShapeMap
   boxedVariables: AsyncTaskStringSet
   classInstanceTypes: AsyncTaskStringMap
-  errorObjectNames: AsyncTaskStringSet
+  exceptionValueNames: AsyncTaskStringSet
   functionTypes: AsyncTaskFunctionTypeMap
   mapTypes: AsyncTaskMapTypeMap
   narrowedNullableScalars: AsyncTaskStringSet

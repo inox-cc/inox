@@ -28,7 +28,6 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
   const path = joinStrings(usage.path, '.')
 
   return (
-    path === 'Error' ||
     path === 'Promise' ||
     path === 'Promise.resolve' ||
     path === 'Promise.reject' ||

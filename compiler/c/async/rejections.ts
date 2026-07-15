@@ -8,8 +8,7 @@ export type RejectionValueTypeDependencies = {
   cFetchRuntimeExpressionMethod(expression: AnyNode): string | null
   cPromiseRuntimeCallName(callee: AnyNode): string | null
   inferExpressionType(expression: AnyNode, context: CFunctionContext): string
-  isErrorConstructorExpression(expression: AnyNode): boolean
-  isKnownErrorValueExpression(expression: AnyNode, errorObjectNames: Set<string>): boolean
+  isKnownExceptionValueExpression(expression: AnyNode, exceptionValueNames: Set<string>): boolean
 }
 
 export function collectLocalAwaitRejectionValueTypes(
@@ -21,7 +20,7 @@ export function collectLocalAwaitRejectionValueTypes(
     node,
     context,
     new Map(),
-    copyRejectionNameSet(context.errorObjectNames),
+    copyRejectionNameSet(context.exceptionValueNames),
     deps
   )
 }
@@ -31,7 +30,7 @@ function pushLocalAwaitRejectionChildValueTypes(
   value: unknown,
   context: CFunctionContext,
   localPromiseRejectionValueTypes: RejectionStringMap,
-  localErrorObjectNames: RejectionNameSet,
+  localExceptionValueNames: RejectionNameSet,
   deps: RejectionValueTypeDependencies
 ): void {
   if (value === null || typeof value === 'undefined') {
@@ -44,7 +43,7 @@ function pushLocalAwaitRejectionChildValueTypes(
       value,
       context,
       localPromiseRejectionValueTypes,
-      localErrorObjectNames,
+      localExceptionValueNames,
       deps
     )
   )
@@ -54,7 +53,7 @@ function collectLocalAwaitRejectionValueTypesWithState(
   node: unknown,
   context: CFunctionContext,
   localPromiseRejectionValueTypes: RejectionStringMap,
-  localErrorObjectNames: RejectionNameSet,
+  localExceptionValueNames: RejectionNameSet,
   deps: RejectionValueTypeDependencies
 ): string[] {
   if (node === null || typeof node === 'undefined') {
@@ -76,7 +75,7 @@ function collectLocalAwaitRejectionValueTypesWithState(
           item,
           context,
           localPromiseRejectionValueTypes,
-          localErrorObjectNames,
+          localExceptionValueNames,
           deps
         )
       )
@@ -92,7 +91,7 @@ function collectLocalAwaitRejectionValueTypesWithState(
       current.body,
       context,
       copyRejectionStringMap(localPromiseRejectionValueTypes),
-      copyRejectionNameSet(localErrorObjectNames),
+      copyRejectionNameSet(localExceptionValueNames),
       deps
     )
   }
@@ -102,12 +101,12 @@ function collectLocalAwaitRejectionValueTypesWithState(
       current.init,
       context,
       localPromiseRejectionValueTypes,
-      localErrorObjectNames,
+      localExceptionValueNames,
       deps
     )
 
-    if (deps.isErrorConstructorExpression(current.init)) {
-      localErrorObjectNames.add(current.name)
+    if (deps.isKnownExceptionValueExpression(current.init, localExceptionValueNames)) {
+      localExceptionValueNames.add(current.name)
     }
 
     if (current.valueType === 'promise') {
@@ -115,7 +114,7 @@ function collectLocalAwaitRejectionValueTypesWithState(
         current.init,
         context,
         localPromiseRejectionValueTypes,
-        localErrorObjectNames,
+        localExceptionValueNames,
         deps
       )
 
@@ -132,7 +131,7 @@ function collectLocalAwaitRejectionValueTypesWithState(
       current.argument,
       context,
       localPromiseRejectionValueTypes,
-      localErrorObjectNames,
+      localExceptionValueNames,
       deps
     )
 
@@ -174,7 +173,7 @@ function collectLocalAwaitRejectionValueTypesWithState(
       child,
       context,
       localPromiseRejectionValueTypes,
-      localErrorObjectNames,
+      localExceptionValueNames,
       deps
     )
   }
@@ -186,9 +185,13 @@ function inferPromiseRejectionValueType(
   expression: AnyNode,
   context: CFunctionContext,
   localPromiseRejectionValueTypes: RejectionStringMap,
-  localErrorObjectNames: RejectionNameSet,
+  localExceptionValueNames: RejectionNameSet,
   deps: RejectionValueTypeDependencies
 ): string {
+  if (expression.promiseRejectionIntrinsicRole === 'exception-value') {
+    return 'error'
+  }
+
   if (
     expression.promiseRejectionValueType !== null &&
     typeof expression.promiseRejectionValueType !== 'undefined'
@@ -197,7 +200,7 @@ function inferPromiseRejectionValueType(
   }
 
   if (expression.type === 'CallExpression' && deps.cPromiseRuntimeCallName(expression.callee) === 'reject') {
-    return inferRejectedValueTypeWithErrors(expression.args[0], context, localErrorObjectNames, deps)
+    return inferRejectedValueTypeWithExceptions(expression.args[0], context, localExceptionValueNames, deps)
   }
 
   if (expression.type === 'CallExpression' && deps.cFetchRuntimeExpressionMethod(expression)) {
@@ -229,16 +232,16 @@ export function inferRejectedValueType(
   context: CFunctionContext,
   deps: RejectionValueTypeDependencies
 ): string {
-  return inferRejectedValueTypeWithErrors(expression, context, context.errorObjectNames, deps)
+  return inferRejectedValueTypeWithExceptions(expression, context, context.exceptionValueNames, deps)
 }
 
-function inferRejectedValueTypeWithErrors(
+function inferRejectedValueTypeWithExceptions(
   expression: AnyNode,
   context: CFunctionContext,
-  localErrorObjectNames: RejectionNameSet,
+  localExceptionValueNames: RejectionNameSet,
   deps: RejectionValueTypeDependencies
 ): string {
-  if (deps.isKnownErrorValueExpression(expression, localErrorObjectNames)) {
+  if (deps.isKnownExceptionValueExpression(expression, localExceptionValueNames)) {
     return 'error'
   }
 

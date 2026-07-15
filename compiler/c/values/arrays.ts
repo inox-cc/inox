@@ -52,7 +52,7 @@ type ArrayVariableScopeSnapshot = {
   arrayShapes: Map<string, CArrayElementInfo[]>
   boxedVariables: CStringSet
   classInstanceTypes: CStringMap
-  errorObjectNames: CStringSet
+  exceptionValueNames: CStringSet
   functionTypes: CFunctionTypeMap
   mapTypes: CFunctionReturnMapTypeMap
   narrowedNullableScalars: CStringSet
@@ -211,17 +211,17 @@ function ensureClassInstanceTypes(context: ArrayFunctionContext): CStringMap {
   return nextClassInstanceTypes
 }
 
-function ensureErrorObjectNames(context: ArrayFunctionContext): CStringSet {
-  let errorObjectNames = context.errorObjectNames
+function ensureExceptionValueNames(context: ArrayFunctionContext): CStringSet {
+  let exceptionValueNames = context.exceptionValueNames
 
-  if (errorObjectNames !== null && typeof errorObjectNames !== 'undefined') {
-    return errorObjectNames
+  if (exceptionValueNames !== null && typeof exceptionValueNames !== 'undefined') {
+    return exceptionValueNames
   }
 
-  const nextErrorObjectNames: CStringSet = new Set()
-  context.errorObjectNames = nextErrorObjectNames
+  const nextExceptionValueNames: CStringSet = new Set()
+  context.exceptionValueNames = nextExceptionValueNames
 
-  return nextErrorObjectNames
+  return nextExceptionValueNames
 }
 
 function ensurePromiseConstructorHandlers(context: ArrayFunctionContext): CPromiseConstructorHandlerMap {
@@ -310,7 +310,7 @@ function pushArrayVariableScope(context: ArrayFunctionContext): ArrayVariableSco
     arrayShapes: ensureArrayShapes(context),
     boxedVariables: context.boxedVariables,
     classInstanceTypes: ensureClassInstanceTypes(context),
-    errorObjectNames: ensureErrorObjectNames(context),
+    exceptionValueNames: ensureExceptionValueNames(context),
     functionTypes: context.functionTypes,
     mapTypes: context.mapTypes,
     narrowedNullableScalars: context.narrowedNullableScalars,
@@ -330,7 +330,7 @@ function pushArrayVariableScope(context: ArrayFunctionContext): ArrayVariableSco
   context.arrayShapes = cloneCArrayShapeMap(snapshot.arrayShapes)
   context.boxedVariables = cloneCStringSet(snapshot.boxedVariables)
   context.classInstanceTypes = cloneCStringMap(snapshot.classInstanceTypes)
-  context.errorObjectNames = cloneCStringSet(snapshot.errorObjectNames)
+  context.exceptionValueNames = cloneCStringSet(snapshot.exceptionValueNames)
   context.functionTypes = cloneCFunctionTypeMap(snapshot.functionTypes)
   context.mapTypes = cloneCFunctionReturnMapTypeMap(snapshot.mapTypes)
   context.narrowedNullableScalars = cloneCStringSet(snapshot.narrowedNullableScalars)
@@ -353,7 +353,7 @@ function restoreArrayVariableScope(context: ArrayFunctionContext, snapshot: Arra
   context.arrayShapes = snapshot.arrayShapes
   context.boxedVariables = snapshot.boxedVariables
   context.classInstanceTypes = snapshot.classInstanceTypes
-  context.errorObjectNames = snapshot.errorObjectNames
+  context.exceptionValueNames = snapshot.exceptionValueNames
   context.functionTypes = snapshot.functionTypes
   context.mapTypes = snapshot.mapTypes
   context.narrowedNullableScalars = snapshot.narrowedNullableScalars

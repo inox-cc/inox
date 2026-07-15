@@ -556,6 +556,8 @@ export function resolveObjectShape(context: DeclaredTypeResolverContext, shape: 
 
   if (shape.builtin !== null && typeof shape.builtin !== 'undefined') {
     resolvedShape.builtin = shape.builtin
+  } else if (bases.builtin !== null) {
+    resolvedShape.builtin = bases.builtin
   }
 
   return resolvedShape
@@ -688,36 +690,71 @@ export function resolveObjectShapeBases(
   shape: ObjectShapeInfo
 ): ObjectShapeBases {
   const fields: AnyNode[] = []
+  let builtin: string | null = null
   let dynamic = false
   let dynamicField: AnyNode | null = null
 
   const baseTypes: string[] = shape.baseTypes ?? []
 
   for (const name of baseTypes) {
-    const base = context.types.get(name)
+    const base = resolveObjectShapeBase(context, name)
 
-    if (base === null || typeof base === 'undefined' || base.kind !== 'object') {
+    if (base === null || typeof base === 'undefined') {
       continue
     }
 
-    const resolved = resolveObjectShape(context, base)
-
-    for (const field of resolved.fields) {
+    for (const field of base.fields) {
       fields.push(field)
     }
 
-    dynamic = dynamic || resolved.dynamic === true
+    dynamic = dynamic || base.dynamic === true
 
-    if (resolved.dynamicField !== null && typeof resolved.dynamicField !== 'undefined') {
-      dynamicField = resolved.dynamicField
+    if (base.builtin !== null && typeof base.builtin !== 'undefined') {
+      builtin = base.builtin
+    }
+
+    if (base.dynamicField !== null && typeof base.dynamicField !== 'undefined') {
+      dynamicField = base.dynamicField
     }
   }
 
   return {
+    builtin,
     dynamic,
     dynamicField,
     fields
   }
+}
+
+function resolveObjectShapeBase(context: DeclaredTypeResolverContext, name: string): ObjectShapeInfo | null {
+  const seen: Set<string> = new Set()
+  let currentName = name
+
+  while (!seen.has(currentName)) {
+    seen.add(currentName)
+
+    if (currentName === 'AnyNode') {
+      return anyNodeResolvedTypeInfo({ line: 1, column: 1 }).shape
+    }
+
+    const current = context.types.get(currentName)
+
+    if (current === null || typeof current === 'undefined') {
+      return null
+    }
+
+    if (current.kind === 'object') {
+      return resolveObjectShape(context, current)
+    }
+
+    if (current.kind !== 'alias') {
+      return null
+    }
+
+    currentName = current.valueType
+  }
+
+  return null
 }
 
 export function resolveFieldDeclaredType(
@@ -921,6 +958,8 @@ export function resolveWeakTargetObjectShape(
 
   if (shape.builtin !== null && typeof shape.builtin !== 'undefined') {
     resolvedShape.builtin = shape.builtin
+  } else if (bases.builtin !== null) {
+    resolvedShape.builtin = bases.builtin
   }
 
   return resolvedShape

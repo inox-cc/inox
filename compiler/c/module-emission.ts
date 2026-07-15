@@ -12,6 +12,7 @@ import {
   mergeIrFunctionEffects
 } from '../ir.ts'
 import { resolveCompilerLibrarySet } from '../extensions/library-set.ts'
+import { compilerLibraryIntrinsicResultMetadata } from '../extensions/intrinsic-metadata.ts'
 import { reexportImportAliasName } from '../modules/synthetic-imports.ts'
 import type {
   AnyNode,
@@ -80,6 +81,7 @@ import { emitCompilerLibraryRuntimeInitializerDefinitions } from './library-init
 import { emitCPrelude, filterUnusedCPreludeIncludes } from './prelude.ts'
 import { collectCReferencedFunctionPrototypeNames } from './prototype-references.ts'
 import { resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
+import { cObjectShapeFromMetadata } from './types.ts'
 import type {
   CCallbackWrapper,
   CClassInfo,
@@ -368,6 +370,14 @@ export function emitCModuleSource(
   const functionEntries = collectCModuleFunctionNodeEntries(plan, irPrograms)
   const functions: AnyNode[] = []
   const context = createCModuleBaseContext(plan, diagnostics, deps)
+  context.exceptionValueShape = cObjectShapeFromMetadata(
+    compilerLibraryIntrinsicResultMetadata(
+      resolveCompilerLibrarySet(options.libraries),
+      'exception-value',
+      'construct',
+      { line: 1, column: 1 }
+    )?.shape ?? null
+  )
   const runtimeRequirements = runtimeRequirementSetFromArray(collectIrRuntimeRequirements(irPrograms))
   const emitsMain = plan.isEntry || plan.initName === null || typeof plan.initName === 'undefined'
   const ownsProgramRuntime = plan.isGraphEntry

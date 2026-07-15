@@ -136,7 +136,8 @@ type CFunctionContext = {
   cppValueTypes: CStringMap
   diagnostics: Diagnostic[]
   errorChannelUsed: boolean
-  errorObjectNames: CStringSet
+  exceptionValueNames: CStringSet
+  exceptionValueShape: CObjectShape | null
   errorTargets: string[]
   errorTargetActiveFlags: boolean[]
   eventLoopUsed: boolean
@@ -312,7 +313,6 @@ export type StatementLoweringDependencies = {
     context: CFunctionContext
   ): string[]
   emitDynamicObjectFieldAssignment(expression: StatementNode, context: CFunctionContext): string[] | null
-  emitErrorObjectVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[]
   emitFailureStatement(context: CFunctionContext): string
   emitFetchAbortControllerVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] | null
   emitFetchAbortControllerAbortStatement(expression: StatementNode, context: CFunctionContext): string[] | null
@@ -462,15 +462,14 @@ export type StatementLoweringDependencies = {
   isClassConstructorExpression(expression: StatementNode, context: CFunctionContext): boolean
   isConsoleLog(expression: StatementNode): boolean
   isCollectionConstructorExpression(expression: StatementNode): boolean
-  isErrorConstructorExpression(expression: StatementNode): boolean
-  isErrorValueExpression(expression: StatementNode, context: CFunctionContext): boolean
+  isExceptionValueExpression(expression: StatementNode, context: CFunctionContext): boolean
   isObjectRuntimeCallExpression(expression: StatementNode): boolean
   isIndexAccessExpression(expression: StatementNode): boolean
   isDynamicRuntimeValueExpression(expression: StatementNode, context: CFunctionContext): boolean
   isMemberAccessExpression(expression: StatementNode): boolean
   isNullableRuntimeValueAssignment(expression: StatementNode, context: CFunctionContext): boolean
   isRuntimeProducedStringExpression(expression: StatementNode, context: CFunctionContext): boolean
-  registerErrorObjectShape(context: CFunctionContext, name: string): void
+  registerExceptionValueShape(context: CFunctionContext, name: string): void
   resolveForOfElementType(elements: CArrayElementInfo[]): string
   resolveKnownArrayIndex(expression: StatementNode, context: CFunctionContext): CKnownArrayElement | null
   resolveKnownObjectIndex(expression: StatementNode, context: CFunctionContext): CKnownObjectIndexField | null
@@ -2718,13 +2717,6 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
     }
   }
 
-  if (deps.isErrorConstructorExpression(statement.init)) {
-    return {
-      lines: deps.emitErrorObjectVariableDeclaration(statement, context),
-      expression: ''
-    }
-  }
-
   if (deps.isClassConstructorExpression(statement.init, context)) {
     return {
       lines: deps.emitClassObjectVariableDeclaration(statement, context),
@@ -3553,7 +3545,7 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
 
         if (catchValueType === 'object') {
           context.variables.set(statement.handler.param, 'object')
-          statementDeps(context).registerErrorObjectShape(context, statement.handler.param)
+          statementDeps(context).registerExceptionValueShape(context, statement.handler.param)
           catchExceptionName = catchParamName
         } else if (catchValueType === 'string') {
           context.variables.set(statement.handler.param, 'string')
@@ -3714,14 +3706,14 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
     return []
   }
 
-  const isErrorObject = isThrowableObjectExpression(statement.argument, context)
+  const isExceptionObject = isThrowableObjectExpression(statement.argument, context)
 
-  if (statementDeps(context).inferExpressionType(statement.argument, context) !== 'string' && !isErrorObject) {
+  if (statementDeps(context).inferExpressionType(statement.argument, context) !== 'string' && !isExceptionObject) {
     pushDiagnostic(
       context,
       diagnostic(
         'INOX_C_THROW',
-        'C throw currently supports only string values and lightweight Error objects in local try/catch regions',
+        'C throw currently supports only string values and package-provided exception objects in local try/catch regions',
         statement.loc
       )
     )
@@ -3749,7 +3741,7 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
 
     let typeCheck = `${errorValue}.tag != INOX_TAG_STRING || ${errorValue}.as.ref == 0`
 
-    if (isErrorObject) {
+    if (isExceptionObject) {
       typeCheck = runtimeObjectLikeValueMismatchCondition(errorValue)
     }
 
@@ -3781,7 +3773,7 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
 
   let typeCheck = 'inox_error.tag != INOX_TAG_STRING || inox_error.as.ref == 0'
 
-  if (isErrorObject) {
+  if (isExceptionObject) {
     typeCheck = runtimeObjectLikeValueMismatchCondition('inox_error')
   }
 
@@ -3835,7 +3827,7 @@ function emitThrowableObjectValueExpression(value: PreparedExpression, context: 
 function isThrowableObjectExpression(expression: StatementNode, context: CFunctionContext): boolean {
   const deps = statementDeps(context)
 
-  if (deps.isErrorValueExpression(expression, context)) {
+  if (deps.isExceptionValueExpression(expression, context)) {
     return true
   }
 
@@ -3986,6 +3978,10 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
   }
 
   if (libraryObject !== null && libraryObject.valueType === 'object') {
+    if (deps.isExceptionValueExpression(statement.init, context)) {
+      deps.registerExceptionValueShape(context, statement.name)
+    }
+
     return libraryObject.lines
   }
 
@@ -4137,10 +4133,6 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     registerRuntimeValueMetadata(statement.name, statementValueType, statement, statement.init, context)
 
     return lines
-  }
-
-  if (deps.isErrorConstructorExpression(statement.init)) {
-    return deps.emitErrorObjectVariableDeclaration(statement, context)
   }
 
   if (deps.isClassConstructorExpression(statement.init, context)) {

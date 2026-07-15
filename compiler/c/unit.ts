@@ -1,5 +1,6 @@
 import { throwDiagnostics } from '../diagnostics.ts'
 import { resolveCompilerLibrarySet } from '../extensions/library-set.ts'
+import { compilerLibraryIntrinsicResultMetadata } from '../extensions/intrinsic-metadata.ts'
 import {
   collectIrFunctionDeclarations,
   collectIrFunctionEffectsWithExternalEffects,
@@ -66,6 +67,7 @@ import { emitCompilerLibraryRuntimeInitializerDefinitions } from './library-init
 import { emitCPrelude, filterUnusedCPreludeIncludes } from './prelude.ts'
 import { collectCReferencedFunctionPrototypeNames } from './prototype-references.ts'
 import { resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
+import { cObjectShapeFromMetadata } from './types.ts'
 import type {
   CClassInfo,
   CClassMethod,
@@ -1254,6 +1256,14 @@ export function emitCUnit(
     functionEffects,
     jsGlobalRoots,
     topLevelNodes
+  )
+  baseContext.exceptionValueShape = cObjectShapeFromMetadata(
+    compilerLibraryIntrinsicResultMetadata(
+      resolveCompilerLibrarySet(options.libraries),
+      'exception-value',
+      'construct',
+      { line: 1, column: 1 }
+    )?.shape ?? null
   )
   baseContext.runtimeEntryPath = entryPath
   baseContext.classInfos = createClassInfos(classes, diagnostics)

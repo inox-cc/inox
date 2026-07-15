@@ -187,8 +187,6 @@ export function collectCoreRuntimeIrFeatures(node: AnyNode, features: CoreRuntim
 
     if (collectionConstructorName(item)) {
       features.add('collections')
-    } else if (objectConstructorName(item)) {
-      features.add('objects')
     }
   }
 
@@ -407,13 +405,7 @@ function plainFunctionCallHasStringArgument(expression: CoreRuntimeNode): boolea
 }
 
 function runtimeConstructorName(expression: CoreRuntimeNode): string | null {
-  const collectionConstructor = collectionConstructorName(expression)
-
-  if (collectionConstructor !== null && typeof collectionConstructor !== 'undefined') {
-    return collectionConstructor
-  }
-
-  return objectConstructorName(expression)
+  return collectionConstructorName(expression)
 }
 
 function collectionConstructorName(expression: CoreRuntimeNode): string | null {
@@ -423,20 +415,6 @@ function collectionConstructorName(expression: CoreRuntimeNode): string | null {
 
   if (expression.valueType === 'set') {
     return 'Set'
-  }
-
-  return null
-}
-
-function objectConstructorName(expression: CoreRuntimeNode): string | null {
-  const calleePath = simpleReferencePath(expression.callee)
-
-  if (calleePath === null || typeof calleePath === 'undefined') {
-    return null
-  }
-
-  if (calleePath[0] === 'Error') {
-    return calleePath[0]
   }
 
   return null

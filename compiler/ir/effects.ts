@@ -6,7 +6,7 @@ type StringMap = Map<string, string>
 type StringSet = Set<string>
 
 export type IrLocalThrowValueTypeOptions = {
-  errorObjectNames?: StringSet | null
+  exceptionValueNames?: StringSet | null
   functionThrowValueTypes?: ThrowValueTypeMap | null
 }
 
@@ -175,12 +175,12 @@ export function collectIrLocalThrowValueTypes(
 ): IrThrowValueType[] {
   const functionThrowValueTypes = cloneFunctionThrowValueTypeMap(options.functionThrowValueTypes)
   const functionNames = functionNameSetFromMap(functionThrowValueTypes)
-  const errorObjectNames = cloneOptionalStringSet(options.errorObjectNames)
+  const exceptionValueNames = cloneOptionalStringSet(options.exceptionValueNames)
   const types = collectEscapingThrowValueTypesFromStatement(
     statement,
     functionThrowValueTypes,
     functionNames,
-    errorObjectNames,
+    exceptionValueNames,
     createStringMap(),
     false,
     false
@@ -274,7 +274,7 @@ function collectEscapingThrowValueTypesFromStatements(
   statements: NodeList,
   functionThrowValueTypes: ThrowValueTypeMap,
   functionNames: StringSet,
-  errorObjectNames: StringSet,
+  exceptionValueNames: StringSet,
   classInstanceTypes: StringMap,
   includeClassMethods: boolean,
   hasErrorTarget: boolean
@@ -289,7 +289,7 @@ function collectEscapingThrowValueTypesFromStatements(
         statement,
         functionThrowValueTypes,
         functionNames,
-        errorObjectNames,
+        exceptionValueNames,
         classInstanceTypes,
         includeClassMethods,
         hasErrorTarget
@@ -304,7 +304,7 @@ function collectEscapingThrowValueTypesFromStatement(
   statement: MaybeNode,
   functionThrowValueTypes: ThrowValueTypeMap,
   functionNames: StringSet,
-  errorObjectNames: StringSet,
+  exceptionValueNames: StringSet,
   classInstanceTypes: StringMap,
   includeClassMethods: boolean,
   hasErrorTarget: boolean
@@ -317,7 +317,7 @@ function collectEscapingThrowValueTypesFromStatement(
 
   if (statement.type === 'ThrowStatement') {
     if (!hasErrorTarget) {
-      types.push(inferThrowValueTypeForAnalysis(statement.argument, errorObjectNames))
+      types.push(inferThrowValueTypeForAnalysis(statement.argument, exceptionValueNames))
     }
 
     return types
@@ -330,18 +330,18 @@ function collectEscapingThrowValueTypesFromStatement(
         statement.init,
         functionThrowValueTypes,
         functionNames,
-        errorObjectNames,
+        exceptionValueNames,
         classInstanceTypes,
         includeClassMethods,
         hasErrorTarget
       )
     )
 
-    if (isErrorValueExpressionForAnalysis(statement.init, errorObjectNames)) {
+    if (isExceptionValueExpressionForAnalysis(statement.init, exceptionValueNames)) {
       const name = nodeName(statement)
 
       if (name !== '') {
-        errorObjectNames.add(name)
+        exceptionValueNames.add(name)
       }
     }
 
@@ -366,7 +366,7 @@ function collectEscapingThrowValueTypesFromStatement(
       statement.expression,
       functionThrowValueTypes,
       functionNames,
-      errorObjectNames,
+      exceptionValueNames,
       classInstanceTypes,
       includeClassMethods,
       hasErrorTarget
@@ -378,7 +378,7 @@ function collectEscapingThrowValueTypesFromStatement(
       statement.argument,
       functionThrowValueTypes,
       functionNames,
-      errorObjectNames,
+      exceptionValueNames,
       classInstanceTypes,
       includeClassMethods,
       hasErrorTarget
@@ -390,7 +390,7 @@ function collectEscapingThrowValueTypesFromStatement(
       nodeList(statement.body),
       functionThrowValueTypes,
       functionNames,
-      cloneStringSet(errorObjectNames),
+      cloneStringSet(exceptionValueNames),
       cloneStringMap(classInstanceTypes),
       includeClassMethods,
       hasErrorTarget
@@ -404,7 +404,7 @@ function collectEscapingThrowValueTypesFromStatement(
         statement.condition,
         functionThrowValueTypes,
         functionNames,
-        errorObjectNames,
+        exceptionValueNames,
         classInstanceTypes,
         includeClassMethods,
         hasErrorTarget
@@ -416,7 +416,7 @@ function collectEscapingThrowValueTypesFromStatement(
         statement.consequent,
         functionThrowValueTypes,
         functionNames,
-        cloneStringSet(errorObjectNames),
+        cloneStringSet(exceptionValueNames),
         cloneStringMap(classInstanceTypes),
         includeClassMethods,
         hasErrorTarget
@@ -428,7 +428,7 @@ function collectEscapingThrowValueTypesFromStatement(
         statement.alternate,
         functionThrowValueTypes,
         functionNames,
-        cloneStringSet(errorObjectNames),
+        cloneStringSet(exceptionValueNames),
         cloneStringMap(classInstanceTypes),
         includeClassMethods,
         hasErrorTarget
@@ -445,7 +445,7 @@ function collectEscapingThrowValueTypesFromStatement(
         statement.condition,
         functionThrowValueTypes,
         functionNames,
-        errorObjectNames,
+        exceptionValueNames,
         classInstanceTypes,
         includeClassMethods,
         hasErrorTarget
@@ -457,7 +457,7 @@ function collectEscapingThrowValueTypesFromStatement(
         statement.body,
         functionThrowValueTypes,
         functionNames,
-        cloneStringSet(errorObjectNames),
+        cloneStringSet(exceptionValueNames),
         cloneStringMap(classInstanceTypes),
         includeClassMethods,
         hasErrorTarget
@@ -477,7 +477,7 @@ function collectEscapingThrowValueTypesFromStatement(
           init,
           functionThrowValueTypes,
           functionNames,
-          cloneStringSet(errorObjectNames),
+          cloneStringSet(exceptionValueNames),
           cloneStringMap(classInstanceTypes),
           includeClassMethods,
           hasErrorTarget
@@ -490,7 +490,7 @@ function collectEscapingThrowValueTypesFromStatement(
           init,
           functionThrowValueTypes,
           functionNames,
-          errorObjectNames,
+          exceptionValueNames,
           classInstanceTypes,
           includeClassMethods,
           hasErrorTarget
@@ -504,7 +504,7 @@ function collectEscapingThrowValueTypesFromStatement(
         statement.test,
         functionThrowValueTypes,
         functionNames,
-        errorObjectNames,
+        exceptionValueNames,
         classInstanceTypes,
         includeClassMethods,
         hasErrorTarget
@@ -516,7 +516,7 @@ function collectEscapingThrowValueTypesFromStatement(
         statement.update,
         functionThrowValueTypes,
         functionNames,
-        errorObjectNames,
+        exceptionValueNames,
         classInstanceTypes,
         includeClassMethods,
         hasErrorTarget
@@ -528,7 +528,7 @@ function collectEscapingThrowValueTypesFromStatement(
         statement.body,
         functionThrowValueTypes,
         functionNames,
-        cloneStringSet(errorObjectNames),
+        cloneStringSet(exceptionValueNames),
         cloneStringMap(classInstanceTypes),
         includeClassMethods,
         hasErrorTarget
@@ -545,7 +545,7 @@ function collectEscapingThrowValueTypesFromStatement(
         statement.iterable,
         functionThrowValueTypes,
         functionNames,
-        errorObjectNames,
+        exceptionValueNames,
         classInstanceTypes,
         includeClassMethods,
         hasErrorTarget
@@ -557,7 +557,7 @@ function collectEscapingThrowValueTypesFromStatement(
         statement.body,
         functionThrowValueTypes,
         functionNames,
-        cloneStringSet(errorObjectNames),
+        cloneStringSet(exceptionValueNames),
         cloneStringMap(classInstanceTypes),
         includeClassMethods,
         hasErrorTarget
@@ -574,7 +574,7 @@ function collectEscapingThrowValueTypesFromStatement(
         statement.discriminant,
         functionThrowValueTypes,
         functionNames,
-        errorObjectNames,
+        exceptionValueNames,
         classInstanceTypes,
         includeClassMethods,
         hasErrorTarget
@@ -591,7 +591,7 @@ function collectEscapingThrowValueTypesFromStatement(
           item.test,
           functionThrowValueTypes,
           functionNames,
-          errorObjectNames,
+          exceptionValueNames,
           classInstanceTypes,
           includeClassMethods,
           hasErrorTarget
@@ -603,7 +603,7 @@ function collectEscapingThrowValueTypesFromStatement(
           nodeList(item.consequent),
           functionThrowValueTypes,
           functionNames,
-          cloneStringSet(errorObjectNames),
+          cloneStringSet(exceptionValueNames),
           cloneStringMap(classInstanceTypes),
           includeClassMethods,
           hasErrorTarget
@@ -627,7 +627,7 @@ function collectEscapingThrowValueTypesFromStatement(
         statement.block,
         functionThrowValueTypes,
         functionNames,
-        cloneStringSet(errorObjectNames),
+        cloneStringSet(exceptionValueNames),
         cloneStringMap(classInstanceTypes),
         includeClassMethods,
         blockHasTarget
@@ -643,7 +643,7 @@ function collectEscapingThrowValueTypesFromStatement(
           handler.body,
           functionThrowValueTypes,
           functionNames,
-          cloneStringSet(errorObjectNames),
+          cloneStringSet(exceptionValueNames),
           cloneStringMap(classInstanceTypes),
           includeClassMethods,
           hasErrorTarget
@@ -657,7 +657,7 @@ function collectEscapingThrowValueTypesFromStatement(
         statement.finalizer,
         functionThrowValueTypes,
         functionNames,
-        cloneStringSet(errorObjectNames),
+        cloneStringSet(exceptionValueNames),
         cloneStringMap(classInstanceTypes),
         includeClassMethods,
         hasErrorTarget
@@ -674,7 +674,7 @@ function collectEscapingThrowValueTypesFromExpression(
   expression: MaybeNode,
   functionThrowValueTypes: ThrowValueTypeMap,
   functionNames: StringSet,
-  errorObjectNames: StringSet,
+  exceptionValueNames: StringSet,
   classInstanceTypes: StringMap,
   includeClassMethods: boolean,
   hasErrorTarget: boolean
@@ -704,7 +704,7 @@ function collectEscapingThrowValueTypesFromExpression(
         expression.callee,
         functionThrowValueTypes,
         functionNames,
-        errorObjectNames,
+        exceptionValueNames,
         classInstanceTypes,
         includeClassMethods,
         hasErrorTarget
@@ -715,7 +715,7 @@ function collectEscapingThrowValueTypesFromExpression(
       nodeList(expression.args),
       functionThrowValueTypes,
       functionNames,
-      errorObjectNames,
+      exceptionValueNames,
       classInstanceTypes,
       includeClassMethods,
       hasErrorTarget
@@ -731,7 +731,7 @@ function collectEscapingThrowValueTypesFromExpression(
         expression.callee,
         functionThrowValueTypes,
         functionNames,
-        errorObjectNames,
+        exceptionValueNames,
         classInstanceTypes,
         includeClassMethods,
         hasErrorTarget
@@ -742,7 +742,7 @@ function collectEscapingThrowValueTypesFromExpression(
       nodeList(expression.args),
       functionThrowValueTypes,
       functionNames,
-      errorObjectNames,
+      exceptionValueNames,
       classInstanceTypes,
       includeClassMethods,
       hasErrorTarget
@@ -756,7 +756,7 @@ function collectEscapingThrowValueTypesFromExpression(
       expression.object,
       functionThrowValueTypes,
       functionNames,
-      errorObjectNames,
+      exceptionValueNames,
       classInstanceTypes,
       includeClassMethods,
       hasErrorTarget
@@ -770,7 +770,7 @@ function collectEscapingThrowValueTypesFromExpression(
         expression.object,
         functionThrowValueTypes,
         functionNames,
-        errorObjectNames,
+        exceptionValueNames,
         classInstanceTypes,
         includeClassMethods,
         hasErrorTarget
@@ -782,7 +782,7 @@ function collectEscapingThrowValueTypesFromExpression(
         expression.index,
         functionThrowValueTypes,
         functionNames,
-        errorObjectNames,
+        exceptionValueNames,
         classInstanceTypes,
         includeClassMethods,
         hasErrorTarget
@@ -799,7 +799,7 @@ function collectEscapingThrowValueTypesFromExpression(
         expression.target,
         functionThrowValueTypes,
         functionNames,
-        errorObjectNames,
+        exceptionValueNames,
         classInstanceTypes,
         includeClassMethods,
         hasErrorTarget
@@ -811,7 +811,7 @@ function collectEscapingThrowValueTypesFromExpression(
         expression.value,
         functionThrowValueTypes,
         functionNames,
-        errorObjectNames,
+        exceptionValueNames,
         classInstanceTypes,
         includeClassMethods,
         hasErrorTarget
@@ -828,7 +828,7 @@ function collectEscapingThrowValueTypesFromExpression(
         expression.left,
         functionThrowValueTypes,
         functionNames,
-        errorObjectNames,
+        exceptionValueNames,
         classInstanceTypes,
         includeClassMethods,
         hasErrorTarget
@@ -840,7 +840,7 @@ function collectEscapingThrowValueTypesFromExpression(
         expression.right,
         functionThrowValueTypes,
         functionNames,
-        errorObjectNames,
+        exceptionValueNames,
         classInstanceTypes,
         includeClassMethods,
         hasErrorTarget
@@ -859,7 +859,7 @@ function collectEscapingThrowValueTypesFromExpression(
       expression.argument,
       functionThrowValueTypes,
       functionNames,
-      errorObjectNames,
+      exceptionValueNames,
       classInstanceTypes,
       includeClassMethods,
       hasErrorTarget
@@ -872,7 +872,7 @@ function collectEscapingThrowValueTypesFromExpression(
       nodeList(expression.elements),
       functionThrowValueTypes,
       functionNames,
-      errorObjectNames,
+      exceptionValueNames,
       classInstanceTypes,
       includeClassMethods,
       hasErrorTarget
@@ -892,7 +892,7 @@ function collectEscapingThrowValueTypesFromExpression(
           property.value,
           functionThrowValueTypes,
           functionNames,
-          errorObjectNames,
+          exceptionValueNames,
           classInstanceTypes,
           includeClassMethods,
           hasErrorTarget
@@ -904,8 +904,8 @@ function collectEscapingThrowValueTypesFromExpression(
   return types
 }
 
-function inferThrowValueTypeForAnalysis(expression: MaybeNode, errorObjectNames: StringSet): IrThrowValueType {
-  if (isErrorValueExpressionForAnalysis(expression, errorObjectNames)) {
+function inferThrowValueTypeForAnalysis(expression: MaybeNode, exceptionValueNames: StringSet): IrThrowValueType {
+  if (isExceptionValueExpressionForAnalysis(expression, exceptionValueNames)) {
     return 'error'
   }
 
@@ -922,8 +922,22 @@ function inferThrowValueTypeForAnalysis(expression: MaybeNode, errorObjectNames:
   return 'other'
 }
 
-function isErrorValueExpressionForAnalysis(expression: MaybeNode, errorObjectNames: StringSet): boolean {
-  if (isErrorConstructorExpression(expression)) {
+function isExceptionValueExpressionForAnalysis(expression: MaybeNode, exceptionValueNames: StringSet): boolean {
+  if (
+    expression !== null &&
+    typeof expression !== 'undefined' &&
+    expression.type === 'NewExpression' &&
+    expression.className !== null &&
+    typeof expression.className !== 'undefined'
+  ) {
+    return true
+  }
+
+  if (
+    expression !== null &&
+    typeof expression !== 'undefined' &&
+    expression.libraryIntrinsicRole === 'exception-value'
+  ) {
     return true
   }
 
@@ -931,32 +945,11 @@ function isErrorValueExpressionForAnalysis(expression: MaybeNode, errorObjectNam
     const name = singleReferenceName(expression)
 
     if (name !== null && typeof name !== 'undefined') {
-      return errorObjectNames.has(name)
+      return exceptionValueNames.has(name)
     }
   }
 
   return false
-}
-
-function isErrorConstructorExpression(expression: MaybeNode): boolean {
-  if (expression === null || typeof expression === 'undefined') {
-    return false
-  }
-
-  if (expression.type !== 'NewExpression') {
-    return false
-  }
-
-  if (expression.className !== null && typeof expression.className !== 'undefined') {
-    return true
-  }
-
-  if (expression.callee === null || typeof expression.callee === 'undefined') {
-    return false
-  }
-
-  const name = singleReferenceName(expression.callee)
-  return name === 'Error'
 }
 
 function nodeName(node: EffectNode): string {
@@ -1138,7 +1131,7 @@ function pushExpressionListThrowValueTypes(
   expressions: NodeList,
   functionThrowValueTypes: ThrowValueTypeMap,
   functionNames: StringSet,
-  errorObjectNames: StringSet,
+  exceptionValueNames: StringSet,
   classInstanceTypes: StringMap,
   includeClassMethods: boolean,
   hasErrorTarget: boolean
@@ -1151,7 +1144,7 @@ function pushExpressionListThrowValueTypes(
         expression,
         functionThrowValueTypes,
         functionNames,
-        errorObjectNames,
+        exceptionValueNames,
         classInstanceTypes,
         includeClassMethods,
         hasErrorTarget

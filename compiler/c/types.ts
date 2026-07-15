@@ -1,6 +1,6 @@
 import type { CompilerHost } from '../host.ts'
 import type { CompilerLibraryOptionValue, CompilerLibrarySet, TypeRef } from '../extensions/types.ts'
-import type { AnyNode, IrProgram, ModuleRecord } from '../types.ts'
+import type { AnyNode, IrProgram, ModuleRecord, ObjectShapeInfo } from '../types.ts'
 
 export type CEmitOptions = {
   libraries?: CompilerLibrarySet
@@ -93,6 +93,26 @@ export type CObjectShape = {
   dynamic?: boolean
   dynamicField?: CObjectShapeField | null
   fields?: CObjectShapeField[] | null
+}
+
+export function cObjectShapeFromMetadata(shape: ObjectShapeInfo | null): CObjectShape | null {
+  if (shape === null) {
+    return null
+  }
+
+  const fields: CObjectShapeField[] = []
+
+  for (let index = 0; index < shape.fields.length; index = index + 1) {
+    fields.push(shape.fields[index] as CObjectShapeField)
+  }
+
+  return {
+    builtin: shape.builtin ?? null,
+    libraryCppType: shape.libraryCppType ?? null,
+    libraryTypeId: shape.libraryTypeId ?? null,
+    dynamic: shape.dynamic === true,
+    fields
+  }
 }
 
 export type CObjectFieldInfo = CShapeValueMetadata & {

@@ -143,6 +143,7 @@ export type CEmitContext = {
   collectionLoweringDependencies: CollectionLoweringDependencies
   diagnostics: Diagnostic[]
   explicitEventLoop?: boolean | null
+  exceptionValueShape: CObjectShape | null
   externalEventLoopFunctions: CStringSet
   functionAsyncFlags: CBooleanMap
   functionNames: CStringMap
@@ -232,7 +233,7 @@ type CVariableScopeContext = {
   cppSetValues: CStringSet
   cppStringValues: CStringSet
   cppValueTypes: CStringMap
-  errorObjectNames: CStringSet
+  exceptionValueNames: CStringSet
   functionTypes: CFunctionTypeMap
   localValueNames: CStringSet
   mapTypes: CFunctionReturnMapTypeMap
@@ -272,7 +273,7 @@ export type CFunctionContext = CEmitContext & {
   cppStringValues: CStringSet
   cppValueTypes: CStringMap
   errorChannelUsed: boolean
-  errorObjectNames: CStringSet
+  exceptionValueNames: CStringSet
   errorTargets: string[]
   errorTargetActiveFlags: boolean[]
   eventLoopUsed: boolean
@@ -328,7 +329,7 @@ export type CVariableScopeSnapshot = {
   cppSetValues: CStringSet
   cppStringValues: CStringSet
   cppValueTypes: CStringMap
-  errorObjectNames: CStringSet
+  exceptionValueNames: CStringSet
   functionTypes: CFunctionTypeMap
   localValueNames: CStringSet
   mapTypes: CFunctionReturnMapTypeMap
@@ -370,6 +371,7 @@ export function createFunctionContext(
     classLoweringDependencies: baseContext.classLoweringDependencies,
     collectionLoweringDependencies: baseContext.collectionLoweringDependencies,
     diagnostics: baseContext.diagnostics,
+    exceptionValueShape: baseContext.exceptionValueShape,
     externalEventLoopFunctions: baseContext.externalEventLoopFunctions,
     forceRuntimeStringDeclarations: baseContext.forceRuntimeStringDeclarations,
     functionAsyncFlags: baseContext.functionAsyncFlags,
@@ -423,7 +425,7 @@ export function createFunctionContext(
     continueTargets: [],
     cleanupEnabled: true,
     errorChannelUsed: false,
-    errorObjectNames: new Set(),
+    exceptionValueNames: new Set(),
     errorTargets: [],
     errorTargetActiveFlags: [],
     functionErrorOut: null,
@@ -902,7 +904,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   const previousCppSetValues = context.cppSetValues
   const previousCppStringValues = context.cppStringValues
   const previousCppValueTypes = context.cppValueTypes
-  const previousErrorObjectNames = context.errorObjectNames
+  const previousExceptionValueNames = context.exceptionValueNames
   const previousFunctionTypes = context.functionTypes
   const previousLocalValueNames = context.localValueNames
   const previousMapTypes = context.mapTypes
@@ -931,7 +933,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   context.cppSetValues = cloneCStringSet(previousCppSetValues)
   context.cppStringValues = cloneCStringSet(previousCppStringValues)
   context.cppValueTypes = cloneCStringMap(previousCppValueTypes)
-  context.errorObjectNames = cloneCStringSet(previousErrorObjectNames)
+  context.exceptionValueNames = cloneCStringSet(previousExceptionValueNames)
   context.functionTypes = cloneCFunctionTypeMap(previousFunctionTypes)
   context.localValueNames = cloneCStringSet(previousLocalValueNames)
   context.mapTypes = cloneCFunctionReturnMapTypeMap(previousMapTypes)
@@ -960,7 +962,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
     cppSetValues: previousCppSetValues,
     cppStringValues: previousCppStringValues,
     cppValueTypes: previousCppValueTypes,
-    errorObjectNames: previousErrorObjectNames,
+    exceptionValueNames: previousExceptionValueNames,
     functionTypes: previousFunctionTypes,
     localValueNames: previousLocalValueNames,
     mapTypes: previousMapTypes,
@@ -995,7 +997,7 @@ export function restoreVariableScope(context: CVariableScopeContext, snapshot: C
   context.cppSetValues = snapshot.cppSetValues
   context.cppStringValues = snapshot.cppStringValues
   context.cppValueTypes = snapshot.cppValueTypes
-  context.errorObjectNames = snapshot.errorObjectNames
+  context.exceptionValueNames = snapshot.exceptionValueNames
   context.functionTypes = snapshot.functionTypes
   context.localValueNames = snapshot.localValueNames
   context.mapTypes = snapshot.mapTypes

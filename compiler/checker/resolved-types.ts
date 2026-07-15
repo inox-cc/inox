@@ -117,6 +117,7 @@ export type NullableConditionNarrowing = {
 }
 
 export type ObjectShapeBases = {
+  builtin: string | null
   dynamic: boolean
   dynamicField: AnyNode | null
   fields: AnyNode[]
@@ -270,6 +271,7 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('constraint', 'string', null, true, loc),
       anyNodeField('promiseValueType', 'string', null, true, loc),
       anyNodeField('promiseRejectionValueType', 'string', null, true, loc),
+      anyNodeField('promiseRejectionIntrinsicRole', 'string', null, true, loc),
       anyNodeField('setElementType', 'string', null, true, loc),
       anyNodeField('propertyValueType', 'string', null, true, loc),
       anyNodeField('returnType', 'string', null, true, loc),
@@ -287,6 +289,7 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('rest', 'boolean', null, false, loc),
       anyNodeField('libraryReceiverTypeId', 'string', null, true, loc),
       anyNodeField('libraryResultTypeId', 'string', null, true, loc),
+      anyNodeField('libraryIntrinsicRole', 'string', null, true, loc),
       anyNodeField('libraryCCallStyle', 'string', null, true, loc),
       anyNodeField('libraryCFailureMode', 'string', null, true, loc),
       anyNodeField('libraryCallbackLifetime', 'string', null, true, loc)

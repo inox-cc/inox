@@ -15,33 +15,6 @@ function readonlyStringFields(names: string[]): AnyNode[] {
   return fields
 }
 
-export const errorObjectShape: ObjectShapeInfo = {
-  kind: 'object',
-  fields: [
-    {
-      name: 'name',
-      valueType: 'string',
-      readonly: true
-    },
-    {
-      name: 'message',
-      valueType: 'string',
-      readonly: true
-    },
-    {
-      name: 'code',
-      valueType: 'string',
-      readonly: true
-    },
-    {
-      name: 'cause',
-      valueType: 'object',
-      nullable: true,
-      readonly: true
-    }
-  ]
-}
-
 export const fetchResponseObjectShape: ObjectShapeInfo = {
   kind: 'object',
   builtin: 'fetch.Response',
@@ -130,15 +103,6 @@ export const globals: Map<string, SymbolInfo> = new Map([
   ],
   [
     'Promise',
-    {
-      kind: 'global',
-      mutable: false,
-      valueType: 'object',
-      constructable: true
-    }
-  ],
-  [
-    'Error',
     {
       kind: 'global',
       mutable: false,
@@ -264,7 +228,6 @@ export function builtinGlobalSymbol(name: string): SymbolInfo | null {
 
   if (
     name === 'Promise' ||
-    name === 'Error' ||
     name === 'Set' ||
     name === 'Map' ||
     name === 'Array' ||

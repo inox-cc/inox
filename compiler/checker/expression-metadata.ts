@@ -1,4 +1,3 @@
-import { errorObjectShape } from './builtins.ts'
 import { resolveDeclaredType, resolveFieldDeclaredType as resolveFieldDeclaredTypeInContext } from './declared-types.ts'
 import type { DeclaredTypeResolverContext } from './declared-types.ts'
 import { dynamicShapeField } from './expression-helpers.ts'
@@ -8,6 +7,7 @@ import {
   resolvedFunctionTypeMetadata
 } from './resolved-types.ts'
 import type { CheckerMapType, FunctionTypeMetadata, ResolvedTypeInfo } from './resolved-types.ts'
+import type { IntrinsicRole } from '../extensions/types.ts'
 import type { AnyNode, ObjectShapeInfo, SourceLocation, SymbolInfo, ValueType } from '../types.ts'
 
 export type ExpressionMetadataResolverContext = {
@@ -716,14 +716,14 @@ export function resolveExpressionPromiseValueType(
 }
 
 export function resolveRejectedExpressionValueType(
-  context: ExpressionMetadataResolverContext,
+  _context: ExpressionMetadataResolverContext,
   expression: AnyNode | null | undefined
 ): ValueType {
   if (expression === null || typeof expression === 'undefined') {
     return 'unknown'
   }
 
-  if (isErrorObjectExpression(context, expression)) {
+  if (expression.libraryIntrinsicRole === 'exception-value') {
     return 'error'
   }
 
@@ -734,19 +734,12 @@ export function resolveRejectedExpressionValueType(
   return 'unknown'
 }
 
-export function isErrorObjectExpression(context: ExpressionMetadataResolverContext, expression: AnyNode): boolean {
-  if (
-    expression.type === 'NewExpression' &&
-    expression.callee !== null &&
-    typeof expression.callee !== 'undefined' &&
-    expression.callee.type === 'Reference' &&
-    expression.callee.path.length === 1 &&
-    firstPathSegment(expression.callee.path) === 'Error'
-  ) {
-    return true
+export function resolveRejectedExpressionIntrinsicRole(
+  expression: AnyNode | null | undefined
+): IntrinsicRole | null {
+  if (expression === null || typeof expression === 'undefined') {
+    return null
   }
 
-  const shape = resolveExpressionShape(context, expression)
-
-  return shape === errorObjectShape
+  return expression.libraryIntrinsicRole ?? null
 }

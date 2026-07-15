@@ -15,15 +15,22 @@ test('Error identity принадлежит discoverable global package и им�
       libraryId: 'global:error',
       typeId: errorNativeTypeId,
       declarationNames: ['Error'],
-      valueType: 'error',
-      cppType: 'inox::Value',
+      valueType: 'object',
+      cppType: 'Error',
       baseTypeIds: [],
-      runtimeRequirements: ['managed-values', 'objects', 'string-bytes'],
+      runtimeRequirements: ['global:error'],
       fields: [
-        { name: 'name', valueType: 'string', readonly: true },
-        { name: 'message', valueType: 'string', readonly: true },
-        { name: 'code', valueType: 'string', readonly: true },
-        { name: 'cause', valueType: 'object', nullable: true, readonly: true }
+        { name: 'name', valueType: 'string', readonly: true, cMember: 'name', cppType: 'inox::String' },
+        { name: 'message', valueType: 'string', readonly: true, cMember: 'message', cppType: 'inox::String' },
+        { name: 'code', valueType: 'string', readonly: true, cMember: 'code', cppType: 'inox::String' },
+        {
+          name: 'cause',
+          valueType: 'object',
+          nullable: true,
+          readonly: true,
+          cMember: 'cause',
+          cppType: 'inox::Value'
+        }
       ]
     }
   ])

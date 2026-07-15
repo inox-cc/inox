@@ -210,6 +210,56 @@ export function compilerLibraryOperationForIntrinsic(
   return null
 }
 
+export function compilerLibraryIntrinsicRoleForBinding(
+  libraries: CompilerLibrarySet,
+  bindingId: string
+): IntrinsicRole | null {
+  for (let index = 0; index < libraries.intrinsicBindings.length; index = index + 1) {
+    const binding = libraries.intrinsicBindings[index]
+
+    if (binding.bindingId === bindingId) {
+      return binding.role
+    }
+  }
+
+  return null
+}
+
+export function compilerLibraryIntrinsicRoleForTypeId(
+  libraries: CompilerLibrarySet,
+  typeId: string
+): IntrinsicRole | null {
+  for (let index = 0; index < libraries.intrinsicBindings.length; index = index + 1) {
+    const binding = libraries.intrinsicBindings[index]
+
+    for (let operationIndex = 0; operationIndex < libraries.operations.length; operationIndex = operationIndex + 1) {
+      const operation = libraries.operations[operationIndex]
+
+      if (!operationHasBinding(operation, binding.bindingId)) {
+        continue
+      }
+
+      const resultTypeRef = operation.resultTypeRef
+
+      if (resultTypeRef?.kind === 'nominal' && resultTypeRef.typeId === typeId) {
+        return binding.role
+      }
+
+      const variants = operation.variants ?? []
+
+      for (let variantIndex = 0; variantIndex < variants.length; variantIndex = variantIndex + 1) {
+        const variantResultTypeRef = variants[variantIndex].resultTypeRef
+
+        if (variantResultTypeRef?.kind === 'nominal' && variantResultTypeRef.typeId === typeId) {
+          return binding.role
+        }
+      }
+    }
+  }
+
+  return null
+}
+
 export function compilerLibraryOperationForReceiver(
   libraries: CompilerLibrarySet,
   receiverTypeId: string | null | undefined,

@@ -1,6 +1,7 @@
 import { commonValueType } from './assignability.ts'
 import { checkerNodeAt, nodeValueTypeOrUnknown } from './resolved-types.ts'
 import type { CheckerMapType, FunctionTypeMetadata, FunctionTypeParamMetadata } from './resolved-types.ts'
+import type { IntrinsicRole } from '../extensions/types.ts'
 import type { AnyNode, ObjectShapeInfo, SourceLocation, ValueType } from '../types.ts'
 
 export function callExpressionArgumentLabel(expression: AnyNode): string {
@@ -248,6 +249,28 @@ export function resolveExpressionPromiseRejectionValueType(expression: AnyNode |
     if (objectRejectionValueType !== null && typeof objectRejectionValueType !== 'undefined') {
       return objectRejectionValueType
     }
+  }
+
+  return null
+}
+
+export function resolveExpressionPromiseRejectionIntrinsicRole(
+  expression: AnyNode | null | undefined
+): IntrinsicRole | null {
+  if (expression === null || typeof expression === 'undefined') {
+    return null
+  }
+
+  if (expression.valueType === 'promise') {
+    const role = expression.promiseRejectionIntrinsicRole
+
+    if (role !== null && typeof role !== 'undefined') {
+      return role
+    }
+  }
+
+  if (expression.type === 'MemberExpression') {
+    return resolveExpressionPromiseRejectionIntrinsicRole(expression.object)
   }
 
   return null

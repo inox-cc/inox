@@ -375,6 +375,11 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.libraryOperationId = libraryOperationId
   }
 
+  const libraryIntrinsicRole = nullableString(source.libraryIntrinsicRole)
+  if (libraryIntrinsicRole !== null && typeof libraryIntrinsicRole !== 'undefined') {
+    target.libraryIntrinsicRole = libraryIntrinsicRole
+  }
+
   const libraryReceiverTypeId = nullableString(source.libraryReceiverTypeId)
   if (libraryReceiverTypeId !== null && typeof libraryReceiverTypeId !== 'undefined') {
     target.libraryReceiverTypeId = libraryReceiverTypeId
@@ -501,6 +506,11 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
   const promiseRejectionValueType = nullableString(source.promiseRejectionValueType)
   if (promiseRejectionValueType !== null && typeof promiseRejectionValueType !== 'undefined') {
     target.promiseRejectionValueType = promiseRejectionValueType
+  }
+
+  const promiseRejectionIntrinsicRole = nullableString(source.promiseRejectionIntrinsicRole)
+  if (promiseRejectionIntrinsicRole !== null && typeof promiseRejectionIntrinsicRole !== 'undefined') {
+    target.promiseRejectionIntrinsicRole = promiseRejectionIntrinsicRole
   }
 
   const returnSetElementType = nullableString(source.returnSetElementType)

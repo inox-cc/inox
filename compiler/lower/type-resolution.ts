@@ -45,6 +45,7 @@ export type LowerResolvedType = {
 }
 
 type LowerObjectShapeBases = {
+  builtin: string | null
   dynamic: boolean
   fields: LowerTypeNode[]
 }
@@ -314,6 +315,11 @@ export function resolveObjectShape(shape: LowerTypeNode, context: LowerContext):
   const bases = resolveObjectShapeBases(shape, context)
   const fields = concatFields(bases.fields, shape.fields)
   const resolvedFields: LowerTypeNode[] = []
+  let builtin = bases.builtin
+
+  if (shape.builtin !== null && typeof shape.builtin !== 'undefined') {
+    builtin = shape.builtin
+  }
 
   for (let fieldIndex = 0; fieldIndex < fields.length; fieldIndex = fieldIndex + 1) {
     const field = fields[fieldIndex]
@@ -322,7 +328,7 @@ export function resolveObjectShape(shape: LowerTypeNode, context: LowerContext):
 
   return {
     kind: 'object',
-    builtin: nullableString(shape.builtin),
+    builtin,
     baseTypes: copyStringArray(shape.baseTypes),
     dynamic: shape.dynamic === true || bases.dynamic,
     fields: resolvedFields
@@ -383,29 +389,70 @@ function hasWeakOwnershipMarker(fields: LowerTypeNode[], fieldName: string): boo
 
 function resolveObjectShapeBases(shape: LowerTypeNode, context: LowerContext): LowerObjectShapeBases {
   const fields: LowerTypeNode[] = []
+  let builtin: string | null = null
   let dynamic = false
   const baseTypes = copyStringArray(shape.baseTypes)
 
   for (const name of baseTypes) {
-    const base = context.types.get(name)
+    const base = resolveObjectShapeBase(name, context)
 
-    if (base === null || typeof base === 'undefined' || base.kind !== 'object') {
+    if (base === null || typeof base === 'undefined') {
       continue
     }
 
-    const resolved = resolveObjectShape(base, context)
-
-    for (const field of resolved.fields) {
+    for (const field of base.fields) {
       fields.push(hydrateObjectShapeField(field, context))
     }
 
-    dynamic = dynamic || resolved.dynamic === true
+    dynamic = dynamic || base.dynamic === true
+
+    if (base.builtin !== null && typeof base.builtin !== 'undefined') {
+      builtin = base.builtin
+    }
   }
 
   return {
+    builtin,
     dynamic,
     fields
   }
+}
+
+function resolveObjectShapeBase(name: string, context: LowerContext): LowerTypeNode | null {
+  const seen: Set<string> = new Set()
+  let currentName = name
+
+  while (!seen.has(currentName)) {
+    seen.add(currentName)
+
+    if (currentName === 'AnyNode') {
+      return anyNodeResolvedType().shape
+    }
+
+    const current = context.types.get(currentName)
+
+    if (current === null || typeof current === 'undefined') {
+      return null
+    }
+
+    if (current.kind === 'object') {
+      return resolveObjectShape(current, context)
+    }
+
+    if (current.kind !== 'alias') {
+      return null
+    }
+
+    const nextName = current.valueType
+
+    if (nextName === null || typeof nextName === 'undefined') {
+      return null
+    }
+
+    currentName = nextName
+  }
+
+  return null
 }
 
 function hydrateResolvedType(resolved: LowerResolvedType, context: LowerContext): void {
@@ -615,6 +662,11 @@ function resolveWeakTargetObjectShape(shape: LowerTypeNode, context: LowerContex
   const bases = resolveObjectShapeBases(shape, context)
   const fields = concatFields(bases.fields, shape.fields)
   const resolvedFields: LowerTypeNode[] = []
+  let builtin = bases.builtin
+
+  if (shape.builtin !== null && typeof shape.builtin !== 'undefined') {
+    builtin = shape.builtin
+  }
 
   for (let fieldIndex = 0; fieldIndex < fields.length; fieldIndex = fieldIndex + 1) {
     const field = fields[fieldIndex]
@@ -623,6 +675,7 @@ function resolveWeakTargetObjectShape(shape: LowerTypeNode, context: LowerContex
 
   return {
     kind: 'object',
+    builtin,
     baseTypes: copyStringArray(shape.baseTypes),
     dynamic: shape.dynamic === true || bases.dynamic,
     fields: resolvedFields

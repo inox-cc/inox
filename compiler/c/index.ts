@@ -415,12 +415,6 @@ type CThrowingFunctionInfo = {
   throwingFunctions: CNameSet
 }
 
-type CErrorConstructorParts = {
-  message: AnyNode
-  code: AnyNode
-  cause: AnyNode
-}
-
 function firstKnownValueTypeOrUnknown(
   first: string | null | undefined,
   second: string | null | undefined,
@@ -486,7 +480,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitDynamicObjectMemberAssignment,
   emitDynamicObjectFieldAssignment: (expression: CDynamicObjectFieldNode, context: CFunctionContext) =>
     emitDynamicObjectFieldAssignment(expression, context, objectExpressionFieldDependencies),
-  emitErrorObjectVariableDeclaration,
   emitFailureStatement,
   emitFetchAbortControllerVariableDeclaration,
   emitFetchAbortControllerAbortStatement,
@@ -566,15 +559,14 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   isClassConstructorExpression,
   isConsoleLog,
   isCollectionConstructorExpression,
-  isErrorConstructorExpression,
-  isErrorValueExpression,
+  isExceptionValueExpression,
   isObjectRuntimeCallExpression,
   isIndexAccessExpression,
   isDynamicRuntimeValueExpression: isStatementDynamicRuntimeValueExpression,
   isMemberAccessExpression,
   isNullableRuntimeValueAssignment,
   isRuntimeProducedStringExpression,
-  registerErrorObjectShape,
+  registerExceptionValueShape,
   resolveForOfElementType,
   resolveKnownArrayIndex,
   resolveKnownForOfArray,
@@ -777,8 +769,7 @@ const rejectionValueTypeDependencies: RejectionValueTypeDependencies = {
   cFetchRuntimeExpressionMethod,
   cPromiseRuntimeCallName,
   inferExpressionType,
-  isErrorConstructorExpression,
-  isKnownErrorValueExpression
+  isKnownExceptionValueExpression
 }
 
 promiseLoweringDependencies = {
@@ -1004,7 +995,6 @@ const expressionTypeDependencies = {
   isArrayJoinCall,
   isArrayLengthExpression,
   isClassConstructorExpression,
-  isErrorConstructorExpression,
   isFetchAbortControllerConstructorExpression,
   isIndexAccessExpression,
   isMemberAccessExpression,
@@ -1150,7 +1140,6 @@ const cValueExpressionDependencies = {
   emitCArrayLiteralValueExpression,
   emitCAwaitValueExpression,
   emitCClassObjectValueExpression,
-  emitCErrorObjectValueExpression,
   emitCNullishCoalescingValueExpression,
   emitCNumberConversionValueExpression,
   emitCNumberToStringValueExpression,
@@ -1206,7 +1195,6 @@ const cValueExpressionDependencies = {
   inferExpressionType,
   isBoxedRuntimeValueName,
   isClassConstructorExpression,
-  isErrorConstructorExpression,
   isIndexAccessExpression,
   isMemberAccessExpression,
   isNullableRuntimeExpression,
@@ -1509,6 +1497,7 @@ function createBaseContext(
     arrayLoweringDependencies,
     stringLoweringDependencies,
     diagnostics,
+    exceptionValueShape: null,
     functionThrowValueTypes: throwing.functionThrowValueTypes,
     functionNames,
     functionParams,
@@ -2580,7 +2569,7 @@ function emitStatement(statement: AnyNode, context: CFunctionContext): string[] 
 function inferCatchBindingValueType(statement: AnyNode, context: CFunctionContext): string {
   const types: string[] = []
   const throwOptions: IrLocalThrowValueTypeOptions = {
-    errorObjectNames: context.errorObjectNames,
+    exceptionValueNames: context.exceptionValueNames,
     functionThrowValueTypes: context.functionThrowValueTypes
   }
   const localThrowTypes: IrThrowValueType[] = collectIrLocalThrowValueTypes(statement.block, throwOptions)
@@ -2719,10 +2708,6 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
     lines.push(`${uninitializedDeclarationPrefix(statement)}double ${emitCIdentifier(statement.name)} = ${arrayReduceCall.expression};`)
 
     return lines
-  }
-
-  if (isErrorConstructorExpression(statement.init)) {
-    return emitErrorObjectVariableDeclaration(statement, context)
   }
 
   const fetchHeadersBooleanDeclaration = emitFetchHeadersBooleanVariableDeclaration(
@@ -5558,199 +5543,6 @@ function objectLiteralShapeFieldIndex(fields: CObjectShapeField[], key: string):
   return -1
 }
 
-function emitErrorObjectVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
-  registerOwnedValue(context, statement.name)
-  context.variables.set(statement.name, 'object')
-  registerErrorObjectShape(context, statement.name)
-
-  return emitCErrorObjectInitLines(statement.name, statement.init, context)
-}
-
-function emitCErrorObjectValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
-  const temp = nextCName(context, 'inox_error_object')
-  registerOwnedValue(context, temp)
-
-  return {
-    lines: emitCErrorObjectInitLines(temp, expression, context),
-    expression: temp
-  }
-}
-
-function emitCErrorObjectInitLines(target: string, expression: AnyNode, context: CFunctionContext): string[] {
-  const shapeName = nextCName(context, 'inox_shape_error')
-  const fieldsName = `${shapeName}_fields`
-  const parts = errorConstructorExpressions(expression, context)
-  const name = emitCValueExpression(cStringLiteralNode('Error', expression.loc), context)
-  const message = emitCValueExpression(parts.message, context)
-  const code = emitCValueExpression(parts.code, context)
-  const cause = emitCValueExpression(parts.cause, context)
-  const lines: string[] = []
-
-  lines.push(`static const inox_field_info ${fieldsName}[] = {`)
-  lines.push(`  { ${cStringLiteral('name')}, INOX_FIELD_READONLY },`)
-  lines.push(`  { ${cStringLiteral('message')}, INOX_FIELD_READONLY },`)
-  lines.push(`  { ${cStringLiteral('code')}, INOX_FIELD_READONLY },`)
-  lines.push(`  { ${cStringLiteral('cause')}, INOX_FIELD_READONLY },`)
-  lines.push('};')
-  lines.push(`static const inox_shape ${shapeName} = {`)
-  lines.push('  4,')
-  lines.push(`  ${fieldsName}`)
-  lines.push('};')
-  pushAll(lines, emitPrepareOwnedValueWrite(target))
-  lines.push(emitStatusCheck(`inox_object_new(&inox_default_allocator, &${shapeName}, &${target})`, context))
-  pushAll(lines, name.lines)
-  lines.push(emitStatusCheck(`inox_object_init_known(${target}, 0, ${name.expression})`, context))
-  pushAll(lines, message.lines)
-  lines.push(emitStatusCheck(`inox_object_init_known(${target}, 1, ${message.expression})`, context))
-  pushAll(lines, code.lines)
-  lines.push(emitStatusCheck(`inox_object_init_known(${target}, 2, ${code.expression})`, context))
-  pushAll(lines, cause.lines)
-  lines.push(emitStatusCheck(`inox_object_init_known(${target}, 3, ${cause.expression})`, context))
-
-  return lines
-}
-
-function errorConstructorExpressions(expression: AnyNode, context: CFunctionContext): CErrorConstructorParts {
-  if (expression.args.length > 2) {
-    pushDiagnostic(
-      context,
-      diagnostic(
-        'INOX_ARG_COUNT',
-        `Error constructor expects at most 2 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    )
-  }
-
-  let message: AnyNode = cStringLiteralNode('', expression.loc)
-  const options: AnyNode | null | undefined = expression.args[1]
-  let code: AnyNode = cStringLiteralNode('', expression.loc)
-  let cause: AnyNode = cNullLiteralNode(expression.loc)
-
-  const messageArg: AnyNode | null | undefined = expression.args[0]
-
-  if (messageArg !== null && typeof messageArg !== 'undefined') {
-    message = messageArg
-  }
-
-  if (inferExpressionType(message, context) !== 'string') {
-    let loc: CSourceLocation = expression.loc
-
-    if (message.loc !== null && typeof message.loc !== 'undefined') {
-      loc = message.loc
-    }
-
-    pushDiagnostic(
-      context,
-      diagnostic('INOX_TYPE_MISMATCH', 'Error message must be a string in the current C backend slice', loc)
-    )
-
-    return {
-      message: cStringLiteralNode('', expression.loc),
-      code,
-      cause
-    }
-  }
-
-  if (options === null || typeof options === 'undefined') {
-    return {
-      message,
-      code,
-      cause
-    }
-  }
-
-  if (options.type !== 'ObjectLiteral') {
-    let loc: CSourceLocation = expression.loc
-
-    if (options.loc !== null && typeof options.loc !== 'undefined') {
-      loc = options.loc
-    }
-
-    pushDiagnostic(
-      context,
-      diagnostic('INOX_TYPE_MISMATCH', 'Error options must be an object literal in the current C backend slice', loc)
-    )
-
-    return {
-      message,
-      code,
-      cause
-    }
-  }
-
-  const properties: CObjectLiteralPropertyNode[] = options.properties
-
-  for (const property of properties) {
-    const propertyValue: AnyNode = property.value
-
-    if (property.key === 'code') {
-      if (inferExpressionType(propertyValue, context) !== 'string') {
-        let loc: CSourceLocation = property.loc
-
-        if (propertyValue.loc !== null && typeof propertyValue.loc !== 'undefined') {
-          loc = propertyValue.loc
-        }
-
-        pushDiagnostic(
-          context,
-          diagnostic('INOX_TYPE_MISMATCH', 'Error code must be a string in the current C backend slice', loc)
-        )
-      } else {
-        code = propertyValue
-      }
-    } else if (property.key === 'cause') {
-      if (propertyValue.type === 'NullLiteral' || isErrorValueExpression(propertyValue, context)) {
-        cause = propertyValue
-      } else {
-        let loc: CSourceLocation = property.loc
-
-        if (propertyValue.loc !== null && typeof propertyValue.loc !== 'undefined') {
-          loc = propertyValue.loc
-        }
-
-        pushDiagnostic(
-          context,
-          diagnostic(
-            'INOX_TYPE_MISMATCH',
-            'Error cause must be an Error object or null in the current C backend slice',
-            loc
-          )
-        )
-      }
-    } else {
-      let loc: CSourceLocation = options.loc
-
-      if (property.loc !== null && typeof property.loc !== 'undefined') {
-        loc = property.loc
-      }
-
-      pushDiagnostic(context, diagnostic('INOX_UNKNOWN_FIELD', `unknown Error option ${property.key}`, loc))
-    }
-  }
-
-  return {
-    message,
-    code,
-    cause
-  }
-}
-
-function cStringLiteralNode(value: string, loc: CSourceLocation = null): AnyNode {
-  return {
-    type: 'StringLiteral',
-    value,
-    loc
-  }
-}
-
-function cNullLiteralNode(loc: CSourceLocation = null): AnyNode {
-  return {
-    type: 'NullLiteral',
-    loc
-  }
-}
-
 function emitCNullishCoalescingValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   if (!canLowerCNullishCoalescingExpression(expression, context)) {
     pushDiagnostic(
@@ -6067,7 +5859,7 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
     return emitNumberLogValue(expression, context)
   }
 
-  if (valueType === 'object' && isErrorValueExpression(expression, context)) {
+  if (valueType === 'object' && isExceptionValueExpression(expression, context)) {
     return emitRuntimeErrorLogValue(expression, context)
   }
 
@@ -8873,21 +8665,6 @@ function inferExpressionType(expression: AnyNode, context: CFunctionContext): st
   return inferExpressionTypeWithDependencies(expression, context, expressionTypeDependencies)
 }
 
-function isErrorConstructorExpression(expression: AnyNode): boolean {
-  if (
-    expression === null ||
-    typeof expression === 'undefined' ||
-    expression.type !== 'NewExpression' ||
-    expression.callee.type !== 'Reference'
-  ) {
-    return false
-  }
-
-  const path: string[] = expression.callee.path
-
-  return path.length === 1 && path[0] === 'Error'
-}
-
 function isFetchAbortControllerConstructorExpression(expression: AnyNode): boolean {
   if (
     expression === null ||
@@ -9085,12 +8862,16 @@ function emitPreparedObjectRuntimeCallArgumentExpression(
   }
 }
 
-function isErrorValueExpression(expression: AnyNode, context: CFunctionContext): boolean {
-  return isKnownErrorValueExpression(expression, context.errorObjectNames)
+function isExceptionValueExpression(expression: AnyNode, context: CFunctionContext): boolean {
+  return isKnownExceptionValueExpression(expression, context.exceptionValueNames)
 }
 
-function isKnownErrorValueExpression(expression: AnyNode, errorObjectNames: CNameSet): boolean {
-  if (isErrorConstructorExpression(expression)) {
+function isKnownExceptionValueExpression(expression: AnyNode, exceptionValueNames: CNameSet): boolean {
+  if (
+    expression !== null &&
+    typeof expression !== 'undefined' &&
+    expression.libraryIntrinsicRole === 'exception-value'
+  ) {
     return true
   }
 
@@ -9100,30 +8881,17 @@ function isKnownErrorValueExpression(expression: AnyNode, errorObjectNames: CNam
     expression.type === 'Reference' &&
     expression.path.length === 1
   ) {
-    return errorObjectNames.has(expression.path[0])
+    return exceptionValueNames.has(expression.path[0])
   }
 
   return false
 }
 
-function registerErrorObjectShape(context: CFunctionContext, name: string): void {
-  context.errorObjectNames.add(name)
-  context.objectShapes.set(name, [
-    {
-      name: 'name',
-      valueType: 'string'
-    },
-    {
-      name: 'message',
-      valueType: 'string'
-    },
-    {
-      name: 'code',
-      valueType: 'string'
-    },
-    {
-      name: 'cause',
-      valueType: 'object'
-    }
-  ])
+function registerExceptionValueShape(context: CFunctionContext, name: string): void {
+  context.exceptionValueNames.add(name)
+  const fields = context.exceptionValueShape?.fields
+
+  if (!context.objectShapes.has(name) && fields !== null && typeof fields !== 'undefined') {
+    context.objectShapes.set(name, fields)
+  }
 }

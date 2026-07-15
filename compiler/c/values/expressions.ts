@@ -4884,7 +4884,6 @@ export type CValueExpressionDependencies = {
   emitCArrayLiteralValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCAwaitValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCClassObjectValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitCErrorObjectValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCNullishCoalescingValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCNumberConversionValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitCObjectLiteralValueExpression(
@@ -4988,7 +4987,6 @@ export type CValueExpressionDependencies = {
   inferExpressionType(expression: CValueNode, context: CFunctionContext): string
   isBoxedRuntimeValueName(name: string, context: CFunctionContext): boolean
   isClassConstructorExpression(expression: CValueNode, context: CFunctionContext): boolean
-  isErrorConstructorExpression(expression: CValueNode): boolean
   isIndexAccessExpression(expression: CValueNode): boolean
   isMemberAccessExpression(expression: CValueNode): boolean
   isNullableRuntimeExpression(expression: CValueNode, context: CFunctionContext): boolean
@@ -5100,10 +5098,6 @@ export function emitCValueExpression(
 
   if (objectValuesCall !== null && typeof objectValuesCall !== 'undefined') {
     return objectValuesCall
-  }
-
-  if (deps.isErrorConstructorExpression(expression)) {
-    return deps.emitCErrorObjectValueExpression(expression, context)
   }
 
   if (deps.isClassConstructorExpression(expression, context)) {

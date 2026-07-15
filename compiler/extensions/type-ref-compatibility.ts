@@ -1,6 +1,10 @@
-import { compilerLibraryNativeTypeForId } from './library-set.ts'
+import {
+  compilerLibraryIntrinsicRoleForTypeId,
+  compilerLibraryNativeTypeForId
+} from './library-set.ts'
 import type {
   CompilerLibrarySet,
+  IntrinsicRole,
   LibraryCResultFieldMappingDescriptor,
   LibraryCResultMappingDescriptor,
   LibraryResultShapeFieldDescriptor,
@@ -10,6 +14,7 @@ import type {
 import type { AnyNode, ObjectShapeInfo, SourceLocation, ValueType } from '../types.ts'
 
 export type TypeRefCompatibilityMetadata = {
+  intrinsicRole: IntrinsicRole | null
   valueType: ValueType
   nullable: boolean
   owned: boolean
@@ -23,6 +28,7 @@ export type TypeRefCompatibilityMetadata = {
   mapValueType: ValueType | null
   promiseValueType: ValueType | null
   promiseRejectionValueType: ValueType | null
+  promiseRejectionIntrinsicRole: IntrinsicRole | null
   setElementType: ValueType | null
 }
 
@@ -68,6 +74,7 @@ function baseTypeRefCompatibilityMetadata(
 
     metadata.libraryCppType = nativeType.cppType
     metadata.libraryResultTypeId = nativeType.typeId
+    metadata.intrinsicRole = compilerLibraryIntrinsicRoleForTypeId(libraries, nativeType.typeId)
     metadata.shape = {
       kind: 'object',
       baseTypes: nativeType.baseTypeIds,
@@ -100,6 +107,7 @@ function baseTypeRefCompatibilityMetadata(
         mapValueType: fieldMetadata.mapValueType,
         promiseValueType: fieldMetadata.promiseValueType,
         promiseRejectionValueType: fieldMetadata.promiseRejectionValueType,
+        promiseRejectionIntrinsicRole: fieldMetadata.promiseRejectionIntrinsicRole,
         setElementType: fieldMetadata.setElementType,
         shape: fieldMetadata.shape,
         libraryCMember: null,
@@ -121,6 +129,7 @@ function emptyCompatibilityMetadata(
   owned: boolean
 ): TypeRefCompatibilityMetadata {
   return {
+    intrinsicRole: null,
     valueType,
     nullable,
     owned,
@@ -134,6 +143,7 @@ function emptyCompatibilityMetadata(
     mapValueType: null,
     promiseValueType: null,
     promiseRejectionValueType: null,
+    promiseRejectionIntrinsicRole: null,
     setElementType: null
   }
 }
@@ -244,7 +254,10 @@ function applyTypeTraits(
       metadata.setElementType = fulfilled.setElementType
 
       if (trait.args.length > 1) {
-        metadata.promiseRejectionValueType = typeRefCompatibilityMetadata(trait.args[1], libraries, loc).valueType
+        const rejected = typeRefCompatibilityMetadata(trait.args[1], libraries, loc)
+
+        metadata.promiseRejectionValueType = rejected.valueType
+        metadata.promiseRejectionIntrinsicRole = rejected.intrinsicRole
       }
     }
   }

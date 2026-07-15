@@ -1,5 +1,5 @@
 import type { CompilerHost } from './host.ts'
-import type { CompilerLibraryOptionValue, CompilerLibrarySet } from './extensions/types.ts'
+import type { CompilerLibraryOptionValue, CompilerLibrarySet, IntrinsicRole } from './extensions/types.ts'
 
 export type SourceLocation = {
   file?: string
@@ -180,6 +180,7 @@ export type SymbolInfo = {
   valueType: ValueType
   libraryId?: string | null
   libraryBindingId?: string | null
+  libraryIntrinsicRole?: IntrinsicRole | null
   importedName?: string
   importSource?: string
   nullable?: boolean
@@ -194,6 +195,7 @@ export type SymbolInfo = {
   mapValueArrayElementType?: ValueType | null
   mapValueArrayElementDeclaredType?: string | null
   promiseValueType?: ValueType | null
+  promiseRejectionIntrinsicRole?: IntrinsicRole | null
   setElementType?: ValueType | null
   params?: AnyNode[]
   returnType?: ValueType
