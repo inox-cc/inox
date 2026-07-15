@@ -35,15 +35,24 @@ test('удаление global:regexp убирает literal semantics и native 
   const afterRegistry = await readFile(resolve(output, 'default-registry.ts'), 'utf8')
   const afterPlan = await readFile(resolve(output, 'native-plan.json'), 'utf8')
 
-  assert.equal(after.declarations.some((item) => item.libraryId === 'global:regexp'), false)
-  assert.equal(after.operations.some((item) => item.libraryId === 'global:regexp'), false)
-  assert.equal(after.intrinsicBindings.some((item) => item.role === 'regexp-literal'), false)
+  assert.equal(
+    after.declarations.some((item) => item.libraryId === 'global:regexp'),
+    false
+  )
+  assert.equal(
+    after.operations.some((item) => item.libraryId === 'global:regexp'),
+    false
+  )
+  assert.equal(
+    after.intrinsicBindings.some((item) => item.role === 'regexp-literal'),
+    false
+  )
   assert.doesNotMatch(afterRegistry, /global:regexp/)
   assert.doesNotMatch(afterPlan, /stdlib\/global\/regexp/)
   assert.match(afterPlan, /stdlib\/global\/math\/src\/math\.cc/)
   assert.doesNotThrow(() => compileSource('Math.min(1, 2)\n', { libraries: after }))
   assert.throws(
-    () => compileSource('/stdlib/i.test(\'INOX stdlib\')\n', { libraries: after }),
+    () => compileSource("/stdlib/i.test('INOX stdlib')\n", { libraries: after }),
     (error: unknown) =>
       error instanceof CompileError &&
       error.diagnostics.length === 1 &&

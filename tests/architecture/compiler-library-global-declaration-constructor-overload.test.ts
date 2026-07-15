@@ -8,7 +8,9 @@ import { globalDeclarationLibrary } from './helpers/compiler-library-fixtures.ts
 
 test('ambient class constructor overloads проверяются по declaration', () => {
   const libraries = createCompilerLibrarySet([
-    globalDeclarationLibrary('global:bridge', `
+    globalDeclarationLibrary(
+      'global:bridge',
+      `
       export {};
       declare global {
         class Bridge {
@@ -16,15 +18,14 @@ test('ambient class constructor overloads проверяются по declaratio
           constructor(value: string);
         }
       }
-    `)
+    `
+    )
   ])
   const result = compileSourceToIr("const bridge = new Bridge('ready')\n", { libraries })
 
   assert.equal(result.ir.body[0].init.valueType, 'object')
   assert.throws(
     () => compileSourceToIr('new Bridge(true)\n', { libraries }),
-    (error: unknown) =>
-      error instanceof CompileError &&
-      error.diagnostics[0].code === 'INOX_TYPE_MISMATCH'
+    (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_TYPE_MISMATCH'
   )
 })

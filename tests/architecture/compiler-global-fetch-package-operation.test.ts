@@ -16,12 +16,7 @@ test('global:fetch владеет declarations, native types, operations и runt
   assert.match(fetchPackage.declarationSource ?? '', /declare global/)
   assert.deepEqual(
     fetchPackage.compilerPackage?.nativeTypes?.map((nativeType) => nativeType.typeId),
-    [
-      'global:fetch#AbortController',
-      'global:fetch#AbortSignal',
-      'global:fetch#Headers',
-      'global:fetch#Response'
-    ]
+    ['global:fetch#AbortController', 'global:fetch#AbortSignal', 'global:fetch#Headers', 'global:fetch#Response']
   )
 
   const operationIds = fetchPackage.compilerPackage?.operations.map((operation) => operation.operationId) ?? []

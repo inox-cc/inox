@@ -25,10 +25,7 @@ test('node:timers использует declarations-only JS-shaped RAII C++ faca
   assert.match(header, /extern const TimersModule timers;/)
 
   assert.doesNotMatch(header, /\binox_timer_handle\b|\binox_loop_\w*\b|\bvoid\s*\*/)
-  assert.doesNotMatch(
-    header,
-    /\binox_(?:status|value|allocator)\b|\binox_[a-zA-Z0-9_]+\s*\(|extern\s+"C"|\btypedef\b/
-  )
+  assert.doesNotMatch(header, /\binox_(?:status|value|allocator)\b|\binox_[a-zA-Z0-9_]+\s*\(|extern\s+"C"|\btypedef\b/)
   assert.doesNotMatch(header, /\binline\b|\btemplate\s*</)
   assert.doesNotMatch(header, /\)\s*(?:const\s*)?\{/)
 })

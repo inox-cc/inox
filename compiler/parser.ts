@@ -488,23 +488,22 @@ class Parser {
 
   parseTypeAliasDeclaration(exported: boolean): AnyNode {
     const name = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected type alias name')
-    const typeParameters = this.parseFunctionTypeParameters()
     this.expectValue('=', 'INOX_EXPECTED_TYPE', 'expected = after type alias name')
 
     if (this.isValue('(')) {
-      return createTypeAliasDeclaration(exported, name, typeParameters, this.parseFunctionType(false))
+      return createTypeAliasDeclaration(exported, name, this.parseFunctionType(false))
     }
 
     if (this.is('identifier') && this.peek(1).value === '&') {
-      return createTypeAliasDeclaration(exported, name, typeParameters, this.parseIntersectionObjectType())
+      return createTypeAliasDeclaration(exported, name, this.parseIntersectionObjectType())
     }
 
     if (this.isValue('|') && this.peek(1).value === '{') {
-      return createTypeAliasDeclaration(exported, name, typeParameters, this.parseUnionObjectType())
+      return createTypeAliasDeclaration(exported, name, this.parseUnionObjectType())
     }
 
     if (this.isValue('{')) {
-      return createTypeAliasDeclaration(exported, name, typeParameters, this.parseObjectType(null))
+      return createTypeAliasDeclaration(exported, name, this.parseObjectType(null))
     }
 
     const valueType = this.parseTypeAnnotation([';'], {
@@ -512,7 +511,7 @@ class Parser {
     })
     this.matchValue(';')
 
-    return createTypeAliasDeclaration(exported, name, typeParameters, createAliasType(valueType))
+    return createTypeAliasDeclaration(exported, name, createAliasType(valueType))
   }
 
   parseUnionObjectType(): AnyNode {
@@ -717,7 +716,6 @@ class Parser {
 
   parseClassDeclaration(exported: boolean): AnyNode {
     const name = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected class name')
-    const typeParameters = this.parseFunctionTypeParameters()
     const fields: AnyNode[] = []
     const indexSignatures: AnyNode[] = []
     const methods: AnyNode[] = []
@@ -749,7 +747,6 @@ class Parser {
     return createClassDeclaration({
       exported,
       name,
-      typeParameters,
       extendsName,
       extendsToken,
       fields,
@@ -1208,6 +1205,7 @@ class Parser {
       arrayElementDeclaredType: null,
       mapKeyType: null,
       mapValueType: null,
+      setElementType: null,
       functionType: null,
       shape: null,
       loc: locFromToken(start),
@@ -1534,6 +1532,7 @@ class Parser {
           mapValueType: null,
           mapValueShape: null,
           promiseValueType: null,
+          setElementType: null,
           functionType: null,
           shape: null
         })
@@ -1728,7 +1727,7 @@ class Parser {
       callee = createMemberExpression(callee, property)
     }
 
-    const typeArguments = this.parseTypeArgumentsBeforeCall()
+    this.skipTypeArgumentsBeforeCall()
 
     if (this.matchValue('(')) {
       while (!this.isValue(')') && !this.is('eof')) {
@@ -1742,7 +1741,7 @@ class Parser {
       this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after constructor arguments')
     }
 
-    return createNewExpression(start, callee, args, typeArguments)
+    return createNewExpression(start, callee, args)
   }
 
   parsePostfix(): AnyNode {
@@ -1753,13 +1752,6 @@ class Parser {
     let expression = initial
 
     while (true) {
-      if (this.isTypeArgumentsBeforeCall()) {
-        const typeArguments = this.parseTypeArgumentsBeforeCall()
-        this.expectValue('(', 'INOX_EXPECTED_PAREN', 'expected ( after call type arguments')
-        expression = this.finishCallExpression(expression, typeArguments)
-        continue
-      }
-
       if (this.matchValue('(')) {
         expression = this.finishCallExpression(expression)
         continue
@@ -1812,7 +1804,7 @@ class Parser {
     return createOptionalMemberExpression(object, property)
   }
 
-  finishCallExpression(callee: AnyNode, typeArguments: string[] = []): AnyNode {
+  finishCallExpression(callee: AnyNode): AnyNode {
     const args: AnyNode[] = []
 
     while (!this.isValue(')') && !this.is('eof')) {
@@ -1825,7 +1817,7 @@ class Parser {
 
     this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after call arguments')
 
-    return createCallExpression(callee, args, typeArguments)
+    return createCallExpression(callee, args)
   }
 
   parsePrimary(): AnyNode {
@@ -2026,24 +2018,23 @@ class Parser {
     return this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected property name')
   }
 
-  parseTypeArgumentsBeforeCall(): string[] {
+  skipTypeArgumentsBeforeCall(): void {
     if (!this.isTypeArgumentsBeforeCall()) {
-      return []
+      return
     }
 
-    this.expectValue('<', 'INOX_EXPECTED_TYPE', 'expected < before call type arguments')
-    const typeArguments: string[] = []
+    this.advance()
+    let depth = 1
 
-    while (!this.isValue('>') && !this.is('eof')) {
-      typeArguments.push(this.parseTypeAnnotation([',', '>'], null))
-
-      if (!this.matchValue(',')) {
-        break
+    while (!this.is('eof') && depth > 0) {
+      if (this.isValue('<')) {
+        depth = depth + 1
+      } else if (this.isValue('>')) {
+        depth = depth - 1
       }
-    }
 
-    this.expectValue('>', 'INOX_EXPECTED_TYPE', 'expected > after call type arguments')
-    return typeArguments
+      this.advance()
+    }
   }
 
   isTypeArgumentsBeforeCall(): boolean {
@@ -2053,14 +2044,9 @@ class Parser {
 
     let offset = 0
     let depth = 0
-    const line = this.current().line
 
     while (this.peek(offset).type !== 'eof') {
       const token = this.peek(offset)
-
-      if (token.line !== line || this.isInvalidCallTypeArgumentToken(token.value)) {
-        return false
-      }
 
       if (token.value === '<') {
         depth = depth + 1
@@ -2080,19 +2066,6 @@ class Parser {
     }
 
     return false
-  }
-
-  isInvalidCallTypeArgumentToken(value: string): boolean {
-    return (
-      value === '&&' ||
-      value === '||' ||
-      value === '===' ||
-      value === '!==' ||
-      value === '=' ||
-      value === ';' ||
-      value === '{' ||
-      value === '}'
-    )
   }
 
   skipTypeUntil(values: string[]): void {

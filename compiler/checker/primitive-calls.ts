@@ -7,10 +7,7 @@ import {
 import { diagnostic } from '../diagnostics.ts'
 import type { AnyNode, Diagnostic, SourceLocation, ValueType } from '../types.ts'
 import { isAssignableType } from './assignability.ts'
-import {
-  isStringTrimMethod,
-  stringPredicateArgCountMessage
-} from './helpers.ts'
+import { isStringTrimMethod, stringPredicateArgCountMessage } from './helpers.ts'
 import { firstPathSegment } from './resolved-types.ts'
 
 export type PrimitiveCallCheckerContext = {
@@ -121,7 +118,12 @@ export function checkNumericCastCall(
   expression.numericCast = castName
 
   if (expression.args.length !== 1) {
-    report(context, 'INOX_ARG_COUNT', `${castName} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+    report(
+      context,
+      'INOX_ARG_COUNT',
+      `${castName} expects 1 argument(s), got ${expression.args.length}`,
+      expression.loc
+    )
     return 'number'
   }
 
@@ -454,7 +456,12 @@ export function checkStringSplitCall(
   }
 
   if (expression.args.length !== 1) {
-    report(context, 'INOX_ARG_COUNT', `string.split expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+    report(
+      context,
+      'INOX_ARG_COUNT',
+      `string.split expects 1 argument(s), got ${expression.args.length}`,
+      expression.loc
+    )
   }
 
   if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {

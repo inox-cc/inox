@@ -7,7 +7,8 @@ import { createCompilerLibrarySetFromDiscovered } from '../../scripts/lib/compil
 
 test('package-native nominal type reaches a class field and its receiver call', async () => {
   const libraries = createCompilerLibrarySetFromDiscovered(await discoverCompilerLibraries())
-  const result = compileSource(`
+  const result = compileSource(
+    `
     class Matcher {
       pattern: RegExp
 
@@ -22,7 +23,9 @@ test('package-native nominal type reaches a class field and its receiver call', 
 
     const matcher = new Matcher()
     const matches = matcher.matches('INOX stdlib')
-  `, { libraries, target: 'cc' })
+  `,
+    { libraries, target: 'cc' }
+  )
   const field = result.hir.body[0].shape.fields[0]
 
   assert.equal(field.typeRef?.kind, 'nominal')

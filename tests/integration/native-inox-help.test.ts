@@ -10,11 +10,7 @@ import { compileRuntimeProgram } from '../helpers/runtime-c.ts'
 export async function assertNativeInoxHelp(): Promise<void> {
   const result = await runCommand('dist/inox', ['--help'])
 
-  assert.equal(
-    result.code,
-    0,
-    `dist/inox --help failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
-  )
+  assert.equal(result.code, 0, `dist/inox --help failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
   assert.equal(result.stderr, '')
   assert.match(result.stdout, /Usage:/)
   assert.match(result.stdout, /inox --help/)
@@ -42,11 +38,7 @@ export async function assertNativeInoxDefaultOutput(): Promise<void> {
 
     const result = await runCommand(join(rootDir, 'dist/inox'), [input], workspace)
 
-    assert.equal(
-      result.code,
-      0,
-      `dist/inox input.ts failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
-    )
+    assert.equal(result.code, 0, `dist/inox input.ts failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
     assert.equal(result.stderr, '')
     assert.equal(result.stdout.trim(), output)
     assert.match(await readFile(output, 'utf8'), /ok/)
@@ -90,11 +82,7 @@ export async function assertNativeInoxRuntimeSmoke(): Promise<void> {
 
     const emit = await runCommand(join(rootDir, 'dist/inox'), [input, outputCc])
 
-    assert.equal(
-      emit.code,
-      0,
-      `dist/inox runtime smoke emit failed\nstdout:\n${emit.stdout}\nstderr:\n${emit.stderr}`
-    )
+    assert.equal(emit.code, 0, `dist/inox runtime smoke emit failed\nstdout:\n${emit.stdout}\nstderr:\n${emit.stderr}`)
     assert.equal(emit.stderr, '')
 
     const compile = await compileRuntimeProgram(outputCc, output)

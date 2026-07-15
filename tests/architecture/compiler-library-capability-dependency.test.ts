@@ -10,11 +10,12 @@ test('unconditional capabilities раскрываются через runtime req
   const libraries = createCompilerLibrarySet([bridgeLibrary()])
 
   assert.throws(
-    () => compileSource('bridge()\n', {
-      libraries,
-      profile: 'embedded',
-      capabilities: { 'fixture:leaf': true }
-    }),
+    () =>
+      compileSource('bridge()\n', {
+        libraries,
+        profile: 'embedded',
+        capabilities: { 'fixture:leaf': true }
+      }),
     capabilityError('fixture:base')
   )
 
@@ -27,10 +28,7 @@ test('unconditional capabilities раскрываются через runtime req
     }
   })
 
-  assert.deepEqual(
-    result.ir.body[0].expression.libraryCapabilities,
-    ['fixture:leaf', 'fixture:base']
-  )
+  assert.deepEqual(result.ir.body[0].expression.libraryCapabilities, ['fixture:leaf', 'fixture:base'])
 })
 
 function bridgeLibrary(): CompilerLibraryDescriptor {
@@ -73,8 +71,6 @@ function capabilityError(capability: string): (error: unknown) => boolean {
   return (error: unknown) =>
     error instanceof CompileError &&
     error.diagnostics.some(
-      (diagnostic) =>
-        diagnostic.code === 'INOX_CAPABILITY' &&
-        diagnostic.message.includes(capability)
+      (diagnostic) => diagnostic.code === 'INOX_CAPABILITY' && diagnostic.message.includes(capability)
     )
 }

@@ -50,10 +50,7 @@ const shape: CompilerAnyNode = {
   ]
 }
 
-const field = findField(
-  shape,
-  'title'
-)
+const field = findField(shape, 'title')
 
 if (field !== null) {
   console.log(field.valueType)

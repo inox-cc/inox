@@ -18,10 +18,7 @@ function isUnionMetadataType(valueType: string | null | undefined): boolean {
 
 function isConcreteContextValueType(valueType: string | null | undefined): boolean {
   return (
-    valueType !== null &&
-    typeof valueType !== 'undefined' &&
-    valueType !== 'unknown' &&
-    !isUnionMetadataType(valueType)
+    valueType !== null && typeof valueType !== 'undefined' && valueType !== 'unknown' && !isUnionMetadataType(valueType)
   )
 }
 

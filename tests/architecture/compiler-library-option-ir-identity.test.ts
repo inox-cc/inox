@@ -15,8 +15,10 @@ test('IR identity учитывает значения и presence library option
     () => emitTargetFromIr('cc', compiled.ir, { libraries: defaultCompilerLibrarySet }),
     /library options fingerprint mismatch/i
   )
-  assert.doesNotThrow(() => emitTargetFromIr('cc', compiled.ir, {
-    libraries: defaultCompilerLibrarySet,
-    libraryOptions: [{ optionId, value: 1831565813 }]
-  }))
+  assert.doesNotThrow(() =>
+    emitTargetFromIr('cc', compiled.ir, {
+      libraries: defaultCompilerLibrarySet,
+      libraryOptions: [{ optionId, value: 1831565813 }]
+    })
+  )
 })

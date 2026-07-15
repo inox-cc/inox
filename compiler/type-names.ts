@@ -13,11 +13,6 @@ export type IndexedAccessTypeName = {
   indexes: string[]
 }
 
-export type GenericTypeApplication = {
-  name: string
-  args: string[]
-}
-
 export function arrayElementTypeNameFromTypeName(name: string): string | null {
   return genericTypeInner(name, 'array')
 }
@@ -100,6 +95,30 @@ export function recordTypeNamesFromTypeName(name: string): RecordTypeNames | nul
   }
 }
 
+export function setElementTypeNameFromTypeName(name: string): string | null {
+  const inner = genericTypeInner(name, 'set')
+
+  if (inner !== null && typeof inner !== 'undefined') {
+    const args = splitGenericArgs(inner)
+
+    if (args.length === 1) {
+      return args[0]
+    }
+
+    return null
+  }
+
+  return null
+}
+
+export function isSetTypeName(name: string): boolean {
+  return hasGenericTypeInner(name, 'set')
+}
+
+export function setElementTypeNameFromKnownTypeName(name: string): string {
+  return knownGenericTypeInner(name, 'set')
+}
+
 export function promiseValueTypeNameFromTypeName(name: string): string | null {
   const inner = genericTypeInner(name, 'promise')
 
@@ -130,47 +149,6 @@ export function splitGenericArgs(value: string): string[] {
 
 export function splitUnionArgs(value: string): string[] {
   return splitDelimitedTypeArgs(value, '|')
-}
-
-export function genericTypeApplicationFromTypeName(name: string): GenericTypeApplication | null {
-  let open = -1
-  let depth = 0
-
-  for (let index = 0; index < name.length; index = index + 1) {
-    const unit = name.slice(index, index + 1)
-
-    if (unit === '<') {
-      if (depth === 0) {
-        open = index
-      }
-      depth = depth + 1
-    } else if (unit === '>') {
-      if (depth === 0) {
-        return null
-      }
-
-      depth = depth - 1
-
-      if (depth === 0 && index !== name.length - 1) {
-        return null
-      }
-    }
-  }
-
-  if (open <= 0 || depth !== 0 || !isIdentifierTypeName(name.slice(0, open))) {
-    return null
-  }
-
-  const args = splitGenericArgs(name.slice(open + 1, name.length - 1))
-
-  if (args.length === 0) {
-    return null
-  }
-
-  return {
-    name: name.slice(0, open),
-    args
-  }
 }
 
 export function unionTypeNamesFromTypeName(name: string): string[] | null {
@@ -312,6 +290,30 @@ export function normalizeTypeName(name: string): string {
     return 'object'
   }
 
+  const normalizedSetInner = genericTypeInner(name, 'set')
+
+  if (normalizedSetInner !== null && typeof normalizedSetInner !== 'undefined') {
+    const args = splitGenericArgs(normalizedSetInner)
+
+    if (args.length === 1) {
+      return `set<${normalizeTypeName(args[0])}>`
+    }
+
+    return 'set'
+  }
+
+  const setInner = genericTypeInner(name, 'Set')
+
+  if (setInner !== null && typeof setInner !== 'undefined') {
+    const args = splitGenericArgs(setInner)
+
+    if (args.length === 1) {
+      return `set<${normalizeTypeName(args[0])}>`
+    }
+
+    return 'set'
+  }
+
   const normalizedPromiseInner = genericTypeInner(name, 'promise')
 
   if (normalizedPromiseInner !== null && typeof normalizedPromiseInner !== 'undefined') {
@@ -348,6 +350,10 @@ export function normalizeTypeName(name: string): string {
     return 'map'
   }
 
+  if (name === 'Set' || name === 'set') {
+    return 'set'
+  }
+
   if (name === 'Promise' || name === 'promise') {
     return 'promise'
   }
@@ -362,18 +368,6 @@ export function normalizeTypeName(name: string): string {
 
   if (name === 'any') {
     return 'unknown'
-  }
-
-  const genericApplication = genericTypeApplicationFromTypeName(name)
-
-  if (genericApplication !== null) {
-    const normalizedArgs: string[] = []
-
-    for (let index = 0; index < genericApplication.args.length; index = index + 1) {
-      normalizedArgs.push(normalizeTypeName(genericApplication.args[index]))
-    }
-
-    return `${genericApplication.name}<${joinStrings(normalizedArgs, ',')}>`
   }
 
   if (isIdentifierTypeName(name)) {
@@ -512,11 +506,11 @@ export function isBuiltinTypeDependencyName(name: string): boolean {
     return true
   }
 
-  if (name === 'any' || name === 'class' || name === 'false' || name === 'map') {
+  if (name === 'Set' || name === 'any' || name === 'class' || name === 'false' || name === 'map') {
     return true
   }
 
-  if (name === 'never' || name === 'nullable' || name === 'record') {
+  if (name === 'never' || name === 'nullable' || name === 'record' || name === 'set') {
     return true
   }
 

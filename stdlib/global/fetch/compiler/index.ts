@@ -67,8 +67,21 @@ const operations: LibraryOperationDescriptor[] = [
     cResultMode: 'value'
   },
   receiverCall(abortControllerTypeId, 'abort', 'inox::AbortController($value)', [], voidTypeRef),
-  receiverCall(responseTypeId, 'text', 'inox::FetchResponse(inox::Value($value))', [], promiseTypeRef(stringTypeRef, errorTypeRef())),
-  receiverCall(headersTypeId, 'get', 'inox::FetchHeaders(inox::Value($value))', [stringArgument()], nullableStringTypeRef, valueCResultMapping),
+  receiverCall(
+    responseTypeId,
+    'text',
+    'inox::FetchResponse(inox::Value($value))',
+    [],
+    promiseTypeRef(stringTypeRef, errorTypeRef())
+  ),
+  receiverCall(
+    headersTypeId,
+    'get',
+    'inox::FetchHeaders(inox::Value($value))',
+    [stringArgument()],
+    nullableStringTypeRef,
+    valueCResultMapping
+  ),
   receiverCall(headersTypeId, 'has', 'inox::FetchHeaders(inox::Value($value))', [stringArgument()], booleanTypeRef),
   unsupportedResponseMember('body', 'member-read'),
   unsupportedResponseCall('arrayBuffer'),
@@ -144,7 +157,8 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
           option: 'loopBackend',
           allowedValues: ['libuv'],
           diagnosticCode: 'INOX_NOT_IMPLEMENTED',
-          diagnosticMessage: "fetch is not implemented for C without libuv; compile with loopBackend: 'libuv' or --loop-backend libuv"
+          diagnosticMessage:
+            "fetch is not implemented for C without libuv; compile with loopBackend: 'libuv' or --loop-backend libuv"
         }
       ]
     }
@@ -162,10 +176,7 @@ function fetchOperation(): LibraryOperationDescriptor {
     minArgs: 1,
     maxArgs: 2,
     argumentChecks: [fetchUrlArgument(), fetchInitArgument()],
-    variants: [
-      fetchVariant(1, ['string-view']),
-      fetchVariant(2, ['string-view', 'value'])
-    ],
+    variants: [fetchVariant(1, ['string-view']), fetchVariant(2, ['string-view', 'value'])],
     resultTypeRef: promiseTypeRef(responseTypeRef, errorTypeRef())
   }
 }
@@ -231,7 +242,8 @@ function receiverCall(
     cArgumentKinds,
     cReceiverAdapter: receiverAdapter,
     cCallStyle: 'member',
-    cFailureMode: resultTypeRef.kind === 'nominal' && resultTypeRef.typeId === 'global:promise#Promise' ? null : 'thrown',
+    cFailureMode:
+      resultTypeRef.kind === 'nominal' && resultTypeRef.typeId === 'global:promise#Promise' ? null : 'thrown',
     minArgs: argumentChecks.length,
     maxArgs: argumentChecks.length,
     argumentChecks,
@@ -253,9 +265,10 @@ function unsupportedResponseMember(name: string, kind: LibraryOperationKind): Li
     runtimeRequirements: [],
     receiverTypeId: responseTypeId,
     diagnosticCode: 'INOX_FETCH',
-    diagnosticMessage: name === 'body'
-      ? 'Response.body streams are not supported by the current C/libuv fetch slice'
-      : `Response.${name} is not supported by the current C/libuv fetch slice`
+    diagnosticMessage:
+      name === 'body'
+        ? 'Response.body streams are not supported by the current C/libuv fetch slice'
+        : `Response.${name} is not supported by the current C/libuv fetch slice`
   }
 }
 
@@ -272,7 +285,8 @@ function fetchUrlArgument(): LibraryArgumentCheckDescriptor {
         option: 'tlsBackend',
         allowedValues: ['boringssl', 'openssl'],
         diagnosticCode: 'INOX_FETCH',
-        diagnosticMessage: 'https fetch URLs require a configured TLS adapter and are not supported by the current C/libuv fetch slice'
+        diagnosticMessage:
+          'https fetch URLs require a configured TLS adapter and are not supported by the current C/libuv fetch slice'
       }
     ]
   }
@@ -304,11 +318,6 @@ function primitiveTypeRef(name: 'boolean' | 'string' | 'void', nullable = false)
   }
 }
 
-function field(
-  name: string,
-  valueType: string,
-  cMember: string,
-  cppType: string
-): LibraryResultShapeFieldDescriptor {
+function field(name: string, valueType: string, cMember: string, cppType: string): LibraryResultShapeFieldDescriptor {
   return { name, valueType, readonly: true, cMember, cppType }
 }

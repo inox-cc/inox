@@ -11,10 +11,7 @@ const diagnosticMessage = 'bridge.schedule callback must be synchronous'
 
 test('library callback argument metadata владеет synchronous callback diagnostic', () => {
   const libraries = createCompilerLibrarySet([bridgeLibrary()])
-  const passingSources = [
-    'bridge.schedule(() => {})\n',
-    'function work(): void {}\nbridge.schedule(work)\n'
-  ]
+  const passingSources = ['bridge.schedule(() => {})\n', 'function work(): void {}\nbridge.schedule(work)\n']
   const failingSources = [
     'bridge.schedule(async () => { await Promise.resolve() })\n',
     'async function work(): Promise<void> { await Promise.resolve() }\nbridge.schedule(work)\n'

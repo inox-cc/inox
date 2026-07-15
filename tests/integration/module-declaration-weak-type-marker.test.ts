@@ -26,13 +26,16 @@ export class Child {
   assert.equal(parsedField.valueType, 'nullable<Parent>')
 
   const sourceProgram = parse(
-    tokenize(`
+    tokenize(
+      `
 export class Child {
   parent: weak<Parent | null>
 }
-`, {
-      file: 'weak-type-marker.ts'
-    })
+`,
+      {
+        file: 'weak-type-marker.ts'
+      }
+    )
   )
   const code = emitModuleDeclarationContract(createModuleDeclarationProgram(sourceProgram))
 

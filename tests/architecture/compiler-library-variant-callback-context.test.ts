@@ -83,10 +83,7 @@ function bridgeLibrary(dataValueType: string = 'string'): CompilerLibraryDescrip
         cResultMode: 'borrowed',
         minArgs: 2,
         maxArgs: 2,
-        argumentChecks: [
-          { valueTypes: ['string'], stringLiterals: ['data', 'close'] },
-          { valueTypes: ['function'] }
-        ],
+        argumentChecks: [{ valueTypes: ['string'], stringLiterals: ['data', 'close'] }, { valueTypes: ['function'] }],
         variants: [
           {
             minArgs: 2,

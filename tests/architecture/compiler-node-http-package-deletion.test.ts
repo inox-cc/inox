@@ -46,8 +46,7 @@ test('удаление node:http убирает API и native plan без centra
   assert.match(afterPlan, /stdlib\/node\/net\/src\/net\.cc/)
   assert.throws(
     () => compileSource(source, { libraries: after, loopBackend: 'libuv' }),
-    (error: unknown) =>
-      error instanceof CompileError && error.diagnostics[0].code === 'INOX_NOT_IMPLEMENTED'
+    (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_NOT_IMPLEMENTED'
   )
 })
 

@@ -1,2 +1,2 @@
-declare const workerThreads: unknown;
-export default workerThreads;
+declare const workerThreads: unknown
+export default workerThreads

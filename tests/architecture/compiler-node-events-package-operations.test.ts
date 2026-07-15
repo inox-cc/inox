@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import type {
-  LibraryOperationDescriptor,
-  LibraryOperationKind
-} from '../../compiler/extensions/types.ts'
+import type { LibraryOperationDescriptor, LibraryOperationKind } from '../../compiler/extensions/types.ts'
 import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
 
 const libraryId = 'node:events'
@@ -31,12 +28,7 @@ test('node:events exhaustive diagnostics принадлежат package operatio
     assertDiagnosticOperation(operations, name, 'call', asyncListenerReason)
   }
 
-  for (const name of [
-    'getEventListeners',
-    'getMaxListeners',
-    'listenerCount',
-    'setMaxListeners'
-  ]) {
+  for (const name of ['getEventListeners', 'getMaxListeners', 'listenerCount', 'setMaxListeners']) {
     assertDiagnosticOperation(operations, name, 'member-read', eventRuntimeReason)
     assertDiagnosticOperation(operations, name, 'call', eventRuntimeReason)
   }
@@ -46,11 +38,26 @@ test('node:events exhaustive diagnostics принадлежат package operatio
   assertDiagnosticOperation(operations, 'defaultMaxListeners', 'member-write', eventRuntimeReason)
   assertDiagnosticOperation(operations, 'errorMonitor', 'member-read', eventRuntimeReason)
 
-  assert.equal(operations.every((operation) => operation.libraryId === libraryId), true)
-  assert.equal(operations.every((operation) => operation.runtimeRequirements.length === 0), true)
-  assert.equal(operations.every((operation) => operation.cExpression === null), true)
-  assert.equal(operations.every((operation) => operation.cppType === null), true)
-  assert.equal(operations.every((operation) => operation.valueType === null), true)
+  assert.equal(
+    operations.every((operation) => operation.libraryId === libraryId),
+    true
+  )
+  assert.equal(
+    operations.every((operation) => operation.runtimeRequirements.length === 0),
+    true
+  )
+  assert.equal(
+    operations.every((operation) => operation.cExpression === null),
+    true
+  )
+  assert.equal(
+    operations.every((operation) => operation.cppType === null),
+    true
+  )
+  assert.equal(
+    operations.every((operation) => operation.valueType === null),
+    true
+  )
 })
 
 function assertDiagnosticOperation(
@@ -60,9 +67,7 @@ function assertDiagnosticOperation(
   reason: string
 ): void {
   const bindingId = `${libraryId}#module:${libraryId}:${name}`
-  const operation = operations.find(
-    (candidate) => candidate.bindingId === bindingId && candidate.kind === kind
-  )
+  const operation = operations.find((candidate) => candidate.bindingId === bindingId && candidate.kind === kind)
 
   assert.ok(operation, `missing ${kind} diagnostic operation for ${name}`)
   assert.equal(operation.operationId, `${libraryId}#${name}.${operationKindSuffix(kind)}`)

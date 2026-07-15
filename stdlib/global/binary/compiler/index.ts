@@ -30,17 +30,10 @@ const operations: LibraryOperationDescriptor[] = [
   receiverMemberRead('length', 'length', numberTypeRef),
   receiverIndexRead(),
   receiverIndexWrite(),
-  receiverCall(
-    'slice',
-    ['receiver', 'number', 'optional-number'],
-    'slice',
-    uint8ArrayTypeRef,
-    null,
-    'value',
-    1,
-    2,
-    [numberArgument(), numberArgument()]
-  ),
+  receiverCall('slice', ['receiver', 'number', 'optional-number'], 'slice', uint8ArrayTypeRef, null, 'value', 1, 2, [
+    numberArgument(),
+    numberArgument()
+  ]),
   receiverCall(
     'toString',
     ['receiver'],
@@ -97,10 +90,7 @@ function uint8ArrayConstructor(): LibraryOperationDescriptor {
         arrayElementValueTypes: ['number']
       }
     ],
-    variants: [
-      constructorVariant('number', ['number']),
-      constructorVariant('array', ['value'])
-    ],
+    variants: [constructorVariant('number', ['number']), constructorVariant('array', ['value'])],
     resultTypeRef: uint8ArrayTypeRef
   }
 }
@@ -120,11 +110,7 @@ function constructorVariant(
   }
 }
 
-function receiverMemberRead(
-  name: string,
-  cExpression: string,
-  resultTypeRef: TypeRef
-): LibraryOperationDescriptor {
+function receiverMemberRead(name: string, cExpression: string, resultTypeRef: TypeRef): LibraryOperationDescriptor {
   return {
     libraryId,
     bindingId: receiverBinding(name),

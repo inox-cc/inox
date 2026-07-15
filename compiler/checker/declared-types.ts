@@ -3,14 +3,15 @@ import {
   arrayElementTypeNameFromKnownTypeName,
   isArrayTypeName,
   isBuiltinValueType,
-  genericTypeApplicationFromTypeName,
   indexedAccessTypeNameFromTypeName,
   isNullableTypeName,
   isPromiseTypeName,
+  isSetTypeName,
   mapTypeNamesFromTypeName,
   nullableTypeNameFromKnownTypeName,
   promiseValueTypeNameFromKnownTypeName,
   recordTypeNamesFromTypeName,
+  setElementTypeNameFromKnownTypeName,
   unionTypeNamesFromTypeName
 } from '../type-names.ts'
 import type {
@@ -33,6 +34,7 @@ import {
   commonResolvedMapValueType,
   commonResolvedObjectShape,
   commonResolvedPromiseValueType,
+  commonResolvedSetElementType,
   isOptionalParam,
   nodeDeclaredTypeOrValueType,
   resolvedFunctionTypeMetadata as resolvedFunctionTypeMetadataValue,
@@ -47,21 +49,17 @@ import type {
 } from './resolved-types.ts'
 import { mergeShapeFields } from './helpers.ts'
 import { compilerLibraryNativeTypeForName } from '../extensions/library-set.ts'
-import { instantiateNativeTypeRef } from '../extensions/type-ref-substitution.ts'
-import { typeRefCompatibilityMetadata } from '../extensions/type-ref-compatibility.ts'
-import type { CompilerLibrarySet, CorePrimitiveType, TypeOwnership, TypeRef } from '../extensions/types.ts'
+import type { CompilerLibrarySet, TypeOwnership, TypeRef } from '../extensions/types.ts'
 import type { LibraryResultShapeFieldDescriptor } from '../extensions/types.ts'
 
 export type DeclaredTypeResolverContext = {
   classNames: Set<string>
   diagnostics: Diagnostic[]
-  incompleteDeclaredTypes: Set<string>
   libraries: CompilerLibrarySet
   resolvedDeclaredTypes: Map<string, ResolvedTypeInfo>
   resolvingDeclaredTypes: Set<string>
   symbols: Map<string, SymbolInfo>
   types: Map<string, TypeAliasInfo>
-  typeSubstitutions: Map<string, ResolvedTypeInfo>
 }
 
 export function declareTypeAlias(context: DeclaredTypeResolverContext, item: TypeAliasDeclarationNode): void {
@@ -71,19 +69,8 @@ export function declareTypeAlias(context: DeclaredTypeResolverContext, item: Typ
   }
 
   if (item.valueType.kind === 'alias' || item.valueType.kind === 'object' || item.valueType.kind === 'function') {
-    context.types.set(item.name, typeAliasInfoFromDeclaration(item))
+    context.types.set(item.name, item.valueType)
   }
-}
-
-export function typeAliasInfoFromDeclaration(item: TypeAliasDeclarationNode): TypeAliasInfo {
-  const info: TypeAliasInfo = { ...item.valueType }
-  const typeParameters = item.typeParameters ?? []
-
-  if (typeParameters.length > 0) {
-    info.typeParameters = typeParameters
-  }
-
-  return info
 }
 
 export function resolveDeclaredType(
@@ -93,12 +80,6 @@ export function resolveDeclaredType(
 ): ResolvedTypeInfo {
   if (name === null || typeof name === 'undefined' || name === 'unknown') {
     return unresolvedTypeInfo()
-  }
-
-  const substitution = context.typeSubstitutions.get(name)
-
-  if (substitution !== null && typeof substitution !== 'undefined') {
-    return cloneResolvedTypeInfo(substitution)
   }
 
   if (name === 'AnyNode') {
@@ -116,28 +97,6 @@ export function resolveDeclaredType(
 
   if (indexedAccess !== null) {
     return resolveIndexedAccessDeclaredType(context, indexedAccess.base, indexedAccess.indexes, loc)
-  }
-
-  const genericApplication = genericTypeApplicationFromTypeName(name)
-
-  if (genericApplication !== null) {
-    if (genericApplication.name === 'NonNullable' && genericApplication.args.length === 1) {
-      const resolved = resolveDeclaredType(context, genericApplication.args[0], loc)
-
-      resolved.nullable = false
-      resolved.typeRef = qualifiedTypeRef(resolved.typeRef, false, null)
-      return resolved
-    }
-
-    const definition = context.types.get(genericApplication.name)
-
-    if (
-      definition !== null &&
-      typeof definition !== 'undefined' &&
-      (definition.typeParameters ?? []).length > 0
-    ) {
-      return resolveGenericDeclaredType(context, name, definition, genericApplication.args, loc)
-    }
   }
 
   const nativeType = compilerLibraryNativeTypeForName(context.libraries, name)
@@ -163,7 +122,6 @@ export function resolveDeclaredType(
       kind: 'object',
       baseTypes: nativeType.baseTypeIds,
       fields,
-      libraryCValueAdapter: nativeType.cValueAdapter ?? null,
       libraryTypeId: nativeType.typeId,
       libraryCppType: nativeType.cppType
     }
@@ -186,7 +144,8 @@ export function resolveDeclaredType(
       mapKeyType: inner.mapKeyType,
       mapValueType: inner.mapValueType,
       mapValueShape: inner.mapValueShape,
-      promiseValueType: inner.promiseValueType
+      promiseValueType: inner.promiseValueType,
+      setElementType: inner.setElementType
     }
   }
 
@@ -260,12 +219,31 @@ export function resolveDeclaredType(
         mapValueType: valueInfo.mapValueType,
         mapValueShape: valueInfo.mapValueShape,
         promiseValueType: valueInfo.promiseValueType,
+        setElementType: valueInfo.setElementType,
         functionType: valueInfo.functionType,
         shape: valueInfo.shape,
         loc
       },
       fields: []
     }
+
+    return info
+  }
+
+  if (name === 'set') {
+    const info = unresolvedTypeInfo()
+    info.valueType = 'set'
+    info.setElementType = 'unknown'
+
+    return info
+  }
+
+  if (isSetTypeName(name)) {
+    const setElementTypeName = setElementTypeNameFromKnownTypeName(name)
+    const elementInfo = resolveDeclaredType(context, setElementTypeName, loc)
+    const info = unresolvedTypeInfo()
+    info.valueType = 'set'
+    info.setElementType = elementInfo.valueType
 
     return info
   }
@@ -326,29 +304,13 @@ export function resolveDeclaredType(
   const shape = context.types.get(name)
 
   if (shape !== null && typeof shape !== 'undefined') {
-    const rootResolution = context.resolvingDeclaredTypes.size === 0
     const cached = context.resolvedDeclaredTypes.get(name)
-    let staleCached: ResolvedTypeInfo | null = null
 
-    if (
-      cached !== null &&
-      typeof cached !== 'undefined' &&
-      !(rootResolution && context.incompleteDeclaredTypes.has(name))
-    ) {
+    if (cached !== null && typeof cached !== 'undefined') {
       return cloneResolvedTypeInfo(cached)
     }
 
-    if (rootResolution) {
-      if (cached !== null && typeof cached !== 'undefined') {
-        staleCached = cached
-      }
-
-      context.incompleteDeclaredTypes.delete(name)
-      context.resolvedDeclaredTypes.delete(name)
-    }
-
     if (context.resolvingDeclaredTypes.has(name)) {
-      markIncompleteDeclaredTypeResolutions(context)
       const recursiveInfo = unresolvedTypeInfo()
 
       if (shape.kind === 'function') {
@@ -365,11 +327,7 @@ export function resolveDeclaredType(
 
       try {
         const resolved = resolveDeclaredType(context, shape.valueType, loc)
-        cacheResolvedDeclaredType(context, name, resolved, staleCached)
-
-        if (rootResolution) {
-          context.incompleteDeclaredTypes.delete(name)
-        }
+        context.resolvedDeclaredTypes.set(name, cloneResolvedTypeInfo(resolved))
 
         return resolved
       } finally {
@@ -378,11 +336,9 @@ export function resolveDeclaredType(
     }
 
     if (shape.kind === 'function') {
-      return resolveDeclaredFunctionAlias(context, name, shape, loc, staleCached)
+      return resolveDeclaredFunctionAlias(context, name, shape, loc)
     }
 
-    const placeholder = objectResolvedTypePlaceholder(staleCached)
-    context.resolvedDeclaredTypes.set(name, placeholder)
     context.resolvingDeclaredTypes.add(name)
 
     try {
@@ -390,11 +346,7 @@ export function resolveDeclaredType(
       const resolved = unresolvedTypeInfo()
       resolved.valueType = 'object'
       resolved.shape = resolvedShape
-      cacheResolvedDeclaredType(context, name, resolved, placeholder)
-
-      if (rootResolution) {
-        context.incompleteDeclaredTypes.delete(name)
-      }
+      context.resolvedDeclaredTypes.set(name, cloneResolvedTypeInfo(resolved))
 
       return resolved
     } finally {
@@ -405,300 +357,6 @@ export function resolveDeclaredType(
   context.diagnostics.push(diagnostic('INOX_UNKNOWN_TYPE', `unknown type ${name}`, loc))
 
   return unresolvedTypeInfo()
-}
-
-function resolveGenericDeclaredType(
-  context: DeclaredTypeResolverContext,
-  applicationName: string,
-  definition: TypeAliasInfo,
-  argumentNames: string[],
-  loc: SourceLocation
-): ResolvedTypeInfo {
-  const rootResolution = context.resolvingDeclaredTypes.size === 0
-  const typeParameters = definition.typeParameters ?? []
-
-  if (typeParameters.length !== argumentNames.length) {
-    context.diagnostics.push(
-      diagnostic(
-        'INOX_TYPE_ARGUMENT_COUNT',
-        `generic type ${applicationName} expects ${typeParameters.length} type argument(s), got ${argumentNames.length}`,
-        loc
-      )
-    )
-    return unresolvedTypeInfo()
-  }
-
-  const cached = context.resolvedDeclaredTypes.get(applicationName)
-  let staleCached: ResolvedTypeInfo | null = null
-
-  if (
-    cached !== null &&
-    typeof cached !== 'undefined' &&
-    !(rootResolution && context.incompleteDeclaredTypes.has(applicationName))
-  ) {
-    return cloneResolvedTypeInfo(cached)
-  }
-
-  if (rootResolution) {
-    if (cached !== null && typeof cached !== 'undefined') {
-      staleCached = cached
-    }
-
-    context.incompleteDeclaredTypes.delete(applicationName)
-    context.resolvedDeclaredTypes.delete(applicationName)
-  }
-
-  if (context.resolvingDeclaredTypes.has(applicationName)) {
-    markIncompleteDeclaredTypeResolutions(context)
-    const recursive = unresolvedTypeInfo()
-
-    if (definition.kind === 'object') {
-      recursive.valueType = 'object'
-    } else if (definition.kind === 'function') {
-      recursive.valueType = 'function'
-    }
-
-    return recursive
-  }
-
-  const substitutions = new Map(context.typeSubstitutions)
-
-  for (let index = 0; index < typeParameters.length; index = index + 1) {
-    substitutions.set(typeParameters[index].name, resolveDeclaredType(context, argumentNames[index], loc))
-  }
-
-  const child: DeclaredTypeResolverContext = {
-    ...context,
-    typeSubstitutions: substitutions
-  }
-  let placeholder = staleCached
-
-  if (definition.kind === 'object') {
-    placeholder = objectResolvedTypePlaceholder(staleCached)
-    context.resolvedDeclaredTypes.set(applicationName, placeholder)
-  }
-
-  context.resolvingDeclaredTypes.add(applicationName)
-
-  try {
-    let resolved = unresolvedTypeInfo()
-
-    if (definition.kind === 'alias') {
-      resolved = resolveDeclaredType(child, definition.valueType, loc)
-    } else if (definition.kind === 'function') {
-      resolved = resolveDeclaredFunctionAlias(child, applicationName, definition, loc, null)
-    } else {
-      resolved.valueType = 'object'
-      resolved.shape = resolveObjectShape(child, definition)
-    }
-
-    applyGenericNativeType(context, applicationName, argumentNames, resolved, loc)
-    cacheResolvedDeclaredType(context, applicationName, resolved, placeholder)
-
-    if (rootResolution) {
-      context.incompleteDeclaredTypes.delete(applicationName)
-    }
-    return resolved
-  } finally {
-    context.resolvingDeclaredTypes.delete(applicationName)
-  }
-}
-
-function markIncompleteDeclaredTypeResolutions(context: DeclaredTypeResolverContext): void {
-  for (const name of context.resolvingDeclaredTypes) {
-    context.incompleteDeclaredTypes.add(name)
-  }
-}
-
-function cacheResolvedDeclaredType(
-  context: DeclaredTypeResolverContext,
-  name: string,
-  resolved: ResolvedTypeInfo,
-  stale: ResolvedTypeInfo | null
-): void {
-  if (stale !== null) {
-    refreshResolvedTypeInfo(stale, resolved)
-    context.resolvedDeclaredTypes.set(name, stale)
-    return
-  }
-
-  context.resolvedDeclaredTypes.set(name, cloneResolvedTypeInfo(resolved))
-}
-
-function objectResolvedTypePlaceholder(stale: ResolvedTypeInfo | null): ResolvedTypeInfo {
-  if (stale !== null) {
-    stale.valueType = 'object'
-
-    if (stale.shape === null) {
-      stale.shape = emptyObjectShapeInfo()
-    }
-
-    return stale
-  }
-
-  const placeholder = unresolvedTypeInfo()
-  placeholder.valueType = 'object'
-  placeholder.shape = emptyObjectShapeInfo()
-
-  return placeholder
-}
-
-function emptyObjectShapeInfo(): ObjectShapeInfo {
-  return {
-    kind: 'object',
-    typeParameters: undefined,
-    baseTypes: undefined,
-    builtin: undefined,
-    dynamic: undefined,
-    dynamicField: undefined,
-    fields: [],
-    libraryTypeId: undefined,
-    libraryCppType: undefined,
-    libraryCValueAdapter: undefined
-  }
-}
-
-function refreshResolvedTypeInfo(target: ResolvedTypeInfo, source: ResolvedTypeInfo): void {
-  target.valueType = source.valueType
-  target.nullable = source.nullable
-  target.typeRef = source.typeRef
-  target.functionType = refreshFunctionTypeMetadata(target.functionType, source.functionType)
-  target.shape = refreshObjectShape(target.shape, source.shape)
-  target.arrayElementType = source.arrayElementType
-  target.arrayElementDeclaredType = source.arrayElementDeclaredType
-  target.arrayElementFunctionType = refreshFunctionTypeMetadata(
-    target.arrayElementFunctionType ?? null,
-    source.arrayElementFunctionType ?? null
-  )
-  target.mapKeyType = source.mapKeyType
-  target.mapValueType = source.mapValueType
-  target.mapValueShape = refreshObjectShape(target.mapValueShape, source.mapValueShape)
-  target.mapValueArrayElementType = source.mapValueArrayElementType ?? null
-  target.mapValueArrayElementDeclaredType = source.mapValueArrayElementDeclaredType ?? null
-  target.promiseValueType = source.promiseValueType
-}
-
-function refreshObjectShape(target: ObjectShapeInfo | null, source: ObjectShapeInfo | null): ObjectShapeInfo | null {
-  if (target === null || source === null) {
-    return source
-  }
-
-  target.kind = source.kind
-  target.typeParameters = source.typeParameters
-  target.baseTypes = source.baseTypes
-  target.builtin = source.builtin
-  target.dynamic = source.dynamic
-  target.dynamicField = source.dynamicField
-  target.fields = source.fields
-  target.libraryTypeId = source.libraryTypeId
-  target.libraryCppType = source.libraryCppType
-  target.libraryCValueAdapter = source.libraryCValueAdapter
-
-  return target
-}
-
-function refreshFunctionTypeMetadata(
-  target: FunctionTypeMetadata | null,
-  source: FunctionTypeMetadata | null
-): FunctionTypeMetadata | null {
-  if (target === null || source === null) {
-    return source
-  }
-
-  const previousReturnShape = target.returnShape ?? null
-
-  for (const key of Object.keys(source)) {
-    target[key] = source[key]
-  }
-
-  target.returnShape = refreshObjectShape(previousReturnShape, source.returnShape ?? null)
-  return target
-}
-
-function applyGenericNativeType(
-  context: DeclaredTypeResolverContext,
-  applicationName: string,
-  argumentNames: string[],
-  resolved: ResolvedTypeInfo,
-  loc: SourceLocation
-): void {
-  const application = genericTypeApplicationFromTypeName(applicationName)
-
-  if (application === null) {
-    return
-  }
-
-  const nativeType = compilerLibraryNativeTypeForName(context.libraries, application.name)
-
-  if (nativeType === null || nativeType.typeParameters === null || typeof nativeType.typeParameters === 'undefined') {
-    return
-  }
-
-  const typeArguments: TypeRef[] = []
-
-  for (let index = 0; index < argumentNames.length; index = index + 1) {
-    typeArguments.push(typeRefFromResolvedType(resolveDeclaredType(context, argumentNames[index], loc)))
-  }
-
-  const typeRef = instantiateNativeTypeRef(nativeType, typeArguments)
-  const metadata = typeRefCompatibilityMetadata(typeRef, context.libraries, loc)
-
-  resolved.valueType = metadata.valueType
-  resolved.typeRef = typeRef
-  resolved.arrayElementType = metadata.arrayElementType
-  resolved.arrayElementDeclaredType = metadata.arrayElementDeclaredType
-  resolved.mapKeyType = metadata.mapKeyType
-  resolved.mapValueType = metadata.mapValueType
-  resolved.promiseValueType = metadata.promiseValueType
-
-  if (resolved.shape === null) {
-    resolved.shape = metadata.shape
-  } else {
-    resolved.shape.baseTypes = nativeType.baseTypeIds
-    resolved.shape.libraryCValueAdapter = nativeType.cValueAdapter ?? null
-    resolved.shape.libraryTypeId = nativeType.typeId
-    resolved.shape.libraryCppType = nativeType.cppType
-  }
-}
-
-export function typeRefFromResolvedType(info: ResolvedTypeInfo): TypeRef {
-  if (info.typeRef !== null) {
-    return info.typeRef
-  }
-
-  const primitive = corePrimitiveTypeName(info.valueType)
-
-  if (primitive !== null) {
-    return {
-      kind: 'primitive',
-      name: primitive,
-      nullable: info.nullable,
-      ownership: 'value',
-      traits: []
-    }
-  }
-
-  return {
-    kind: 'unknown',
-    nullable: info.nullable,
-    ownership: 'value',
-    traits: []
-  }
-}
-
-function corePrimitiveTypeName(valueType: ValueType): CorePrimitiveType | null {
-  if (
-    valueType === 'boolean' ||
-    valueType === 'bytes' ||
-    valueType === 'null' ||
-    valueType === 'number' ||
-    valueType === 'string' ||
-    valueType === 'void'
-  ) {
-    return valueType
-  }
-
-  return null
 }
 
 function resolveIndexedAccessDeclaredType(
@@ -855,15 +513,13 @@ function resolveDeclaredFunctionAlias(
   context: DeclaredTypeResolverContext,
   name: string,
   shape: FunctionTypeInfo,
-  loc: SourceLocation,
-  staleCached: ResolvedTypeInfo | null
+  loc: SourceLocation
 ): ResolvedTypeInfo {
-  const rootResolution = context.resolvingDeclaredTypes.size === 0
   context.resolvingDeclaredTypes.add(name)
 
   try {
     const returnInfo = resolveDeclaredType(context, shape.returnType, loc)
-    const params = resolveFunctionTypeParams(context, shape.params, loc)
+    const params = resolveFunctionTypeParams(context, shape.params)
     const resolved = unresolvedTypeInfo()
     let returnPromiseValueType: ValueType | null = null
 
@@ -884,13 +540,10 @@ function resolveDeclaredFunctionAlias(
       returnMapKeyType: returnInfo.mapKeyType,
       returnMapValueType: returnInfo.mapValueType,
       returnPromiseValueType,
+      returnSetElementType: returnInfo.setElementType,
       returnShape: returnInfo.shape
     }
-    cacheResolvedDeclaredType(context, name, resolved, staleCached)
-
-    if (rootResolution) {
-      context.incompleteDeclaredTypes.delete(name)
-    }
+    context.resolvedDeclaredTypes.set(name, cloneResolvedTypeInfo(resolved))
 
     return resolved
   } finally {
@@ -900,15 +553,13 @@ function resolveDeclaredFunctionAlias(
 
 function resolveFunctionTypeParams(
   context: DeclaredTypeResolverContext,
-  params: AnyNode[],
-  loc: SourceLocation
+  params: AnyNode[]
 ): FunctionTypeParamMetadata[] {
   const resolvedParams: FunctionTypeParamMetadata[] = []
 
   for (const param of params) {
     const declaredType = nodeDeclaredTypeOrValueType(param)
-    const paramLoc: SourceLocation = param.loc ?? loc
-    const paramInfo = resolveDeclaredType(context, declaredType, paramLoc)
+    const paramInfo = resolveDeclaredType(context, declaredType, param.loc)
     let paramPromiseValueType: ValueType | null = null
 
     if (paramInfo.promiseValueType !== null && typeof paramInfo.promiseValueType !== 'undefined') {
@@ -917,20 +568,18 @@ function resolveFunctionTypeParams(
 
     resolvedParams.push({
       name: param.name,
-      loc: paramLoc,
+      loc: param.loc,
       optional: isOptionalParam(param),
       rest: param.rest === true,
       declaredType,
       valueType: paramInfo.valueType,
-      nullable:
-        paramInfo.nullable ||
-        (param.optional === true &&
-          (param.defaultValue === null || typeof param.defaultValue === 'undefined')),
+      nullable: paramInfo.nullable,
       arrayElementType: paramInfo.arrayElementType,
       arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
       mapKeyType: paramInfo.mapKeyType,
       mapValueType: paramInfo.mapValueType,
       promiseValueType: paramPromiseValueType,
+      setElementType: paramInfo.setElementType,
       functionType: paramInfo.functionType,
       shape: paramInfo.shape
     })
@@ -971,6 +620,8 @@ export function resolveUnionDeclaredType(
     result.mapValueShape = commonResolvedMapValueShape(infos)
   } else if (valueType === 'promise') {
     result.promiseValueType = commonResolvedPromiseValueType(infos)
+  } else if (valueType === 'set') {
+    result.setElementType = commonResolvedSetElementType(infos)
   } else if (valueType === 'object') {
     result.shape = commonResolvedObjectShape(infos)
   }
@@ -1076,7 +727,7 @@ export function resolveObjectShapeField(
     declaredType,
     typeRef: qualifiedFieldTypeRef(fieldInfo.typeRef, weakField, field.optional === true),
     valueType: fieldInfo.valueType,
-    nullable: fieldInfo.nullable || field.nullable === true || weakField || field.optional === true,
+    nullable: fieldInfo.nullable || weakField || field.optional === true,
     arrayElementType: fieldInfo.arrayElementType,
     arrayElementDeclaredType: fieldInfo.arrayElementDeclaredType,
     mapKeyType: fieldInfo.mapKeyType,
@@ -1085,6 +736,7 @@ export function resolveObjectShapeField(
     mapValueArrayElementType: fieldInfo.mapValueArrayElementType ?? null,
     mapValueArrayElementDeclaredType: fieldInfo.mapValueArrayElementDeclaredType ?? null,
     promiseValueType,
+    setElementType: fieldInfo.setElementType,
     functionType,
     functionOverloads,
     shape: fieldInfo.shape
@@ -1117,7 +769,7 @@ export function resolveFunctionTypeMetadata(
 
   const typeLoc: SourceLocation = { line: typeLine, column: typeColumn }
   const returnInfo = resolveDeclaredType(context, functionType.returnType, typeLoc)
-  const params = resolveFunctionTypeParams(context, functionType.params, typeLoc)
+  const params = resolveFunctionTypeParams(context, functionType.params)
   let returnPromiseValueType: ValueType | null = null
 
   if (returnInfo.promiseValueType !== null && typeof returnInfo.promiseValueType !== 'undefined') {
@@ -1136,6 +788,7 @@ export function resolveFunctionTypeMetadata(
     returnMapKeyType: returnInfo.mapKeyType,
     returnMapValueType: returnInfo.mapValueType,
     returnPromiseValueType,
+    returnSetElementType: returnInfo.setElementType,
     returnShape: returnInfo.shape
   }
 }
@@ -1249,6 +902,7 @@ function resolvedSyntheticFieldType(field: AnyNode): ResolvedTypeInfo {
   info.mapValueArrayElementType = field.mapValueArrayElementType ?? null
   info.mapValueArrayElementDeclaredType = field.mapValueArrayElementDeclaredType ?? null
   info.promiseValueType = field.promiseValueType ?? null
+  info.setElementType = field.setElementType ?? null
 
   return info
 }
@@ -1389,6 +1043,7 @@ export function resolveWeakTargetObjectShape(
       mapValueArrayElementType: declared.mapValueArrayElementType ?? null,
       mapValueArrayElementDeclaredType: declared.mapValueArrayElementDeclaredType ?? null,
       promiseValueType,
+      setElementType: declared.setElementType,
       functionType,
       shape: null
     })
@@ -1445,7 +1100,8 @@ export function resolveWeakTargetShapeTypeName(
       mapKeyType: inner.mapKeyType,
       mapValueType: inner.mapValueType,
       mapValueShape: inner.mapValueShape,
-      promiseValueType: inner.promiseValueType
+      promiseValueType: inner.promiseValueType,
+      setElementType: inner.setElementType
     }
   }
 
@@ -1484,6 +1140,24 @@ export function resolveWeakTargetShapeTypeName(
       info.mapKeyType = keyInfo.valueType
       info.mapValueType = valueInfo.valueType
     }
+
+    return info
+  }
+
+  if (name === 'set') {
+    const info = unresolvedTypeInfo()
+    info.valueType = 'set'
+    info.setElementType = 'unknown'
+
+    return info
+  }
+
+  if (isSetTypeName(name)) {
+    const setElementTypeName = setElementTypeNameFromKnownTypeName(name)
+    const elementInfo = resolveWeakTargetShapeTypeName(context, setElementTypeName, loc)
+    const info = unresolvedTypeInfo()
+    info.valueType = 'set'
+    info.setElementType = elementInfo.valueType
 
     return info
   }
@@ -1534,7 +1208,8 @@ export function cloneResolvedTypeInfo(info: ResolvedTypeInfo): ResolvedTypeInfo 
     mapValueShape: info.mapValueShape,
     mapValueArrayElementType: info.mapValueArrayElementType ?? null,
     mapValueArrayElementDeclaredType: info.mapValueArrayElementDeclaredType ?? null,
-    promiseValueType: info.promiseValueType
+    promiseValueType: info.promiseValueType,
+    setElementType: info.setElementType
   }
 }
 
@@ -1547,13 +1222,11 @@ export function unresolvedTypeInfo(): ResolvedTypeInfo {
     shape: null,
     arrayElementType: null,
     arrayElementDeclaredType: null,
-    arrayElementFunctionType: null,
     mapKeyType: null,
     mapValueType: null,
     mapValueShape: null,
-    mapValueArrayElementType: null,
-    mapValueArrayElementDeclaredType: null,
-    promiseValueType: null
+    promiseValueType: null,
+    setElementType: null
   }
 }
 
@@ -1572,10 +1245,6 @@ function qualifiedFieldTypeRef(typeRef: TypeRef | null, weak: boolean, optional:
 function qualifiedTypeRef(typeRef: TypeRef | null, nullable: boolean, ownership: TypeOwnership | null): TypeRef | null {
   if (typeRef === null) {
     return null
-  }
-
-  if (typeRef.kind === 'parameter') {
-    return typeRef
   }
 
   const resolvedOwnership = ownership ?? typeRef.ownership

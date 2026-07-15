@@ -73,12 +73,7 @@ export function checkSimpleArrayMethodCall(
     expression.valueType = 'number'
 
     if (info.argCount !== 1) {
-      report(
-        context,
-        'INOX_ARG_COUNT',
-        `array.${method} expects 1 argument(s), got ${info.argCount}`,
-        expression.loc
-      )
+      report(context, 'INOX_ARG_COUNT', `array.${method} expects 1 argument(s), got ${info.argCount}`, expression.loc)
     }
 
     checkElementAssignable(context, info, 0)
@@ -101,12 +96,7 @@ export function checkSimpleArrayMethodCall(
     expression.valueType = 'string'
 
     if (info.argCount > 1) {
-      report(
-        context,
-        'INOX_ARG_COUNT',
-        `array.join expects 0 or 1 argument(s), got ${info.argCount}`,
-        expression.loc
-      )
+      report(context, 'INOX_ARG_COUNT', `array.join expects 0 or 1 argument(s), got ${info.argCount}`, expression.loc)
     }
 
     checkIndexedArgAssignable(context, info, 0, 'string', true)
@@ -118,12 +108,7 @@ export function checkSimpleArrayMethodCall(
     expression.valueType = 'boolean'
 
     if (info.argCount !== 1) {
-      report(
-        context,
-        'INOX_ARG_COUNT',
-        `array.includes expects 1 argument(s), got ${info.argCount}`,
-        expression.loc
-      )
+      report(context, 'INOX_ARG_COUNT', `array.includes expects 1 argument(s), got ${info.argCount}`, expression.loc)
     }
 
     if (info.elementType !== 'unknown') {

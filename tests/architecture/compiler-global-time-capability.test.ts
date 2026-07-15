@@ -6,19 +6,10 @@ import { CompileError } from '../../compiler/diagnostics.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 test('wall и monotonic capabilities принадлежат выбранным time operations', () => {
-  assert.throws(
-    () => embedded('Date.now()\n'),
-    capabilityError('wallClock')
-  )
-  assert.throws(
-    () => embedded('new Date()\n'),
-    capabilityError('wallClock')
-  )
+  assert.throws(() => embedded('Date.now()\n'), capabilityError('wallClock'))
+  assert.throws(() => embedded('new Date()\n'), capabilityError('wallClock'))
   assert.doesNotThrow(() => embedded('new Date(0)\n'))
-  assert.throws(
-    () => embedded('performance.now()\n'),
-    capabilityError('monotonicClock')
-  )
+  assert.throws(() => embedded('performance.now()\n'), capabilityError('monotonicClock'))
 
   const wall = embedded('Date.now()\n', { wallClock: true })
   const monotonic = embedded('performance.now()\n', { monotonicClock: true })

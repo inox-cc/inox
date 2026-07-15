@@ -191,10 +191,7 @@ function inferPromiseRejectionValueType(
     return 'error'
   }
 
-  if (
-    expression.promiseRejectionValueType !== null &&
-    typeof expression.promiseRejectionValueType !== 'undefined'
-  ) {
+  if (expression.promiseRejectionValueType !== null && typeof expression.promiseRejectionValueType !== 'undefined') {
     return expression.promiseRejectionValueType
   }
 

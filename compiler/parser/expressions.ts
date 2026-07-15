@@ -143,7 +143,7 @@ export function createOptionalMemberExpression(object: AnyNode, property: Token)
   }
 }
 
-export function createCallExpression(callee: AnyNode, args: AnyNode[], typeArguments: string[] = []): AnyNode {
+export function createCallExpression(callee: AnyNode, args: AnyNode[]): AnyNode {
   if (callee.type === 'OptionalCallTarget') {
     const target = callee as OptionalCallTargetNode
 
@@ -151,7 +151,6 @@ export function createCallExpression(callee: AnyNode, args: AnyNode[], typeArgum
       type: 'OptionalCallExpression',
       callee: target.callee,
       args,
-      typeArguments,
       loc: callee.loc
     }
   }
@@ -160,24 +159,18 @@ export function createCallExpression(callee: AnyNode, args: AnyNode[], typeArgum
     type: 'CallExpression',
     callee,
     args,
-    typeArguments,
     loc: callee.loc
   }
 }
 
-export function createNewExpression(
-  start: Token,
-  callee: AnyNode,
-  args: AnyNode[],
-  typeArguments: string[] = []
-): AnyNode {
+export function createNewExpression(start: Token, callee: AnyNode, args: AnyNode[]): AnyNode {
   return {
     type: 'NewExpression',
     callee,
     args,
-    typeArguments,
     mapKeyType: 'unknown',
     mapValueType: 'unknown',
+    setElementType: 'unknown',
     loc: locFromToken(start)
   }
 }
@@ -249,7 +242,6 @@ export function createReferenceFromName(name: string, loc: SourceLocation): AnyN
   return {
     type: 'Reference',
     path: [name],
-    functionStorage: null,
     loc
   }
 }

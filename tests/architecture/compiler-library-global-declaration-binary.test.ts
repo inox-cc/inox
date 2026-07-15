@@ -15,8 +15,5 @@ test('global declaration reader сохраняет binary constructors и numeri
   assert.equal(declaration.fields[0].readonly, true)
   assert.equal(declaration.indexSignatures[0].keyType, 'number')
   assert.equal(declaration.indexSignatures[0].valueType, 'number')
-  assert.equal(
-    declaration.methods.filter((method: AnyNode) => method.name === 'constructor').length,
-    2
-  )
+  assert.equal(declaration.methods.filter((method: AnyNode) => method.name === 'constructor').length, 2)
 })

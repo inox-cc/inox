@@ -36,17 +36,28 @@ test('удаление global:math убирает API, options, initializer и n
   const afterRegistry = await readFile(resolve(output, 'default-registry.ts'), 'utf8')
   const afterPlan = await readFile(resolve(output, 'native-plan.json'), 'utf8')
 
-  assert.equal(after.declarations.some((item) => item.libraryId === 'global:math'), false)
-  assert.equal(after.operations.some((item) => item.libraryId === 'global:math'), false)
-  assert.equal(after.options?.some((item) => item.libraryId === 'global:math'), false)
-  assert.equal(after.runtimeInitializers?.some((item) => item.libraryId === 'global:math'), false)
+  assert.equal(
+    after.declarations.some((item) => item.libraryId === 'global:math'),
+    false
+  )
+  assert.equal(
+    after.operations.some((item) => item.libraryId === 'global:math'),
+    false
+  )
+  assert.equal(
+    after.options?.some((item) => item.libraryId === 'global:math'),
+    false
+  )
+  assert.equal(
+    after.runtimeInitializers?.some((item) => item.libraryId === 'global:math'),
+    false
+  )
   assert.doesNotMatch(afterRegistry, /global:math/)
   assert.doesNotMatch(afterPlan, /stdlib\/global\/math/)
   assert.match(afterPlan, /stdlib\/global\/time\/src\/time\.cc/)
   assert.throws(
     () => compileSource('Math.min(1, 2)\n', { libraries: after }),
-    (error: unknown) =>
-      error instanceof CompileError && error.diagnostics[0].code === 'INOX_UNKNOWN_NAME'
+    (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_UNKNOWN_NAME'
   )
 })
 

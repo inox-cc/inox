@@ -16,6 +16,10 @@ const node: AnyNode = {
 
 attachControlFlowMetadata(node)
 
-if (node.update.type === 'UpdateExpression' && node.iterable.type === 'Reference' && node.discriminant.type === 'Reference') {
+if (
+  node.update.type === 'UpdateExpression' &&
+  node.iterable.type === 'Reference' &&
+  node.discriminant.type === 'Reference'
+) {
   console.log('ok')
 }

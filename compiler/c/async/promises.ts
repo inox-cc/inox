@@ -311,6 +311,10 @@ export function knownValueType(valueType: string | null | undefined): string | n
     return 'promise'
   }
 
+  if (valueType === 'set') {
+    return 'set'
+  }
+
   if (valueType === 'string') {
     return 'string'
   }
@@ -1253,7 +1257,10 @@ function promiseCatchErrorMemberReturnFieldName(callback: AnyNode, expression: A
   return promiseMemberFieldNameForReference(returnExpression, param.name)
 }
 
-function promiseMemberFieldNameForReference(expression: AnyNode | null | undefined, referenceName: string): string | null {
+function promiseMemberFieldNameForReference(
+  expression: AnyNode | null | undefined,
+  referenceName: string
+): string | null {
   if (
     expression === null ||
     typeof expression === 'undefined' ||
@@ -1292,10 +1299,7 @@ function promiseCallbackParamMemberReturnType(callback: AnyNode, expression: Any
   return null
 }
 
-function promiseCallbackParamMemberShapeField(
-  callback: AnyNode,
-  expression: AnyNode
-): CObjectShapeField | null {
+function promiseCallbackParamMemberShapeField(callback: AnyNode, expression: AnyNode): CObjectShapeField | null {
   if (
     expression.type !== 'MemberExpression' ||
     expression.object === null ||
@@ -1333,12 +1337,7 @@ function promiseCallbackParamByName(callback: AnyNode, name: string): AnyNode | 
 }
 
 function promiseShapeFieldByName(shape: CObjectShape | null | undefined, name: string): CObjectShapeField | null {
-  if (
-    shape === null ||
-    typeof shape === 'undefined' ||
-    shape.fields === null ||
-    typeof shape.fields === 'undefined'
-  ) {
+  if (shape === null || typeof shape === 'undefined' || shape.fields === null || typeof shape.fields === 'undefined') {
     return null
   }
 

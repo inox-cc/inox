@@ -16,7 +16,6 @@ type FunctionDeclarationOptions = {
 type ClassDeclarationOptions = {
   exported: boolean
   name: Token
-  typeParameters: AnyNode[]
   extendsName: string | null
   extendsToken: Token | null
   fields: AnyNode[]
@@ -98,55 +97,43 @@ export function createParam(
   defaultValue: AnyNode | null = null,
   rest: boolean = false
 ): AnyNode {
-  return {
+  const param: AnyNode = {
     name: token.value,
     optional,
     rest: rest === true,
     valueType,
-    declaredType: null,
-    typeRef: null,
-    nullable: false,
-    arrayElementType: null,
-    arrayElementDeclaredType: null,
-    arrayElementFunctionType: null,
-    mapKeyType: null,
-    mapValueType: null,
-    mapValueShape: null,
-    mapValueArrayElementType: null,
-    mapValueArrayElementDeclaredType: null,
-    promiseValueType: null,
-    promiseRejectionIntrinsicRole: null,
-    functionType: null,
-    shape: null,
-    className: null,
-    libraryIntrinsicRole: null,
-    defaultValue,
-    bindingElements: null,
     loc: locFromToken(token)
   }
+
+  if (defaultValue !== null && typeof defaultValue !== 'undefined') {
+    param.defaultValue = defaultValue
+  }
+
+  return param
 }
 
 export function createFunctionDeclaration(options: FunctionDeclarationOptions): AnyNode {
-  return {
+  const declaration: AnyNode = {
     type: 'FunctionDeclaration',
     exported: options.exported,
     async: options.isAsync,
     name: options.name.value,
     loc: locFromToken(options.name),
-    typeParameters: options.typeParameters,
     params: options.params,
     declaredReturnType: options.declaredReturnType,
     returnType: options.returnType,
-    returnTypeRef: null,
-    returnNullable: false,
-    returnArrayElementType: null,
-    returnArrayElementDeclaredType: null,
-    returnMapKeyType: null,
-    returnMapValueType: null,
-    returnPromiseValueType: null,
-    returnShape: options.returnShape,
     body: options.body
   }
+
+  if (options.typeParameters.length > 0) {
+    declaration.typeParameters = options.typeParameters
+  }
+
+  if (options.returnShape !== null && typeof options.returnShape !== 'undefined') {
+    declaration.returnShape = options.returnShape
+  }
+
+  return declaration
 }
 
 export function createTypeParameter(name: Token, constraint: string | null): AnyNode {
@@ -157,18 +144,12 @@ export function createTypeParameter(name: Token, constraint: string | null): Any
   }
 }
 
-export function createTypeAliasDeclaration(
-  exported: boolean,
-  name: Token,
-  typeParameters: AnyNode[],
-  valueType: AnyNode
-): AnyNode {
+export function createTypeAliasDeclaration(exported: boolean, name: Token, valueType: AnyNode): AnyNode {
   return {
     type: 'TypeAliasDeclaration',
     exported,
     name: name.value,
     loc: locFromToken(name),
-    typeParameters,
     valueType
   }
 }
@@ -227,7 +208,6 @@ export function createClassDeclaration(options: ClassDeclarationOptions): AnyNod
     exported: options.exported,
     name: options.name.value,
     loc: locFromToken(options.name),
-    typeParameters: options.typeParameters,
     extendsName: options.extendsName,
     extendsLoc: nullableTokenLocation(options.extendsToken),
     fields: options.fields,
@@ -272,24 +252,6 @@ export function createVariableDeclaration(options: VariableDeclarationOptions): 
     name: options.name.value,
     loc: locFromToken(options.name),
     declaredType: options.declaredType,
-    inferredDeclaredType: null,
-    init: options.init,
-    valueType: 'unknown',
-    nullable: false,
-    arrayElementType: null,
-    arrayElementDeclaredType: null,
-    arrayElementFunctionType: null,
-    mapKeyType: null,
-    mapValueType: null,
-    mapValueShape: null,
-    mapValueArrayElementType: null,
-    mapValueArrayElementDeclaredType: null,
-    promiseValueType: null,
-    promiseRejectionIntrinsicRole: null,
-    functionType: null,
-    shape: null,
-    className: null,
-    libraryIntrinsicRole: null,
-    typeRef: null
+    init: options.init
   }
 }

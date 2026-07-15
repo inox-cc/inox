@@ -4,10 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { compileFileToCModulesSync } from '../../compiler/core.ts'
 import { tokenize } from '../../compiler/lexer.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
-import {
-  createModuleDeclarationProgram,
-  emitModuleDeclarationContract
-} from '../../compiler/modules/declarations.ts'
+import { createModuleDeclarationProgram, emitModuleDeclarationContract } from '../../compiler/modules/declarations.ts'
 import { parse } from '../../compiler/parser.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 

@@ -72,10 +72,7 @@ try {
   const source = generatedTextFile(files, 'src/index.cc').code
 
   assert.match(source, /auto value = inox::await_value<inox::Value>\(inox_promise_\d+\);/)
-  assert.match(
-    source,
-    /if \(inox::thrown\(\)\) goto catch_\d+;/
-  )
+  assert.match(source, /if \(inox::thrown\(\)\) goto catch_\d+;/)
   assert.match(source, /auto error = inox::take_exception\(\);/)
   assert.match(source, /inox_promise_rejected\(inox::loop\(\), inox::String\("bad", 3\), &inox_promise_\d+\)/)
   assert.doesNotMatch(source, /String::fromLiteral\(&inox_default_allocator/)

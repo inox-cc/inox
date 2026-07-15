@@ -6,9 +6,7 @@ import { compilerLibraryFingerprintFixture } from '../helpers/compiler-library-f
 
 test('library set fingerprint учитывает default library option', () => {
   const safe = createCompilerLibrarySet([compilerLibraryFingerprintFixture()])
-  const fast = createCompilerLibrarySet([
-    compilerLibraryFingerprintFixture({ defaultValue: 'fast' })
-  ])
+  const fast = createCompilerLibrarySet([compilerLibraryFingerprintFixture({ defaultValue: 'fast' })])
 
   assert.notEqual(safe.fingerprint, fast.fingerprint)
 })

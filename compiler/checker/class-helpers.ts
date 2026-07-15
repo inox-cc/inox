@@ -1,9 +1,5 @@
 import { findParamByName } from './helpers.ts'
-import {
-  checkerNodeAt,
-  firstPathSegment,
-  nodeValueTypeOrUnknown
-} from './resolved-types.ts'
+import { checkerNodeAt, firstPathSegment, nodeValueTypeOrUnknown } from './resolved-types.ts'
 import type { NullableNode } from './resolved-types.ts'
 import type { AnyNode, ValueType } from '../types.ts'
 

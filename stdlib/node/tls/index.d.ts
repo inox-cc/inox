@@ -1,2 +1,2 @@
-declare const tls: unknown;
-export default tls;
+declare const tls: unknown
+export default tls

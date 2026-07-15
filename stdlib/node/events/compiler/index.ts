@@ -32,21 +32,13 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: []
 }
 
-function pushDiagnosticOperations(
-  name: string,
-  kinds: LibraryOperationKind[],
-  reason: string
-): void {
+function pushDiagnosticOperations(name: string, kinds: LibraryOperationKind[], reason: string): void {
   for (const kind of kinds) {
     operations.push(diagnosticOperation(name, kind, reason))
   }
 }
 
-function diagnosticOperation(
-  name: string,
-  kind: LibraryOperationKind,
-  reason: string
-): LibraryOperationDescriptor {
+function diagnosticOperation(name: string, kind: LibraryOperationKind, reason: string): LibraryOperationDescriptor {
   return {
     libraryId,
     bindingId: `${libraryId}#module:${libraryId}:${name}`,

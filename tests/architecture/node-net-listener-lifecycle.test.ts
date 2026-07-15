@@ -12,10 +12,7 @@ test('node:net накапливает listeners и вызывает их по re
   assert.match(source, /std::vector<inox::Callback>\s+error_listeners_;/)
   assert.match(source, /\.push_back\(std::move\(listener\)\)/)
 
-  assert.match(
-    source,
-    /std::vector<inox::Callback>\s+listeners\s*=\s*[^;]+listeners_;/
-  )
+  assert.match(source, /std::vector<inox::Callback>\s+listeners\s*=\s*[^;]+listeners_;/)
   assert.match(source, /for\s*\(const inox::Callback& listener : listeners\)/)
   assert.doesNotMatch(source, /inox::Callback\s+(?:connection|listening|data|close|error)_listener_;/)
 })

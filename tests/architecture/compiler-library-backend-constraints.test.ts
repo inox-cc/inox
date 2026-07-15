@@ -24,10 +24,7 @@ function backendLibrary(): CompilerLibraryDescriptor {
     id: 'platform',
     dependencies: [],
     declarations: [],
-    operations: [
-      operation('random', 'platform:random'),
-      operation('secure', 'platform:secure')
-    ],
+    operations: [operation('random', 'platform:random'), operation('secure', 'platform:secure')],
     intrinsicBindings: [],
     runtimeRequirements: [
       {
@@ -78,6 +75,5 @@ function operation(name: string, requirement: string) {
 
 function hasDiagnostic(code: string, message: string): (error: unknown) => boolean {
   return (error: unknown) =>
-    error instanceof CompileError &&
-    error.diagnostics.some((item) => item.code === code && item.message === message)
+    error instanceof CompileError && error.diagnostics.some((item) => item.code === code && item.message === message)
 }

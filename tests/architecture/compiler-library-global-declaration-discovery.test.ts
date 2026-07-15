@@ -21,9 +21,7 @@ test('global package declaration попадает в generated library set', asy
     "export const compilerLibraryPackage = { id: 'global:bridge', dependencies: [], operations: [], intrinsicBindings: [], runtimeRequirements: [] }\n"
   )
 
-  const libraries = createCompilerLibrarySetFromDiscovered(
-    await discoverCompilerLibraries(fixtureRoot)
-  )
+  const libraries = createCompilerLibrarySetFromDiscovered(await discoverCompilerLibraries(fixtureRoot))
   const declaration = libraries.declarations[0]
 
   assert.equal(declaration.libraryId, 'global:bridge')

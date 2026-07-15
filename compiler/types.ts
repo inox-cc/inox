@@ -1,5 +1,5 @@
 import type { CompilerHost } from './host.ts'
-import type { CompilerLibraryOptionValue, CompilerLibrarySet, IntrinsicRole, TypeRef } from './extensions/types.ts'
+import type { CompilerLibraryOptionValue, CompilerLibrarySet, IntrinsicRole } from './extensions/types.ts'
 
 export type SourceLocation = {
   file?: string
@@ -71,6 +71,7 @@ export type IrFunctionDeclaration = {
   returnMapKeyType?: ValueType | null
   returnMapValueType?: ValueType | null
   returnPromiseValueType?: ValueType | null
+  returnSetElementType?: ValueType | null
   returnShape?: any
   loc?: SourceLocation
 }
@@ -128,7 +129,6 @@ export type ValueType =
 
 export type FunctionTypeInfo = {
   kind: 'function'
-  typeParameters?: AnyNode[]
   params: AnyNode[]
   returnType: ValueType
   returnNullable?: boolean
@@ -138,7 +138,6 @@ export type FunctionTypeInfo = {
 
 export type ObjectShapeInfo = {
   kind: 'object'
-  typeParameters?: AnyNode[]
   baseTypes?: string[]
   builtin?: string | null
   dynamic?: boolean
@@ -146,14 +145,12 @@ export type ObjectShapeInfo = {
   fields: AnyNode[]
   libraryTypeId?: string | null
   libraryCppType?: string | null
-  libraryCValueAdapter?: string | null
   [key: string]: any
 }
 
 export type AliasTypeInfo = {
   kind: 'alias'
   valueType: ValueType
-  typeParameters?: AnyNode[]
 }
 
 export type TypeAliasInfo = AliasTypeInfo | FunctionTypeInfo | ObjectShapeInfo
@@ -163,13 +160,13 @@ export type CallableOverloadInfo = {
   valueType: ValueType
   params?: AnyNode[]
   returnType?: ValueType
-  returnTypeRef?: TypeRef | null
   returnNullable?: boolean
   returnArrayElementType?: ValueType | null
   returnArrayElementDeclaredType?: string | null
   returnMapKeyType?: ValueType | null
   returnMapValueType?: ValueType | null
   returnPromiseValueType?: ValueType | null
+  returnSetElementType?: ValueType | null
   returnShape?: ObjectShapeInfo | null
   async?: boolean
   loc?: SourceLocation
@@ -179,7 +176,6 @@ export type SymbolInfo = {
   kind: string
   mutable?: boolean
   valueType: ValueType
-  typeRef?: TypeRef | null
   libraryId?: string | null
   libraryBindingId?: string | null
   libraryIntrinsicRole?: IntrinsicRole | null
@@ -198,23 +194,22 @@ export type SymbolInfo = {
   mapValueArrayElementDeclaredType?: string | null
   promiseValueType?: ValueType | null
   promiseRejectionIntrinsicRole?: IntrinsicRole | null
+  setElementType?: ValueType | null
   params?: AnyNode[]
   returnType?: ValueType
-  returnTypeRef?: TypeRef | null
   returnNullable?: boolean
   returnArrayElementType?: ValueType | null
   returnArrayElementDeclaredType?: string | null
   returnMapKeyType?: ValueType | null
   returnMapValueType?: ValueType | null
   returnPromiseValueType?: ValueType | null
+  returnSetElementType?: ValueType | null
   returnShape?: ObjectShapeInfo | null
   async?: boolean
   className?: string | null
   classMethods?: AnyNode[]
   constructable?: boolean
-  typeParameters?: AnyNode[]
   constructorParams?: AnyNode[]
-  constructorParamTemplates?: AnyNode[][]
   constructorOverloads?: CallableOverloadInfo[]
   functionType?: any
   overloads?: CallableOverloadInfo[]

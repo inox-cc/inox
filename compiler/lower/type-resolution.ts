@@ -1,13 +1,14 @@
 import {
   arrayElementTypeNameFromKnownTypeName,
-  genericTypeApplicationFromTypeName,
   isArrayTypeName,
   isBuiltinValueType,
   isNullableTypeName,
   isPromiseTypeName,
+  isSetTypeName,
   mapTypeNamesFromTypeName,
   nullableTypeNameFromKnownTypeName,
   promiseValueTypeNameFromKnownTypeName,
+  setElementTypeNameFromKnownTypeName,
   unionTypeNamesFromTypeName
 } from '../type-names.ts'
 import type { AnyNode, ProgramNode } from '../types.ts'
@@ -24,7 +25,6 @@ export type LowerContext = {
   nextId: number
   variables: Map<string, LowerTypeNode>
   resolvingTypes: Set<string>
-  typeSubstitutions: Map<string, LowerResolvedType>
 }
 
 export type LowerResolvedType = {
@@ -38,6 +38,7 @@ export type LowerResolvedType = {
   mapValueType: string | null
   mapValueShape?: LowerTypeNode | null
   promiseValueType?: string | null
+  setElementType: string | null
   returnShape?: LowerTypeNode | null
   shape: LowerTypeNode | null
   functionType: LowerTypeNode | null
@@ -55,6 +56,7 @@ type LowerResolvedStringKey =
   | 'mapKeyType'
   | 'mapValueType'
   | 'promiseValueType'
+  | 'setElementType'
 
 type LowerTypeNameResolver = (name: string, context: LowerContext) => LowerResolvedType
 
@@ -69,37 +71,13 @@ export function createLowerContext(
     libraries: resolveCompilerLibrarySet(libraries),
     nextId: 0,
     variables: new Map(),
-    resolvingTypes: new Set(),
-    typeSubstitutions: new Map()
+    resolvingTypes: new Set()
   }
 }
 
 export function resolveDeclaredType(name: string | null | undefined, context: LowerContext): LowerResolvedType {
   if (name === null || typeof name === 'undefined' || name.length === 0) {
     return unresolvedType()
-  }
-
-  const substitution = context.typeSubstitutions.get(name)
-
-  if (substitution !== null && typeof substitution !== 'undefined') {
-    return cloneResolvedType(substitution)
-  }
-
-  const genericApplication = genericTypeApplicationFromTypeName(name)
-
-  if (genericApplication !== null) {
-    if (genericApplication.name === 'NonNullable' && genericApplication.args.length === 1) {
-      const resolved = resolveDeclaredType(genericApplication.args[0], context)
-
-      resolved.nullable = false
-      return resolved
-    }
-
-    const definition = context.types.get(genericApplication.name)
-
-    if (definition !== null && typeof definition !== 'undefined' && (definition.typeParameters ?? []).length > 0) {
-      return resolveGenericDeclaredType(name, definition, genericApplication.args, context)
-    }
   }
 
   if (isNullableTypeName(name)) {
@@ -145,6 +123,17 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
     return mapResolvedType(keyType, valueType)
   }
 
+  if (name === 'set') {
+    return setResolvedType(null)
+  }
+
+  if (isSetTypeName(name)) {
+    const setElementTypeName = setElementTypeNameFromKnownTypeName(name)
+    const elementType = resolveDeclaredType(setElementTypeName, context)
+
+    return setResolvedType(elementType)
+  }
+
   if (name === 'promise') {
     return promiseResolvedType(null)
   }
@@ -164,7 +153,6 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
       kind: 'object',
       baseTypes: nativeType.baseTypeIds,
       fields: [],
-      libraryCValueAdapter: nativeType.cValueAdapter ?? null,
       libraryTypeId: nativeType.typeId,
       libraryCppType: nativeType.cppType
     }
@@ -267,68 +255,6 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
   return unresolvedType()
 }
 
-function resolveGenericDeclaredType(
-  applicationName: string,
-  definition: LowerTypeNode,
-  argumentNames: string[],
-  context: LowerContext
-): LowerResolvedType {
-  const typeParameters: LowerTypeNode[] = definition.typeParameters ?? []
-
-  if (typeParameters.length !== argumentNames.length) {
-    return unresolvedType()
-  }
-
-  const cached = context.resolvedTypes.get(applicationName)
-
-  if (cached !== null && typeof cached !== 'undefined') {
-    return cloneResolvedType(cached)
-  }
-
-  if (context.resolvingTypes.has(applicationName)) {
-    if (definition.kind === 'object') {
-      return namedResolvedType('object')
-    }
-
-    if (definition.kind === 'function') {
-      return namedResolvedType('function')
-    }
-
-    return unresolvedType()
-  }
-
-  const substitutions = new Map(context.typeSubstitutions)
-
-  for (let index = 0; index < typeParameters.length; index = index + 1) {
-    substitutions.set(typeParameters[index].name, resolveDeclaredType(argumentNames[index], context))
-  }
-
-  const child: LowerContext = {
-    ...context,
-    typeSubstitutions: substitutions
-  }
-
-  context.resolvingTypes.add(applicationName)
-
-  try {
-    let resolved = unresolvedType()
-
-    if (definition.kind === 'object') {
-      resolved = namedResolvedType('object')
-      resolved.shape = resolveObjectShape(definition, child)
-    } else if (definition.kind === 'alias') {
-      resolved = resolveDeclaredType(definition.valueType, child)
-    } else if (definition.kind === 'function') {
-      resolved = resolveFunctionType(definition, child)
-    }
-
-    context.resolvedTypes.set(applicationName, cloneResolvedType(resolved))
-    return resolved
-  } finally {
-    context.resolvingTypes.delete(applicationName)
-  }
-}
-
 function resolveFunctionType(typeInfo: LowerTypeNode, context: LowerContext): LowerResolvedType {
   let returnTypeName = 'unknown'
 
@@ -354,6 +280,7 @@ function resolveFunctionType(typeInfo: LowerTypeNode, context: LowerContext): Lo
     returnMapKeyType: returnType.mapKeyType,
     returnMapValueType: returnType.mapValueType,
     returnPromiseValueType: nullableString(returnType.promiseValueType),
+    returnSetElementType: returnType.setElementType,
     returnShape: returnType.shape
   }
 
@@ -370,17 +297,15 @@ function resolveFunctionParam(param: LowerTypeNode, context: LowerContext): Lowe
     rest: param.rest === true,
     declaredType,
     valueType: resolvedValueType(declared, lowerNodeValueTypeOrUnknown(param)),
-    nullable:
-      declared.nullable ||
-      (param.optional === true &&
-        (param.defaultValue === null || typeof param.defaultValue === 'undefined')),
+    nullable: declared.nullable,
     arrayElementType: declared.arrayElementType,
     arrayElementDeclaredType: declared.arrayElementDeclaredType,
     arrayElementFunctionType: nullableNode(declared.arrayElementFunctionType),
     mapKeyType: declared.mapKeyType,
     mapValueType: declared.mapValueType,
     promiseValueType: nullableString(declared.promiseValueType),
-    shape: declared.shape ?? nullableNode(param.shape),
+    setElementType: declared.setElementType,
+    shape: declared.shape,
     functionType: declared.functionType,
     loc: param.loc
   }
@@ -396,11 +321,9 @@ export function resolveObjectShape(shape: LowerTypeNode, context: LowerContext):
     builtin = shape.builtin
   }
 
-  const optionalFieldsAreNullable = builtin !== 'compiler.AnyNode'
-
   for (let fieldIndex = 0; fieldIndex < fields.length; fieldIndex = fieldIndex + 1) {
     const field = fields[fieldIndex]
-    resolvedFields.push(resolveObjectShapeField(field, fields, context, optionalFieldsAreNullable))
+    resolvedFields.push(resolveObjectShapeField(field, fields, context))
   }
 
   return {
@@ -408,19 +331,11 @@ export function resolveObjectShape(shape: LowerTypeNode, context: LowerContext):
     builtin,
     baseTypes: copyStringArray(shape.baseTypes),
     dynamic: shape.dynamic === true || bases.dynamic,
-    fields: resolvedFields,
-    libraryCValueAdapter: nullableString(shape.libraryCValueAdapter),
-    libraryTypeId: nullableString(shape.libraryTypeId),
-    libraryCppType: nullableString(shape.libraryCppType)
+    fields: resolvedFields
   }
 }
 
-function resolveObjectShapeField(
-  field: LowerTypeNode,
-  fields: LowerTypeNode[],
-  context: LowerContext,
-  optionalFieldsAreNullable: boolean = true
-): LowerTypeNode {
+function resolveObjectShapeField(field: LowerTypeNode, fields: LowerTypeNode[], context: LowerContext): LowerTypeNode {
   const weakField = field.ownership === 'weak' || hasWeakOwnershipMarker(fields, field.name)
   let declared = unresolvedType()
 
@@ -442,17 +357,17 @@ function resolveObjectShapeField(
     ownership: field.ownership,
     weakLoc: nullableNode(field.weakLoc),
     loc: field.loc,
-    declaredType: optionalFieldsAreNullable ? fieldDeclaredType(field) : nullableString(field.declaredType),
+    declaredType: fieldDeclaredType(field),
     valueType: resolvedValueType(declared, lowerNodeValueTypeOrUnknown(field)),
-    nullable:
-      declared.nullable || field.nullable === true || weakField || (optionalFieldsAreNullable && field.optional === true),
+    nullable: declared.nullable || weakField || field.optional === true,
     arrayElementType: declared.arrayElementType,
     arrayElementDeclaredType: declared.arrayElementDeclaredType,
     arrayElementFunctionType: nullableNode(declared.arrayElementFunctionType),
     mapKeyType: declared.mapKeyType,
     mapValueType: declared.mapValueType,
     promiseValueType: nullableString(declared.promiseValueType),
-    shape: declared.shape ?? nullableNode(field.shape),
+    setElementType: declared.setElementType,
+    shape: declared.shape,
     functionType
   }
 }
@@ -603,6 +518,7 @@ function hydrateObjectShapeField(field: LowerTypeNode, context: LowerContext): L
         mapKeyType: field.mapKeyType,
         mapValueType: field.mapValueType,
         promiseValueType: nullableString(field.promiseValueType),
+        setElementType: field.setElementType,
         shape: declared.shape,
         functionType
       }
@@ -626,6 +542,7 @@ function hydrateObjectShapeField(field: LowerTypeNode, context: LowerContext): L
       mapKeyType: field.mapKeyType,
       mapValueType: field.mapValueType,
       promiseValueType: nullableString(field.promiseValueType),
+      setElementType: field.setElementType,
       shape: nullableNode(field.shape),
       functionType
     }
@@ -653,6 +570,7 @@ function hydrateFunctionType(functionType: LowerTypeNode, context: LowerContext)
     returnMapKeyType: functionType.returnMapKeyType,
     returnMapValueType: functionType.returnMapValueType,
     returnPromiseValueType: nullableString(functionType.returnPromiseValueType),
+    returnSetElementType: functionType.returnSetElementType,
     returnShape: nullableNode(functionType.returnShape),
     loc: functionType.loc
   }
@@ -687,6 +605,7 @@ function hydrateFunctionParam(param: LowerTypeNode, context: LowerContext): Lowe
     mapKeyType: param.mapKeyType,
     mapValueType: param.mapValueType,
     promiseValueType: nullableString(param.promiseValueType),
+    setElementType: param.setElementType,
     shape,
     functionType: nullableNode(param.functionType),
     loc: param.loc
@@ -781,6 +700,7 @@ function resolveWeakTargetObjectShapeField(field: LowerTypeNode, context: LowerC
     mapKeyType: declared.mapKeyType,
     mapValueType: declared.mapValueType,
     promiseValueType: nullableString(declared.promiseValueType),
+    setElementType: declared.setElementType,
     shape: null,
     functionType: nullableNode(field.functionType)
   }
@@ -838,6 +758,17 @@ function resolveWeakTargetShapeTypeName(name: string | null | undefined, context
     return mapResolvedType(keyType, valueType)
   }
 
+  if (name === 'set') {
+    return setResolvedType(null)
+  }
+
+  if (isSetTypeName(name)) {
+    const setElementTypeName = setElementTypeNameFromKnownTypeName(name)
+    const elementType = resolveWeakTargetShapeTypeName(setElementTypeName, context)
+
+    return setResolvedType(elementType)
+  }
+
   if (name === 'ValueType') {
     return namedResolvedType('string')
   }
@@ -868,27 +799,15 @@ function collectTypes(ast: ProgramNode): Map<string, LowerTypeNode> {
 
     const valueType = item.valueType as LowerTypeNode
 
-    let collected: LowerTypeNode | null = null
-
     if (valueType.kind === 'object') {
-      collected = collectObjectType(valueType)
+      types.set(item.name, collectObjectType(valueType))
     } else if (valueType.kind === 'function') {
-      collected = collectFunctionType(valueType)
+      types.set(item.name, collectFunctionType(valueType))
     } else if (valueType.kind === 'alias') {
-      collected = {
+      types.set(item.name, {
         kind: 'alias',
         valueType: valueType.valueType
-      }
-    }
-
-    if (collected !== null) {
-      const typeParameters: LowerTypeNode[] = item.typeParameters ?? []
-
-      if (typeParameters.length > 0) {
-        collected.typeParameters = typeParameters
-      }
-
-      types.set(item.name, collected)
+      })
     }
   }
 
@@ -967,9 +886,9 @@ function collectFunctionParams(params: LowerTypeNode[] | null | undefined): Lowe
       mapKeyType: param.mapKeyType,
       mapValueType: param.mapValueType,
       promiseValueType: nullableString(param.promiseValueType),
+      setElementType: param.setElementType,
       shape: nullableNode(param.shape),
       functionType: nullableNode(param.functionType),
-      defaultValue: null,
       loc: param.loc
     }
 
@@ -1051,6 +970,8 @@ function resolveUnionTypeNames(
     resolved.mapValueType = commonResolvedString(resolvedTypes, 'mapValueType')
   } else if (valueType === 'promise') {
     resolved.promiseValueType = commonResolvedString(resolvedTypes, 'promiseValueType')
+  } else if (valueType === 'set') {
+    resolved.setElementType = commonResolvedString(resolvedTypes, 'setElementType')
   }
 
   return resolved
@@ -1165,7 +1086,7 @@ function lowerResolvedStringValue(value: LowerResolvedType, key: LowerResolvedSt
     return null
   }
 
-  return null
+  return value.setElementType
 }
 
 function arrayResolvedType(
@@ -1187,6 +1108,13 @@ function mapResolvedType(keyType: LowerResolvedType | null, valueType: LowerReso
   if (valueType !== null && typeof valueType !== 'undefined') {
     resolved.mapValueShape = nullableNode(valueType.shape)
   }
+
+  return resolved
+}
+
+function setResolvedType(elementType: LowerResolvedType | null): LowerResolvedType {
+  const resolved = namedResolvedType('set')
+  resolved.setElementType = resolvedValueType(elementType, 'unknown')
 
   return resolved
 }
@@ -1213,6 +1141,7 @@ function cloneResolvedType(source: LowerResolvedType): LowerResolvedType {
     mapValueType: source.mapValueType,
     mapValueShape: nullableNode(source.mapValueShape),
     promiseValueType: nullableString(source.promiseValueType),
+    setElementType: source.setElementType,
     shape: nullableNode(source.shape),
     functionType: nullableNode(source.functionType)
   }
@@ -1235,6 +1164,7 @@ function unresolvedType(): LowerResolvedType {
     mapValueType: null,
     mapValueShape: null,
     promiseValueType: null,
+    setElementType: null,
     shape: null,
     functionType: null
   }

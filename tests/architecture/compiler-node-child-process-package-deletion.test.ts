@@ -38,7 +38,10 @@ test('удаление node:child_process убирает declaration, operations
   const libraries = createCompilerLibrarySetFromDiscovered(await discoverCompilerLibraries(fixtureRoot))
 
   assert.throws(
-    () => compileSource("import { execSync } from 'node:child_process'\nexecSync('printf hi', { encoding: 'utf8' })\n", { libraries }),
+    () =>
+      compileSource("import { execSync } from 'node:child_process'\nexecSync('printf hi', { encoding: 'utf8' })\n", {
+        libraries
+      }),
     (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_NOT_IMPLEMENTED'
   )
 })
@@ -50,8 +53,14 @@ async function createFixture(): Promise<void> {
   await mkdir(resolve(fixtureRoot, 'stdlib/node/child_process/src'), { recursive: true })
   await mkdir(resolve(fixtureRoot, 'stdlib/node/child_process/include'), { recursive: true })
   await mkdir(resolve(fixtureRoot, 'stdlib/node/os'), { recursive: true })
-  await writeFile(resolve(fixtureRoot, 'stdlib/node/child_process/index.d.ts'), 'export function execSync(command: string, options: object): string;\n')
-  await writeFile(resolve(fixtureRoot, 'stdlib/node/child_process/src/child_process.cc'), 'int child_process_fixture = 0;\n')
+  await writeFile(
+    resolve(fixtureRoot, 'stdlib/node/child_process/index.d.ts'),
+    'export function execSync(command: string, options: object): string;\n'
+  )
+  await writeFile(
+    resolve(fixtureRoot, 'stdlib/node/child_process/src/child_process.cc'),
+    'int child_process_fixture = 0;\n'
+  )
   await writeFile(
     resolve(fixtureRoot, 'stdlib/node/child_process/compiler/index.ts'),
     "export const compilerLibraryPackage = { id: 'node:child_process', dependencies: [], operations: [{ libraryId: 'node:child_process', bindingId: 'node:child_process#module:node:child_process:execSync', operationId: 'node:child_process#execSync', kind: 'call', runtimeRequirements: [] }], intrinsicBindings: [], runtimeRequirements: [] }\n"

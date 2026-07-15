@@ -91,11 +91,7 @@ function cPrototypeReferenceIsRecord(value: unknown): boolean {
   return typeof value === 'object' && value !== null
 }
 
-function collectCTemplateReferencedFunctionNames(
-  raw: string,
-  functionNames: Set<string>,
-  target: Set<string>
-): void {
+function collectCTemplateReferencedFunctionNames(raw: string, functionNames: Set<string>, target: Set<string>): void {
   if (!raw.includes('${')) {
     return
   }

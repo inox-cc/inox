@@ -3,20 +3,7 @@ import { test } from 'node:test'
 
 import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
 
-const operationIds = [
-  'abs',
-  'ceil',
-  'cos',
-  'floor',
-  'fround',
-  'max',
-  'min',
-  'random',
-  'round',
-  'sin',
-  'sqrt',
-  'trunc'
-]
+const operationIds = ['abs', 'ceil', 'cos', 'floor', 'fround', 'max', 'min', 'random', 'round', 'sin', 'sqrt', 'trunc']
 
 test('global:math operations describe number results only through TypeRef', async () => {
   const discovered = await discoverCompilerLibraries()

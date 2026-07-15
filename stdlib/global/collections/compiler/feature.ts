@@ -100,11 +100,7 @@ export function collectMapIndexSetIrFeatures(node: AnyNode, features: MapAccessF
 }
 
 function isArrayPopCall(node: ArrayPopNullFeatureNode): boolean {
-  if (
-    node.type !== 'CallExpression' &&
-    node.type !== 'OptionalCallExpression' &&
-    node.type !== 'NewExpression'
-  ) {
+  if (node.type !== 'CallExpression' && node.type !== 'OptionalCallExpression' && node.type !== 'NewExpression') {
     return false
   }
 
@@ -128,11 +124,7 @@ function isNullableMapRead(node: MapAccessFeatureNode): boolean {
     return true
   }
 
-  if (
-    node.type !== 'CallExpression' &&
-    node.type !== 'OptionalCallExpression' &&
-    node.type !== 'NewExpression'
-  ) {
+  if (node.type !== 'CallExpression' && node.type !== 'OptionalCallExpression' && node.type !== 'NewExpression') {
     return false
   }
 
@@ -143,10 +135,7 @@ function isNullableMapRead(node: MapAccessFeatureNode): boolean {
   const callee = node.callee
 
   return (
-    callee !== null &&
-    typeof callee !== 'undefined' &&
-    callee.type === 'MemberExpression' &&
-    callee.property === 'get'
+    callee !== null && typeof callee !== 'undefined' && callee.type === 'MemberExpression' && callee.property === 'get'
   )
 }
 

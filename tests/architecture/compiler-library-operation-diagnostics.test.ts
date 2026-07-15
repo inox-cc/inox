@@ -62,21 +62,14 @@ function diagnosticLibrary(): CompilerLibraryDescriptor {
   }
 }
 
-function receiverDiagnosticOperation(
-  kind: 'index-read' | 'index-write',
-  code: string
-): LibraryOperationDescriptor {
+function receiverDiagnosticOperation(kind: 'index-read' | 'index-write', code: string): LibraryOperationDescriptor {
   return {
     ...diagnosticOperation('test:diagnostics#UnsupportedObject.*', kind, code),
     receiverTypeId: 'test:diagnostics#UnsupportedObject'
   }
 }
 
-function diagnosticOperation(
-  bindingId: string,
-  kind: LibraryOperationKind,
-  code: string
-): LibraryOperationDescriptor {
+function diagnosticOperation(bindingId: string, kind: LibraryOperationKind, code: string): LibraryOperationDescriptor {
   return {
     libraryId: 'test:diagnostics',
     bindingId,

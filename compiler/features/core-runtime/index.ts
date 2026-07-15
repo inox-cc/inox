@@ -403,6 +403,10 @@ function collectionConstructorName(expression: CoreRuntimeNode): string | null {
     return 'Map'
   }
 
+  if (expression.valueType === 'set') {
+    return 'Set'
+  }
+
   return null
 }
 
@@ -485,7 +489,7 @@ function isCollectionMethodCall(expression: CoreRuntimeNode): boolean {
     return false
   }
 
-  return object.valueType === 'map'
+  return object.valueType === 'map' || object.valueType === 'set'
 }
 
 function isArrayMethodCall(expression: CoreRuntimeNode): boolean {
@@ -608,7 +612,8 @@ function isSupportedRuntimeCallbackReturnType(returnType: string | null | undefi
     returnType === 'bytes' ||
     returnType === 'object' ||
     returnType === 'array' ||
-    returnType === 'map'
+    returnType === 'map' ||
+    returnType === 'set'
   )
 }
 

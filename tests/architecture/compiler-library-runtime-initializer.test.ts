@@ -18,14 +18,13 @@ test('library options валидируются и формируют ordered run
   assert.match(result.code, /#include "bridge\.h"/)
   assert.match(result.code, /inline BridgeRuntime bridge\(0x00000007u, BridgeMode::Fast\);/)
   assert.match(result.code, /bridge\.run\(\)/)
-  assert.ok(
-    result.code.indexOf('inline BridgeRuntime bridge(') < result.code.indexOf('bridge.run()')
-  )
+  assert.ok(result.code.indexOf('inline BridgeRuntime bridge(') < result.code.indexOf('bridge.run()'))
   assert.throws(
-    () => compileSource('bridge()\n', {
-      libraries,
-      libraryOptions: [{ optionId: 'global:bridge#seed', value: -1 }]
-    }),
+    () =>
+      compileSource('bridge()\n', {
+        libraries,
+        libraryOptions: [{ optionId: 'global:bridge#seed', value: -1 }]
+      }),
     /global:bridge#seed must be an integer from 0 to 4294967295/
   )
 })

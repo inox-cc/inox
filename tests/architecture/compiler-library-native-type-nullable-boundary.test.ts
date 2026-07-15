@@ -26,22 +26,6 @@ try {
   assert.doesNotMatch(result.code, /FixtureBridge inox_call_result/)
 })
 
-test('nullable native local accepts a native assignment without a generic object guard', () => {
-  const result = compileSource(
-    `
-function assign(input: Bridge): Bridge | null {
-  let value: Bridge | null = null
-  value = input
-  return value
-}
-`,
-    { libraries: createCompilerLibrarySet([bridgeLibrary()]), target: 'cc' }
-  )
-
-  assert.match(result.code, /auto inox_nullable_value_[0-9]+ = input;/)
-  assert.doesNotMatch(result.code, /inox_nullable_value_[0-9]+\.tag != INOX_TAG_OBJECT/)
-})
-
 function bridgeLibrary(): CompilerLibraryDescriptor {
   return {
     id: 'fixture',

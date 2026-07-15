@@ -15,14 +15,17 @@ const source = `
 
 test('ambient function, value и class существуют только в выбранном library set', () => {
   const libraries = createCompilerLibrarySet([
-    globalDeclarationLibrary('global:bridge', `
+    globalDeclarationLibrary(
+      'global:bridge',
+      `
       export {};
       declare global {
         function bridge(value: number): string;
         const bridgeVersion: number;
         class Bridge { constructor(value: number); }
       }
-    `)
+    `
+    )
   ])
   const result = compileSourceToIr(source, { libraries })
 

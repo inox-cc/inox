@@ -6,16 +6,19 @@ import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 test('split graph без main сохраняет единственного owner package initializer', () => {
-  const host = createMemoryCompilerHost([
-    {
-      path: '/pkg/index.ts',
-      source: "import { sample } from './sample.ts'\nexport const value = sample + Math.random()\n"
-    },
-    {
-      path: '/pkg/sample.ts',
-      source: 'export const sample = Math.random()\n'
-    }
-  ], { root: '/' })
+  const host = createMemoryCompilerHost(
+    [
+      {
+        path: '/pkg/index.ts',
+        source: "import { sample } from './sample.ts'\nexport const value = sample + Math.random()\n"
+      },
+      {
+        path: '/pkg/sample.ts',
+        source: 'export const sample = Math.random()\n'
+      }
+    ],
+    { root: '/' }
+  )
   const files = compileFileToCModuleTextsSync('/pkg/index.ts', {
     callMain: false,
     host,

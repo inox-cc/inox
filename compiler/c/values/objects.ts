@@ -1,10 +1,6 @@
 import { diagnostic } from '../../diagnostics.ts'
 import type { AnyNode, Diagnostic } from '../../types.ts'
-import {
-  isPlainObjectFunctionField,
-  isPlainFunctionPointerType,
-  isRuntimeFunctionType
-} from '../async/callbacks.ts'
+import { isPlainFunctionPointerType, isRuntimeFunctionType } from '../async/callbacks.ts'
 import {
   emitPrepareOwnedValueWrite,
   emitFailureStatement,
@@ -34,14 +30,10 @@ import type {
 } from '../types.ts'
 import { isReadonlyCObjectShapeField } from '../types.ts'
 import {
-  applyLibraryNativeValueAdapter,
   cRuntimeValueTag,
   isManagedRuntimeReturnType,
   isNullableScalarType,
-  isOpaqueRuntimeValueType,
-  libraryNativeBoundaryCppType,
-  libraryNativeCppType,
-  libraryNativeValueAdapter
+  isOpaqueRuntimeValueType
 } from '../value-types.ts'
 import {
   compilerAnyNodeArrayFields,
@@ -454,6 +446,7 @@ function normalizedObjectShapeField(field: CObjectShapeField): CObjectShapeField
     mapKeyType: field.mapKeyType,
     mapValueType: field.mapValueType,
     promiseValueType: field.promiseValueType,
+    setElementType: field.setElementType,
     libraryCMember: field.libraryCMember,
     libraryCppType: field.libraryCppType,
     functionTypeOwnership: field.functionTypeOwnership,
@@ -614,6 +607,7 @@ function knownObjectMemberField(objectName: string, index: number, field: CObjec
     declaredType: field.declaredType,
     mapKeyType: field.mapKeyType,
     mapValueType: field.mapValueType,
+    setElementType: field.setElementType,
     shape: field.shape,
     functionType: field.functionType
   }
@@ -761,6 +755,7 @@ function knownObjectIndexField(
     declaredType: field.declaredType,
     mapKeyType: field.mapKeyType,
     mapValueType: field.mapValueType,
+    setElementType: field.setElementType,
     shape: field.shape,
     functionType: field.functionType
   }
@@ -812,6 +807,7 @@ function resolveObjectExpressionShapeField(objectExpression: AnyNode, key: strin
     declaredType: field.declaredType,
     mapKeyType: field.mapKeyType,
     mapValueType: field.mapValueType,
+    setElementType: field.setElementType,
     shape: field.shape,
     functionType: field.functionType
   }
@@ -1133,7 +1129,7 @@ function emitPreparedKnownObjectFieldValueExpression(
   }
 
   const temp = nextCName(context, 'inox_value')
-  const tag = objectFieldRuntimeValueTag(field)
+  const tag = cRuntimeValueTag(field.valueType)
   const object = emitObjectValueReference(access.objectName, context)
   const lines: string[] = []
 
@@ -1141,7 +1137,11 @@ function emitPreparedKnownObjectFieldValueExpression(
   appendLines(lines, emitObjectThrownCheckLines(context))
   appendLines(lines, emitKnownObjectFieldValueCheck(temp, tag, field, expression, context))
 
-  return preparedObjectFieldReadValue(field, temp, lines)
+  return {
+    lines,
+    expression: temp,
+    cppType: 'inox::Value'
+  }
 }
 
 function emitPreparedObjectExpressionFieldValueExpression(
@@ -1161,7 +1161,7 @@ function emitPreparedObjectExpressionFieldValueExpression(
 
   const object = dependencies.emitCValueExpression(objectExpression, context)
   const temp = nextCName(context, 'inox_value')
-  const tag = objectFieldRuntimeValueTag(field)
+  const tag = cRuntimeValueTag(field.valueType)
   const lines: string[] = []
 
   if (isOptionalChainContinuationReceiver(objectExpression)) {
@@ -1177,7 +1177,12 @@ function emitPreparedObjectExpressionFieldValueExpression(
     appendPrefixedLines(lines, emitRuntimeOptionalObjectFieldValueCheck(temp, tag, context), '  ')
     lines.push('}')
 
-    return preparedObjectFieldReadValue(field, temp, lines)
+    return {
+      lines,
+      expression: temp,
+      cppType: 'inox::Value',
+      valueType: field.valueType
+    }
   }
 
   appendLines(lines, object.lines)
@@ -1189,42 +1194,10 @@ function emitPreparedObjectExpressionFieldValueExpression(
     appendLines(lines, emitRuntimeFieldValueCheck(temp, tag, expression, context))
   }
 
-  return preparedObjectFieldReadValue(field, temp, lines)
-}
-
-function preparedObjectFieldReadValue(
-  field: CObjectFieldInfo,
-  value: string,
-  lines: string[]
-): PreparedExpression {
-  const nativeCppType = libraryNativeBoundaryCppType(
-    field.valueType,
-    field.nullable === true,
-    field.optional === true,
-    field.shape
-  )
-
-  if (nativeCppType !== null) {
-    const adapter = libraryNativeValueAdapter(field.shape)
-    const expression =
-      adapter === null || adapter.length === 0
-        ? `${nativeCppType}(${value})`
-        : applyLibraryNativeValueAdapter(value, adapter)
-
-    return {
-      lines,
-      expression,
-      cppType: nativeCppType,
-      runtimeTypeChecked: true,
-      valueType: field.valueType
-    }
-  }
-
   return {
     lines,
-    expression: value,
+    expression: temp,
     cppType: 'inox::Value',
-    runtimeTypeChecked: libraryNativeCppType(field.shape) !== null,
     valueType: field.valueType
   }
 }
@@ -1435,6 +1408,7 @@ function isManagedObjectFieldValueType(valueType: string): boolean {
     valueType === 'bytes' ||
     valueType === 'array' ||
     valueType === 'map' ||
+    valueType === 'set' ||
     valueType === 'object' ||
     valueType === 'string'
   )
@@ -1757,14 +1731,6 @@ function objectFieldValueMayBeNullish(field: CObjectFieldInfo): boolean {
   return field.optional === true || field.nullable === true
 }
 
-function objectFieldRuntimeValueTag(field: CObjectFieldInfo): string | null {
-  if (field.valueType === 'object' && libraryNativeCppType(field.shape) !== null) {
-    return null
-  }
-
-  return cRuntimeValueTag(field.valueType)
-}
-
 function emitRuntimeOptionalObjectFieldValueCheck(
   value: string,
   expectedTag: string | null,
@@ -1994,11 +1960,11 @@ function objectSpreadPropertyHasField(property: ObjectPropertyNode, fieldName: s
 }
 
 function isSupportedObjectFunctionField(field: CObjectShapeField): boolean {
-  return isPlainObjectFunctionField(field) || isRuntimeFunctionType(field.functionType)
+  return isPlainFunctionPointerType(field.functionType) || isRuntimeFunctionType(field.functionType)
 }
 
 function isRuntimeObjectFunctionField(field: CObjectShapeField): boolean {
-  return !isPlainObjectFunctionField(field) && isRuntimeFunctionType(field.functionType)
+  return !isPlainFunctionPointerType(field.functionType) && isRuntimeFunctionType(field.functionType)
 }
 
 function objectVariableDeclaredTypes(statement: AnyNode): string[] {
@@ -2078,6 +2044,7 @@ function objectShapeFieldWithPropertyMetadata(
     arrayElementType: field.arrayElementType,
     mapKeyType: field.mapKeyType,
     mapValueType: field.mapValueType,
+    setElementType: field.setElementType,
     shapeOwnership: field.shapeOwnership,
     shape: field.shape,
     functionTypeOwnership: field.functionTypeOwnership,
@@ -2103,6 +2070,10 @@ function objectShapeFieldWithPropertyMetadata(
 
   if (shouldUseObjectPropertyStringMetadata(next.mapValueType, value.mapValueType)) {
     next.mapValueType = value.mapValueType
+  }
+
+  if (shouldUseObjectPropertyStringMetadata(next.setElementType, value.setElementType)) {
+    next.setElementType = value.setElementType
   }
 
   if (next.shape === null || typeof next.shape === 'undefined') {
@@ -2131,6 +2102,7 @@ function objectShapeFieldFromProperty(
     arrayElementType: property.value.arrayElementType,
     mapKeyType: property.value.mapKeyType,
     mapValueType: property.value.mapValueType,
+    setElementType: property.value.setElementType,
     shape,
     functionType
   }

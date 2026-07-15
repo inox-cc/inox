@@ -147,6 +147,7 @@ type AsyncTaskFunctionContext = AsyncTaskEmitContext & {
   runtimeCallbacks: AsyncTaskStringSet
   runtimeStringValues: AsyncTaskStringMap
   runtimeStrings: AsyncTaskStringSet
+  setElementTypes: AsyncTaskStringMap
   statusReturn: boolean
   throwingFunction: boolean
   usedCleanupGoto: boolean
@@ -161,6 +162,7 @@ type AsyncTaskLocalMetadataContext = {
   runtimeArrayElementTypes: AsyncTaskStringMap
   runtimeStringValues: AsyncTaskStringMap
   runtimeStrings: AsyncTaskStringSet
+  setElementTypes: AsyncTaskStringMap
   variables: AsyncTaskStringMap
 }
 
@@ -184,6 +186,7 @@ type AsyncTaskVariableScopeSnapshot = {
   runtimeCallbacks: AsyncTaskStringSet
   runtimeStringValues: AsyncTaskStringMap
   runtimeStrings: AsyncTaskStringSet
+  setElementTypes: AsyncTaskStringMap
   variables: AsyncTaskStringMap
 }
 
@@ -254,6 +257,7 @@ export type AsyncTaskLoweringDependencies = {
     expression: AsyncTaskAstNode,
     context: AsyncTaskFunctionContext
   ): CAsyncTaskRuntimeMapType | null
+  resolveRuntimeSetElementType(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): string | null
   resolveRuntimeStringReference(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): string | null
   restoreVariableScope(context: AsyncTaskFunctionContext, snapshot: AsyncTaskVariableScopeSnapshot): void
 }
@@ -531,6 +535,7 @@ function createAsyncTaskFrameLocals(
       forceRuntimeStringDeclaration: local.forceRuntimeStringDeclaration,
       mapKeyType: local.mapKeyType,
       mapValueType: local.mapValueType,
+      setElementType: local.setElementType,
       shape: local.shape,
       kind: 'prefix'
     })
@@ -556,6 +561,7 @@ function createAsyncTaskFrameLocals(
       awaitedPromiseExpression: item.awaitedPromiseExpression,
       mapKeyType: item.mapKeyType,
       mapValueType: item.mapValueType,
+      setElementType: item.setElementType,
       shape: item.shape,
       kind: 'await'
     })
@@ -966,6 +972,7 @@ function isSupportedAsyncTaskValueType(valueType: string): boolean {
     valueType === 'object' ||
     valueType === 'array' ||
     valueType === 'map' ||
+    valueType === 'set' ||
     valueType === 'void'
   )
 }
@@ -1576,6 +1583,7 @@ function resolveAsyncTaskPrefixLocals(
       let arrayElementType: string | null = null
       let mapKeyType: string | null = null
       let mapValueType: string | null = null
+      let setElementType: string | null = null
 
       if (valueType === 'object') {
         if (statement.shape !== null && typeof statement.shape !== 'undefined') {
@@ -1650,6 +1658,27 @@ function resolveAsyncTaskPrefixLocals(
         }
       }
 
+      if (valueType === 'set') {
+        if (statement.setElementType !== null && typeof statement.setElementType !== 'undefined') {
+          setElementType = statement.setElementType
+        } else {
+          const resolvedSetElementType = asyncTaskDeps(context).resolveRuntimeSetElementType(statement.init, context)
+
+          if (resolvedSetElementType !== null && typeof resolvedSetElementType !== 'undefined') {
+            setElementType = resolvedSetElementType
+          } else if (
+            statement.init !== null &&
+            typeof statement.init !== 'undefined' &&
+            statement.init.setElementType !== null &&
+            typeof statement.init.setElementType !== 'undefined'
+          ) {
+            setElementType = statement.init.setElementType
+          } else {
+            setElementType = 'unknown'
+          }
+        }
+      }
+
       locals.push({
         name: statement.name,
         type: valueType,
@@ -1657,6 +1686,7 @@ function resolveAsyncTaskPrefixLocals(
         arrayElementType: arrayElementType,
         mapKeyType: mapKeyType,
         mapValueType: mapValueType,
+        setElementType: setElementType,
         fieldName: `prefix_${emitCIdentifier(statement.name)}`,
         forceRuntimeStringDeclaration: valueType === 'string' && isRawStringLiteralExpression(statement.init)
       })
@@ -1694,7 +1724,8 @@ function isSupportedAsyncTaskPrefixLocalType(valueType: string): boolean {
     valueType === 'bytes' ||
     valueType === 'object' ||
     valueType === 'array' ||
-    valueType === 'map'
+    valueType === 'map' ||
+    valueType === 'set'
   )
 }
 
@@ -1706,7 +1737,8 @@ function isSupportedAsyncTaskFramePrefixLocalType(valueType: string): boolean {
     valueType === 'bytes' ||
     valueType === 'object' ||
     valueType === 'array' ||
-    valueType === 'map'
+    valueType === 'map' ||
+    valueType === 'set'
   )
 }
 
@@ -2051,6 +2083,7 @@ function resolveAsyncTaskDirectAwaitStep(
   let arrayElementType = 'unknown'
   let mapKeyType: string | null = null
   let mapValueType: string | null = null
+  let setElementType: string | null = null
 
   if (awaitedType === 'object') {
     if (statement.shape !== null && typeof statement.shape !== 'undefined') {
@@ -2114,6 +2147,23 @@ function resolveAsyncTaskDirectAwaitStep(
     }
   }
 
+  if (awaitedType === 'set') {
+    if (statement.setElementType !== null && typeof statement.setElementType !== 'undefined') {
+      setElementType = statement.setElementType
+    } else if (statement.init.setElementType !== null && typeof statement.init.setElementType !== 'undefined') {
+      setElementType = statement.init.setElementType
+    } else if (
+      awaitedExpression !== null &&
+      typeof awaitedExpression !== 'undefined' &&
+      awaitedExpression.setElementType !== null &&
+      typeof awaitedExpression.setElementType !== 'undefined'
+    ) {
+      setElementType = awaitedExpression.setElementType
+    } else {
+      setElementType = 'unknown'
+    }
+  }
+
   let storedAwaitedExpression: AsyncTaskAstNode | null = awaitedExpression
 
   if (awaitedPromiseExpression !== null && typeof awaitedPromiseExpression !== 'undefined') {
@@ -2129,6 +2179,7 @@ function resolveAsyncTaskDirectAwaitStep(
     arrayElementType: arrayElementType,
     mapKeyType: mapKeyType,
     mapValueType: mapValueType,
+    setElementType: setElementType,
     awaitedExpression: storedAwaitedExpression,
     awaitedPromiseExpression: awaitedPromiseExpression
   }
@@ -2228,6 +2279,7 @@ function resolveAsyncTaskLocalPromiseAwaitStep(
   let arrayElementType: string | null = null
   let mapKeyType: string | null = null
   let mapValueType: string | null = null
+  let setElementType: string | null = null
 
   if (awaitedType === 'object') {
     if (awaitStatement.shape !== null && typeof awaitStatement.shape !== 'undefined') {
@@ -2284,6 +2336,24 @@ function resolveAsyncTaskLocalPromiseAwaitStep(
     }
   }
 
+  if (awaitedType === 'set') {
+    if (awaitStatement.setElementType !== null && typeof awaitStatement.setElementType !== 'undefined') {
+      setElementType = awaitStatement.setElementType
+    } else if (
+      awaitStatement.init.setElementType !== null &&
+      typeof awaitStatement.init.setElementType !== 'undefined'
+    ) {
+      setElementType = awaitStatement.init.setElementType
+    } else if (
+      awaitedPromiseExpression.setElementType !== null &&
+      typeof awaitedPromiseExpression.setElementType !== 'undefined'
+    ) {
+      setElementType = awaitedPromiseExpression.setElementType
+    } else {
+      setElementType = 'unknown'
+    }
+  }
+
   return {
     index: index,
     name: awaitStatement.name,
@@ -2293,6 +2363,7 @@ function resolveAsyncTaskLocalPromiseAwaitStep(
     arrayElementType: arrayElementType,
     mapKeyType: mapKeyType,
     mapValueType: mapValueType,
+    setElementType: setElementType,
     awaitedExpression: null,
     awaitedPromiseExpression: awaitedPromiseExpression
   }
@@ -2797,6 +2868,9 @@ function registerAsyncTaskLocalMetadata(
       key: mapKeyType,
       value: mapValueType
     })
+  } else if (valueType === 'set') {
+    const setElementType = asyncTaskMetadataStringOrUnknown(item.setElementType)
+    context.setElementTypes.set(name, setElementType)
   }
 }
 
@@ -3152,11 +3226,9 @@ function emitPreparedAsyncTaskPromiseSourceExpression(
     return rejected
   }
 
-  const libraryCall = asyncTaskDeps(context).emitPreparedCompilerLibraryCallExpression(
-    expression,
-    context,
-    { owned: false }
-  )
+  const libraryCall = asyncTaskDeps(context).emitPreparedCompilerLibraryCallExpression(expression, context, {
+    owned: false
+  })
 
   if (libraryCall !== null && asyncTaskDeps(context).isCompilerLibraryPromiseExpression(expression)) {
     const lines: string[] = []

@@ -58,6 +58,7 @@ type DeclarationValueMetadata = {
   arrayElementDeclaredType: string | null
   mapKeyType: ValueType | null
   mapValueType: ValueType | null
+  setElementType: ValueType | null
 }
 
 type DeclarationMapMetadata = {
@@ -349,9 +350,7 @@ function appendModuleDeclarationImport(lines: string[], item: AnyNode, diagnosti
 }
 
 function appendModuleDeclarationTypeAlias(lines: string[], item: AnyNode): void {
-  const typeParameters = formatTypeParameterList(item.typeParameters)
-
-  lines.push(`${exportPrefix(item)}type ${item.name}${typeParameters} = ${formatTypeAliasInfo(item.valueType)};`)
+  lines.push(`${exportPrefix(item)}type ${item.name} = ${formatTypeAliasInfo(item.valueType)};`)
 }
 
 function appendModuleDeclarationFunction(lines: string[], item: AnyNode): void {
@@ -381,10 +380,9 @@ function appendModuleDeclarationVariable(lines: string[], item: AnyNode, diagnos
 }
 
 function appendModuleDeclarationClass(lines: string[], item: AnyNode): void {
-  const typeParameters = formatTypeParameterList(item.typeParameters)
   const extendsClause = classExtendsClause(item)
 
-  lines.push(`${exportPrefix(item)}class ${item.name}${typeParameters}${extendsClause} {`)
+  lines.push(`${exportPrefix(item)}class ${item.name}${extendsClause} {`)
 
   appendModuleDeclarationClassFields(lines, item.fields)
   appendModuleDeclarationClassIndexSignatures(lines, item.indexSignatures)
@@ -1186,16 +1184,6 @@ function appendNormalizedInterfaceDeclaration(parts: string[], tokens: Token[], 
 
   parts.push('type')
   parts.push(tokenSource(name))
-
-  while (
-    !tokenIs(tokens, current, 'eof', '<eof>') &&
-    tokenValue(tokens, current) !== 'extends' &&
-    tokenValue(tokens, current) !== '{'
-  ) {
-    parts.push(tokenSource(tokenAt(tokens, current)))
-    current = current + 1
-  }
-
   parts.push('=')
 
   if (tokenValue(tokens, current) === 'extends') {
@@ -1611,6 +1599,7 @@ function declarationReturnType(item: AnyNode): string {
       mapKeyType: item.returnMapKeyType,
       mapValueType: item.returnMapValueType,
       promiseValueType: item.returnPromiseValueType,
+      setElementType: item.returnSetElementType,
       shape: item.returnShape
     },
     'void'
@@ -1655,6 +1644,8 @@ function typeNameFromMetadata(item: AnyNode, fallback: string): string {
     typeName = `map<${stringMetadata(item.mapKeyType, 'unknown')},${stringMetadata(item.mapValueType, 'unknown')}>`
   } else if (valueType === 'promise') {
     typeName = `promise<${stringMetadata(item.promiseValueType, 'unknown')}>`
+  } else if (valueType === 'set') {
+    typeName = `set<${stringMetadata(item.setElementType, 'unknown')}>`
   }
 
   if (item.nullable === true && typeName !== 'null' && !typeName.startsWith('nullable<')) {
@@ -1837,6 +1828,7 @@ function cloneFunctionDeclaration(item: AnyNode): AnyNode {
     returnMapKeyType: nullableMetadata(item.returnMapKeyType),
     returnMapValueType: nullableMetadata(item.returnMapValueType),
     returnPromiseValueType: nullableMetadata(item.returnPromiseValueType),
+    returnSetElementType: nullableMetadata(item.returnSetElementType),
     returnShape: nullableMetadata(item.returnShape),
     body: []
   }
@@ -1877,7 +1869,7 @@ function cloneVariableDeclaration(item: AnyNode): AnyNode {
     declarationOnly: true,
     name: item.name,
     loc: nullableMetadata(item.loc),
-    declaredType: nullableMetadata(item.declaredType ?? item.inferredDeclaredType),
+    declaredType: nullableMetadata(item.declaredType),
     valueType: knownStringMetadata(item.valueType) ?? inferred.valueType ?? stringMetadata(item.valueType, 'unknown'),
     nullable: item.nullable === true,
     shape: nullableMetadata(item.shape),
@@ -1895,6 +1887,8 @@ function cloneVariableDeclaration(item: AnyNode): AnyNode {
       knownStringMetadata(item.mapValueType) ?? inferred.mapValueType ?? nullableMetadata(item.mapValueType),
     mapValueShape: nullableMetadata(item.mapValueShape),
     promiseValueType: nullableMetadata(item.promiseValueType),
+    setElementType:
+      knownStringMetadata(item.setElementType) ?? inferred.setElementType ?? nullableMetadata(item.setElementType),
     init: null
   }
 }
@@ -1941,7 +1935,8 @@ function scalarDeclarationValueMetadata(valueType: ValueType): DeclarationValueM
     arrayElementType: null,
     arrayElementDeclaredType: null,
     mapKeyType: null,
-    mapValueType: null
+    mapValueType: null,
+    setElementType: null
   }
 }
 
@@ -1953,7 +1948,8 @@ function arrayLiteralDeclarationValueMetadata(expression: AnyNode): DeclarationV
     arrayElementType: elementType,
     arrayElementDeclaredType: elementType,
     mapKeyType: null,
-    mapValueType: null
+    mapValueType: null,
+    setElementType: null
   }
 }
 
@@ -1968,7 +1964,19 @@ function newExpressionDeclarationValueMetadata(expression: AnyNode): Declaration
       arrayElementType: null,
       arrayElementDeclaredType: null,
       mapKeyType: mapType?.keyType ?? null,
-      mapValueType: mapType?.valueType ?? null
+      mapValueType: mapType?.valueType ?? null,
+      setElementType: null
+    }
+  }
+
+  if (calleeName === 'Set') {
+    return {
+      valueType: 'set',
+      arrayElementType: null,
+      arrayElementDeclaredType: null,
+      mapKeyType: null,
+      mapValueType: null,
+      setElementType: setConstructorElementType(expression)
     }
   }
 
@@ -2054,6 +2062,30 @@ function mapEntryArrayType(expression: AnyNode): DeclarationMapMetadata | null {
   }
 }
 
+function setConstructorElementType(expression: AnyNode): ValueType | null {
+  if (expression.args.length === 0) {
+    return null
+  }
+
+  const first = expression.args[0]
+
+  if (first.type === 'ArrayLiteral') {
+    return arrayLiteralElementType(first)
+  }
+
+  const metadata = inferExpressionDeclarationMetadata(first)
+
+  if (metadata.valueType === 'set') {
+    return metadata.setElementType
+  }
+
+  if (metadata.valueType === 'array') {
+    return metadata.arrayElementType
+  }
+
+  return null
+}
+
 function arrayLiteralElementType(expression: AnyNode): ValueType | null {
   if (expression.elements.length === 0) {
     return null
@@ -2084,12 +2116,13 @@ function emptyDeclarationValueMetadata(): DeclarationValueMetadata {
     arrayElementType: null,
     arrayElementDeclaredType: null,
     mapKeyType: null,
-    mapValueType: null
+    mapValueType: null,
+    setElementType: null
   }
 }
 
 function cloneClassDeclaration(item: AnyNode): AnyNode {
-  const declaration: AnyNode = {
+  return {
     type: 'ClassDeclaration',
     exported: true,
     declarationOnly: true,
@@ -2102,13 +2135,6 @@ function cloneClassDeclaration(item: AnyNode): AnyNode {
     indexSignatures: cloneClassIndexSignatures(item.indexSignatures),
     methods: cloneClassMethods(item.methods)
   }
-  const typeParameters = cloneTypeParameters(item.typeParameters)
-
-  if (typeParameters.length > 0) {
-    declaration.typeParameters = typeParameters
-  }
-
-  return declaration
 }
 
 function cloneClassIndexSignatures(signatures: AnyNode[] | null | undefined): AnyNode[] {
@@ -2158,6 +2184,7 @@ function cloneClassFields(fields: AnyNode[] | null | undefined): AnyNode[] {
       mapKeyType: nullableMetadata(field.mapKeyType),
       mapValueType: nullableMetadata(field.mapValueType),
       promiseValueType: nullableMetadata(field.promiseValueType),
+      setElementType: nullableMetadata(field.setElementType),
       shape: nullableMetadata(field.shape),
       functionType: nullableMetadata(field.functionType),
       className: nullableMetadata(field.className)
@@ -2190,6 +2217,7 @@ function cloneClassMethods(methods: AnyNode[] | null | undefined): AnyNode[] {
       returnMapKeyType: nullableMetadata(method.returnMapKeyType),
       returnMapValueType: nullableMetadata(method.returnMapValueType),
       returnPromiseValueType: nullableMetadata(method.returnPromiseValueType),
+      returnSetElementType: nullableMetadata(method.returnSetElementType),
       body: []
     })
   }
@@ -2217,6 +2245,7 @@ function cloneParams(params: AnyNode[] | null | undefined): AnyNode[] {
       mapKeyType: nullableMetadata(param.mapKeyType),
       mapValueType: nullableMetadata(param.mapValueType),
       promiseValueType: nullableMetadata(param.promiseValueType),
+      setElementType: nullableMetadata(param.setElementType),
       shape: nullableMetadata(param.shape),
       functionType: nullableMetadata(param.functionType),
       className: nullableMetadata(param.className)

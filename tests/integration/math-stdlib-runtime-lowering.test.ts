@@ -61,10 +61,7 @@ console.log(Math.random() >= 0)
   }) as GeneratedTextFile[]
   const xorshiftSource = generatedTextFile(xorshiftFiles, 'src/index.cc').code
 
-  assert.match(
-    xorshiftSource,
-    /MathObject Math\(0x00000007u, true, MathRandomBackend::Xorshift32\);/
-  )
+  assert.match(xorshiftSource, /MathObject Math\(0x00000007u, true, MathRandomBackend::Xorshift32\);/)
   assert.doesNotMatch(xorshiftSource, /INOX_MATH_RANDOM_/)
 }
 

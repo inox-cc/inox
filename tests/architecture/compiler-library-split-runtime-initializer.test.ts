@@ -6,16 +6,19 @@ import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 test('split graph эмитит package runtime initializer ровно один раз', () => {
-  const host = createMemoryCompilerHost([
-    {
-      path: '/pkg/index.ts',
-      source: "import { sample } from './sample.ts'\nconsole.log(sample + Math.random())\n"
-    },
-    {
-      path: '/pkg/sample.ts',
-      source: 'export const sample = Math.random()\n'
-    }
-  ], { root: '/' })
+  const host = createMemoryCompilerHost(
+    [
+      {
+        path: '/pkg/index.ts',
+        source: "import { sample } from './sample.ts'\nconsole.log(sample + Math.random())\n"
+      },
+      {
+        path: '/pkg/sample.ts',
+        source: 'export const sample = Math.random()\n'
+      }
+    ],
+    { root: '/' }
+  )
   const files = compileFileToCModuleTextsSync('/pkg/index.ts', {
     callMain: true,
     host,

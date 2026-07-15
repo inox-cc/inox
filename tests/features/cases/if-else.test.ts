@@ -4,7 +4,7 @@
 
 const enabled: boolean = true
 if (enabled) {
-console.log('yes')
+  console.log('yes')
 } else {
-console.log('no')
+  console.log('no')
 }

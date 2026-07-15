@@ -82,7 +82,10 @@ console.log(strNum, strBool, strNull, strTpl, numText, hexText)
   assert.doesNotMatch(source, /inox::String\([^\n]+\)\.slice\([^\n]*\)\.(tag|as\.ref)/)
   assert.match(source, /auto value_default_\d+ = inox::String\("fallback", 8\);/)
   assert.match(source, /inox_retain\(inox_param_value\);/)
-  assert.match(source, /inox_string_value_\d+ == nullptr \? inox::String\(\) : inox::String\(inox_string_value_\d+->bytes, inox_string_value_\d+->len\)/)
+  assert.match(
+    source,
+    /inox_string_value_\d+ == nullptr \? inox::String\(\) : inox::String\(inox_string_value_\d+->bytes, inox_string_value_\d+->len\)/
+  )
   assert.doesNotMatch(source, /inox::String\(statement\)\.endsWith/)
   assert.match(source, /trimmed\.includes\("std"\)/)
   assert.match(source, /trimmed\.startsWith\("In"\)/)

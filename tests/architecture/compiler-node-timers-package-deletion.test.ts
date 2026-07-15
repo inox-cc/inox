@@ -14,14 +14,7 @@ import {
 
 const fixture = resolve('dist/test-tmp/compiler-node-timers-package-deletion')
 const output = resolve(fixture, 'dist/compiler-libraries')
-const globalNames = [
-  'clearImmediate',
-  'clearInterval',
-  'clearTimeout',
-  'setImmediate',
-  'setInterval',
-  'setTimeout'
-]
+const globalNames = ['clearImmediate', 'clearInterval', 'clearTimeout', 'setImmediate', 'setInterval', 'setTimeout']
 
 test('удаление node:timers убирает module, globals, operations и native plan', async () => {
   await createFixture()
@@ -29,9 +22,7 @@ test('удаление node:timers убирает module, globals, operations и
 
   const before = createCompilerLibrarySetFromDiscovered(await discoverCompilerLibraries(fixture))
   const beforeGenerated = await generatedSources()
-  const timersDeclaration = before.declarations.find(
-    (declaration) => declaration.source === 'node:timers'
-  )
+  const timersDeclaration = before.declarations.find((declaration) => declaration.source === 'node:timers')
 
   assert.equal(timersDeclaration?.compilerImplemented, true)
   assert.ok(before.operations.some((operation) => operation.libraryId === 'node:timers'))
@@ -57,7 +48,10 @@ test('удаление node:timers убирает module, globals, operations и
     after.declarations.some((declaration) => declaration.source === 'node:timers'),
     false
   )
-  assert.equal(after.operations.some((operation) => operation.libraryId === 'node:timers'), false)
+  assert.equal(
+    after.operations.some((operation) => operation.libraryId === 'node:timers'),
+    false
+  )
 
   for (const name of globalNames) {
     assert.equal(hasGlobalOperation(after, name), false, `stale global operation ${name}`)
@@ -91,8 +85,7 @@ function hasGlobalOperation(libraries: CompilerLibrarySet, name: string): boolea
   const binding = `global:${name}`
 
   return libraries.operations.some(
-    (operation) =>
-      operation.bindingId === binding || operation.bindingAliases?.includes(binding) === true
+    (operation) => operation.bindingId === binding || operation.bindingAliases?.includes(binding) === true
   )
 }
 

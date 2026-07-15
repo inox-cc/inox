@@ -1,6 +1,4 @@
-import type {
-  NodeStdlibRuntimeImportKind
-} from './descriptor.ts'
+import type { NodeStdlibRuntimeImportKind } from './descriptor.ts'
 import {
   nodeStdlibPackageDescriptorAt,
   nodeStdlibPackageDescriptorCount,
@@ -37,10 +35,7 @@ export function isStdlibModuleImportSource(source: string): boolean {
   return findStdlibModuleDescriptor(source) !== null
 }
 
-export function isStdlibModuleImportSourceForId(
-  source: string | null | undefined,
-  id: StdlibModuleId
-): boolean {
+export function isStdlibModuleImportSourceForId(source: string | null | undefined, id: StdlibModuleId): boolean {
   if (source === null || typeof source === 'undefined') {
     return false
   }
@@ -64,10 +59,7 @@ export function stdlibModuleImportSourceSetForId(id: StdlibModuleId): Set<string
   return result
 }
 
-export function stdlibModuleRuntimeImportNameSet(
-  id: StdlibModuleId,
-  kind: StdlibModuleRuntimeImportKind
-): Set<string> {
+export function stdlibModuleRuntimeImportNameSet(id: StdlibModuleId, kind: StdlibModuleRuntimeImportKind): Set<string> {
   const result = new Set<string>()
 
   for (let index = 0; index < stdlibModuleRuntimeImportDescriptors.length; index = index + 1) {

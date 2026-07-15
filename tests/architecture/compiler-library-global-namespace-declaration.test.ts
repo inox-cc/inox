@@ -11,7 +11,9 @@ const source = 'const stats = fixture.tools.inspect()\n'
 
 test('ambient nested namespace создаёт library-owned object path', () => {
   const libraries = createCompilerLibrarySet([
-    globalDeclarationLibrary('global:fixture', `
+    globalDeclarationLibrary(
+      'global:fixture',
+      `
       export {};
       declare global {
         interface FixtureStats {
@@ -24,7 +26,8 @@ test('ambient nested namespace создаёт library-owned object path', () => 
           }
         }
       }
-    `)
+    `
+    )
   ])
   const result = compileSourceToIr(source, { libraries })
   const stats = result.ir.body[0].init

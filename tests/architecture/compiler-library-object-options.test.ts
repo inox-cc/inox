@@ -4,10 +4,7 @@ import { test } from 'node:test'
 import { compileSource, compileSourceToIr } from '../../compiler/core.ts'
 import { CompileError } from '../../compiler/diagnostics.ts'
 import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-fixtures.ts'
-import type {
-  CompilerLibraryDescriptor,
-  LibraryObjectLiteralFieldDescriptor
-} from '../../compiler/extensions/types.ts'
+import type { CompilerLibraryDescriptor, LibraryObjectLiteralFieldDescriptor } from '../../compiler/extensions/types.ts'
 
 test('library object options validate, lower and preserve nominal array elements', () => {
   const libraries = createCompilerLibrarySetWithConsole([objectOptionsLibrary()])
@@ -90,11 +87,7 @@ function objectOptionsLibrary(): CompilerLibraryDescriptor {
         kind: 'call',
         runtimeRequirements: [],
         cExpression: 'bridge.remove',
-        cArgumentKinds: [
-          'string-view',
-          'object-boolean-field',
-          'object-boolean-field'
-        ],
+        cArgumentKinds: ['string-view', 'object-boolean-field', 'object-boolean-field'],
         cArgumentSources: [
           null,
           { argumentIndex: 1, objectFieldName: 'recursive' },
@@ -106,10 +99,7 @@ function objectOptionsLibrary(): CompilerLibraryDescriptor {
           { valueTypes: ['string'] },
           {
             valueTypes: ['object'],
-            objectLiteralFields: [
-              booleanField('recursive'),
-              booleanField('force')
-            ]
+            objectLiteralFields: [booleanField('recursive'), booleanField('force')]
           }
         ],
         cppType: 'void',
@@ -171,7 +161,6 @@ function objectOptionsLibrary(): CompilerLibraryDescriptor {
     intrinsicBindings: [],
     runtimeRequirements: []
   }
-
 }
 
 function booleanField(name: string): LibraryObjectLiteralFieldDescriptor {

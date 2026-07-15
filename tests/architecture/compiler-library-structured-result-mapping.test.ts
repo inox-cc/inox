@@ -8,10 +8,10 @@ import type { CompilerLibraryDescriptor, TypeRef } from '../../compiler/extensio
 test('structural TypeRef uses a separate C++ result mapping', () => {
   const resultTypeRef = fixtureTypeRef()
   const libraries = createCompilerLibrarySet([fixtureLibrary(resultTypeRef)])
-  const result = compileSource(
-    'const stats = readFixtureStats()\nconst total = stats.total\n',
-    { libraries, target: 'cc' }
-  )
+  const result = compileSource('const stats = readFixtureStats()\nconst total = stats.total\n', {
+    libraries,
+    target: 'cc'
+  })
   const astCall = result.ast.body[0].init
   const hirCall = result.hir.body[0].init
   const astField = astCall.shape?.fields[0]
@@ -38,8 +38,7 @@ function fixtureLibrary(resultTypeRef: TypeRef): CompilerLibraryDescriptor {
         libraryId: 'fixture',
         kind: 'global',
         source: 'stdlib/fixture/index.d.ts',
-        declarationSource:
-          'export {}; declare global { function readFixtureStats(): unknown; }',
+        declarationSource: 'export {}; declare global { function readFixtureStats(): unknown; }',
         compilerImplemented: true
       }
     ],

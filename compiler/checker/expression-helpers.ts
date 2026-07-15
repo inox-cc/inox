@@ -92,6 +92,7 @@ export function dynamicShapeField(shape: ObjectShapeInfo, name: string): AnyNode
       mapKeyType: field.mapKeyType,
       mapValueType: field.mapValueType,
       promiseValueType: field.promiseValueType,
+      setElementType: field.setElementType,
       functionType: field.functionType,
       shape: field.shape,
       className: field.className
@@ -172,6 +173,7 @@ export function createArrowFunctionTypeMetadata(
     returnMapKeyType: expression.returnMapKeyType ?? null,
     returnMapValueType: expression.returnMapValueType ?? null,
     returnPromiseValueType: expression.returnPromiseValueType ?? null,
+    returnSetElementType: expression.returnSetElementType ?? null,
     returnShape
   }
 }

@@ -55,7 +55,10 @@ client.end()
   const source = generatedTextFile(files, 'src/index.cc').code
 
   assert.match(source, /#include "inox\/net\.h"/)
-  assert.match(source, /static inox_status inox_callback_arrow_\d+\(void\* inox_context, const inox_value\* args, size_t arg_count, inox_value\* out\)/)
+  assert.match(
+    source,
+    /static inox_status inox_callback_arrow_\d+\(void\* inox_context, const inox_value\* args, size_t arg_count, inox_value\* out\)/
+  )
   assert.match(source, /args\[0\]\.tag != INOX_TAG_CLASS_INSTANCE/)
   assert.match(source, /inox_value socket = args\[0\];/)
   assert.match(source, /NetSocket\(socket\)\.end\("ok"\)/)

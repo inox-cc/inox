@@ -41,12 +41,7 @@ function collectNodeOsSemanticTails(): SemanticTail[] {
   return result.sort(compareSemanticTails)
 }
 
-function visitNode(
-  node: ts.Node,
-  sourceFile: ts.SourceFile,
-  result: SemanticTail[],
-  seen: Set<string>
-): void {
+function visitNode(node: ts.Node, sourceFile: ts.SourceFile, result: SemanticTail[], seen: Set<string>): void {
   if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
     const specifier = node.moduleSpecifier
 
@@ -108,13 +103,13 @@ function isNodeOsPackagePath(specifier: string): boolean {
   return specifier.includes('stdlib/node/os/compiler/') || specifier.endsWith('stdlib/node/os/compiler')
 }
 
-function isTextLikeNode(node: ts.Node): node is ts.StringLiteralLike | ts.TemplateHead | ts.TemplateMiddle | ts.TemplateTail {
+function isTextLikeNode(
+  node: ts.Node
+): node is ts.StringLiteralLike | ts.TemplateHead | ts.TemplateMiddle | ts.TemplateTail {
   return ts.isStringLiteralLike(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)
 }
 
-function textLikeNodeText(
-  node: ts.StringLiteralLike | ts.TemplateHead | ts.TemplateMiddle | ts.TemplateTail
-): string {
+function textLikeNodeText(node: ts.StringLiteralLike | ts.TemplateHead | ts.TemplateMiddle | ts.TemplateTail): string {
   return node.text
 }
 

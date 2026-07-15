@@ -31,6 +31,7 @@ type IrTopLevelNode = AnyNode & {
   returnMapValueType?: ValueType | null
   returnNullable?: boolean | null
   returnPromiseValueType?: ValueType | null
+  returnSetElementType?: ValueType | null
   returnShape?: ObjectShapeInfo | null
   returnType?: string | null
   type?: string | null
@@ -374,6 +375,10 @@ function createFunctionDeclaration(item: IrTopLevelNode, name: string): IrFuncti
 
   if (item.returnPromiseValueType !== null && typeof item.returnPromiseValueType !== 'undefined') {
     declaration.returnPromiseValueType = item.returnPromiseValueType
+  }
+
+  if (item.returnSetElementType !== null && typeof item.returnSetElementType !== 'undefined') {
+    declaration.returnSetElementType = item.returnSetElementType
   }
 
   if (item.returnShape !== null && typeof item.returnShape !== 'undefined') {

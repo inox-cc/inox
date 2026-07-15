@@ -34,15 +34,20 @@ test('удаление global:console убирает API и native plan без c
   const afterRegistry = await readFile(resolve(output, 'default-registry.ts'), 'utf8')
   const afterPlan = await readFile(resolve(output, 'native-plan.json'), 'utf8')
 
-  assert.equal(after.declarations.some((item) => item.libraryId === 'global:console'), false)
-  assert.equal(after.operations.some((item) => item.libraryId === 'global:console'), false)
+  assert.equal(
+    after.declarations.some((item) => item.libraryId === 'global:console'),
+    false
+  )
+  assert.equal(
+    after.operations.some((item) => item.libraryId === 'global:console'),
+    false
+  )
   assert.doesNotMatch(afterRegistry, /global:console/)
   assert.doesNotMatch(afterPlan, /stdlib\/global\/console/)
   assert.match(afterPlan, /stdlib\/global\/math\/src\/math\.cc/)
   assert.throws(
     () => compileSource("console.log('ready')\n", { libraries: after }),
-    (error: unknown) =>
-      error instanceof CompileError && error.diagnostics[0].code === 'INOX_UNKNOWN_NAME'
+    (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_UNKNOWN_NAME'
   )
 })
 

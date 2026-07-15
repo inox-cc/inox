@@ -1,5 +1,5 @@
 import type { AnyNode, Diagnostic, IrFunctionEffect } from '../types.ts'
-import type { CompilerLibrarySet, RuntimeEntrypointAdapterDescriptor } from '../extensions/types.ts'
+import type { RuntimeEntrypointAdapterDescriptor } from '../extensions/types.ts'
 import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
 import type {
   CArrayElementInfo,
@@ -8,7 +8,6 @@ import type {
   CClassInfo,
   CFunctionParam,
   CFunctionPointerAdapter,
-  CFunctionPointerRuntimeAdapter,
   CFunctionReturnMapType,
   CFunctionType,
   CObjectAccessorReturnPath,
@@ -151,20 +150,18 @@ export type CEmitContext = {
   functionParams: Map<string, CFunctionParam[]>
   functionPointerAdapterNames: CFunctionPointerAdapterMap
   functionPointerAdapters: CFunctionPointerAdapter[]
-  functionPointerRuntimeAdapterNames: Map<string, CFunctionPointerRuntimeAdapter>
-  functionPointerRuntimeAdapters: CFunctionPointerRuntimeAdapter[]
   functionReturnArrayElementDeclaredTypes: CStringNullableMap
   functionReturnArrayElementTypes: CStringNullableMap
   functionReturnDeclaredTypes: CStringNullableMap
   functionReturnMapTypes: CFunctionReturnMapTypeMap
   functionReturnNullables: CBooleanMap
   functionReturnPromiseValueTypes: CStringNullableMap
+  functionReturnSetElementTypes: CStringNullableMap
   functionReturnShapes: Map<string, CObjectShape | null>
   functionReturnTypes: CStringMap
   functionThrowValueTypes: Map<string, IrFunctionEffect['throwValueTypes']>
   forceRuntimeStringDeclarations?: CStringSet
   jsGlobalRoots: CStringSet
-  libraries: CompilerLibrarySet
   runtimeInitializerDefinitions: string[]
   moduleValueNames: CStringMap
   moduleValueCppTypes: CStringMap
@@ -233,6 +230,7 @@ type CVariableScopeContext = {
   classInstanceTypes: CStringMap
   cppArrayValues: CStringSet
   cppMapValues: CStringSet
+  cppSetValues: CStringSet
   cppStringValues: CStringSet
   cppValueTypes: CStringMap
   exceptionValueNames: CStringSet
@@ -253,6 +251,7 @@ type CVariableScopeContext = {
   runtimeStringValues: CStringMap
   runtimeStrings: CStringSet
   runtimeValueStorageNames: CStringSet
+  setElementTypes: CStringMap
   variables: CStringMap
 }
 
@@ -270,6 +269,7 @@ export type CFunctionContext = CEmitContext & {
   continueTargets: CLoopFlowTarget[]
   cppArrayValues: CStringSet
   cppMapValues: CStringSet
+  cppSetValues: CStringSet
   cppStringValues: CStringSet
   cppValueTypes: CStringMap
   errorChannelUsed: boolean
@@ -311,6 +311,7 @@ export type CFunctionContext = CEmitContext & {
   runtimeStringValues: CStringMap
   runtimeStrings: CStringSet
   runtimeValueStorageNames: CStringSet
+  setElementTypes: CStringMap
   statusReturn: boolean
   throwingFunction: boolean
   usedCleanupGoto: boolean
@@ -325,6 +326,7 @@ export type CVariableScopeSnapshot = {
   classInstanceTypes: CStringMap
   cppArrayValues: CStringSet
   cppMapValues: CStringSet
+  cppSetValues: CStringSet
   cppStringValues: CStringSet
   cppValueTypes: CStringMap
   exceptionValueNames: CStringSet
@@ -344,6 +346,7 @@ export type CVariableScopeSnapshot = {
   runtimeStringValues: CStringMap
   runtimeStrings: CStringSet
   runtimeValueStorageNames: CStringSet
+  setElementTypes: CStringMap
   variables: CStringMap
 }
 
@@ -376,19 +379,17 @@ export function createFunctionContext(
     functionParams: baseContext.functionParams,
     functionPointerAdapterNames: baseContext.functionPointerAdapterNames,
     functionPointerAdapters: baseContext.functionPointerAdapters,
-    functionPointerRuntimeAdapterNames: baseContext.functionPointerRuntimeAdapterNames,
-    functionPointerRuntimeAdapters: baseContext.functionPointerRuntimeAdapters,
     functionReturnArrayElementDeclaredTypes: baseContext.functionReturnArrayElementDeclaredTypes,
     functionReturnArrayElementTypes: baseContext.functionReturnArrayElementTypes,
     functionReturnDeclaredTypes: baseContext.functionReturnDeclaredTypes,
     functionReturnMapTypes: baseContext.functionReturnMapTypes,
     functionReturnNullables: baseContext.functionReturnNullables,
     functionReturnPromiseValueTypes: baseContext.functionReturnPromiseValueTypes,
+    functionReturnSetElementTypes: baseContext.functionReturnSetElementTypes,
     functionReturnShapes: baseContext.functionReturnShapes,
     functionReturnTypes: baseContext.functionReturnTypes,
     functionThrowValueTypes: baseContext.functionThrowValueTypes,
     jsGlobalRoots: baseContext.jsGlobalRoots,
-    libraries: baseContext.libraries,
     runtimeInitializerDefinitions: baseContext.runtimeInitializerDefinitions,
     moduleValueNames: baseContext.moduleValueNames,
     moduleValueCppTypes: baseContext.moduleValueCppTypes,
@@ -417,6 +418,7 @@ export function createFunctionContext(
     classInstanceTypes: new Map(),
     cppArrayValues: new Set(),
     cppMapValues: new Set(),
+    cppSetValues: new Set(),
     cppStringValues: new Set(),
     cppValueTypes: cloneCStringMap(baseContext.moduleValueCppTypes),
     continueFlowUsed: false,
@@ -450,6 +452,7 @@ export function createFunctionContext(
     runtimeCallbacks: new Set(),
     runtimeArrayElementTypes: new Map(),
     runtimeStringValues: new Map(),
+    setElementTypes: new Map(),
     runtimeStrings: new Set(),
     runtimeValueStorageNames: cloneCStringSet(baseContext.moduleRuntimeValueNames),
     statusReturn: false,
@@ -898,6 +901,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   const previousClassInstanceTypes = context.classInstanceTypes
   const previousCppArrayValues = context.cppArrayValues
   const previousCppMapValues = context.cppMapValues
+  const previousCppSetValues = context.cppSetValues
   const previousCppStringValues = context.cppStringValues
   const previousCppValueTypes = context.cppValueTypes
   const previousExceptionValueNames = context.exceptionValueNames
@@ -915,6 +919,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   const previousRuntimeCallbacks = context.runtimeCallbacks
   const previousRuntimeArrayElementTypes = context.runtimeArrayElementTypes
   const previousRuntimeStringValues = context.runtimeStringValues
+  const previousSetElementTypes = context.setElementTypes
   const previousRuntimeStrings = context.runtimeStrings
   const previousRuntimeValueStorageNames = context.runtimeValueStorageNames
 
@@ -925,6 +930,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   context.classInstanceTypes = cloneCStringMap(previousClassInstanceTypes)
   context.cppArrayValues = cloneCStringSet(previousCppArrayValues)
   context.cppMapValues = cloneCStringSet(previousCppMapValues)
+  context.cppSetValues = cloneCStringSet(previousCppSetValues)
   context.cppStringValues = cloneCStringSet(previousCppStringValues)
   context.cppValueTypes = cloneCStringMap(previousCppValueTypes)
   context.exceptionValueNames = cloneCStringSet(previousExceptionValueNames)
@@ -942,6 +948,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   context.runtimeCallbacks = cloneCStringSet(previousRuntimeCallbacks)
   context.runtimeArrayElementTypes = cloneCStringMap(previousRuntimeArrayElementTypes)
   context.runtimeStringValues = cloneCStringMap(previousRuntimeStringValues)
+  context.setElementTypes = cloneCStringMap(previousSetElementTypes)
   context.runtimeStrings = cloneCStringSet(previousRuntimeStrings)
   context.runtimeValueStorageNames = cloneCStringSet(previousRuntimeValueStorageNames)
 
@@ -952,6 +959,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
     classInstanceTypes: previousClassInstanceTypes,
     cppArrayValues: previousCppArrayValues,
     cppMapValues: previousCppMapValues,
+    cppSetValues: previousCppSetValues,
     cppStringValues: previousCppStringValues,
     cppValueTypes: previousCppValueTypes,
     exceptionValueNames: previousExceptionValueNames,
@@ -971,6 +979,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
     runtimeStringValues: previousRuntimeStringValues,
     runtimeStrings: previousRuntimeStrings,
     runtimeValueStorageNames: previousRuntimeValueStorageNames,
+    setElementTypes: previousSetElementTypes,
     variables: previousVariables
   }
 }
@@ -985,6 +994,7 @@ export function restoreVariableScope(context: CVariableScopeContext, snapshot: C
   context.classInstanceTypes = snapshot.classInstanceTypes
   context.cppArrayValues = snapshot.cppArrayValues
   context.cppMapValues = snapshot.cppMapValues
+  context.cppSetValues = snapshot.cppSetValues
   context.cppStringValues = snapshot.cppStringValues
   context.cppValueTypes = snapshot.cppValueTypes
   context.exceptionValueNames = snapshot.exceptionValueNames
@@ -1002,6 +1012,7 @@ export function restoreVariableScope(context: CVariableScopeContext, snapshot: C
   context.runtimeCallbacks = snapshot.runtimeCallbacks
   context.runtimeArrayElementTypes = snapshot.runtimeArrayElementTypes
   context.runtimeStringValues = snapshot.runtimeStringValues
+  context.setElementTypes = snapshot.setElementTypes
   context.runtimeStrings = snapshot.runtimeStrings
   context.runtimeValueStorageNames = snapshot.runtimeValueStorageNames
 }

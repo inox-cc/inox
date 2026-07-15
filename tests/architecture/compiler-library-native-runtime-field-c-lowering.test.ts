@@ -6,10 +6,10 @@ import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('native library type fields stay runtime-backed without cMember metadata', () => {
-  const result = compileSource(
-    'const entry = bridge.open()\nconsole.log(entry.size)\n',
-    { libraries: createCompilerLibrarySetWithConsole([bridgeLibrary()]), target: 'cc' }
-  )
+  const result = compileSource('const entry = bridge.open()\nconsole.log(entry.size)\n', {
+    libraries: createCompilerLibrarySetWithConsole([bridgeLibrary()]),
+    target: 'cc'
+  })
 
   assert.match(result.code, /inox::get\(entry, "size"\)/)
   assert.doesNotMatch(result.code, /console\.log\("%.17g", \(\(double\)entry\.size\)\)/)

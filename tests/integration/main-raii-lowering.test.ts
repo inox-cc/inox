@@ -88,10 +88,7 @@ console.log(value)
 }
 
 export function assertProcessMainEntryPathUsesStringView(): void {
-  const header = readFileSync(
-    new URL('../../stdlib/node/process/include/inox/process.h', import.meta.url),
-    'utf8'
-  )
+  const header = readFileSync(new URL('../../stdlib/node/process/include/inox/process.h', import.meta.url), 'utf8')
 
   assert.match(
     header,

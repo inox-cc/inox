@@ -39,9 +39,7 @@ test('binary package deletion removes only the API and native plan owned by that
   assert.match(withoutBuffer.nativePlan, /stdlib\/global\/binary\/src\/binary\.cc/)
   assert.doesNotMatch(withoutBuffer.nativePlan, /stdlib\/node\/buffer/)
 
-  const binaryOnly = createCompilerLibrarySetFromDiscovered(
-    await discoverCompilerLibraries(fixtureRoot)
-  )
+  const binaryOnly = createCompilerLibrarySetFromDiscovered(await discoverCompilerLibraries(fixtureRoot))
   assert.equal(compilerLibraryOperationForGlobal(binaryOnly, ['Buffer', 'alloc'], 'call'), null)
   assert.equal(compilerLibraryNativeTypeForName(binaryOnly, 'Buffer'), null)
   assert.throws(
@@ -49,10 +47,7 @@ test('binary package deletion removes only the API and native plan owned by that
     (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_UNKNOWN_NAME'
   )
   assert.ok(compilerLibraryOperationForGlobal(binaryOnly, ['Uint8Array'], 'construct'))
-  assert.equal(
-    compilerLibraryNativeTypeForName(binaryOnly, 'Uint8Array')?.typeId,
-    'global:binary#Uint8Array'
-  )
+  assert.equal(compilerLibraryNativeTypeForName(binaryOnly, 'Uint8Array')?.typeId, 'global:binary#Uint8Array')
 
   await rm(resolve(fixtureRoot, 'stdlib/global/binary'), { recursive: true, force: true })
   await generateCompilerLibraryRegistry(fixtureRoot, outputRoot)

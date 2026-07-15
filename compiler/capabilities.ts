@@ -1,12 +1,5 @@
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
-import type {
-  AnyNode,
-  CompileOptions,
-  Diagnostic,
-  IrProgram,
-  RuntimeCapabilities,
-  SourceLocation
-} from './types.ts'
+import type { AnyNode, CompileOptions, Diagnostic, IrProgram, RuntimeCapabilities, SourceLocation } from './types.ts'
 
 type NodeList = AnyNode[]
 

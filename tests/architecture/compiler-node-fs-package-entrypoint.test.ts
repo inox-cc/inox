@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import type {
-  CompilerLibraryPackageDescriptor,
-  LibraryOperationDescriptor
-} from '../../compiler/extensions/types.ts'
+import type { CompilerLibraryPackageDescriptor, LibraryOperationDescriptor } from '../../compiler/extensions/types.ts'
 import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
 
 test('node:fs и node:fs/promises имеют отдельные compiler entrypoints и ownership', async () => {
@@ -70,34 +67,36 @@ test('node:fs и node:fs/promises имеют отдельные compiler entrypo
     ['fs.promises.readFile', 'fs.promises.readFile']
   )
 
-  assert.equal(fs.operations.every((item) => item.libraryId === 'node:fs'), true)
-  assert.equal(promises.operations.every((item) => item.libraryId === 'node:fs/promises'), true)
+  assert.equal(
+    fs.operations.every((item) => item.libraryId === 'node:fs'),
+    true
+  )
+  assert.equal(
+    promises.operations.every((item) => item.libraryId === 'node:fs/promises'),
+    true
+  )
   assert.deepEqual(promises.runtimeRequirements, [])
 
   const runtime = fs.runtimeRequirements.find((item) => item.id === 'node:fs')
   assert.ok(runtime)
   assert.deepEqual(runtime.cPreludeIncludes, ['inox/fs.h'])
-  assert.deepEqual(
-    runtime.dependencies,
-    ['async-runtime', 'collections', 'managed-values', 'node:buffer', 'string-bytes']
-  )
+  assert.deepEqual(runtime.dependencies, [
+    'async-runtime',
+    'collections',
+    'managed-values',
+    'node:buffer',
+    'string-bytes'
+  ])
 })
 
-function operation(
-  descriptor: CompilerLibraryPackageDescriptor,
-  operationId: string
-): LibraryOperationDescriptor {
+function operation(descriptor: CompilerLibraryPackageDescriptor, operationId: string): LibraryOperationDescriptor {
   const result = descriptor.operations.find((item) => item.operationId === operationId)
 
   assert.ok(result, `missing operation ${operationId}`)
   return result
 }
 
-function assertNativeType(
-  descriptor: CompilerLibraryPackageDescriptor,
-  typeId: string,
-  cppType: string
-): void {
+function assertNativeType(descriptor: CompilerLibraryPackageDescriptor, typeId: string, cppType: string): void {
   const nativeType = descriptor.nativeTypes?.find((item) => item.typeId === typeId)
 
   assert.ok(nativeType, `missing native type ${typeId}`)

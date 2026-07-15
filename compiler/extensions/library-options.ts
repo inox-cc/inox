@@ -49,10 +49,7 @@ export function compilerLibraryOptionScalarType(value: LibraryOptionScalar): str
   return 'boolean'
 }
 
-export function compilerLibraryOptionScalarsEqual(
-  left: LibraryOptionScalar,
-  right: LibraryOptionScalar
-): boolean {
+export function compilerLibraryOptionScalarsEqual(left: LibraryOptionScalar, right: LibraryOptionScalar): boolean {
   if (typeof left === 'string') {
     if (typeof right !== 'string') {
       return false
@@ -89,8 +86,17 @@ export function compilerLibraryOptionsFingerprint(
     const value = compilerLibraryOptionScalarText(option.value)
 
     rows.push(
-      id.length.toString() + ':' + id + ':' + option.descriptor.valueType + ':' +
-        (option.present ? 'present' : 'default') + ':' + value.length.toString() + ':' + value
+      id.length.toString() +
+        ':' +
+        id +
+        ':' +
+        option.descriptor.valueType +
+        ':' +
+        (option.present ? 'present' : 'default') +
+        ':' +
+        value.length.toString() +
+        ':' +
+        value
     )
   }
 
@@ -140,9 +146,7 @@ export function resolveCompilerLibraryOptions(
   return resolved
 }
 
-export function validateCompilerLibraryOptionDescriptors(
-  descriptors: LibraryOptionDescriptor[]
-): void {
+export function validateCompilerLibraryOptionDescriptors(descriptors: LibraryOptionDescriptor[]): void {
   const ids: Set<string> = new Set()
   const aliases: Set<string> = new Set()
 
@@ -184,10 +188,7 @@ function validateCompilerLibraryOptionDescriptorShape(descriptor: LibraryOptionD
   const hasMinimum = minimum !== null && typeof minimum !== 'undefined'
   const hasMaximum = maximum !== null && typeof maximum !== 'undefined'
 
-  if (
-    descriptor.valueType !== 'number' &&
-    (descriptor.integer === true || hasMinimum || hasMaximum)
-  ) {
+  if (descriptor.valueType !== 'number' && (descriptor.integer === true || hasMinimum || hasMaximum)) {
     throw new Error(`${descriptor.optionId} numeric constraints require number valueType`)
   }
 
@@ -201,10 +202,7 @@ function validateCompilerLibraryOptionDescriptorShape(descriptor: LibraryOptionD
 
   if (
     descriptor.integer === true &&
-    (
-      hasMinimum && (minimum as number) % 1 !== 0 ||
-      hasMaximum && (maximum as number) % 1 !== 0
-    )
+    ((hasMinimum && (minimum as number) % 1 !== 0) || (hasMaximum && (maximum as number) % 1 !== 0))
   ) {
     throw new Error(`${descriptor.optionId} integer bounds must be integers`)
   }
@@ -306,7 +304,11 @@ export function compilerLibraryCapabilities(
   for (let index = 0; index < requirements.length; index = index + 1) {
     const requirement = requirements[index]
 
-    for (let capabilityIndex = 0; capabilityIndex < requirement.capabilities.length; capabilityIndex = capabilityIndex + 1) {
+    for (
+      let capabilityIndex = 0;
+      capabilityIndex < requirement.capabilities.length;
+      capabilityIndex = capabilityIndex + 1
+    ) {
       const capability = requirement.capabilities[capabilityIndex]
 
       if (!capabilities.includes(capability)) {
@@ -349,18 +351,11 @@ function compilerLibraryOptionConditionMatches(
   for (let index = 0; index < condition.values.length; index = index + 1) {
     const expected = condition.values[index]
 
-    if (
-      condition.source === 'present' &&
-      typeof expected === 'boolean' &&
-      (expected as boolean) === option.present
-    ) {
+    if (condition.source === 'present' && typeof expected === 'boolean' && (expected as boolean) === option.present) {
       return true
     }
 
-    if (
-      condition.source === 'value' &&
-      compilerLibraryOptionScalarsEqual(expected, option.value)
-    ) {
+    if (condition.source === 'value' && compilerLibraryOptionScalarsEqual(expected, option.value)) {
       return true
     }
   }
@@ -396,7 +391,11 @@ function expandedRuntimeRequirements(
 
     result.push(descriptor)
 
-    for (let dependencyIndex = 0; dependencyIndex < descriptor.dependencies.length; dependencyIndex = dependencyIndex + 1) {
+    for (
+      let dependencyIndex = 0;
+      dependencyIndex < descriptor.dependencies.length;
+      dependencyIndex = dependencyIndex + 1
+    ) {
       pending.push(descriptor.dependencies[dependencyIndex])
     }
   }
@@ -432,9 +431,7 @@ export function validateCompilerLibraryOptionValue(
   const allowed = descriptor.allowedValues ?? []
 
   if (allowed.length > 0 && !libraryOptionScalarArrayIncludes(allowed, value)) {
-    throw new Error(
-      `${descriptor.optionId} expects one of ${compilerLibraryOptionScalarListText(allowed)}`
-    )
+    throw new Error(`${descriptor.optionId} expects one of ${compilerLibraryOptionScalarListText(allowed)}`)
   }
 
   if (typeof value !== 'number') {
@@ -488,10 +485,7 @@ function compilerLibraryOptionNumberMessage(descriptor: LibraryOptionDescriptor)
   return `${descriptor.optionId} has an invalid numeric value`
 }
 
-function libraryOptionScalarArrayIncludes(
-  values: LibraryOptionScalar[],
-  expected: LibraryOptionScalar
-): boolean {
+function libraryOptionScalarArrayIncludes(values: LibraryOptionScalar[], expected: LibraryOptionScalar): boolean {
   for (let index = 0; index < values.length; index = index + 1) {
     if (compilerLibraryOptionScalarsEqual(values[index], expected)) {
       return true

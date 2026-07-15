@@ -34,10 +34,7 @@ export function render<T extends Payload, Context extends RenderContext>(
 
   const declarationSource = emitModuleDeclarationContract(createModuleDeclarationProgram(hir))
 
-  assert.match(
-    declarationSource,
-    /export function render<T extends Payload, Context extends RenderContext>\(/
-  )
+  assert.match(declarationSource, /export function render<T extends Payload, Context extends RenderContext>\(/)
   assert.match(declarationSource, /value: T, context: Context/)
 
   const roundTrip = parseModuleDeclarationContract(declarationSource, '/pkg/render.d.ts')

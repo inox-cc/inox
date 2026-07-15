@@ -14,9 +14,7 @@ test('library argument checks владеют literal restrictions и diagnostics
     (error: unknown) =>
       error instanceof CompileError &&
       error.diagnostics.some(
-        (item) =>
-          item.code === 'CODEC_ALGORITHM' &&
-          item.message === "codec.open only supports 'sha256'"
+        (item) => item.code === 'CODEC_ALGORITHM' && item.message === "codec.open only supports 'sha256'"
       )
   )
 })

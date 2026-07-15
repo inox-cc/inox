@@ -5,9 +5,7 @@ import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import {
   emitFunctionPointerParams,
   emitFunctionPointerReturnType,
-  isPlainObjectFunctionField,
   isPlainFunctionPointerType,
-  isRuntimeObjectFunctionField,
   isRuntimeFunctionType
 } from '../async/callbacks.ts'
 import { functionTakesEventLoopParam } from '../async/promises.ts'
@@ -48,7 +46,6 @@ import {
   isManagedRuntimeReturnType,
   isNullableScalarType,
   isOpaqueRuntimeValueType,
-  libraryNativeBoundaryCppType,
   libraryNativeCppType
 } from '../value-types.ts'
 import { emitObjectValueReference, resolveCObjectExpressionName } from './objects.ts'
@@ -553,7 +550,8 @@ function classFieldSupportsNativeLowering(field: CObjectShapeField): boolean {
   return (
     field.valueType === 'object' ||
     field.valueType === 'array' ||
-    field.valueType === 'map'
+    field.valueType === 'map' ||
+    field.valueType === 'set'
   )
 }
 
@@ -713,11 +711,11 @@ function emitCClassObjectFunctionFieldParamDeclaration(objectName: string, field
   const functionType = field.functionType
   const name = emitCObjectFunctionFieldName(objectName, field.name)
 
-  if (isRuntimeObjectFunctionField(field)) {
+  if (!isPlainFunctionPointerType(functionType) && isRuntimeFunctionType(functionType)) {
     return `inox_value ${emitCIdentifier(name)}`
   }
 
-  if (isPlainObjectFunctionField(field) || isRuntimeFunctionType(functionType)) {
+  if (isPlainFunctionPointerType(functionType) || isRuntimeFunctionType(functionType)) {
     return emitCClassFunctionPointerParamDeclaration(name, functionType)
   }
 
@@ -2185,6 +2183,7 @@ function resolveClassShapeField(field: CObjectShapeField): CObjectShapeField {
     declaredType: field.declaredType,
     mapKeyType: field.mapKeyType,
     mapValueType: field.mapValueType,
+    setElementType: field.setElementType,
     shape: field.shape,
     typeRef: field.typeRef,
     functionType: field.functionType,
@@ -2454,6 +2453,7 @@ export function registerClassObjectShape(context: ClassFunctionContext, name: st
       declaredType: field.declaredType,
       mapKeyType: field.mapKeyType,
       mapValueType: field.mapValueType,
+      setElementType: field.setElementType,
       shape: field.shape,
       typeRef: field.typeRef,
       functionType: field.functionType,
@@ -2627,9 +2627,11 @@ function substituteCallLikeExpression(node: AnyNode, args: CConstructorArgMap, t
   }
 
   return {
-    ...node,
+    type: node.type,
     callee: substituteClassConstructorParams(node.callee, args, target),
-    args: callArgs
+    args: callArgs,
+    valueType: node.valueType,
+    loc: node.loc
   }
 }
 
@@ -2924,12 +2926,7 @@ function emitKnownPreparedClassMethodCallExpression(
   }
 
   const callExpression = emitClassMethodCallExpression(call, method, prepared, context)
-  const returnCppType = libraryNativeBoundaryCppType(
-    method.returnType,
-    method.returnNullable === true,
-    false,
-    method.returnShape
-  )
+  const returnCppType = libraryNativeCppType(method.returnShape)
 
   if (method.returnType === 'promise') {
     let out = callExpression
@@ -3042,12 +3039,7 @@ function emitPreparedThrowingClassMethodCallExpression(
 
   if (method.returnType !== 'void') {
     result = nextCName(context, 'inox_method_result')
-    const returnCppType = libraryNativeBoundaryCppType(
-      method.returnType,
-      method.returnNullable === true,
-      false,
-      method.returnShape
-    )
+    const returnCppType = libraryNativeCppType(method.returnShape)
 
     if (returnCppType !== null) {
       lines.push(`${returnCppType} ${result}{};`)
@@ -3078,13 +3070,7 @@ function emitPreparedThrowingClassMethodCallExpression(
   return {
     lines,
     expression: result,
-    cppType:
-      libraryNativeBoundaryCppType(
-        method.returnType,
-        method.returnNullable === true,
-        false,
-        method.returnShape
-      ) ?? undefined,
+    cppType: libraryNativeCppType(method.returnShape) ?? undefined,
     valueType: method.returnType
   }
 }

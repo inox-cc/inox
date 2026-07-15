@@ -6,10 +6,10 @@ import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('native library type fields lower as C++ facade members', () => {
-  const result = compileSource(
-    'const entry = bridge.open()\nconsole.log(entry.size, entry.name)\n',
-    { libraries: createCompilerLibrarySetWithConsole([bridgeLibrary()]), target: 'cc' }
-  )
+  const result = compileSource('const entry = bridge.open()\nconsole.log(entry.size, entry.name)\n', {
+    libraries: createCompilerLibrarySetWithConsole([bridgeLibrary()]),
+    target: 'cc'
+  })
 
   assert.match(result.code, /bridge\.open\(\)/)
   assert.match(result.code, /entry\.size/)

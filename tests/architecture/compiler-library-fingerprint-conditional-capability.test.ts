@@ -6,9 +6,7 @@ import { compilerLibraryFingerprintFixture } from '../helpers/compiler-library-f
 
 test('library set fingerprint учитывает conditional capability', () => {
   const entropy = createCompilerLibrarySet([compilerLibraryFingerprintFixture()])
-  const clock = createCompilerLibrarySet([
-    compilerLibraryFingerprintFixture({ conditionalCapability: 'clock' })
-  ])
+  const clock = createCompilerLibrarySet([compilerLibraryFingerprintFixture({ conditionalCapability: 'clock' })])
 
   assert.notEqual(entropy.fingerprint, clock.fingerprint)
 })

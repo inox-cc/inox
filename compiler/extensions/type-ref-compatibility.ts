@@ -1,11 +1,6 @@
-import {
-  compilerLibraryIntrinsicRoleForTypeId,
-  compilerLibraryNativeTypeForId
-} from './library-set.ts'
-import { instantiateNativeTypeTraits } from './type-ref-substitution.ts'
+import { compilerLibraryIntrinsicRoleForTypeId, compilerLibraryNativeTypeForId } from './library-set.ts'
 import type {
   CompilerLibrarySet,
-  ConcreteTypeRef,
   IntrinsicRole,
   LibraryCResultFieldMappingDescriptor,
   LibraryCResultMappingDescriptor,
@@ -31,6 +26,7 @@ export type TypeRefCompatibilityMetadata = {
   promiseValueType: ValueType | null
   promiseRejectionValueType: ValueType | null
   promiseRejectionIntrinsicRole: IntrinsicRole | null
+  setElementType: ValueType | null
 }
 
 export function typeRefCompatibilityMetadata(
@@ -39,55 +35,15 @@ export function typeRefCompatibilityMetadata(
   loc: SourceLocation,
   cResultMapping: LibraryCResultMappingDescriptor | null = null
 ): TypeRefCompatibilityMetadata {
-  if (typeRef.kind === 'parameter') {
-    throw new Error(`unresolved TypeRef parameter ${typeRef.name}`)
-  }
-
   const metadata = baseTypeRefCompatibilityMetadata(typeRef, libraries, loc)
 
-  applyTypeTraits(metadata, typeRefTraits(typeRef, libraries), libraries, loc)
+  applyTypeTraits(metadata, typeRef.traits, libraries, loc)
   applyCResultMapping(metadata, cResultMapping)
   return metadata
 }
 
-export function typeRefTraits(typeRef: ConcreteTypeRef, libraries: CompilerLibrarySet): TypeTraitRef[] {
-  if (typeRef.kind !== 'nominal') {
-    return typeRef.traits
-  }
-
-  const nativeType = compilerLibraryNativeTypeForId(libraries, typeRef.typeId)
-
-  if (nativeType === null) {
-    return typeRef.traits
-  }
-
-  const traitTemplates = nativeType.traits ?? []
-
-  if (traitTemplates.length === 0) {
-    return typeRef.traits
-  }
-
-  const result: TypeTraitRef[] = []
-  const explicitTraitIds: Set<string> = new Set<string>()
-
-  for (let index = 0; index < typeRef.traits.length; index = index + 1) {
-    result.push(typeRef.traits[index])
-    explicitTraitIds.add(typeRef.traits[index].traitId)
-  }
-
-  const nativeTraits = instantiateNativeTypeTraits(nativeType, typeRef.args)
-
-  for (let index = 0; index < nativeTraits.length; index = index + 1) {
-    if (!explicitTraitIds.has(nativeTraits[index].traitId)) {
-      result.push(nativeTraits[index])
-    }
-  }
-
-  return result
-}
-
 function baseTypeRefCompatibilityMetadata(
-  typeRef: ConcreteTypeRef,
+  typeRef: TypeRef,
   libraries: CompilerLibrarySet,
   loc: SourceLocation
 ): TypeRefCompatibilityMetadata {
@@ -120,7 +76,6 @@ function baseTypeRefCompatibilityMetadata(
       kind: 'object',
       baseTypes: nativeType.baseTypeIds,
       fields,
-      libraryCValueAdapter: nativeType.cValueAdapter ?? null,
       libraryTypeId: nativeType.typeId,
       libraryCppType: nativeType.cppType
     }
@@ -150,6 +105,7 @@ function baseTypeRefCompatibilityMetadata(
         promiseValueType: fieldMetadata.promiseValueType,
         promiseRejectionValueType: fieldMetadata.promiseRejectionValueType,
         promiseRejectionIntrinsicRole: fieldMetadata.promiseRejectionIntrinsicRole,
+        setElementType: fieldMetadata.setElementType,
         shape: fieldMetadata.shape,
         libraryCMember: null,
         libraryCppType: fieldMetadata.libraryCppType,
@@ -184,7 +140,8 @@ function emptyCompatibilityMetadata(
     mapValueType: null,
     promiseValueType: null,
     promiseRejectionValueType: null,
-    promiseRejectionIntrinsicRole: null
+    promiseRejectionIntrinsicRole: null,
+    setElementType: null
   }
 }
 
@@ -266,9 +223,13 @@ function applyTypeTraits(
     if (trait.traitId === 'iterable' && trait.args.length > 0) {
       const element = typeRefCompatibilityMetadata(trait.args[0], libraries, loc)
 
-      metadata.arrayElementType = element.valueType
-      metadata.arrayElementTypeId = element.libraryResultTypeId
-      metadata.arrayElementDeclaredType = nativeDeclarationName(element.libraryResultTypeId, libraries)
+      if (metadata.valueType === 'set') {
+        metadata.setElementType = element.valueType
+      } else {
+        metadata.arrayElementType = element.valueType
+        metadata.arrayElementTypeId = element.libraryResultTypeId
+        metadata.arrayElementDeclaredType = nativeDeclarationName(element.libraryResultTypeId, libraries)
+      }
     }
 
     if (trait.traitId === 'indexable' && trait.args.length > 1) {
@@ -287,6 +248,7 @@ function applyTypeTraits(
       metadata.arrayElementDeclaredType = fulfilled.arrayElementDeclaredType
       metadata.mapKeyType = fulfilled.mapKeyType
       metadata.mapValueType = fulfilled.mapValueType
+      metadata.setElementType = fulfilled.setElementType
 
       if (trait.args.length > 1) {
         const rejected = typeRefCompatibilityMetadata(trait.args[1], libraries, loc)

@@ -18,10 +18,13 @@ test('global:debug владеет namespace, memory operation и allocator initi
   assert.equal(debug.compilerPackage?.runtimeInitializers?.length, 1)
 
   const libraries = createCompilerLibrarySetFromDiscovered(discovered)
-  const result = compileSource(`
+  const result = compileSource(
+    `
     const stats = inox.__debug.memory()
     const count = stats.allocCount
-  `, { libraries })
+  `,
+    { libraries }
+  )
   const stats = result.ir.body[0].init
 
   assert.equal(stats.libraryOperationId, 'global:debug#memory')

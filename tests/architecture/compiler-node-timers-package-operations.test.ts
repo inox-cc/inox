@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import type {
-  LibraryArgumentCheckDescriptor,
-  LibraryOperationDescriptor
-} from '../../compiler/extensions/types.ts'
+import type { LibraryArgumentCheckDescriptor, LibraryOperationDescriptor } from '../../compiler/extensions/types.ts'
 import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
 
 type StartOperation = {
@@ -74,19 +71,12 @@ test('node:timers объявляет global, named, default и handle operations
     expectedOperationIds.push(`node:timers#${item.name}`)
   }
 
-  for (const typeId of [
-    'node:timers#ImmediateHandle',
-    'node:timers#IntervalHandle',
-    'node:timers#TimeoutHandle'
-  ]) {
+  for (const typeId of ['node:timers#ImmediateHandle', 'node:timers#IntervalHandle', 'node:timers#TimeoutHandle']) {
     expectedOperationIds.push(`${typeId}.ref`)
     expectedOperationIds.push(`${typeId}.unref`)
   }
 
-  assert.deepEqual(
-    operations.map((item) => item.operationId).sort(),
-    expectedOperationIds.sort()
-  )
+  assert.deepEqual(operations.map((item) => item.operationId).sort(), expectedOperationIds.sort())
 
   for (const item of startOperations) {
     const descriptor = operation(operations, `node:timers#${item.name}`)
@@ -128,9 +118,7 @@ test('node:timers объявляет global, named, default и handle operations
     assert.deepEqual(descriptor.runtimeRequirements, ['node:timers'])
     assert.equal(descriptor.cExpression, `timers.${item.name}`)
     assert.deepEqual(descriptor.cArgumentKinds, ['value'])
-    assert.deepEqual(descriptor.cArgumentAdapters, [
-      `${item.cppType}(inox::Value($value))`
-    ])
+    assert.deepEqual(descriptor.cArgumentAdapters, [`${item.cppType}(inox::Value($value))`])
     assert.equal(descriptor.minArgs, 1)
     assert.equal(descriptor.maxArgs, 1)
     assert.deepEqual(argumentCheck(descriptor, 0), {
@@ -146,11 +134,7 @@ test('node:timers объявляет global, named, default и handle operations
     })
   }
 
-  for (const typeId of [
-    'node:timers#ImmediateHandle',
-    'node:timers#IntervalHandle',
-    'node:timers#TimeoutHandle'
-  ]) {
+  for (const typeId of ['node:timers#ImmediateHandle', 'node:timers#IntervalHandle', 'node:timers#TimeoutHandle']) {
     for (const method of ['ref', 'unref']) {
       const descriptor = operation(operations, `${typeId}.${method}`)
 
@@ -168,30 +152,21 @@ test('node:timers объявляет global, named, default и handle operations
   }
 })
 
-function operation(
-  operations: LibraryOperationDescriptor[],
-  operationId: string
-): LibraryOperationDescriptor {
+function operation(operations: LibraryOperationDescriptor[], operationId: string): LibraryOperationDescriptor {
   const result = operations.find((item) => item.operationId === operationId)
 
   assert.ok(result, `missing operation ${operationId}`)
   return result
 }
 
-function argumentCheck(
-  operationDescriptor: LibraryOperationDescriptor,
-  index: number
-): LibraryArgumentCheckDescriptor {
+function argumentCheck(operationDescriptor: LibraryOperationDescriptor, index: number): LibraryArgumentCheckDescriptor {
   const check = operationDescriptor.argumentChecks?.[index]
 
   assert.ok(check, `missing argument check ${index} for ${operationDescriptor.operationId}`)
   return check
 }
 
-function assertModuleBindings(
-  operationDescriptor: LibraryOperationDescriptor,
-  name: string
-): void {
+function assertModuleBindings(operationDescriptor: LibraryOperationDescriptor, name: string): void {
   assert.equal(operationDescriptor.bindingId, `node:timers#module:node:timers:${name}`)
   assert.deepEqual(operationDescriptor.bindingAliases, [
     `node:timers#module:node:timers:default.${name}`,

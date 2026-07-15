@@ -6,6 +6,6 @@
 
 let index: number = 0
 while (index < 3) {
-console.log(index)
-index++
+  console.log(index)
+  index++
 }

@@ -1,2 +1,2 @@
-declare const https: unknown;
-export default https;
+declare const https: unknown
+export default https

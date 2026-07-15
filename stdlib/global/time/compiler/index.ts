@@ -53,14 +53,7 @@ const numberMethods = [
   'valueOf'
 ]
 
-const stringMethods = [
-  'toDateString',
-  'toISOString',
-  'toJSON',
-  'toString',
-  'toTimeString',
-  'toUTCString'
-]
+const stringMethods = ['toDateString', 'toISOString', 'toJSON', 'toString', 'toTimeString', 'toUTCString']
 
 const operations: LibraryOperationDescriptor[] = [
   dateConstructor(),
@@ -76,28 +69,10 @@ const operations: LibraryOperationDescriptor[] = [
     [argument(['string'])],
     [stringRuntimeRequirement]
   ),
-  staticCall(
-    'Date',
-    'UTC',
-    datePartsArgumentKinds(),
-    numberTypeRef,
-    null,
-    2,
-    7,
-    repeatedArguments(7, ['number']),
-    [runtimeRequirement]
-  ),
-  staticCall(
-    'performance',
-    'now',
-    [],
-    numberTypeRef,
-    null,
-    0,
-    0,
-    [],
-    [monotonicRuntimeRequirement]
-  )
+  staticCall('Date', 'UTC', datePartsArgumentKinds(), numberTypeRef, null, 2, 7, repeatedArguments(7, ['number']), [
+    runtimeRequirement
+  ]),
+  staticCall('performance', 'now', [], numberTypeRef, null, 0, 0, [], [monotonicRuntimeRequirement])
 ]
 
 for (let index = 0; index < numberMethods.length; index = index + 1) {
@@ -105,7 +80,9 @@ for (let index = 0; index < numberMethods.length; index = index + 1) {
 }
 
 for (let index = 0; index < stringMethods.length; index = index + 1) {
-  operations.push(dateReceiverCall(stringMethods[index], stringTypeRef, stringCResultMapping, [stringRuntimeRequirement]))
+  operations.push(
+    dateReceiverCall(stringMethods[index], stringTypeRef, stringCResultMapping, [stringRuntimeRequirement])
+  )
 }
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
@@ -162,24 +139,8 @@ function dateConstructor(): LibraryOperationDescriptor {
     variants: [
       constructorVariant(0, 0, [wallRuntimeRequirement], [], []),
       constructorVariant(1, 1, [runtimeRequirement], ['number'], [argument(['number'])], 0, ['number']),
-      constructorVariant(
-        1,
-        1,
-        [stringRuntimeRequirement],
-        ['string-view'],
-        [argument(['string'])],
-        0,
-        ['string']
-      ),
-      constructorVariant(
-        1,
-        1,
-        [runtimeRequirement],
-        ['value'],
-        [argument(['object'], [dateTypeId])],
-        0,
-        ['object']
-      ),
+      constructorVariant(1, 1, [stringRuntimeRequirement], ['string-view'], [argument(['string'])], 0, ['string']),
+      constructorVariant(1, 1, [runtimeRequirement], ['value'], [argument(['object'], [dateTypeId])], 0, ['object']),
       constructorVariant(2, 7, [runtimeRequirement], datePartsArgumentKinds(), repeatedArguments(7, ['number']))
     ],
     minArgs: 0,

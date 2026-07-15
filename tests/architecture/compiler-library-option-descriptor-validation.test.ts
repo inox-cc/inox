@@ -2,10 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
-import type {
-  CompilerLibraryDescriptor,
-  LibraryOptionDescriptor
-} from '../../compiler/extensions/types.ts'
+import type { CompilerLibraryDescriptor, LibraryOptionDescriptor } from '../../compiler/extensions/types.ts'
 
 test('option descriptor отклоняет недостижимые CLI aliases и несогласованные значения', () => {
   assert.throws(
@@ -17,38 +14,50 @@ test('option descriptor отклоняет недостижимые CLI aliases 
     /CLI alias --emit is reserved/
   )
   assert.throws(
-    () => createCompilerLibrarySet([libraryWithOption({
-      ...validOption(),
-      allowedValues: ['safe', 1]
-    })]),
+    () =>
+      createCompilerLibrarySet([
+        libraryWithOption({
+          ...validOption(),
+          allowedValues: ['safe', 1]
+        })
+      ]),
     /allowed value 1 expects string/
   )
   assert.throws(
-    () => createCompilerLibrarySet([libraryWithOption({
-      ...validOption(),
-      valueType: 'number',
-      defaultValue: 5,
-      allowedValues: undefined,
-      integer: true,
-      minimum: 10,
-      maximum: 1
-    })]),
+    () =>
+      createCompilerLibrarySet([
+        libraryWithOption({
+          ...validOption(),
+          valueType: 'number',
+          defaultValue: 5,
+          allowedValues: undefined,
+          integer: true,
+          minimum: 10,
+          maximum: 1
+        })
+      ]),
     /minimum 10 exceeds maximum 1/
   )
   assert.throws(
-    () => createCompilerLibrarySet([libraryWithOption({
-      ...validOption(),
-      valueType: 'number',
-      defaultValue: Number.POSITIVE_INFINITY,
-      allowedValues: undefined
-    })]),
+    () =>
+      createCompilerLibrarySet([
+        libraryWithOption({
+          ...validOption(),
+          valueType: 'number',
+          defaultValue: Number.POSITIVE_INFINITY,
+          allowedValues: undefined
+        })
+      ]),
     /invalid numeric value/
   )
   assert.throws(
-    () => createCompilerLibrarySet([libraryWithOption({
-      ...validOption(),
-      libraryId: 'global:other'
-    })]),
+    () =>
+      createCompilerLibrarySet([
+        libraryWithOption({
+          ...validOption(),
+          libraryId: 'global:other'
+        })
+      ]),
     /option global:fixture#mode is owned by global:other, expected global:fixture/
   )
 })

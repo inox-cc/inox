@@ -8,10 +8,7 @@ import ts from 'typescript'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const compilerRoot = resolve(projectRoot, 'compiler')
-const baselinePath = resolve(
-  projectRoot,
-  'tests/architecture/fixtures/compiler-stdlib-import-baseline.txt'
-)
+const baselinePath = resolve(projectRoot, 'tests/architecture/fixtures/compiler-stdlib-import-baseline.txt')
 
 test('compiler stdlib dependency edges do not grow', () => {
   const baseline = readBaselineEdges()

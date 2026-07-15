@@ -2,11 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
-import type {
-  CompilerLibraryDescriptor,
-  NominalTypeRef,
-  TypeRef
-} from '../../compiler/extensions/types.ts'
+import type { CompilerLibraryDescriptor, NominalTypeRef, TypeRef } from '../../compiler/extensions/types.ts'
 
 test('library fingerprint covers the complete recursive TypeRef', () => {
   const baseline = fingerprint(genericBoxTypeRef())

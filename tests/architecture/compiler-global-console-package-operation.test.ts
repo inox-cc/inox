@@ -16,12 +16,7 @@ test('global:console владеет declaration, operations и C++ facade loweri
   assert.match(consolePackage.declarationSource ?? '', /declare global/)
   assert.deepEqual(
     consolePackage.compilerPackage?.operations.map((operation) => operation.operationId),
-    [
-      'global:console#error',
-      'global:console#info',
-      'global:console#log',
-      'global:console#warn'
-    ]
+    ['global:console#error', 'global:console#info', 'global:console#log', 'global:console#warn']
   )
 
   const libraries = createCompilerLibrarySetFromDiscovered(discovered)

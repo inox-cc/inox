@@ -35,10 +35,9 @@ test('package globals lower through generic member, index, optional argument and
 })
 
 test('package global result metadata preserves nested shapes and array element types', () => {
-  const result = compileSourceToIr(
-    'const release = host.versions.node\nconst args = host.argv\n',
-    { libraries: createCompilerLibrarySet([hostLibrary()]) }
-  )
+  const result = compileSourceToIr('const release = host.versions.node\nconst args = host.argv\n', {
+    libraries: createCompilerLibrarySet([hostLibrary()])
+  })
   const release = result.ir.body[0].init
   const args = result.ir.body[1].init
 
@@ -48,10 +47,9 @@ test('package global result metadata preserves nested shapes and array element t
 })
 
 test('local bindings shadow package-provided globals', () => {
-  const result = compileSourceToIr(
-    "const host = { env: { PATH: 'local' } }\nconst name = host.env.PATH\n",
-    { libraries: createCompilerLibrarySet([hostLibrary()]) }
-  )
+  const result = compileSourceToIr("const host = { env: { PATH: 'local' } }\nconst name = host.env.PATH\n", {
+    libraries: createCompilerLibrarySet([hostLibrary()])
+  })
 
   assert.equal(result.ir.body[1].init.libraryOperationId, undefined)
 })
@@ -77,9 +75,7 @@ function hostLibrary(): CompilerLibraryDescriptor {
             readonly: true,
             resultTypeId: 'host:versions',
             cppType: 'inox::HostVersions',
-            resultShapeFields: [
-              { name: 'node', valueType: 'string', readonly: true }
-            ]
+            resultShapeFields: [{ name: 'node', valueType: 'string', readonly: true }]
           }
         ],
         cppType: 'inox::Host&',

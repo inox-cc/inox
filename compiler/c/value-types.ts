@@ -1,7 +1,6 @@
 import { emitCIdentifier } from './identifiers.ts'
 
 type CLibraryNativeShape = {
-  libraryCValueAdapter?: string | null
   libraryCppType?: string | null
   libraryTypeId?: string | null
 }
@@ -39,7 +38,8 @@ function isConcreteManagedRuntimeReturnType(valueType: CValueTypeInput): boolean
     valueType === 'string' ||
     valueType === 'object' ||
     valueType === 'array' ||
-    valueType === 'map'
+    valueType === 'map' ||
+    valueType === 'set'
   )
 }
 
@@ -114,37 +114,14 @@ export function libraryNativeCppType(shape: CLibraryNativeShape | null | undefin
   return cppType
 }
 
-export function libraryNativeBoundaryCppType(
+export function emitCReturnType(
   valueType: CValueTypeInput,
   nullable: boolean,
-  optional: boolean,
-  shape: CLibraryNativeShape | null | undefined
-): string | null {
-  if (valueType !== 'object' || nullable || optional) {
-    return null
-  }
+  shape?: CLibraryNativeShape | null
+): string {
+  const libraryCppType = libraryNativeCppType(shape)
 
-  return libraryNativeCppType(shape)
-}
-
-export function libraryNativeValueAdapter(
-  shape: CLibraryNativeShape | null | undefined
-): string | null {
-  return shape?.libraryCValueAdapter ?? null
-}
-
-export function applyLibraryNativeValueAdapter(value: string, adapter: string | null): string {
-  if (adapter === null || adapter.length === 0) {
-    return value
-  }
-
-  return adapter.split('$value').join(value)
-}
-
-export function emitCReturnType(valueType: CValueTypeInput, nullable: boolean, shape?: CLibraryNativeShape | null): string {
-  const libraryCppType = libraryNativeBoundaryCppType(valueType, nullable, false, shape)
-
-  if (libraryCppType !== null) {
+  if (valueType === 'object' && !nullable && libraryCppType !== null) {
     return libraryCppType
   }
 
@@ -164,9 +141,9 @@ export function emitThrowingFunctionOutType(
   nullable: boolean,
   shape?: CLibraryNativeShape | null
 ): string {
-  const libraryCppType = libraryNativeBoundaryCppType(valueType, nullable, false, shape)
+  const libraryCppType = libraryNativeCppType(shape)
 
-  if (libraryCppType !== null) {
+  if (valueType === 'object' && !nullable && libraryCppType !== null) {
     return libraryCppType
   }
 
@@ -225,6 +202,10 @@ export function cRuntimeValueTag(valueType: CValueTypeInput): CRuntimeValueTag {
 
   if (valueType === 'map') {
     return 'INOX_TAG_MAP'
+  }
+
+  if (valueType === 'set') {
+    return 'INOX_TAG_SET'
   }
 
   return null

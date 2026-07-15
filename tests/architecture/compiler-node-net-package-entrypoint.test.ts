@@ -15,12 +15,8 @@ test('entrypoint package node:net владеет native API и runtime plan', as
   assert.deepEqual(netPackage.nativeSources, ['stdlib/node/net/src/net.cc'])
   assert.deepEqual(netPackage.nativeIncludeDirs, ['stdlib/node/net/include'])
 
-  const server = netPackage.compilerPackage.nativeTypes?.find(
-    (nativeType) => nativeType.typeId === 'node:net#Server'
-  )
-  const socket = netPackage.compilerPackage.nativeTypes?.find(
-    (nativeType) => nativeType.typeId === 'node:net#Socket'
-  )
+  const server = netPackage.compilerPackage.nativeTypes?.find((nativeType) => nativeType.typeId === 'node:net#Server')
+  const socket = netPackage.compilerPackage.nativeTypes?.find((nativeType) => nativeType.typeId === 'node:net#Socket')
   const address = netPackage.compilerPackage.nativeTypes?.find(
     (nativeType) => nativeType.typeId === 'node:net#AddressInfo'
   )
@@ -29,9 +25,7 @@ test('entrypoint package node:net владеет native API и runtime plan', as
   assert.equal(socket?.cppType, 'NetSocket')
   assert.equal(address?.cppType, 'NetAddress')
 
-  const runtime = netPackage.compilerPackage.runtimeRequirements.find(
-    (requirement) => requirement.id === 'node:net'
-  )
+  const runtime = netPackage.compilerPackage.runtimeRequirements.find((requirement) => requirement.id === 'node:net')
 
   assert.ok(runtime)
   assert.deepEqual(runtime.cPreludeIncludes, ['inox/net.h'])

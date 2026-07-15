@@ -20,6 +20,7 @@ export const compilerAnyNodeStringFields: readonly string[] = [
   'promiseValueType',
   'promiseRejectionValueType',
   'promiseRejectionIntrinsicRole',
+  'setElementType',
   'propertyValueType',
   'libraryBindingId',
   'libraryOperationId',
@@ -30,13 +31,6 @@ export const compilerAnyNodeStringFields: readonly string[] = [
   'libraryCFailureMode',
   'libraryCResultMode',
   'libraryCReceiverAdapter',
-  'libraryCIteratorMethod',
-  'libraryCIteratorNextMethod',
-  'libraryCIteratorDoneMember',
-  'libraryCIteratorValueMember',
-  'libraryCIteratorReceiverAdapter',
-  'libraryCIteratorValueAdapter',
-  'libraryCIteratorFailureMode',
   'libraryCExpression',
   'libraryCLowering',
   'libraryCClassFormatExpression',
@@ -53,6 +47,7 @@ export const compilerAnyNodeStringFields: readonly string[] = [
   'returnMapKeyType',
   'returnMapValueType',
   'returnPromiseValueType',
+  'returnSetElementType',
   'className',
   'collectionKind',
   'constraint',
@@ -103,7 +98,6 @@ export const compilerAnyNodeArrayFields: readonly string[] = [
   'path',
   'properties',
   'specifiers',
-  'typeArguments',
   'typeParameters'
 ]
 

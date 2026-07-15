@@ -14,6 +14,7 @@ export type CRuntimePreludeRequirements = {
   needsStringHeader: boolean
   needsCollectionRuntime: boolean
   needsMapRuntime: boolean
+  needsSetRuntime: boolean
   needsObjectRuntime: boolean
   runtimeEntrypointAdapter: RuntimeEntrypointAdapterDescriptor | null
   libraryCPreludeIncludes: string[]
@@ -48,8 +49,10 @@ export function resolveCRuntimePreludeRequirements(
     irProgramsUseArrayIsArray(input.irPrograms) ||
     irProgramsUseArrayIncludes(input.irPrograms) ||
     signatureRuntimeTypes.has('array') ||
-    signatureRuntimeTypes.has('map')
+    signatureRuntimeTypes.has('map') ||
+    signatureRuntimeTypes.has('set')
   const needsMapRuntime = signatureRuntimeTypes.has('map') || irProgramsUseCollectionKind(input.irPrograms, 'map')
+  const needsSetRuntime = signatureRuntimeTypes.has('set') || irProgramsUseCollectionKind(input.irPrograms, 'set')
   const needsClassRuntime = input.classDescriptorCount > 0
   const needsClassDescriptorRuntime = needsClassRuntime
   const needsCppValueRuntime =
@@ -81,6 +84,7 @@ export function resolveCRuntimePreludeRequirements(
     needsStringHeader,
     needsCollectionRuntime,
     needsMapRuntime,
+    needsSetRuntime,
     needsObjectRuntime,
     runtimeEntrypointAdapter: libraryRuntime.entrypointAdapter,
     libraryCPreludeIncludes: libraryRuntime.includes,
@@ -154,13 +158,6 @@ function resolveLibraryRuntimeRequirements(
   }
 
   return { entrypointAdapter, includes, requirements }
-}
-
-export function resolveLibraryRuntimeCPreludeIncludes(
-  selected: Set<IrRuntimeRequirement>,
-  libraries: CompilerLibrarySet | null | undefined
-): string[] {
-  return resolveLibraryRuntimeRequirements(selected, libraries).includes
 }
 
 function findRuntimeRequirementDescriptor(
@@ -270,6 +267,10 @@ function nodeIsCollectionConstructor(value: AnyNode, kind: string): boolean {
 
   if (kind === 'map') {
     return callee.path[0] === 'Map'
+  }
+
+  if (kind === 'set') {
+    return callee.path[0] === 'Set'
   }
 
   return false

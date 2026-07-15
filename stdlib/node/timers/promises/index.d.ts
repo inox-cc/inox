@@ -1,2 +1,2 @@
-declare const timersPromises: unknown;
-export default timersPromises;
+declare const timersPromises: unknown
+export default timersPromises

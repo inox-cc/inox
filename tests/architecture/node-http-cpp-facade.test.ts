@@ -22,9 +22,6 @@ test('node:http использует declarations-only JS-shaped Value facade б
 
   assert.doesNotMatch(header, /\)\s*const\s*\{|\)\s*\{/)
   assert.doesNotMatch(header, /\bstruct\b|\bvoid\s*\*|\btypedef\b|\b[a-zA-Z_][\w:<>]*\s*\*/)
-  assert.doesNotMatch(
-    header,
-    /\b(?:raw|create|onRequest|localPort|methodEquals|urlEquals|text|sendFsFile)\s*\(/
-  )
+  assert.doesNotMatch(header, /\b(?:raw|create|onRequest|localPort|methodEquals|urlEquals|text|sendFsFile)\s*\(/)
   assert.doesNotMatch(native, /inox\/(?:fs|buffer)\.h|\bfs\.|\bBuffer\b/)
 })

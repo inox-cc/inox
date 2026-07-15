@@ -14,20 +14,11 @@ test('CLI получает aliases и значения options только из
   await writeFile(input, 'console.log(Math.random())\n')
 
   try {
-    const selected = runCli(defaultCompilerLibrarySet, [
-      input,
-      '--random-backend',
-      'xorshift32',
-      '--random-seed',
-      '7'
-    ])
+    const selected = runCli(defaultCompilerLibrarySet, [input, '--random-backend', 'xorshift32', '--random-seed', '7'])
 
     assert.equal(selected.exitCode, 0)
     assert.equal(selected.errors.length, 0)
-    assert.match(
-      selected.output,
-      /MathObject Math\(0x00000007u, true, MathRandomBackend::Xorshift32\);/
-    )
+    assert.match(selected.output, /MathObject Math\(0x00000007u, true, MathRandomBackend::Xorshift32\);/)
 
     const missing = runCli(emptyCompilerLibrarySet, [input, '--random-seed', '7'])
 

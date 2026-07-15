@@ -32,10 +32,7 @@ function bridgeOperation(libraryId: string, operationId: string): LibraryOperati
   }
 }
 
-function operationOnlyLibrary(
-  id: string,
-  operation: LibraryOperationDescriptor
-): CompilerLibraryDescriptor {
+function operationOnlyLibrary(id: string, operation: LibraryOperationDescriptor): CompilerLibraryDescriptor {
   return {
     id,
     dependencies: [],

@@ -18,10 +18,9 @@ test('runtime requirement references принимают core и объявлен
     /native type node:fixture#Value references unknown runtime requirement global:missing/
   )
 
-  assert.doesNotThrow(() => createCompilerLibrarySet([
-    binaryLibrary(),
-    consumerLibrary(['global:binary', 'managed-values'], ['global:binary'])
-  ]))
+  assert.doesNotThrow(() =>
+    createCompilerLibrarySet([binaryLibrary(), consumerLibrary(['global:binary', 'managed-values'], ['global:binary'])])
+  )
 })
 
 function binaryLibrary(): CompilerLibraryDescriptor {
@@ -62,10 +61,7 @@ function consumerWithNativeRequirement(requirement: string): CompilerLibraryDesc
   return library
 }
 
-function consumerLibrary(
-  dependencies: string[],
-  operationRequirements: string[]
-): CompilerLibraryDescriptor {
+function consumerLibrary(dependencies: string[], operationRequirements: string[]): CompilerLibraryDescriptor {
   return {
     id: 'node:fixture',
     dependencies: dependencies.includes('global:binary') ? ['global:binary'] : [],
@@ -73,15 +69,18 @@ function consumerLibrary(
     options: [],
     runtimeInitializers: [],
     nativeTypes: [],
-    operations: operationRequirements.length === 0 ? [] : [
-      {
-        libraryId: 'node:fixture',
-        bindingId: 'node:fixture#run',
-        operationId: 'node:fixture#run',
-        kind: 'call',
-        runtimeRequirements: operationRequirements
-      }
-    ],
+    operations:
+      operationRequirements.length === 0
+        ? []
+        : [
+            {
+              libraryId: 'node:fixture',
+              bindingId: 'node:fixture#run',
+              operationId: 'node:fixture#run',
+              kind: 'call',
+              runtimeRequirements: operationRequirements
+            }
+          ],
     intrinsicBindings: [],
     runtimeRequirements: [
       {

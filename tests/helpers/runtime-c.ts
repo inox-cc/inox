@@ -6,10 +6,7 @@ import { join } from 'node:path'
 import { createServer } from 'node:tls'
 import { fileURLToPath } from 'node:url'
 import { compileSource } from '../../compiler/compiler.ts'
-import {
-  collectStdlibNativeIncludeArgs,
-  collectStdlibNativeSources
-} from '../../scripts/lib/stdlib-native-files.ts'
+import { collectStdlibNativeIncludeArgs, collectStdlibNativeSources } from '../../scripts/lib/stdlib-native-files.ts'
 
 export type CommandResult = {
   code: number
@@ -28,10 +25,7 @@ const cxxGeneratedCompileArgs = ['-std=c++20']
 const defaultRuntimeArchiveEnv = 'INOX_TEST_RUNTIME_ARCHIVE'
 const weakRuntimeArchiveEnv = 'INOX_TEST_RUNTIME_ARCHIVE_WEAK'
 const runtimeArchiveRoot = join(repoRoot, 'dist/test-runtime')
-const runtimeBaseIncludeArgs = [
-  '-Iruntime/include',
-  '-Iruntime/src/async'
-]
+const runtimeBaseIncludeArgs = ['-Iruntime/include', '-Iruntime/src/async']
 const runtimeBaseSources = [
   'runtime/src/core/value.c',
   'runtime/src/core/allocator.c',
@@ -78,7 +72,15 @@ export async function compileRuntimeProgram(
   const archive = preparedRuntimeArchiveForArgs(extraArgs)
 
   if (archive) {
-    return await runCommand('c++', [...cxxGeneratedCompileArgs, ...includeArgs, ...extraArgs, source, archive, '-o', output])
+    return await runCommand('c++', [
+      ...cxxGeneratedCompileArgs,
+      ...includeArgs,
+      ...extraArgs,
+      source,
+      archive,
+      '-o',
+      output
+    ])
   }
 
   const runtimeObjects = await compileRuntimeObjectFiles(output, includeArgs, extraArgs)
@@ -111,10 +113,15 @@ async function compileRuntimeObjectFiles(
 
   for (const source of await runtimeSources()) {
     const object = join(objectDir, runtimeObjectName(source))
-    const compile = await runCommand(
-      'cc',
-      [...runtimeSourceCompileArgs(source), ...includeArgs, ...compileArgs, '-c', source, '-o', object]
-    )
+    const compile = await runCommand('cc', [
+      ...runtimeSourceCompileArgs(source),
+      ...includeArgs,
+      ...compileArgs,
+      '-c',
+      source,
+      '-o',
+      object
+    ])
 
     if (compile.code !== 0) {
       return {
@@ -158,10 +165,15 @@ async function prepareRuntimeArchive(variant: RuntimeArchiveVariant): Promise<st
 
   for (const source of sources) {
     const object = join(objectDir, runtimeObjectName(source))
-    const compile = await runCommand(
-      'cc',
-      [...runtimeSourceCompileArgs(source), ...includeArgs, ...compileArgs, '-c', source, '-o', object]
-    )
+    const compile = await runCommand('cc', [
+      ...runtimeSourceCompileArgs(source),
+      ...includeArgs,
+      ...compileArgs,
+      '-c',
+      source,
+      '-o',
+      object
+    ])
 
     assert.equal(
       compile.code,

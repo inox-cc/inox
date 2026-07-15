@@ -1,10 +1,6 @@
 import type { AnyNode, IrFeature, IrProgram, IrRuntimeRequirement } from '../types.ts'
 import { collectCoreRuntimeIrFeatures, coreRuntimeFeatures } from './core-runtime/index.ts'
-import {
-  collectNodeStdlibIrFeatures,
-  nodeStdlibFeatureChildNodes,
-  nodeStdlibFeatures
-} from '../stdlib/node/feature.ts'
+import { collectNodeStdlibIrFeatures, nodeStdlibFeatureChildNodes, nodeStdlibFeatures } from '../stdlib/node/feature.ts'
 import {
   collectGlobalStdlibIrFeatures,
   emitGlobalStdlibCPreludeHelpers,
@@ -190,7 +186,11 @@ function createCompilerRuntimeRequirementOrder(): IrRuntimeRequirement[] {
   const result: IrRuntimeRequirement[] = []
   const seen: Set<IrRuntimeRequirement> = new Set()
 
-  for (let descriptorIndex = 0; descriptorIndex < compilerFeatureDescriptors.length; descriptorIndex = descriptorIndex + 1) {
+  for (
+    let descriptorIndex = 0;
+    descriptorIndex < compilerFeatureDescriptors.length;
+    descriptorIndex = descriptorIndex + 1
+  ) {
     const descriptor = compilerFeatureDescriptorAt(descriptorIndex)
 
     for (

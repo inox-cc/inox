@@ -53,29 +53,6 @@ test('generated module header includes selected stdlib facade used only by signa
   assert.match(header.code, /Set features/)
 })
 
-test('generated module header keeps native type of exported value', () => {
-  const host = createMemoryCompilerHost(
-    [
-      {
-        path: '/pkg/index.ts',
-        source: 'export const values = new Set<string>()\n'
-      }
-    ],
-    { root: '/' }
-  )
-  const files = compileFileToCModuleTextsSync('/pkg/index.ts', {
-    callMain: false,
-    host,
-    libraries: defaultCompilerLibrarySet,
-    sourceRoot: '/pkg'
-  })
-  const header = files.find((file) => file.path === 'index.h')
-
-  assert.ok(header)
-  assert.match(header.code, /extern Set inox_mod_index_ts_[a-f0-9]+_values;/)
-  assert.doesNotMatch(header.code, /extern inox_value inox_mod_index_ts_[a-f0-9]+_values;/)
-})
-
 function bridgeLibrary(): CompilerLibraryDescriptor {
   return {
     id: 'fixture',

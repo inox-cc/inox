@@ -37,7 +37,16 @@ console.log('url')
 console.log(page.hostname)
 console.log(page.pathname)
 console.log(params.toString())
-console.log('os-process:' + String(os.tmpdir().length > 0) + '/' + String(platform().length > 0) + '/' + String(process.argv.length > 0) + '/' + String(process.env.PATH.length > 0))
+console.log(
+  'os-process:' +
+    String(os.tmpdir().length > 0) +
+    '/' +
+    String(platform().length > 0) +
+    '/' +
+    String(process.argv.length > 0) +
+    '/' +
+    String(process.env.PATH.length > 0)
+)
 console.log('fs:' + syncText + '/' + asyncText)
 console.log('child:' + execFileSync('/bin/echo', ['child'], { encoding: 'utf8' }).trim())
 

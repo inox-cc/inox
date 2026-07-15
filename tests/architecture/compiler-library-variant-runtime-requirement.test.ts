@@ -4,10 +4,7 @@ import { test } from 'node:test'
 import { compileSource } from '../../compiler/core.ts'
 import { CompileError } from '../../compiler/diagnostics.ts'
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
-import type {
-  CompilerLibraryDescriptor,
-  LibraryOperationVariantDescriptor
-} from '../../compiler/extensions/types.ts'
+import type { CompilerLibraryDescriptor, LibraryOperationVariantDescriptor } from '../../compiler/extensions/types.ts'
 
 type RuntimeVariant = LibraryOperationVariantDescriptor & {
   runtimeRequirements: string[]
@@ -16,10 +13,7 @@ type RuntimeVariant = LibraryOperationVariantDescriptor & {
 test('вариант операции выбирает собственные runtime requirements и capabilities', () => {
   const libraries = createCompilerLibrarySet([variantLibrary()])
 
-  assert.notEqual(
-    libraries.fingerprint,
-    createCompilerLibrarySet([variantLibrary('fixture:base')]).fingerprint
-  )
+  assert.notEqual(libraries.fingerprint, createCompilerLibrarySet([variantLibrary('fixture:base')]).fingerprint)
   assert.throws(
     () => createCompilerLibrarySet([variantLibrary('fixture:missing')]),
     /unknown runtime requirement fixture:missing/
@@ -29,8 +23,8 @@ test('вариант операции выбирает собственные ru
     () => compileSource('clockProbe()\n', { libraries, profile: 'embedded' }),
     (error: unknown) =>
       error instanceof CompileError &&
-      error.diagnostics.some((diagnostic) =>
-        diagnostic.code === 'INOX_CAPABILITY' && diagnostic.message.includes('fixture:wall-clock')
+      error.diagnostics.some(
+        (diagnostic) => diagnostic.code === 'INOX_CAPABILITY' && diagnostic.message.includes('fixture:wall-clock')
       )
   )
 

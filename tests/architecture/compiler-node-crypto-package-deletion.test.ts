@@ -63,7 +63,10 @@ async function createFixture(): Promise<void> {
     resolve(fixtureRoot, 'stdlib/global/crypto/compiler/index.ts'),
     "export const compilerLibraryPackage = { id: 'global:crypto', dependencies: [], operations: [{ libraryId: 'global:crypto', bindingId: 'global:crypto.getRandomValues', operationId: 'global:crypto#getRandomValues', kind: 'call', runtimeRequirements: ['global:crypto'], cExpression: 'crypto.getRandomValues', cArgumentKinds: ['value'], cppType: 'Uint8Array', valueType: 'bytes' }], intrinsicBindings: [], runtimeRequirements: [{ id: 'global:crypto', dependencies: [], cPreludeIncludes: ['inox/crypto.h'], capabilities: ['entropy'] }] }\n"
   )
-  await writeFile(resolve(fixtureRoot, 'stdlib/node/crypto/index.d.ts'), 'export function randomBytes(size: number): Uint8Array;\n')
+  await writeFile(
+    resolve(fixtureRoot, 'stdlib/node/crypto/index.d.ts'),
+    'export function randomBytes(size: number): Uint8Array;\n'
+  )
   await writeFile(
     resolve(fixtureRoot, 'stdlib/node/crypto/compiler/index.ts'),
     "export const compilerLibraryPackage = { id: 'node:crypto', dependencies: ['global:crypto'], operations: [{ libraryId: 'node:crypto', bindingId: 'node:crypto#module:node:crypto:randomBytes', operationId: 'node:crypto#randomBytes', kind: 'call', runtimeRequirements: ['node:crypto'], cExpression: 'crypto.randomBytes', cArgumentKinds: ['number'], cppType: 'Buffer', valueType: 'bytes' }], intrinsicBindings: [], runtimeRequirements: [{ id: 'node:crypto', dependencies: [], cPreludeIncludes: ['inox/crypto.h'], capabilities: [] }] }\n"

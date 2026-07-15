@@ -45,12 +45,7 @@ test('entrypoint package node:timers владеет native handles и runtime pl
   )
 
   assert.ok(runtime)
-  assert.deepEqual(runtime.dependencies, [
-    'async-runtime',
-    'callback-values',
-    'managed-values',
-    'objects'
-  ])
+  assert.deepEqual(runtime.dependencies, ['async-runtime', 'callback-values', 'managed-values', 'objects'])
   assert.deepEqual(runtime.cPreludeIncludes, ['inox/timers.h'])
   assert.deepEqual(runtime.capabilities, ['timers'])
   assert.deepEqual(runtime.backendConstraints ?? [], [])

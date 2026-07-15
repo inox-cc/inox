@@ -2,10 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { resolveCRuntimePreludeRequirements } from '../../compiler/c/runtime-plan.ts'
-import type {
-  CompilerLibrarySet,
-  RuntimeRequirementDescriptor
-} from '../../compiler/extensions/types.ts'
+import type { CompilerLibrarySet, RuntimeRequirementDescriptor } from '../../compiler/extensions/types.ts'
 
 test('runtime plan selects a package-provided entrypoint adapter', () => {
   const requirements = resolveCRuntimePreludeRequirements({
@@ -32,25 +29,26 @@ test('runtime plan selects a package-provided entrypoint adapter', () => {
 
 test('runtime plan rejects multiple different entrypoint adapters', () => {
   assert.throws(
-    () => resolveCRuntimePreludeRequirements({
-      classDescriptorCount: 0,
-      cppValueRuntime: false,
-      globalUsages: [],
-      hasRuntimeCallbackWrapper: false,
-      irPrograms: [],
-      libraries: librarySet([
-        runtimeRequirement('first', {
-          cFunction: 'inox::first_main',
-          acceptsEntryPath: false
-        }),
-        runtimeRequirement('second', {
-          cFunction: 'inox::second_main',
-          acceptsEntryPath: false
-        })
-      ]),
-      runtimeRequirements: new Set(['first', 'second']),
-      throwingFunctionCount: 0
-    }),
+    () =>
+      resolveCRuntimePreludeRequirements({
+        classDescriptorCount: 0,
+        cppValueRuntime: false,
+        globalUsages: [],
+        hasRuntimeCallbackWrapper: false,
+        irPrograms: [],
+        libraries: librarySet([
+          runtimeRequirement('first', {
+            cFunction: 'inox::first_main',
+            acceptsEntryPath: false
+          }),
+          runtimeRequirement('second', {
+            cFunction: 'inox::second_main',
+            acceptsEntryPath: false
+          })
+        ]),
+        runtimeRequirements: new Set(['first', 'second']),
+        throwingFunctionCount: 0
+      }),
     /multiple entrypoint adapters/
   )
 })

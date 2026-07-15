@@ -3,6 +3,6 @@
 // @stdout 42
 
 function score(): number {
-return 42
+  return 42
 }
 console.log(score())

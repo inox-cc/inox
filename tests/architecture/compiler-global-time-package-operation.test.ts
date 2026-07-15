@@ -18,7 +18,8 @@ test('global:time владеет Date, performance, native value и runtime plan
   assert.equal(time.compilerPackage?.operations.length, 30)
 
   const libraries = createCompilerLibrarySetFromDiscovered(discovered)
-  const result = compileSource(`
+  const result = compileSource(
+    `
     const timestamp = Date.now()
     const parsed = Date.parse('2026-06-24T12:34:56.789Z')
     const utc = Date.UTC(2026, 5, 24)
@@ -26,7 +27,9 @@ test('global:time владеет Date, performance, native value и runtime plan
     const year = date.getUTCFullYear()
     const text = date.toISOString()
     const tick = performance.now()
-  `, { libraries })
+  `,
+    { libraries }
+  )
   const timestamp = result.ir.body[0].init
   const parsed = result.ir.body[1].init
   const utc = result.ir.body[2].init

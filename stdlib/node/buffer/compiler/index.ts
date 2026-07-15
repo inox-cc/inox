@@ -40,16 +40,10 @@ const operations: LibraryOperationDescriptor[] = [
   receiverMemberRead('length', 'length', numberTypeRef, null),
   receiverIndexRead(),
   receiverIndexWrite(),
-  receiverCall(
-    'slice',
-    ['receiver', 'number', 'optional-number'],
-    'slice',
-    bufferTypeRef,
-    null,
-    1,
-    2,
-    [numberArgument(), numberArgument()]
-  ),
+  receiverCall('slice', ['receiver', 'number', 'optional-number'], 'slice', bufferTypeRef, null, 1, 2, [
+    numberArgument(),
+    numberArgument()
+  ]),
   bufferToStringOperation(),
   ...unsupportedCalls().map((name) => unsupportedOperation(name, 'call')),
   ...unsupportedConstructors().map((name) => unsupportedOperation(name, 'construct')),
@@ -84,39 +78,20 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
 
 function bufferFromOperation(): LibraryOperationDescriptor {
   return {
-    ...staticCall(
-      'from',
-      ['string-view'],
-      'Buffer::from',
-      bufferTypeRef,
-      null,
-      1,
-      2,
-      [stringArgument(), utf8Argument('Buffer.from')]
-    ),
-    variants: [
-      staticVariant(1, 1, ['string-view']),
-      staticVariant(2, 2, ['string-view', 'string-view'])
-    ]
+    ...staticCall('from', ['string-view'], 'Buffer::from', bufferTypeRef, null, 1, 2, [
+      stringArgument(),
+      utf8Argument('Buffer.from')
+    ]),
+    variants: [staticVariant(1, 1, ['string-view']), staticVariant(2, 2, ['string-view', 'string-view'])]
   }
 }
 
 function bufferToStringOperation(): LibraryOperationDescriptor {
   return {
-    ...receiverCall(
-      'toString',
-      ['receiver'],
-      'toString',
-      stringTypeRef,
-      stringCResultMapping,
-      0,
-      1,
-      [utf8Argument('Buffer.toString')]
-    ),
-    variants: [
-      receiverVariant(0, 0, ['receiver']),
-      receiverVariant(1, 1, ['receiver', 'string-view'])
-    ]
+    ...receiverCall('toString', ['receiver'], 'toString', stringTypeRef, stringCResultMapping, 0, 1, [
+      utf8Argument('Buffer.toString')
+    ]),
+    variants: [receiverVariant(0, 0, ['receiver']), receiverVariant(1, 1, ['receiver', 'string-view'])]
   }
 }
 
@@ -275,10 +250,7 @@ function constantOperation(): LibraryOperationDescriptor {
   return {
     libraryId,
     bindingId: moduleBinding('constants.MAX_LENGTH'),
-    bindingAliases: [
-      defaultBinding('constants.MAX_LENGTH'),
-      namedModuleObjectBinding('constants.MAX_LENGTH')
-    ],
+    bindingAliases: [defaultBinding('constants.MAX_LENGTH'), namedModuleObjectBinding('constants.MAX_LENGTH')],
     operationId: `${libraryId}#constants.MAX_LENGTH`,
     kind: 'member-read',
     runtimeRequirements: [runtimeRequirement],
@@ -332,11 +304,7 @@ function primitiveTypeRef(name: 'boolean' | 'number' | 'string'): PrimitiveTypeR
 }
 
 function staticBindingAliases(name: string): string[] {
-  return [
-    moduleBinding(`Buffer.${name}`),
-    defaultBinding(`Buffer.${name}`),
-    namedModuleObjectBinding(`Buffer.${name}`)
-  ]
+  return [moduleBinding(`Buffer.${name}`), defaultBinding(`Buffer.${name}`), namedModuleObjectBinding(`Buffer.${name}`)]
 }
 
 function moduleBinding(path: string): string {
@@ -356,14 +324,7 @@ function receiverBinding(name: string): string {
 }
 
 function unsupportedCalls(): string[] {
-  return [
-    'atob',
-    'btoa',
-    'isAscii',
-    'isUtf8',
-    'resolveObjectURL',
-    'transcode'
-  ]
+  return ['atob', 'btoa', 'isAscii', 'isUtf8', 'resolveObjectURL', 'transcode']
 }
 
 function unsupportedConstructors(): string[] {

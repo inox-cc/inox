@@ -50,7 +50,10 @@ async function createFixture(): Promise<void> {
   await mkdir(resolve(fixtureRoot, 'stdlib/node/url/src'), { recursive: true })
   await mkdir(resolve(fixtureRoot, 'stdlib/node/url/include'), { recursive: true })
   await mkdir(resolve(fixtureRoot, 'stdlib/node/os'), { recursive: true })
-  await writeFile(resolve(fixtureRoot, 'stdlib/node/url/index.d.ts'), 'export function pathToFileURL(path: string): object;\n')
+  await writeFile(
+    resolve(fixtureRoot, 'stdlib/node/url/index.d.ts'),
+    'export function pathToFileURL(path: string): object;\n'
+  )
   await writeFile(resolve(fixtureRoot, 'stdlib/node/url/src/url.cc'), 'int url_fixture = 0;\n')
   await writeFile(
     resolve(fixtureRoot, 'stdlib/node/url/compiler/index.ts'),

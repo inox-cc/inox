@@ -12,10 +12,7 @@ test('node:net передаёт error listeners объект с readonly message
   assert.match(source, /inox::Value\s+materializeNetError\([^)]*\)/)
   assert.match(source, /\{"message",\s*INOX_FIELD_READONLY\}/)
   assert.match(source, /ObjectValue::create\(&shape\)/)
-  assert.match(
-    source,
-    /reportError\([^)]*\)\s*\{[\s\S]*materializeNetError\([^)]*\)[\s\S]*callListeners\([^;]*error\)/
-  )
+  assert.match(source, /reportError\([^)]*\)\s*\{[\s\S]*materializeNetError\([^)]*\)[\s\S]*callListeners\([^;]*error\)/)
   assert.equal(source.match(/materializeNetError\(error_message\)/g)?.length, 2)
 
   for (const consumer of tlsConsumers) {

@@ -1,12 +1,7 @@
 import { diagnostic } from '../diagnostics.ts'
 import type { AnyNode, Diagnostic, ObjectShapeInfo, SourceLocation, SymbolInfo, ValueType } from '../types.ts'
 import { isAssignableType } from './assignability.ts'
-import {
-  acceptsArgumentCount,
-  argumentCountMessage,
-  argumentParamValueType,
-  paramForArgument
-} from './helpers.ts'
+import { acceptsArgumentCount, argumentCountMessage, argumentParamValueType, paramForArgument } from './helpers.ts'
 import { callExpressionArgumentLabel } from './expression-helpers.ts'
 
 export type CallableSymbolCheckerContext = {
@@ -102,6 +97,13 @@ export function applyCallableSymbolCall(
     returnPromiseValueType = symbolReturnPromiseValueType
   }
 
+  let returnSetElementType: ValueType | null = null
+  const symbolReturnSetElementType = symbol.returnSetElementType ?? null
+
+  if (symbolReturnSetElementType !== null && typeof symbolReturnSetElementType !== 'undefined') {
+    returnSetElementType = symbolReturnSetElementType
+  }
+
   let returnShape: ObjectShapeInfo | null = null
   const symbolReturnShape = symbol.returnShape
 
@@ -110,13 +112,13 @@ export function applyCallableSymbolCall(
   }
 
   expression.valueType = returnType
-  expression.typeRef = symbol.returnTypeRef ?? null
   expression.nullable = symbol.returnNullable === true
   expression.arrayElementType = returnArrayElementType
   expression.arrayElementDeclaredType = returnArrayElementDeclaredType
   expression.mapKeyType = returnMapKeyType
   expression.mapValueType = returnMapValueType
   expression.promiseValueType = returnPromiseValueType
+  expression.setElementType = returnSetElementType
   if (returnShape !== null) {
     expression.shape = returnShape
   } else if (expression.shape === null || typeof expression.shape === 'undefined') {
@@ -142,12 +144,7 @@ export function applyCallableSymbolCall(
     const param = paramForArgument(params, index)
     const argInfo = argInfos[index]
 
-    if (
-      param !== null &&
-      typeof param !== 'undefined' &&
-      argInfo !== null &&
-      typeof argInfo !== 'undefined'
-    ) {
+    if (param !== null && typeof param !== 'undefined' && argInfo !== null && typeof argInfo !== 'undefined') {
       checkAssignableType(
         context,
         argInfo.valueType,
@@ -185,12 +182,7 @@ function selectCallableOverload(
       if (
         param === null ||
         typeof param === 'undefined' ||
-        !isAssignableType(
-          argInfo.valueType,
-          argumentParamValueType(param),
-          param.nullable === true,
-          argInfo.nullable
-        )
+        !isAssignableType(argInfo.valueType, argumentParamValueType(param), param.nullable === true, argInfo.nullable)
       ) {
         accepts = false
         break

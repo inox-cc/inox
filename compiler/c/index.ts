@@ -3,8 +3,6 @@ import { collectIrLocalThrowValueTypes, collectIrPrograms } from '../ir.ts'
 import type { IrLocalThrowValueTypeOptions } from '../ir/effects.ts'
 import type { IrModuleRecord } from '../ir/top-level.ts'
 import { memberExpressionPath } from '../member-paths.ts'
-import { resolveCompilerLibrarySet } from '../extensions/library-set.ts'
-import type { CompilerLibrarySet } from '../extensions/types.ts'
 import type {
   AnyNode,
   Diagnostic,
@@ -22,7 +20,6 @@ import {
   callbackContextWrapperContextTypeName,
   callbackContextWrapperFinalizerName,
   callbackContextWrapperNeedsEventLoop,
-  collectFunctionPointerParamNames,
   emitFunctionPointerParams,
   emitFunctionPointerReturnType,
   emitRuntimeArrowCallbackContextFinalizerDeclaration,
@@ -31,16 +28,13 @@ import {
   functionUsesExternalEventLoop,
   hasRuntimeArrowCallbackContext,
   isNullableFunctionType,
-  isPlainObjectFunctionField,
   isPlainFunctionPointerType,
   isPromiseChainCallbackWrapperWithContext,
   isRetainedRuntimeArrowCapture,
-  isRuntimeObjectFunctionField,
   isRuntimeFunctionType,
   isSupportedMutableRuntimeArrowCapture,
   isSupportedRuntimeCallbackType,
   normalizeFunctionType,
-  registerFunctionPointerRuntimeAdapter,
   resolveRuntimeFunctionArgumentType,
   runtimeCallbackWrapperFor
 } from './async/callbacks.ts'
@@ -167,8 +161,7 @@ import {
   isManagedRuntimeReturnType,
   isNullableScalarType,
   isOpaqueRuntimeValueType,
-  isRuntimeNullableType,
-  libraryNativeCppType
+  isRuntimeNullableType
 } from './value-types.ts'
 import type { ArrayLoweringDependencies, PreparedArrayExpression } from './values/arrays.ts'
 import {
@@ -234,7 +227,9 @@ import {
   isCollectionConstructorExpression,
   resolveRuntimeForOfMap,
   resolveRuntimeForOfMapValues,
-  resolveRuntimeMapType
+  resolveRuntimeForOfSet,
+  resolveRuntimeMapType,
+  resolveRuntimeSetElementType
 } from './values/collections.ts'
 import {
   emitCExpression as emitCExpressionWithDependencies,
@@ -379,6 +374,7 @@ type CKnownArrayIndexDeclaration = {
   functionType?: CFunctionType | null
   mapKeyType?: string | null
   mapValueType?: string | null
+  setElementType?: string | null
 }
 type RuntimeLogGetSource =
   | {
@@ -547,6 +543,7 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   resolveRuntimeForOfMap,
   resolveRuntimeForOfMapValues,
   resolveRuntimeStringReference,
+  resolveRuntimeForOfSet,
   emitBoxedRuntimeValueAssignment
 }
 
@@ -900,6 +897,7 @@ const asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies = {
   resolveRuntimeArrayElementType,
   resolveRuntimeArrayIndex,
   resolveRuntimeMapType,
+  resolveRuntimeSetElementType,
   resolveRuntimeStringReference,
   restoreVariableScope: (context, snapshot) => restoreVariableScope(context as CFunctionContext, snapshot as any)
 }
@@ -954,7 +952,6 @@ const cCallExpressionDependencies = {
   emitCValueExpression,
   emitObjectValueReference,
   emitFunctionPointerAdapter,
-  emitFunctionPointerRuntimeCallbackValue,
   emitFunctionValueExpression,
   emitNullableFunctionValueExpression,
   emitNullableScalarValueExpression,
@@ -1219,13 +1216,8 @@ export function emitCModuleFilesFromGraph(graph: ModuleGraph, options: CModuleEm
   return emitCModuleFilesFromGraphWithEmitters(graph, options, emitters)
 }
 
-function emitCModuleHeaderForGraph(
-  plan: CModulePlan,
-  plans: CModulePlan[],
-  emitOptions: CModuleEmitOptions,
-  diagnostics: Diagnostic[]
-): string {
-  return emitCModuleHeaderWithDependencies(plan, plans, emitOptions, diagnostics, cModuleEmissionDependencies)
+function emitCModuleHeaderForGraph(plan: CModulePlan, plans: CModulePlan[], diagnostics: Diagnostic[]): string {
+  return emitCModuleHeaderWithDependencies(plan, plans, diagnostics, cModuleEmissionDependencies)
 }
 
 function emitCModuleSourceForGraph(
@@ -1312,8 +1304,7 @@ function createBaseContext(
   functionDeclarations: IrFunctionDeclaration[],
   functionEffects: IrFunctionEffect[],
   jsGlobalRoots: CNameSet,
-  topLevelNodes: CAccessorNode[],
-  libraries?: CompilerLibrarySet
+  topLevelNodes: CAccessorNode[]
 ): CEmitContext {
   const throwing = createThrowingFunctionInfo(functionDeclarations, functionEffects)
   const functionNames: CStringMap = new Map()
@@ -1325,6 +1316,7 @@ function createBaseContext(
   const functionReturnNullables: Map<string, boolean> = new Map()
   const functionReturnPromiseValueTypes: Map<string, any> = new Map()
   const functionReturnShapes: Map<string, any> = new Map()
+  const functionReturnSetElementTypes: Map<string, any> = new Map()
   const functionReturnTypes: CStringMap = new Map()
   const functionAsyncFlags: Map<string, boolean> = new Map()
   const objectAccessorReturnPaths = collectObjectAccessorReturnPaths(topLevelNodes)
@@ -1335,6 +1327,7 @@ function createBaseContext(
     let returnArrayElementDeclaredType: string | null = null
     let returnPromiseValueType: string | null = null
     let returnShape: CObjectShape | null = null
+    let returnSetElementType: string | null = null
 
     if (item.returnArrayElementType !== null && typeof item.returnArrayElementType !== 'undefined') {
       returnArrayElementType = item.returnArrayElementType
@@ -1350,6 +1343,10 @@ function createBaseContext(
 
     if (item.returnShape !== null && typeof item.returnShape !== 'undefined') {
       returnShape = item.returnShape
+    }
+
+    if (item.returnSetElementType !== null && typeof item.returnSetElementType !== 'undefined') {
+      returnSetElementType = item.returnSetElementType
     }
 
     const returnMapType: CFunctionReturnMapType = {
@@ -1374,6 +1371,7 @@ function createBaseContext(
     functionReturnNullables.set(item.name, item.returnNullable === true)
     functionReturnPromiseValueTypes.set(item.name, returnPromiseValueType)
     functionReturnShapes.set(item.name, returnShape)
+    functionReturnSetElementTypes.set(item.name, returnSetElementType)
     functionReturnTypes.set(item.name, item.returnType)
     functionAsyncFlags.set(item.name, item.async === true)
   }
@@ -1385,6 +1383,7 @@ function createBaseContext(
     functionReturnMapTypes,
     functionReturnNullables,
     functionReturnPromiseValueTypes,
+    functionReturnSetElementTypes,
     functionReturnShapes,
     functionReturnTypes
   )
@@ -1408,8 +1407,6 @@ function createBaseContext(
     functionParams,
     functionPointerAdapterNames: new Map(),
     functionPointerAdapters: [],
-    functionPointerRuntimeAdapterNames: new Map(),
-    functionPointerRuntimeAdapters: [],
     functionReturnArrayElementTypes,
     functionReturnArrayElementDeclaredTypes,
     functionReturnDeclaredTypes,
@@ -1417,11 +1414,11 @@ function createBaseContext(
     functionReturnNullables,
     functionReturnPromiseValueTypes,
     functionReturnShapes,
+    functionReturnSetElementTypes,
     functionReturnTypes,
     functionAsyncFlags,
     asyncTaskWrappers: new Map(),
     jsGlobalRoots,
-    libraries: resolveCompilerLibrarySet(libraries),
     runtimeInitializerDefinitions: [],
     moduleValueNames: new Map(),
     moduleValueCppTypes: new Map(),
@@ -1448,6 +1445,7 @@ function collectModuleObjectShapes(
   functionReturnMapTypes: Map<string, CFunctionReturnMapType>,
   functionReturnNullables: Map<string, boolean>,
   functionReturnPromiseValueTypes: Map<string, any>,
+  functionReturnSetElementTypes: Map<string, any>,
   functionReturnShapes: Map<string, any>,
   functionReturnTypes: CStringMap
 ): Map<string, CObjectShapeField[]> {
@@ -1487,6 +1485,7 @@ function collectModuleObjectShapes(
           functionReturnMapTypes,
           functionReturnNullables,
           functionReturnPromiseValueTypes,
+          functionReturnSetElementTypes,
           functionReturnShapes,
           functionReturnTypes,
           result
@@ -1514,6 +1513,7 @@ function collectModuleObjectShapes(
         functionReturnMapTypes,
         functionReturnNullables,
         functionReturnPromiseValueTypes,
+        functionReturnSetElementTypes,
         functionReturnShapes,
         functionReturnTypes,
         result
@@ -1545,6 +1545,7 @@ function collectModuleObjectShapes(
       functionReturnMapTypes,
       functionReturnNullables,
       functionReturnPromiseValueTypes,
+      functionReturnSetElementTypes,
       functionReturnShapes,
       functionReturnTypes,
       result
@@ -1608,15 +1609,10 @@ function registerModuleObjectShape(
       } else {
         const existingField = existing[index]
 
-        if (field.functionStorage === 'pointer') {
-          existingField.functionStorage = 'pointer'
-        }
-
         if (shouldReplaceModuleObjectShapeField(existingField, field)) {
           existingField.valueType = field.valueType
           existingField.declaredType = field.declaredType
           existingField.functionType = field.functionType
-          existingField.functionStorage = field.functionStorage
           existingField.functionTypeOwnership = field.functionTypeOwnership
           existingField.nullable = field.nullable
           existingField.optional = field.optional
@@ -1669,7 +1665,7 @@ function shouldReplaceModuleObjectShapeField(existingField: CObjectShapeField, f
 }
 
 function isSupportedModuleObjectFunctionField(field: CObjectShapeField): boolean {
-  return isPlainObjectFunctionField(field) || isRuntimeFunctionType(field.functionType)
+  return isPlainFunctionPointerType(field.functionType) || isRuntimeFunctionType(field.functionType)
 }
 
 function moduleObjectShapeFieldScore(field: CObjectShapeField): number {
@@ -1748,6 +1744,7 @@ function collectModuleObjectLiteralShapeFields(
   functionReturnMapTypes: Map<string, CFunctionReturnMapType>,
   functionReturnNullables: Map<string, boolean>,
   functionReturnPromiseValueTypes: Map<string, any>,
+  functionReturnSetElementTypes: Map<string, any>,
   functionReturnShapes: Map<string, any>,
   functionReturnTypes: CStringMap,
   knownObjectShapes: Map<string, CObjectShapeField[]>
@@ -1800,31 +1797,20 @@ function collectModuleObjectLiteralShapeFields(
       functionReturnMapTypes,
       functionReturnNullables,
       functionReturnPromiseValueTypes,
+      functionReturnSetElementTypes,
       functionReturnShapes,
       functionReturnTypes
     )
 
     if (functionType !== null && typeof functionType !== 'undefined') {
-      let functionStorage: 'pointer' | undefined
-
-      if (
-        value.type === 'Reference' &&
-        value.path.length === 1 &&
-        functionParams.has(value.path[0])
-      ) {
-        functionStorage = 'pointer'
-        value.functionStorage = 'pointer'
-      }
-
       const field: CObjectShapeField = {
         name: property.key,
         readonlyField: false,
         valueType: 'function',
-        functionType,
-        functionTypeOwnership: 'weak',
-        functionStorage
+        functionType
       }
 
+      field.functionTypeOwnership = 'weak'
       fields.push(field)
       continue
     }
@@ -1837,6 +1823,7 @@ function collectModuleObjectLiteralShapeFields(
         functionReturnMapTypes,
         functionReturnNullables,
         functionReturnPromiseValueTypes,
+        functionReturnSetElementTypes,
         functionReturnShapes,
         functionReturnTypes,
         knownObjectShapes
@@ -1893,6 +1880,7 @@ function resolveModuleObjectFunctionType(
   functionReturnMapTypes: Map<string, CFunctionReturnMapType>,
   functionReturnNullables: Map<string, boolean>,
   functionReturnPromiseValueTypes: Map<string, any>,
+  functionReturnSetElementTypes: Map<string, any>,
   functionReturnShapes: Map<string, any>,
   functionReturnTypes: CStringMap
 ): CFunctionType | null {
@@ -1939,6 +1927,7 @@ function resolveModuleObjectFunctionType(
     returnMapValueType,
     returnNullable: functionReturnNullables.get(name) === true,
     returnPromiseValueType: functionReturnPromiseValueTypes.get(name) ?? null,
+    returnSetElementType: functionReturnSetElementTypes.get(name) ?? null,
     returnShape: functionReturnShapes.get(name) ?? null,
     returnType
   }
@@ -1974,6 +1963,7 @@ function moduleObjectArrowFunctionType(expression: CAccessorNode): CFunctionType
     returnMapValueType: expression.returnMapValueType ?? null,
     returnNullable: expression.returnNullable === true,
     returnPromiseValueType: expression.returnPromiseValueType ?? null,
+    returnSetElementType: expression.returnSetElementType ?? null,
     returnShape,
     returnType: expression.returnType ?? 'unknown'
   }
@@ -2325,54 +2315,6 @@ function emitFunctionPointerAdapter(
   return name
 }
 
-function emitFunctionPointerRuntimeCallbackValue(
-  target: string,
-  functionType: CFunctionType,
-  seenTypes: string[],
-  context: CFunctionContext,
-  loc: SourceLocation | null | undefined
-): PreparedExpression {
-  const paramNames = collectFunctionPointerParamNames(functionType, seenTypes)
-
-  if (paramNames.length !== functionType.params.length) {
-    context.diagnostics.push(
-      diagnostic(
-        'INOX_C_FUNCTION_VALUE',
-        'converting a function pointer with flattened object function fields to a runtime callback is not supported',
-        loc
-      )
-    )
-
-    return {
-      lines: [],
-      expression: 'inox_undefined_value()'
-    }
-  }
-
-  const adapter = registerFunctionPointerRuntimeAdapter(functionType, seenTypes, context)
-  const adapterContext = nextCName(context, 'inox_function_pointer_callback_context')
-  const value = nextCName(context, 'inox_function_pointer_callback')
-  const lines: string[] = []
-
-  registerOwnedValue(context, value)
-  lines.push(
-    `${adapter.contextTypeName}* ${adapterContext} = (${adapter.contextTypeName}*)inox_default_alloc(0, sizeof(${adapter.contextTypeName}), _Alignof(${adapter.contextTypeName}));`
-  )
-  lines.push(`if (${adapterContext} == 0) ${emitFailureStatement(context)}`)
-  lines.push(`${adapterContext}->target = ${target};`)
-  lines.push(
-    `if (inox_callback_new(&inox_default_allocator, ${adapter.callbackName}, ${adapterContext}, ${adapter.finalizerName}, &${value}) != INOX_OK) {`
-  )
-  lines.push(`  ${adapter.finalizerName}(${adapterContext});`)
-  lines.push(`  ${emitFailureStatement(context)}`)
-  lines.push('}')
-
-  return {
-    lines,
-    expression: value
-  }
-}
-
 function emitFunctionPointerVariable(
   name: string,
   init: AnyNode,
@@ -2439,6 +2381,7 @@ function resolveFunctionValueType(expression: AnyNode, context: CFunctionContext
         returnMapValueType,
         returnNullable: context.functionReturnNullables.get(name) === true,
         returnPromiseValueType: context.functionReturnPromiseValueTypes.get(name) ?? null,
+        returnSetElementType: context.functionReturnSetElementTypes.get(name) ?? null,
         returnShape: context.functionReturnShapes.get(name) ?? null,
         returnType
       }
@@ -2947,7 +2890,7 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
     }
   }
 
-  if (inferred === 'map') {
+  if (inferred === 'map' || inferred === 'set') {
     const collection = emitPreparedCollectionConstructorValueExpression(statement.init, context)
 
     if (collection !== null && typeof collection !== 'undefined') {
@@ -3059,10 +3002,14 @@ function emitModuleCollectionValueAssignment(
   context.variables.set(statement.name, valueType)
   context.moduleValueTypes.set(statement.name, valueType)
 
-  context.mapTypes.set(statement.name, {
-    key: stringOrUnknown(statement.mapKeyType),
-    value: stringOrUnknown(statement.mapValueType)
-  })
+  if (valueType === 'map') {
+    context.mapTypes.set(statement.name, {
+      key: stringOrUnknown(statement.mapKeyType),
+      value: stringOrUnknown(statement.mapValueType)
+    })
+  } else {
+    context.setElementTypes.set(statement.name, stringOrUnknown(statement.setElementType))
+  }
 
   const lines: string[] = []
   pushAll(lines, collection.lines)
@@ -3122,6 +3069,8 @@ function registerModuleNullableRuntimeValueMetadata(
       key: stringOrUnknown(statement.mapKeyType),
       value: stringOrUnknown(statement.mapValueType)
     })
+  } else if (valueType === 'set') {
+    context.setElementTypes.set(statement.name, stringOrUnknown(statement.setElementType))
   } else if (valueType === 'function') {
     context.functionTypes.set(statement.name, normalizeFunctionType(statement.functionType))
     context.runtimeCallbacks.add(statement.name)
@@ -3369,7 +3318,7 @@ function emitModuleObjectFunctionFieldAssignmentsFromShape(
       const value = findObjectLiteralPropertyValue(expression, field.name)
       const fieldName = emitCObjectFunctionFieldName(objectName, field.name)
 
-      if (isPlainObjectFunctionField(field)) {
+      if (isPlainFunctionPointerType(field.functionType)) {
         if (value === null || typeof value === 'undefined') {
           lines.push(`${fieldName} = 0;`)
         } else {
@@ -3590,7 +3539,7 @@ function emitModuleObjectFunctionFieldCopyAssignment(
     sourceField.valueType !== 'function' ||
     !isSupportedModuleObjectFunctionField(sourceField)
   ) {
-    if (isPlainObjectFunctionField(targetField)) {
+    if (isPlainFunctionPointerType(targetField.functionType)) {
       return [`${targetName} = 0;`]
     }
 
@@ -3603,7 +3552,7 @@ function emitModuleObjectFunctionFieldCopyAssignment(
 
   const sourceName = emitCObjectFunctionFieldName(sourceObjectName, targetField.name)
 
-  if (isPlainObjectFunctionField(targetField)) {
+  if (isPlainFunctionPointerType(targetField.functionType)) {
     return [
       `${targetName} = ${emitAdaptedModuleFunctionPointerExpression(
         sourceName,
@@ -3713,7 +3662,7 @@ function emitModuleObjectFunctionFieldDefaultAssignments(objectName: string, fie
 
   for (const field of fields) {
     if (field.valueType === 'function') {
-      if (isPlainObjectFunctionField(field)) {
+      if (isPlainFunctionPointerType(field.functionType)) {
         lines.push(`${emitCObjectFunctionFieldName(objectName, field.name)} = 0;`)
       } else if (isRuntimeFunctionType(field.functionType)) {
         pushAll(lines, emitUndefinedRuntimeCallbackValueInto(emitCObjectFunctionFieldName(objectName, field.name)))
@@ -3790,6 +3739,7 @@ function emptyPreparedExpression(): PreparedExpression {
 function emitNullableRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): string[] {
   const path: string[] = expression.target.path
   const name = path[0]
+  const expectedTag = cRuntimeValueTag(context.variables.get(name))
   const targetType = context.variables.get(name)
   let value = emptyPreparedExpression()
 
@@ -3811,11 +3761,6 @@ function emitNullableRuntimeValueAssignment(expression: AnyNode, context: CFunct
   } else {
     value = emitCValueExpression(expression.value, context)
   }
-  const nativeTarget =
-    targetType === 'object' &&
-    (libraryNativeCppType(expression.target.shape) !== null ||
-      (value.cppType !== null && typeof value.cppType !== 'undefined'))
-  const expectedTag = nativeTarget ? null : cRuntimeValueTag(targetType)
   const temp = nextCName(context, 'inox_nullable_value')
   const reference = emitCIdentifier(name)
   const lines: string[] = []
@@ -3950,6 +3895,7 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
       arrayElementType: field.arrayElementType,
       mapKeyType: field.mapKeyType,
       mapValueType: field.mapValueType,
+      setElementType: field.setElementType,
       shape: field.shape,
       functionType: field.functionType
     }
@@ -4006,7 +3952,7 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
     if (field.valueType === 'function') {
       const fieldName = emitCObjectFunctionFieldName(statement.name, field.name)
 
-      if (isRuntimeObjectFunctionField(field)) {
+      if (!isPlainFunctionPointerType(field.functionType) && isRuntimeFunctionType(field.functionType)) {
         registerOwnedValue(context, fieldName)
         pushAll(lines, emitRuntimeCallbackValueInto(nodeOrEmpty(propertyValue), field.functionType, fieldName, context))
       } else {
@@ -4081,7 +4027,7 @@ function emitObjectMemberVariableDeclaration(
     return emitObjectArrayMemberVariableDeclaration(statement, member, context, objectName, key)
   }
 
-  if (member.valueType === 'map') {
+  if (member.valueType === 'map' || member.valueType === 'set') {
     return emitObjectCollectionMemberVariableDeclaration(statement, member, context, objectName, key)
   }
 
@@ -4169,8 +4115,12 @@ function emitObjectCollectionMemberVariableDeclaration(
 ): string[] {
   registerOwnedValue(context, statement.name)
 
-  const tag = 'INOX_TAG_MAP'
+  let tag = 'INOX_TAG_SET'
   const lines: string[] = []
+
+  if (member.valueType === 'map') {
+    tag = 'INOX_TAG_MAP'
+  }
 
   pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
   pushAll(lines, emitObjectMemberGetLines(objectName, key, statement.name, context))
@@ -4183,24 +4133,35 @@ function emitObjectCollectionMemberVariableDeclaration(
 
   context.variables.set(statement.name, member.valueType)
 
-  let keyType = 'unknown'
-  let valueType = 'unknown'
+  if (member.valueType === 'map') {
+    let keyType = 'unknown'
+    let valueType = 'unknown'
 
-  const memberMapKeyType = member.mapKeyType
-  const memberMapValueType = member.mapValueType
+    const memberMapKeyType = member.mapKeyType
+    const memberMapValueType = member.mapValueType
 
-  if (memberMapKeyType !== null && typeof memberMapKeyType !== 'undefined') {
-    keyType = memberMapKeyType
+    if (memberMapKeyType !== null && typeof memberMapKeyType !== 'undefined') {
+      keyType = memberMapKeyType
+    }
+
+    if (memberMapValueType !== null && typeof memberMapValueType !== 'undefined') {
+      valueType = memberMapValueType
+    }
+
+    context.mapTypes.set(statement.name, {
+      key: keyType,
+      value: valueType
+    })
+  } else {
+    let setElementType = 'unknown'
+    const memberSetElementType = member.setElementType
+
+    if (memberSetElementType !== null && typeof memberSetElementType !== 'undefined') {
+      setElementType = memberSetElementType
+    }
+
+    context.setElementTypes.set(statement.name, setElementType)
   }
-
-  if (memberMapValueType !== null && typeof memberMapValueType !== 'undefined') {
-    valueType = memberMapValueType
-  }
-
-  context.mapTypes.set(statement.name, {
-    key: keyType,
-    value: valueType
-  })
 
   return lines
 }
@@ -4241,10 +4202,7 @@ function emitObjectObjectMemberVariableDeclaration(
 
   pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
   pushAll(lines, emitObjectMemberGetLines(objectName, key, statement.name, context))
-
-  if (libraryNativeCppType(member.shape) === null) {
-    lines.push(emitRuntimeTypeCheck(runtimeObjectLikeValueMismatchCondition(emitCIdentifier(statement.name)), context))
-  }
+  lines.push(emitRuntimeTypeCheck(runtimeObjectLikeValueMismatchCondition(emitCIdentifier(statement.name)), context))
 
   context.variables.set(statement.name, 'object')
 
@@ -4501,6 +4459,15 @@ function emitKnownArrayRuntimeIndexVariableDeclaration(
       key: keyType,
       value: valueType
     })
+  } else if (element.valueType === 'set') {
+    let elementType = 'unknown'
+    const statementSetElementType = statement.setElementType
+
+    if (statementSetElementType !== null && typeof statementSetElementType !== 'undefined') {
+      elementType = statementSetElementType
+    }
+
+    context.setElementTypes.set(name, elementType)
   }
 
   return lines
@@ -5455,6 +5422,7 @@ function objectLiteralPropertyShapeField(
     arrayElementType: property.value.arrayElementType,
     mapKeyType: property.value.mapKeyType,
     mapValueType: property.value.mapValueType,
+    setElementType: property.value.setElementType,
     shape: propertyShape,
     functionType
   }
@@ -5522,10 +5490,7 @@ function emitCNullishCoalescingValueExpression(expression: AnyNode, context: CFu
   }
 
   const temp = nextCName(context, 'inox_value')
-  const expectedTag =
-    resultType === 'object' && libraryNativeCppType(expression.shape) !== null
-      ? null
-      : cRuntimeValueTag(resultType)
+  const expectedTag = cRuntimeValueTag(resultType)
   const lines: string[] = []
   registerOwnedValue(context, temp)
 
@@ -6020,7 +5985,8 @@ function isRuntimeLogValueType(valueType: string): boolean {
     valueType === 'bytes' ||
     valueType === 'function' ||
     valueType === 'map' ||
-    valueType === 'object'
+    valueType === 'object' ||
+    valueType === 'set'
   )
 }
 
@@ -7065,7 +7031,7 @@ function emitPreparedAsyncFunctionPromiseCallExpression(
       context,
       diagnostic(
         'INOX_C_ASYNC',
-        'async function calls as Promise values currently support only number, boolean, string, bytes, object, array, map and void values in C',
+        'async function calls as Promise values currently support only number, boolean, string, bytes, object, array, map, set and void values in C',
         expression.loc
       )
     )
@@ -7203,7 +7169,7 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(
       context,
       diagnostic(
         'INOX_C_ASYNC',
-        'throwing async function calls as Promise values currently support only number, boolean, string, bytes, object, array, map and void values in C',
+        'throwing async function calls as Promise values currently support only number, boolean, string, bytes, object, array, map, set and void values in C',
         expression.loc
       )
     )
@@ -7833,11 +7799,14 @@ function resolveRuntimeCallbackCalleeType(callee: AnyNode, context: CFunctionCon
   const objectField = objectFunctionFieldReference(callee, context)
 
   if (objectField !== null && typeof objectField !== 'undefined') {
+    const functionType = objectField.field.functionType
+
     if (
       !context.classInstanceTypes.has(objectField.objectName) &&
-      isRuntimeObjectFunctionField(objectField.field)
+      !isPlainFunctionPointerType(functionType) &&
+      isRuntimeFunctionType(functionType)
     ) {
-      return normalizeFunctionType(objectField.field.functionType)
+      return normalizeFunctionType(functionType)
     }
   }
 
@@ -7864,7 +7833,8 @@ function emitRuntimeCallbackCalleeReference(callee: AnyNode, context: CFunctionC
   if (
     objectField !== null &&
     typeof objectField !== 'undefined' &&
-    isRuntimeObjectFunctionField(objectField.field)
+    !isPlainFunctionPointerType(objectField.field.functionType) &&
+    isRuntimeFunctionType(objectField.field.functionType)
   ) {
     return objectField.name
   }
@@ -7937,7 +7907,8 @@ function emitRuntimeCallbackValueInto(
     objectField !== null &&
     typeof objectField !== 'undefined' &&
     !context.classInstanceTypes.has(objectField.objectName) &&
-    isRuntimeObjectFunctionField(objectField.field)
+    !isPlainFunctionPointerType(objectField.field.functionType) &&
+    isRuntimeFunctionType(objectField.field.functionType)
   ) {
     const lines: string[] = []
 

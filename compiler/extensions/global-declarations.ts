@@ -35,10 +35,7 @@ export function parseCompilerLibraryGlobalDeclarations(
       continue
     }
 
-    const parsed = parseGlobalDeclarationContractResult(
-      descriptor.declarationSource,
-      descriptor.source
-    )
+    const parsed = parseGlobalDeclarationContractResult(descriptor.declarationSource, descriptor.source)
 
     for (let diagnosticIndex = 0; diagnosticIndex < parsed.diagnostics.length; diagnosticIndex = diagnosticIndex + 1) {
       diagnostics.push(parsed.diagnostics[diagnosticIndex])
@@ -84,27 +81,8 @@ export function parseCompilerLibraryGlobalDeclarations(
   }
 }
 
-export function compilerLibraryGlobalTypeNames(descriptors: LibraryDeclarationDescriptor[]): Set<string> {
-  const names: Set<string> = new Set()
-  const parsed = parseCompilerLibraryGlobalDeclarations(descriptors)
-
-  for (const declaration of parsed.declarations) {
-    for (const item of declaration.program.body) {
-      if (ambientDeclarationHasType(item)) {
-        names.add(item.name)
-      }
-    }
-  }
-
-  return names
-}
-
 function ambientDeclarationHasValue(item: AnyNode): boolean {
-  return (
-    item.type === 'FunctionDeclaration' ||
-    item.type === 'VariableDeclaration' ||
-    item.type === 'ClassDeclaration'
-  )
+  return item.type === 'FunctionDeclaration' || item.type === 'VariableDeclaration' || item.type === 'ClassDeclaration'
 }
 
 function ambientDeclarationHasType(item: AnyNode): boolean {

@@ -28,8 +28,5 @@ test('node:http держит managed state и вызывает lifecycle callbac
   assert.match(source, /net_server_?\.close\(std::move\(callback\)\)/)
 
   assert.match(compiler, /callbackLifetime:\s*'event-loop'/)
-  assert.doesNotMatch(
-    compiler,
-    /emitHttpZeroArgCallbackLines|emitHttpServerListenLines|emitHttpServerCloseLines/
-  )
+  assert.doesNotMatch(compiler, /emitHttpZeroArgCallbackLines|emitHttpServerListenLines|emitHttpServerCloseLines/)
 })

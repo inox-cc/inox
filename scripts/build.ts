@@ -185,12 +185,7 @@ async function emitCompilerDeclarationContracts(
   const contracts = seedCompilerDeclarationContracts(modules)
   const orderedFiles = orderCompilerFilesByDependencies(driverPath, modules)
 
-  return await refineCompilerDeclarationContracts(
-    orderedFiles,
-    contracts,
-    stdlibDeclarationFiles,
-    bootstrapLibraries
-  )
+  return await refineCompilerDeclarationContracts(orderedFiles, contracts, stdlibDeclarationFiles, bootstrapLibraries)
 }
 
 async function refineCompilerDeclarationContracts(

@@ -1,42 +1,42 @@
-export type RequestListener = (request: IncomingMessage, response: ServerResponse) => void;
-export type ServerCallback = () => void;
+export type RequestListener = (request: IncomingMessage, response: ServerResponse) => void
+export type ServerCallback = () => void
 
 export interface ListenOptions {
-  readonly port?: number;
-  readonly host?: string;
-  readonly backlog?: number;
+  readonly port?: number
+  readonly host?: string
+  readonly backlog?: number
 }
 
 export interface HttpModule {
-  readonly IncomingMessage: typeof IncomingMessage;
-  readonly Server: typeof Server;
-  readonly ServerResponse: typeof ServerResponse;
+  readonly IncomingMessage: typeof IncomingMessage
+  readonly Server: typeof Server
+  readonly ServerResponse: typeof ServerResponse
 
-  createServer(listener?: RequestListener): Server;
+  createServer(listener?: RequestListener): Server
 }
 
 export class IncomingMessage {
-  readonly method: string;
-  readonly url: string;
+  readonly method: string
+  readonly url: string
 }
 
 export class ServerResponse {
-  statusCode: number;
+  statusCode: number
 
-  end(body?: string | Uint8Array): void;
-  setHeader(name: string, value: string): void;
-  write(body: string | Uint8Array): boolean;
-  writeHead(statusCode: number, headers?: Record<string, string>): ServerResponse;
+  end(body?: string | Uint8Array): void
+  setHeader(name: string, value: string): void
+  write(body: string | Uint8Array): boolean
+  writeHead(statusCode: number, headers?: Record<string, string>): ServerResponse
 }
 
 export class Server {
-  close(callback?: ServerCallback): Server;
-  listen(port?: number, host?: string, callback?: ServerCallback): Server;
-  listen(options: ListenOptions, callback?: ServerCallback): Server;
-  on(eventName: 'request', listener: RequestListener): Server;
+  close(callback?: ServerCallback): Server
+  listen(port?: number, host?: string, callback?: ServerCallback): Server
+  listen(options: ListenOptions, callback?: ServerCallback): Server
+  on(eventName: 'request', listener: RequestListener): Server
 }
 
-export function createServer(listener?: RequestListener): Server;
+export function createServer(listener?: RequestListener): Server
 
-declare const http: HttpModule;
-export default http;
+declare const http: HttpModule
+export default http

@@ -39,8 +39,7 @@ test('удаление node:process убирает global knowledge, operations 
 
   assert.throws(
     () => compileSource('console.log(process.version)\n', { libraries }),
-    (error: unknown) =>
-      error instanceof CompileError && error.diagnostics[0].code === 'INOX_UNKNOWN_NAME'
+    (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_UNKNOWN_NAME'
   )
 })
 
@@ -55,10 +54,7 @@ async function createFixture(): Promise<void> {
     resolve(fixtureRoot, 'stdlib/node/process/index.d.ts'),
     'declare const process: { readonly version: string }; export default process;\n'
   )
-  await writeFile(
-    resolve(fixtureRoot, 'stdlib/node/process/src/process.cc'),
-    'int process_fixture = 0;\n'
-  )
+  await writeFile(resolve(fixtureRoot, 'stdlib/node/process/src/process.cc'), 'int process_fixture = 0;\n')
   await writeFile(
     resolve(fixtureRoot, 'stdlib/node/process/compiler/index.ts'),
     "export const compilerLibraryPackage = { id: 'node:process', dependencies: [], operations: [{ libraryId: 'node:process', bindingId: 'global:process', bindingAliases: ['node:process#module:node:process:default'], operationId: 'node:process#process', kind: 'member-read', runtimeRequirements: ['node:process'], cExpression: 'process', cppType: 'inox::Value', valueType: 'object' }], intrinsicBindings: [], runtimeRequirements: [{ id: 'node:process', dependencies: [], cPreludeIncludes: ['inox/process.h'], capabilities: [], cEntrypointAdapter: { cFunction: 'inox::process_main', acceptsEntryPath: true } }] }\n"

@@ -3,11 +3,11 @@
 // @stdout 7
 
 class Box {
-value: number
+  value: number
 
-constructor(value: number) {
-  this.value = value
-}
+  constructor(value: number) {
+    this.value = value
+  }
 }
 
 const box = new Box(7)

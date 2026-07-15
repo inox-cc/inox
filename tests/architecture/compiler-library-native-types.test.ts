@@ -19,10 +19,7 @@ test('native types resolve from library data and preserve inheritance', () => {
   assert.equal(uint8Array?.cppType, 'Uint8Array')
   assert.equal(buffer?.typeId, 'node:buffer#Buffer')
   assert.equal(buffer?.valueType, 'bytes')
-  assert.equal(
-    compilerLibraryNativeTypeIsAssignable(libraries, 'node:buffer#Buffer', 'global:binary#Uint8Array'),
-    true
-  )
+  assert.equal(compilerLibraryNativeTypeIsAssignable(libraries, 'node:buffer#Buffer', 'global:binary#Uint8Array'), true)
   assert.equal(
     compilerLibraryNativeTypeIsAssignable(libraries, 'global:binary#Uint8Array', 'node:buffer#Buffer'),
     false
@@ -59,10 +56,10 @@ test('native type metadata changes the library fingerprint', () => {
 
 test('declared native types reach checked AST and HIR without core name knowledge', () => {
   const libraries = createCompilerLibrarySet(binaryLibraries())
-  const result = compileSourceToIr(
-    'function identity(value: Buffer): Uint8Array { return value }',
-    { libraries, target: 'cc' }
-  )
+  const result = compileSourceToIr('function identity(value: Buffer): Uint8Array { return value }', {
+    libraries,
+    target: 'cc'
+  })
   const astFunction = result.ast.body[0]
   const hirFunction = result.hir.body[0]
 

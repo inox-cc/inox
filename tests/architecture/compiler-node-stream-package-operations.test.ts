@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import type {
-  LibraryOperationDescriptor,
-  LibraryOperationKind
-} from '../../compiler/extensions/types.ts'
+import type { LibraryOperationDescriptor, LibraryOperationKind } from '../../compiler/extensions/types.ts'
 import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
 
 type ExpectedOperation = {
@@ -26,9 +23,7 @@ test('node:stream package исчерпывающе владеет diagnostic ope
 
   assert.ok(streamPackage?.compilerPackage)
 
-  const actual = streamPackage.compilerPackage.operations
-    .map(operationContract)
-    .sort(compareOperations)
+  const actual = streamPackage.compilerPackage.operations.map(operationContract).sort(compareOperations)
   const expected = expectedOperations().sort(compareOperations)
 
   assert.equal(expected.length, 21)

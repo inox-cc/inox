@@ -1,6 +1,5 @@
 import { checkProgram } from '../checker.ts'
 import { diagnostic, throwDiagnostics } from '../diagnostics.ts'
-import { compilerLibraryGlobalTypeNames } from '../extensions/global-declarations.ts'
 import { resolveCompilerLibrarySet } from '../extensions/library-set.ts'
 import { compilerLibraryOptionsFingerprint } from '../extensions/library-options.ts'
 import type { CompilerLibraryLiteralTypeInference } from '../extensions/types.ts'
@@ -50,7 +49,6 @@ type ModuleGraphContext = {
   stdlibDeclarationPrograms: Map<string, ProgramNode>
   visiting: Set<string>
   diagnostics: Diagnostic[]
-  libraryGlobalTypeNames: Set<string>
 }
 
 type ModuleGraphDeclarationImport = {
@@ -111,10 +109,7 @@ export function buildModuleGraphWithHostSync(
     missingStdlibDeclarationPrograms: new Set(),
     stdlibDeclarationPrograms: new Map(),
     visiting: new Set(),
-    diagnostics: [],
-    libraryGlobalTypeNames: compilerLibraryGlobalTypeNames(
-      resolveCompilerLibrarySet(options.libraries).declarations
-    )
+    diagnostics: []
   }
 
   visitModuleGraphFile(context, entryPath, libraryLiteralTypeInference)
@@ -276,11 +271,7 @@ function visitModuleGraphFile(
         }
 
         const importedProgram = moduleProgramForTypeImports(importedModule)
-        const declarations = createTypeImportDeclarations(
-          specifier,
-          importedProgram,
-          context.libraryGlobalTypeNames
-        )
+        const declarations = createTypeImportDeclarations(specifier, importedProgram)
 
         for (
           let declarationIndex = 0;
@@ -313,11 +304,7 @@ function visitModuleGraphFile(
       applyImportedFunctionMetadata(specifier, importedProgram)
 
       if (importedProgram !== null) {
-        const declarations = createValueImportTypeDeclarations(
-          specifier,
-          importedProgram,
-          context.libraryGlobalTypeNames
-        )
+        const declarations = createValueImportTypeDeclarations(specifier, importedProgram)
 
         for (
           let declarationIndex = 0;
@@ -400,11 +387,7 @@ function visitModuleGraphFile(
       const importedProgram = moduleProgramForImports(importedModule)
 
       if (item.typeOnly) {
-        const typeDeclarations = createTypeImportDeclarations(
-          specifier,
-          moduleProgramForTypeImports(importedModule),
-          context.libraryGlobalTypeNames
-        )
+        const typeDeclarations = createTypeImportDeclarations(specifier, moduleProgramForTypeImports(importedModule))
 
         for (
           let declarationIndex = 0;
@@ -432,11 +415,7 @@ function visitModuleGraphFile(
       }
 
       if (!item.typeOnly && importedProgram !== null) {
-        const typeDeclarations = createValueImportTypeDeclarations(
-          specifier,
-          importedProgram,
-          context.libraryGlobalTypeNames
-        )
+        const typeDeclarations = createValueImportTypeDeclarations(specifier, importedProgram)
 
         for (
           let declarationIndex = 0;
@@ -743,11 +722,7 @@ function prepareModuleTypeImportDeclarations(
         continue
       }
 
-      const declarations = createTypeImportDeclarations(
-        specifier,
-        moduleProgramForTypeImports(importedModule),
-        context.libraryGlobalTypeNames
-      )
+      const declarations = createTypeImportDeclarations(specifier, moduleProgramForTypeImports(importedModule))
 
       for (const declaration of declarations) {
         if (!typeNames.has(declaration.name)) {
@@ -811,11 +786,7 @@ function prepareStdlibRuntimeImportDeclarations(
       continue
     }
 
-    const declarations = createValueImportTypeDeclarations(
-      specifier,
-      importedProgram,
-      context.libraryGlobalTypeNames
-    )
+    const declarations = createValueImportTypeDeclarations(specifier, importedProgram)
 
     for (let declarationIndex = 0; declarationIndex < declarations.length; declarationIndex = declarationIndex + 1) {
       const declaration = declarations[declarationIndex]
@@ -1001,6 +972,7 @@ function applyImportedDeclarationMetadata(specifier: AnyNode, declaration: AnyNo
   specifier.mapKeyType = declaration.mapKeyType ?? null
   specifier.mapValueType = declaration.mapValueType ?? null
   specifier.promiseValueType = declaration.promiseValueType ?? null
+  specifier.setElementType = declaration.setElementType ?? null
   specifier.shape = declaration.shape ?? null
 }
 
@@ -1034,6 +1006,7 @@ function applyImportedFunctionDeclarationMetadata(specifier: AnyNode, declaratio
   specifier.returnMapKeyType = declaration.returnMapKeyType ?? null
   specifier.returnMapValueType = declaration.returnMapValueType ?? null
   specifier.returnPromiseValueType = declaration.returnPromiseValueType ?? null
+  specifier.returnSetElementType = declaration.returnSetElementType ?? null
   specifier.returnShape = declaration.returnShape ?? null
 }
 

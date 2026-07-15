@@ -175,11 +175,7 @@ export function createTypeImportDeclaration(specifier: AnyNode, exported: TypeAl
   return cloneTypeAliasDeclaration(exported, specifier.local, specifier.loc, specifier.imported, true)
 }
 
-export function createTypeImportDeclarations(
-  specifier: AnyNode,
-  importedProgram: ProgramNode,
-  externalTypeNames: Set<string> = new Set()
-): AnyNode[] {
+export function createTypeImportDeclarations(specifier: AnyNode, importedProgram: ProgramNode): AnyNode[] {
   const exported = findExportedTypeAliasDeclaration(importedProgram, specifier.imported)
 
   if (exported === null || typeof exported === 'undefined') {
@@ -199,18 +195,14 @@ export function createTypeImportDeclarations(
   const visiting: Set<string> = new Set()
 
   for (const name of typeAliasDependencyNames(exported)) {
-    addTypeImportDependency(name, specifier.imported, aliases, externalTypeNames, added, visiting, declarations)
+    addTypeImportDependency(name, specifier.imported, aliases, added, visiting, declarations)
   }
 
   declarations.push(createTypeImportDeclaration(specifier, exported))
   return declarations
 }
 
-export function createValueImportTypeDeclarations(
-  specifier: AnyNode,
-  importedProgram: ProgramNode,
-  externalTypeNames: Set<string> = new Set()
-): AnyNode[] {
+export function createValueImportTypeDeclarations(specifier: AnyNode, importedProgram: ProgramNode): AnyNode[] {
   const exported = findExportedDeclaration(importedProgram, specifier.imported)
 
   if (exported === null || typeof exported === 'undefined') {
@@ -223,7 +215,7 @@ export function createValueImportTypeDeclarations(
   const visiting: Set<string> = new Set()
 
   for (const name of declarationTypeDependencyNames(exported)) {
-    addTypeImportDependency(name, '', aliases, externalTypeNames, added, visiting, declarations)
+    addTypeImportDependency(name, '', aliases, added, visiting, declarations)
   }
 
   return declarations
@@ -278,7 +270,6 @@ function addTypeImportDependency(
   name: string,
   importedName: string,
   aliases: Map<string, TypeAliasDeclarationNode>,
-  externalTypeNames: Set<string>,
   added: Set<string>,
   visiting: Set<string>,
   declarations: AnyNode[]
@@ -294,10 +285,6 @@ function addTypeImportDependency(
   const dependency = aliases.get(name)
 
   if (dependency === null || typeof dependency === 'undefined') {
-    if (externalTypeNames.has(name)) {
-      return
-    }
-
     declarations.push(createUnknownTypeAliasDeclaration(name))
     added.add(name)
     return
@@ -306,7 +293,7 @@ function addTypeImportDependency(
   visiting.add(name)
 
   for (const child of typeAliasDependencyNames(dependency)) {
-    addTypeImportDependency(child, importedName, aliases, externalTypeNames, added, visiting, declarations)
+    addTypeImportDependency(child, importedName, aliases, added, visiting, declarations)
   }
 
   visiting.delete(name)
@@ -352,6 +339,7 @@ function collectFunctionDeclarationTypeDependencyNames(declaration: SyntheticImp
   collectTypeNameDependencyNames(declaration.returnMapKeyType, names)
   collectTypeNameDependencyNames(declaration.returnMapValueType, names)
   collectTypeNameDependencyNames(declaration.returnPromiseValueType, names)
+  collectTypeNameDependencyNames(declaration.returnSetElementType, names)
 }
 
 function collectValueDeclarationTypeDependencyNames(declaration: SyntheticImportNode, names: string[]): void {
@@ -362,6 +350,7 @@ function collectValueDeclarationTypeDependencyNames(declaration: SyntheticImport
   collectTypeNameDependencyNames(declaration.mapKeyType, names)
   collectTypeNameDependencyNames(declaration.mapValueType, names)
   collectTypeNameDependencyNames(declaration.promiseValueType, names)
+  collectTypeNameDependencyNames(declaration.setElementType, names)
 
   if (declaration.functionType !== null && typeof declaration.functionType !== 'undefined') {
     collectTypeAliasDependencyNames(declaration.functionType, names)
@@ -556,6 +545,7 @@ function createFunctionAliasDeclaration(
     mapKeyType: nullableNodeValue(target.returnMapKeyType),
     mapValueType: nullableNodeValue(target.returnMapValueType),
     promiseValueType: nullableNodeValue(target.returnPromiseValueType),
+    setElementType: nullableNodeValue(target.returnSetElementType),
     shape: nullableNodeValue(target.returnShape)
   }
   const declaration: AnyNode = {
@@ -573,6 +563,7 @@ function createFunctionAliasDeclaration(
     returnMapKeyType: nullableNodeValue(target.returnMapKeyType),
     returnMapValueType: nullableNodeValue(target.returnMapValueType),
     returnPromiseValueType: nullableNodeValue(target.returnPromiseValueType),
+    returnSetElementType: nullableNodeValue(target.returnSetElementType),
     returnShape: nullableNodeValue(target.returnShape),
     body: createFunctionAliasBody(target, call, loc)
   }
@@ -649,6 +640,7 @@ function cloneTypeAliasField(field: AnyNode): AnyNode {
     mapKeyType: nullableNodeValue(field.mapKeyType),
     mapValueType: nullableNodeValue(field.mapValueType),
     promiseValueType: nullableNodeValue(field.promiseValueType),
+    setElementType: nullableNodeValue(field.setElementType),
     shape: nullableNodeValue(field.shape),
     functionType: nullableNodeValue(field.functionType),
     functionOverloads: nullableNodeValue(field.functionOverloads),
@@ -688,6 +680,7 @@ function cloneParam(param: AnyNode): AnyNode {
     mapKeyType: nullableNodeValue(param.mapKeyType),
     mapValueType: nullableNodeValue(param.mapValueType),
     promiseValueType: nullableNodeValue(param.promiseValueType),
+    setElementType: nullableNodeValue(param.setElementType),
     shape: nullableNodeValue(param.shape),
     functionType: nullableNodeValue(param.functionType),
     className: nullableNodeValue(param.className)

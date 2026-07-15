@@ -6,9 +6,7 @@ type FingerprintFixtureOptions = {
   conditionalCapability?: string
 }
 
-export function compilerLibraryFingerprintFixture(
-  options: FingerprintFixtureOptions = {}
-): CompilerLibraryDescriptor {
+export function compilerLibraryFingerprintFixture(options: FingerprintFixtureOptions = {}): CompilerLibraryDescriptor {
   const libraryId = 'global:fingerprint-fixture'
   const optionId = `${libraryId}#mode`
 

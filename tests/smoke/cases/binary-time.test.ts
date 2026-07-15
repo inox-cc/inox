@@ -18,6 +18,17 @@ mutable[0] = 7
 const random = new Uint8Array(4)
 const same = crypto.getRandomValues(random)
 
-console.log('buffer:' + text.toString() + '/' + allocated.slice(0, 1).toString() + '/' + sliced.toString() + '/' + String(Buffer.isBuffer(text)))
+console.log(
+  'buffer:' +
+    text.toString() +
+    '/' +
+    allocated.slice(0, 1).toString() +
+    '/' +
+    sliced.toString() +
+    '/' +
+    String(Buffer.isBuffer(text))
+)
 console.log('uint8:' + String(mutable[0]) + '/' + bytes.slice(1, 2).toString() + '/' + String(same.length))
-console.log('clocks:' + String(constants.MAX_LENGTH > 0) + '/' + String(Date.now() > 0) + '/' + String(performance.now() >= 0))
+console.log(
+  'clocks:' + String(constants.MAX_LENGTH > 0) + '/' + String(Date.now() > 0) + '/' + String(performance.now() >= 0)
+)

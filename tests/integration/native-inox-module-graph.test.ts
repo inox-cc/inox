@@ -27,11 +27,7 @@ export async function assertNativeInoxModuleGraph(): Promise<void> {
 
     const emit = await runCommand(join(rootDir, 'dist/inox'), [input, outputCc])
 
-    assert.equal(
-      emit.code,
-      0,
-      `dist/inox module graph emit failed\nstdout:\n${emit.stdout}\nstderr:\n${emit.stderr}`
-    )
+    assert.equal(emit.code, 0, `dist/inox module graph emit failed\nstdout:\n${emit.stdout}\nstderr:\n${emit.stderr}`)
     assert.equal(emit.stderr, '')
 
     const compile = await compileRuntimeProgram(outputCc, output)

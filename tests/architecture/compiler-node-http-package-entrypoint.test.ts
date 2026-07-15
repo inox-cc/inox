@@ -15,9 +15,7 @@ test('entrypoint package node:http владеет native API и runtime plan', a
   assert.deepEqual(httpPackage.nativeSources, ['stdlib/node/http/src/http.cc'])
   assert.deepEqual(httpPackage.nativeIncludeDirs, ['stdlib/node/http/include'])
 
-  const server = httpPackage.compilerPackage.nativeTypes?.find(
-    (nativeType) => nativeType.typeId === 'node:http#Server'
-  )
+  const server = httpPackage.compilerPackage.nativeTypes?.find((nativeType) => nativeType.typeId === 'node:http#Server')
   const request = httpPackage.compilerPackage.nativeTypes?.find(
     (nativeType) => nativeType.typeId === 'node:http#IncomingMessage'
   )
@@ -30,9 +28,7 @@ test('entrypoint package node:http владеет native API и runtime plan', a
   assert.equal(request?.cppType, 'HttpRequest')
   assert.equal(response?.cppType, 'HttpResponse')
 
-  const runtime = httpPackage.compilerPackage.runtimeRequirements.find(
-    (requirement) => requirement.id === 'node:http'
-  )
+  const runtime = httpPackage.compilerPackage.runtimeRequirements.find((requirement) => requirement.id === 'node:http')
 
   assert.ok(runtime)
   assert.deepEqual(runtime.cPreludeIncludes, ['inox/http.h'])

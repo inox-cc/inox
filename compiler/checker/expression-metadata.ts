@@ -1,11 +1,7 @@
 import { resolveDeclaredType, resolveFieldDeclaredType as resolveFieldDeclaredTypeInContext } from './declared-types.ts'
 import type { DeclaredTypeResolverContext } from './declared-types.ts'
 import { dynamicShapeField } from './expression-helpers.ts'
-import {
-  firstPathSegment,
-  nodeNameEquals,
-  resolvedFunctionTypeMetadata
-} from './resolved-types.ts'
+import { firstPathSegment, nodeNameEquals, resolvedFunctionTypeMetadata } from './resolved-types.ts'
 import type { CheckerMapType, FunctionTypeMetadata, ResolvedTypeInfo } from './resolved-types.ts'
 import type { IntrinsicRole } from '../extensions/types.ts'
 import type { AnyNode, ObjectShapeInfo, SourceLocation, SymbolInfo, ValueType } from '../types.ts'
@@ -366,10 +362,7 @@ export function resolveExpressionArrayElementFunctionType(
     expression.type === 'CallExpression' ||
     expression.type === 'AwaitExpression'
   ) {
-    if (
-      expression.arrayElementFunctionType !== null &&
-      typeof expression.arrayElementFunctionType !== 'undefined'
-    ) {
+    if (expression.arrayElementFunctionType !== null && typeof expression.arrayElementFunctionType !== 'undefined') {
       return expression.arrayElementFunctionType
     }
 
@@ -457,12 +450,7 @@ export function resolveArrayIterableElementShape(
 
     const field = findShapeField(shape, expression.property)
 
-    if (
-      field !== null &&
-      typeof field !== 'undefined' &&
-      field.shape !== null &&
-      typeof field.shape !== 'undefined'
-    ) {
+    if (field !== null && typeof field !== 'undefined' && field.shape !== null && typeof field.shape !== 'undefined') {
       return field.shape
     }
 
@@ -478,12 +466,7 @@ export function resolveArrayIterableElementShape(
 
     const field = findShapeField(shape, expression.index.value)
 
-    if (
-      field !== null &&
-      typeof field !== 'undefined' &&
-      field.shape !== null &&
-      typeof field.shape !== 'undefined'
-    ) {
+    if (field !== null && typeof field !== 'undefined' && field.shape !== null && typeof field.shape !== 'undefined') {
       return field.shape
     }
   }
@@ -543,6 +526,88 @@ export function resolveExpressionMapType(
 
     if (field !== null && typeof field !== 'undefined' && field.valueType === 'map') {
       return mapTypeFromMetadata(field)
+    }
+
+    return null
+  }
+
+  return null
+}
+
+export function resolveExpressionSetElementType(
+  context: ExpressionMetadataResolverContext,
+  expression: AnyNode | null | undefined
+): ValueType | null {
+  if (expression === null || typeof expression === 'undefined') {
+    return null
+  }
+
+  if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
+    if (
+      expression.valueType === 'set' &&
+      expression.setElementType !== null &&
+      typeof expression.setElementType !== 'undefined'
+    ) {
+      return expression.setElementType
+    }
+
+    return null
+  }
+
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    const name = firstPathSegment(expression.path)
+    const symbol = resolveSymbol(context.scopeBindings, name)
+
+    if (
+      symbol !== null &&
+      typeof symbol !== 'undefined' &&
+      symbol.valueType === 'set' &&
+      symbol.setElementType !== null &&
+      typeof symbol.setElementType !== 'undefined'
+    ) {
+      return symbol.setElementType
+    }
+
+    return null
+  }
+
+  if (expression.type === 'MemberExpression') {
+    const shape = resolveExpressionShape(context, expression.object)
+    let field: AnyNode | null = null
+
+    if (shape !== null && typeof shape !== 'undefined') {
+      field = findShapeField(shape, expression.property)
+    }
+
+    if (
+      field !== null &&
+      typeof field !== 'undefined' &&
+      field.valueType === 'set' &&
+      field.setElementType !== null &&
+      typeof field.setElementType !== 'undefined'
+    ) {
+      return field.setElementType
+    }
+
+    return null
+  }
+
+  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+    const shape = resolveExpressionShape(context, expression.object)
+    let field: AnyNode | null = null
+
+    if (shape !== null && typeof shape !== 'undefined') {
+      field = findShapeField(shape, expression.index.value)
+    }
+
+    if (
+      field !== null &&
+      typeof field !== 'undefined' &&
+      field.valueType === 'set' &&
+      field.setElementType !== null &&
+      typeof field.setElementType !== 'undefined'
+    ) {
+      return field.setElementType
     }
 
     return null
@@ -652,9 +717,7 @@ export function resolveRejectedExpressionValueType(
   return 'unknown'
 }
 
-export function resolveRejectedExpressionIntrinsicRole(
-  expression: AnyNode | null | undefined
-): IntrinsicRole | null {
+export function resolveRejectedExpressionIntrinsicRole(expression: AnyNode | null | undefined): IntrinsicRole | null {
   if (expression === null || typeof expression === 'undefined') {
     return null
   }

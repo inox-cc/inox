@@ -14,11 +14,7 @@ const bufferOperationIds = [
   'node:buffer#Buffer#slice',
   'node:buffer#Buffer#toString'
 ]
-const nominalResultIds = [
-  'node:buffer#Buffer.from',
-  'node:buffer#Buffer.alloc',
-  'node:buffer#Buffer#slice'
-]
+const nominalResultIds = ['node:buffer#Buffer.from', 'node:buffer#Buffer.alloc', 'node:buffer#Buffer#slice']
 const numberResultIds = [
   'node:buffer#constants.MAX_LENGTH',
   'node:buffer#Buffer#read:length',

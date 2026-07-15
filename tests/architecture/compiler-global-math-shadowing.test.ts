@@ -5,7 +5,8 @@ import { compileSourceToIr } from '../../compiler/core.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 test('local Math shadow не получает package operation', () => {
-  const result = compileSourceToIr(`
+  const result = compileSourceToIr(
+    `
     type LocalMath = {
       min: (left: number, right: number) => number
     }
@@ -13,7 +14,9 @@ test('local Math shadow не получает package operation', () => {
       min: (left, _right) => left
     }
     const value = Math.min(2, 3)
-  `, { libraries: defaultCompilerLibrarySet })
+  `,
+    { libraries: defaultCompilerLibrarySet }
+  )
   const call = result.ir.body[2].init
 
   assert.equal(call.libraryOperationId, undefined)

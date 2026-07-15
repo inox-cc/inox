@@ -126,9 +126,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
 }
 
 function nullaryOperation(name: string): LibraryOperationDescriptor {
-  const runtimeRequirements = name === 'random'
-    ? [runtimeRequirement, randomRuntimeRequirement]
-    : [runtimeRequirement]
+  const runtimeRequirements = name === 'random' ? [runtimeRequirement, randomRuntimeRequirement] : [runtimeRequirement]
 
   return operation(name, [], runtimeRequirements)
 }

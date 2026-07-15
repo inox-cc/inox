@@ -35,9 +35,18 @@ test('удаление global:debug убирает inox.__debug и native plan �
   const afterRegistry = await readFile(resolve(output, 'default-registry.ts'), 'utf8')
   const afterPlan = await readFile(resolve(output, 'native-plan.json'), 'utf8')
 
-  assert.equal(after.declarations.some((item) => item.libraryId === 'global:debug'), false)
-  assert.equal(after.operations.some((item) => item.libraryId === 'global:debug'), false)
-  assert.equal(after.runtimeInitializers?.some((item) => item.libraryId === 'global:debug'), false)
+  assert.equal(
+    after.declarations.some((item) => item.libraryId === 'global:debug'),
+    false
+  )
+  assert.equal(
+    after.operations.some((item) => item.libraryId === 'global:debug'),
+    false
+  )
+  assert.equal(
+    after.runtimeInitializers?.some((item) => item.libraryId === 'global:debug'),
+    false
+  )
   assert.doesNotMatch(afterRegistry, /global:debug/)
   assert.doesNotMatch(afterPlan, /stdlib\/global\/debug/)
   assert.match(afterPlan, /stdlib\/global\/math\/src\/math\.cc/)

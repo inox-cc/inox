@@ -32,7 +32,7 @@ function scalarDeclarationVariableType(statement: ScalarDeclaration): string {
   const inferred = inferScalarDeclarationValueType(statement)
   const declared = knownValueType(statement.valueType)
 
-  return inferred === 'function' ? 'function' : declared ?? inferred
+  return inferred === 'function' ? 'function' : (declared ?? inferred)
 }
 
 const statement: ScalarDeclaration = {

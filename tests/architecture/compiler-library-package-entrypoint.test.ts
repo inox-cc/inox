@@ -11,7 +11,9 @@ test('entrypoint package node:os добавляет generated operations и runt
   assert.ok(osPackage)
   assert.equal(osPackage.compilerEntrypoint, 'stdlib/node/os/compiler/index.ts')
   assert.ok(osPackage.compilerPackage)
-  const platform = osPackage.compilerPackage.operations.find((operation) => operation.operationId === 'node:os#platform')
+  const platform = osPackage.compilerPackage.operations.find(
+    (operation) => operation.operationId === 'node:os#platform'
+  )
 
   assert.ok(platform)
   assert.equal(platform.cExpression, 'os.platform()')

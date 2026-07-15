@@ -60,7 +60,10 @@ for (const a of foo.v) {
     /for \(size_t inox_for_index_\d+ = 0; inox_for_index_\d+ < inox_for_array_\d+->length; \+\+inox_for_index_\d+\) \{\n\s+inox::Value a = inox_for_array_\d+->items\[inox_for_index_\d+\];/
   )
   assert.doesNotMatch(source, /if \(\(a\.tag != INOX_TAG_OBJECT && a\.tag != INOX_TAG_CLASS_INSTANCE\)/)
-  assert.doesNotMatch(source, /if \(\(inox_for_value_\d+\.tag != INOX_TAG_OBJECT && inox_for_value_\d+\.tag != INOX_TAG_CLASS_INSTANCE\)/)
+  assert.doesNotMatch(
+    source,
+    /if \(\(inox_for_value_\d+\.tag != INOX_TAG_OBJECT && inox_for_value_\d+\.tag != INOX_TAG_CLASS_INSTANCE\)/
+  )
   assert.doesNotMatch(source, /inox_object_values\(&inox_default_allocator, a, &inox_object_values_\d+\)/)
   assert.doesNotMatch(source, /inox_object_entries\(&inox_default_allocator, a, &inox_object_entries_\d+\)/)
   assert.doesNotMatch(source, /inox_status inox_object_values_status_\d+/)

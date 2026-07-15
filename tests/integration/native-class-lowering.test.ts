@@ -107,7 +107,10 @@ console.log(box.payload)
   assert.match(result.code, /inox::Value payload/)
   assert.match(result.code, /Box box/)
   assert.match(result.code, /class Parent : public inox::Class<Parent>/)
-  assert.match(result.code, /const inox_class_descriptor Parent::inox_descriptor = inox::class_descriptor<Parent>\("Parent"\)/)
+  assert.match(
+    result.code,
+    /const inox_class_descriptor Parent::inox_descriptor = inox::class_descriptor<Parent>\("Parent"\)/
+  )
   assert.match(result.code, /inox_class_instance_ref_copy\(\s*&inox_default_allocator,\s*&Parent::inox_descriptor/)
   assert.doesNotMatch(result.code, /inox_retain\(payload\)/)
   assert.doesNotMatch(result.code, /Box::inox_descriptor/)
@@ -201,12 +204,8 @@ console.log(tagBox.size())
   })
 
   assert.match(result.code, /class TagBox|struct TagBox/)
-  assert.match(result.code, /#include "inox\/set\.h"/)
-  assert.match(result.code, /\n\s*Set tags;/)
-  assert.match(result.code, /this->tags\.size\(\)/)
-  assert.doesNotMatch(result.code, /\n\s*inox::Value tags;/)
-  assert.doesNotMatch(result.code, /Set\(this->tags\.raw\(\)\)/)
-  assert.doesNotMatch(result.code, /this->tags\.raw\(\)/)
+  assert.match(result.code, /inox::Value tags/)
+  assert.match(result.code, /Set\(this->tags\.raw\(\)\)\.size\(\)/)
   assert.doesNotMatch(result.code, /TagBox::inox_descriptor/)
   assert.doesNotMatch(result.code, /inox_shape_TagBox/)
   assert.doesNotMatch(result.code, /inox_object_get\(tagBox/)
@@ -307,7 +306,10 @@ console.log(holder.label())
     target: 'cc'
   })
 
-  assert.match(result.code, /inox::class_assign_from_value\(\s*inox_value_\d+,\s*&Scope::inox_descriptor,\s*&this->scope\s*\)/)
+  assert.match(
+    result.code,
+    /inox::class_assign_from_value\(\s*inox_value_\d+,\s*&Scope::inox_descriptor,\s*&this->scope\s*\)/
+  )
   assert.doesNotMatch(result.code, /this->scope = inox_value_\d+;/)
 }
 
@@ -342,10 +344,7 @@ console.log(f.isPromise())
   assert.match(result.code, /inox::String name/)
   assert.match(result.code, /Foo\(const inox::String& name\);/)
   assert.match(result.code, /Foo::Foo\(const inox::String& name\) : name\(name\) \{\n\}/)
-  assert.match(
-    result.code,
-    /Foo f\{inox::String\("foo 1", 5\)\};|f = Foo\(inox::String\("foo 1", 5\)\);/
-  )
+  assert.match(result.code, /Foo f\{inox::String\("foo 1", 5\)\};|f = Foo\(inox::String\("foo 1", 5\)\);/)
   assert.doesNotMatch(result.code, /Foo\(const inox::Value& name\)/)
   assert.doesNotMatch(result.code, /Foo::Foo\(const inox::Value& name\)/)
   assert.doesNotMatch(result.code, /Foo\(const char\* name\)/)

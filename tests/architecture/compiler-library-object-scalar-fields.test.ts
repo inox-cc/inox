@@ -7,10 +7,10 @@ import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.
 
 test('library object options извлекают string и number поля с признаком наличия', () => {
   const libraries = createCompilerLibrarySet([bridgeLibrary()])
-  const result = compileSource(
-    "bridge.open({ host: '127.0.0.1', port: 8080 })\nbridge.open({})\n",
-    { libraries, target: 'cc' }
-  )
+  const result = compileSource("bridge.open({ host: '127.0.0.1', port: 8080 })\nbridge.open({})\n", {
+    libraries,
+    target: 'cc'
+  })
 
   assert.match(result.code, /bridge\.open\("127\.0\.0\.1", true, 8080(?:\.0)?, true\)/)
   assert.match(result.code, /bridge\.open\(inox::StringView\("", 0\), false, 0, false\)/)
@@ -29,12 +29,7 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
         kind: 'call',
         runtimeRequirements: [],
         cExpression: 'bridge.open',
-        cArgumentKinds: [
-          'object-string-field',
-          'argument-presence',
-          'object-number-field',
-          'argument-presence'
-        ],
+        cArgumentKinds: ['object-string-field', 'argument-presence', 'object-number-field', 'argument-presence'],
         cArgumentSources: [
           { argumentIndex: 0, objectFieldName: 'host' },
           null,

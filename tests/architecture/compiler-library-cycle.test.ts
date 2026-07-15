@@ -6,11 +6,7 @@ import { compilerLibrary } from './helpers/compiler-library-fixtures.ts'
 
 test('compiler library set rejects dependency cycles', () => {
   assert.throws(
-    () =>
-      createCompilerLibrarySet([
-        compilerLibrary('node:a', ['node:b']),
-        compilerLibrary('node:b', ['node:a'])
-      ]),
+    () => createCompilerLibrarySet([compilerLibrary('node:a', ['node:b']), compilerLibrary('node:b', ['node:a'])]),
     /Compiler library dependency cycle: node:a, node:b/
   )
 })

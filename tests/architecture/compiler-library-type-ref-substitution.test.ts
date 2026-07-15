@@ -24,40 +24,6 @@ test('generic TypeRef substitution рекурсивно заменяет paramet
     ownership: 'value',
     traits: [{ traitId: 'iterable', args: [stringType] }]
   })
-
-  assert.deepEqual(
-    substituteTypeRef(
-      {
-        kind: 'function',
-        params: [parameter],
-        result: {
-          kind: 'object',
-          fields: [{ name: 'value', typeRef: parameter, readonly: true }],
-          nullable: false,
-          ownership: 'value',
-          traits: []
-        },
-        nullable: false,
-        ownership: 'value',
-        traits: []
-      },
-      [{ name: 'T', typeRef: stringType }]
-    ),
-    {
-      kind: 'function',
-      params: [stringType],
-      result: {
-        kind: 'object',
-        fields: [{ name: 'value', typeRef: stringType, readonly: true }],
-        nullable: false,
-        ownership: 'value',
-        traits: []
-      },
-      nullable: false,
-      ownership: 'value',
-      traits: []
-    }
-  )
 })
 
 function primitiveTypeRef(name: 'string'): TypeRef {

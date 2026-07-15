@@ -89,17 +89,17 @@ await checkFetch()
   assert.doesNotMatch(checkFetch, /auto res = inox_res_\d+\.value\(\);/)
   assert.doesNotMatch(checkFetch, /auto txt = inox_res_\d+\.value\(\);/)
   assert.match(checkFetch, /console\.log\("Text %s", txt\);/)
-  assert.match(
-    checkFetch,
-    /console\.log\("Post %d", post\.ok\);\n    goto end_0;\n  \} catch_0: \{/
-  )
+  assert.match(checkFetch, /console\.log\("Post %d", post\.ok\);\n    goto end_0;\n  \} catch_0: \{/)
   assert.match(checkFetch, /\} end_0:;/)
   assert.match(checkFetch, /\} end_0:;\n\}/)
   assert.doesNotMatch(checkFetch, /end_0: ;/)
   assert.doesNotMatch(checkFetch, /end_\d+:\n\s+;/)
   assert.doesNotMatch(checkFetch, /\} end_0:;\n\n\}/)
   assert.doesNotMatch(checkFetch, /else catch_\d+:/)
-  assert.doesNotMatch(checkFetch, /inox_error = inox_undefined_value\(\);\n\s+inox_error = inox_res_\d+\.error_value\(\);/)
+  assert.doesNotMatch(
+    checkFetch,
+    /inox_error = inox_undefined_value\(\);\n\s+inox_error = inox_res_\d+\.error_value\(\);/
+  )
   assert.doesNotMatch(checkFetch, /inox::FetchResponse res =/)
   assert.doesNotMatch(checkFetch, /inox::String txt =/)
   assert.doesNotMatch(checkFetch, /inox_await_result_\d+/)

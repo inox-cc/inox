@@ -5,14 +5,7 @@ import { test } from 'node:test'
 
 const compilerRoot = resolve('compiler')
 const projectRoot = resolve('.')
-const timerApiNames = [
-  'setTimeout',
-  'clearTimeout',
-  'setInterval',
-  'clearInterval',
-  'setImmediate',
-  'clearImmediate'
-]
+const timerApiNames = ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate']
 const forbiddenPatterns = [
   /stdlib\/node\/timers\/compiler\/(?:c|checker|descriptor|feature)/,
   /\b(?:Timer|timer)(?:RuntimeMethod|LoweringDependencies|HandleMethod|StartCall|ClearCall)\w*\b/,

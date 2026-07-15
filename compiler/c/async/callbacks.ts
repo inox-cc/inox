@@ -7,7 +7,6 @@ import type {
   CCallbackContextWrapper,
   CCallbackWrapper,
   CClassInfo,
-  CFunctionPointerRuntimeAdapter,
   CFunctionParam,
   CFunctionType,
   CNamedCallbackWrapper,
@@ -21,15 +20,12 @@ import type {
   CPreparedExpression as PreparedExpression
 } from '../types.ts'
 import {
-  applyLibraryNativeValueAdapter,
   cRuntimeValueTag,
   emitCStringParamName,
   emitCType,
   isManagedRuntimeReturnType,
   isNullableScalarType,
-  isOpaqueRuntimeValueType,
-  libraryNativeBoundaryCppType,
-  libraryNativeValueAdapter
+  isOpaqueRuntimeValueType
 } from '../value-types.ts'
 import { isPromiseConstructorExpression } from './promises.ts'
 
@@ -51,18 +47,6 @@ type CallbackStringMap = Map<string, string>
 type CallbackStringSet = Set<string>
 type CallbackWrapperMap = Map<string, CCallbackWrapper>
 type RuntimeArrowCaptureMap = Map<string, CRuntimeArrowCapture>
-
-export type FunctionPointerParamInfo = {
-  functionType: CFunctionType | null
-  name: string
-  runtimeFunction: boolean
-  seenTypes: string[]
-}
-
-type FunctionPointerRuntimeAdapterContext = {
-  functionPointerRuntimeAdapterNames: Map<string, CFunctionPointerRuntimeAdapter>
-  functionPointerRuntimeAdapters: CFunctionPointerRuntimeAdapter[]
-}
 
 export type RuntimeCallbackArgumentInfo = {
   functionType: CFunctionType
@@ -87,7 +71,6 @@ type CallbackEmitContext = {
   moduleObjectShapes?: CallbackObjectShapeMap
   moduleValueNames?: CallbackStringMap
   runtimeFunctionParams: CallbackFunctionTypeMap
-  throwingFunctions?: CallbackStringSet
 }
 
 type CallbackFunctionContext = CallbackEmitContext & {
@@ -187,6 +170,7 @@ function callbackArrowFunctionType(expression: AnyNode | null | undefined): CFun
     returnMapValueType: callbackStringOrNull(expression.returnMapValueType),
     returnNullable: expression.returnNullable === true,
     returnPromiseValueType: callbackStringOrNull(expression.returnPromiseValueType),
+    returnSetElementType: callbackStringOrNull(expression.returnSetElementType),
     returnShape,
     returnType: callbackStringOrUnknown(returnType)
   }
@@ -470,6 +454,7 @@ function isBuiltinObjectShapeValueType(valueType: string): boolean {
     valueType === 'number' ||
     valueType === 'object' ||
     valueType === 'promise' ||
+    valueType === 'set' ||
     valueType === 'string' ||
     valueType === 'unknown' ||
     valueType === 'void'
@@ -480,13 +465,8 @@ function isPlainCallbackParamValueType(valueType: string): boolean {
   return valueType === 'number' || valueType === 'boolean'
 }
 
-function isPlainFunctionPointerParam(
-  param: CFunctionParam,
-  seen: CObjectShape[],
-  seenTypes: string[],
-  allowNullableScalar: boolean
-): boolean {
-  if (!allowNullableScalar && param.nullable === true && isNullableScalarType(param.valueType)) {
+function isPlainFunctionPointerParam(param: CFunctionParam, seen: CObjectShape[], seenTypes: string[]): boolean {
+  if (param.nullable === true && isNullableScalarType(param.valueType)) {
     return false
   }
 
@@ -560,8 +540,8 @@ function isSupportedPlainFunctionPointerShape(
   return true
 }
 
-function isPlainFunctionPointerReturn(functionType: CFunctionType, allowNullableScalar: boolean): boolean {
-  if (!allowNullableScalar && functionType.returnNullable === true && isNullableScalarType(functionType.returnType)) {
+function isPlainFunctionPointerReturn(functionType: CFunctionType): boolean {
+  if (functionType.returnNullable === true && isNullableScalarType(functionType.returnType)) {
     return false
   }
 
@@ -813,25 +793,22 @@ export function normalizeFunctionType(functionType: CFunctionType | null | undef
 }
 
 export function isPlainFunctionPointerType(
-  functionType: CFunctionType | null | undefined
+  functionType: CFunctionType | null | undefined,
+  seen: CObjectShape[] = [],
+  seenTypes: string[] = []
 ): boolean {
   if (functionType === null || typeof functionType === 'undefined') {
     return true
   }
 
-  const requiresObjectFunctionCompanions = functionTypeRequiresObjectFunctionCompanions(functionType)
-
-  if (!isPlainFunctionPointerReturn(functionType, requiresObjectFunctionCompanions)) {
+  if (!isPlainFunctionPointerReturn(functionType)) {
     return false
   }
-
-  const seen: CObjectShape[] = []
-  const seenTypes: string[] = []
 
   for (let index = 0; index < functionType.params.length; index = index + 1) {
     const param = callbackParamAt(functionType.params, index)
 
-    if (!isPlainFunctionPointerParam(param, seen, seenTypes, requiresObjectFunctionCompanions)) {
+    if (!isPlainFunctionPointerParam(param, seen, seenTypes)) {
       return false
     }
   }
@@ -839,22 +816,8 @@ export function isPlainFunctionPointerType(
   return true
 }
 
-export function isPlainObjectFunctionField(
-  field: CObjectShapeField
-): boolean {
-  return field.functionStorage === 'pointer' || isPlainFunctionPointerType(field.functionType)
-}
-
-export function isRuntimeObjectFunctionField(field: CObjectShapeField): boolean {
-  return !isPlainObjectFunctionField(field) && isRuntimeFunctionType(field.functionType)
-}
-
 export function isRuntimeFunctionType(functionType: CFunctionType | null | undefined): boolean {
   if (functionType === null || typeof functionType === 'undefined') {
-    return false
-  }
-
-  if (functionTypeRequiresObjectFunctionCompanions(functionType)) {
     return false
   }
 
@@ -889,10 +852,6 @@ export function isNullableFunctionType(
 export function isSupportedRuntimeCallbackType(functionType: CFunctionType | null | undefined): boolean {
   const normalized = normalizeFunctionType(functionType)
 
-  if (functionTypeRequiresObjectFunctionCompanions(normalized)) {
-    return false
-  }
-
   if (!isSupportedRuntimeCallbackReturnType(normalized.returnType)) {
     return false
   }
@@ -906,91 +865,6 @@ export function isSupportedRuntimeCallbackType(functionType: CFunctionType | nul
   }
 
   return true
-}
-
-function functionTypeRequiresObjectFunctionCompanions(
-  functionType: CFunctionType | null | undefined,
-  seen: CObjectShape[] = [],
-  seenTypes: string[] = []
-): boolean {
-  if (functionType === null || typeof functionType === 'undefined') {
-    return false
-  }
-
-  for (const param of functionType.params) {
-    if (param.valueType !== 'object') {
-      continue
-    }
-
-    const paramSeenTypes: string[] = []
-
-    for (const seenType of seenTypes) {
-      paramSeenTypes.push(seenType)
-    }
-
-    if (seenTypesIncludeDeclaredType(paramSeenTypes, param.declaredType)) {
-      continue
-    }
-
-    const pushedTypes = pushSeenDeclaredType(paramSeenTypes, param.declaredType)
-    const requiresCompanions = objectShapeRequiresFunctionCompanions(param.shape, seen, paramSeenTypes)
-
-    popSeenDeclaredTypes(paramSeenTypes, pushedTypes)
-
-    if (requiresCompanions) {
-      return true
-    }
-  }
-
-  return false
-}
-
-function objectShapeRequiresFunctionCompanions(
-  shape: CObjectShape | null | undefined,
-  seen: CObjectShape[],
-  seenTypes: string[]
-): boolean {
-  if (shape === null || typeof shape === 'undefined' || shape.fields === null || typeof shape.fields === 'undefined') {
-    return false
-  }
-
-  for (const item of seen) {
-    if (item === shape) {
-      return false
-    }
-  }
-
-  seen.push(shape)
-
-  for (const field of shape.fields) {
-    if (field.valueType === 'function') {
-      seen.pop()
-      return true
-    }
-
-    if (field.valueType !== 'object') {
-      continue
-    }
-
-    const declaredType = objectShapeDeclaredType(field.valueType, field.declaredType, field.shape)
-
-    if (seenTypesIncludeDeclaredType(seenTypes, declaredType)) {
-      continue
-    }
-
-    const pushedTypes = pushSeenDeclaredType(seenTypes, declaredType)
-    const requiresCompanions = objectShapeRequiresFunctionCompanions(field.shape, seen, seenTypes)
-
-    popSeenDeclaredTypes(seenTypes, pushedTypes)
-
-    if (requiresCompanions) {
-      seen.pop()
-      return true
-    }
-  }
-
-  seen.pop()
-  return false
 }
 
 export function isSupportedRuntimeCallbackReturnType(returnType: string | null | undefined): boolean {
@@ -1297,15 +1171,6 @@ function registerCallbackExpression(
   context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): void {
-  if (
-    expression !== null &&
-    typeof expression !== 'undefined' &&
-    expression.functionStorage === 'pointer'
-  ) {
-    registerPlainCallbackExpression(expression, functionType, scopes, wrappers, context, deps)
-    return
-  }
-
   const arrowNeedsEventLoop =
     expression !== null &&
     typeof expression !== 'undefined' &&
@@ -1553,6 +1418,7 @@ function refineArrowCallbackFunctionType(expression: AnyNode, functionType: CFun
     refined.mapKeyType = param.mapKeyType
     refined.mapValueType = param.mapValueType
     refined.promiseValueType = param.promiseValueType
+    refined.setElementType = param.setElementType
     refined.shape = param.shape
 
     if (param.nullable === true) {
@@ -1606,6 +1472,10 @@ function refineArrowCallbackFunctionType(expression: AnyNode, functionType: CFun
         refined.promiseValueType = arrowParam.promiseValueType
       }
 
+      if (arrowParam.setElementType !== null && typeof arrowParam.setElementType !== 'undefined') {
+        refined.setElementType = arrowParam.setElementType
+      }
+
       if (arrowParam.shape !== null && typeof arrowParam.shape !== 'undefined') {
         refined.shape = arrowParam.shape
       }
@@ -1624,6 +1494,7 @@ function refineArrowCallbackFunctionType(expression: AnyNode, functionType: CFun
   result.returnMapKeyType = functionType.returnMapKeyType
   result.returnMapValueType = functionType.returnMapValueType
   result.returnPromiseValueType = functionType.returnPromiseValueType
+  result.returnSetElementType = functionType.returnSetElementType
   result.returnShape = functionType.returnShape
 
   if (functionType.returnNullable === true) {
@@ -1656,6 +1527,10 @@ function refineArrowCallbackFunctionType(expression: AnyNode, functionType: CFun
 
   if (expression.returnPromiseValueType !== null && typeof expression.returnPromiseValueType !== 'undefined') {
     result.returnPromiseValueType = expression.returnPromiseValueType
+  }
+
+  if (expression.returnSetElementType !== null && typeof expression.returnSetElementType !== 'undefined') {
+    result.returnSetElementType = expression.returnSetElementType
   }
 
   if (expression.returnShape !== null && typeof expression.returnShape !== 'undefined') {
@@ -1705,6 +1580,7 @@ function mergeArrowCallbackFunctionTypes(left: CFunctionType, right: CFunctionTy
   result.returnMapKeyType = preferredCallbackMetadata(left.returnMapKeyType, right.returnMapKeyType)
   result.returnMapValueType = preferredCallbackMetadata(left.returnMapValueType, right.returnMapValueType)
   result.returnPromiseValueType = preferredCallbackMetadata(left.returnPromiseValueType, right.returnPromiseValueType)
+  result.returnSetElementType = preferredCallbackMetadata(left.returnSetElementType, right.returnSetElementType)
   result.returnShape = preferredCallbackShape(left.returnShape, right.returnShape)
 
   if (left.returnNullable === true || right.returnNullable === true) {
@@ -1726,6 +1602,7 @@ function mergeCallbackFunctionParam(left: CFunctionParam, right: CFunctionParam)
   result.mapKeyType = preferredCallbackMetadata(left.mapKeyType, right.mapKeyType)
   result.mapValueType = preferredCallbackMetadata(left.mapValueType, right.mapValueType)
   result.promiseValueType = preferredCallbackMetadata(left.promiseValueType, right.promiseValueType)
+  result.setElementType = preferredCallbackMetadata(left.setElementType, right.setElementType)
   result.shape = preferredCallbackShape(left.shape, right.shape)
 
   if (left.functionTypeOwnership !== null && typeof left.functionTypeOwnership !== 'undefined') {
@@ -1764,6 +1641,7 @@ function cloneCallbackFunctionParam(param: CFunctionParam): CFunctionParam {
   result.mapKeyType = param.mapKeyType
   result.mapValueType = param.mapValueType
   result.promiseValueType = param.promiseValueType
+  result.setElementType = param.setElementType
   result.shape = param.shape
 
   if (param.functionTypeOwnership !== null && typeof param.functionTypeOwnership !== 'undefined') {
@@ -3199,7 +3077,7 @@ function pushPlainArrowObjectFunctionFieldParams(
 
   for (const field of fields) {
     if (field.valueType === 'function') {
-      if (!isPlainObjectFunctionField(field) && !isRuntimeFunctionType(field.functionType)) {
+      if (!isPlainFunctionPointerType(field.functionType) && !isRuntimeFunctionType(field.functionType)) {
         continue
       }
 
@@ -3226,7 +3104,7 @@ function emitPlainArrowObjectFunctionFieldParam(
 ): string {
   const name = emitCObjectFunctionFieldName(objectName, field.name)
 
-  if (isRuntimeObjectFunctionField(field)) {
+  if (!isPlainFunctionPointerType(field.functionType) && isRuntimeFunctionType(field.functionType)) {
     return `inox_value ${name}`
   }
 
@@ -3415,17 +3293,6 @@ export function emitRuntimeCallbackWrapperDeclaration(
 
   const call = `${functionName}(${joinStrings(callArgs, ', ')})`
 
-  if (
-    context.throwingFunctions !== null &&
-    typeof context.throwingFunctions !== 'undefined' &&
-    context.throwingFunctions.has(wrapper.target)
-  ) {
-    pushLines(lines, emitThrowingRuntimeCallbackTargetCall(wrapper, functionName, callArgs))
-    lines.push('}')
-
-    return lines
-  }
-
   if (wrapper.functionType.returnNullable === true && isNullableScalarType(wrapper.functionType.returnType)) {
     lines.push(`  *out = ${call};`)
   } else if (wrapper.functionType.returnType === 'number') {
@@ -3442,144 +3309,6 @@ export function emitRuntimeCallbackWrapperDeclaration(
   lines.push('}')
 
   return lines
-}
-
-export function emitFunctionPointerRuntimeAdapterDefinition(
-  adapter: CFunctionPointerRuntimeAdapter
-): string[] {
-  const functionType = adapter.functionType
-  const lines = [
-    `typedef struct ${adapter.contextTypeName} {`,
-    `  ${emitFunctionPointerReturnType(functionType)} (*target)(${emitFunctionPointerParams(
-      functionType,
-      [],
-      adapter.seenTypes
-    )});`,
-    `} ${adapter.contextTypeName};`,
-    '',
-    `static void ${adapter.finalizerName}(void* context) {`,
-    '  if (context == 0) return;',
-    `  inox_default_free(0, context, sizeof(${adapter.contextTypeName}), _Alignof(${adapter.contextTypeName}));`,
-    '}',
-    '',
-    `static inox_status ${adapter.callbackName}(`,
-    '  void* inox_context,',
-    '  const inox_value* args,',
-    '  size_t arg_count,',
-    '  inox_value* out',
-    ') {',
-    '  if (inox_context == 0) return INOX_ERR_TYPE;',
-    emitIndentedRuntimeArgCountCheck(functionType.params.length),
-    '  *out = inox_undefined_value();',
-    `  ${adapter.contextTypeName}* captured = (${adapter.contextTypeName}*)inox_context;`,
-    '  if (captured->target == 0) return INOX_ERR_TYPE;'
-  ]
-  const args: string[] = []
-  let index = 0
-
-  for (const param of functionType.params) {
-    pushIndentedLines(lines, emitRuntimeCallbackWrapperArgChecks(param, index))
-    args.push(emitRuntimeCallbackWrapperArg(param, index))
-    index = index + 1
-  }
-
-  const call = `captured->target(${joinStrings(args, ', ')})`
-
-  if (functionType.returnNullable === true && isNullableScalarType(functionType.returnType)) {
-    lines.push(`  *out = ${call};`)
-  } else if (functionType.returnType === 'number') {
-    lines.push(`  *out = inox_number_value(${call});`)
-  } else if (functionType.returnType === 'boolean') {
-    lines.push(`  *out = inox_bool_value((${call}) != 0);`)
-  } else if (isManagedRuntimeReturnType(functionType.returnType) || functionType.returnType === 'unknown') {
-    lines.push(`  *out = ${call};`)
-  } else {
-    lines.push(`  ${call};`)
-  }
-
-  lines.push('  return INOX_OK;')
-  lines.push('}')
-
-  return lines
-}
-
-function emitThrowingRuntimeCallbackTargetCall(
-  wrapper: CNamedCallbackWrapper,
-  functionName: string,
-  callArgs: string[]
-): string[] {
-  const lines: string[] = []
-  const args: string[] = []
-
-  for (const arg of callArgs) {
-    args.push(arg)
-  }
-
-  const resultType = throwingRuntimeCallbackTargetResultType(wrapper.functionType)
-
-  if (resultType !== 'void') {
-    lines.push(`  ${resultType} inox_callback_result = ${runtimeCallbackTargetDefaultResult(resultType)};`)
-    args.push('&inox_callback_result')
-  }
-
-  lines.push('  inox_value inox_callback_error = inox_undefined_value();')
-  args.push('&inox_callback_error')
-  lines.push(`  inox_status inox_callback_status = ${functionName}(${joinStrings(args, ', ')});`)
-  lines.push('  if (inox_callback_status != INOX_OK) {')
-  lines.push('    if (inox_callback_status == INOX_ERR_THROW) inox::throw_value(inox_callback_error);')
-  lines.push('    inox_release(inox_callback_error);')
-
-  if (resultType === 'inox_value') {
-    lines.push('    inox_release(inox_callback_result);')
-  }
-
-  lines.push('    return inox_callback_status;')
-  lines.push('  }')
-  lines.push('  inox_release(inox_callback_error);')
-  pushLines(lines, emitThrowingRuntimeCallbackResult(wrapper.functionType, resultType))
-  lines.push('  return INOX_OK;')
-
-  return lines
-}
-
-function throwingRuntimeCallbackTargetResultType(functionType: CFunctionType): string {
-  if (functionType.returnType === 'void') {
-    return 'void'
-  }
-
-  if (functionType.returnNullable === true && isNullableScalarType(functionType.returnType)) {
-    return 'inox_value'
-  }
-
-  return emitCType(functionType.returnType)
-}
-
-function runtimeCallbackTargetDefaultResult(resultType: string): string {
-  if (resultType === 'inox_value') {
-    return 'inox_undefined_value()'
-  }
-
-  return '0'
-}
-
-function emitThrowingRuntimeCallbackResult(functionType: CFunctionType, resultType: string): string[] {
-  if (resultType === 'void') {
-    return []
-  }
-
-  if (resultType === 'inox_value') {
-    return ['  *out = inox_callback_result;']
-  }
-
-  if (functionType.returnType === 'number') {
-    return ['  *out = inox_number_value(inox_callback_result);']
-  }
-
-  if (functionType.returnType === 'boolean') {
-    return ['  *out = inox_bool_value(inox_callback_result != 0);']
-  }
-
-  return []
 }
 
 function emitNamedRuntimeCallbackTargetArgs(
@@ -3636,6 +3365,7 @@ function namedRuntimeCallbackTargetFunctionType(
     returnMapValueType: wrapper.functionType.returnMapValueType,
     returnNullable: wrapper.functionType.returnNullable,
     returnPromiseValueType: wrapper.functionType.returnPromiseValueType,
+    returnSetElementType: wrapper.functionType.returnSetElementType,
     returnShape: wrapper.functionType.returnShape,
     returnType: wrapper.functionType.returnType
   }
@@ -3693,7 +3423,7 @@ function collectCallbackModuleObjectFunctionFieldNames(context: CallbackEmitCont
         continue
       }
 
-      if (isPlainObjectFunctionField(field) || isRuntimeFunctionType(field.functionType)) {
+      if (isPlainFunctionPointerType(field.functionType) || isRuntimeFunctionType(field.functionType)) {
         names.add(emitCObjectFunctionFieldName(objectName, field.name))
       }
     }
@@ -4228,21 +3958,6 @@ function emitRuntimeCallbackWrapperArg(param: CFunctionParam, index: number): st
 
 export function emitFunctionPointerReturnType(functionType: CFunctionType | null | undefined): string {
   if (functionType !== null && typeof functionType !== 'undefined') {
-    const libraryCppType = libraryNativeBoundaryCppType(
-      functionType.returnType,
-      functionType.returnNullable === true,
-      false,
-      functionType.returnShape
-    )
-
-    if (libraryCppType !== null) {
-      return libraryCppType
-    }
-
-    if (functionType.returnNullable === true && isNullableScalarType(functionType.returnType)) {
-      return 'inox_value'
-    }
-
     return emitCType(functionType.returnType)
   }
 
@@ -4267,7 +3982,7 @@ export function emitFunctionPointerParams(
       paramSeenTypes.push(seenType)
     }
 
-    params.push(emitFunctionPointerParamCType(param))
+    params.push(emitCType(param.valueType))
 
     if (param.valueType === 'object' && seenTypesIncludeDeclaredType(paramSeenTypes, param.declaredType)) {
       continue
@@ -4308,138 +4023,6 @@ export function collectFunctionPointerParamNames(
   appendFunctionPointerParamNames(names, functionType, seenTypes)
 
   return names
-}
-
-export function collectFunctionPointerParamInfos(
-  functionType: CFunctionType | null | undefined,
-  seenTypes: string[] = []
-): FunctionPointerParamInfo[] {
-  const infos: FunctionPointerParamInfo[] = []
-
-  if (functionType === null || typeof functionType === 'undefined') {
-    return infos
-  }
-
-  appendFunctionPointerParamInfos(infos, functionType, seenTypes)
-
-  return infos
-}
-
-export function emitFunctionPointerNativeBoundaryArgument(
-  paramName: string,
-  value: string,
-  expectedFunctionType: CFunctionType | null | undefined,
-  targetFunctionType: CFunctionType | null | undefined
-): string {
-  const index = functionPointerRootParamIndex(paramName)
-
-  if (
-    index === null ||
-    expectedFunctionType === null ||
-    typeof expectedFunctionType === 'undefined' ||
-    targetFunctionType === null ||
-    typeof targetFunctionType === 'undefined' ||
-    index >= expectedFunctionType.params.length ||
-    index >= targetFunctionType.params.length
-  ) {
-    return value
-  }
-
-  const expectedParam = callbackParamAt(expectedFunctionType.params, index)
-  const targetParam = callbackParamAt(targetFunctionType.params, index)
-  const expectedCppType = libraryNativeBoundaryCppType(
-    expectedParam.valueType,
-    expectedParam.nullable === true,
-    expectedParam.optional === true,
-    expectedParam.shape
-  )
-  const targetCppType = libraryNativeBoundaryCppType(
-    targetParam.valueType,
-    targetParam.nullable === true,
-    targetParam.optional === true,
-    targetParam.shape
-  )
-
-  if (targetCppType === null || targetCppType === expectedCppType) {
-    return value
-  }
-
-  return applyLibraryNativeValueAdapter(value, libraryNativeValueAdapter(targetParam.shape))
-}
-
-function functionPointerRootParamIndex(name: string): number | null {
-  const prefix = 'inox_arg_'
-
-  if (!name.startsWith(prefix)) {
-    return null
-  }
-
-  let index = prefix.length
-  let value = 0
-
-  while (index < name.length) {
-    const code = name.charCodeAt(index)
-
-    if (code < 48 || code > 57) {
-      return null
-    }
-
-    value = value * 10 + (code - 48)
-    index = index + 1
-  }
-
-  if (index === prefix.length) {
-    return null
-  }
-
-  return value
-}
-
-export function registerFunctionPointerRuntimeAdapter(
-  functionType: CFunctionType,
-  seenTypes: string[],
-  context: FunctionPointerRuntimeAdapterContext
-): CFunctionPointerRuntimeAdapter {
-  const key = functionPointerRuntimeAdapterKey(functionType, seenTypes)
-  const existing = context.functionPointerRuntimeAdapterNames.get(key)
-
-  if (existing !== null && typeof existing !== 'undefined') {
-    return existing
-  }
-
-  const index = context.functionPointerRuntimeAdapters.length
-  const adapterSeenTypes: string[] = []
-
-  for (const seenType of seenTypes) {
-    adapterSeenTypes.push(seenType)
-  }
-
-  const adapter: CFunctionPointerRuntimeAdapter = {
-    callbackName: `inox_function_pointer_runtime_callback_${index}`,
-    contextTypeName: `inox_function_pointer_runtime_context_${index}`,
-    finalizerName: `inox_function_pointer_runtime_finalize_${index}`,
-    functionType,
-    seenTypes: adapterSeenTypes
-  }
-
-  context.functionPointerRuntimeAdapterNames.set(key, adapter)
-  context.functionPointerRuntimeAdapters.push(adapter)
-
-  return adapter
-}
-
-function functionPointerRuntimeAdapterKey(functionType: CFunctionType, seenTypes: string[]): string {
-  let key = `${functionType.returnType}:${functionType.returnNullable === true ? 'nullable' : 'required'}`
-
-  for (const param of functionType.params) {
-    key = `${key}:${param.valueType}:${param.nullable === true ? 'nullable' : 'required'}`
-  }
-
-  return `${key}:${emitFunctionPointerReturnType(functionType)}:${emitFunctionPointerParams(
-    functionType,
-    [],
-    seenTypes
-  )}`
 }
 
 function appendFunctionPointerNamedParams(params: string[], functionType: CFunctionType, seenTypes: string[]): void {
@@ -4486,49 +4069,7 @@ function appendFunctionPointerParamNames(names: string[], functionType: CFunctio
   }
 }
 
-function appendFunctionPointerParamInfos(
-  infos: FunctionPointerParamInfo[],
-  functionType: CFunctionType,
-  seenTypes: string[]
-): void {
-  let index = 0
-
-  for (const param of functionType.params) {
-    const name = `inox_arg_${index}`
-    const paramSeenTypes: string[] = []
-
-    for (const seenType of seenTypes) {
-      paramSeenTypes.push(seenType)
-    }
-
-    infos.push({
-      functionType: null,
-      name,
-      runtimeFunction: false,
-      seenTypes: copyFunctionPointerSeenTypes(paramSeenTypes)
-    })
-
-    if (param.valueType !== 'object' || !seenTypesIncludeDeclaredType(paramSeenTypes, param.declaredType)) {
-      pushSeenDeclaredType(paramSeenTypes, param.declaredType)
-      appendObjectShapeFunctionPointerParamInfos(infos, name, param.shape, [], paramSeenTypes)
-    }
-
-    index = index + 1
-  }
-}
-
 function emitFunctionPointerParamCType(param: CFunctionParam): string {
-  const libraryCppType = libraryNativeBoundaryCppType(
-    param.valueType,
-    param.nullable === true,
-    param.optional === true,
-    param.shape
-  )
-
-  if (libraryCppType !== null) {
-    return libraryCppType
-  }
-
   if (param.nullable === true && isNullableScalarType(param.valueType)) {
     return 'inox_value'
   }
@@ -4558,13 +4099,20 @@ function appendObjectShapeFunctionPointerParamDeclarations(
   for (const field of shape.fields) {
     if (field.valueType === 'function') {
       if (
-        !isPlainObjectFunctionField(field) &&
+        !isPlainFunctionPointerType(field.functionType, seen, seenTypes) &&
         !isRuntimeFunctionType(field.functionType)
       ) {
         continue
       }
 
-      params.push(emitPlainArrowObjectFunctionFieldParam(objectName, field, seenTypes))
+      params.push(
+        emitNamedFunctionPointerParam(
+          emitCObjectFunctionFieldName(objectName, field.name),
+          field.functionType,
+          seen,
+          seenTypes
+        )
+      )
     } else if (field.valueType === 'object') {
       const declaredType = objectShapeDeclaredType(field.valueType, field.declaredType, field.shape)
 
@@ -4609,7 +4157,7 @@ function appendObjectShapeFunctionPointerParamNames(
   for (const field of shape.fields) {
     if (field.valueType === 'function') {
       if (
-        !isPlainObjectFunctionField(field) &&
+        !isPlainFunctionPointerType(field.functionType, seen, seenTypes) &&
         !isRuntimeFunctionType(field.functionType)
       ) {
         continue
@@ -4632,79 +4180,13 @@ function appendObjectShapeFunctionPointerParamNames(
   seen.pop()
 }
 
-function appendObjectShapeFunctionPointerParamInfos(
-  infos: FunctionPointerParamInfo[],
-  objectName: string,
-  shape: CObjectShape | null | undefined,
-  seen: CObjectShape[],
-  seenTypes: string[]
-): void {
-  if (shape === null || typeof shape === 'undefined' || shape.fields === null || typeof shape.fields === 'undefined') {
-    return
-  }
-
-  for (const item of seen) {
-    if (item === shape) {
-      return
-    }
-  }
-
-  seen.push(shape)
-
-  for (const field of shape.fields) {
-    if (field.valueType === 'function') {
-      const plain = isPlainObjectFunctionField(field)
-      const runtime = !plain && isRuntimeFunctionType(field.functionType)
-
-      if (!isPlainObjectFunctionField(field) && !runtime) {
-        continue
-      }
-
-      infos.push({
-        functionType: field.functionType ?? null,
-        name: emitCObjectFunctionFieldName(objectName, field.name),
-        runtimeFunction: runtime,
-        seenTypes: copyFunctionPointerSeenTypes(seenTypes)
-      })
-    } else if (field.valueType === 'object') {
-      const declaredType = objectShapeDeclaredType(field.valueType, field.declaredType, field.shape)
-
-      if (seenTypesIncludeDeclaredType(seenTypes, declaredType)) {
-        continue
-      }
-
-      const pushedTypes = pushSeenDeclaredType(seenTypes, declaredType)
-      appendObjectShapeFunctionPointerParamInfos(
-        infos,
-        `${objectName}_${field.name}`,
-        field.shape,
-        seen,
-        seenTypes
-      )
-      popSeenDeclaredTypes(seenTypes, pushedTypes)
-    }
-  }
-
-  seen.pop()
-}
-
-function copyFunctionPointerSeenTypes(seenTypes: string[]): string[] {
-  const copy: string[] = []
-
-  for (const seenType of seenTypes) {
-    copy.push(seenType)
-  }
-
-  return copy
-}
-
 function emitNamedFunctionPointerParam(
   name: string,
   functionType: CFunctionType | null | undefined,
   seen: CObjectShape[],
   seenTypes: string[]
 ): string {
-  if (!isPlainFunctionPointerType(functionType) && isRuntimeFunctionType(functionType)) {
+  if (!isPlainFunctionPointerType(functionType, seen, seenTypes) && isRuntimeFunctionType(functionType)) {
     return `inox_value ${name}`
   }
 
@@ -4732,13 +4214,13 @@ function appendObjectShapeFunctionPointerParamTypes(
   for (const field of shape.fields) {
     if (field.valueType === 'function') {
       if (
-        !isPlainObjectFunctionField(field) &&
+        !isPlainFunctionPointerType(field.functionType, seen, seenTypes) &&
         !isRuntimeFunctionType(field.functionType)
       ) {
         continue
       }
 
-      params.push(emitObjectFunctionFieldParamType(field, seen, seenTypes))
+      params.push(emitFunctionPointerParamType(field.functionType, seen, seenTypes))
     } else if (field.valueType === 'object') {
       const declaredType = objectShapeDeclaredType(field.valueType, field.declaredType, field.shape)
 
@@ -4755,28 +4237,12 @@ function appendObjectShapeFunctionPointerParamTypes(
   seen.pop()
 }
 
-function emitObjectFunctionFieldParamType(
-  field: CObjectShapeField,
-  seen: CObjectShape[],
-  seenTypes: string[]
-): string {
-  if (isRuntimeObjectFunctionField(field)) {
-    return 'inox_value'
-  }
-
-  return `${emitFunctionPointerReturnType(field.functionType)} (*)(${emitFunctionPointerParams(
-    field.functionType,
-    seen,
-    seenTypes
-  )})`
-}
-
 function emitFunctionPointerParamType(
   functionType: CFunctionType | null | undefined,
   seen: CObjectShape[] = [],
   seenTypes: string[] = []
 ): string {
-  if (!isPlainFunctionPointerType(functionType) && isRuntimeFunctionType(functionType)) {
+  if (!isPlainFunctionPointerType(functionType, seen, seenTypes) && isRuntimeFunctionType(functionType)) {
     return 'inox_value'
   }
 

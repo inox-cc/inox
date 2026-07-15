@@ -1,2 +1,2 @@
-declare const dns: unknown;
-export default dns;
+declare const dns: unknown
+export default dns

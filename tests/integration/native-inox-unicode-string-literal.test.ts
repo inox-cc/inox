@@ -42,7 +42,11 @@ export async function assertNativeInoxUnicodeStringLiteral(): Promise<void> {
 
     const run = await runCommand(output, [])
 
-    assert.equal(run.code, 0, `native unicode string literal run failed\nstdout:\n${run.stdout}\nstderr:\n${run.stderr}`)
+    assert.equal(
+      run.code,
+      0,
+      `native unicode string literal run failed\nstdout:\n${run.stdout}\nstderr:\n${run.stderr}`
+    )
     assert.equal(run.stderr, '')
     assert.equal(run.stdout, 'foo 1 ололо\n')
   } finally {

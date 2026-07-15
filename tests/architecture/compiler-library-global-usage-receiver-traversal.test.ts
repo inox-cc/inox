@@ -7,10 +7,7 @@ import type { ProgramNode } from '../../compiler/types.ts'
 test('global usage traversal пропускает package binding, но обходит receiver library operation', () => {
   const program = {
     type: 'Program',
-    body: [
-      libraryGlobalCall(),
-      libraryReceiverCall()
-    ]
+    body: [libraryGlobalCall(), libraryReceiverCall()]
   } as unknown as ProgramNode
   const paths = collectGlobalUsages(program).map((usage) => usage.path.join('.'))
 

@@ -37,14 +37,8 @@ try {
 }
 `)
 
-  assert.match(
-    source,
-    /inox::await_value<inox::Value>\(inox_promise_\d+\);/
-  )
-  assert.match(
-    source,
-    /if \(inox::thrown\(\)\) goto catch_\d+;/
-  )
+  assert.match(source, /inox::await_value<inox::Value>\(inox_promise_\d+\);/)
+  assert.match(source, /if \(inox::thrown\(\)\) goto catch_\d+;/)
   assert.match(source, /auto error = inox::take_exception\(\);/)
   assert.doesNotMatch(source, /inox_error = inox_undefined_value\(\);\n\s+inox_error = inox_res_\d+\.error_value\(\);/)
   assert.doesNotMatch(source, /inox_await_result_\d+/)

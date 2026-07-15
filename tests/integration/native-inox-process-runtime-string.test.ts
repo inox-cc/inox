@@ -22,11 +22,7 @@ export async function assertNativeInoxProcessRuntimeString(): Promise<void> {
     })
     await writeFile(
       input,
-      [
-        'const snapshot = process',
-        'console.log(snapshot.versions.node === process.version.slice(1))',
-        ''
-      ].join('\n')
+      ['const snapshot = process', 'console.log(snapshot.versions.node === process.version.slice(1))', ''].join('\n')
     )
 
     const emit = await runCommand(join(rootDir, 'dist/inox'), [input, outputCc])
@@ -48,7 +44,11 @@ export async function assertNativeInoxProcessRuntimeString(): Promise<void> {
 
     const run = await runCommand(output, [])
 
-    assert.equal(run.code, 0, `native process runtime string run failed\nstdout:\n${run.stdout}\nstderr:\n${run.stderr}`)
+    assert.equal(
+      run.code,
+      0,
+      `native process runtime string run failed\nstdout:\n${run.stdout}\nstderr:\n${run.stderr}`
+    )
     assert.equal(run.stderr, '')
     assert.equal(run.stdout, '1\n')
   } finally {

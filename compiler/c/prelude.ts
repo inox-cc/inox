@@ -56,15 +56,6 @@ function emitCPreludeIncludeLines(systemIncludes: string[], localIncludes: strin
   return lines
 }
 
-export function emitLibraryCPreludeIncludeLines(includes: string[]): string[] {
-  const systemIncludes: string[] = []
-  const localIncludes: string[] = []
-
-  pushLibraryCPreludeIncludes(systemIncludes, localIncludes, includes)
-
-  return emitCPreludeIncludeLines(systemIncludes, localIncludes)
-}
-
 export function filterUnusedCPreludeIncludes(code: string): string {
   const lines = code.split('\n')
   const body = cPreludeFilterBody(lines)
@@ -165,6 +156,7 @@ export function emitCPrelude(
   needsStringHeader: boolean,
   needsCollectionRuntime: boolean,
   needsMapRuntime: boolean,
+  needsSetRuntime: boolean,
   needsObjectRuntime: boolean,
   libraryCPreludeIncludes: string[]
 ): string[] {
@@ -206,6 +198,9 @@ export function emitCPrelude(
     }
     if (needsObjectRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/object.h"')
+    }
+    if (needsSetRuntime) {
+      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/set.h"')
     }
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/string.h"')
   } else if (needsStringHeader) {

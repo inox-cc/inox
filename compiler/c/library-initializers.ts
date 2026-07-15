@@ -43,7 +43,9 @@ export function emitCompilerLibraryRuntimeInitializerDefinitions(
       }
 
       if (optionValue === null) {
-        throw new Error(`runtime initializer ${initializer.initializerId} references missing option ${argument.optionId}`)
+        throw new Error(
+          `runtime initializer ${initializer.initializerId} references missing option ${argument.optionId}`
+        )
       }
 
       args.push(emitCompilerLibraryInitializerArgument(argument, optionValue))

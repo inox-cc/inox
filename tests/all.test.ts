@@ -103,15 +103,13 @@ function shouldRunIntegrationTests(options: RunnerOptions): boolean {
 }
 
 async function runIntegrationTests(): Promise<void> {
-  const { assertArrayLowersToGlobalObject } =
-    await import('./integration/array-global-object-lowering.test.ts')
+  const { assertArrayLowersToGlobalObject } = await import('./integration/array-global-object-lowering.test.ts')
   const { assertBuildCMakeConfigureIsQuiet } = await import('./integration/build-cmake-log-level.test.ts')
   const { assertBufferLowersToCppObject, assertBufferNativeFacadeHidesAllocatorOverloads } =
     await import('./integration/buffer-cpp-object-lowering.test.ts')
   const { assertCPreludeIncludeOrder } = await import('./integration/c-prelude-include-order.test.ts')
   const { assertCliEntryModuleMain } = await import('./integration/cli-entry-module-main.test.ts')
-  const { assertConsoleLowersToGlobalObject } =
-    await import('./integration/console-global-object-lowering.test.ts')
+  const { assertConsoleLowersToGlobalObject } = await import('./integration/console-global-object-lowering.test.ts')
   const { assertCompilerIndexNodeHelp } = await import('./integration/compiler-index-node-help.test.ts')
   const { assertDateLowersToGlobalObject } = await import('./integration/date-global-object-lowering.test.ts')
   const { assertPerformanceLowersToGlobalObject } =
@@ -120,12 +118,10 @@ async function runIntegrationTests(): Promise<void> {
     assertAwaitCatchOnlyDoesNotEmitErrorActiveState,
     assertCatchOnlyDoesNotEmitErrorActiveState,
     assertFinallyStillEmitsErrorActiveState
-  } =
-    await import('./integration/error-flow-state-lowering.test.ts')
+  } = await import('./integration/error-flow-state-lowering.test.ts')
   const { assertFetchAwaitUsesCppWrappers, assertFetchRuntimeFacadesUseCppObjects } =
     await import('./integration/fetch-await-cpp-lowering.test.ts')
-  const { assertGeneratedLabelsHaveLeadingBlankOnly } =
-    await import('./integration/generated-label-spacing.test.ts')
+  const { assertGeneratedLabelsHaveLeadingBlankOnly } = await import('./integration/generated-label-spacing.test.ts')
   const {
     assertAwaitFunctionUsesExternalLoopRuntime,
     assertGeneratedMainDoesNotCollideWithUserMain,
@@ -149,16 +145,14 @@ async function runIntegrationTests(): Promise<void> {
   const { assertModuleDeclarationImports } = await import('./integration/module-declaration-imports.test.ts')
   const { assertModuleDeclarationWeakTypeMarker } =
     await import('./integration/module-declaration-weak-type-marker.test.ts')
-  const { assertObjectLowersToGlobalObject } =
-    await import('./integration/object-global-object-lowering.test.ts')
+  const { assertObjectLowersToGlobalObject } = await import('./integration/object-global-object-lowering.test.ts')
   const { assertObjectRuntimeIndexUsesDirectHelpers } =
     await import('./integration/object-runtime-index-lowering.test.ts')
   const {
     assertJsonParseCatchUsesRaiiErrorReset,
     assertJsonParseLiteralShapeUsesDirectVariableTarget,
     assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariableTarget
-  } =
-    await import('./integration/json-parse-shape-lowering.test.ts')
+  } = await import('./integration/json-parse-shape-lowering.test.ts')
   const { assertJsonLowersToGlobalObject } = await import('./integration/json-global-object-lowering.test.ts')
   const { assertFsReadFileSyncLowersToCppObject } = await import('./integration/fs-cpp-object-lowering.test.ts')
   const { assertChildProcessLowersToCppObject } =
@@ -170,8 +164,7 @@ async function runIntegrationTests(): Promise<void> {
     assertNativeClassExplicitUnknownReturnIsPreserved,
     assertNativeClassLoopReturnKeepsRuntimeReturn,
     assertNativeClassVoidStringFieldLogMethod
-  } =
-    await import('./integration/native-class-method-log-lowering.test.ts')
+  } = await import('./integration/native-class-method-log-lowering.test.ts')
   const { assertNativeClassModuleMethodCallUsesNativeReceiver } =
     await import('./integration/native-class-module-method-call.test.ts')
   const { assertTestsDoNotReferenceExamples } = await import('./integration/no-example-dependencies.test.ts')
@@ -190,8 +183,7 @@ async function runIntegrationTests(): Promise<void> {
   const { assertHttpServerUsesCppObjectFacade } = await import('./integration/http-cpp-object-lowering.test.ts')
   const { assertReadableCStringLiterals } = await import('./integration/readable-c-string-literals.test.ts')
   const { assertRegExpLowersToCppObject } = await import('./integration/regexp-cpp-object-lowering.test.ts')
-  const { assertRuntimeAllocatorStaysInRuntime } =
-    await import('./integration/runtime-allocator-prelude.test.ts')
+  const { assertRuntimeAllocatorStaysInRuntime } = await import('./integration/runtime-allocator-prelude.test.ts')
   const { assertStringMethodsLowerToCppObject, assertStringRuntimeMethodsStayDirect } =
     await import('./integration/string-cpp-object-lowering.test.ts')
   const { assertRuntimeValueDeclarationsStayLocal } =
@@ -212,8 +204,7 @@ async function runIntegrationTests(): Promise<void> {
     assertNativeClassRuntimeValueFieldLowering,
     assertNativeClassStringLiteralConstructorUsesCppValue,
     assertNativeClassSetRuntimeFieldLowering
-  } =
-    await import('./integration/native-class-lowering.test.ts')
+  } = await import('./integration/native-class-lowering.test.ts')
   const { assertRuntimeValueCoreDoesNotReferenceFeatureDisposers } =
     await import('./integration/runtime-value-core-dependencies.test.ts')
   const { assertThrowingErrorTransferUsesValueRelease } =
@@ -264,10 +255,10 @@ async function runIntegrationTests(): Promise<void> {
       assertFinallyStillEmitsErrorActiveState()
     })
 
-  await t.test('fetch-await-cpp-lowering', () => {
-    assertFetchAwaitUsesCppWrappers()
-    assertFetchRuntimeFacadesUseCppObjects()
-  })
+    await t.test('fetch-await-cpp-lowering', () => {
+      assertFetchAwaitUsesCppWrappers()
+      assertFetchRuntimeFacadesUseCppObjects()
+    })
 
     await t.test('generated-label-spacing', () => {
       assertGeneratedLabelsHaveLeadingBlankOnly()

@@ -14,8 +14,9 @@ export const arrayMethods = [
   'sort',
   'unshift'
 ]
-export const collectionConstructors = ['Map']
+export const collectionConstructors = ['Map', 'Set']
 export const mapMethods = ['clear', 'delete', 'get', 'has', 'set']
+export const setMethods = ['add', 'clear', 'delete', 'has']
 
 export function arrayRuntimeMethodName(method: string): string | null {
   if (isArrayMethod(method)) {
@@ -45,6 +46,14 @@ export function mapRuntimeMethodName(method: string): string | null {
   return null
 }
 
+export function setRuntimeMethodName(method: string): string | null {
+  if (isSetMethod(method)) {
+    return method
+  }
+
+  return null
+}
+
 export function isArrayMethod(method: string): boolean {
   return stringListIncludes(arrayMethods, method)
 }
@@ -59,4 +68,8 @@ export function isCollectionConstructorGlobalUsagePath(path: string[]): boolean 
 
 export function isMapMethod(method: string): boolean {
   return stringListIncludes(mapMethods, method)
+}
+
+export function isSetMethod(method: string): boolean {
+  return stringListIncludes(setMethods, method)
 }

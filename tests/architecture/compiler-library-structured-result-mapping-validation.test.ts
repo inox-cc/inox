@@ -41,10 +41,7 @@ test('builder validates structural C++ result mappings against TypeRef fields', 
 
   for (let index = 0; index < invalidCases.length; index = index + 1) {
     const invalid = invalidCases[index]
-    assert.throws(
-      () => createCompilerLibrarySet([fixtureLibrary(invalid.typeRef, invalid.mapping)]),
-      invalid.message
-    )
+    assert.throws(() => createCompilerLibrarySet([fixtureLibrary(invalid.typeRef, invalid.mapping)]), invalid.message)
   }
 })
 
@@ -72,9 +69,7 @@ function fixtureLibrary(
   }
 }
 
-function resultMapping(
-  fields: LibraryCResultMappingDescriptor['fields']
-): LibraryCResultMappingDescriptor {
+function resultMapping(fields: LibraryCResultMappingDescriptor['fields']): LibraryCResultMappingDescriptor {
   return { cppType: 'FixtureStats', fields }
 }
 

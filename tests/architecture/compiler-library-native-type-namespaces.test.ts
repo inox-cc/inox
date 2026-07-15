@@ -12,14 +12,8 @@ test('native type names из разных packages не конфликтуют �
   ])
 
   assert.equal(compilerLibraryNativeTypeForName(libraries, 'Socket'), null)
-  assert.equal(
-    compilerLibraryNativeTypeForName(libraries, 'Socket', 'node:dgram')?.cppType,
-    'DgramSocket'
-  )
-  assert.equal(
-    compilerLibraryNativeTypeForName(libraries, 'Socket', 'node:net')?.cppType,
-    'NetSocket'
-  )
+  assert.equal(compilerLibraryNativeTypeForName(libraries, 'Socket', 'node:dgram')?.cppType, 'DgramSocket')
+  assert.equal(compilerLibraryNativeTypeForName(libraries, 'Socket', 'node:net')?.cppType, 'NetSocket')
 })
 
 function libraryWithSocket(id: string, cppType: string): CompilerLibraryDescriptor {

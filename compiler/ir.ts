@@ -13,10 +13,7 @@ export {
   irClassMethodEffectName,
   mergeIrFunctionEffects
 } from './ir/effects.ts'
-export {
-  collectIrFeatureRequirements,
-  collectIrRuntimeRequirements
-} from './ir/features.ts'
+export { collectIrFeatureRequirements, collectIrRuntimeRequirements } from './ir/features.ts'
 export { collectIrGlobalRoots, collectIrGlobalUsages } from './ir/globals.ts'
 export { collectIrSyntaxFeatureUsages } from './ir/syntax-features.ts'
 export {

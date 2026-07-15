@@ -6,10 +6,10 @@ import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('library callback metadata contextually types unannotated arrow parameters', () => {
-  const result = compileSource(
-    'bridge.listen((data, info) => { console.log(info.size) })\n',
-    { libraries: createCompilerLibrarySetWithConsole([bridgeLibrary()]), target: 'cc' }
-  )
+  const result = compileSource('bridge.listen((data, info) => { console.log(info.size) })\n', {
+    libraries: createCompilerLibrarySetWithConsole([bridgeLibrary()]),
+    target: 'cc'
+  })
 
   assert.match(result.code, /args\[0\]\.tag != INOX_TAG_BYTES/)
   assert.match(result.code, /inox_value data = args\[0\];/)

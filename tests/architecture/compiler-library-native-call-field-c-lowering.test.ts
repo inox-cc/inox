@@ -6,10 +6,10 @@ import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('native library result fields lower directly on call expressions', () => {
-  const result = compileSource(
-    'console.log(bridge.open().size, bridge.open().name)\n',
-    { libraries: createCompilerLibrarySetWithConsole([bridgeLibrary()]), target: 'cc' }
-  )
+  const result = compileSource('console.log(bridge.open().size, bridge.open().name)\n', {
+    libraries: createCompilerLibrarySetWithConsole([bridgeLibrary()]),
+    target: 'cc'
+  })
 
   assert.match(result.code, /auto inox_library_object_\d+ = bridge\.open\(\);/)
   assert.match(result.code, /\(inox_library_object_\d+\)\.size/)

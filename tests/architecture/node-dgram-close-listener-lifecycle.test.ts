@@ -7,9 +7,6 @@ test('dgram close сохраняет все callbacks до закрытия nati
 
   assert.match(source, /std::vector<inox::Callback>\s+close_callbacks_;/)
   assert.match(source, /close_callbacks_\.push_back\(std::move\(callback\)\);/)
-  assert.match(
-    source,
-    /std::vector<inox::Callback>\s+callbacks\s*=\s*std::move\(socket->close_callbacks_\);/
-  )
+  assert.match(source, /std::vector<inox::Callback>\s+callbacks\s*=\s*std::move\(socket->close_callbacks_\);/)
   assert.match(source, /for\s*\(const inox::Callback& callback : callbacks\)/)
 })

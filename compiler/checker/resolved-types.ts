@@ -18,6 +18,7 @@ export type ResolvedTypeInfo = {
   mapValueArrayElementType?: ValueType | null
   mapValueArrayElementDeclaredType?: string | null
   promiseValueType: ValueType | null
+  setElementType: ValueType | null
 }
 
 export type ResolvedTypeInfoValueKind = number
@@ -26,6 +27,7 @@ export const resolvedArrayElementTypeKind: ResolvedTypeInfoValueKind = 0
 export const resolvedMapKeyTypeKind: ResolvedTypeInfoValueKind = 1
 export const resolvedMapValueTypeKind: ResolvedTypeInfoValueKind = 2
 export const resolvedPromiseValueTypeKind: ResolvedTypeInfoValueKind = 3
+export const resolvedSetElementTypeKind: ResolvedTypeInfoValueKind = 4
 
 export type OwnershipGraphEdge = {
   from: string
@@ -49,7 +51,6 @@ export type NullableNode = AnyNode | null
 export type TypeAliasDeclarationNode = AnyNode & {
   name: string
   loc: SourceLocation
-  typeParameters?: AnyNode[]
   valueType: TypeAliasInfo
 }
 export type CheckerObjectPropertyNode = CheckerNode & {
@@ -65,7 +66,6 @@ export type FunctionTypeParamMetadata = {
   rest?: boolean
   declaredType?: string
   valueType: ValueType
-  typeRef?: TypeRef | null
   nullable?: boolean
   arrayElementType?: ValueType | null
   arrayElementDeclaredType?: string | null
@@ -77,6 +77,7 @@ export type FunctionTypeParamMetadata = {
   mapValueArrayElementType?: ValueType | null
   mapValueArrayElementDeclaredType?: string | null
   promiseValueType?: ValueType | null
+  setElementType?: ValueType | null
   functionType?: FunctionTypeMetadata | null
   functionTypeOwnership?: 'weak'
   shape?: ObjectShapeInfo | null
@@ -88,7 +89,6 @@ export type FunctionTypeMetadata = {
   resolved: boolean
   params: FunctionTypeParamMetadata[]
   returnType: ValueType
-  returnTypeRef?: TypeRef | null
   declaredReturnType?: string
   returnNullable: boolean
   returnArrayElementType?: ValueType | null
@@ -96,6 +96,7 @@ export type FunctionTypeMetadata = {
   returnMapKeyType?: ValueType | null
   returnMapValueType?: ValueType | null
   returnPromiseValueType?: ValueType | null
+  returnSetElementType?: ValueType | null
   returnShape?: ObjectShapeInfo | null
   loc?: SourceLocation
   [key: string]: any
@@ -168,7 +169,8 @@ export function anyNodeResolvedTypeInfo(loc: SourceLocation): ResolvedTypeInfo {
     mapKeyType: null,
     mapValueType: null,
     mapValueShape: null,
-    promiseValueType: null
+    promiseValueType: null,
+    setElementType: null
   }
 }
 
@@ -265,6 +267,7 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('promiseValueType', 'string', null, true, loc),
       anyNodeField('promiseRejectionValueType', 'string', null, true, loc),
       anyNodeField('promiseRejectionIntrinsicRole', 'string', null, true, loc),
+      anyNodeField('setElementType', 'string', null, true, loc),
       anyNodeField('propertyValueType', 'string', null, true, loc),
       anyNodeField('returnType', 'string', null, true, loc),
       anyNodeField('declaredReturnType', 'string', null, true, loc),
@@ -273,6 +276,7 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('returnMapKeyType', 'string', null, true, loc),
       anyNodeField('returnMapValueType', 'string', null, true, loc),
       anyNodeField('returnPromiseValueType', 'string', null, true, loc),
+      anyNodeField('returnSetElementType', 'string', null, true, loc),
       anyNodeField('returnNullable', 'boolean', null, false, loc),
       anyNodeField('returnShape', 'object', null, true, loc, { shape: objectShapeMetadata }),
       anyNodeField('functionType', 'object', null, true, loc),
@@ -357,6 +361,7 @@ export function anyNodeField(
     mapKeyType: null,
     mapValueType: null,
     promiseValueType: null,
+    setElementType: null,
     functionType: null,
     shape: options.shape ?? null,
     loc
@@ -388,6 +393,7 @@ export function cloneObjectShapeField(field: AnyNode): AnyNode {
     mapValueArrayElementDeclaredType: field.mapValueArrayElementDeclaredType ?? null,
     promiseValueType: field.promiseValueType ?? null,
     promiseRejectionValueType: field.promiseRejectionValueType ?? null,
+    setElementType: field.setElementType ?? null,
     functionType: field.functionType ?? null,
     functionOverloads: field.functionOverloads ?? null,
     className: field.className ?? null,
@@ -651,6 +657,10 @@ export function commonResolvedPromiseValueType(infos: ResolvedTypeInfo[]): Value
   return commonResolvedOptionalValueType(infos, resolvedPromiseValueTypeKind)
 }
 
+export function commonResolvedSetElementType(infos: ResolvedTypeInfo[]): ValueType | null {
+  return commonResolvedOptionalValueType(infos, resolvedSetElementTypeKind)
+}
+
 export function commonResolvedObjectShape(infos: ResolvedTypeInfo[]): ObjectShapeInfo | null {
   if (infos.length === 0) {
     return null
@@ -758,6 +768,7 @@ export function commonResolvedObjectShapeField(name: string, infos: ResolvedType
     mapValueType: commonResolvedObjectShapeFieldMapValueType(fields),
     mapValueShape: commonResolvedObjectShapeFieldMapValueShape(fields),
     promiseValueType: commonResolvedObjectShapeFieldPromiseValueType(fields),
+    setElementType: commonResolvedObjectShapeFieldSetElementType(fields),
     functionType: commonResolvedObjectShapeFieldFunctionType(fields),
     shape: commonResolvedObjectShapeFieldShape(fields)
   }
@@ -941,6 +952,22 @@ export function commonResolvedObjectShapeFieldPromiseValueType(fields: AnyNode[]
   return commonValueType(values)
 }
 
+export function commonResolvedObjectShapeFieldSetElementType(fields: AnyNode[]): ValueType | null {
+  const values: ValueType[] = []
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    const value = fields[index].setElementType
+
+    if (value === null || typeof value === 'undefined') {
+      return null
+    }
+
+    values.push(value)
+  }
+
+  return commonValueType(values)
+}
+
 export function commonResolvedObjectShapeFieldFunctionType(fields: AnyNode[]): FunctionTypeMetadata | null {
   const first = fields[0]
   let functionType: FunctionTypeMetadata | null = null
@@ -1033,7 +1060,7 @@ export function resolvedTypeInfoValue(info: ResolvedTypeInfo, kind: ResolvedType
     return info.promiseValueType ?? null
   }
 
-  return null
+  return info.setElementType
 }
 
 export function commonResolvedOptionalValueType(

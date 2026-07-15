@@ -3,16 +3,11 @@ import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
 import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-fixtures.ts'
-import type {
-  CompilerLibraryDescriptor,
-  LibraryOperationDescriptor
-} from '../../compiler/extensions/types.ts'
+import type { CompilerLibraryDescriptor, LibraryOperationDescriptor } from '../../compiler/extensions/types.ts'
 
 test('data-only library Promise operations preserve fulfilled metadata and lower generically', () => {
   const result = compileSource(
-    'const pending = fixture.load()\n' +
-      'const item = await pending\n' +
-      'const entries = await fixture.list()\n',
+    'const pending = fixture.load()\n' + 'const item = await pending\n' + 'const entries = await fixture.list()\n',
     { libraries: createCompilerLibrarySetWithConsole([promiseLibrary()]), target: 'cc' }
   )
   const pendingCall = result.ir.body[0].init

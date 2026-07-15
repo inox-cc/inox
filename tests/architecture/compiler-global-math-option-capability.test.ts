@@ -7,10 +7,11 @@ import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 test('Math random entropy capability зависит только от package option conditions', () => {
   assert.throws(
-    () => compileSource('Math.random()\n', {
-      libraries: defaultCompilerLibrarySet,
-      profile: 'embedded'
-    }),
+    () =>
+      compileSource('Math.random()\n', {
+        libraries: defaultCompilerLibrarySet,
+        profile: 'embedded'
+      }),
     capabilityError
   )
 
@@ -26,11 +27,12 @@ test('Math random entropy capability зависит только от package op
   })
 
   assert.throws(
-    () => compileSource('Math.random()\n', {
-      libraries: defaultCompilerLibrarySet,
-      libraryOptions: [{ optionId: 'global:math#random-backend', value: 'os' }],
-      profile: 'embedded'
-    }),
+    () =>
+      compileSource('Math.random()\n', {
+        libraries: defaultCompilerLibrarySet,
+        libraryOptions: [{ optionId: 'global:math#random-backend', value: 'os' }],
+        profile: 'embedded'
+      }),
     capabilityError
   )
 })

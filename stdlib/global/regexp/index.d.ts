@@ -1,7 +1,7 @@
-export {};
+export {}
 
 declare global {
   interface RegExp {
-    test(value: string): boolean;
+    test(value: string): boolean
   }
 }

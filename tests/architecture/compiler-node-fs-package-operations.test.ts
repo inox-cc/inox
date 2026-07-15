@@ -34,10 +34,7 @@ test('node:fs operations lower only through package descriptors', async () => {
   assert.ok(operationIds.includes('node:fs#Stats.isDirectory'))
   assert.ok(operationIds.includes('node:fs#Dirent.isFile'))
   assert.ok(operationIds.includes('node:fs#constants.F_OK'))
-  assert.equal(
-    operationIds.filter((id) => id === 'node:fs/promises#readFile').length,
-    4
-  )
+  assert.equal(operationIds.filter((id) => id === 'node:fs/promises#readFile').length, 4)
 
   assert.match(result.code, /fs\.readFileSync\(path\)/)
   assert.match(result.code, /fs\.readFileSync\(path, "utf8"\)/)

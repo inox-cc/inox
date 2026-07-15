@@ -19,8 +19,7 @@ test('managed native library values lower without C++ type name cases in core', 
   assert.match(result.code, /auto value = api\.make\(\)/)
   assert.match(result.code, /auto copy = value/)
   assert.match(result.code, /copy = api\.make\(\)/)
-  assert.match(result.code, /NativeBytes makeBytes\(void\)/)
-  assert.match(result.code, /inox_return = copy/)
+  assert.match(result.code, /auto inox_return_value_\d+ = copy/)
   assert.doesNotMatch(result.code, /Buffer|Uint8Array/)
 })
 

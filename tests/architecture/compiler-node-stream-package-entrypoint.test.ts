@@ -20,12 +20,6 @@ test('entrypoint package node:stream владеет diagnostic compiler contract
 
   const rendered = renderCompilerLibraryRegistry(discovered)
 
-  assert.match(
-    rendered.registrySource,
-    /stdlib\/node\/stream\/compiler\/index\.ts/
-  )
-  assert.match(
-    rendered.manifestSource,
-    /"compilerEntrypoint": "stdlib\/node\/stream\/compiler\/index\.ts"/
-  )
+  assert.match(rendered.registrySource, /stdlib\/node\/stream\/compiler\/index\.ts/)
+  assert.match(rendered.manifestSource, /"compilerEntrypoint": "stdlib\/node\/stream\/compiler\/index\.ts"/)
 })

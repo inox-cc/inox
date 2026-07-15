@@ -26,8 +26,7 @@ import {
   cRuntimeValueTag,
   isNullableScalarType,
   isOpaqueRuntimeValueType,
-  isRuntimeNullableType,
-  libraryNativeCppType
+  isRuntimeNullableType
 } from '../value-types.ts'
 import {
   emitObjectValueReference,
@@ -68,6 +67,7 @@ type NullableFunctionContext = {
   returnType?: string
   runtimeArrayElementTypes: CStringMap
   runtimeCallbacks: CStringSet
+  setElementTypes: CStringMap
   statusReturn: boolean
   throwingFunction: boolean
   usedCleanupGoto: boolean
@@ -769,10 +769,7 @@ export function emitNullableRuntimeValueVariableDeclaration(
     valueType = statementValueType
   }
 
-  const expectedTag =
-    valueType === 'object' && libraryNativeCppType(statement.shape) !== null
-      ? null
-      : cRuntimeValueTag(valueType)
+  const expectedTag = cRuntimeValueTag(valueType)
 
   registerOwnedValue(context, statement.name)
   context.variables.set(statement.name, valueType)
@@ -804,6 +801,14 @@ export function emitNullableRuntimeValueVariableDeclaration(
       key: mapKeyType,
       value: mapValueType
     })
+  } else if (valueType === 'set') {
+    let setElementType = 'unknown'
+
+    if (statement.setElementType !== null && typeof statement.setElementType !== 'undefined') {
+      setElementType = statement.setElementType
+    }
+
+    context.setElementTypes.set(statement.name, setElementType)
   } else if (valueType === 'function') {
     context.functionTypes.set(statement.name, normalizeNullableFunctionType(statement.functionType))
     context.runtimeCallbacks.add(statement.name)
@@ -855,14 +860,6 @@ export function emitCOptionalMemberValueExpression(
   expression: AnyNode,
   context: NullableFunctionContext
 ): PreparedExpression {
-  if (
-    expression.property === 'length' &&
-    (expression.object.valueType === 'array' ||
-      nullableDeps(context).inferExpressionType(expression.object, context) === 'array')
-  ) {
-    return emitCOptionalArrayLengthValueExpression(expression, context)
-  }
-
   let member: CObjectFieldInfo | null = resolveKnownObjectMember(expression, context)
 
   if (member === null || typeof member === 'undefined') {
@@ -879,48 +876,10 @@ export function emitCOptionalMemberValueExpression(
       objectName: nullableString(member.objectName)
     }
 
-    return emitCOptionalObjectReadValueExpression(objectExpression, member, context, access)
+    return emitCOptionalObjectReadValueExpression(objectExpression, member.valueType, context, access)
   }
 
   return emitCOptionalDynamicObjectMemberValueExpression(expression, context)
-}
-
-function emitCOptionalArrayLengthValueExpression(
-  expression: AnyNode,
-  context: NullableFunctionContext
-): PreparedExpression {
-  const array = nullableDeps(context).emitCValueExpression(expression.object, context)
-  const out = nextCName(context, 'inox_optional_array_length')
-  const length = nextCName(context, 'inox_array_len')
-  const lines: string[] = []
-
-  registerOwnedValue(context, out)
-  appendLines(lines, array.lines)
-  appendLines(lines, emitPrepareOwnedValueWrite(out))
-  lines.push(`if (${array.expression}.tag != INOX_TAG_NULL && ${array.expression}.tag != INOX_TAG_UNDEFINED) {`)
-  lines.push(
-    `  ${emitRuntimeTypeCheck(
-      `${array.expression}.tag != INOX_TAG_ARRAY || ${array.expression}.as.ref == 0`,
-      context
-    )}`
-  )
-  lines.push(`  size_t ${length} = ArrayClass(${array.expression}).length();`)
-
-  const thrownLines = emitNullableThrownCheckLines(context)
-
-  for (let index = 0; index < thrownLines.length; index = index + 1) {
-    lines.push(`  ${thrownLines[index]}`)
-  }
-
-  lines.push(`  ${out} = inox_number_value((double)${length});`)
-  lines.push('}')
-
-  return {
-    lines,
-    expression: out,
-    nullable: true,
-    valueType: 'number'
-  }
 }
 
 function emitCOptionalDynamicObjectMemberValueExpression(
@@ -981,7 +940,7 @@ export function emitCOptionalIndexValueExpression(
       objectName: nullableString(field.objectName)
     }
 
-    return emitCOptionalObjectReadValueExpression(objectExpression, field, context, access)
+    return emitCOptionalObjectReadValueExpression(objectExpression, field.valueType, context, access)
   }
 
   const element = resolveNullableOptionalRuntimeArrayIndex(expression, context)
@@ -1021,16 +980,13 @@ export function emitCOptionalIndexValueExpression(
 
 function emitCOptionalObjectReadValueExpression(
   objectExpression: AnyNode,
-  field: CObjectFieldInfo,
+  valueType: string,
   context: NullableFunctionContext,
   access: OptionalObjectReadAccess
 ): PreparedExpression {
   const object = nullableDeps(context).emitCValueExpression(objectExpression, context)
   const temp = nextCName(context, 'inox_optional_value')
-  const expectedTag =
-    field.valueType === 'object' && libraryNativeCppType(field.shape) !== null
-      ? null
-      : cRuntimeValueTag(field.valueType)
+  const expectedTag = cRuntimeValueTag(valueType)
   const typeCheck = emitRuntimeTypeCheck(runtimeObjectReadValueMismatchCondition(object.expression), context)
   const getLines = optionalObjectReadGetLines(access, object.expression, temp, context)
   const lines: string[] = []
@@ -1049,9 +1005,7 @@ function emitCOptionalObjectReadValueExpression(
 
   return {
     lines,
-    expression: temp,
-    nullable: true,
-    valueType: field.valueType
+    expression: temp
   }
 }
 

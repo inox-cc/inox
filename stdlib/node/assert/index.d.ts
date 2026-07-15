@@ -1,2 +1,2 @@
-declare const assert: unknown;
-export default assert;
+declare const assert: unknown
+export default assert

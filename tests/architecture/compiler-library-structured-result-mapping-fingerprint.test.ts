@@ -42,11 +42,7 @@ function fixtureLibrary(cResultMapping: LibraryCResultMappingDescriptor): Compil
   }
 }
 
-function resultMapping(
-  cppType: string,
-  cMember: string,
-  fieldCppType: string
-): LibraryCResultMappingDescriptor {
+function resultMapping(cppType: string, cMember: string, fieldCppType: string): LibraryCResultMappingDescriptor {
   return {
     cppType,
     fields: [{ name: 'total', cMember, cppType: fieldCppType }]

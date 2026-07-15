@@ -64,6 +64,7 @@ type ArrayVariableScopeSnapshot = {
   runtimeArrayElementTypes: CStringMap
   runtimeCallbacks: CStringSet
   runtimeStrings: CStringSet
+  setElementTypes: CStringMap
   variables: CStringMap
 }
 
@@ -321,6 +322,7 @@ function pushArrayVariableScope(context: ArrayFunctionContext): ArrayVariableSco
     runtimeArrayElementTypes: context.runtimeArrayElementTypes,
     runtimeCallbacks: context.runtimeCallbacks,
     runtimeStrings: context.runtimeStrings,
+    setElementTypes: context.setElementTypes,
     variables: context.variables
   }
 
@@ -340,6 +342,7 @@ function pushArrayVariableScope(context: ArrayFunctionContext): ArrayVariableSco
   context.runtimeArrayElementTypes = cloneCStringMap(snapshot.runtimeArrayElementTypes)
   context.runtimeCallbacks = cloneCStringSet(snapshot.runtimeCallbacks)
   context.runtimeStrings = cloneCStringSet(snapshot.runtimeStrings)
+  context.setElementTypes = cloneCStringMap(snapshot.setElementTypes)
   context.variables = cloneCStringMap(snapshot.variables)
 
   return snapshot
@@ -362,6 +365,7 @@ function restoreArrayVariableScope(context: ArrayFunctionContext, snapshot: Arra
   context.runtimeArrayElementTypes = snapshot.runtimeArrayElementTypes
   context.runtimeCallbacks = snapshot.runtimeCallbacks
   context.runtimeStrings = snapshot.runtimeStrings
+  context.setElementTypes = snapshot.setElementTypes
   context.variables = snapshot.variables
 }
 
@@ -939,11 +943,7 @@ function isNativeClassObjectRuntimeArgument(expression: ArrayMaybeNode, context:
   const name = path[0]
   const variableType = context.variables.get(name)
 
-  if (
-    variableType !== null &&
-    typeof variableType !== 'undefined' &&
-    variableType.startsWith('class:')
-  ) {
+  if (variableType !== null && typeof variableType !== 'undefined' && variableType.startsWith('class:')) {
     return true
   }
 
@@ -996,10 +996,7 @@ function emitRuntimeArrayGetAllowMissing(
   out: string,
   context: ArrayFunctionContext
 ): string[] {
-  return [
-    `${out} = ArrayClass(${arrayExpression}).get(${indexExpression});`,
-    emitArrayThrownCheck(context)
-  ]
+  return [`${out} = ArrayClass(${arrayExpression}).get(${indexExpression});`, emitArrayThrownCheck(context)]
 }
 
 function emitObjectRuntimeArrayIndexGetAllowMissing(
@@ -1014,10 +1011,7 @@ function emitObjectRuntimeArrayIndexGetAllowMissing(
       ? `inox::object_value_at(${objectExpression}, ${indexExpression})`
       : `inox::object_entry_at(${objectExpression}, ${indexExpression})`
 
-  return [
-    `auto ${out} = ${call};`,
-    `if (inox::thrown()) ${emitFailureStatement(context)}`
-  ]
+  return [`auto ${out} = ${call};`, `if (inox::thrown()) ${emitFailureStatement(context)}`]
 }
 
 function emitPreparedRuntimeArrayIndexExpression(
@@ -1198,20 +1192,10 @@ function emitRuntimeArrayIndexValueCheck(
   }
 
   if (expectedTag === 'INOX_TAG_OBJECT') {
-    return [
-      emitRuntimeTypeCheck(
-        `${missingCheck} && (${runtimeObjectLikeValueMismatchCondition(value)})`,
-        context
-      )
-    ]
+    return [emitRuntimeTypeCheck(`${missingCheck} && (${runtimeObjectLikeValueMismatchCondition(value)})`, context)]
   }
 
-  return [
-    emitRuntimeTypeCheck(
-      `${missingCheck} && (${value}.tag != ${expectedTag} || ${value}.as.ref == 0)`,
-      context
-    )
-  ]
+  return [emitRuntimeTypeCheck(`${missingCheck} && (${value}.tag != ${expectedTag} || ${value}.as.ref == 0)`, context)]
 }
 
 export function resolveKnownArrayLength(expression: ArrayMaybeNode, context: ArrayFunctionContext): string | null {
@@ -1289,10 +1273,7 @@ function emitPreparedDirectRuntimeArrayLengthExpression(
   const temp = nextCName(context, 'inox_array_len')
 
   return {
-    lines: [
-      `size_t ${temp} = ArrayClass(${arrayExpression}).length();`,
-      emitArrayThrownCheck(context)
-    ],
+    lines: [`size_t ${temp} = ArrayClass(${arrayExpression}).length();`, emitArrayThrownCheck(context)],
     expression: `((double)${temp})`
   }
 }
@@ -1315,10 +1296,7 @@ function emitPreparedRuntimeArrayLengthExpression(
   }
 }
 
-function arrayLengthDirectReferenceName(
-  expression: ArrayMaybeNode,
-  context: ArrayFunctionContext
-): string | null {
+function arrayLengthDirectReferenceName(expression: ArrayMaybeNode, context: ArrayFunctionContext): string | null {
   if (expression === null || typeof expression === 'undefined') {
     return null
   }
@@ -1415,9 +1393,7 @@ function isAnyNodeLikeArrayFieldReceiver(
 
   const declaredType = context.objectDeclaredTypes.get(rootName)
   const declaredAnyNode =
-    declaredType !== null &&
-    typeof declaredType !== 'undefined' &&
-    isAnyNodeLikeDeclaredType(declaredType)
+    declaredType !== null && typeof declaredType !== 'undefined' && isAnyNodeLikeDeclaredType(declaredType)
 
   if (declaredAnyNode) {
     return true
@@ -1455,11 +1431,7 @@ function isAnyNodeLikeBlockBodyArrayReceiver(expression: ArrayMaybeNode, context
 
   const declaredType = context.objectDeclaredTypes.get(rootName)
 
-  if (
-    declaredType !== null &&
-    typeof declaredType !== 'undefined' &&
-    isAnyNodeLikeDeclaredType(declaredType)
-  ) {
+  if (declaredType !== null && typeof declaredType !== 'undefined' && isAnyNodeLikeDeclaredType(declaredType)) {
     return true
   }
 
@@ -2279,7 +2251,11 @@ export function emitPreparedArrayFromCallExpression(
     return null
   }
 
-  const source = arrayDeps(context).emitPreparedStringBytesOperand(expression.args[0], context, 'inox_array_from_string')
+  const source = arrayDeps(context).emitPreparedStringBytesOperand(
+    expression.args[0],
+    context,
+    'inox_array_from_string'
+  )
   const out = nextCName(context, 'inox_array_from')
   const index = nextCName(context, 'inox_array_from_index')
   const item = nextCName(context, 'inox_array_from_item')
@@ -2511,6 +2487,7 @@ function arrayMapCallbackExpression(callback: ArrayMaybeNode | null | undefined)
       mapKeyType: param.mapKeyType ?? null,
       mapValueType: param.mapValueType ?? null,
       promiseValueType: param.promiseValueType ?? null,
+      setElementType: param.setElementType ?? null,
       functionType: param.functionType ?? null,
       shape: param.shape ?? null,
       loc: callback.loc
@@ -2533,6 +2510,7 @@ function arrayMapCallbackExpression(callback: ArrayMaybeNode | null | undefined)
       mapKeyType: functionType.returnMapKeyType ?? null,
       mapValueType: functionType.returnMapValueType ?? null,
       promiseValueType: functionType.returnPromiseValueType ?? null,
+      setElementType: functionType.returnSetElementType ?? null,
       shape: functionType.returnShape ?? null,
       loc: callback.loc
     },
@@ -2991,15 +2969,7 @@ function emitArrayCallbackBodyLines(
     statements = body.statements
   }
 
-  const lines = emitArrayCallbackStatementListLines(
-    statements,
-    doneLabel,
-    returnKind,
-    elementType,
-    out,
-    value,
-    context
-  )
+  const lines = emitArrayCallbackStatementListLines(statements, doneLabel, returnKind, elementType, out, value, context)
 
   lines.push(`${doneLabel}:;`)
 
@@ -3223,10 +3193,7 @@ function emitPreparedArrayCallbackInput(
   return lines
 }
 
-function emitPreparedArrayBindingElements(
-  param: ArrayNode,
-  context: ArrayFunctionContext
-): string[] {
+function emitPreparedArrayBindingElements(param: ArrayNode, context: ArrayFunctionContext): string[] {
   const bindingElements: ArrayBindingElement[] = param.bindingElements ?? []
   const lines: string[] = []
 
@@ -3637,10 +3604,7 @@ function emitPreparedArrayReceiver(
       call = emitPreparedArrayFromCallExpression(expression, context)
     }
 
-    if (
-      (call === null || typeof call === 'undefined') &&
-      arrayDeps(context).isStringSplitCall(expression, context)
-    ) {
+    if ((call === null || typeof call === 'undefined') && arrayDeps(context).isStringSplitCall(expression, context)) {
       call = arrayDeps(context).emitCStringSplitValueExpression(expression, context)
     }
 

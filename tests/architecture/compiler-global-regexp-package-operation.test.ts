@@ -26,10 +26,13 @@ test('global:regexp владеет literal provider, native type и test operati
   assert.doesNotMatch(header, /RegExpFlags|inox::Value/)
 
   const libraries = createCompilerLibrarySetFromDiscovered(discovered)
-  const result = compileSource(`
+  const result = compileSource(
+    `
     const regexp = /stdlib/i
     const matches = regexp.test('INOX stdlib')
-  `, { libraries })
+  `,
+    { libraries }
+  )
   const literal = result.ir.body[0].init
   const call = result.ir.body[1].init
 
@@ -39,7 +42,10 @@ test('global:regexp владеет literal provider, native type и test operati
   assert.equal(literal.typeRef?.typeId, 'global:regexp#RegExp')
   assert.equal(literal.shape?.libraryTypeId, 'global:regexp#RegExp')
   assert.equal(literal.shape?.libraryCppType, 'RegExp')
-  assert.deepEqual(literal.args.map((argument: { value: string }) => argument.value), ['stdlib', 'i'])
+  assert.deepEqual(
+    literal.args.map((argument: { value: string }) => argument.value),
+    ['stdlib', 'i']
+  )
   assert.equal(call.libraryOperationId, 'global:regexp#test')
   assert.equal(call.typeRef?.kind, 'primitive')
   assert.equal(call.typeRef?.name, 'boolean')
@@ -50,7 +56,7 @@ test('global:regexp владеет literal provider, native type и test operati
   assert.doesNotMatch(result.code, /RegExpFlags|emitCRegExp|inox_regexp_/)
 
   assert.throws(
-    () => compileSource('/stdlib/g.test(\'stdlib\')\n', { libraries }),
+    () => compileSource("/stdlib/g.test('stdlib')\n", { libraries }),
     (error: unknown) =>
       error instanceof CompileError &&
       error.diagnostics[0].code === 'INOX_REGEXP_FLAG' &&

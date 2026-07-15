@@ -2,53 +2,60 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
-import type {
-  CompilerLibraryDescriptor,
-  LibraryRuntimeInitializerDescriptor
-} from '../../compiler/extensions/types.ts'
+import type { CompilerLibraryDescriptor, LibraryRuntimeInitializerDescriptor } from '../../compiler/extensions/types.ts'
 
 test('runtime initializer descriptor валидирует C++ argument mapping и имена definitions', () => {
   assert.throws(
-    () => createCompilerLibrarySet([fixtureLibrary([
-      initializer('global:fixture#bad-kind', 'badKind', [
-        { optionId: 'global:fixture#seed', source: 'value', cValueKind: 'boolean' }
-      ])
-    ])]),
+    () =>
+      createCompilerLibrarySet([
+        fixtureLibrary([
+          initializer('global:fixture#bad-kind', 'badKind', [
+            { optionId: 'global:fixture#seed', source: 'value', cValueKind: 'boolean' }
+          ])
+        ])
+      ]),
     /initializer global:fixture#bad-kind boolean argument requires boolean option/
   )
   assert.throws(
-    () => createCompilerLibrarySet([fixtureLibrary([
-      initializer('global:fixture#bad-uint32', 'badUint32', [
-        { optionId: 'global:fixture#free-number', source: 'value', cValueKind: 'uint32-hex' }
-      ])
-    ])]),
+    () =>
+      createCompilerLibrarySet([
+        fixtureLibrary([
+          initializer('global:fixture#bad-uint32', 'badUint32', [
+            { optionId: 'global:fixture#free-number', source: 'value', cValueKind: 'uint32-hex' }
+          ])
+        ])
+      ]),
     /initializer global:fixture#bad-uint32 uint32-hex option must constrain integers from 0 to 4294967295/
   )
   assert.throws(
-    () => createCompilerLibrarySet([fixtureLibrary([
-      initializer('global:fixture#incomplete-map', 'incompleteMap', [
-        {
-          optionId: 'global:fixture#mode',
-          source: 'value',
-          cValueKind: 'mapped',
-          cValueMap: [{ value: 'safe', cExpression: 'Mode::Safe' }]
-        }
-      ])
-    ])]),
+    () =>
+      createCompilerLibrarySet([
+        fixtureLibrary([
+          initializer('global:fixture#incomplete-map', 'incompleteMap', [
+            {
+              optionId: 'global:fixture#mode',
+              source: 'value',
+              cValueKind: 'mapped',
+              cValueMap: [{ value: 'safe', cExpression: 'Mode::Safe' }]
+            }
+          ])
+        ])
+      ]),
     /initializer global:fixture#incomplete-map has no C\+\+ mapping for fast/
   )
   assert.throws(
-    () => createCompilerLibrarySet([fixtureLibrary([
-      initializer('global:fixture#first', 'fixtureRuntime', []),
-      initializer('global:fixture#second', 'fixtureRuntime', [])
-    ])]),
+    () =>
+      createCompilerLibrarySet([
+        fixtureLibrary([
+          initializer('global:fixture#first', 'fixtureRuntime', []),
+          initializer('global:fixture#second', 'fixtureRuntime', [])
+        ])
+      ]),
     /duplicate compiler library runtime initializer C\+\+ name fixtureRuntime/
   )
 })
 
-function fixtureLibrary(
-  runtimeInitializers: LibraryRuntimeInitializerDescriptor[]
-): CompilerLibraryDescriptor {
+function fixtureLibrary(runtimeInitializers: LibraryRuntimeInitializerDescriptor[]): CompilerLibraryDescriptor {
   return {
     id: 'global:fixture',
     dependencies: [],

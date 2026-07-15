@@ -7,7 +7,11 @@ import { runCommand } from '../../scripts/lib/run-command.ts'
 export async function assertCompilerIndexNodeHelp(): Promise<void> {
   const result = await runCommand('node', ['compiler/index.ts'], rootDir)
 
-  assert.equal(result.code, 1, `node compiler/index.ts should require an input\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
+  assert.equal(
+    result.code,
+    1,
+    `node compiler/index.ts should require an input\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
+  )
   assert.equal(result.stdout, '')
   assert.match(result.stderr, /Usage:/)
   assert.match(result.stderr, /inox input\.ts \[output\.cc\]/)

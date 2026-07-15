@@ -32,12 +32,10 @@ test('global:math владеет declaration, operations, options и initializer
   assert.match(result.code, /Math\.min\(2, 3\)/)
   assert.throws(
     () => compileSource('Math.min(1)\n', { libraries }),
-    (error: unknown) =>
-      error instanceof CompileError && error.diagnostics[0].code === 'INOX_ARG_COUNT'
+    (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_ARG_COUNT'
   )
   assert.throws(
     () => compileSource("Math.min('x', 1)\n", { libraries }),
-    (error: unknown) =>
-      error instanceof CompileError && error.diagnostics[0].code === 'INOX_TYPE_MISMATCH'
+    (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_TYPE_MISMATCH'
   )
 })

@@ -3,7 +3,7 @@
 // @stdout bad
 
 try {
-throw 'bad'
+  throw 'bad'
 } catch (error) {
-console.log(error)
+  console.log(error)
 }

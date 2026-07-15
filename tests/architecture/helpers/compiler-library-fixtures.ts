@@ -8,9 +8,7 @@ import { compilerLibraryPackage as collectionsCompilerLibraryPackage } from '../
 import { compilerLibraryPackage as consoleCompilerLibraryPackage } from '../../../stdlib/global/console/compiler/index.ts'
 
 /** Adds the explicitly selected console package to a synthetic library set. */
-export function createCompilerLibrarySetWithConsole(
-  libraries: CompilerLibraryDescriptor[]
-): CompilerLibrarySet {
+export function createCompilerLibrarySetWithConsole(libraries: CompilerLibraryDescriptor[]): CompilerLibrarySet {
   const selected: CompilerLibraryDescriptor[] = [
     { ...collectionsCompilerLibraryPackage, declarations: [] },
     { ...consoleCompilerLibraryPackage, declarations: [] }
@@ -23,10 +21,7 @@ export function createCompilerLibrarySetWithConsole(
   return createCompilerLibrarySet(selected)
 }
 
-export function compilerLibrary(
-  id: string,
-  dependencies: string[] = []
-): CompilerLibraryDescriptor {
+export function compilerLibrary(id: string, dependencies: string[] = []): CompilerLibraryDescriptor {
   return {
     id,
     dependencies,

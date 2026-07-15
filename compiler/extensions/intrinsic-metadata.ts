@@ -1,11 +1,7 @@
 import { compilerLibraryOperationForIntrinsic } from './library-set.ts'
 import { typeRefCompatibilityMetadata } from './type-ref-compatibility.ts'
 import type { TypeRefCompatibilityMetadata } from './type-ref-compatibility.ts'
-import type {
-  CompilerLibrarySet,
-  IntrinsicRole,
-  LibraryOperationKind
-} from './types.ts'
+import type { CompilerLibrarySet, IntrinsicRole, LibraryOperationKind } from './types.ts'
 import type { SourceLocation } from '../types.ts'
 
 /** Resolves result metadata supplied by the package selected for a semantic compiler role. */
