@@ -665,8 +665,11 @@ function validateNativeTypeIteration(nativeType: LibraryNativeTypeDescriptor): v
     return
   }
 
+  if (iteration.iteratorMethod !== null && iteration.iteratorMethod.length === 0) {
+    throw new Error(`native type ${nativeType.typeId} C++ iteration requires iteratorMethod or null`)
+  }
+
   const fields = [
-    ['iteratorMethod', iteration.iteratorMethod],
     ['nextMethod', iteration.nextMethod],
     ['doneMember', iteration.doneMember],
     ['valueMember', iteration.valueMember]
@@ -765,7 +768,6 @@ function validateOperationTypeRefs(
         nativeTypes,
         typeParameters
       )
-
       if (resultTypeRef === null || typeof resultTypeRef === 'undefined') {
         validateCResultMapping(
           `operation ${operation.operationId} variant ${variantIndex}`,
@@ -1612,7 +1614,7 @@ function nativeIterationFingerprint(nativeType: LibraryNativeTypeDescriptor): st
   }
 
   return [
-    iteration.iteratorMethod,
+    iteration.iteratorMethod ?? '',
     iteration.nextMethod,
     iteration.doneMember,
     iteration.valueMember,
@@ -1839,7 +1841,7 @@ function resultInferenceFingerprint(inference: LibraryOperationDescriptor['resul
 
 function typeRefFingerprint(typeRef: TypeRef): string {
   if (typeRef.kind === 'parameter') {
-    return 'parameter(' + fingerprintAtom(typeRef.name) + ')'
+    return 'parameter(' + fingerprintAtom(typeRef.name) + ')' + (typeRef.nullable === true ? ':nullable' : '')
   }
 
   const common =

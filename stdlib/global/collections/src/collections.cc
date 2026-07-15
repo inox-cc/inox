@@ -12,7 +12,25 @@
 #include "inox/set.h"
 #include "inox/string.h"
 
+enum MapSlotState { MapSlotEmpty, MapSlotOccupied, MapSlotTombstone };
+
+struct MapEntry {
+  inox_value key;
+  inox_value value;
+  uint64_t hash;
+  MapSlotState state;
+};
+
+struct MapStorage {
+  inox_ref header;
+  size_t length;
+  size_t capacity;
+  size_t tombstones;
+  MapEntry* entries;
+};
+
 static void inox_map_dispose_ref(inox_ref* ref);
+static inox::Value inox_map_create_value();
 static uint64_t inox_hash_mix(uint64_t hash, const void* bytes, size_t len);
 static bool inox_hash_value(inox_value value, uint64_t& out);
 static bool inox_value_equal(inox_value left, inox_value right);
@@ -169,16 +187,43 @@ static inox_status inox_map_find(MapStorage* map, inox_value key, uint64_t hash,
   return INOX_ERR_TYPE;
 }
 
-Map::Map() : inox::Value() {}
+static MapStorage* map_data(const Map& value) {
+  inox_value raw = value.raw();
+
+  if (raw.tag != INOX_TAG_MAP || raw.as.ref == 0) {
+    return 0;
+  }
+
+  return (MapStorage*)raw.as.ref;
+}
+
+static bool inox_map_add_entry(Map& map, const inox::Value& entry_value) {
+  ArrayClass entry(entry_value);
+
+  if (!entry.valid() || entry.length() < 2) {
+    inox_collection_throw("TypeError: Map constructor entry is not a key/value pair");
+    return false;
+  }
+
+  inox::Value key = entry.get(0);
+  inox::Value value = entry.get(1);
+
+  if (inox::thrown()) {
+    return false;
+  }
+
+  map.set(key, value);
+  return !inox::thrown();
+}
+
+Map::Map() : inox::Value(inox_map_create_value()) {}
 
 Map::Map(const inox::Value& value) : inox::Value(value) {}
 
-Map::Map(inox::Value&& value) : inox::Value(std::move(value)) {}
-
-Map Map::create() {
+static inox::Value inox_map_create_value() {
   if (inox_default_allocator.alloc == 0) {
     inox_collection_throw("TypeError: Map allocator is not available");
-    return Map();
+    return inox::Value();
   }
 
   MapStorage* map = (MapStorage*)inox_default_allocator.alloc(
@@ -187,7 +232,7 @@ Map Map::create() {
 
   if (map == 0) {
     inox_collection_throw("TypeError: Map allocation failed");
-    return Map();
+    return inox::Value();
   }
 
   map->header.kind = INOX_REF_MAP;
@@ -210,7 +255,55 @@ Map Map::create() {
   inox::debugMemory.recordRefCreated(INOX_REF_MAP);
 #endif
 
-  return Map(inox::adopt(out));
+  return inox::adopt(out);
+}
+
+Map Map::from(const inox::Value& values) {
+  Map result;
+
+  if (!result.valid() || inox::thrown()) {
+    return result;
+  }
+
+  inox_value raw_values = values.raw();
+
+  if (raw_values.tag == INOX_TAG_ARRAY) {
+    ArrayClass entries(values);
+    size_t length = entries.length();
+
+    if (inox::thrown()) {
+      return result;
+    }
+
+    for (size_t index = 0; index < length; index += 1) {
+      inox::Value entry = entries.get(index);
+
+      if (inox::thrown() || !inox_map_add_entry(result, entry)) {
+        return result;
+      }
+    }
+
+    return result;
+  }
+
+  if (raw_values.tag == INOX_TAG_MAP) {
+    MapIterator iterator = Map(values).entries();
+
+    while (true) {
+      MapIterationResult step = iterator.next();
+
+      if (inox::thrown() || step.done) {
+        return result;
+      }
+
+      if (!inox_map_add_entry(result, step.value)) {
+        return result;
+      }
+    }
+  }
+
+  inox_collection_throw("TypeError: Map constructor value is not iterable");
+  return result;
 }
 
 bool Map::valid() const {
@@ -219,16 +312,8 @@ bool Map::valid() const {
   return value.tag == INOX_TAG_MAP && value.as.ref != 0;
 }
 
-MapStorage* Map::data() const {
-  if (!valid()) {
-    return 0;
-  }
-
-  return (MapStorage*)inox::Value::raw().as.ref;
-}
-
 void Map::clear() const {
-  MapStorage* instance = data();
+  MapStorage* instance = map_data(*this);
 
   if (instance == 0) {
     inox_collection_throw("TypeError: Map.clear receiver is not a Map");
@@ -253,8 +338,8 @@ void Map::clear() const {
   instance->tombstones = 0;
 }
 
-bool Map::deleteKey(const inox::Value& key) const {
-  MapStorage* instance = data();
+bool Map::erase(const inox::Value& key) const {
+  MapStorage* instance = map_data(*this);
 
   if (instance == 0) {
     inox_collection_throw("TypeError: Map.delete receiver is not a Map");
@@ -322,7 +407,7 @@ static void inox_map_dispose_ref(inox_ref* ref) {
 }
 
 inox::Value Map::get(const inox::Value& key) const {
-  MapStorage* instance = data();
+  MapStorage* instance = map_data(*this);
 
   if (instance == 0) {
     inox_collection_throw("TypeError: Map.get receiver is not a Map");
@@ -358,7 +443,7 @@ inox::Value Map::get(const inox::Value& key) const {
 }
 
 bool Map::has(const inox::Value& key) const {
-  MapStorage* instance = data();
+  MapStorage* instance = map_data(*this);
 
   if (instance == 0) {
     inox_collection_throw("TypeError: Map.has receiver is not a Map");
@@ -387,7 +472,7 @@ bool Map::has(const inox::Value& key) const {
 }
 
 Map Map::set(const inox::Value& key, const inox::Value& value) const {
-  MapStorage* instance = data();
+  MapStorage* instance = map_data(*this);
 
   if (instance == 0) {
     inox_collection_throw("TypeError: Map.set receiver is not a Map");
@@ -445,7 +530,7 @@ Map Map::set(const inox::Value& key, const inox::Value& value) const {
 }
 
 size_t Map::size() const {
-  MapStorage* instance = data();
+  MapStorage* instance = map_data(*this);
 
   if (instance == 0) {
     inox_collection_throw("TypeError: Map.size receiver is not a Map");
@@ -453,6 +538,73 @@ size_t Map::size() const {
   }
 
   return instance->length;
+}
+
+MapIterator Map::entries() const {
+  if (!valid()) {
+    inox_collection_throw("TypeError: Map.entries receiver is not a Map");
+  }
+
+  return MapIterator(*this, 0);
+}
+
+MapIterator Map::keys() const {
+  if (!valid()) {
+    inox_collection_throw("TypeError: Map.keys receiver is not a Map");
+  }
+
+  return MapIterator(*this, 1);
+}
+
+MapIterator Map::values() const {
+  if (!valid()) {
+    inox_collection_throw("TypeError: Map.values receiver is not a Map");
+  }
+
+  return MapIterator(*this, 2);
+}
+
+MapIterator::MapIterator() : owner_(), index_(0), mode_(0) {}
+
+MapIterator::MapIterator(const Map& value, uint8_t mode) : owner_(value), index_(0), mode_(mode) {}
+
+MapIterationResult MapIterator::next() {
+  Map value(owner_);
+  MapStorage* instance = map_data(value);
+
+  if (instance == 0) {
+    inox_collection_throw("TypeError: Map iterator receiver is not a Map");
+    return { true, inox::Value() };
+  }
+
+  while (index_ < instance->capacity) {
+    MapEntry* entry = &instance->entries[index_];
+    index_ += 1;
+
+    if (entry->state != MapSlotOccupied) {
+      continue;
+    }
+
+    if (mode_ == 1) {
+      return { false, inox::Value(entry->key) };
+    }
+
+    if (mode_ == 2) {
+      return { false, inox::Value(entry->value) };
+    }
+
+    ArrayClass pair = ArrayClass::create(0);
+    pair.push(inox::Value(entry->key));
+    pair.push(inox::Value(entry->value));
+
+    if (inox::thrown()) {
+      return { true, inox::Value() };
+    }
+
+    return { false, pair };
+  }
+
+  return { true, inox::Value() };
 }
 
 enum SetSlotState { SetSlotEmpty, SetSlotOccupied, SetSlotTombstone };

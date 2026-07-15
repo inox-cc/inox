@@ -304,7 +304,6 @@ function isJsStdGlobalRootName(name: string): boolean {
     name === 'Int8Array' ||
     name === 'Int16Array' ||
     name === 'Int32Array' ||
-    name === 'Map' ||
     name === 'Object' ||
     name === 'Promise' ||
     name === 'Uint16Array' ||

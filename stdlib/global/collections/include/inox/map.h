@@ -1,50 +1,55 @@
 #ifndef INOX_MAP_H
 #define INOX_MAP_H
 
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include "inox/allocator.h"
 #include "inox/value.h"
 
-enum MapSlotState { MapSlotEmpty, MapSlotOccupied, MapSlotTombstone };
-
-struct MapEntry {
-  inox_value key;
-  inox_value value;
-  uint64_t hash;
-  MapSlotState state;
-};
-
-struct MapStorage {
-  inox_ref header;
-  size_t length;
-  size_t capacity;
-  size_t tombstones;
-  MapEntry* entries;
-};
-
 #ifdef __cplusplus
+
+class Map;
+
+struct MapIterationResult {
+  bool done;
+  inox::Value value;
+};
+
+class MapIterator {
+public:
+  MapIterator();
+
+  MapIterationResult next();
+
+private:
+  friend class Map;
+
+  MapIterator(const Map& value, uint8_t mode);
+
+  inox::Value owner_;
+  size_t index_;
+  uint8_t mode_;
+};
 
 class Map : public inox::Value {
 public:
   Map();
   explicit Map(const inox::Value& value);
-  explicit Map(inox::Value&& value);
 
   using inox::Value::operator=;
   using inox::Value::raw;
 
-  static Map create();
+  static Map from(const inox::Value& values);
 
-  bool valid() const;
   void clear() const;
-  bool deleteKey(const inox::Value& key) const;
+  bool erase(const inox::Value& key) const;
+  MapIterator entries() const;
   inox::Value get(const inox::Value& key) const;
   bool has(const inox::Value& key) const;
+  MapIterator keys() const;
   Map set(const inox::Value& key, const inox::Value& value) const;
   size_t size() const;
-  MapStorage* data() const;
+  bool valid() const;
+  MapIterator values() const;
 };
 
 #endif

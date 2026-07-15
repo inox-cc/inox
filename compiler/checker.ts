@@ -167,7 +167,7 @@ import {
 } from './checker/helpers.ts'
 import { ownershipCycleDiagnostics } from './checker/ownership.ts'
 import { memberExpressionPath } from './member-paths.ts'
-import { collectionConstructorNameFromPath, isArrayMethod } from '../stdlib/global/compiler/descriptor.ts'
+import { isArrayMethod } from '../stdlib/global/compiler/descriptor.ts'
 import { isStdlibModuleImportSource } from './stdlib/node/modules.ts'
 import {
   isUnsupportedRuntimeBuiltinImportSource,
@@ -867,8 +867,7 @@ class Checker {
       typeRef: paramInfo.typeRef,
       nullable:
         paramInfo.nullable ||
-        (param.optional === true &&
-          (param.defaultValue === null || typeof param.defaultValue === 'undefined')),
+        (param.optional === true && (param.defaultValue === null || typeof param.defaultValue === 'undefined')),
       arrayElementType: paramInfo.arrayElementType,
       arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
       mapKeyType: paramInfo.mapKeyType,
@@ -1060,8 +1059,7 @@ class Checker {
           param.typeRef = paramInfo.typeRef
           param.nullable =
             paramInfo.nullable ||
-            (param.optional === true &&
-              (param.defaultValue === null || typeof param.defaultValue === 'undefined'))
+            (param.optional === true && (param.defaultValue === null || typeof param.defaultValue === 'undefined'))
           param.arrayElementType = paramInfo.arrayElementType
           param.arrayElementDeclaredType = paramInfo.arrayElementDeclaredType
           param.mapKeyType = paramInfo.mapKeyType
@@ -1436,10 +1434,7 @@ class Checker {
       }
 
       if (declared !== null && typeof declared !== 'undefined') {
-        if (
-          declared.mapValueArrayElementType !== null &&
-          typeof declared.mapValueArrayElementType !== 'undefined'
-        ) {
+        if (declared.mapValueArrayElementType !== null && typeof declared.mapValueArrayElementType !== 'undefined') {
           mapValueArrayElementType = declared.mapValueArrayElementType
         }
 
@@ -6636,32 +6631,7 @@ class Checker {
       return 'object'
     }
 
-    const collectionConstructor = collectionConstructorNameFromPath(expression.callee.path)
     const constructorName = firstPathSegment(expression.callee.path)
-
-    if (collectionConstructor === 'Map') {
-      expression.valueType = 'map'
-      expression.mapKeyType = 'unknown'
-      expression.mapValueType = 'unknown'
-
-      const mapType = this.resolveMapConstructorType(expression, argTypes)
-
-      if (mapType !== null && typeof mapType !== 'undefined') {
-        if (mapType.key !== null && typeof mapType.key !== 'undefined') {
-          expression.mapKeyType = mapType.key
-        }
-
-        if (mapType.value !== null && typeof mapType.value !== 'undefined') {
-          expression.mapValueType = mapType.value
-        }
-
-        if (mapType.valueShape !== null && typeof mapType.valueShape !== 'undefined') {
-          expression.mapValueShape = mapType.valueShape
-        }
-      }
-
-      return 'map'
-    }
 
     let symbol = this.scope.resolve(constructorName)
 
@@ -7348,8 +7318,7 @@ class Checker {
         param.typeRef = paramInfo.typeRef
         param.nullable =
           paramInfo.nullable ||
-          (param.optional === true &&
-            (param.defaultValue === null || typeof param.defaultValue === 'undefined'))
+          (param.optional === true && (param.defaultValue === null || typeof param.defaultValue === 'undefined'))
         param.arrayElementType = paramInfo.arrayElementType
         param.arrayElementDeclaredType = paramInfo.arrayElementDeclaredType
         param.mapKeyType = paramInfo.mapKeyType

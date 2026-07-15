@@ -1,7 +1,4 @@
-import {
-  compilerLibraryIntrinsicRoleForTypeId,
-  compilerLibraryNativeTypeForId
-} from './library-set.ts'
+import { compilerLibraryIntrinsicRoleForTypeId, compilerLibraryNativeTypeForId } from './library-set.ts'
 import { instantiateNativeTypeTraits } from './type-ref-substitution.ts'
 import type {
   CompilerLibrarySet,
@@ -269,6 +266,10 @@ function applyTypeTraits(
       metadata.arrayElementType = element.valueType
       metadata.arrayElementTypeId = element.libraryResultTypeId
       metadata.arrayElementDeclaredType = nativeDeclarationName(element.libraryResultTypeId, libraries)
+
+      if (metadata.valueType === 'array' && element.shape !== null) {
+        metadata.shape = element.shape
+      }
     }
 
     if (trait.traitId === 'indexable' && trait.args.length > 1) {

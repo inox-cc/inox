@@ -16,15 +16,6 @@ export const globals: Map<string, SymbolInfo> = new Map([
     }
   ],
   [
-    'Map',
-    {
-      kind: 'global',
-      mutable: false,
-      valueType: 'object',
-      constructable: true
-    }
-  ],
-  [
     'Array',
     {
       kind: 'global',
@@ -91,7 +82,6 @@ export const globals: Map<string, SymbolInfo> = new Map([
 export function builtinGlobalSymbol(name: string): SymbolInfo | null {
   if (
     name === 'Promise' ||
-    name === 'Map' ||
     name === 'Array' ||
     name === 'Int8Array' ||
     name === 'Uint16Array' ||

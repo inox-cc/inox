@@ -1,10 +1,4 @@
-import type {
-  LibraryNativeTypeDescriptor,
-  NominalTypeRef,
-  ObjectTypeRefField,
-  TypeRef,
-  TypeTraitRef
-} from './types.ts'
+import type { LibraryNativeTypeDescriptor, NominalTypeRef, ObjectTypeRefField, TypeRef, TypeTraitRef } from './types.ts'
 
 export type TypeRefSubstitution = {
   name: string
@@ -38,7 +32,11 @@ export function instantiateNativeTypeTraits(
 ): TypeTraitRef[] {
   const typeParameters = nativeType.typeParameters
 
-  if (typeParameters !== null && typeof typeParameters !== 'undefined' && typeParameters.length !== typeArguments.length) {
+  if (
+    typeParameters !== null &&
+    typeof typeParameters !== 'undefined' &&
+    typeParameters.length !== typeArguments.length
+  ) {
     throw new Error(
       `native type ${nativeType.typeId} expects ${typeParameters.length} type argument(s), got ${typeArguments.length}`
     )
@@ -72,7 +70,13 @@ function substituteTypeRefInScope(
     resolving.add(typeRef.name)
 
     try {
-      return substituteTypeRefInScope(substitution.typeRef, substitutions, resolving)
+      const resolved = substituteTypeRefInScope(substitution.typeRef, substitutions, resolving)
+
+      if (typeRef.nullable === true) {
+        return nullableTypeRef(resolved)
+      }
+
+      return resolved
     } finally {
       resolving.delete(typeRef.name)
     }
@@ -139,6 +143,14 @@ function substituteTypeRefInScope(
     ownership: typeRef.ownership,
     traits
   }
+}
+
+function nullableTypeRef(typeRef: TypeRef): TypeRef {
+  if (typeRef.kind === 'parameter') {
+    return { kind: 'parameter', name: typeRef.name, nullable: true }
+  }
+
+  return { ...typeRef, nullable: true }
 }
 
 function substituteTypeRefs(

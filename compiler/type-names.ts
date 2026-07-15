@@ -276,18 +276,6 @@ export function normalizeTypeName(name: string): string {
     return 'map'
   }
 
-  const mapInner = genericTypeInner(name, 'Map')
-
-  if (mapInner !== null && typeof mapInner !== 'undefined') {
-    const args = splitGenericArgs(mapInner)
-
-    if (args.length === 2) {
-      return `map<${normalizeTypeName(args[0])},${normalizeTypeName(args[1])}>`
-    }
-
-    return 'map'
-  }
-
   const normalizedRecordInner = genericTypeInner(name, 'record')
 
   if (normalizedRecordInner !== null && typeof normalizedRecordInner !== 'undefined') {
@@ -344,7 +332,7 @@ export function normalizeTypeName(name: string): string {
     return 'array'
   }
 
-  if (name === 'Map' || name === 'map') {
+  if (name === 'map') {
     return 'map'
   }
 
@@ -508,7 +496,7 @@ export function isBuiltinTypeDependencyName(name: string): boolean {
     return true
   }
 
-  if (name === 'Array' || name === 'Function' || name === 'Map' || name === 'Promise' || name === 'Record') {
+  if (name === 'Array' || name === 'Function' || name === 'Promise' || name === 'Record') {
     return true
   }
 

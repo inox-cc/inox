@@ -46,7 +46,11 @@ import type {
   TypeAliasDeclarationNode
 } from './resolved-types.ts'
 import { mergeShapeFields } from './helpers.ts'
-import { compilerLibraryNativeTypeForName } from '../extensions/library-set.ts'
+import {
+  compilerLibraryNativeTypeForId,
+  compilerLibraryNativeTypeForName,
+  compilerLibraryOperationForIntrinsic
+} from '../extensions/library-set.ts'
 import { instantiateNativeTypeRef } from '../extensions/type-ref-substitution.ts'
 import { typeRefCompatibilityMetadata } from '../extensions/type-ref-compatibility.ts'
 import type { CompilerLibrarySet, CorePrimitiveType, TypeOwnership, TypeRef } from '../extensions/types.ts'
@@ -129,13 +133,29 @@ export function resolveDeclaredType(
       return resolved
     }
 
+    const genericNativeType = compilerLibraryNativeTypeForName(context.libraries, genericApplication.name)
+    const nativeTypeParameters = genericNativeType?.typeParameters
+
+    if (nativeTypeParameters !== null && typeof nativeTypeParameters !== 'undefined') {
+      if (nativeTypeParameters.length !== genericApplication.args.length) {
+        context.diagnostics.push(
+          diagnostic(
+            'INOX_TYPE_ARGUMENT_COUNT',
+            `generic type ${genericApplication.name} expects ${nativeTypeParameters.length} type argument(s), got ${genericApplication.args.length}`,
+            loc
+          )
+        )
+        return unresolvedTypeInfo()
+      }
+
+      const resolved = unresolvedTypeInfo()
+      applyGenericNativeType(context, name, genericApplication.args, resolved, loc)
+      return resolved
+    }
+
     const definition = context.types.get(genericApplication.name)
 
-    if (
-      definition !== null &&
-      typeof definition !== 'undefined' &&
-      (definition.typeParameters ?? []).length > 0
-    ) {
+    if (definition !== null && typeof definition !== 'undefined' && (definition.typeParameters ?? []).length > 0) {
       return resolveGenericDeclaredType(context, name, definition, genericApplication.args, loc)
     }
   }
@@ -212,6 +232,21 @@ export function resolveDeclaredType(
     info.arrayElementType = elementInfo.valueType
     info.arrayElementDeclaredType = arrayElementTypeName
     info.arrayElementFunctionType = elementInfo.functionType
+    const providerOperation = compilerLibraryOperationForIntrinsic(context.libraries, 'array-literal', 'construct')
+    const providerTypeRef = providerOperation?.resultTypeRef
+
+    if (providerTypeRef?.kind === 'nominal') {
+      const providerType = compilerLibraryNativeTypeForId(context.libraries, providerTypeRef.typeId)
+
+      if (providerType !== null && (providerType.typeParameters ?? []).length === 1) {
+        const typeRef = instantiateNativeTypeRef(providerType, [typeRefFromResolvedType(elementInfo)])
+        const metadata = typeRefCompatibilityMetadata(typeRef, context.libraries, loc)
+
+        info.typeRef = typeRef
+        info.shape = metadata.shape
+        info.arrayElementType = metadata.arrayElementType ?? elementInfo.valueType
+      }
+    }
 
     return info
   }
@@ -662,6 +697,10 @@ function applyGenericNativeType(
 }
 
 export function typeRefFromResolvedType(info: ResolvedTypeInfo): TypeRef {
+  return typeRefFromResolvedTypeInScope(info, new Set<ObjectShapeInfo>())
+}
+
+function typeRefFromResolvedTypeInScope(info: ResolvedTypeInfo, resolvingShapes: Set<ObjectShapeInfo>): TypeRef {
   if (info.typeRef !== null) {
     return info.typeRef
   }
@@ -678,9 +717,65 @@ export function typeRefFromResolvedType(info: ResolvedTypeInfo): TypeRef {
     }
   }
 
+  if (info.valueType === 'object' && info.shape !== null) {
+    if (resolvingShapes.has(info.shape)) {
+      return unknownTypeRef(info.nullable)
+    }
+
+    const fields = []
+    resolvingShapes.add(info.shape)
+
+    try {
+      for (let index = 0; index < info.shape.fields.length; index = index + 1) {
+        const field = info.shape.fields[index]
+        const fieldTypeRef =
+          field.typeRef ?? typeRefFromResolvedTypeInScope(resolvedTypeInfoFromField(field), resolvingShapes)
+
+        fields.push({
+          name: field.name,
+          typeRef: fieldTypeRef,
+          readonly: field.readonly === true
+        })
+      }
+    } finally {
+      resolvingShapes.delete(info.shape)
+    }
+
+    return {
+      kind: 'object',
+      fields,
+      nullable: info.nullable,
+      ownership: 'value',
+      traits: []
+    }
+  }
+
+  return unknownTypeRef(info.nullable)
+}
+
+function resolvedTypeInfoFromField(field: AnyNode): ResolvedTypeInfo {
+  return {
+    valueType: field.valueType ?? 'unknown',
+    nullable: field.nullable === true,
+    typeRef: field.typeRef ?? null,
+    functionType: field.functionType ?? null,
+    shape: field.shape ?? null,
+    arrayElementType: field.arrayElementType ?? null,
+    arrayElementDeclaredType: field.arrayElementDeclaredType ?? null,
+    arrayElementFunctionType: field.arrayElementFunctionType ?? null,
+    mapKeyType: field.mapKeyType ?? null,
+    mapValueType: field.mapValueType ?? null,
+    mapValueShape: field.mapValueShape ?? null,
+    mapValueArrayElementType: field.mapValueArrayElementType ?? null,
+    mapValueArrayElementDeclaredType: field.mapValueArrayElementDeclaredType ?? null,
+    promiseValueType: field.promiseValueType ?? null
+  }
+}
+
+function unknownTypeRef(nullable: boolean): TypeRef {
   return {
     kind: 'unknown',
-    nullable: info.nullable,
+    nullable,
     ownership: 'value',
     traits: []
   }
@@ -924,8 +1019,7 @@ function resolveFunctionTypeParams(
       valueType: paramInfo.valueType,
       nullable:
         paramInfo.nullable ||
-        (param.optional === true &&
-          (param.defaultValue === null || typeof param.defaultValue === 'undefined')),
+        (param.optional === true && (param.defaultValue === null || typeof param.defaultValue === 'undefined')),
       arrayElementType: paramInfo.arrayElementType,
       arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
       mapKeyType: paramInfo.mapKeyType,
@@ -1575,7 +1669,11 @@ function qualifiedTypeRef(typeRef: TypeRef | null, nullable: boolean, ownership:
   }
 
   if (typeRef.kind === 'parameter') {
-    return typeRef
+    return {
+      kind: 'parameter',
+      name: typeRef.name,
+      nullable: nullable || typeRef.nullable === true
+    }
   }
 
   const resolvedOwnership = ownership ?? typeRef.ownership

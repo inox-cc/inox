@@ -115,7 +115,7 @@ type CTypeofConditionNarrowing = {
 type CCompilerLibraryIteration = {
   doneMember: string
   failureMode: 'thrown' | null
-  iteratorMethod: string
+  iteratorMethod: string | null
   nextMethod: string
   receiverAdapter: string | null
   valueAdapter: string | null
@@ -3084,7 +3084,11 @@ function emitCompilerLibraryForOfStatement(
     const lines: string[] = []
 
     pushAllLines(lines, iterable.lines)
-    lines.push(`auto ${iterator} = (${receiver}).${iteration.iteratorMethod}();`)
+    if (iteration.iteratorMethod === null) {
+      lines.push(`auto ${iterator} = ${receiver};`)
+    } else {
+      lines.push(`auto ${iterator} = (${receiver}).${iteration.iteratorMethod}();`)
+    }
 
     if (iteration.failureMode === 'thrown') {
       lines.push(emitRuntimeTypeCheck('inox::thrown()', context))

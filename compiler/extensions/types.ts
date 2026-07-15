@@ -19,6 +19,7 @@ export type TypeTraitRef = {
 export type ParameterTypeRef = {
   kind: 'parameter'
   name: string
+  nullable?: boolean
 }
 
 export type PrimitiveTypeRef = {
@@ -131,7 +132,7 @@ export type LibraryDeclarationDescriptor = {
 }
 
 export type LibraryNativeIterationDescriptor = {
-  iteratorMethod: string
+  iteratorMethod: string | null
   nextMethod: string
   doneMember: string
   valueMember: string
