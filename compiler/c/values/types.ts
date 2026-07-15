@@ -552,10 +552,6 @@ export function inferExpressionType(
     return 'map'
   }
 
-  if (expression.type === 'NewExpression' && deps.collectionConstructorName(expression) === 'Set') {
-    return 'set'
-  }
-
   if (deps.isClassConstructorExpression(expression, context)) {
     return 'object'
   }

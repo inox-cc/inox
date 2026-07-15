@@ -58,7 +58,6 @@ type DeclarationValueMetadata = {
   arrayElementDeclaredType: string | null
   mapKeyType: ValueType | null
   mapValueType: ValueType | null
-  setElementType: ValueType | null
 }
 
 type DeclarationMapMetadata = {
@@ -1612,7 +1611,6 @@ function declarationReturnType(item: AnyNode): string {
       mapKeyType: item.returnMapKeyType,
       mapValueType: item.returnMapValueType,
       promiseValueType: item.returnPromiseValueType,
-      setElementType: item.returnSetElementType,
       shape: item.returnShape
     },
     'void'
@@ -1657,8 +1655,6 @@ function typeNameFromMetadata(item: AnyNode, fallback: string): string {
     typeName = `map<${stringMetadata(item.mapKeyType, 'unknown')},${stringMetadata(item.mapValueType, 'unknown')}>`
   } else if (valueType === 'promise') {
     typeName = `promise<${stringMetadata(item.promiseValueType, 'unknown')}>`
-  } else if (valueType === 'set') {
-    typeName = `set<${stringMetadata(item.setElementType, 'unknown')}>`
   }
 
   if (item.nullable === true && typeName !== 'null' && !typeName.startsWith('nullable<')) {
@@ -1841,7 +1837,6 @@ function cloneFunctionDeclaration(item: AnyNode): AnyNode {
     returnMapKeyType: nullableMetadata(item.returnMapKeyType),
     returnMapValueType: nullableMetadata(item.returnMapValueType),
     returnPromiseValueType: nullableMetadata(item.returnPromiseValueType),
-    returnSetElementType: nullableMetadata(item.returnSetElementType),
     returnShape: nullableMetadata(item.returnShape),
     body: []
   }
@@ -1882,7 +1877,7 @@ function cloneVariableDeclaration(item: AnyNode): AnyNode {
     declarationOnly: true,
     name: item.name,
     loc: nullableMetadata(item.loc),
-    declaredType: nullableMetadata(item.declaredType),
+    declaredType: nullableMetadata(item.declaredType ?? item.inferredDeclaredType),
     valueType: knownStringMetadata(item.valueType) ?? inferred.valueType ?? stringMetadata(item.valueType, 'unknown'),
     nullable: item.nullable === true,
     shape: nullableMetadata(item.shape),
@@ -1900,8 +1895,6 @@ function cloneVariableDeclaration(item: AnyNode): AnyNode {
       knownStringMetadata(item.mapValueType) ?? inferred.mapValueType ?? nullableMetadata(item.mapValueType),
     mapValueShape: nullableMetadata(item.mapValueShape),
     promiseValueType: nullableMetadata(item.promiseValueType),
-    setElementType:
-      knownStringMetadata(item.setElementType) ?? inferred.setElementType ?? nullableMetadata(item.setElementType),
     init: null
   }
 }
@@ -1948,8 +1941,7 @@ function scalarDeclarationValueMetadata(valueType: ValueType): DeclarationValueM
     arrayElementType: null,
     arrayElementDeclaredType: null,
     mapKeyType: null,
-    mapValueType: null,
-    setElementType: null
+    mapValueType: null
   }
 }
 
@@ -1961,8 +1953,7 @@ function arrayLiteralDeclarationValueMetadata(expression: AnyNode): DeclarationV
     arrayElementType: elementType,
     arrayElementDeclaredType: elementType,
     mapKeyType: null,
-    mapValueType: null,
-    setElementType: null
+    mapValueType: null
   }
 }
 
@@ -1977,19 +1968,7 @@ function newExpressionDeclarationValueMetadata(expression: AnyNode): Declaration
       arrayElementType: null,
       arrayElementDeclaredType: null,
       mapKeyType: mapType?.keyType ?? null,
-      mapValueType: mapType?.valueType ?? null,
-      setElementType: null
-    }
-  }
-
-  if (calleeName === 'Set') {
-    return {
-      valueType: 'set',
-      arrayElementType: null,
-      arrayElementDeclaredType: null,
-      mapKeyType: null,
-      mapValueType: null,
-      setElementType: setConstructorElementType(expression)
+      mapValueType: mapType?.valueType ?? null
     }
   }
 
@@ -2075,30 +2054,6 @@ function mapEntryArrayType(expression: AnyNode): DeclarationMapMetadata | null {
   }
 }
 
-function setConstructorElementType(expression: AnyNode): ValueType | null {
-  if (expression.args.length === 0) {
-    return null
-  }
-
-  const first = expression.args[0]
-
-  if (first.type === 'ArrayLiteral') {
-    return arrayLiteralElementType(first)
-  }
-
-  const metadata = inferExpressionDeclarationMetadata(first)
-
-  if (metadata.valueType === 'set') {
-    return metadata.setElementType
-  }
-
-  if (metadata.valueType === 'array') {
-    return metadata.arrayElementType
-  }
-
-  return null
-}
-
 function arrayLiteralElementType(expression: AnyNode): ValueType | null {
   if (expression.elements.length === 0) {
     return null
@@ -2129,8 +2084,7 @@ function emptyDeclarationValueMetadata(): DeclarationValueMetadata {
     arrayElementType: null,
     arrayElementDeclaredType: null,
     mapKeyType: null,
-    mapValueType: null,
-    setElementType: null
+    mapValueType: null
   }
 }
 
@@ -2204,7 +2158,6 @@ function cloneClassFields(fields: AnyNode[] | null | undefined): AnyNode[] {
       mapKeyType: nullableMetadata(field.mapKeyType),
       mapValueType: nullableMetadata(field.mapValueType),
       promiseValueType: nullableMetadata(field.promiseValueType),
-      setElementType: nullableMetadata(field.setElementType),
       shape: nullableMetadata(field.shape),
       functionType: nullableMetadata(field.functionType),
       className: nullableMetadata(field.className)
@@ -2237,7 +2190,6 @@ function cloneClassMethods(methods: AnyNode[] | null | undefined): AnyNode[] {
       returnMapKeyType: nullableMetadata(method.returnMapKeyType),
       returnMapValueType: nullableMetadata(method.returnMapValueType),
       returnPromiseValueType: nullableMetadata(method.returnPromiseValueType),
-      returnSetElementType: nullableMetadata(method.returnSetElementType),
       body: []
     })
   }
@@ -2265,7 +2217,6 @@ function cloneParams(params: AnyNode[] | null | undefined): AnyNode[] {
       mapKeyType: nullableMetadata(param.mapKeyType),
       mapValueType: nullableMetadata(param.mapValueType),
       promiseValueType: nullableMetadata(param.promiseValueType),
-      setElementType: nullableMetadata(param.setElementType),
       shape: nullableMetadata(param.shape),
       functionType: nullableMetadata(param.functionType),
       className: nullableMetadata(param.className)

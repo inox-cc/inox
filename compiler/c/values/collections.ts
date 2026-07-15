@@ -35,7 +35,7 @@ export type CollectionLoweringDependencies = {
 }
 
 type PreparedCollectionReceiver = {
-  type: 'map' | 'set'
+  type: 'map'
   lines: string[]
   expression: string
   cppObject: boolean
@@ -49,13 +49,6 @@ type PreparedMapIndexReceiver = {
 type RuntimeMapType = {
   key: string
   value: string
-}
-
-type RuntimeForOfSet = {
-  name: string
-  elementType: string
-  lines: string[]
-  cppObject: boolean
 }
 
 type RuntimeForOfMap = {
@@ -80,10 +73,6 @@ function collectionThrownCheck(context: CollectionFunctionContext): string {
 
 function mapFacade(expression: string, cppObject: boolean = false): string {
   return cppObject ? expression : `Map(${expression})`
-}
-
-function setFacade(expression: string, cppObject: boolean = false): string {
-  return cppObject ? expression : `Set(${expression})`
 }
 
 function emitFallbackCollectionValueExpression(
@@ -280,22 +269,6 @@ function functionReturnMapType(
   return null
 }
 
-function functionReturnSetElementType(context: CollectionFunctionContext, functionReturn: string): string | null {
-  const functionReturnSetElementTypes = context.functionReturnSetElementTypes
-
-  if (functionReturnSetElementTypes === null || typeof functionReturnSetElementTypes === 'undefined') {
-    return null
-  }
-
-  const elementType = functionReturnSetElementTypes.get(functionReturn)
-
-  if (elementType !== null && typeof elementType !== 'undefined') {
-    return elementType
-  }
-
-  return null
-}
-
 export function emitPreparedCollectionReceiver(
   expression: AnyNode,
   context: CollectionFunctionContext
@@ -304,12 +277,12 @@ export function emitPreparedCollectionReceiver(
     const name = collectionStringAt(expression.path, 0)
     const receiverType = context.variables.get(name)
 
-    if (receiverType === 'map' || receiverType === 'set') {
+    if (receiverType === 'map') {
       return {
-        type: receiverType,
+        type: 'map',
         lines: [],
         expression: name,
-        cppObject: receiverType === 'map' ? context.cppMapValues.has(name) : context.cppSetValues.has(name)
+        cppObject: context.cppMapValues.has(name)
       }
     }
 
@@ -319,7 +292,7 @@ export function emitPreparedCollectionReceiver(
   if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
     const valueType = inferCollectionExpressionType(expression, context)
 
-    if (valueType !== 'map' && valueType !== 'set') {
+    if (valueType !== 'map') {
       return null
     }
 
@@ -333,20 +306,20 @@ export function emitPreparedCollectionReceiver(
 
     if (call !== null && typeof call !== 'undefined' && call.expression !== '') {
       return {
-        type: valueType,
+        type: 'map',
         lines: call.lines,
         expression: call.expression,
-        cppObject: call.cppType === 'Map' || call.cppType === 'Set'
+        cppObject: call.cppType === 'Map'
       }
     }
 
     const value = emitCollectionValueExpression(expression, context)
 
     return {
-      type: valueType,
+      type: 'map',
       lines: value.lines,
       expression: value.expression,
-      cppObject: value.cppType === 'Map' || value.cppType === 'Set'
+      cppObject: value.cppType === 'Map'
     }
   }
 
@@ -359,7 +332,7 @@ export function emitPreparedCollectionReceiver(
       type: knownField,
       lines: value.lines,
       expression: value.expression,
-      cppObject: value.cppType === 'Map' || value.cppType === 'Set'
+      cppObject: value.cppType === 'Map'
     }
   }
 
@@ -369,17 +342,17 @@ export function emitPreparedCollectionReceiver(
   ) {
     const valueType = inferCollectionExpressionType(expression, context)
 
-    if (valueType !== 'map' && valueType !== 'set') {
+    if (valueType !== 'map') {
       return null
     }
 
     const value = emitCollectionValueExpression(expression, context)
 
     return {
-      type: valueType,
+      type: 'map',
       lines: value.lines,
       expression: value.expression,
-      cppObject: value.cppType === 'Map' || value.cppType === 'Set'
+      cppObject: value.cppType === 'Map'
     }
   }
 
@@ -389,7 +362,7 @@ export function emitPreparedCollectionReceiver(
 function knownCollectionReceiverField(
   expression: AnyNode,
   context: CollectionFunctionContext
-): 'map' | 'set' | null {
+): 'map' | null {
   const classField = resolveNativeClassFieldMetadata(expression, context)
 
   if (classField !== null && typeof classField !== 'undefined' && classField.optional !== true) {
@@ -411,13 +384,13 @@ function knownCollectionReceiverField(
   return null
 }
 
-function knownCollectionShapeFieldType(field: CObjectShapeField): 'map' | 'set' | null {
+function knownCollectionShapeFieldType(field: CObjectShapeField): 'map' | null {
   return knownCollectionFieldType(field.valueType)
 }
 
-function knownCollectionFieldType(valueType: string | null | undefined): 'map' | 'set' | null {
-  if (valueType === 'map' || valueType === 'set') {
-    return valueType
+function knownCollectionFieldType(valueType: string | null | undefined): 'map' | null {
+  if (valueType === 'map') {
+    return 'map'
   }
 
   return null
@@ -438,7 +411,13 @@ export function collectionConstructorName(expression: AnyNode | null | undefined
     return null
   }
 
-  return collectionConstructorNameFromPath(expression.callee.path)
+  const name = collectionConstructorNameFromPath(expression.callee.path)
+
+  if (name === 'Map') {
+    return name
+  }
+
+  return null
 }
 
 export function emitPreparedCollectionConstructorValueExpression(
@@ -465,47 +444,23 @@ export function emitPreparedCollectionConstructorValueExpression(
     )
   }
 
-  let tempPrefix = 'set_storage'
-
-  if (collectionConstructor === 'Map') {
-    tempPrefix = 'map_storage'
-  }
-
-  const temp = nextCName(context, tempPrefix)
+  const temp = nextCName(context, 'map_storage')
   const lines: string[] = []
 
-  if (collectionConstructor === 'Map') {
-    reportCollectionHashability(expression.mapKeyType, 'Map keys', expression.loc, context)
-    lines.push(`auto ${temp} = Map::create();`)
-    lines.push(emitRuntimeTypeCheck(`!${temp}.valid()`, context))
-    if (expression.args.length > 0) {
-      pushAllLines(
-        lines,
-        emitMapConstructorValueEntries(temp, collectionNodeAt(expression.args, 0), context, expression.loc)
-      )
-    }
-
-    return {
-      lines,
-      expression: temp,
-      cppType: 'Map'
-    }
-  }
-
-  reportCollectionHashability(expression.setElementType, 'Set values', expression.loc, context)
-  lines.push(`auto ${temp} = Set::create();`)
+  reportCollectionHashability(expression.mapKeyType, 'Map keys', expression.loc, context)
+  lines.push(`auto ${temp} = Map::create();`)
   lines.push(emitRuntimeTypeCheck(`!${temp}.valid()`, context))
   if (expression.args.length > 0) {
     pushAllLines(
       lines,
-      emitSetConstructorValueElements(temp, collectionNodeAt(expression.args, 0), context, expression.loc)
+      emitMapConstructorValueEntries(temp, collectionNodeAt(expression.args, 0), context, expression.loc)
     )
   }
 
   return {
     lines,
     expression: temp,
-    cppType: 'Set'
+    cppType: 'Map'
   }
 }
 
@@ -595,77 +550,6 @@ function emitMapConstructorCopiedEntries(
   return lines
 }
 
-function emitSetConstructorValueElements(
-  name: string,
-  expression: CollectionNode | null | undefined,
-  context: CollectionFunctionContext,
-  loc: SourceLocation | null | undefined
-): string[] {
-  if (expression === null || typeof expression === 'undefined') {
-    return []
-  }
-
-  if (expression.type !== 'ArrayLiteral') {
-    const source = emitPreparedCollectionReceiver(expression, context)
-
-    if (source !== null && typeof source !== 'undefined' && source.type === 'set') {
-      return emitSetConstructorCopiedElements(name, source, context)
-    }
-
-    context.diagnostics.push(
-      diagnostic(
-        'INOX_C_COLLECTION',
-        'C Set constructor currently supports only array literal values or Set copy sources',
-        nodeLocOrFallback(expression, loc)
-      )
-    )
-    return []
-  }
-
-  const lines: string[] = []
-
-  for (const element of expression.elements) {
-    const value = emitCollectionValueExpression(element, context)
-
-    reportCollectionHashability(
-      inferCollectionExpressionType(element, context),
-      'Set values',
-      nodeLocOrFallback(element, loc),
-      context
-    )
-
-    pushAllLines(lines, value.lines)
-    lines.push(`${setFacade(name, true)}.add(${value.expression});`)
-    lines.push(collectionThrownCheck(context))
-  }
-
-  return lines
-}
-
-function emitSetConstructorCopiedElements(
-  name: string,
-  source: PreparedCollectionReceiver,
-  context: CollectionFunctionContext
-): string[] {
-  const sourceSet = nextCName(context, 'inox_set_source')
-  const index = nextCName(context, 'inox_set_source_index')
-  const sourceExpression = source.expression
-  const lines: string[] = []
-
-  pushAllLines(lines, source.lines)
-  lines.push(`SetStorage* ${sourceSet} = ${setFacade(sourceExpression, source.cppObject)}.data();`)
-  lines.push(emitRuntimeTypeCheck(`${sourceSet} == nullptr`, context))
-  lines.push(`for (size_t ${index} = 0; ${index} < ${sourceSet}->capacity; ++${index}) {`)
-  lines.push(`  if (${sourceSet}->entries[${index}].state != SetSlotOccupied) {`)
-  lines.push('    continue;')
-  lines.push('  }')
-  lines.push(`  ${setFacade(name, true)}.add(${sourceSet}->entries[${index}].value);`)
-  lines.push(`  ${collectionThrownCheck(context)}`)
-  lines.push('}')
-
-  return lines
-}
-
 export function emitPreparedCollectionCallExpression(
   expression: AnyNode | null | undefined,
   context: CollectionFunctionContext
@@ -682,13 +566,7 @@ export function emitPreparedCollectionCallExpression(
   const receiver = emitPreparedCollectionReceiver(expression.callee.object, context)
 
   if (receiver !== null && typeof receiver !== 'undefined') {
-    if (receiver.type === 'map') {
-      const call = emitPreparedMapMethodCall(receiver, expression, context)
-
-      return createPreparedCollectionMethodCall(receiver, call)
-    }
-
-    const call = emitPreparedSetMethodCall(receiver, expression, context)
+    const call = emitPreparedMapMethodCall(receiver, expression, context)
 
     return createPreparedCollectionMethodCall(receiver, call)
   }
@@ -902,81 +780,6 @@ function emitPreparedMapIndexReceiver(
   }
 }
 
-function emitPreparedSetMethodCall(
-  receiver: PreparedCollectionReceiver,
-  expression: AnyNode,
-  context: CollectionFunctionContext
-): PreparedExpression {
-  const method = expression.callee.property
-  const name = receiver.expression
-  const facade = setFacade(name, receiver.cppObject)
-
-  if (method === 'clear') {
-    return {
-      lines: [`${facade}.clear();`, collectionThrownCheck(context)],
-      expression: ''
-    }
-  }
-
-  if (method === 'add') {
-    const valueArg = collectionNodeAt(expression.args, 0)
-    reportCollectionHashability(
-      inferCollectionExpressionType(valueArg, context),
-      'Set values',
-      nodeLocOrFallback(valueArg, expression.loc),
-      context
-    )
-    const value = emitCollectionValueExpression(valueArg, context)
-    const lines: string[] = []
-    pushAllLines(lines, value.lines)
-    lines.push(`${facade}.add(${value.expression});`)
-    lines.push(collectionThrownCheck(context))
-
-    return {
-      lines,
-      expression: name
-    }
-  }
-
-  if (method === 'delete' || method === 'has') {
-    let tempPrefix = 'inox_set_has'
-    let methodName = 'has'
-
-    if (method === 'delete') {
-      tempPrefix = 'inox_set_delete'
-      methodName = 'deleteValue'
-    }
-
-    const valueArg = collectionNodeAt(expression.args, 0)
-    reportCollectionHashability(
-      inferCollectionExpressionType(valueArg, context),
-      'Set values',
-      nodeLocOrFallback(valueArg, expression.loc),
-      context
-    )
-    const value = emitCollectionValueExpression(valueArg, context)
-    const out = nextCName(context, tempPrefix)
-    const lines: string[] = []
-    pushAllLines(lines, value.lines)
-    lines.push(`bool ${out} = ${facade}.${methodName}(${value.expression});`)
-    lines.push(collectionThrownCheck(context))
-
-    return {
-      lines,
-      expression: `(${out} ? 1 : 0)`
-    }
-  }
-
-  context.diagnostics.push(
-    diagnostic('INOX_C_COLLECTION', `Set.${method} is not supported by the current C backend slice`, expression.loc)
-  )
-
-  return {
-    lines: [],
-    expression: '0'
-  }
-}
-
 export function emitPreparedCollectionSizeExpression(
   expression: AnyNode,
   context: CollectionFunctionContext
@@ -988,15 +791,8 @@ export function emitPreparedCollectionSizeExpression(
   const receiver = emitPreparedCollectionReceiver(expression.object, context)
 
   if (receiver !== null && typeof receiver !== 'undefined') {
-    let tempPrefix = 'inox_set_size'
-    let facade = setFacade(receiver.expression, receiver.cppObject)
-
-    if (receiver.type === 'map') {
-      tempPrefix = 'inox_map_size'
-      facade = mapFacade(receiver.expression, receiver.cppObject)
-    }
-
-    const out = nextCName(context, tempPrefix)
+    const facade = mapFacade(receiver.expression, receiver.cppObject)
+    const out = nextCName(context, 'inox_map_size')
     const lines: string[] = []
     pushAllLines(lines, receiver.lines)
     lines.push(`size_t ${out} = ${facade}.size();`)
@@ -1006,66 +802,6 @@ export function emitPreparedCollectionSizeExpression(
       lines,
       expression: `((double)${out})`
     }
-  }
-
-  return null
-}
-
-export function resolveRuntimeSetElementType(expression: AnyNode, context: CollectionFunctionContext): string | null {
-  if (expression.type === 'Reference' && expression.path.length === 1) {
-    const elementType = context.setElementTypes.get(collectionStringAt(expression.path, 0))
-
-    if (elementType !== null && typeof elementType !== 'undefined') {
-      return elementType
-    }
-
-    return null
-  }
-
-  if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
-    let functionReturn: string | null = null
-
-    if (expression.type === 'CallExpression') {
-      functionReturn = resolveFunctionReturnNameFromCall(expression)
-    }
-
-    if (expression.valueType !== 'set') {
-      return null
-    }
-
-    if (expression.setElementType !== null && typeof expression.setElementType !== 'undefined') {
-      return expression.setElementType
-    }
-
-    if (functionReturn !== null && typeof functionReturn !== 'undefined') {
-      const returnSetElementType = functionReturnSetElementType(context, functionReturn)
-
-      if (returnSetElementType !== null && typeof returnSetElementType !== 'undefined') {
-        return returnSetElementType
-      }
-    }
-
-    return 'unknown'
-  }
-
-  if (expression.type === 'MemberExpression') {
-    const member = resolveKnownCollectionObjectMember(expression, context)
-
-    if (member !== null && typeof member !== 'undefined' && member.valueType === 'set') {
-      return stringOrUnknown(member.setElementType)
-    }
-
-    return null
-  }
-
-  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
-    const field = resolveKnownCollectionObjectIndex(expression, context)
-
-    if (field !== null && typeof field !== 'undefined' && field.valueType === 'set') {
-      return stringOrUnknown(field.setElementType)
-    }
-
-    return null
   }
 
   return null
@@ -1239,32 +975,6 @@ function resolveCollectionEntriesCallReceiver(
   }
 
   return emitPreparedCollectionReceiver(expression.callee.object, context)
-}
-
-export function resolveRuntimeForOfSet(
-  expression: AnyNode,
-  context: CollectionFunctionContext
-): RuntimeForOfSet | null {
-  const elementType = resolveRuntimeSetElementType(expression, context)
-
-  if (elementType === null || typeof elementType === 'undefined') {
-    return null
-  }
-
-  const receiver = emitPreparedCollectionReceiver(expression, context)
-
-  if (receiver !== null && typeof receiver !== 'undefined') {
-    if (receiver.type === 'set') {
-      return {
-        name: receiver.expression,
-        elementType,
-        lines: receiver.lines,
-        cppObject: receiver.cppObject
-      }
-    }
-  }
-
-  return null
 }
 
 export function resolveRuntimeForOfMapKeys(

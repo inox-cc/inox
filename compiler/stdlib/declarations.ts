@@ -40,14 +40,14 @@ export function stdlibDeclarationNodeValueType(declaration: AnyNode): ValueType 
 
   const valueType = declaration.valueType
 
-  if (typeof valueType === 'string' && valueType !== '') {
+  if (typeof valueType === 'string' && valueType !== '' && valueType !== 'unknown') {
     return valueType.slice(0)
   }
 
   const declaredType = declaration.declaredType
 
   if (typeof declaredType !== 'string' || declaredType === '') {
-    return 'unknown'
+    return typeof valueType === 'string' && valueType !== '' ? valueType.slice(0) : 'unknown'
   }
 
   return stdlibDeclarationTypeNameValueType(declaredType.slice(0))

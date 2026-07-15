@@ -165,7 +165,12 @@ export function createCallExpression(callee: AnyNode, args: AnyNode[], typeArgum
   }
 }
 
-export function createNewExpression(start: Token, callee: AnyNode, args: AnyNode[], typeArguments: string[] = []): AnyNode {
+export function createNewExpression(
+  start: Token,
+  callee: AnyNode,
+  args: AnyNode[],
+  typeArguments: string[] = []
+): AnyNode {
   return {
     type: 'NewExpression',
     callee,
@@ -173,7 +178,6 @@ export function createNewExpression(start: Token, callee: AnyNode, args: AnyNode
     typeArguments,
     mapKeyType: 'unknown',
     mapValueType: 'unknown',
-    setElementType: 'unknown',
     loc: locFromToken(start)
   }
 }
@@ -245,6 +249,7 @@ export function createReferenceFromName(name: string, loc: SourceLocation): AnyN
   return {
     type: 'Reference',
     path: [name],
+    functionStorage: null,
     loc
   }
 }

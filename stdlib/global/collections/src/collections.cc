@@ -455,7 +455,34 @@ size_t Map::size() const {
   return instance->length;
 }
 
+enum SetSlotState { SetSlotEmpty, SetSlotOccupied, SetSlotTombstone };
+
+struct SetEntry {
+  inox_value value;
+  uint64_t hash;
+  SetSlotState state;
+};
+
+struct SetStorage {
+  inox_ref header;
+  size_t length;
+  size_t capacity;
+  size_t tombstones;
+  SetEntry* entries;
+};
+
+static SetStorage* set_data(const Set& value) {
+  inox_value raw = value.raw();
+
+  if (raw.tag != INOX_TAG_SET || raw.as.ref == 0) {
+    return 0;
+  }
+
+  return (SetStorage*)raw.as.ref;
+}
+
 static void inox_set_dispose_ref(inox_ref* ref);
+static inox::Value inox_set_create_value();
 
 static void inox_set_init_entries(SetEntry* entries, size_t cap) {
   for (size_t index = 0; index < cap; index += 1) {
@@ -602,11 +629,65 @@ static inox_status inox_set_find(SetStorage* set, inox_value value, uint64_t has
   return INOX_ERR_TYPE;
 }
 
-Set::Set() : inox::Value() {}
+Set::Set() : inox::Value(inox_set_create_value()) {}
 
 Set::Set(const inox::Value& value) : inox::Value(value) {}
 
-Set::Set(inox::Value&& value) : inox::Value(std::move(value)) {}
+Set Set::from(const inox::Value& values) {
+  Set result;
+
+  if (!result.valid() || inox::thrown()) {
+    return result;
+  }
+
+  inox_value raw_values = values.raw();
+
+  if (raw_values.tag == INOX_TAG_ARRAY) {
+    ArrayClass array(values);
+    size_t length = array.length();
+
+    if (inox::thrown()) {
+      return result;
+    }
+
+    for (size_t index = 0; index < length; index += 1) {
+      inox::Value value = array.get(index);
+
+      if (inox::thrown()) {
+        return result;
+      }
+
+      result.add(value);
+
+      if (inox::thrown()) {
+        return result;
+      }
+    }
+
+    return result;
+  }
+
+  if (raw_values.tag == INOX_TAG_SET) {
+    SetIterator iterator{Set(values)};
+
+    while (true) {
+      SetIterationResult step = iterator.next();
+
+      if (inox::thrown() || step.done) {
+        return result;
+      }
+
+      result.add(step.value);
+
+      if (inox::thrown()) {
+        return result;
+      }
+    }
+  }
+
+  inox_collection_throw("TypeError: Set constructor value is not iterable");
+  return result;
+}
 
 bool Set::valid() const {
   inox_value value = inox::Value::raw();
@@ -614,20 +695,12 @@ bool Set::valid() const {
   return value.tag == INOX_TAG_SET && value.as.ref != 0;
 }
 
-SetStorage* Set::data() const {
-  if (!valid()) {
-    return 0;
-  }
-
-  return (SetStorage*)inox::Value::raw().as.ref;
-}
-
 Set Set::add(const inox::Value& value) const {
-  SetStorage* instance = data();
+  SetStorage* instance = set_data(*this);
 
   if (instance == 0) {
     inox_collection_throw("TypeError: Set.add receiver is not a Set");
-    return Set();
+    return Set(*this);
   }
 
   inox_value raw_value = value.raw();
@@ -636,14 +709,14 @@ Set Set::add(const inox::Value& value) const {
 
   if (!hash_ok) {
     inox_collection_throw("TypeError: Set value is not hashable");
-    return Set();
+    return Set(*this);
   }
 
   inox_status status = inox_set_reserve(instance, instance->length + 1);
 
   if (status != INOX_OK) {
     inox_collection_throw("TypeError: Set allocation failed");
-    return Set();
+    return Set(*this);
   }
 
   size_t index = 0;
@@ -653,7 +726,7 @@ Set Set::add(const inox::Value& value) const {
   if (status != INOX_OK || found) {
     if (status != INOX_OK) {
       inox_collection_throw("TypeError: Set lookup failed");
-      return Set();
+      return Set(*this);
     }
 
     return Set(*this);
@@ -675,7 +748,7 @@ Set Set::add(const inox::Value& value) const {
 }
 
 void Set::clear() const {
-  SetStorage* instance = data();
+  SetStorage* instance = set_data(*this);
 
   if (instance == 0) {
     inox_collection_throw("TypeError: Set.clear receiver is not a Set");
@@ -698,8 +771,8 @@ void Set::clear() const {
   instance->tombstones = 0;
 }
 
-bool Set::deleteValue(const inox::Value& value) const {
-  SetStorage* instance = data();
+bool Set::erase(const inox::Value& value) const {
+  SetStorage* instance = set_data(*this);
 
   if (instance == 0) {
     inox_collection_throw("TypeError: Set.delete receiver is not a Set");
@@ -764,7 +837,7 @@ static void inox_set_dispose_ref(inox_ref* ref) {
 }
 
 bool Set::has(const inox::Value& value) const {
-  SetStorage* instance = data();
+  SetStorage* instance = set_data(*this);
 
   if (instance == 0) {
     inox_collection_throw("TypeError: Set.has receiver is not a Set");
@@ -792,10 +865,10 @@ bool Set::has(const inox::Value& value) const {
   return found;
 }
 
-Set Set::create() {
+static inox::Value inox_set_create_value() {
   if (inox_default_allocator.alloc == 0) {
     inox_collection_throw("TypeError: Set allocator is not available");
-    return Set();
+    return inox::Value();
   }
 
   SetStorage* set = (SetStorage*)inox_default_allocator.alloc(
@@ -804,7 +877,7 @@ Set Set::create() {
 
   if (set == 0) {
     inox_collection_throw("TypeError: Set allocation failed");
-    return Set();
+    return inox::Value();
   }
 
   set->header.kind = INOX_REF_SET;
@@ -827,11 +900,11 @@ Set Set::create() {
   inox::debugMemory.recordRefCreated(INOX_REF_SET);
 #endif
 
-  return Set(inox::adopt(out));
+  return inox::adopt(out);
 }
 
 size_t Set::size() const {
-  SetStorage* instance = data();
+  SetStorage* instance = set_data(*this);
 
   if (instance == 0) {
     inox_collection_throw("TypeError: Set.size receiver is not a Set");
@@ -839,6 +912,39 @@ size_t Set::size() const {
   }
 
   return instance->length;
+}
+
+SetIterator Set::values() const {
+  if (!valid()) {
+    inox_collection_throw("TypeError: Set.values receiver is not a Set");
+  }
+
+  return SetIterator(*this);
+}
+
+SetIterator::SetIterator() : owner_(), index_(0) {}
+
+SetIterator::SetIterator(const Set& value) : owner_(value), index_(0) {}
+
+SetIterationResult SetIterator::next() {
+  Set value(owner_);
+  SetStorage* instance = set_data(value);
+
+  if (instance == 0) {
+    inox_collection_throw("TypeError: Set iterator receiver is not a Set");
+    return { true, inox::Value() };
+  }
+
+  while (index_ < instance->capacity) {
+    SetEntry* entry = &instance->entries[index_];
+    index_ += 1;
+
+    if (entry->state == SetSlotOccupied) {
+      return { false, inox::Value(entry->value) };
+    }
+  }
+
+  return { true, inox::Value() };
 }
 
 static uint64_t inox_hash_mix(uint64_t hash, const void* bytes, size_t len) {

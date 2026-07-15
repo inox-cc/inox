@@ -2,10 +2,8 @@ import {
   arrayElementTypeNameFromKnownTypeName,
   isArrayTypeName,
   isNullableTypeName,
-  isSetTypeName,
   mapTypeNamesFromTypeName,
-  nullableTypeNameFromKnownTypeName,
-  setElementTypeNameFromKnownTypeName
+  nullableTypeNameFromKnownTypeName
 } from '../type-names.ts'
 import { diagnostic } from '../diagnostics.ts'
 import type { AnyNode, Diagnostic, ProgramNode, TypeAliasInfo } from '../types.ts'
@@ -235,12 +233,6 @@ function ownershipTargetsFromTypeName(name: string | null | undefined): string[]
     const arrayElementTypeName = arrayElementTypeNameFromKnownTypeName(name)
 
     return ownershipTargetsFromTypeName(arrayElementTypeName)
-  }
-
-  if (isSetTypeName(name)) {
-    const setElementTypeName = setElementTypeNameFromKnownTypeName(name)
-
-    return ownershipTargetsFromTypeName(setElementTypeName)
   }
 
   const mapTypeNames = mapTypeNamesFromTypeName(name)

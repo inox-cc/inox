@@ -6,6 +6,7 @@ import { tokenize } from '../../compiler/lexer.ts'
 import { lowerProgram } from '../../compiler/lower.ts'
 import { createModuleDeclarationProgram, emitModuleDeclarationContract } from '../../compiler/modules/declarations.ts'
 import { parse } from '../../compiler/parser.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 export function assertModuleDeclarationInferredConsts(): void {
   const seedProgram = parse(
@@ -31,16 +32,16 @@ export const imports = new Map([
   const seedCode = emitModuleDeclarationContract(createModuleDeclarationProgram(seedProgram))
 
   assert.match(seedCode, /export const methods: array<string>;/)
-  assert.match(seedCode, /export const names: set<string>;/)
+  assert.match(seedCode, /export const names: unknown;/)
   assert.match(seedCode, /export const constants: map<string,number>;/)
   assert.match(seedCode, /export const imports: map<string,string>;/)
 
-  const checked = checkProgram(seedProgram, {})
-  const hir = lowerProgram(checked.ast)
+  const checked = checkProgram(seedProgram, { libraries: defaultCompilerLibrarySet })
+  const hir = lowerProgram(checked.ast, defaultCompilerLibrarySet)
   const refinedCode = emitModuleDeclarationContract(createModuleDeclarationProgram(hir))
 
   assert.match(refinedCode, /export const methods: array<string>;/)
-  assert.match(refinedCode, /export const names: set<string>;/)
+  assert.match(refinedCode, /export const names: Set<string>;/)
   assert.match(refinedCode, /export const constants: map<string,number>;/)
   assert.match(refinedCode, /export const imports: map<string,string>;/)
 }

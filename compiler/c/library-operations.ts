@@ -104,6 +104,8 @@ export function emitPreparedCompilerLibraryExpression(expression: AnyNode): Prep
     lines: [],
     expression: cExpression,
     cppType,
+    scalarType,
+    valueType: item.valueType ?? undefined,
     owned: item.libraryOwned === true
   }
 }

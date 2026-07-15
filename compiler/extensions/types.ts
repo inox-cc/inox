@@ -130,6 +130,16 @@ export type LibraryDeclarationDescriptor = {
   compilerImplemented?: boolean
 }
 
+export type LibraryNativeIterationDescriptor = {
+  iteratorMethod: string
+  nextMethod: string
+  doneMember: string
+  valueMember: string
+  receiverAdapter?: string | null
+  valueAdapter?: string | null
+  failureMode?: 'thrown' | null
+}
+
 export type LibraryNativeTypeDescriptor = {
   libraryId: LibraryId
   typeId: LibraryNativeTypeId
@@ -138,9 +148,11 @@ export type LibraryNativeTypeDescriptor = {
   cppType: string
   baseTypeIds: LibraryNativeTypeId[]
   runtimeRequirements: RuntimeRequirementId[]
+  cValueAdapter?: string | null
   typeParameters?: string[]
   traits?: TypeTraitRef[]
   fields?: LibraryResultShapeFieldDescriptor[]
+  cIteration?: LibraryNativeIterationDescriptor | null
 }
 
 export type LibraryOperationKind = 'call' | 'construct' | 'member-read' | 'member-write' | 'index-read' | 'index-write'

@@ -100,30 +100,6 @@ export function recordTypeNamesFromTypeName(name: string): RecordTypeNames | nul
   }
 }
 
-export function setElementTypeNameFromTypeName(name: string): string | null {
-  const inner = genericTypeInner(name, 'set')
-
-  if (inner !== null && typeof inner !== 'undefined') {
-    const args = splitGenericArgs(inner)
-
-    if (args.length === 1) {
-      return args[0]
-    }
-
-    return null
-  }
-
-  return null
-}
-
-export function isSetTypeName(name: string): boolean {
-  return hasGenericTypeInner(name, 'set')
-}
-
-export function setElementTypeNameFromKnownTypeName(name: string): string {
-  return knownGenericTypeInner(name, 'set')
-}
-
 export function promiseValueTypeNameFromTypeName(name: string): string | null {
   const inner = genericTypeInner(name, 'promise')
 
@@ -336,30 +312,6 @@ export function normalizeTypeName(name: string): string {
     return 'object'
   }
 
-  const normalizedSetInner = genericTypeInner(name, 'set')
-
-  if (normalizedSetInner !== null && typeof normalizedSetInner !== 'undefined') {
-    const args = splitGenericArgs(normalizedSetInner)
-
-    if (args.length === 1) {
-      return `set<${normalizeTypeName(args[0])}>`
-    }
-
-    return 'set'
-  }
-
-  const setInner = genericTypeInner(name, 'Set')
-
-  if (setInner !== null && typeof setInner !== 'undefined') {
-    const args = splitGenericArgs(setInner)
-
-    if (args.length === 1) {
-      return `set<${normalizeTypeName(args[0])}>`
-    }
-
-    return 'set'
-  }
-
   const normalizedPromiseInner = genericTypeInner(name, 'promise')
 
   if (normalizedPromiseInner !== null && typeof normalizedPromiseInner !== 'undefined') {
@@ -394,10 +346,6 @@ export function normalizeTypeName(name: string): string {
 
   if (name === 'Map' || name === 'map') {
     return 'map'
-  }
-
-  if (name === 'Set' || name === 'set') {
-    return 'set'
   }
 
   if (name === 'Promise' || name === 'promise') {
@@ -564,11 +512,11 @@ export function isBuiltinTypeDependencyName(name: string): boolean {
     return true
   }
 
-  if (name === 'Set' || name === 'any' || name === 'class' || name === 'false' || name === 'map') {
+  if (name === 'any' || name === 'class' || name === 'false' || name === 'map') {
     return true
   }
 
-  if (name === 'never' || name === 'nullable' || name === 'record' || name === 'set') {
+  if (name === 'never' || name === 'nullable' || name === 'record') {
     return true
   }
 

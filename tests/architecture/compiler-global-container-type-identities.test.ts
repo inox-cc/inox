@@ -5,7 +5,9 @@ import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-di
 import {
   arrayNativeTypeId,
   arrayTypeRef,
-  compilerLibraryPackage as collectionsPackage
+  compilerLibraryPackage as collectionsPackage,
+  setNativeTypeId,
+  setTypeRef
 } from '../../stdlib/global/collections/compiler/index.ts'
 import {
   compilerLibraryPackage as promisePackage,
@@ -14,7 +16,7 @@ import {
 } from '../../stdlib/global/promise/compiler/index.ts'
 import type { PrimitiveTypeRef } from '../../compiler/extensions/types.ts'
 
-test('Array и Promise принадлежат discoverable global packages с package-local TypeRef factories', async () => {
+test('Array, Set и Promise принадлежат discoverable global packages с package-local TypeRef factories', async () => {
   const discovered = await discoverCompilerLibraries()
   const collections = discovered.find((item) => item.id === 'global:collections')
   const promise = discovered.find((item) => item.id === 'global:promise')
@@ -30,6 +32,27 @@ test('Array и Promise принадлежат discoverable global packages с pa
       cppType: 'ArrayClass',
       baseTypeIds: [],
       runtimeRequirements: ['collections', 'managed-values']
+    },
+    {
+      libraryId: 'global:collections',
+      typeId: 'global:collections#Set',
+      declarationNames: ['Set'],
+      valueType: 'object',
+      cppType: 'Set',
+      cValueAdapter: 'Set($value)',
+      baseTypeIds: [],
+      runtimeRequirements: ['global:collections#set'],
+      typeParameters: ['T'],
+      traits: [{ traitId: 'iterable', args: [{ kind: 'parameter', name: 'T' }] }],
+      cIteration: {
+        iteratorMethod: 'values',
+        nextMethod: 'next',
+        doneMember: 'done',
+        valueMember: 'value',
+        receiverAdapter: 'Set($value)',
+        valueAdapter: '$value.raw()',
+        failureMode: 'thrown'
+      }
     }
   ])
   assert.deepEqual(promisePackage.nativeTypes, [
@@ -51,6 +74,15 @@ test('Array и Promise принадлежат discoverable global packages с pa
   assert.deepEqual(arrayTypeRef(fulfilled), {
     kind: 'nominal',
     typeId: arrayNativeTypeId,
+    args: [fulfilled],
+    nullable: false,
+    ownership: 'value',
+    traits: [{ traitId: 'iterable', args: [fulfilled] }]
+  })
+  assert.equal(setNativeTypeId, 'global:collections#Set')
+  assert.deepEqual(setTypeRef(fulfilled), {
+    kind: 'nominal',
+    typeId: setNativeTypeId,
     args: [fulfilled],
     nullable: false,
     ownership: 'value',

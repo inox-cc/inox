@@ -64,7 +64,6 @@ type ArrayVariableScopeSnapshot = {
   runtimeArrayElementTypes: CStringMap
   runtimeCallbacks: CStringSet
   runtimeStrings: CStringSet
-  setElementTypes: CStringMap
   variables: CStringMap
 }
 
@@ -322,7 +321,6 @@ function pushArrayVariableScope(context: ArrayFunctionContext): ArrayVariableSco
     runtimeArrayElementTypes: context.runtimeArrayElementTypes,
     runtimeCallbacks: context.runtimeCallbacks,
     runtimeStrings: context.runtimeStrings,
-    setElementTypes: context.setElementTypes,
     variables: context.variables
   }
 
@@ -342,7 +340,6 @@ function pushArrayVariableScope(context: ArrayFunctionContext): ArrayVariableSco
   context.runtimeArrayElementTypes = cloneCStringMap(snapshot.runtimeArrayElementTypes)
   context.runtimeCallbacks = cloneCStringSet(snapshot.runtimeCallbacks)
   context.runtimeStrings = cloneCStringSet(snapshot.runtimeStrings)
-  context.setElementTypes = cloneCStringMap(snapshot.setElementTypes)
   context.variables = cloneCStringMap(snapshot.variables)
 
   return snapshot
@@ -365,7 +362,6 @@ function restoreArrayVariableScope(context: ArrayFunctionContext, snapshot: Arra
   context.runtimeArrayElementTypes = snapshot.runtimeArrayElementTypes
   context.runtimeCallbacks = snapshot.runtimeCallbacks
   context.runtimeStrings = snapshot.runtimeStrings
-  context.setElementTypes = snapshot.setElementTypes
   context.variables = snapshot.variables
 }
 
@@ -2515,7 +2511,6 @@ function arrayMapCallbackExpression(callback: ArrayMaybeNode | null | undefined)
       mapKeyType: param.mapKeyType ?? null,
       mapValueType: param.mapValueType ?? null,
       promiseValueType: param.promiseValueType ?? null,
-      setElementType: param.setElementType ?? null,
       functionType: param.functionType ?? null,
       shape: param.shape ?? null,
       loc: callback.loc
@@ -2538,7 +2533,6 @@ function arrayMapCallbackExpression(callback: ArrayMaybeNode | null | undefined)
       mapKeyType: functionType.returnMapKeyType ?? null,
       mapValueType: functionType.returnMapValueType ?? null,
       promiseValueType: functionType.returnPromiseValueType ?? null,
-      setElementType: functionType.returnSetElementType ?? null,
       shape: functionType.returnShape ?? null,
       loc: callback.loc
     },

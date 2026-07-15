@@ -392,7 +392,7 @@ function errorDiagnostics(error: unknown): Diagnostic[] | null {
 
   const diagnostics = (error as DiagnosticError).diagnostics
 
-  if (Array.isArray(diagnostics)) {
+  if (Array.isArray(diagnostics) && diagnostics.length > 0) {
     return diagnostics
   }
 

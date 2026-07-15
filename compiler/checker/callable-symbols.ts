@@ -102,13 +102,6 @@ export function applyCallableSymbolCall(
     returnPromiseValueType = symbolReturnPromiseValueType
   }
 
-  let returnSetElementType: ValueType | null = null
-  const symbolReturnSetElementType = symbol.returnSetElementType ?? null
-
-  if (symbolReturnSetElementType !== null && typeof symbolReturnSetElementType !== 'undefined') {
-    returnSetElementType = symbolReturnSetElementType
-  }
-
   let returnShape: ObjectShapeInfo | null = null
   const symbolReturnShape = symbol.returnShape
 
@@ -117,13 +110,13 @@ export function applyCallableSymbolCall(
   }
 
   expression.valueType = returnType
+  expression.typeRef = symbol.returnTypeRef ?? null
   expression.nullable = symbol.returnNullable === true
   expression.arrayElementType = returnArrayElementType
   expression.arrayElementDeclaredType = returnArrayElementDeclaredType
   expression.mapKeyType = returnMapKeyType
   expression.mapValueType = returnMapValueType
   expression.promiseValueType = returnPromiseValueType
-  expression.setElementType = returnSetElementType
   if (returnShape !== null) {
     expression.shape = returnShape
   } else if (expression.shape === null || typeof expression.shape === 'undefined') {

@@ -11,8 +11,9 @@ import {
   irClassMethodEffectName,
   mergeIrFunctionEffects
 } from '../ir.ts'
-import { resolveCompilerLibrarySet } from '../extensions/library-set.ts'
+import { compilerLibraryNativeTypeForId, resolveCompilerLibrarySet } from '../extensions/library-set.ts'
 import { compilerLibraryIntrinsicResultMetadata } from '../extensions/intrinsic-metadata.ts'
+import type { CompilerLibrarySet } from '../extensions/types.ts'
 import { reexportImportAliasName } from '../modules/synthetic-imports.ts'
 import type {
   AnyNode,
@@ -22,24 +23,29 @@ import type {
   IrProgram,
   IrRuntimeRequirement
 } from '../types.ts'
-import type { CallbackLoweringDependencies } from './async/callbacks.ts'
+import type { CallbackLoweringDependencies, FunctionPointerParamInfo } from './async/callbacks.ts'
 import {
   collectCallbackWrappers,
+  collectFunctionPointerParamInfos,
   collectFunctionPointerParamNames,
+  emitFunctionPointerNativeBoundaryArgument,
   emitFunctionPointerNamedParams,
   emitFunctionPointerParams,
   emitFunctionPointerReturnType,
+  emitFunctionPointerRuntimeAdapterDefinition,
   emitPlainArrowCallbackWrapperDeclaration,
   emitPlainArrowCallbackWrapperHead,
   emitRuntimeArrowCallbackContextType,
   emitRuntimeCallbackWrapperDeclaration,
   emitRuntimeCallbackWrapperHead,
   isNullableFunctionType,
+  isPlainObjectFunctionField,
   isPlainFunctionPointerType,
   isPromiseChainCallbackWrapperWithContext,
   isRuntimeArrowCallbackWrapperWithContext,
   isRuntimeCallbackWrapper,
-  isRuntimeFunctionType
+  isRuntimeFunctionType,
+  registerFunctionPointerRuntimeAdapter
 } from './async/callbacks.ts'
 import type { PromiseChainLoweringDependencies } from './async/promises.ts'
 import {
@@ -78,9 +84,9 @@ import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from
 import { cStringLiteral, emitCFunctionName, emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { relativeCIncludePath, uniqueCModuleImports } from './modules.ts'
 import { emitCompilerLibraryRuntimeInitializerDefinitions } from './library-initializers.ts'
-import { emitCPrelude, filterUnusedCPreludeIncludes } from './prelude.ts'
+import { emitCPrelude, emitLibraryCPreludeIncludeLines, filterUnusedCPreludeIncludes } from './prelude.ts'
 import { collectCReferencedFunctionPrototypeNames } from './prototype-references.ts'
-import { resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
+import { resolveCRuntimePreludeRequirements, resolveLibraryRuntimeCPreludeIncludes } from './runtime-plan.ts'
 import { cObjectShapeFromMetadata } from './types.ts'
 import type {
   CCallbackWrapper,
@@ -92,6 +98,7 @@ import type {
   CModuleEmitOptions,
   CModuleImportPlan,
   CModulePlan,
+  CObjectShape,
   CObjectShapeField,
   CPromiseChainWrapper,
   CRuntimeArrowCallbackWrapper
@@ -216,7 +223,6 @@ function pushCModuleClassMethodFunctionDeclarations(target: IrFunctionDeclaratio
           returnMapKeyType: method.returnMapKeyType,
           returnMapValueType: method.returnMapValueType,
           returnPromiseValueType: method.returnPromiseValueType,
-          returnSetElementType: method.returnSetElementType,
           returnShape: method.returnShape,
           loc: method.loc
         }
@@ -349,7 +355,8 @@ export type CModuleEmissionDependencies = {
     functionDeclarations: IrFunctionDeclaration[],
     functionEffects: IrFunctionEffect[],
     jsGlobalRoots: Set<string>,
-    topLevelNodes: AnyNode[]
+    topLevelNodes: AnyNode[],
+    libraries?: CompilerLibrarySet
   ): CEmitContext
   emitClassConstructorDeclaration(info: CClassInfo, baseContext: CEmitContext): string[]
   emitClassMethodDeclaration(info: CClassInfo, method: AnyNode, baseContext: CEmitContext): string[]
@@ -374,7 +381,7 @@ export function emitCModuleSource(
   const irPrograms = [plan.ir]
   const functionEntries = collectCModuleFunctionNodeEntries(plan, irPrograms)
   const functions: AnyNode[] = []
-  const context = createCModuleBaseContext(plan, diagnostics, deps)
+  const context = createCModuleBaseContext(plan, diagnostics, deps, options.libraries)
   context.exceptionValueShape = cObjectShapeFromMetadata(
     compilerLibraryIntrinsicResultMetadata(
       resolveCompilerLibrarySet(options.libraries),
@@ -466,7 +473,6 @@ export function emitCModuleSource(
       prelude.needsStringHeader,
       prelude.needsCollectionRuntime,
       prelude.needsMapRuntime,
-      prelude.needsSetRuntime,
       prelude.needsObjectRuntime,
       prelude.libraryCPreludeIncludes
     )
@@ -547,10 +553,53 @@ export function emitCModuleSource(
     lines,
     emitCNativeClassDeclarations(context, collectCModuleClassMethodPrototypes(context, deps), classDescriptorNames)
   )
+  emitCModuleFunctionPointerRuntimeAdapterDefinitions(lines, context)
   emitCModuleFunctionPointerAdapterDefinitions(lines, context)
   pushCModuleLines(lines, bodyLines)
 
   return filterUnusedCPreludeIncludes(joinCModuleLines(lines))
+}
+
+function emitCModuleFunctionPointerRuntimeAdapterDefinitions(lines: string[], context: CEmitContext): void {
+  registerCModuleFunctionPointerAdapterRuntimeBridges(context)
+
+  for (const adapter of context.functionPointerRuntimeAdapters) {
+    pushCModuleLines(lines, emitFunctionPointerRuntimeAdapterDefinition(adapter))
+    lines.push('')
+  }
+}
+
+function registerCModuleFunctionPointerAdapterRuntimeBridges(context: CEmitContext): void {
+  const moduleObjectFunctionFields = collectCModuleObjectFunctionFieldNames(context)
+  const moduleObjectFunctionFieldInfos = collectCModuleObjectFunctionFieldInfos(context)
+
+  for (const adapter of context.functionPointerAdapters) {
+    const targetFunctionType = functionPointerAdapterTargetFunctionType(adapter, context)
+    const targetSeenTypes = functionPointerAdapterTargetSeenTypes(adapter, context)
+    const expectedInfos = collectFunctionPointerParamInfos(adapter.functionType, adapter.seenTypes)
+    const targetInfos = collectFunctionPointerParamInfos(targetFunctionType, targetSeenTypes)
+
+    for (const targetInfo of targetInfos) {
+      let expectedInfo = functionPointerParamInfoForName(expectedInfos, targetInfo.name)
+
+      if (expectedInfo === null) {
+        const moduleFieldName = emitFunctionPointerAdapterModuleObjectFieldArg(
+          targetInfo.name,
+          moduleObjectFunctionFields
+        )
+
+        if (moduleFieldName !== null) {
+          expectedInfo = functionPointerPointerParamInfoForName(moduleObjectFunctionFieldInfos, moduleFieldName)
+        }
+      }
+
+      if (functionPointerParamNeedsRuntimeBridge(expectedInfo, targetInfo)) {
+        if (expectedInfo !== null && expectedInfo.functionType !== null) {
+          registerFunctionPointerRuntimeAdapter(expectedInfo.functionType, expectedInfo.seenTypes, context)
+        }
+      }
+    }
+  }
 }
 
 function emitCModuleNativeClassForwardDeclarations(
@@ -611,12 +660,20 @@ function cModuleIdentifierChar(value: string): boolean {
 export function emitCModuleHeader(
   plan: CModulePlan,
   _plans: CModulePlan[],
+  options: CModuleEmitOptions,
   diagnostics: Diagnostic[],
   deps: CModuleEmissionDependencies
 ): string {
-  const context = createCModuleBaseContext(plan, diagnostics, deps)
+  const context = createCModuleBaseContext(plan, diagnostics, deps, options.libraries)
   const exportedFunctions = collectCModuleExportedFunctions(plan)
   const exportedValues = collectCModuleExportedValueDeclarations(plan)
+  const runtimeRequirements = runtimeRequirementSetFromArray(collectIrRuntimeRequirements([plan.ir]))
+
+  addCModuleNativeSignatureRuntimeRequirements(runtimeRequirements, context, options.libraries)
+
+  const libraryIncludes = emitLibraryCPreludeIncludeLines(
+    resolveLibraryRuntimeCPreludeIncludes(runtimeRequirements, options.libraries)
+  )
   const lines: string[] = []
 
   lines.push(`#ifndef ${plan.headerGuard}`)
@@ -625,6 +682,11 @@ export function emitCModuleHeader(
   lines.push('#include "inox/value.h"')
   lines.push('#include "inox/loop.h"')
   lines.push('#include "inox/promise.h"')
+
+  for (let includeIndex = 0; includeIndex < libraryIncludes.length; includeIndex = includeIndex + 1) {
+    lines.push(libraryIncludes[includeIndex])
+  }
+
   lines.push('')
 
   if (plan.initName !== null && typeof plan.initName !== 'undefined') {
@@ -640,13 +702,65 @@ export function emitCModuleHeader(
   for (let valueIndex = 0; valueIndex < exportedValues.length; valueIndex = valueIndex + 1) {
     const item = cModuleValueDeclarationAt(exportedValues, valueIndex)
 
-    lines.push(`extern ${cModuleValueCType(item.valueType, context)} ${item.symbolName};`)
+    lines.push(`extern ${cModuleValueDeclarationCType(item, context)} ${item.symbolName};`)
   }
 
   lines.push('')
   lines.push(`#endif`)
 
   return joinCModuleLines(lines)
+}
+
+function addCModuleNativeSignatureRuntimeRequirements(
+  requirements: Set<IrRuntimeRequirement>,
+  context: CEmitContext,
+  libraries: CompilerLibrarySet | null | undefined
+): void {
+  if (libraries === null || typeof libraries === 'undefined') {
+    return
+  }
+
+  const seen: Set<CObjectShape> = new Set()
+
+  for (const shape of context.functionReturnShapes.values()) {
+    addCModuleNativeShapeRuntimeRequirements(requirements, shape, libraries, seen)
+  }
+
+  for (const params of context.functionParams.values()) {
+    for (let paramIndex = 0; paramIndex < params.length; paramIndex = paramIndex + 1) {
+      addCModuleNativeShapeRuntimeRequirements(requirements, params[paramIndex].shape, libraries, seen)
+    }
+  }
+}
+
+function addCModuleNativeShapeRuntimeRequirements(
+  requirements: Set<IrRuntimeRequirement>,
+  shape: CObjectShape | null | undefined,
+  libraries: CompilerLibrarySet,
+  seen: Set<CObjectShape>
+): void {
+  if (shape === null || typeof shape === 'undefined' || seen.has(shape)) {
+    return
+  }
+
+  seen.add(shape)
+  const typeId = shape.libraryTypeId
+
+  if (typeId !== null && typeof typeId !== 'undefined') {
+    const nativeType = compilerLibraryNativeTypeForId(libraries, typeId)
+
+    if (nativeType !== null) {
+      for (let index = 0; index < nativeType.runtimeRequirements.length; index = index + 1) {
+        requirements.add(nativeType.runtimeRequirements[index])
+      }
+    }
+  }
+
+  const fields = shape.fields ?? []
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    addCModuleNativeShapeRuntimeRequirements(requirements, fields[index].shape, libraries, seen)
+  }
 }
 
 function joinCModuleLines(lines: string[]): string {
@@ -935,9 +1049,20 @@ function emitCModuleFunctionPointerAdapterDefinitions(lines: string[], context: 
   }
 
   const moduleObjectFunctionFields = collectCModuleObjectFunctionFieldNames(context)
+  const moduleObjectFunctionFieldInfos = collectCModuleObjectFunctionFieldInfos(context)
+  const runtimeModuleObjectFunctionFields = collectCModuleRuntimeObjectFunctionFieldNames(context)
 
   for (const adapter of context.functionPointerAdapters) {
-    pushCModuleLines(lines, emitCModuleFunctionPointerAdapterDefinition(adapter, context, moduleObjectFunctionFields))
+    pushCModuleLines(
+      lines,
+      emitCModuleFunctionPointerAdapterDefinition(
+        adapter,
+        context,
+        moduleObjectFunctionFields,
+        moduleObjectFunctionFieldInfos,
+        runtimeModuleObjectFunctionFields
+      )
+    )
     lines.push('')
   }
 }
@@ -945,20 +1070,32 @@ function emitCModuleFunctionPointerAdapterDefinitions(lines: string[], context: 
 function emitCModuleFunctionPointerAdapterDefinition(
   adapter: CFunctionPointerAdapter,
   context: CEmitContext,
-  moduleObjectFunctionFields: Set<string>
+  moduleObjectFunctionFields: Set<string>,
+  moduleObjectFunctionFieldInfos: FunctionPointerParamInfo[],
+  runtimeModuleObjectFunctionFields: Set<string>
 ): string[] {
   const lines = [`${emitCModuleFunctionPointerAdapterHead(adapter)} {`]
+  const bridgeLines: string[] = []
+  const cleanupLines: string[] = []
   const expectedNames = collectFunctionPointerParamNames(adapter.functionType, adapter.seenTypes)
+  const expectedInfos = collectFunctionPointerParamInfos(adapter.functionType, adapter.seenTypes)
   const targetFunctionType = functionPointerAdapterTargetFunctionType(adapter, context)
   const targetSeenTypes = functionPointerAdapterTargetSeenTypes(adapter, context)
   const targetNames = collectFunctionPointerParamNames(targetFunctionType, targetSeenTypes)
+  const targetInfos = collectFunctionPointerParamInfos(targetFunctionType, targetSeenTypes)
   const targetNameSet = stringSetFromArray(targetNames)
   const targetArgs = emitFunctionPointerAdapterTargetArgs(
     adapter,
     expectedNames,
     targetNames,
     moduleObjectFunctionFields,
-    targetFunctionType
+    moduleObjectFunctionFieldInfos,
+    targetFunctionType,
+    expectedInfos,
+    targetInfos,
+    context,
+    bridgeLines,
+    cleanupLines
   )
 
   for (const name of expectedNames) {
@@ -967,8 +1104,20 @@ function emitCModuleFunctionPointerAdapterDefinition(
     }
   }
 
+  pushCModuleLines(lines, bridgeLines)
+
+  if (runtimeModuleObjectFunctionFields.has(adapter.target)) {
+    pushCModuleLines(lines, emitRuntimeFunctionPointerAdapterTargetCall(adapter, targetFunctionType))
+    lines.push('}')
+
+    return lines
+  }
+
   if (isThrowingFunctionPointerAdapterTarget(adapter, context)) {
-    pushCModuleLines(lines, emitThrowingFunctionPointerAdapterTargetCall(adapter, targetArgs, targetFunctionType))
+    pushCModuleLines(
+      lines,
+      emitThrowingFunctionPointerAdapterTargetCall(adapter, targetArgs, targetFunctionType, cleanupLines)
+    )
     lines.push('}')
 
     return lines
@@ -978,12 +1127,140 @@ function emitCModuleFunctionPointerAdapterDefinition(
 
   if (emitFunctionPointerReturnType(adapter.functionType) === 'void') {
     lines.push(`  ${call};`)
+    pushCModuleLines(lines, cleanupLines)
+  } else if (cleanupLines.length > 0) {
+    lines.push(`  ${emitFunctionPointerReturnType(adapter.functionType)} inox_adapter_result = ${call};`)
+    pushCModuleLines(lines, cleanupLines)
+    lines.push('  return inox_adapter_result;')
   } else {
     lines.push(`  return ${call};`)
   }
 
   lines.push('}')
 
+  return lines
+}
+
+function emitRuntimeFunctionPointerAdapterTargetCall(
+  adapter: CFunctionPointerAdapter,
+  targetFunctionType: CFunctionType | null | undefined
+): string[] {
+  const lines: string[] = []
+  const args = runtimeFunctionPointerAdapterArgs(adapter, targetFunctionType)
+
+  if (args.length > 0) {
+    lines.push(`  inox_value inox_adapter_args[] = { ${joinStrings(args, ', ')} };`)
+  }
+
+  lines.push('  inox_value inox_adapter_result = inox_undefined_value();')
+
+  if (args.length > 0) {
+    lines.push(
+      `  inox_status inox_adapter_status = inox_callback_call(${adapter.target}, inox_adapter_args, ${args.length}, &inox_adapter_result);`
+    )
+  } else {
+    lines.push(
+      `  inox_status inox_adapter_status = inox_callback_call(${adapter.target}, 0, 0, &inox_adapter_result);`
+    )
+  }
+
+  lines.push('  if (inox_adapter_status != INOX_OK) {')
+  lines.push('    inox_release(inox_adapter_result);')
+
+  const returnType = emitFunctionPointerReturnType(adapter.functionType)
+
+  if (returnType === 'void') {
+    lines.push('    return;')
+  } else {
+    lines.push(`    return ${cFunctionPointerAdapterDefaultReturnValue(returnType)};`)
+  }
+
+  lines.push('  }')
+  pushCModuleLines(lines, emitRuntimeFunctionPointerAdapterReturn(adapter.functionType))
+
+  return lines
+}
+
+function runtimeFunctionPointerAdapterArgs(
+  adapter: CFunctionPointerAdapter,
+  targetFunctionType: CFunctionType | null | undefined
+): string[] {
+  const args: string[] = []
+
+  if (targetFunctionType === null || typeof targetFunctionType === 'undefined') {
+    return args
+  }
+
+  for (let index = 0; index < targetFunctionType.params.length; index = index + 1) {
+    const targetParam = cModuleFunctionParamAt(targetFunctionType.params, index)
+    let value: string | null = null
+    let sourceParam = targetParam
+
+    if (index < adapter.functionType.params.length) {
+      value = `inox_arg_${index}`
+      sourceParam = cModuleFunctionParamAt(adapter.functionType.params, index)
+    } else {
+      value = emitFunctionPointerAdapterDefaultTargetArg(`inox_arg_${index}`, adapter, targetFunctionType)
+    }
+
+    if (value === null || typeof value === 'undefined') {
+      value = 'inox_undefined_value()'
+    }
+
+    args.push(runtimeFunctionPointerAdapterArgValue(value, sourceParam))
+  }
+
+  return args
+}
+
+function runtimeFunctionPointerAdapterArgValue(value: string, param: CFunctionParam): string {
+  if (param.nullable === true) {
+    return value
+  }
+
+  if (param.valueType === 'number') {
+    return `inox_number_value(${value})`
+  }
+
+  if (param.valueType === 'boolean') {
+    return `inox_bool_value((${value}) != 0)`
+  }
+
+  return value
+}
+
+function emitRuntimeFunctionPointerAdapterReturn(functionType: CFunctionType): string[] {
+  const lines: string[] = []
+
+  if (functionType.returnType === 'void') {
+    lines.push('  inox_release(inox_adapter_result);')
+    lines.push('  return;')
+    return lines
+  }
+
+  if (functionType.returnType === 'number') {
+    lines.push('  if (inox_adapter_result.tag != INOX_TAG_NUMBER) {')
+    lines.push('    inox_release(inox_adapter_result);')
+    lines.push('    return 0;')
+    lines.push('  }')
+    lines.push('  double inox_adapter_number = inox_adapter_result.as.number;')
+    lines.push('  inox_release(inox_adapter_result);')
+    lines.push('  return inox_adapter_number;')
+    return lines
+  }
+
+  if (functionType.returnType === 'boolean') {
+    lines.push('  if (inox_adapter_result.tag != INOX_TAG_BOOL) {')
+    lines.push('    inox_release(inox_adapter_result);')
+    lines.push('    return 0;')
+    lines.push('  }')
+    lines.push('  double inox_adapter_boolean = inox_adapter_result.as.boolean ? 1 : 0;')
+    lines.push('  inox_release(inox_adapter_result);')
+    lines.push('  return inox_adapter_boolean;')
+    return lines
+  }
+
+  lines.push('  return inox_adapter_result;')
   return lines
 }
 
@@ -1045,7 +1322,6 @@ function functionPointerAdapterContextFunctionType(name: string, context: CEmitC
     returnMapValueType,
     returnNullable: context.functionReturnNullables.get(name) === true,
     returnPromiseValueType: context.functionReturnPromiseValueTypes.get(name) ?? null,
-    returnSetElementType: context.functionReturnSetElementTypes.get(name) ?? null,
     returnShape: context.functionReturnShapes.get(name) ?? null,
     returnType
   }
@@ -1092,7 +1368,8 @@ function cFunctionPointerAdapterTargetSourceNames(adapter: CFunctionPointerAdapt
 function emitThrowingFunctionPointerAdapterTargetCall(
   adapter: CFunctionPointerAdapter,
   targetArgs: string[],
-  targetFunctionType: CFunctionType | null | undefined
+  targetFunctionType: CFunctionType | null | undefined,
+  cleanupLines: string[]
 ): string[] {
   const lines: string[] = []
   const callArgs: string[] = []
@@ -1111,6 +1388,7 @@ function emitThrowingFunctionPointerAdapterTargetCall(
   lines.push('inox_value inox_adapter_error = inox_undefined_value();')
   callArgs.push('&inox_adapter_error')
   lines.push(`inox_status inox_adapter_status = ${adapter.target}(${joinStrings(callArgs, ', ')});`)
+  pushCModuleLines(lines, cleanupLines)
   lines.push('if (inox_adapter_status != INOX_OK) {')
   lines.push('  inox_release(inox_adapter_error);')
 
@@ -1155,21 +1433,53 @@ function emitFunctionPointerAdapterTargetArgs(
   expectedNames: string[],
   targetNames: string[],
   moduleObjectFunctionFields: Set<string>,
-  targetFunctionType: CFunctionType | null | undefined
+  moduleObjectFunctionFieldInfos: FunctionPointerParamInfo[],
+  targetFunctionType: CFunctionType | null | undefined,
+  expectedInfos: FunctionPointerParamInfo[],
+  targetInfos: FunctionPointerParamInfo[],
+  context: CEmitContext,
+  bridgeLines: string[],
+  cleanupLines: string[]
 ): string[] {
   const expectedNameSet = stringSetFromArray(expectedNames)
   const args: string[] = []
 
   for (const name of targetNames) {
     if (expectedNameSet.has(name)) {
-      args.push(name)
+      const value = emitFunctionPointerAdapterRuntimeBridgeArg(
+        name,
+        expectedInfos,
+        targetInfos,
+        adapter,
+        context,
+        bridgeLines,
+        cleanupLines
+      )
+      args.push(
+        emitFunctionPointerNativeBoundaryArgument(
+          name,
+          value,
+          adapter.functionType,
+          targetFunctionType
+        )
+      )
       continue
     }
 
     const moduleObjectFunctionField = emitFunctionPointerAdapterModuleObjectFieldArg(name, moduleObjectFunctionFields)
 
     if (moduleObjectFunctionField !== null && typeof moduleObjectFunctionField !== 'undefined') {
-      args.push(moduleObjectFunctionField)
+      args.push(
+        emitFunctionPointerAdapterRuntimeBridgeForInfos(
+          moduleObjectFunctionField,
+          functionPointerPointerParamInfoForName(moduleObjectFunctionFieldInfos, moduleObjectFunctionField),
+          functionPointerParamInfoForName(targetInfos, name),
+          adapter,
+          context,
+          bridgeLines,
+          cleanupLines
+        )
+      )
       continue
     }
 
@@ -1186,6 +1496,117 @@ function emitFunctionPointerAdapterTargetArgs(
   return args
 }
 
+function emitFunctionPointerAdapterRuntimeBridgeArg(
+  name: string,
+  expectedInfos: FunctionPointerParamInfo[],
+  targetInfos: FunctionPointerParamInfo[],
+  adapter: CFunctionPointerAdapter,
+  context: CEmitContext,
+  bridgeLines: string[],
+  cleanupLines: string[]
+): string {
+  const expectedInfo = functionPointerParamInfoForName(expectedInfos, name)
+  const targetInfo = functionPointerParamInfoForName(targetInfos, name)
+
+  return emitFunctionPointerAdapterRuntimeBridgeForInfos(
+    name,
+    expectedInfo,
+    targetInfo,
+    adapter,
+    context,
+    bridgeLines,
+    cleanupLines
+  )
+}
+
+function emitFunctionPointerAdapterRuntimeBridgeForInfos(
+  name: string,
+  expectedInfo: FunctionPointerParamInfo | null,
+  targetInfo: FunctionPointerParamInfo | null,
+  adapter: CFunctionPointerAdapter,
+  context: CEmitContext,
+  bridgeLines: string[],
+  cleanupLines: string[]
+): string {
+
+  if (!functionPointerParamNeedsRuntimeBridge(expectedInfo, targetInfo)) {
+    return name
+  }
+
+  if (expectedInfo === null || expectedInfo.functionType === null) {
+    return name
+  }
+
+  const runtimeAdapter = registerFunctionPointerRuntimeAdapter(
+    expectedInfo.functionType,
+    expectedInfo.seenTypes,
+    context
+  )
+  const bridgeIndex = bridgeLines.length
+  const bridgeContext = `inox_adapter_callback_context_${bridgeIndex}`
+  const bridgeValue = `inox_adapter_callback_${bridgeIndex}`
+  const adapterReturnType = emitFunctionPointerReturnType(adapter.functionType)
+  const failureReturn =
+    adapterReturnType === 'void'
+      ? 'return;'
+      : `return ${cFunctionPointerAdapterDefaultReturnValue(adapterReturnType)};`
+
+  bridgeLines.push(
+    `  ${runtimeAdapter.contextTypeName}* ${bridgeContext} = (${runtimeAdapter.contextTypeName}*)inox_default_alloc(0, sizeof(${runtimeAdapter.contextTypeName}), _Alignof(${runtimeAdapter.contextTypeName}));`
+  )
+  bridgeLines.push(`  if (${bridgeContext} == 0) ${failureReturn}`)
+  bridgeLines.push(`  ${bridgeContext}->target = ${name};`)
+  bridgeLines.push(`  inox_value ${bridgeValue} = inox_undefined_value();`)
+  bridgeLines.push(
+    `  if (inox_callback_new(&inox_default_allocator, ${runtimeAdapter.callbackName}, ${bridgeContext}, ${runtimeAdapter.finalizerName}, &${bridgeValue}) != INOX_OK) {`
+  )
+  bridgeLines.push(`    ${runtimeAdapter.finalizerName}(${bridgeContext});`)
+  bridgeLines.push(`    ${failureReturn}`)
+  bridgeLines.push('  }')
+  cleanupLines.push(`  inox_release(${bridgeValue});`)
+
+  return bridgeValue
+}
+
+function functionPointerParamNeedsRuntimeBridge(
+  expectedInfo: FunctionPointerParamInfo | null,
+  targetInfo: FunctionPointerParamInfo | null
+): boolean {
+  return (
+    expectedInfo !== null &&
+    expectedInfo.functionType !== null &&
+    !expectedInfo.runtimeFunction &&
+    targetInfo !== null &&
+    targetInfo.runtimeFunction
+  )
+}
+
+function functionPointerParamInfoForName(
+  infos: FunctionPointerParamInfo[],
+  name: string
+): FunctionPointerParamInfo | null {
+  for (const info of infos) {
+    if (info.name === name) {
+      return info
+    }
+  }
+
+  return null
+}
+
+function functionPointerPointerParamInfoForName(
+  infos: FunctionPointerParamInfo[],
+  name: string
+): FunctionPointerParamInfo | null {
+  for (const info of infos) {
+    if (info.name === name && !info.runtimeFunction) {
+      return info
+    }
+  }
+
+  return null
+}
+
 function collectCModuleObjectFunctionFieldNames(context: CEmitContext): Set<string> {
   const names: Set<string> = new Set()
 
@@ -1200,6 +1621,106 @@ function collectCModuleObjectFunctionFieldNames(context: CEmitContext): Set<stri
   return names
 }
 
+function collectCModuleObjectFunctionFieldInfos(context: CEmitContext): FunctionPointerParamInfo[] {
+  const infos: FunctionPointerParamInfo[] = []
+
+  for (const objectName of context.moduleObjectShapes.keys()) {
+    const fields = context.moduleObjectShapes.get(objectName)
+
+    if (fields === null || typeof fields === 'undefined') {
+      continue
+    }
+
+    for (const field of fields) {
+      if (field.valueType !== 'function') {
+        continue
+      }
+
+      const plain = isPlainObjectFunctionField(field)
+      const runtime = !plain && isRuntimeFunctionType(field.functionType)
+
+      if (!plain && !runtime) {
+        continue
+      }
+
+      infos.push({
+        functionType: field.functionType ?? null,
+        name: emitCObjectFunctionFieldName(objectName, field.name),
+        runtimeFunction: runtime,
+        seenTypes: cModuleObjectFunctionFieldSeenTypes()
+      })
+    }
+  }
+
+  return infos
+}
+
+function collectCModuleRuntimeObjectFunctionFieldNames(context: CEmitContext): Set<string> {
+  const names: Set<string> = new Set()
+
+  for (const objectName of context.moduleObjectShapes.keys()) {
+    const fields = context.moduleObjectShapes.get(objectName)
+
+    if (fields !== null && typeof fields !== 'undefined') {
+      collectCModuleRuntimeObjectFunctionFieldNamesFromShape(
+        names,
+        objectName,
+        fields,
+        cModuleObjectFunctionFieldSeenTypes()
+      )
+    }
+  }
+
+  return names
+}
+
+function collectCModuleRuntimeObjectFunctionFieldNamesFromShape(
+  names: Set<string>,
+  objectName: string,
+  fields: CObjectShapeField[],
+  seenTypes: string[]
+): void {
+  for (const field of fields) {
+    if (field.valueType === 'function') {
+      if (!isPlainObjectFunctionField(field) && isRuntimeFunctionType(field.functionType)) {
+        names.add(emitCObjectFunctionFieldName(objectName, field.name))
+      }
+    } else if (
+      field.valueType === 'object' &&
+      field.shape !== null &&
+      typeof field.shape !== 'undefined' &&
+      field.shape.fields !== null &&
+      typeof field.shape.fields !== 'undefined'
+    ) {
+      if (
+        field.declaredType !== null &&
+        typeof field.declaredType !== 'undefined' &&
+        seenTypes.includes(field.declaredType)
+      ) {
+        continue
+      }
+
+      let pushedType = false
+
+      if (field.declaredType !== null && typeof field.declaredType !== 'undefined') {
+        seenTypes.push(field.declaredType)
+        pushedType = true
+      }
+
+      collectCModuleRuntimeObjectFunctionFieldNamesFromShape(
+        names,
+        `${objectName}_${field.name}`,
+        field.shape.fields,
+        seenTypes
+      )
+
+      if (pushedType) {
+        seenTypes.pop()
+      }
+    }
+  }
+}
+
 function collectCModuleObjectFunctionFieldNamesFromShape(
   names: Set<string>,
   objectName: string,
@@ -1207,7 +1728,7 @@ function collectCModuleObjectFunctionFieldNamesFromShape(
 ): void {
   for (const field of fields) {
     if (field.valueType === 'function') {
-      if (isPlainFunctionPointerType(field.functionType) || isRuntimeFunctionType(field.functionType)) {
+      if (isPlainObjectFunctionField(field) || isRuntimeFunctionType(field.functionType)) {
         names.add(emitCObjectFunctionFieldName(objectName, field.name))
       }
     }
@@ -1318,7 +1839,8 @@ function emitCModuleFunctionPointerAdapterHead(adapter: CFunctionPointerAdapter)
 function createCModuleBaseContext(
   plan: CModulePlan,
   diagnostics: Diagnostic[],
-  deps: CModuleEmissionDependencies
+  deps: CModuleEmissionDependencies,
+  libraries?: CompilerLibrarySet
 ): CEmitContext {
   const ir = plan.ir
   const irPrograms = [ir]
@@ -1358,7 +1880,14 @@ function createCModuleBaseContext(
     pushIrFunctionEffect(functionEffects, effect)
   }
 
-  const context = deps.createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots, ir.body)
+  const context = deps.createBaseContext(
+    diagnostics,
+    functionDeclarations,
+    functionEffects,
+    jsGlobalRoots,
+    ir.body,
+    libraries
+  )
   context.runtimeEntryPath = plan.relativeSourcePath
   const classNodes = collectIrTopLevelNodes(ir, 'class')
 
@@ -1453,7 +1982,7 @@ function collectCModuleObjectShapeRuntimeTypes(
 
     if (
       field.valueType === 'function' &&
-      !isPlainFunctionPointerType(field.functionType) &&
+      !isPlainObjectFunctionField(field) &&
       isRuntimeFunctionType(field.functionType)
     ) {
       types.add('function')
@@ -1947,7 +2476,7 @@ function emitCModuleObjectFunctionFieldDefinitions(
     if (field.valueType === 'function') {
       const name = emitCObjectFunctionFieldName(objectName, field.name)
 
-      if (isPlainFunctionPointerType(field.functionType)) {
+      if (isPlainObjectFunctionField(field)) {
         lines.push(
           `static ${emitFunctionPointerReturnType(field.functionType)} (*${name})(${emitFunctionPointerParams(
             field.functionType,
@@ -2691,7 +3220,6 @@ function cloneImportedCModuleFunctionDeclaration(
     returnMapValueType: declaration.returnMapValueType,
     declaredReturnType: declaration.declaredReturnType,
     returnPromiseValueType: declaration.returnPromiseValueType,
-    returnSetElementType: declaration.returnSetElementType,
     returnShape: declaration.returnShape,
     loc: declaration.loc
   }

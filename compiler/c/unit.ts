@@ -1,6 +1,7 @@
 import { throwDiagnostics } from '../diagnostics.ts'
 import { resolveCompilerLibrarySet } from '../extensions/library-set.ts'
 import { compilerLibraryIntrinsicResultMetadata } from '../extensions/intrinsic-metadata.ts'
+import type { CompilerLibrarySet } from '../extensions/types.ts'
 import {
   collectIrFunctionDeclarations,
   collectIrFunctionEffectsWithExternalEffects,
@@ -22,25 +23,30 @@ import type {
   IrProgram,
   IrRuntimeRequirement
 } from '../types.ts'
-import type { CallbackLoweringDependencies } from './async/callbacks.ts'
+import type { CallbackLoweringDependencies, FunctionPointerParamInfo } from './async/callbacks.ts'
 import {
   callbackContextWrapperFinalizerName,
   collectCallbackWrappers,
+  collectFunctionPointerParamInfos,
   collectFunctionPointerParamNames,
+  emitFunctionPointerNativeBoundaryArgument,
   emitFunctionPointerParams,
   emitFunctionPointerNamedParams,
   emitFunctionPointerReturnType,
+  emitFunctionPointerRuntimeAdapterDefinition,
   emitPlainArrowCallbackWrapperDeclaration,
   emitPlainArrowCallbackWrapperHead,
   emitRuntimeArrowCallbackContextType,
   emitRuntimeCallbackWrapperDeclaration,
   emitRuntimeCallbackWrapperHead,
   isNullableFunctionType,
+  isPlainObjectFunctionField,
   isPlainFunctionPointerType,
   isPromiseChainCallbackWrapperWithContext,
   isRuntimeFunctionType,
   isRuntimeArrowCallbackWrapperWithContext,
-  isRuntimeCallbackWrapper
+  isRuntimeCallbackWrapper,
+  registerFunctionPointerRuntimeAdapter
 } from './async/callbacks.ts'
 import type { PromiseChainLoweringDependencies } from './async/promises.ts'
 import {
@@ -110,7 +116,8 @@ export type CUnitDependencies = {
     functionDeclarations: IrFunctionDeclaration[],
     functionEffects: IrFunctionEffect[],
     jsGlobalRoots: Set<string>,
-    topLevelNodes: AnyNode[]
+    topLevelNodes: AnyNode[],
+    libraries?: CompilerLibrarySet
   ): CEmitContext
   emitClassConstructorDeclaration: (info: CClassInfo, baseContext: CEmitContext) => string[]
   emitClassMethodDeclaration: (info: CClassInfo, method: AnyNode, baseContext: CEmitContext) => string[]
@@ -434,7 +441,7 @@ function emitCUnitObjectFunctionFieldDefinitions(
     if (field.valueType === 'function') {
       const name = emitCObjectFunctionFieldName(objectName, field.name)
 
-      if (isPlainFunctionPointerType(field.functionType)) {
+      if (isPlainObjectFunctionField(field)) {
         lines.push(
           `static ${emitFunctionPointerReturnType(field.functionType)} (*${name})(${emitFunctionPointerParams(
             field.functionType,
@@ -768,7 +775,7 @@ function collectCUnitObjectShapeRuntimeTypes(
 
     if (
       field.valueType === 'function' &&
-      !isPlainFunctionPointerType(field.functionType) &&
+      !isPlainObjectFunctionField(field) &&
       isRuntimeFunctionType(field.functionType)
     ) {
       types.add('function')
@@ -804,9 +811,11 @@ function emitCUnitFunctionPointerAdapterDefinition(adapter: CFunctionPointerAdap
   const defaultLines: string[] = []
   const cleanupLines: string[] = []
   const expectedNames = collectFunctionPointerParamNames(adapter.functionType, adapter.seenTypes)
+  const expectedInfos = collectFunctionPointerParamInfos(adapter.functionType, adapter.seenTypes)
   const targetFunctionType = cUnitFunctionPointerAdapterTargetFunctionType(adapter, context)
   const targetSeenTypes = cUnitFunctionPointerAdapterTargetSeenTypes(adapter, context)
   const targetNames = collectFunctionPointerParamNames(targetFunctionType, targetSeenTypes)
+  const targetInfos = collectFunctionPointerParamInfos(targetFunctionType, targetSeenTypes)
   const expectedNameSet = stringSetFromArray(expectedNames)
   const targetNameSet = stringSetFromArray(targetNames)
   const targetArgs = emitCUnitFunctionPointerAdapterTargetArgs(
@@ -815,6 +824,9 @@ function emitCUnitFunctionPointerAdapterDefinition(adapter: CFunctionPointerAdap
     targetNames,
     targetFunctionType,
     emitFunctionPointerReturnType(adapter.functionType),
+    expectedInfos,
+    targetInfos,
+    context,
     defaultLines,
     cleanupLines
   )
@@ -860,6 +872,9 @@ function emitCUnitFunctionPointerAdapterTargetArgs(
   targetNames: string[],
   targetFunctionType: CFunctionType | null | undefined,
   adapterReturnType: string,
+  expectedInfos: FunctionPointerParamInfo[],
+  targetInfos: FunctionPointerParamInfo[],
+  context: CEmitContext,
   defaultLines: string[],
   cleanupLines: string[]
 ): string[] {
@@ -867,7 +882,23 @@ function emitCUnitFunctionPointerAdapterTargetArgs(
 
   for (const name of targetNames) {
     if (expectedNameSet.has(name)) {
-      args.push(name)
+      const value = emitCUnitFunctionPointerAdapterRuntimeBridgeArg(
+        name,
+        expectedInfos,
+        targetInfos,
+        adapterReturnType,
+        context,
+        defaultLines,
+        cleanupLines
+      )
+      args.push(
+        emitFunctionPointerNativeBoundaryArgument(
+          name,
+          value,
+          adapter.functionType,
+          targetFunctionType
+        )
+      )
       continue
     }
 
@@ -889,6 +920,82 @@ function emitCUnitFunctionPointerAdapterTargetArgs(
   }
 
   return args
+}
+
+function emitCUnitFunctionPointerAdapterRuntimeBridgeArg(
+  name: string,
+  expectedInfos: FunctionPointerParamInfo[],
+  targetInfos: FunctionPointerParamInfo[],
+  adapterReturnType: string,
+  context: CEmitContext,
+  defaultLines: string[],
+  cleanupLines: string[]
+): string {
+  const expectedInfo = cUnitFunctionPointerParamInfoForName(expectedInfos, name)
+  const targetInfo = cUnitFunctionPointerParamInfoForName(targetInfos, name)
+
+  if (!cUnitFunctionPointerParamNeedsRuntimeBridge(expectedInfo, targetInfo)) {
+    return name
+  }
+
+  if (expectedInfo === null || expectedInfo.functionType === null) {
+    return name
+  }
+
+  const runtimeAdapter = registerFunctionPointerRuntimeAdapter(
+    expectedInfo.functionType,
+    expectedInfo.seenTypes,
+    context
+  )
+  const bridgeIndex = defaultLines.length
+  const bridgeContext = `inox_adapter_callback_context_${bridgeIndex}`
+  const bridgeValue = `inox_adapter_callback_${bridgeIndex}`
+  const failureReturn =
+    adapterReturnType === 'void'
+      ? 'return;'
+      : `return ${cUnitFunctionPointerAdapterDefaultReturnValue(adapterReturnType)};`
+
+  defaultLines.push(
+    `  ${runtimeAdapter.contextTypeName}* ${bridgeContext} = (${runtimeAdapter.contextTypeName}*)inox_default_alloc(0, sizeof(${runtimeAdapter.contextTypeName}), _Alignof(${runtimeAdapter.contextTypeName}));`
+  )
+  defaultLines.push(`  if (${bridgeContext} == 0) ${failureReturn}`)
+  defaultLines.push(`  ${bridgeContext}->target = ${name};`)
+  defaultLines.push(`  inox_value ${bridgeValue} = inox_undefined_value();`)
+  defaultLines.push(
+    `  if (inox_callback_new(&inox_default_allocator, ${runtimeAdapter.callbackName}, ${bridgeContext}, ${runtimeAdapter.finalizerName}, &${bridgeValue}) != INOX_OK) {`
+  )
+  defaultLines.push(`    ${runtimeAdapter.finalizerName}(${bridgeContext});`)
+  defaultLines.push(`    ${failureReturn}`)
+  defaultLines.push('  }')
+  cleanupLines.push(`  inox_release(${bridgeValue});`)
+
+  return bridgeValue
+}
+
+function cUnitFunctionPointerParamNeedsRuntimeBridge(
+  expectedInfo: FunctionPointerParamInfo | null,
+  targetInfo: FunctionPointerParamInfo | null
+): boolean {
+  return (
+    expectedInfo !== null &&
+    targetInfo !== null &&
+    expectedInfo.functionType !== null &&
+    !expectedInfo.runtimeFunction &&
+    targetInfo.runtimeFunction
+  )
+}
+
+function cUnitFunctionPointerParamInfoForName(
+  infos: FunctionPointerParamInfo[],
+  name: string
+): FunctionPointerParamInfo | null {
+  for (const info of infos) {
+    if (info.name === name) {
+      return info
+    }
+  }
+
+  return null
 }
 
 function emitCUnitFunctionPointerAdapterDefaultTargetArg(
@@ -1030,7 +1137,6 @@ function cUnitFunctionPointerAdapterContextFunctionType(name: string, context: C
     returnMapValueType,
     returnNullable: context.functionReturnNullables.get(name) === true,
     returnPromiseValueType: context.functionReturnPromiseValueTypes.get(name) ?? null,
-    returnSetElementType: context.functionReturnSetElementTypes.get(name) ?? null,
     returnShape: context.functionReturnShapes.get(name) ?? null,
     returnType
   }
@@ -1180,7 +1286,6 @@ function pushCUnitClassMethodFunctionDeclarations(target: IrFunctionDeclaration[
         returnMapKeyType: method.returnMapKeyType,
         returnMapValueType: method.returnMapValueType,
         returnPromiseValueType: method.returnPromiseValueType,
-        returnSetElementType: method.returnSetElementType,
         returnShape: method.returnShape,
         loc: method.loc
       }
@@ -1246,7 +1351,8 @@ export function emitCUnit(
     functionDeclarations,
     functionEffects,
     jsGlobalRoots,
-    topLevelNodes
+    topLevelNodes,
+    options.libraries
   )
   baseContext.exceptionValueShape = cObjectShapeFromMetadata(
     compilerLibraryIntrinsicResultMetadata(
@@ -1295,7 +1401,6 @@ export function emitCUnit(
   const needsStringHeader: boolean = preludeRequirements.needsStringHeader
   const needsCollectionRuntime: boolean = preludeRequirements.needsCollectionRuntime
   const needsMapRuntime: boolean = preludeRequirements.needsMapRuntime
-  const needsSetRuntime: boolean = preludeRequirements.needsSetRuntime
   const needsObjectRuntime: boolean = preludeRequirements.needsObjectRuntime
   baseContext.runtimeEntrypointAdapter = preludeRequirements.runtimeEntrypointAdapter
   baseContext.runtimeInitializerDefinitions = emitCompilerLibraryRuntimeInitializerDefinitions(
@@ -1320,7 +1425,6 @@ export function emitCUnit(
     needsStringHeader,
     needsCollectionRuntime,
     needsMapRuntime,
-    needsSetRuntime,
     needsObjectRuntime,
     preludeRequirements.libraryCPreludeIncludes
   )
@@ -1498,6 +1602,7 @@ export function emitCUnit(
 
   const mainLines = deps.emitMainWrapper(entryIrPrograms, baseContext)
 
+  emitCUnitFunctionPointerRuntimeAdapterDefinitions(lines, baseContext)
   emitCUnitFunctionPointerAdapterDefinitions(lines, baseContext)
   pushUnitLines(lines, mainLines)
 
@@ -1506,6 +1611,34 @@ export function emitCUnit(
   const code = filterUnusedCPreludeIncludes(joinCUnitLines(lines))
 
   return code
+}
+
+function emitCUnitFunctionPointerRuntimeAdapterDefinitions(lines: string[], context: CEmitContext): void {
+  registerCUnitFunctionPointerAdapterRuntimeBridges(context)
+
+  for (const adapter of context.functionPointerRuntimeAdapters) {
+    pushUnitLines(lines, emitFunctionPointerRuntimeAdapterDefinition(adapter))
+    lines.push('')
+  }
+}
+
+function registerCUnitFunctionPointerAdapterRuntimeBridges(context: CEmitContext): void {
+  for (const adapter of context.functionPointerAdapters) {
+    const targetFunctionType = cUnitFunctionPointerAdapterTargetFunctionType(adapter, context)
+    const targetSeenTypes = cUnitFunctionPointerAdapterTargetSeenTypes(adapter, context)
+    const expectedInfos = collectFunctionPointerParamInfos(adapter.functionType, adapter.seenTypes)
+    const targetInfos = collectFunctionPointerParamInfos(targetFunctionType, targetSeenTypes)
+
+    for (const targetInfo of targetInfos) {
+      const expectedInfo = cUnitFunctionPointerParamInfoForName(expectedInfos, targetInfo.name)
+
+      if (cUnitFunctionPointerParamNeedsRuntimeBridge(expectedInfo, targetInfo)) {
+        if (expectedInfo !== null && expectedInfo.functionType !== null) {
+          registerFunctionPointerRuntimeAdapter(expectedInfo.functionType, expectedInfo.seenTypes, context)
+        }
+      }
+    }
+  }
 }
 
 function emitCUnitUnhandledRejectionFlagDefinition(lines: string[], context: CEmitContext): void {

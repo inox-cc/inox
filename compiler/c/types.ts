@@ -54,11 +54,11 @@ export type CShapeValueMetadata = {
   mapValueType?: string | null
   nullable?: boolean
   promiseValueType?: string | null
-  setElementType?: string | null
   valueType: string
 }
 
 export type CObjectShapeField = CShapeValueMetadata & {
+  functionStorage?: 'pointer'
   functionTypeOwnership?: 'weak'
   functionType?: CFunctionType | null
   loc?: AnyNode['loc']
@@ -88,6 +88,7 @@ export function isReadonlyCObjectShapeField(field: AnyNode): boolean {
 
 export type CObjectShape = {
   builtin?: string | null
+  libraryCValueAdapter?: string | null
   libraryCppType?: string | null
   libraryTypeId?: string | null
   dynamic?: boolean
@@ -108,6 +109,7 @@ export function cObjectShapeFromMetadata(shape: ObjectShapeInfo | null): CObject
 
   return {
     builtin: shape.builtin ?? null,
+    libraryCValueAdapter: shape.libraryCValueAdapter ?? null,
     libraryCppType: shape.libraryCppType ?? null,
     libraryTypeId: shape.libraryTypeId ?? null,
     dynamic: shape.dynamic === true,
@@ -180,7 +182,6 @@ export type CFunctionParam = {
   ownership?: string
   promiseValueType?: string | null
   rest?: boolean
-  setElementType?: string | null
   shape?: CObjectShape | null
   valueType: string
 }
@@ -193,7 +194,6 @@ export type CFunctionType = {
   returnMapValueType?: string | null
   returnNullable?: boolean
   returnPromiseValueType?: string | null
-  returnSetElementType?: string | null
   returnShape?: CObjectShape | null
   returnType: string
 }
@@ -205,6 +205,14 @@ export type CFunctionPointerAdapter = {
   target: string
   targetFunctionType: CFunctionType
   targetSeenTypes: string[]
+}
+
+export type CFunctionPointerRuntimeAdapter = {
+  callbackName: string
+  contextTypeName: string
+  finalizerName: string
+  functionType: CFunctionType
+  seenTypes: string[]
 }
 
 export type CFunctionReturnMapType = {
@@ -303,7 +311,6 @@ export type CAsyncTaskPrefixLocal = {
   forceRuntimeStringDeclaration?: boolean
   mapKeyType?: string | null
   mapValueType?: string | null
-  setElementType?: string | null
   shape?: CObjectShape | null
 }
 
@@ -321,7 +328,6 @@ export type CAsyncTaskAwaitStep = {
   awaitedPromiseExpression: AnyNode | null
   mapKeyType?: string | null
   mapValueType?: string | null
-  setElementType?: string | null
   shape?: CObjectShape | null
 }
 

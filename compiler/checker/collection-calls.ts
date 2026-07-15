@@ -1,7 +1,4 @@
-import {
-  mapRuntimeMethodName,
-  setRuntimeMethodName
-} from '../../stdlib/global/compiler/descriptor.ts'
+import { mapRuntimeMethodName } from '../../stdlib/global/compiler/descriptor.ts'
 import { diagnostic } from '../diagnostics.ts'
 import type { AnyNode, Diagnostic, ObjectShapeInfo, SourceLocation, ValueType } from '../types.ts'
 import { isAssignableType } from './assignability.ts'
@@ -19,7 +16,6 @@ export type CheckedCollectionCallInfo = {
   args: CheckedCollectionArgInfo[]
   mapType: CheckerMapType | null
   objectType: ValueType
-  setElementType: ValueType
 }
 
 export type CollectionCallCheckerContext = {
@@ -72,12 +68,6 @@ export function checkCollectionMethodCall(
     return checkMapMethodCall(context, expression, mapMethod, info)
   }
 
-  const setMethod = setRuntimeMethodName(property)
-
-  if (info.objectType === 'set' && setMethod !== null && typeof setMethod !== 'undefined') {
-    return checkSetMethodCall(context, expression, setMethod, info)
-  }
-
   return null
 }
 
@@ -86,12 +76,6 @@ export function isCollectionMethodCandidate(objectType: ValueType, property: str
     const mapMethod = mapRuntimeMethodName(property)
 
     return mapMethod !== null && typeof mapMethod !== 'undefined'
-  }
-
-  if (objectType === 'set') {
-    const setMethod = setRuntimeMethodName(property)
-
-    return setMethod !== null && typeof setMethod !== 'undefined'
   }
 
   return false
@@ -150,31 +134,6 @@ function checkMapMethodCall(
   expression.mapValueType = mapRawValueType
 
   return 'map'
-}
-
-function checkSetMethodCall(
-  context: CollectionCallCheckerContext,
-  expression: AnyNode,
-  setMethod: string,
-  info: CheckedCollectionCallInfo
-): ValueType {
-  if (setMethod === 'clear') {
-    checkCollectionArgCount(context, expression, 'set.clear', 0, info.argCount)
-    expression.valueType = 'void'
-    return 'void'
-  }
-
-  checkCollectionArgCount(context, expression, `set.${setMethod}`, 1, info.argCount)
-  checkIndexedArgAssignable(context, info, 0, info.setElementType)
-
-  if (setMethod === 'add') {
-    expression.valueType = 'set'
-    expression.setElementType = info.setElementType
-    return 'set'
-  }
-
-  expression.valueType = 'boolean'
-  return 'boolean'
 }
 
 function checkCollectionArgCount(

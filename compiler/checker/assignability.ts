@@ -2,7 +2,6 @@ import {
   isArrayTypeName,
   isNullableTypeName,
   isPromiseTypeName,
-  isSetTypeName,
   mapTypeNamesFromTypeName,
   nullableTypeNameFromKnownTypeName,
   unionTypeNamesFromTypeName
@@ -61,8 +60,7 @@ export function isEqualityComparableType(left: ValueType, right: ValueType): boo
       left === 'object' ||
       left === 'array' ||
       left === 'bytes' ||
-      left === 'map' ||
-      left === 'set') &&
+      left === 'map') &&
     left === right
   )
 }
@@ -152,10 +150,6 @@ function assignabilityBaseType(valueType: ValueType): ValueType {
 
   if (isPromiseTypeName(valueType)) {
     return 'promise'
-  }
-
-  if (isSetTypeName(valueType)) {
-    return 'set'
   }
 
   return valueType

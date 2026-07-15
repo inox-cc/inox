@@ -98,43 +98,55 @@ export function createParam(
   defaultValue: AnyNode | null = null,
   rest: boolean = false
 ): AnyNode {
-  const param: AnyNode = {
+  return {
     name: token.value,
     optional,
     rest: rest === true,
     valueType,
+    declaredType: null,
+    typeRef: null,
+    nullable: false,
+    arrayElementType: null,
+    arrayElementDeclaredType: null,
+    arrayElementFunctionType: null,
+    mapKeyType: null,
+    mapValueType: null,
+    mapValueShape: null,
+    mapValueArrayElementType: null,
+    mapValueArrayElementDeclaredType: null,
+    promiseValueType: null,
+    promiseRejectionIntrinsicRole: null,
+    functionType: null,
+    shape: null,
+    className: null,
+    libraryIntrinsicRole: null,
+    defaultValue,
+    bindingElements: null,
     loc: locFromToken(token)
   }
-
-  if (defaultValue !== null && typeof defaultValue !== 'undefined') {
-    param.defaultValue = defaultValue
-  }
-
-  return param
 }
 
 export function createFunctionDeclaration(options: FunctionDeclarationOptions): AnyNode {
-  const declaration: AnyNode = {
+  return {
     type: 'FunctionDeclaration',
     exported: options.exported,
     async: options.isAsync,
     name: options.name.value,
     loc: locFromToken(options.name),
+    typeParameters: options.typeParameters,
     params: options.params,
     declaredReturnType: options.declaredReturnType,
     returnType: options.returnType,
+    returnTypeRef: null,
+    returnNullable: false,
+    returnArrayElementType: null,
+    returnArrayElementDeclaredType: null,
+    returnMapKeyType: null,
+    returnMapValueType: null,
+    returnPromiseValueType: null,
+    returnShape: options.returnShape,
     body: options.body
   }
-
-  if (options.typeParameters.length > 0) {
-    declaration.typeParameters = options.typeParameters
-  }
-
-  if (options.returnShape !== null && typeof options.returnShape !== 'undefined') {
-    declaration.returnShape = options.returnShape
-  }
-
-  return declaration
 }
 
 export function createTypeParameter(name: Token, constraint: string | null): AnyNode {
@@ -260,6 +272,24 @@ export function createVariableDeclaration(options: VariableDeclarationOptions): 
     name: options.name.value,
     loc: locFromToken(options.name),
     declaredType: options.declaredType,
-    init: options.init
+    inferredDeclaredType: null,
+    init: options.init,
+    valueType: 'unknown',
+    nullable: false,
+    arrayElementType: null,
+    arrayElementDeclaredType: null,
+    arrayElementFunctionType: null,
+    mapKeyType: null,
+    mapValueType: null,
+    mapValueShape: null,
+    mapValueArrayElementType: null,
+    mapValueArrayElementDeclaredType: null,
+    promiseValueType: null,
+    promiseRejectionIntrinsicRole: null,
+    functionType: null,
+    shape: null,
+    className: null,
+    libraryIntrinsicRole: null,
+    typeRef: null
   }
 }

@@ -21,7 +21,12 @@ type NullableCModulePath = string | null
 type NullableCModulePlan = CModulePlan | null
 
 export type CModuleFileEmitters = {
-  emitHeader(plan: CModulePlan, plans: CModulePlan[], diagnostics: Diagnostic[]): string
+  emitHeader(
+    plan: CModulePlan,
+    plans: CModulePlan[],
+    options: CModuleEmitOptions,
+    diagnostics: Diagnostic[]
+  ): string
   emitSource(plan: CModulePlan, plans: CModulePlan[], options: CModuleEmitOptions, diagnostics: Diagnostic[]): string
 }
 
@@ -347,7 +352,7 @@ function emitCModuleFiles(
     kind: 'header',
     path: plan.headerPath,
     sourcePath: plan.record.path,
-    code: formatGeneratedC(emitters.emitHeader(plan, plans, diagnostics), plan.headerPath)
+    code: formatGeneratedC(emitters.emitHeader(plan, plans, options, diagnostics), plan.headerPath)
   })
   files.push({
     kind: 'declaration',

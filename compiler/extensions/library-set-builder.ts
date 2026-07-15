@@ -637,6 +637,8 @@ function validateNativeTypes(nativeTypes: LibraryNativeTypeDescriptor[]): void {
     const typeParameters = validateNativeTypeParameters(nativeType)
 
     validateTypeTraits(`native type ${nativeType.typeId}`, nativeType.traits ?? [], nativeTypes, typeParameters)
+    validateNativeTypeValueAdapter(nativeType)
+    validateNativeTypeIteration(nativeType)
 
     for (let baseIndex = 0; baseIndex < nativeType.baseTypeIds.length; baseIndex = baseIndex + 1) {
       const baseTypeId = nativeType.baseTypeIds[baseIndex]
@@ -645,6 +647,69 @@ function validateNativeTypes(nativeTypes: LibraryNativeTypeDescriptor[]): void {
         throw new Error(`Missing compiler library native base type ${nativeType.typeId} -> ${baseTypeId}`)
       }
     }
+  }
+}
+
+function validateNativeTypeValueAdapter(nativeType: LibraryNativeTypeDescriptor): void {
+  const adapter = nativeType.cValueAdapter
+
+  if (adapter !== null && typeof adapter !== 'undefined' && !adapter.includes('$value')) {
+    throw new Error(`native type ${nativeType.typeId} C++ value adapter requires $value`)
+  }
+}
+
+function validateNativeTypeIteration(nativeType: LibraryNativeTypeDescriptor): void {
+  const iteration = nativeType.cIteration
+
+  if (iteration === null || typeof iteration === 'undefined') {
+    return
+  }
+
+  const fields = [
+    ['iteratorMethod', iteration.iteratorMethod],
+    ['nextMethod', iteration.nextMethod],
+    ['doneMember', iteration.doneMember],
+    ['valueMember', iteration.valueMember]
+  ]
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    if (fields[index][1].length === 0) {
+      throw new Error(`native type ${nativeType.typeId} C++ iteration requires ${fields[index][0]}`)
+    }
+  }
+
+  const adapter = iteration.receiverAdapter
+
+  if (adapter !== null && typeof adapter !== 'undefined' && !adapter.includes('$value')) {
+    throw new Error(`native type ${nativeType.typeId} C++ iteration receiver adapter requires $value`)
+  }
+
+  const valueAdapter = iteration.valueAdapter
+
+  if (valueAdapter !== null && typeof valueAdapter !== 'undefined' && !valueAdapter.includes('$value')) {
+    throw new Error(`native type ${nativeType.typeId} C++ iteration value adapter requires $value`)
+  }
+
+  if (
+    iteration.failureMode !== null &&
+    typeof iteration.failureMode !== 'undefined' &&
+    iteration.failureMode !== 'thrown'
+  ) {
+    throw new Error(`native type ${nativeType.typeId} has unknown C++ iteration failure mode`)
+  }
+
+  const traits = nativeType.traits ?? []
+  let iterable = false
+
+  for (let index = 0; index < traits.length; index = index + 1) {
+    if (traits[index].traitId === 'iterable') {
+      iterable = true
+      break
+    }
+  }
+
+  if (!iterable) {
+    throw new Error(`native type ${nativeType.typeId} C++ iteration requires iterable trait`)
   }
 }
 
@@ -1477,10 +1542,14 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           sortedStrings(item.baseTypeIds).join(',') +
           ':requirements=' +
           sortedStrings(item.runtimeRequirements).join(',') +
+          ':value-adapter=' +
+          (item.cValueAdapter ?? '') +
           ':parameters=' +
           (item.typeParameters ?? []).map(fingerprintAtom).join(',') +
           ':traits=' +
           typeTraitRefsFingerprint(item.traits ?? []) +
+          ':iteration=' +
+          nativeIterationFingerprint(item) +
           ':fields=' +
           resultShapeFieldsFingerprint(item.fields ?? [])
       )
@@ -1533,6 +1602,26 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
   }
 
   return 'inox:library-set:v1:' + shortStableHash(rows.join(';'))
+}
+
+function nativeIterationFingerprint(nativeType: LibraryNativeTypeDescriptor): string {
+  const iteration = nativeType.cIteration
+
+  if (iteration === null || typeof iteration === 'undefined') {
+    return ''
+  }
+
+  return [
+    iteration.iteratorMethod,
+    iteration.nextMethod,
+    iteration.doneMember,
+    iteration.valueMember,
+    iteration.receiverAdapter ?? '',
+    iteration.valueAdapter ?? '',
+    iteration.failureMode ?? ''
+  ]
+    .map(fingerprintAtom)
+    .join(',')
 }
 
 function pushNativeTypes(target: LibraryNativeTypeDescriptor[], values: LibraryNativeTypeDescriptor[]): void {

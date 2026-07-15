@@ -1,6 +1,6 @@
 // @targets cc
 // @expect pass
-// @stdout 1
+// @stdout 0
 // @stdout 1
 
 import { collectionConstructorNameFromPath } from '../../../stdlib/global/collections/compiler/descriptor.ts'

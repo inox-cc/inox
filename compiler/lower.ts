@@ -96,7 +96,6 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
         returnMapKeyType: returnType.mapKeyType,
         returnMapValueType: returnType.mapValueType,
         returnPromiseValueType: nullableString(returnType.promiseValueType),
-        returnSetElementType: returnType.setElementType,
         returnShape: returnType.shape,
         body: lowerStatementList(item.body, context)
       }
@@ -232,13 +231,13 @@ function lowerClassField(field: AnyNode): AnyNode {
     declaredType: resolvedValueType(field.declaredType, resolvedValueType(field.valueType, 'unknown')),
     optional: field.optional === true,
     valueType: resolvedValueType(field.valueType, 'unknown'),
+    typeRef: nullableNode(field.typeRef),
     nullable: field.nullable === true,
     arrayElementType: nullableString(field.arrayElementType),
     arrayElementDeclaredType: nullableString(field.arrayElementDeclaredType),
     mapKeyType: nullableString(field.mapKeyType),
     mapValueType: nullableString(field.mapValueType),
     promiseValueType: nullableString(field.promiseValueType),
-    setElementType: nullableString(field.setElementType),
     shape: nullableNode(field.shape),
     functionType: nullableNode(field.functionType),
     className: nullableString(field.className)
@@ -277,7 +276,6 @@ function lowerClassMethod(method: AnyNode, context: LowerContext): AnyNode {
     returnMapKeyType: returnType.mapKeyType,
     returnMapValueType: returnType.mapValueType,
     returnPromiseValueType: nullableString(returnType.promiseValueType),
-    returnSetElementType: returnType.setElementType,
     returnShape: nullableNode(returnType.shape),
     body: lowerStatementList(method.body, context)
   }

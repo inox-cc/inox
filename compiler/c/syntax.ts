@@ -76,7 +76,7 @@ export function cUnsupportedExpressionCode(valueType: string): string {
     return 'INOX_C_JS_GLOBAL'
   }
 
-  if (valueType === 'map' || valueType === 'set') {
+  if (valueType === 'map') {
     return 'INOX_C_COLLECTION'
   }
 

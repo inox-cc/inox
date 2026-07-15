@@ -84,6 +84,21 @@ export function parseCompilerLibraryGlobalDeclarations(
   }
 }
 
+export function compilerLibraryGlobalTypeNames(descriptors: LibraryDeclarationDescriptor[]): Set<string> {
+  const names: Set<string> = new Set()
+  const parsed = parseCompilerLibraryGlobalDeclarations(descriptors)
+
+  for (const declaration of parsed.declarations) {
+    for (const item of declaration.program.body) {
+      if (ambientDeclarationHasType(item)) {
+        names.add(item.name)
+      }
+    }
+  }
+
+  return names
+}
+
 function ambientDeclarationHasValue(item: AnyNode): boolean {
   return (
     item.type === 'FunctionDeclaration' ||

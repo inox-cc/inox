@@ -311,10 +311,6 @@ export function knownValueType(valueType: string | null | undefined): string | n
     return 'promise'
   }
 
-  if (valueType === 'set') {
-    return 'set'
-  }
-
   if (valueType === 'string') {
     return 'string'
   }

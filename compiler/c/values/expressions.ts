@@ -4,6 +4,7 @@ import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import {
   emitFunctionPointerParams,
   emitFunctionPointerReturnType,
+  isPlainObjectFunctionField,
   isPlainFunctionPointerType,
   isRuntimeFunctionType
 } from '../async/callbacks.ts'
@@ -40,6 +41,7 @@ import {
 } from '../syntax.ts'
 import type {
   CFunctionParam,
+  CFunctionPointerRuntimeAdapter,
   CFunctionReturnMapType,
   CFunctionType,
   CArrayElementInfo,
@@ -57,13 +59,16 @@ import type {
   CClassInfo
 } from '../types.ts'
 import {
+  applyLibraryNativeValueAdapter,
   cRuntimeValueTag,
   isManagedRuntimeReturnType,
   isBoxedScalarParam,
   isNullableScalarType,
   isOpaqueRuntimeValueType,
   isRuntimeNullableType,
-  libraryNativeCppType
+  libraryNativeBoundaryCppType,
+  libraryNativeCppType,
+  libraryNativeValueAdapter
 } from '../value-types.ts'
 import type { ArrayLoweringDependencies } from './arrays.ts'
 import {
@@ -179,6 +184,8 @@ type CFunctionContext = CEmitContext & {
   functionAsyncFlags: CBooleanMap
   functionNames: CStringMap
   functionParams: Map<string, CFunctionParam[]>
+  functionPointerRuntimeAdapterNames: Map<string, CFunctionPointerRuntimeAdapter>
+  functionPointerRuntimeAdapters: CFunctionPointerRuntimeAdapter[]
   functionReturnArrayElementTypes: CStringNullableMap
   functionReturnDeclaredTypes: CStringNullableMap
   functionReturnNullables: CBooleanMap
@@ -209,7 +216,6 @@ type CFunctionContext = CEmitContext & {
   runtimeStringValues: CStringMap
   runtimeStrings: CStringSet
   runtimeValueStorageNames: CStringSet
-  setElementTypes: CStringMap
   statusReturn: boolean
   statementLoweringDependencies: StatementLoweringDependencies
   stringLoweringDependencies: StringLoweringDependencies
@@ -414,8 +420,7 @@ function isRuntimeReferenceEqualityType(valueType: string): boolean {
     valueType === 'object' ||
     valueType === 'array' ||
     valueType === 'bytes' ||
-    valueType === 'map' ||
-    valueType === 'set'
+    valueType === 'map'
   )
 }
 
@@ -446,8 +451,8 @@ function typeofRuntimeValueTagCheck(value: string, typeName: string): string | n
 
   if (typeName === 'object') {
     return (
-      `(${value}.tag == INOX_TAG_NULL || ${runtimeObjectLikeTagMatchCondition(value)} || ${value}.tag == INOX_TAG_ARRAY || ` +
-      `${value}.tag == INOX_TAG_BYTES || ${value}.tag == INOX_TAG_MAP || ${value}.tag == INOX_TAG_SET)`
+      `(${value}.tag == INOX_TAG_NULL || ` +
+      `(inox_is_ref_value(${value}) && ${value}.tag != INOX_TAG_STRING && ${value}.tag != INOX_TAG_FUNCTION))`
     )
   }
 
@@ -919,16 +924,16 @@ function objectFunctionArgumentSourceShape(
   context: CFunctionContext
 ): CObjectShape | null {
   if (pathName !== null && typeof pathName !== 'undefined') {
-    const fields = context.objectShapes.get(pathName)
-
-    if (fields !== null && typeof fields !== 'undefined') {
-      return { fields }
-    }
-
     const moduleFields = context.moduleObjectShapes.get(pathName)
 
     if (moduleFields !== null && typeof moduleFields !== 'undefined') {
       return { fields: moduleFields }
+    }
+
+    const fields = context.objectShapes.get(pathName)
+
+    if (fields !== null && typeof fields !== 'undefined') {
+      return { fields }
     }
   }
 
@@ -1005,9 +1010,41 @@ function emitObjectFunctionFieldArgument(
     const objectName = source.pathName
 
     if (objectName !== null && typeof objectName !== 'undefined') {
+      const target = emitObjectFunctionFieldArgumentName(objectName, field.name, context)
+
+      if (
+        sourceField !== null &&
+        typeof sourceField !== 'undefined' &&
+        isPlainObjectFunctionField(sourceField) &&
+        sourceField.functionType !== null &&
+        typeof sourceField.functionType !== 'undefined' &&
+        field.functionType !== null &&
+        typeof field.functionType !== 'undefined'
+      ) {
+        const sourceSeenTypes = objectFunctionArgumentSourceSeenTypes(source, context, seenTypes)
+        const bridgeFunctionType = runtimeCallbackBridgeFunctionType(field.functionType)
+        const adaptedTarget = emitAdaptedFunctionPointerExpression(
+          target,
+          sourceField.functionType,
+          bridgeFunctionType,
+          context,
+          deps,
+          [],
+          sourceSeenTypes
+        )
+
+        return deps.emitFunctionPointerRuntimeCallbackValue(
+          adaptedTarget,
+          bridgeFunctionType,
+          [],
+          context,
+          source.loc
+        )
+      }
+
       return {
         lines: [],
-        expression: emitObjectFunctionFieldArgumentName(objectName, field.name, context)
+        expression: target
       }
     }
 
@@ -1087,6 +1124,44 @@ function emitObjectFunctionFieldArgument(
   return {
     lines: [],
     expression: '0'
+  }
+}
+
+function runtimeCallbackBridgeFunctionType(functionType: CFunctionType): CFunctionType {
+  const params: CFunctionParam[] = []
+
+  for (const param of functionType.params) {
+    params.push({
+      arrayElementType: param.arrayElementType,
+      className: param.className,
+      declaredType: param.declaredType,
+      defaultValue: param.defaultValue,
+      functionTypeOwnership: param.functionTypeOwnership,
+      functionType: param.functionType,
+      loc: param.loc,
+      mapKeyType: param.mapKeyType,
+      mapValueType: param.mapValueType,
+      name: param.name,
+      nullable: param.nullable,
+      optional: param.optional,
+      ownership: param.ownership,
+      promiseValueType: param.promiseValueType,
+      rest: param.rest,
+      shape: param.valueType === 'object' ? null : param.shape,
+      valueType: param.valueType
+    })
+  }
+
+  return {
+    kind: functionType.kind,
+    params,
+    returnArrayElementType: functionType.returnArrayElementType,
+    returnMapKeyType: functionType.returnMapKeyType,
+    returnMapValueType: functionType.returnMapValueType,
+    returnNullable: functionType.returnNullable,
+    returnPromiseValueType: functionType.returnPromiseValueType,
+    returnShape: functionType.returnShape,
+    returnType: functionType.returnType
   }
 }
 
@@ -1399,11 +1474,11 @@ function appendDefaultObjectShapeFunctionFieldArguments(
 }
 
 function isSupportedObjectFunctionField(field: CObjectShapeField): boolean {
-  return isPlainFunctionPointerType(field.functionType) || isRuntimeFunctionType(field.functionType)
+  return isPlainObjectFunctionField(field) || isRuntimeFunctionType(field.functionType)
 }
 
 function isRuntimeObjectFunctionField(field: CObjectShapeField): boolean {
-  return !isPlainFunctionPointerType(field.functionType) && isRuntimeFunctionType(field.functionType)
+  return !isPlainObjectFunctionField(field) && isRuntimeFunctionType(field.functionType)
 }
 
 function objectFunctionFieldCallee(callee: CValueNode, context: CFunctionContext): string | null {
@@ -1931,6 +2006,13 @@ export type CCallExpressionDependencies = {
     seenTypes: string[],
     targetSeenTypes: string[]
   ): string
+  emitFunctionPointerRuntimeCallbackValue(
+    target: string,
+    functionType: CFunctionType,
+    seenTypes: string[],
+    context: CFunctionContext,
+    loc: SourceLocation | null | undefined
+  ): PreparedExpression
   emitNullableFunctionValueExpression(
     expression: CValueNode,
     functionType: CFunctionType | null | undefined,
@@ -2164,12 +2246,30 @@ function withFunctionCallReturnMetadata(
   value: PreparedExpression,
   context: CFunctionContext
 ): PreparedExpression {
-  if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
-    return value
+  let shape: CObjectShape | null | undefined = null
+  let returnType: string | null | undefined = null
+  let returnNullable = false
+
+  if (expression.callee.type === 'Reference' && expression.callee.path.length === 1) {
+    const name = expression.callee.path[0]
+
+    shape = context.functionReturnShapes.get(name)
+    returnType = context.functionReturnTypes.get(name)
+    returnNullable = context.functionReturnNullables.get(name) === true
+  } else {
+    const resolved = resolveObjectFunctionField(expression.callee, context)
+    const functionType = resolved?.field.functionType
+
+    if (functionType === null || typeof functionType === 'undefined') {
+      return value
+    }
+
+    shape = functionType.returnShape
+    returnType = functionType.returnType
+    returnNullable = functionType.returnNullable === true
   }
 
-  const shape = context.functionReturnShapes.get(expression.callee.path[0])
-  const cppType = libraryNativeCppType(shape)
+  const cppType = libraryNativeBoundaryCppType(returnType, returnNullable, false, shape)
 
   if (cppType === null) {
     return value
@@ -2344,6 +2444,31 @@ function appendPreparedCallArg(
 
     appendLines(lines, value.lines)
     args.push(value.expression)
+  } else if (
+    libraryNativeBoundaryCppType(paramValueType, param.nullable === true, param.optional === true, param.shape) !== null
+  ) {
+    const value = deps.emitCValueExpression(arg, context)
+    const cppType = libraryNativeCppType(param.shape)
+
+    appendLines(lines, value.lines)
+
+    if (value.cppType === cppType) {
+      args.push(value.expression)
+    } else {
+      const adapter = libraryNativeValueAdapter(param.shape)
+
+      if (adapter === null) {
+        context.diagnostics.push(
+          diagnostic(
+            'INOX_C_LIBRARY_NATIVE_VALUE_ADAPTER',
+            'runtime-backed native function argument requires a package C++ value adapter',
+            arg.loc
+          )
+        )
+      }
+
+      args.push(applyLibraryNativeValueAdapter(value.expression, adapter))
+    }
   } else if (paramValueType === 'object') {
     let value = deps.emitCValueExpression(arg, context)
 
@@ -2436,7 +2561,7 @@ function emitDefaultOptionalArg(param: CFunctionParam): string {
   }
 
   if (param.nullable === true && isRuntimeNullableType(param.valueType)) {
-    return 'inox_null_value()'
+    return 'inox_undefined_value()'
   }
 
   if (
@@ -2492,7 +2617,12 @@ function emitPreparedThrowingCallExpression(
   appendLines(lines, emitPrepareOwnedValueWrite('inox_error'))
 
   if (returnType !== 'void') {
-    const returnCppType = libraryNativeCppType(context.functionReturnShapes.get(name))
+    const returnCppType = libraryNativeBoundaryCppType(
+      returnType,
+      returnNullable,
+      false,
+      context.functionReturnShapes.get(name)
+    )
 
     if (
       (returnCppType === null && returnType === 'unknown') ||
@@ -2510,7 +2640,11 @@ function emitPreparedThrowingCallExpression(
       lines.push(`double ${result} = 0;`)
     }
 
-    callArgs.push(`&${result}`)
+    if (returnCppType !== null) {
+      callArgs.push(`std::addressof(${result})`)
+    } else {
+      callArgs.push(`&${result}`)
+    }
   }
 
   callArgs.push('&inox_error')
@@ -2720,9 +2854,11 @@ export function emitPreparedNumberExpression(
       valueType = resolvedType
     }
 
+    const value = deps.emitReference(expression, context)
+
     return {
       lines: [],
-      expression: scalarRuntimeValueExpression(name, valueType)
+      expression: scalarRuntimeValueExpression(value, valueType)
     }
   }
 
@@ -3892,7 +4028,6 @@ function asRequiredCallExpression(expression: CValueNode): CValueNode {
     mapKeyType: expression.mapKeyType,
     mapValueType: expression.mapValueType,
     promiseValueType: expression.promiseValueType,
-    setElementType: expression.setElementType,
     functionType: expression.functionType,
     shape: expression.shape,
     className: expression.className,
@@ -5053,13 +5188,13 @@ export function emitCValueExpression(
   const libraryCall = deps.emitPreparedCompilerLibraryCallExpression(expression, context)
 
   if (libraryCall !== null) {
-    return libraryCall
+    return boxPreparedRuntimeScalarValue(libraryCall)
   }
 
   const libraryExpression = deps.emitPreparedCompilerLibraryExpression(expression)
 
   if (libraryExpression !== null) {
-    return libraryExpression
+    return boxPreparedRuntimeScalarValue(libraryExpression)
   }
 
   const arrayPopCall = deps.emitPreparedArrayPopCallExpression(expression, context, null)
@@ -5377,7 +5512,7 @@ export function emitCValueExpression(
       }
     }
 
-    if (valueType === 'map' || valueType === 'set') {
+    if (valueType === 'map') {
       return {
         lines: [],
         expression: reference
@@ -5752,6 +5887,22 @@ function emitPreparedScalarRuntimeValueExpression(
   return {
     lines: value.lines,
     expression: boxedScalarRuntimeValueExpression(value.expression, valueType)
+  }
+}
+
+function boxPreparedRuntimeScalarValue(value: PreparedExpression): PreparedExpression {
+  const valueType = value.valueType
+
+  if (value.cppType === 'inox::Value' || (valueType !== 'number' && valueType !== 'boolean')) {
+    return value
+  }
+
+  return {
+    lines: value.lines,
+    expression: boxedScalarRuntimeValueExpression(value.expression, valueType),
+    cppType: 'inox::Value',
+    runtimeTypeChecked: true,
+    valueType
   }
 }
 

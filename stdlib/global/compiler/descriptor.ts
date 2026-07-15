@@ -4,9 +4,7 @@ export {
   isArrayMethod,
   isCollectionConstructorGlobalUsagePath,
   isMapMethod,
-  isSetMethod,
-  mapRuntimeMethodName,
-  setRuntimeMethodName
+  mapRuntimeMethodName
 } from '../collections/compiler/descriptor.ts'
 export { isNumericCastName, numericCastNames } from '../conversions/compiler/descriptor.ts'
 export {

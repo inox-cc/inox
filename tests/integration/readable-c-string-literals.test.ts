@@ -217,7 +217,10 @@ console.log(response.status)
   }) as GeneratedTextFile[]
   const fetchSource = generatedTextFile(fetchFiles, 'src/index.cc').code
 
-  assert.match(fetchSource, /inox::fetch\("http:\/\/127\.0\.0\.1"\)/)
+  assert.match(
+    fetchSource,
+    /inox::fetch\("http:\/\/127\.0\.0\.1"\)/
+  )
   assert.doesNotMatch(fetchSource, /inox::fetch\(inox::StringView/)
 
   const processEntryHost = createMemoryCompilerHost(

@@ -71,7 +71,6 @@ export type IrFunctionDeclaration = {
   returnMapKeyType?: ValueType | null
   returnMapValueType?: ValueType | null
   returnPromiseValueType?: ValueType | null
-  returnSetElementType?: ValueType | null
   returnShape?: any
   loc?: SourceLocation
 }
@@ -147,6 +146,7 @@ export type ObjectShapeInfo = {
   fields: AnyNode[]
   libraryTypeId?: string | null
   libraryCppType?: string | null
+  libraryCValueAdapter?: string | null
   [key: string]: any
 }
 
@@ -163,13 +163,13 @@ export type CallableOverloadInfo = {
   valueType: ValueType
   params?: AnyNode[]
   returnType?: ValueType
+  returnTypeRef?: TypeRef | null
   returnNullable?: boolean
   returnArrayElementType?: ValueType | null
   returnArrayElementDeclaredType?: string | null
   returnMapKeyType?: ValueType | null
   returnMapValueType?: ValueType | null
   returnPromiseValueType?: ValueType | null
-  returnSetElementType?: ValueType | null
   returnShape?: ObjectShapeInfo | null
   async?: boolean
   loc?: SourceLocation
@@ -198,22 +198,23 @@ export type SymbolInfo = {
   mapValueArrayElementDeclaredType?: string | null
   promiseValueType?: ValueType | null
   promiseRejectionIntrinsicRole?: IntrinsicRole | null
-  setElementType?: ValueType | null
   params?: AnyNode[]
   returnType?: ValueType
+  returnTypeRef?: TypeRef | null
   returnNullable?: boolean
   returnArrayElementType?: ValueType | null
   returnArrayElementDeclaredType?: string | null
   returnMapKeyType?: ValueType | null
   returnMapValueType?: ValueType | null
   returnPromiseValueType?: ValueType | null
-  returnSetElementType?: ValueType | null
   returnShape?: ObjectShapeInfo | null
   async?: boolean
   className?: string | null
   classMethods?: AnyNode[]
   constructable?: boolean
+  typeParameters?: AnyNode[]
   constructorParams?: AnyNode[]
+  constructorParamTemplates?: AnyNode[][]
   constructorOverloads?: CallableOverloadInfo[]
   functionType?: any
   overloads?: CallableOverloadInfo[]

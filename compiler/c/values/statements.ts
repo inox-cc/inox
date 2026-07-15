@@ -1,5 +1,6 @@
 import { diagnostic } from '../../diagnostics.ts'
-import type { RuntimeEntrypointAdapterDescriptor } from '../../extensions/types.ts'
+import { compilerLibraryNativeTypeForId } from '../../extensions/library-set.ts'
+import type { CompilerLibrarySet, RuntimeEntrypointAdapterDescriptor } from '../../extensions/types.ts'
 import type { AnyNode, Diagnostic, IrFunctionEffect, SourceLocation } from '../../types.ts'
 import { isRuntimeFunctionType, normalizeFunctionType } from '../async/callbacks.ts'
 import type { AsyncTaskLoweringDependencies } from '../async/tasks.ts'
@@ -32,6 +33,7 @@ import type {
   CClassInfo,
   CFunctionParam,
   CFunctionPointerAdapter,
+  CFunctionPointerRuntimeAdapter,
   CFunctionReturnMapType,
   CFunctionType,
   CKnownArrayElement,
@@ -47,12 +49,15 @@ import type {
   CPreparedExpression as PreparedExpression
 } from '../types.ts'
 import {
+  applyLibraryNativeValueAdapter,
   cRuntimeValueTag,
   isManagedRuntimeReturnType,
   isNullableScalarType,
   isOpaqueRuntimeValueType,
   isRuntimeNullableType,
-  libraryNativeCppType
+  libraryNativeBoundaryCppType,
+  libraryNativeCppType,
+  libraryNativeValueAdapter
 } from '../value-types.ts'
 import type { ArrayLoweringDependencies, PreparedArrayExpression } from './arrays.ts'
 import {
@@ -73,8 +78,7 @@ import type { CollectionLoweringDependencies } from './collections.ts'
 import {
   resolveRuntimeForOfMapEntries,
   resolveRuntimeForOfMapKeys,
-  resolveRuntimeMapType,
-  resolveRuntimeSetElementType
+  resolveRuntimeMapType
 } from './collections.ts'
 import { emitCConditionClause, emitCNegatedConditionClause, objectExpressionPathName } from './expressions.ts'
 import type { NullableLoweringDependencies } from './nullable.ts'
@@ -108,6 +112,16 @@ type CTypeofConditionNarrowing = {
   falseTypes: CVariableTypeNarrowing[]
 }
 
+type CCompilerLibraryIteration = {
+  doneMember: string
+  failureMode: 'thrown' | null
+  iteratorMethod: string
+  nextMethod: string
+  receiverAdapter: string | null
+  valueAdapter: string | null
+  valueMember: string
+}
+
 type CFunctionContext = {
   arrayLoweringDependencies: ArrayLoweringDependencies
   arrayLengths: Map<string, number>
@@ -131,7 +145,6 @@ type CFunctionContext = {
   continueTargets: CLoopFlowTarget[]
   cppArrayValues: CStringSet
   cppMapValues: CStringSet
-  cppSetValues: CStringSet
   cppStringValues: CStringSet
   cppValueTypes: CStringMap
   diagnostics: Diagnostic[]
@@ -153,6 +166,8 @@ type CFunctionContext = {
   functionParams: Map<string, CFunctionParam[]>
   functionPointerAdapterNames: CStringMap
   functionPointerAdapters: CFunctionPointerAdapter[]
+  functionPointerRuntimeAdapterNames: Map<string, CFunctionPointerRuntimeAdapter>
+  functionPointerRuntimeAdapters: CFunctionPointerRuntimeAdapter[]
   functionReturnArrayElementDeclaredTypes: Map<string, string | null>
   functionReturnArrayElementTypes: Map<string, string | null>
   functionReturnDeclaredTypes: Map<string, string | null>
@@ -160,12 +175,12 @@ type CFunctionContext = {
   functionReturnNullables: Map<string, boolean>
   functionReturnOut: string | null
   functionReturnPromiseValueTypes: Map<string, string | null>
-  functionReturnSetElementTypes: Map<string, string | null>
   functionReturnShapes: Map<string, CObjectShape | null>
   functionReturnTypes: CStringMap
   functionThrowValueTypes: Map<string, IrFunctionEffect['throwValueTypes']>
   functionTypes: Map<string, CFunctionType>
   jsGlobalRoots: CStringSet
+  libraries: CompilerLibrarySet
   runtimeInitializerDefinitions: string[]
   localValueNames: CStringSet
   mapTypes: Map<string, CFunctionReturnMapType>
@@ -207,7 +222,6 @@ type CFunctionContext = {
   runtimeStringValues: CStringMap
   runtimeValueStorageNames: CStringSet
   runtimeFunctionParams: Map<string, CFunctionType>
-  setElementTypes: CStringMap
   statementLoweringDependencies: StatementLoweringDependencies
   statusReturn: boolean
   stringLoweringDependencies: StringLoweringDependencies
@@ -249,13 +263,6 @@ type RuntimeForOfMapValues = {
 type RuntimeMapMetadata = {
   key: string
   value: string
-}
-
-type RuntimeForOfSet = {
-  cppObject: boolean
-  elementType: string
-  lines: string[]
-  name: string
 }
 
 type NullableScalarConditionNarrowing = {
@@ -470,7 +477,6 @@ export type StatementLoweringDependencies = {
   resolveRuntimeForOfArray(expression: StatementNode, context: CFunctionContext): RuntimeForOfArray | null
   resolveRuntimeForOfMap(expression: StatementNode, context: CFunctionContext): RuntimeForOfMap | null
   resolveRuntimeForOfMapValues(expression: StatementNode, context: CFunctionContext): RuntimeForOfMapValues | null
-  resolveRuntimeForOfSet(expression: StatementNode, context: CFunctionContext): RuntimeForOfSet | null
   emitBoxedRuntimeValueAssignment(expression: StatementNode, context: CFunctionContext): string[]
 }
 
@@ -618,7 +624,6 @@ function functionTypeFromArrowFunctionExpression(expression: StatementNode | nul
     returnMapValueType: stringOrNull(expression.returnMapValueType),
     returnNullable: expression.returnNullable === true,
     returnPromiseValueType: stringOrNull(expression.returnPromiseValueType),
-    returnSetElementType: stringOrNull(expression.returnSetElementType),
     returnShape,
     returnType: stringOrUnknown(returnType)
   }
@@ -1582,7 +1587,10 @@ export function emitRuntimeValueVariableDeclaration(
     valueType = statementValueType
   }
 
-  const expectedTag = cRuntimeValueTag(valueType)
+  const expectedTag =
+    valueType === 'object' && libraryNativeCppType(statement.shape) !== null
+      ? null
+      : cRuntimeValueTag(valueType)
   let objectLiteralExpression = false
 
   if (valueType === 'object') {
@@ -1789,8 +1797,6 @@ export function registerRuntimeValueMetadata(
         resolveRuntimeMapMetadataValueType(declaration, expression, mapType)
       )
     )
-  } else if (valueType === 'set') {
-    context.setElementTypes.set(name, resolveRuntimeSetMetadataElementType(declaration, expression, context))
   }
 }
 
@@ -2017,7 +2023,6 @@ function resolveRuntimeObjectLiteralShapeField(property: StatementNode, context:
     arrayElementType: value.arrayElementType,
     mapKeyType: value.mapKeyType,
     mapValueType: value.mapValueType,
-    setElementType: value.setElementType,
     shape,
     functionType: value.functionType
   }
@@ -2142,37 +2147,6 @@ function resolveRuntimeMapMetadataValueType(
   return 'unknown'
 }
 
-function resolveRuntimeSetMetadataElementType(
-  declaration: StatementNode,
-  expression: StatementNode | null | undefined,
-  context: CFunctionContext
-): string {
-  if (declaration.setElementType !== null && typeof declaration.setElementType !== 'undefined') {
-    return declaration.setElementType
-  }
-
-  let resolvedElementType: string | null = null
-
-  if (expression !== null && typeof expression !== 'undefined') {
-    resolvedElementType = resolveRuntimeSetElementType(expression, context)
-  }
-
-  if (resolvedElementType !== null && typeof resolvedElementType !== 'undefined') {
-    return resolvedElementType
-  }
-
-  if (
-    expression !== null &&
-    typeof expression !== 'undefined' &&
-    expression.setElementType !== null &&
-    typeof expression.setElementType !== 'undefined'
-  ) {
-    return expression.setElementType
-  }
-
-  return 'unknown'
-}
-
 export function isRuntimeValueLocalExpression(expression: StatementNode, context: CFunctionContext): boolean {
   const valueType = statementDeps(context).inferExpressionType(expression, context)
 
@@ -2292,8 +2266,6 @@ function registerForOfElementMetadata(
       name,
       runtimeMapMetadata(stringOrUnknown(statement.mapKeyType), stringOrUnknown(statement.mapValueType))
     )
-  } else if (elementType === 'set') {
-    context.setElementTypes.set(name, stringOrUnknown(statement.setElementType))
   }
 }
 
@@ -2302,7 +2274,7 @@ function registerForOfObjectElementDeclaredType(
   name: string,
   statement: StatementNode
 ): void {
-  const declaredType = statement.arrayElementDeclaredType ?? statement.declaredType
+  const declaredType = statement.arrayElementDeclaredType ?? statement.inferredDeclaredType ?? statement.declaredType
 
   if (declaredType !== null && typeof declaredType !== 'undefined') {
     context.objectDeclaredTypes.set(name, declaredType)
@@ -2382,33 +2354,12 @@ function emitCollectionVariableDeclaration(statement: StatementNode, context: CF
     constructorArg = args[0]
   }
 
-  if (collectionConstructor === 'Map') {
-    const mapKeyType = stringOrUnknown(statement.mapKeyType)
-    const mapValueType = stringOrUnknown(statement.mapValueType)
-    context.variables.set(statement.name, 'map')
-    context.cppMapValues.add(statement.name)
-    context.mapTypes.set(statement.name, runtimeMapMetadata(mapKeyType, mapValueType))
-    reportCCollectionHashability(statement.mapKeyType, 'Map keys', statement.loc, context)
-
-    const copied = emitCollectionVariableCopyConstructor(statement, context)
-
-    if (copied !== null && typeof copied !== 'undefined') {
-      return copied
-    }
-
-    const lines: string[] = []
-    lines.push(`auto ${emitCIdentifier(statement.name)} = Map::create();`)
-    lines.push(emitRuntimeTypeCheck(`!${emitCIdentifier(statement.name)}.valid()`, context))
-
-    pushAllLines(lines, emitMapConstructorEntries(statement.name, constructorArg, context, statement.init.loc))
-
-    return lines
-  }
-
-  context.variables.set(statement.name, 'set')
-  context.cppSetValues.add(statement.name)
-  context.setElementTypes.set(statement.name, stringOrUnknown(statement.setElementType))
-  reportCCollectionHashability(statement.setElementType, 'Set values', statement.loc, context)
+  const mapKeyType = stringOrUnknown(statement.mapKeyType)
+  const mapValueType = stringOrUnknown(statement.mapValueType)
+  context.variables.set(statement.name, 'map')
+  context.cppMapValues.add(statement.name)
+  context.mapTypes.set(statement.name, runtimeMapMetadata(mapKeyType, mapValueType))
+  reportCCollectionHashability(statement.mapKeyType, 'Map keys', statement.loc, context)
 
   const copied = emitCollectionVariableCopyConstructor(statement, context)
 
@@ -2417,10 +2368,10 @@ function emitCollectionVariableDeclaration(statement: StatementNode, context: CF
   }
 
   const lines: string[] = []
-  lines.push(`auto ${emitCIdentifier(statement.name)} = Set::create();`)
+  lines.push(`auto ${emitCIdentifier(statement.name)} = Map::create();`)
   lines.push(emitRuntimeTypeCheck(`!${emitCIdentifier(statement.name)}.valid()`, context))
 
-  pushAllLines(lines, emitSetConstructorValues(statement.name, constructorArg, context, statement.init.loc))
+  pushAllLines(lines, emitMapConstructorEntries(statement.name, constructorArg, context, statement.init.loc))
 
   return lines
 }
@@ -2500,49 +2451,6 @@ function emitMapConstructorEntries(
     pushAllLines(lines, key.lines)
     pushAllLines(lines, value.lines)
     lines.push(`${emitCIdentifier(name)}.set(${key.expression}, ${value.expression});`)
-    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
-  }
-
-  return lines
-}
-
-function emitSetConstructorValues(
-  name: string,
-  expression: StatementNode | null | undefined,
-  context: CFunctionContext,
-  loc: CSourceLocation
-): string[] {
-  const deps = statementDeps(context)
-
-  if (expression === null || typeof expression === 'undefined') {
-    return []
-  }
-
-  if (expression.type !== 'ArrayLiteral') {
-    pushDiagnostic(
-      context,
-      diagnostic(
-        'INOX_C_COLLECTION',
-        'C Set constructor currently supports only array literal values or Set copy sources',
-        nodeLocOrFallback(expression, loc)
-      )
-    )
-    return []
-  }
-
-  const lines: string[] = []
-
-  for (const element of expression.elements) {
-    const value = deps.emitCValueExpression(element, context)
-    reportCCollectionHashability(
-      deps.inferExpressionType(element, context),
-      'Set values',
-      nodeLocOrFallback(element, loc),
-      context
-    )
-
-    pushAllLines(lines, value.lines)
-    lines.push(`${emitCIdentifier(name)}.add(${value.expression});`)
     lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   }
 
@@ -2934,6 +2842,12 @@ function emitPreparedConditionExpression(expression: StatementNode, context: CFu
 }
 
 export function emitForOfStatement(statement: StatementNode, context: CFunctionContext): string[] {
+  const libraryIterable = emitCompilerLibraryForOfStatement(statement, context)
+
+  if (libraryIterable !== null) {
+    return libraryIterable
+  }
+
   const setup: string[] = []
   let array: KnownForOfArray | null = statementDeps(context).resolveKnownForOfArray(statement.iterable, context)
   let runtimeArray: RuntimeForOfArray | null = null
@@ -2941,7 +2855,6 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
   let runtimeMapEntries: RuntimeForOfMap | null = null
   let runtimeMapKeys: RuntimeForOfMapValues | null = null
   let runtimeMapValues: RuntimeForOfMapValues | null = null
-  let runtimeSet: RuntimeForOfSet | null = null
 
   if (array === null || typeof array === 'undefined') {
     const iterable = statement.iterable
@@ -3008,20 +2921,9 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
     (array === null || typeof array === 'undefined') &&
     (runtimeArray === null || typeof runtimeArray === 'undefined')
   ) {
-    runtimeSet = statementDeps(context).resolveRuntimeForOfSet(statement.iterable, context)
-  }
-
-  if (runtimeSet !== null && typeof runtimeSet !== 'undefined') {
-    return emitRuntimeSetForOfStatement(statement, runtimeSet, context)
-  }
-
-  if (
-    (array === null || typeof array === 'undefined') &&
-    (runtimeArray === null || typeof runtimeArray === 'undefined')
-  ) {
     pushDiagnostic(
       context,
-      diagnostic('INOX_C_FOR_OF', 'C for-of currently supports arrays, Map values and Set values', statement.loc)
+      diagnostic('INOX_C_FOR_OF', 'C for-of currently supports arrays and Map values', statement.loc)
     )
     return []
   }
@@ -3128,6 +3030,177 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
   }
 }
 
+function emitCompilerLibraryForOfStatement(
+  statement: StatementNode,
+  context: CFunctionContext
+): string[] | null {
+  const iteration = resolveCompilerLibraryIteration(statement, context)
+
+  if (iteration === null) {
+    return null
+  }
+
+  const elementType = stringOrUnknown(statement.valueType)
+
+  if (!isCForOfValueType(elementType)) {
+    pushDiagnostic(
+      context,
+      diagnostic(
+        'INOX_C_FOR_OF',
+        'C library iteration supports only number/boolean/string or managed runtime values',
+        statement.loc
+      )
+    )
+    return []
+  }
+
+  const iterable = statementDeps(context).emitCValueExpression(statement.iterable, context)
+  let receiver = iterable.expression
+
+  if (
+    iterable.cppType === null ||
+    typeof iterable.cppType === 'undefined' ||
+    iterable.cppType === 'inox::Value' ||
+    iterable.cppType === 'inox_value'
+  ) {
+    receiver = applyCompilerLibraryIterationAdapter(receiver, iteration.receiverAdapter)
+  }
+
+  const iterator = nextCName(context, 'inox_library_iterator')
+  const step = nextCName(context, 'inox_library_step')
+  const value = nextCName(context, 'inox_library_value')
+  const breakTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_break'), throughFinally: false }
+  const continueTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_continue'), throughFinally: false }
+  const variableScope = pushVariableScope(context)
+
+  try {
+    registerForOfElementMetadata(context, statement.name, elementType, statement)
+    pushFlowTarget(context.breakTargets, breakTarget)
+    pushFlowTarget(context.continueTargets, continueTarget)
+    const body = emitScopedStatementBody(statement.body, context, [], [], [], [])
+    popFlowTarget(context.continueTargets)
+    popFlowTarget(context.breakTargets)
+    const element = emitForOfElementDeclaration(statement.name, value, elementType, context)
+    const lines: string[] = []
+
+    pushAllLines(lines, iterable.lines)
+    lines.push(`auto ${iterator} = (${receiver}).${iteration.iteratorMethod}();`)
+
+    if (iteration.failureMode === 'thrown') {
+      lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+    }
+
+    lines.push('while (true) {')
+    const loopBody = [`auto ${step} = ${iterator}.${iteration.nextMethod}();`]
+
+    if (iteration.failureMode === 'thrown') {
+      loopBody.push(emitRuntimeTypeCheck('inox::thrown()', context))
+    }
+
+    loopBody.push(`if (${step}.${iteration.doneMember}) break;`)
+    const memberValue = `${step}.${iteration.valueMember}`
+    const adaptedValue = applyCompilerLibraryIterationAdapter(memberValue, iteration.valueAdapter)
+    loopBody.push(`auto ${value} = ${adaptedValue};`)
+    pushAllLines(loopBody, element.lines)
+    loopBody.push(element.expression)
+    pushAllLines(loopBody, body)
+    const hasContinueLabel = shouldEmitFlowTargetLabel(continueTarget)
+    pushLoopBodyLines(lines, loopBody, '  ', hasContinueLabel)
+
+    if (hasContinueLabel) {
+      pushAllLines(lines, emitContinueTargetLabel(continueTarget.label, context))
+    }
+
+    lines.push('}')
+
+    if (shouldEmitFlowTargetLabel(breakTarget)) {
+      pushAllLines(lines, emitBreakTargetLabel(breakTarget.label, context))
+    }
+
+    return lines
+  } finally {
+    restoreVariableScope(context, variableScope)
+  }
+}
+
+function resolveCompilerLibraryIteration(
+  statement: StatementNode,
+  context: CFunctionContext
+): CCompilerLibraryIteration | null {
+  const iteratorMethod = stringOrNull(statement.libraryCIteratorMethod)
+  const nextMethod = stringOrNull(statement.libraryCIteratorNextMethod)
+  const doneMember = stringOrNull(statement.libraryCIteratorDoneMember)
+  const valueMember = stringOrNull(statement.libraryCIteratorValueMember)
+
+  if (iteratorMethod !== null && nextMethod !== null && doneMember !== null && valueMember !== null) {
+    return {
+      doneMember,
+      failureMode: statement.libraryCIteratorFailureMode === 'thrown' ? 'thrown' : null,
+      iteratorMethod,
+      nextMethod,
+      receiverAdapter: stringOrNull(statement.libraryCIteratorReceiverAdapter),
+      valueAdapter: stringOrNull(statement.libraryCIteratorValueAdapter),
+      valueMember
+    }
+  }
+
+  const typeId = compilerLibraryIterableTypeId(statement.iterable)
+
+  if (typeId === null) {
+    return null
+  }
+
+  const nativeType = compilerLibraryNativeTypeForId(context.libraries, typeId)
+  const iteration = nativeType?.cIteration
+
+  if (iteration === null || typeof iteration === 'undefined') {
+    return null
+  }
+
+  return {
+    doneMember: iteration.doneMember,
+    failureMode: iteration.failureMode === 'thrown' ? 'thrown' : null,
+    iteratorMethod: iteration.iteratorMethod,
+    nextMethod: iteration.nextMethod,
+    receiverAdapter: iteration.receiverAdapter ?? null,
+    valueAdapter: iteration.valueAdapter ?? null,
+    valueMember: iteration.valueMember
+  }
+}
+
+function compilerLibraryIterableTypeId(iterable: StatementNode): string | null {
+  const typeRef = iterable.typeRef
+
+  if (
+    typeRef !== null &&
+    typeof typeRef !== 'undefined' &&
+    typeRef.kind === 'nominal' &&
+    typeof typeRef.typeId === 'string'
+  ) {
+    return typeRef.typeId
+  }
+
+  const shape = iterable.shape
+
+  if (
+    shape !== null &&
+    typeof shape !== 'undefined' &&
+    typeof shape.libraryTypeId === 'string'
+  ) {
+    return shape.libraryTypeId
+  }
+
+  return null
+}
+
+function applyCompilerLibraryIterationAdapter(value: string, adapter: string | null | undefined): string {
+  if (adapter === null || typeof adapter === 'undefined' || adapter.length === 0) {
+    return value
+  }
+
+  return adapter.split('$value').join(value)
+}
+
 function knownForOfArrayElementType(array: KnownForOfArray, context: CFunctionContext): string {
   if (array.elements.length === 0) {
     const runtimeElementType = context.runtimeArrayElementTypes.get(array.name)
@@ -3223,26 +3296,8 @@ function emitRuntimeMapValuesForOfStatement(
     runtimeMapValues.name,
     runtimeMapValues.elementType,
     runtimeMapValues.lines,
-    'map',
     runtimeMapValues.useKey,
     runtimeMapValues.cppObject,
-    context
-  )
-}
-
-function emitRuntimeSetForOfStatement(
-  statement: StatementNode,
-  runtimeSet: RuntimeForOfSet,
-  context: CFunctionContext
-): string[] {
-  return emitRuntimeCollectionValueForOfStatement(
-    statement,
-    runtimeSet.name,
-    runtimeSet.elementType,
-    runtimeSet.lines,
-    'set',
-    false,
-    runtimeSet.cppObject,
     context
   )
 }
@@ -3252,45 +3307,24 @@ function emitRuntimeCollectionValueForOfStatement(
   collectionName: string,
   elementType: string,
   setupLines: string[],
-  collectionKind: string,
   useKey: boolean,
   cppObject: boolean,
   context: CFunctionContext
 ): string[] {
-  const isMap = collectionKind === 'map'
-  let unsupported = false
-  let unsupportedMessage =
-    'C for-of currently supports only uniform number/boolean/string or managed runtime Set values'
-
-  if (isMap) {
-    unsupportedMessage = 'C for-of currently supports only uniform number/boolean/string or managed runtime Map values'
-
-    if (!isCForOfValueType(elementType)) {
-      unsupported = true
-    }
-  } else if (!isCForOfValueType(elementType)) {
-    unsupported = true
-  }
-
-  if (unsupported) {
-    pushDiagnostic(context, diagnostic('INOX_C_FOR_OF', unsupportedMessage, statement.loc))
+  if (!isCForOfValueType(elementType)) {
+    pushDiagnostic(
+      context,
+      diagnostic(
+        'INOX_C_FOR_OF',
+        'C for-of currently supports only uniform number/boolean/string or managed runtime Map values',
+        statement.loc
+      )
+    )
     return []
   }
 
-  let indexPrefix = 'inox_for_set_index'
-  let collectionPrefix = 'inox_for_set'
-  let collectionType = 'SetStorage'
-  let slotState = 'SetSlotOccupied'
-
-  if (isMap) {
-    indexPrefix = 'inox_for_map_index'
-    collectionPrefix = 'inox_for_map'
-    collectionType = 'MapStorage'
-    slotState = 'MapSlotOccupied'
-  }
-
-  const index = nextCName(context, indexPrefix)
-  const collection = nextCName(context, collectionPrefix)
+  const index = nextCName(context, 'inox_for_map_index')
+  const collection = nextCName(context, 'inox_for_map')
   const value = nextCName(context, 'inox_for_value')
   const breakTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_break'), throughFinally: false }
   const continueTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_continue'), throughFinally: false }
@@ -3310,18 +3344,14 @@ function emitRuntimeCollectionValueForOfStatement(
 
     const lines: string[] = []
     pushAllLines(lines, setupLines)
-    const collectionData = cppObject
-      ? `${collectionName}.data()`
-      : isMap
-        ? `Map(${collectionName}).data()`
-        : `Set(${collectionName}).data()`
-    lines.push(`${collectionType}* ${collection} = ${collectionData};`)
+    const collectionData = cppObject ? `${collectionName}.data()` : `Map(${collectionName}).data()`
+    lines.push(`MapStorage* ${collection} = ${collectionData};`)
     lines.push(emitRuntimeTypeCheck(`${collection} == nullptr`, context))
     lines.push(`for (size_t ${index} = 0; ${index} < ${collection}->capacity; ++${index}) {`)
-    lines.push(`  if (${collection}->entries[${index}].state != ${slotState}) continue;`)
+    lines.push(`  if (${collection}->entries[${index}].state != MapSlotOccupied) continue;`)
     const loopBody: string[] = []
     pushAllLines(loopBody, emitPrepareOwnedValueWrite(value))
-    if (isMap && useKey) {
+    if (useKey) {
       loopBody.push(`${value} = ${collection}->entries[${index}].key;`)
     } else {
       loopBody.push(`${value} = ${collection}->entries[${index}].value;`)
@@ -3839,7 +3869,14 @@ export function emitReturnStatement(statement: StatementNode, context: CFunction
     return emitNullableScalarReturnStatement(returnStatement, context)
   }
 
-  if (context.returnType === 'object' && libraryNativeCppType(context.returnShape) !== null) {
+  if (
+    libraryNativeBoundaryCppType(
+      context.returnType,
+      context.returnNullable === true,
+      false,
+      context.returnShape
+    ) !== null
+  ) {
     return emitLibraryNativeReturnStatement(returnStatement, context)
   }
 
@@ -3898,9 +3935,34 @@ function emitLibraryNativeReturnStatement(statement: StatementNode, context: CFu
 
   const value = statementDeps(context).emitCValueExpression(statement.argument, context)
   const lines: string[] = []
+  const returnCppType = libraryNativeBoundaryCppType(
+    context.returnType,
+    context.returnNullable === true,
+    false,
+    context.returnShape
+  )
+  let returnExpression = value.expression
 
   pushAllLines(lines, value.lines)
-  lines.push(`inox_return = ${value.expression};`)
+
+  if (value.cppType !== returnCppType) {
+    const adapter = libraryNativeValueAdapter(context.returnShape)
+
+    if (adapter === null) {
+      pushDiagnostic(
+        context,
+        diagnostic(
+          'INOX_C_LIBRARY_NATIVE_VALUE_ADAPTER',
+          'runtime-backed native return value requires a package C++ value adapter',
+          statement.argument.loc
+        )
+      )
+    }
+
+    returnExpression = applyLibraryNativeValueAdapter(returnExpression, adapter)
+  }
+
+  lines.push(`inox_return = ${returnExpression};`)
   pushAllLines(lines, emitReturnJump(context))
   return lines
 }
@@ -4452,8 +4514,7 @@ function isRuntimeValueDeclarationValueType(valueType: string | null | undefined
     valueType === 'bytes' ||
     valueType === 'object' ||
     valueType === 'array' ||
-    valueType === 'map' ||
-    valueType === 'set'
+    valueType === 'map'
   )
 }
 
@@ -4740,7 +4801,6 @@ function emitModuleValueAssignmentExpression(
       mapKeyType: expression.target.mapKeyType,
       mapValueType: expression.target.mapValueType,
       promiseValueType: expression.target.promiseValueType,
-      setElementType: expression.target.setElementType,
       loc: expression.loc
     },
     context
@@ -4759,19 +4819,15 @@ function emitRuntimeArrayIndexAssignment(expression: StatementNode, context: CFu
     return null
   }
 
-  if (expression.target.object.type !== 'Reference' || expression.target.object.path.length !== 1) {
-    return null
-  }
-
-  const path: string[] = expression.target.object.path
-  const arrayName = path[0]
+  const array = deps.emitCValueExpression(expression.target.object, context)
   const index = emitRuntimeArrayIndexExpression(element, context)
   const value = deps.emitCValueExpression(expression.value, context)
   const lines: string[] = []
 
+  pushAllLines(lines, array.lines)
   pushAllLines(lines, index.lines)
   pushAllLines(lines, value.lines)
-  lines.push(`ArrayClass(${arrayName}).set(${index.expression}, ${value.expression});`)
+  lines.push(`ArrayClass(${array.expression}).set(${index.expression}, ${value.expression});`)
   lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
   return lines

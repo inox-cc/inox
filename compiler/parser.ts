@@ -1208,7 +1208,6 @@ class Parser {
       arrayElementDeclaredType: null,
       mapKeyType: null,
       mapValueType: null,
-      setElementType: null,
       functionType: null,
       shape: null,
       loc: locFromToken(start),
@@ -1535,7 +1534,6 @@ class Parser {
           mapValueType: null,
           mapValueShape: null,
           promiseValueType: null,
-          setElementType: null,
           functionType: null,
           shape: null
         })
