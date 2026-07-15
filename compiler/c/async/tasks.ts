@@ -2,12 +2,7 @@ import { diagnostic } from '../../diagnostics.ts'
 import type { AnyNode, Diagnostic, IrFunctionDeclaration, SourceLocation } from '../../types.ts'
 import { emitPrepareOwnedValueWrite, emitRuntimeTypeCheck, nextCName } from '../context.ts'
 import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../identifiers.ts'
-import { emitRuntimeValueCheck, runtimeFetchResponseValueMismatchCondition } from '../runtime-values.ts'
-import {
-  cFetchRuntimeExpressionMethod,
-  emitFetchStringArgument,
-  isAsyncFetchRuntimeCallExpression
-} from '../../../stdlib/global/compiler/c.ts'
+import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import type {
   CArrayElementInfo,
   CAsyncTaskAwaitFrameLocal,
@@ -222,7 +217,6 @@ export type AsyncTaskLoweringDependencies = {
     context: AsyncTaskFunctionContext,
     options?: CPreparedCallOptions
   ): PreparedExpression | null
-  emitPreparedFetchInitOperand(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): PreparedExpression
   emitPreparedNumberExpression(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): PreparedExpression
   emitPreparedStringBytesOperand(
     expression: AsyncTaskAstNode,
@@ -2472,10 +2466,6 @@ function isSupportedAsyncTaskDirectAwaitPromiseExpression(
     return true
   }
 
-  if (isAsyncFetchRuntimeCallExpression(expression)) {
-    return true
-  }
-
   if (isPromiseReturningFunctionCallee(expression.callee, context)) {
     return true
   }
@@ -3251,12 +3241,6 @@ function emitPreparedAsyncTaskPromiseSourceExpression(
     return { lines }
   }
 
-  const fetchCall = emitPreparedAsyncTaskFetchSourceExpression(expression, wrapper, context, options)
-
-  if (fetchCall !== null && typeof fetchCall !== 'undefined') {
-    return fetchCall
-  }
-
   const taskCall = emitPreparedAsyncTaskSourceCallExpression(expression, wrapper, context, options)
 
   if (taskCall !== null && typeof taskCall !== 'undefined') {
@@ -3276,50 +3260,6 @@ function emitPreparedAsyncTaskPromiseSourceExpression(
   }
 
   return null
-}
-
-function emitPreparedAsyncTaskFetchSourceExpression(
-  expression: AsyncTaskAstNode,
-  wrapper: CAsyncTaskWrapper,
-  context: AsyncTaskFunctionContext,
-  options: AsyncTaskScheduleOptions
-): PreparedAsyncTaskPromise | null {
-  if (!isAsyncFetchRuntimeCallExpression(expression)) {
-    return null
-  }
-
-  const method = cFetchRuntimeExpressionMethod(expression)
-  const lines: string[] = []
-
-  if (method === 'fetch') {
-    const url = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[0], context, 'inox_fetch_url')
-    const init = asyncTaskDeps(context).emitPreparedFetchInitOperand(expression, context)
-
-    appendAsyncTaskLines(lines, url.lines)
-    appendAsyncTaskLines(lines, init.lines)
-
-    if (init.expression === '0') {
-      lines.push(`frame->awaited = inox::fetch(${emitFetchStringArgument(url)}).release();`)
-    } else {
-      lines.push(`frame->awaited = inox::fetch(${emitFetchStringArgument(url)}, ${init.expression}).release();`)
-    }
-    lines.push('status = frame->awaited != nullptr ? INOX_OK : INOX_ERR_TYPE;')
-  } else {
-    const response = asyncTaskDeps(context).emitCValueExpression(expression.callee.object, context)
-
-    appendAsyncTaskLines(lines, response.lines)
-    lines.push(
-      emitRuntimeTypeCheck(runtimeFetchResponseValueMismatchCondition(response.expression), context)
-    )
-    lines.push(`frame->awaited = inox::FetchResponse(inox::Value(${response.expression})).text().release();`)
-    lines.push('status = frame->awaited != nullptr ? INOX_OK : INOX_ERR_TYPE;')
-  }
-
-  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
-
-  return {
-    lines: lines
-  }
 }
 
 function emitPreparedAsyncTaskRejectedPromiseSourceExpression(

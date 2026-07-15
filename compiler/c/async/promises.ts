@@ -429,11 +429,6 @@ export type PromiseLoweringDependencies = {
     options?: PreparedCallOptions
   ): PreparedExpression | null
   emitPreparedCallExpression(expression: AnyNode, context: PromiseFunctionContext): PreparedExpression
-  emitPreparedFetchCallExpression(
-    expression: AnyNode | null | undefined,
-    context: PromiseFunctionContext,
-    options?: PreparedCallOptions
-  ): PreparedExpression | null
   emitRuntimeArrowCaptureStoreLines(
     capture: CRuntimeArrowCapture,
     contextName: string,
@@ -762,15 +757,6 @@ export function emitPreparedPromiseExpression(
     return preparedPromiseWithValueType(
       libraryCall,
       resolvedPromiseExpressionValueType(expression, context, libraryCall.valueType)
-    )
-  }
-
-  const fetchCall = dependencies.emitPreparedFetchCallExpression(expression, context, options)
-
-  if (fetchCall !== null && typeof fetchCall !== 'undefined') {
-    return preparedPromiseWithValueType(
-      fetchCall,
-      resolvedPromiseExpressionValueType(expression, context, fetchCall.valueType)
     )
   }
 

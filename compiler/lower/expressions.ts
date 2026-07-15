@@ -355,11 +355,6 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.typeRef = typeRef
   }
 
-  const fetchRuntimeMethod = nullableString(source.fetchRuntimeMethod)
-  if (fetchRuntimeMethod !== null && typeof fetchRuntimeMethod !== 'undefined') {
-    target.fetchRuntimeMethod = fetchRuntimeMethod
-  }
-
   const jsonRuntimeMethod = nullableString(source.jsonRuntimeMethod)
   if (jsonRuntimeMethod !== null && typeof jsonRuntimeMethod !== 'undefined') {
     target.jsonRuntimeMethod = jsonRuntimeMethod

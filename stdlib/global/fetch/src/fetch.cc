@@ -5,6 +5,7 @@
 #include <utility>
 #include <vector>
 
+#include "inox/binary.h"
 #include "inox/loop.h"
 
 struct FetchNativeResponse {
@@ -56,6 +57,16 @@ enum {
 
 enum {
   INOX_FETCH_HEADERS_RAW_INDEX = 0
+};
+
+enum {
+  INOX_FETCH_RESPONSE_STATUS_INDEX = 0,
+  INOX_FETCH_RESPONSE_OK_INDEX = 1,
+  INOX_FETCH_RESPONSE_URL_INDEX = 2,
+  INOX_FETCH_RESPONSE_STATUS_TEXT_INDEX = 3,
+  INOX_FETCH_RESPONSE_REDIRECTED_INDEX = 4,
+  INOX_FETCH_RESPONSE_HEADERS_INDEX = 5,
+  INOX_FETCH_RESPONSE_BODY_INDEX = 6
 };
 
 static int fetch_find_header_value(
@@ -163,16 +174,6 @@ struct FetchPromiseRequest {
   inox_promise* promise;
   char* url;
   size_t url_len;
-};
-
-enum {
-  INOX_FETCH_RESPONSE_STATUS_INDEX = 0,
-  INOX_FETCH_RESPONSE_OK_INDEX = 1,
-  INOX_FETCH_RESPONSE_URL_INDEX = 2,
-  INOX_FETCH_RESPONSE_STATUS_TEXT_INDEX = 3,
-  INOX_FETCH_RESPONSE_REDIRECTED_INDEX = 4,
-  INOX_FETCH_RESPONSE_HEADERS_INDEX = 5,
-  INOX_FETCH_RESPONSE_BODY_INDEX = 6
 };
 
 enum {
@@ -1815,75 +1816,145 @@ static inox_status fetch_backend_with_init(
 
 #endif
 
-namespace inox {
-
-FetchInit::FetchInit() : method(), headers(nullptr), header_count(0), body(), signal(), redirect() {}
-
-FetchInit::FetchInit(
-  StringView method,
-  const FetchHeader* headers,
-  size_t header_count,
-  StringView body,
-  Value signal,
-  StringView redirect
-) : method(method),
-    headers(headers),
-    header_count(header_count),
-    body(body),
-    signal(std::move(signal)),
-    redirect(redirect) {}
-
-FetchResponse::FetchResponse() : value_() {}
-
-FetchResponse::FetchResponse(Value value) : value_(std::move(value)) {}
-
-bool FetchResponse::valid() const {
-  inox_value value = value_.raw();
-
+static int fetch_is_object(inox_value value) {
   return value.tag == INOX_TAG_OBJECT && value.as.ref != nullptr;
 }
 
-inox_number FetchResponse::status() const {
-  Value value;
-
-  if (
-    !valid() ||
-    inox_object_get(value_, "status", 6, value.out()) != INOX_OK ||
-    value.tag != INOX_TAG_NUMBER
-  ) {
+static int fetch_object_property(
+  const inox::Value& object,
+  const char* name,
+  size_t name_len,
+  inox::Value& out
+) {
+  if (!fetch_is_object(object.raw())) {
     return 0;
   }
 
-  return value.as.number;
+  return inox_object_get(object, name, name_len, out.out()) == INOX_OK;
 }
 
-bool FetchResponse::ok() const {
-  Value value;
+static int fetch_string_view(const inox::Value& value, inox::StringView* out) {
+  if (out == nullptr || value.tag != INOX_TAG_STRING || value.as.ref == nullptr) {
+    return 0;
+  }
 
-  return valid() &&
-         inox_object_get(value_, "ok", 2, value.out()) == INOX_OK &&
-         value.tag == INOX_TAG_BOOL &&
-         value.as.boolean;
+  inox_string* string = (inox_string*)value.as.ref;
+  *out = inox::StringView(string->bytes, string->len);
+  return 1;
 }
 
-bool FetchResponse::redirected() const {
-  Value value;
+static int fetch_prepare_headers(
+  const inox::Value& value,
+  std::vector<FetchNativeHeader>* headers
+) {
+  if (headers == nullptr || !fetch_is_object(value.raw())) {
+    return 0;
+  }
 
-  return valid() &&
-         inox_object_get(value_, "redirected", 10, value.out()) == INOX_OK &&
-         value.tag == INOX_TAG_BOOL &&
-         value.as.boolean;
+  inox_object* object = (inox_object*)value.as.ref;
+  headers->reserve(object->shape->field_count);
+
+  for (uint32_t index = 0; index < object->shape->field_count; ++index) {
+    const char* name = object->shape->fields[index].name;
+    inox::Value header_value;
+    inox::StringView view;
+
+    if (
+      name == nullptr ||
+      inox_object_get_known(value, index, header_value.out()) != INOX_OK ||
+      !fetch_string_view(header_value, &view)
+    ) {
+      return 0;
+    }
+
+    headers->push_back({ name, strlen(name), view.bytes, view.len });
+  }
+
+  return 1;
 }
+
+static int fetch_prepare_init(
+  const inox::Value& init,
+  FetchNativeInit* native,
+  std::vector<FetchNativeHeader>* headers,
+  Uint8Array& body_storage
+) {
+  if (native == nullptr || headers == nullptr || !fetch_is_object(init.raw())) {
+    return 0;
+  }
+
+  inox::Value method;
+  inox::Value headers_value;
+  inox::Value body;
+  inox::Value signal;
+  inox::Value redirect;
+  inox::StringView view;
+
+  if (fetch_object_property(init, "method", 6, method)) {
+    if (!fetch_string_view(method, &view)) {
+      return 0;
+    }
+
+    native->method = view.bytes;
+    native->method_len = view.len;
+  }
+
+  if (fetch_object_property(init, "headers", 7, headers_value)) {
+    if (!fetch_prepare_headers(headers_value, headers)) {
+      return 0;
+    }
+
+    native->headers = headers->data();
+    native->header_count = headers->size();
+  }
+
+  if (fetch_object_property(init, "body", 4, body)) {
+    if (fetch_string_view(body, &view)) {
+      native->body = view.bytes;
+      native->body_len = view.len;
+    } else if (body.tag == INOX_TAG_BYTES && body.as.ref != nullptr) {
+      body_storage = Uint8Array(body);
+      const std::span<const std::uint8_t> bytes = body_storage.bytes();
+      native->body = (const char*)bytes.data();
+      native->body_len = bytes.size();
+    } else {
+      return 0;
+    }
+  }
+
+  if (fetch_object_property(init, "signal", 6, signal)) {
+    if (!fetch_is_object(signal.raw())) {
+      return 0;
+    }
+
+    native->signal = signal.raw();
+  } else {
+    native->signal = inox_undefined_value();
+  }
+
+  if (fetch_object_property(init, "redirect", 8, redirect)) {
+    if (!fetch_string_view(redirect, &view)) {
+      return 0;
+    }
+
+    native->redirect = view.bytes;
+    native->redirect_len = view.len;
+  }
+
+  return 1;
+}
+
+namespace inox {
 
 Promise FetchResponse::text() const {
-  if (!valid()) {
+  if (!fetch_is_object(value_.raw())) {
     return Promise();
   }
 
   Value body;
 
   if (
-    inox_object_get(value_, "__inoxBody", 10, body.out()) != INOX_OK ||
+    inox_object_get_known(value_, INOX_FETCH_RESPONSE_BODY_INDEX, body.out()) != INOX_OK ||
     body.tag != INOX_TAG_STRING ||
     body.as.ref == nullptr
   ) {
@@ -1962,18 +2033,34 @@ Value FetchHeaders::get(StringView name) const {
   return header;
 }
 
-AbortController::AbortController() : Value() {
+AbortSignal::AbortSignal() : Value(), aborted(false) {}
+
+AbortSignal::AbortSignal(const Value& value) : Value(value), aborted(false) {
+  Value raw_aborted;
+
+  if (
+    inox_object_get_known(Value::raw(), INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX, raw_aborted.out()) != INOX_OK ||
+    raw_aborted.tag != INOX_TAG_BOOL
+  ) {
+    throw_value(Value());
+    return;
+  }
+
+  aborted = raw_aborted.as.boolean;
+}
+
+AbortController::AbortController() : Value(), signal() {
   static const inox_field_info signal_fields[] = { { "aborted", 0 } };
   static const inox_shape signal_shape = { 1, signal_fields };
   static const inox_field_info controller_fields[] = { { "signal", INOX_FIELD_READONLY } };
   static const inox_shape controller_shape = { 1, controller_fields };
 
-  Value signal;
+  Value signal_value;
   Value controller;
-  inox_status status = inox_object_new(&inox_default_allocator, &signal_shape, signal.out());
+  inox_status status = inox_object_new(&inox_default_allocator, &signal_shape, signal_value.out());
 
   if (status == INOX_OK) {
-    status = inox_object_init_known(signal, INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX, inox_bool_value(false));
+    status = inox_object_init_known(signal_value, INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX, inox_bool_value(false));
   }
 
   if (status == INOX_OK) {
@@ -1981,7 +2068,7 @@ AbortController::AbortController() : Value() {
   }
 
   if (status == INOX_OK) {
-    status = inox_object_init_known(controller, INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, signal);
+    status = inox_object_init_known(controller, INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, signal_value);
   }
 
   if (status != INOX_OK) {
@@ -1990,30 +2077,83 @@ AbortController::AbortController() : Value() {
   }
 
   Value::operator=(std::move(controller));
+  signal = AbortSignal(signal_value);
 }
 
-AbortController::AbortController(const Value& value) : Value(value) {}
+AbortController::AbortController(const Value& value) : Value(value), signal() {
+  Value signal_value;
 
-Value AbortController::signal() const {
-  Value out;
-
-  if (inox_object_get_known(Value::raw(), INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, out.out()) != INOX_OK) {
+  if (inox_object_get_known(Value::raw(), INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, signal_value.out()) != INOX_OK) {
     throw_value(Value());
+    return;
   }
 
-  return out;
+  signal = AbortSignal(signal_value);
 }
 
 void AbortController::abort() const {
-  Value signal;
-  inox_status status = inox_object_get_known(Value::raw(), INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, signal.out());
-
-  if (status == INOX_OK) {
-    status = inox_object_init_known(signal, INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX, inox_bool_value(true));
-  }
+  inox_status status = inox_object_init_known(signal, INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX, inox_bool_value(true));
 
   if (status != INOX_OK) {
     throw_value(Value());
+    return;
+  }
+
+  signal.aborted = true;
+}
+
+FetchResponse::FetchResponse()
+  : value_(), status(0), ok(false), url(), statusText(), redirected(false), headers() {}
+
+FetchResponse::FetchResponse(Value value)
+  : value_(std::move(value)), status(0), ok(false), url(), statusText(), redirected(false), headers() {
+  if (!fetch_is_object(value_.raw())) {
+    throw_value(Value());
+    return;
+  }
+
+  Value field_value;
+
+  if (
+    inox_object_get_known(value_, INOX_FETCH_RESPONSE_STATUS_INDEX, field_value.out()) == INOX_OK &&
+    field_value.tag == INOX_TAG_NUMBER
+  ) {
+    status = field_value.as.number;
+  }
+
+  if (
+    inox_object_get_known(value_, INOX_FETCH_RESPONSE_OK_INDEX, field_value.out()) == INOX_OK &&
+    field_value.tag == INOX_TAG_BOOL
+  ) {
+    ok = field_value.as.boolean;
+  }
+
+  if (
+    inox_object_get_known(value_, INOX_FETCH_RESPONSE_URL_INDEX, field_value.out()) == INOX_OK &&
+    field_value.tag == INOX_TAG_STRING
+  ) {
+    url = String(field_value);
+  }
+
+  if (
+    inox_object_get_known(value_, INOX_FETCH_RESPONSE_STATUS_TEXT_INDEX, field_value.out()) == INOX_OK &&
+    field_value.tag == INOX_TAG_STRING
+  ) {
+    statusText = String(field_value);
+  }
+
+  if (
+    inox_object_get_known(value_, INOX_FETCH_RESPONSE_REDIRECTED_INDEX, field_value.out()) == INOX_OK &&
+    field_value.tag == INOX_TAG_BOOL
+  ) {
+    redirected = field_value.as.boolean;
+  }
+
+  if (
+    inox_object_get_known(value_, INOX_FETCH_RESPONSE_HEADERS_INDEX, field_value.out()) == INOX_OK &&
+    fetch_is_object(field_value.raw())
+  ) {
+    headers = FetchHeaders(field_value);
   }
 }
 
@@ -2027,38 +2167,18 @@ Promise fetch(StringView url) {
   return adopt(promise);
 }
 
-Promise fetch(StringView url, const FetchInit* init) {
+Promise fetch(StringView url, const Value& init) {
   inox_promise* promise = nullptr;
   FetchNativeInit native_init = {};
   std::vector<FetchNativeHeader> native_headers;
-  const FetchNativeInit* native_init_ptr = nullptr;
+  Uint8Array body_storage;
 
-  if (init != nullptr) {
-    native_headers.reserve(init->header_count);
-
-    for (size_t index = 0; index < init->header_count; ++index) {
-      const FetchHeader& header = init->headers[index];
-      native_headers.push_back({
-        header.name.bytes,
-        header.name.len,
-        header.value.bytes,
-        header.value.len
-      });
-    }
-
-    native_init.method = init->method.bytes;
-    native_init.method_len = init->method.len;
-    native_init.headers = native_headers.data();
-    native_init.header_count = native_headers.size();
-    native_init.body = init->body.bytes;
-    native_init.body_len = init->body.len;
-    native_init.signal = init->signal.raw();
-    native_init.redirect = init->redirect.bytes;
-    native_init.redirect_len = init->redirect.len;
-    native_init_ptr = &native_init;
+  if (!fetch_prepare_init(init, &native_init, &native_headers, body_storage)) {
+    throw_value(Value());
+    return Promise();
   }
 
-  if (fetch_backend_with_init(loop(), url.bytes, url.len, native_init_ptr, &promise) != INOX_OK) {
+  if (fetch_backend_with_init(loop(), url.bytes, url.len, &native_init, &promise) != INOX_OK) {
     return Promise();
   }
 

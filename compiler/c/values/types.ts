@@ -22,7 +22,6 @@ import {
 import { isMemberAccessExpression, resolveKnownObjectMember, resolveObjectExpressionMember, isIndexAccessExpression, resolveKnownObjectIndex, resolveObjectExpressionIndex } from './objects.ts'
 
 export type CExpressionTypeDependencies = {
-  cFetchRuntimeExpressionMethod: (expression: AnyNode) => string | null
   cJsonRuntimeCallName: (callee: AnyNode) => string | null
   cPromiseRuntimeCallName: (callee: AnyNode) => string | null
   collectionConstructorName: (expression: AnyNode) => string | null
@@ -31,7 +30,6 @@ export type CExpressionTypeDependencies = {
   isArrayJoinCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isArrayLengthExpression: (expression: AnyNode, context: CFunctionContext) => boolean
   isClassConstructorExpression: (expression: AnyNode, context: CFunctionContext) => boolean
-  isFetchAbortControllerConstructorExpression: (expression: AnyNode) => boolean
   isIndexAccessExpression: (expression: AnyNode) => boolean
   isMemberAccessExpression: (expression: AnyNode) => boolean
   isNumberToStringCall: (expression: AnyNode, context: CFunctionContext) => boolean
@@ -506,14 +504,6 @@ export function inferExpressionType(
     return cValueTypeOrUnknown(expression)
   }
 
-  if (expression.type === 'CallExpression' && deps.cFetchRuntimeExpressionMethod(expression)) {
-    if (expression.valueType === 'promise') {
-      return 'promise'
-    }
-
-    return cValueTypeOrUnknown(expression)
-  }
-
   if (expression.type === 'CallExpression') {
     const jsonCall = deps.cJsonRuntimeCallName(expression.callee)
 
@@ -576,10 +566,6 @@ export function inferExpressionType(
 
   if (deps.isNumberToStringCall(expression, context)) {
     return 'string'
-  }
-
-  if (deps.isFetchAbortControllerConstructorExpression(expression)) {
-    return 'object'
   }
 
   if (expression.type === 'NewExpression' && deps.collectionConstructorName(expression) === 'Map') {

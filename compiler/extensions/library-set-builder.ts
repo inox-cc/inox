@@ -9,6 +9,7 @@ import type {
   LibraryDeclarationDescriptor,
   LibraryCallbackParameterDescriptor,
   LibraryNativeTypeDescriptor,
+  LibraryObjectLiteralFieldDescriptor,
   LibraryOptionDescriptor,
   LibraryOptionScalar,
   LibraryNestedResultShapeFieldDescriptor,
@@ -1213,6 +1214,7 @@ function operationArgumentChecksFingerprint(
         (check.arrayLiteralRequired === true ? 'literal' : '') + ':' +
         sortedStrings(check.arrayElementValueTypes ?? []).join(',') + ':' +
         sortedStrings(check.stringLiterals ?? []).join(',') + ':' +
+        stringPrefixBackendConstraintsFingerprint(check.stringPrefixBackendConstraints ?? []) + ':' +
         (check.literalDiagnosticCode ?? '') + ':' + (check.literalDiagnosticMessage ?? '')
         + ':' + objectLiteralFieldsFingerprint(check.objectLiteralFields ?? []) + ':' +
         callbackParametersFingerprint(check.functionParameters ?? []) + ':' +
@@ -1363,7 +1365,7 @@ function fingerprintAtom(value: string): string {
   return `${value.length}:${value}`
 }
 
-function objectLiteralFieldsFingerprint(fields: { name: string; valueTypes: string[]; booleanLiterals?: boolean[]; stringLiterals?: string[]; optional?: boolean }[]): string {
+function objectLiteralFieldsFingerprint(fields: LibraryObjectLiteralFieldDescriptor[]): string {
   const rows: string[] = []
 
   for (let index = 0; index < fields.length; index = index + 1) {
@@ -1372,7 +1374,34 @@ function objectLiteralFieldsFingerprint(fields: { name: string; valueTypes: stri
       field.name + ':' + sortedStrings(field.valueTypes).join(',') + ':' +
         sortedBooleans(field.booleanLiterals ?? []).join(',') + ':' +
         sortedStrings(field.stringLiterals ?? []).join(',') + ':' +
+        (field.objectLiteralRequired === true ? 'literal' : '') + ':' +
+        (field.objectFieldValueType ?? '') + ':' +
+        sortedStrings(field.objectTypeIds ?? []).join(',') + ':' +
         (field.optional === true ? 'optional' : 'required')
+    )
+  }
+
+  rows.sort()
+  return rows.join(';')
+}
+
+function stringPrefixBackendConstraintsFingerprint(
+  constraints: {
+    prefixes: string[]
+    option: string
+    allowedValues: string[]
+    diagnosticCode: string
+    diagnosticMessage: string
+  }[]
+): string {
+  const rows: string[] = []
+
+  for (let index = 0; index < constraints.length; index = index + 1) {
+    const constraint = constraints[index]
+    rows.push(
+      sortedStrings(constraint.prefixes).join(',') + ':' + constraint.option + ':' +
+        sortedStrings(constraint.allowedValues).join(',') + ':' +
+        constraint.diagnosticCode + ':' + constraint.diagnosticMessage
     )
   }
 

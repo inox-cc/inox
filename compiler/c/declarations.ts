@@ -566,7 +566,6 @@ function isContextDeclaredType(value: string): boolean {
     value === 'CallbackFunctionContext' ||
     value === 'ClassFunctionContext' ||
     value === 'CollectionFunctionContext' ||
-    value === 'FetchFunctionContext' ||
     value === 'NullableFunctionContext' ||
     value === 'PromiseEmitContext' ||
     value === 'PromiseFunctionContext' ||

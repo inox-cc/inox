@@ -314,8 +314,6 @@ export type StatementLoweringDependencies = {
   ): string[]
   emitDynamicObjectFieldAssignment(expression: StatementNode, context: CFunctionContext): string[] | null
   emitFailureStatement(context: CFunctionContext): string
-  emitFetchAbortControllerVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] | null
-  emitFetchAbortControllerAbortStatement(expression: StatementNode, context: CFunctionContext): string[] | null
   emitFunctionPointerVariable(
     name: string,
     init: StatementNode,
@@ -397,16 +395,6 @@ export type StatementLoweringDependencies = {
     options?: PreparedCallOptions
   ): PreparedExpression | null
   emitPreparedCollectionCallExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedFetchCallExpression(
-    expression: StatementNode,
-    context: CFunctionContext,
-    options?: PreparedCallOptions
-  ): PreparedExpression | null
-  emitPreparedFetchHeadersCallExpression(
-    expression: StatementNode,
-    context: CFunctionContext,
-    options?: PreparedCallOptions
-  ): PreparedExpression | null
   emitPreparedMapIndexAssignment(expression: StatementNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNumberExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression
   emitPreparedInlineObjectRuntimeCallExpression(
@@ -2582,16 +2570,6 @@ function emitPreparedForInitializer(
 
 function emitPreparedForVariableDeclaration(statement: StatementNode, context: CFunctionContext): PreparedExpression {
   const deps = statementDeps(context)
-  const fetchCall = deps.emitPreparedFetchCallExpression(statement.init, context, preparedCallOut(statement.name))
-
-  if (fetchCall !== null && typeof fetchCall !== 'undefined') {
-    registerPromiseVariableMetadata(statement, fetchCall, context)
-    return {
-      lines: fetchCall.lines,
-      expression: ''
-    }
-  }
-
   const promiseConstructor = deps.emitPreparedPromiseConstructorExpression(
     statement.init,
     context,
@@ -3954,12 +3932,6 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     }
   }
 
-  const fetchAbortController = deps.emitFetchAbortControllerVariableDeclaration(statement, context)
-
-  if (fetchAbortController !== null && typeof fetchAbortController !== 'undefined') {
-    return fetchAbortController
-  }
-
   if (statement.init === null || typeof statement.init === 'undefined') {
     return deps.emitScalarVariableDeclaration(statement, context)
   }
@@ -4022,13 +3994,6 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
   if (promiseMethod !== null && typeof promiseMethod !== 'undefined') {
     registerPromiseVariableMetadata(statement, promiseMethod, context)
     return promiseMethod.lines
-  }
-
-  const fetchCall = deps.emitPreparedFetchCallExpression(statement.init, context, preparedCallOut(statement.name))
-
-  if (fetchCall !== null && typeof fetchCall !== 'undefined') {
-    registerPromiseVariableMetadata(statement, fetchCall, context)
-    return fetchCall.lines
   }
 
   const promiseConstructor = deps.emitPreparedPromiseConstructorExpression(
@@ -4105,17 +4070,6 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
 
   if (arraySortCall !== null && typeof arraySortCall !== 'undefined') {
     return deps.emitArraySortVariableDeclaration(statement, arraySortCall, context)
-  }
-
-  const fetchHeadersCall = deps.emitPreparedFetchHeadersCallExpression(
-    statement.init,
-    context,
-    preparedCallOut(statement.name)
-  )
-
-  if (fetchHeadersCall !== null && typeof fetchHeadersCall !== 'undefined' && statement.valueType === 'boolean') {
-    context.variables.set(statement.name, 'boolean')
-    return fetchHeadersCall.lines
   }
 
   const statementValueType = statement.valueType
@@ -4576,12 +4530,6 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
       return lines
     }
 
-    const fetchAbortCall = deps.emitFetchAbortControllerAbortStatement(expression, context)
-
-    if (fetchAbortCall !== null && typeof fetchAbortCall !== 'undefined') {
-      return fetchAbortCall
-    }
-
     if (deps.isArrayMethodCall(expression)) {
       pushDiagnostic(
         context,
@@ -4598,12 +4546,6 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
 
     if (collectionCall !== null && typeof collectionCall !== 'undefined') {
       return collectionCall.lines
-    }
-
-    const fetchCall = deps.emitPreparedFetchCallExpression(expression, context)
-
-    if (fetchCall !== null && typeof fetchCall !== 'undefined') {
-      return fetchCall.lines
     }
 
     const promise = deps.emitPreparedPromiseStaticExpression(expression, context)

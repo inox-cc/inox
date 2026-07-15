@@ -128,18 +128,8 @@ import {
 import {
   emitRuntimeNullableValueCheck,
   emitRuntimeValueCheck,
-  runtimeFetchAbortControllerValueMismatchCondition,
   runtimeObjectLikeValueMismatchCondition
 } from './runtime-values.ts'
-import type { FetchLoweringDependencies } from '../../stdlib/global/compiler/c.ts'
-import {
-  cFetchRuntimeExpressionMethod,
-  emitFetchHeadersBooleanVariableDeclaration,
-  emitPreparedFetchCallExpression,
-  emitPreparedFetchHeadersCallExpression,
-  emitPreparedFetchInitOperand,
-  isAsyncFetchRuntimeCallExpression
-} from '../../stdlib/global/compiler/c.ts'
 import type { JsonClassInstanceOperand, JsonDeclarationDependencies } from '../../stdlib/global/compiler/c.ts'
 import {
   cJsonRuntimeCallName,
@@ -445,7 +435,6 @@ let objectExpressionFieldDependencies: ObjectExpressionFieldDependencies = {
   inferExpressionType
 }
 let jsonDeclarationDependencies = {} as JsonDeclarationDependencies
-let fetchLoweringDependencies = {} as FetchLoweringDependencies
 let compilerLibraryLoweringDependencies = {} as CompilerLibraryLoweringDependencies
 let promiseLoweringDependencies = {} as PromiseLoweringDependencies
 
@@ -477,8 +466,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitDynamicObjectFieldAssignment: (expression: CDynamicObjectFieldNode, context: CFunctionContext) =>
     emitDynamicObjectFieldAssignment(expression, context, objectExpressionFieldDependencies),
   emitFailureStatement,
-  emitFetchAbortControllerVariableDeclaration,
-  emitFetchAbortControllerAbortStatement,
   emitFunctionPointerVariable,
   emitJsonParseVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
     emitJsonParseVariableDeclaration(statement, context, jsonDeclarationDependencies),
@@ -505,13 +492,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitPreparedCallExpression,
   emitPreparedClassMethodCallExpression,
   emitPreparedCollectionCallExpression,
-  emitPreparedFetchCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
-    emitPreparedFetchCallExpression(expression, context, fetchLoweringDependencies, options),
-  emitPreparedFetchHeadersCallExpression: (
-    expression: AnyNode,
-    context: CFunctionContext,
-    options?: PreparedCallOptions
-  ) => emitPreparedFetchHeadersCallExpression(expression, context, fetchLoweringDependencies, options),
   emitPreparedMapIndexAssignment,
   emitPreparedNumberExpression,
   emitPreparedInlineObjectRuntimeCallExpression,
@@ -742,13 +722,6 @@ function emitPreparedJsonClassInstanceOperand(
   }
 }
 
-fetchLoweringDependencies = {
-  emitCValueExpression,
-  emitPreparedStringBytesOperand,
-  findObjectLiteralPropertyValue,
-  inferExpressionType
-}
-
 compilerLibraryLoweringDependencies = {
   emitCValueExpression,
   emitPreparedNumberFromStringExpression,
@@ -762,7 +735,6 @@ compilerLibraryLoweringDependencies = {
 }
 
 const rejectionValueTypeDependencies: RejectionValueTypeDependencies = {
-  cFetchRuntimeExpressionMethod,
   cPromiseRuntimeCallName,
   inferExpressionType,
   isKnownExceptionValueExpression
@@ -773,8 +745,6 @@ promiseLoweringDependencies = {
   emitPreparedAsyncFunctionPromiseCallExpression,
   emitPreparedCallExpression,
   emitPreparedCompilerLibraryCallExpression,
-  emitPreparedFetchCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
-    emitPreparedFetchCallExpression(expression, context, fetchLoweringDependencies, options),
   emitRuntimeArrowCaptureStoreLines,
   emitStatementList,
   inferExpressionType,
@@ -919,8 +889,7 @@ function isConfiguredExternalEventLoopCallExpression(
 ): boolean {
   return (
     isCompilerLibraryExternalEventLoopCallExpression(expression) ||
-    isCompilerLibraryPromiseExpression(expression) ||
-    isAsyncFetchRuntimeCallExpression(expression)
+    isCompilerLibraryPromiseExpression(expression)
   )
 }
 
@@ -973,8 +942,6 @@ const asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies = {
   emitPreparedCallArgs,
   emitPreparedCallExpression,
   emitPreparedCompilerLibraryCallExpression,
-  emitPreparedFetchInitOperand: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedFetchInitOperand(expression, context, fetchLoweringDependencies),
   emitPreparedNumberExpression,
   emitPreparedStringBytesOperand,
   emitRuntimeArrowCaptureStoreLines,
@@ -1007,7 +974,6 @@ const declarationEmissionDependencies = {
 }
 
 const expressionTypeDependencies = {
-  cFetchRuntimeExpressionMethod,
   cJsonRuntimeCallName,
   cPromiseRuntimeCallName,
   collectionConstructorName,
@@ -1016,7 +982,6 @@ const expressionTypeDependencies = {
   isArrayJoinCall,
   isArrayLengthExpression,
   isClassConstructorExpression,
-  isFetchAbortControllerConstructorExpression,
   isIndexAccessExpression,
   isMemberAccessExpression,
   isNumberToStringCall,
@@ -1066,8 +1031,6 @@ const cCallExpressionDependencies = {
   emitPreparedArraySortCallExpression,
   emitPreparedClassMethodCallExpression,
   emitPreparedCollectionCallExpression,
-  emitPreparedFetchHeadersCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedFetchHeadersCallExpression(expression, context, fetchLoweringDependencies),
   emitPreparedJsonCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedJsonCallExpression(expression, context, jsonDeclarationDependencies, null),
   emitPreparedNumberExpression,
@@ -1183,8 +1146,6 @@ const cValueExpressionDependencies = {
   emitPreparedCollectionCallExpression,
   emitPreparedCollectionConstructorValueExpression,
   emitPreparedCollectionSizeExpression,
-  emitPreparedFetchHeadersCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedFetchHeadersCallExpression(expression, context, fetchLoweringDependencies),
   emitPreparedJsonCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedJsonCallExpression(expression, context, jsonDeclarationDependencies, null),
   emitPreparedKnownArrayIndexValueExpression,
@@ -2723,16 +2684,6 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
     lines.push(`${uninitializedDeclarationPrefix(statement)}double ${emitCIdentifier(statement.name)} = ${arrayReduceCall.expression};`)
 
     return lines
-  }
-
-  const fetchHeadersBooleanDeclaration = emitFetchHeadersBooleanVariableDeclaration(
-    statement,
-    context,
-    fetchLoweringDependencies
-  )
-
-  if (fetchHeadersBooleanDeclaration !== null && typeof fetchHeadersBooleanDeclaration !== 'undefined') {
-    return fetchHeadersBooleanDeclaration
   }
 
   const inferred = inferScalarDeclarationValueType(statement, context)
@@ -6593,12 +6544,6 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): For
       }
     }
 
-    const fetchResponseMember = emitFetchResponseScalarMemberLogValue(expression, context)
-
-    if (fetchResponseMember !== null && typeof fetchResponseMember !== 'undefined') {
-      return fetchResponseMember
-    }
-
     const member = resolveKnownObjectMember(expression, context)
 
     if (member !== null && typeof member !== 'undefined' && isNullableScalarType(member.valueType)) {
@@ -6700,12 +6645,6 @@ function emitBooleanLogValue(expression: AnyNode, context: CFunctionContext): Fo
       }
     }
 
-    const fetchResponseMember = emitFetchResponseBooleanMemberLogValue(expression, context)
-
-    if (fetchResponseMember !== null && typeof fetchResponseMember !== 'undefined') {
-      return fetchResponseMember
-    }
-
     const member = resolveKnownObjectMember(expression, context)
 
     if (member !== null && typeof member !== 'undefined' && member.valueType === 'boolean') {
@@ -6754,70 +6693,6 @@ function emitBooleanLogValue(expression: AnyNode, context: CFunctionContext): Fo
     format: formattedOutputBooleanFormat,
     values: [value.expression]
   }
-}
-
-function emitFetchResponseScalarMemberLogValue(expression: AnyNode, context: CFunctionContext): FormattedOutputValue | null {
-  if (expression.type !== 'MemberExpression' || expression.object.type !== 'Reference') {
-    return null
-  }
-
-  if (expression.object.path.length !== 1) {
-    return null
-  }
-
-  const objectName = expression.object.path[0]
-
-  if (context.objectDeclaredTypes.get(objectName) !== 'fetch.Response') {
-    return null
-  }
-
-  const reference = emitCIdentifier(objectName)
-
-  if (expression.property === 'status') {
-    return {
-      lines: [],
-      format: formattedOutputNumberFormat,
-      values: [`${reference}.status()`]
-    }
-  }
-
-  return null
-}
-
-function emitFetchResponseBooleanMemberLogValue(expression: AnyNode, context: CFunctionContext): FormattedOutputValue | null {
-  if (expression.type !== 'MemberExpression' || expression.object.type !== 'Reference') {
-    return null
-  }
-
-  if (expression.object.path.length !== 1) {
-    return null
-  }
-
-  const objectName = expression.object.path[0]
-
-  if (context.objectDeclaredTypes.get(objectName) !== 'fetch.Response') {
-    return null
-  }
-
-  const reference = emitCIdentifier(objectName)
-
-  if (expression.property === 'ok') {
-    return {
-      lines: [],
-      format: formattedOutputBooleanFormat,
-      values: [`${reference}.ok()`]
-    }
-  }
-
-  if (expression.property === 'redirected') {
-    return {
-      lines: [],
-      format: formattedOutputBooleanFormat,
-      values: [`${reference}.redirected()`]
-    }
-  }
-
-  return null
 }
 
 function emitModuleRuntimeScalarLogValue(expression: AnyNode, context: CFunctionContext): FormattedOutputValue | null {
@@ -7167,40 +7042,6 @@ function emitPreparedCallArgs(
   context: CFunctionContext
 ): PreparedCallArgs {
   return emitPreparedCallArgsWithDependencies(expression, params, context, cCallExpressionDependencies)
-}
-
-function emitFetchAbortControllerVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null {
-  if (!isFetchAbortControllerConstructorExpression(statement.init)) {
-    return null
-  }
-
-  context.variables.set(statement.name, 'object')
-  registerObjectShape(context, statement.name, statement.shape)
-
-  const lines: string[] = []
-
-  lines.push(`inox::AbortController ${emitCIdentifier(statement.name)};`)
-  pushAll(lines, emitThrownCheckLines(context))
-
-  return lines
-}
-
-function emitFetchAbortControllerAbortStatement(expression: AnyNode, context: CFunctionContext): string[] | null {
-  if (cFetchRuntimeExpressionMethod(expression) !== 'abort') {
-    return null
-  }
-
-  const controller = emitCValueExpression(expression.callee.object, context)
-  const lines: string[] = []
-
-  pushAll(lines, controller.lines)
-  lines.push(
-    emitRuntimeTypeCheck(runtimeFetchAbortControllerValueMismatchCondition(controller.expression), context)
-  )
-  lines.push(`inox::AbortController(${controller.expression}).abort();`)
-  pushAll(lines, emitThrownCheckLines(context))
-
-  return lines
 }
 
 function emitPreparedAsyncFunctionPromiseCallExpression(
@@ -7570,14 +7411,6 @@ function emitPreparedAwaitPromiseExpression(expression: AnyNode, context: CFunct
 }
 
 function emitPreparedAwaitValuePromiseExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null {
-  const fetchPromise = emitPreparedFetchCallExpression(expression.argument, context, fetchLoweringDependencies, {
-    cppExpression: true
-  })
-
-  if (fetchPromise !== null && typeof fetchPromise !== 'undefined') {
-    return preparedExpressionOrEmpty(fetchPromise)
-  }
-
   const promise = emitPreparedAwaitPromiseExpression(expression.argument, context)
 
   if (promise !== null && typeof promise !== 'undefined') {
@@ -7638,6 +7471,10 @@ function emitAwaitValueVariableDeclaration(statement: AnyNode, context: CFunctio
     context.cppStringValues.add(statement.name)
   } else {
     registerRuntimeValueMetadata(statement.name, valueType, statement, expression, context)
+
+    if (valueInfo.cppType !== 'inox::Value') {
+      context.cppValueTypes.set(statement.name, valueInfo.cppType)
+    }
   }
 
   return lines
@@ -7648,14 +7485,6 @@ function emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContex
 
   if (asyncCall !== null && typeof asyncCall !== 'undefined') {
     return asyncCall
-  }
-
-  const fetchPromise = emitPreparedFetchCallExpression(expression.argument, context, fetchLoweringDependencies, {
-    cppExpression: true
-  })
-
-  if (fetchPromise !== null && typeof fetchPromise !== 'undefined') {
-    return emitPreparedAwaitedPromiseValueExpression(expression, fetchPromise, context)
   }
 
   const promise = emitPreparedAwaitPromiseExpression(expression.argument, context)
@@ -7777,14 +7606,6 @@ function resolveAwaitResultCppValueInfo(
   valueCheckNeeded: boolean,
   context: CFunctionContext
 ): AwaitResultCppValueInfo {
-  if (isFetchResponseAwaitExpression(expression)) {
-    return {
-      cppType: 'inox::FetchResponse',
-      runtimeTypeChecked: true,
-      valueCheck: ''
-    }
-  }
-
   if (valueType === 'string') {
     return {
       cppType: 'inox::String',
@@ -7829,22 +7650,6 @@ function resolveAwaitResultCppValueInfo(
     runtimeTypeChecked: true,
     valueCheck: emitRuntimeValueCheck(valueExpression, valueTag, context)
   }
-}
-
-function isFetchResponseAwaitExpression(expression: AnyNode): boolean {
-  if (expression.shape !== null && typeof expression.shape !== 'undefined' && expression.shape.builtin === 'fetch.Response') {
-    return true
-  }
-
-  const argument = expression.argument
-
-  return (
-    argument !== null &&
-    typeof argument !== 'undefined' &&
-    argument.shape !== null &&
-    typeof argument.shape !== 'undefined' &&
-    argument.shape.builtin === 'fetch.Response'
-  )
 }
 
 function emitAwaitResultRejectedPromiseLines(
@@ -8693,21 +8498,6 @@ function resolveFunctionParams(callee: CAccessorNode, context: FunctionParamCont
 
 function inferExpressionType(expression: AnyNode, context: CFunctionContext): string {
   return inferExpressionTypeWithDependencies(expression, context, expressionTypeDependencies)
-}
-
-function isFetchAbortControllerConstructorExpression(expression: AnyNode): boolean {
-  if (
-    expression === null ||
-    typeof expression === 'undefined' ||
-    expression.type !== 'NewExpression' ||
-    expression.callee.type !== 'Reference'
-  ) {
-    return false
-  }
-
-  const path: string[] = expression.callee.path
-
-  return path.length === 1 && path[0] === 'AbortController'
 }
 
 function isArrayIsArrayCall(expression: AnyNode): boolean {

@@ -163,7 +163,6 @@ export function emitCPrelude(
   needsSetRuntime: boolean,
   needsObjectRuntime: boolean,
   needsJsonRuntime: boolean,
-  needsFetchRuntime: boolean,
   libraryCPreludeIncludes: string[]
 ): string[] {
   const systemIncludes = ['#include <stdio.h>', '#include <math.h>']
@@ -179,10 +178,6 @@ export function emitCPrelude(
 
   if (needsClassDescriptorRuntime) {
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/class_runtime.h"')
-  }
-
-  if (needsFetchRuntime) {
-    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/fetch.h"')
   }
 
   pushLibraryCPreludeIncludes(systemIncludes, localIncludes, libraryCPreludeIncludes)

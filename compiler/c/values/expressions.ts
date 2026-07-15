@@ -1675,7 +1675,6 @@ function isContextDeclaredType(value: string): boolean {
     value === 'CallbackFunctionContext' ||
     value === 'ClassFunctionContext' ||
     value === 'CollectionFunctionContext' ||
-    value === 'FetchFunctionContext' ||
     value === 'NullableFunctionContext' ||
     value === 'PromiseEmitContext' ||
     value === 'PromiseFunctionContext' ||
@@ -1915,7 +1914,6 @@ export type CCallExpressionDependencies = {
     options?: PreparedCallOptions
   ): PreparedExpression | null
   emitPreparedCollectionCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedFetchHeadersCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedJsonCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNumberExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedPromiseMethodExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
@@ -2025,12 +2023,6 @@ export function emitPreparedCallExpression(
 
   if (collectionCall !== null && typeof collectionCall !== 'undefined') {
     return collectionCall
-  }
-
-  const fetchHeadersCall = deps.emitPreparedFetchHeadersCallExpression(expression, context)
-
-  if (fetchHeadersCall !== null && typeof fetchHeadersCall !== 'undefined') {
-    return fetchHeadersCall
   }
 
   const jsonCall = deps.emitPreparedJsonCallExpression(expression, context)
@@ -3046,12 +3038,6 @@ export function emitPreparedNumberExpression(
 
     if (nativeClassField !== null && typeof nativeClassField !== 'undefined') {
       return nativeClassField
-    }
-
-    const fetchResponseMember = emitPreparedFetchResponseScalarMemberExpression(expression, context)
-
-    if (fetchResponseMember !== null && typeof fetchResponseMember !== 'undefined') {
-      return fetchResponseMember
     }
 
     const member = deps.resolveKnownObjectMember(expression, context)
@@ -4784,50 +4770,6 @@ function numericIntegerCastLimits(cast: string): NumericIntegerCastLimits | null
   return null
 }
 
-function emitPreparedFetchResponseScalarMemberExpression(
-  expression: CValueNode,
-  context: CFunctionContext
-): PreparedExpression | null {
-  if (expression.type !== 'MemberExpression' || expression.object.type !== 'Reference') {
-    return null
-  }
-
-  if (expression.object.path.length !== 1) {
-    return null
-  }
-
-  const objectName = expression.object.path[0]
-
-  if (context.objectDeclaredTypes.get(objectName) !== 'fetch.Response') {
-    return null
-  }
-
-  const reference = emitCIdentifier(objectName)
-
-  if (expression.property === 'status') {
-    return {
-      lines: [],
-      expression: `${reference}.status()`
-    }
-  }
-
-  if (expression.property === 'ok') {
-    return {
-      lines: [],
-      expression: `(${reference}.ok() ? 1 : 0)`
-    }
-  }
-
-  if (expression.property === 'redirected') {
-    return {
-      lines: [],
-      expression: `(${reference}.redirected() ? 1 : 0)`
-    }
-  }
-
-  return null
-}
-
 export function emitPreparedUpdateExpression(
   expression: CValueNode,
   context: CFunctionContext,
@@ -4917,7 +4859,6 @@ export type CValueExpressionDependencies = {
     context: CFunctionContext
   ): PreparedExpression | null
   emitPreparedCollectionSizeExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedFetchHeadersCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedJsonCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedKnownArrayIndexValueExpression(
     expression: CValueNode,
@@ -5019,12 +4960,6 @@ export function emitCValueExpression(
 
   if (libraryExpression !== null) {
     return libraryExpression
-  }
-
-  const fetchHeadersCall = deps.emitPreparedFetchHeadersCallExpression(expression, context)
-
-  if (fetchHeadersCall !== null && typeof fetchHeadersCall !== 'undefined') {
-    return fetchHeadersCall
   }
 
   const jsonCall = deps.emitPreparedJsonCallExpression(expression, context)

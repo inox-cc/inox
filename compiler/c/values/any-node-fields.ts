@@ -22,7 +22,6 @@ export const compilerAnyNodeStringFields: readonly string[] = [
   'promiseRejectionIntrinsicRole',
   'setElementType',
   'propertyValueType',
-  'fetchRuntimeMethod',
   'jsonRuntimeMethod',
   'libraryBindingId',
   'libraryOperationId',

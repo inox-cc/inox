@@ -8,20 +8,9 @@ import {
   isMatchingSwitchCaseType,
   isSwitchableType
 } from './checker/assignability.ts'
+import { builtinGlobalSymbol, libuvOnlyRuntimeImportFeature } from './checker/builtins.ts'
 import {
-  builtinGlobalSymbol,
-  fetchAbortControllerObjectShape,
-  libuvOnlyRuntimeImportFeature
-} from './checker/builtins.ts'
-import {
-  fetchAbortControllerConstructorName,
-  fetchAbortControllerRuntimeMethod,
-  fetchHeadersRuntimeMethodName,
-  fetchResponseBodyMethodInfo,
-  fetchRuntimeCallName,
   isJsonParseDeclaredType,
-  isFetchUnsupportedResponseBodyMember,
-  isSupportedFetchRedirectLiteral,
   jsonRuntimeMethodName
 } from '../stdlib/global/compiler/checker.ts'
 import { applyCallableSymbolCall as applyCallableSymbolCallInContext } from './checker/callable-symbols.ts'
@@ -108,20 +97,6 @@ import {
   isSimpleArrayMethod
 } from './checker/array-calls.ts'
 import type { ArrayCallCheckerContext, CheckedArrayArgInfo, CheckedArrayCallInfo } from './checker/array-calls.ts'
-import {
-  checkFetchAbortControllerMethodCall as checkFetchAbortControllerMethodCallInContext,
-  checkFetchCall as checkFetchCallInContext,
-  checkFetchHeadersMethodCall as checkFetchHeadersMethodCallInContext,
-  checkFetchResponseMethodCall as checkFetchResponseMethodCallInContext,
-  checkFetchUnsupportedResponseBodyMember as checkFetchUnsupportedResponseBodyMemberInContext
-} from './checker/fetch-calls.ts'
-import type {
-  CheckedFetchHeaderInfo,
-  CheckedFetchInitInfo,
-  CheckedFetchInitPropertyInfo,
-  CheckedFetchReceiverInfo,
-  FetchCallCheckerContext
-} from './checker/fetch-calls.ts'
 import {
   checkArrayIsArrayCall as checkArrayIsArrayCallInContext,
   checkObjectStaticCall as checkObjectStaticCallInContext,
@@ -2663,12 +2638,6 @@ class Checker {
       return libraryMemberType
     }
 
-    const unsupportedFetchBodyType = this.checkFetchUnsupportedResponseBodyMember(expression)
-
-    if (unsupportedFetchBodyType !== null && typeof unsupportedFetchBodyType !== 'undefined') {
-      return unsupportedFetchBodyType
-    }
-
     const objectType = this.checkExpression(expression.object)
 
     const optionalChainReceiver = isOptionalChainProtectedExpression(expression.object)
@@ -3771,30 +3740,6 @@ class Checker {
       return promiseMethodType
     }
 
-    const fetchAbortControllerMethodType = this.checkFetchAbortControllerMethodCall(expression)
-
-    if (fetchAbortControllerMethodType !== null && typeof fetchAbortControllerMethodType !== 'undefined') {
-      return fetchAbortControllerMethodType
-    }
-
-    const fetchResponseMethodType = this.checkFetchResponseMethodCall(expression)
-
-    if (fetchResponseMethodType !== null && typeof fetchResponseMethodType !== 'undefined') {
-      return fetchResponseMethodType
-    }
-
-    const fetchHeadersMethodType = this.checkFetchHeadersMethodCall(expression)
-
-    if (fetchHeadersMethodType !== null && typeof fetchHeadersMethodType !== 'undefined') {
-      return fetchHeadersMethodType
-    }
-
-    const fetchType = this.checkFetchCall(expression)
-
-    if (fetchType !== null && typeof fetchType !== 'undefined') {
-      return fetchType
-    }
-
     const jsonType = this.checkJsonCall(expression, null)
 
     if (jsonType !== null && typeof jsonType !== 'undefined') {
@@ -4108,6 +4053,8 @@ class Checker {
         )
       }
 
+      this.checkCompilerLibraryStringPrefixBackendConstraints(argument, check)
+
       if (
         check.arrayLiteralRequired === true &&
         info.arrayElementType !== null &&
@@ -4397,6 +4344,49 @@ class Checker {
           property.value.loc
         )
       }
+
+      if (field.objectLiteralRequired === true && property.value.type !== 'ObjectLiteral') {
+        this.report(
+          'INOX_NOT_IMPLEMENTED',
+          `library operation ${operation.operationId} option ${field.name} currently requires an object literal`,
+          property.value.loc
+        )
+      }
+
+      const objectFieldValueType = field.objectFieldValueType
+
+      if (objectFieldValueType !== null && typeof objectFieldValueType !== 'undefined') {
+        this.checkCompilerLibraryObjectFieldValueTypes(property.value, objectFieldValueType)
+      }
+
+      const objectTypeIds = field.objectTypeIds ?? []
+
+      if (objectTypeIds.length > 0) {
+        const shape = this.resolveExpressionShape(property.value)
+        const objectTypeId = shape?.libraryTypeId
+        let assignable = false
+
+        for (let typeIndex = 0; typeIndex < objectTypeIds.length; typeIndex = typeIndex + 1) {
+          if (
+            compilerLibraryNativeTypeIsAssignable(
+              resolveCompilerLibrarySet(this.options.libraries),
+              objectTypeId,
+              objectTypeIds[typeIndex]
+            )
+          ) {
+            assignable = true
+            break
+          }
+        }
+
+        if (!assignable) {
+          this.report(
+            'INOX_TYPE_MISMATCH',
+            `library operation ${operation.operationId} option ${field.name} does not accept this object type`,
+            property.value.loc
+          )
+        }
+      }
     }
 
     for (let fieldIndex = 0; fieldIndex < fields.length; fieldIndex = fieldIndex + 1) {
@@ -4408,6 +4398,73 @@ class Checker {
           `library operation ${operation.operationId} requires option ${field.name}`,
           argument.loc
         )
+      }
+    }
+  }
+
+  checkCompilerLibraryObjectFieldValueTypes(argument: AnyNode, expectedValueType: string): void {
+    if (argument.type === 'ObjectLiteral') {
+      const properties: CheckerObjectPropertyNode[] = argument.properties
+
+      for (let fieldIndex = 0; fieldIndex < properties.length; fieldIndex = fieldIndex + 1) {
+        const property = properties[fieldIndex]
+        const actual = this.checkExpression(property.value)
+        this.checkAssignableType(
+          actual,
+          expectedValueType,
+          property.value.loc,
+          false,
+          this.expressionCanBeNull(property.value)
+        )
+      }
+
+      return
+    }
+
+    const shape = this.resolveExpressionShape(argument)
+
+    if (shape === null || typeof shape === 'undefined') {
+      return
+    }
+
+    for (let fieldIndex = 0; fieldIndex < shape.fields.length; fieldIndex = fieldIndex + 1) {
+      const field = shape.fields[fieldIndex]
+      const resolved = this.resolveFieldDeclaredType(field)
+      this.checkAssignableType(resolved.valueType, expectedValueType, argument.loc, false, resolved.nullable)
+    }
+  }
+
+  checkCompilerLibraryStringPrefixBackendConstraints(
+    argument: AnyNode,
+    check: LibraryArgumentCheckDescriptor
+  ): void {
+    if (argument.type !== 'StringLiteral') {
+      return
+    }
+
+    const constraints = check.stringPrefixBackendConstraints ?? []
+
+    for (let constraintIndex = 0; constraintIndex < constraints.length; constraintIndex = constraintIndex + 1) {
+      const constraint = constraints[constraintIndex]
+      let matches = false
+
+      for (let prefixIndex = 0; prefixIndex < constraint.prefixes.length; prefixIndex = prefixIndex + 1) {
+        if (argument.value.slice(0, constraint.prefixes[prefixIndex].length) === constraint.prefixes[prefixIndex]) {
+          matches = true
+          break
+        }
+      }
+
+      if (!matches) {
+        continue
+      }
+
+      const actual = constraint.option === 'tlsBackend'
+        ? this.options.tlsBackend ?? 'none'
+        : this.options.loopBackend ?? 'embedded'
+
+      if (!constraint.allowedValues.includes(actual)) {
+        this.report(constraint.diagnosticCode, constraint.diagnosticMessage, argument.loc)
       }
     }
   }
@@ -4887,108 +4944,6 @@ class Checker {
     return checkObjectStaticCallInContext(this.globalCallContext(), expression, this.checkedCallArgInfos(expression))
   }
 
-  checkFetchCall(expression: AnyNode): ValueType | null {
-    const method = fetchRuntimeCallName(expression.callee, this.scope.resolve('fetch'))
-
-    if (method === null || typeof method === 'undefined') {
-      return null
-    }
-
-    let initInfo: CheckedFetchInitInfo | null = null
-
-    if (expression.args.length > 1) {
-      initInfo = this.checkedFetchInitInfo(checkerNodeAt(expression.args, 1))
-    }
-
-    return checkFetchCallInContext(
-      this.fetchCallContext(),
-      expression,
-      method,
-      this.requireLibuvBackend('fetch', expression.loc),
-      this.supportsFetchHttps(),
-      this.checkedCallArgInfos(expression),
-      initInfo
-    )
-  }
-
-  checkedFetchInitInfo(expression: AnyNode): CheckedFetchInitInfo {
-    if (expression.type !== 'ObjectLiteral') {
-      this.checkExpression(expression)
-
-      return {
-        loc: expression.loc,
-        isObjectLiteral: false,
-        properties: []
-      }
-    }
-
-    const properties: CheckedFetchInitPropertyInfo[] = []
-    const nodeProperties: CheckerObjectPropertyNode[] = expression.properties
-
-    for (const property of nodeProperties) {
-      properties.push(this.checkedFetchInitPropertyInfo(property, property.key === 'headers'))
-    }
-
-    return {
-      loc: expression.loc,
-      isObjectLiteral: true,
-      properties
-    }
-  }
-
-  checkedFetchInitPropertyInfo(
-    property: CheckerObjectPropertyNode,
-    inspectHeaders: boolean
-  ): CheckedFetchInitPropertyInfo {
-    const headers: CheckedFetchHeaderInfo[] = []
-    let valueType: ValueType = 'object'
-    let shape: ObjectShapeInfo | null = null
-
-    if (inspectHeaders && property.value.type === 'ObjectLiteral') {
-      const headerProperties: CheckerObjectPropertyNode[] = property.value.properties
-
-      for (const header of headerProperties) {
-        headers.push(this.checkedFetchHeaderInfo(header))
-      }
-    } else {
-      valueType = this.checkExpression(property.value)
-      shape = this.resolveExpressionShape(property.value)
-    }
-
-    return {
-      key: property.key,
-      loc: property.loc,
-      valueLoc: property.value.loc,
-      valueType,
-      nullable: this.expressionCanBeNull(property.value),
-      shape,
-      valueIsObjectLiteral: property.value.type === 'ObjectLiteral',
-      supportedRedirectLiteral: isSupportedFetchRedirectLiteral(property.value),
-      headers
-    }
-  }
-
-  checkedFetchHeaderInfo(property: CheckerObjectPropertyNode): CheckedFetchHeaderInfo {
-    return {
-      key: property.key,
-      loc: property.loc,
-      nullable: this.expressionCanBeNull(property.value),
-      valueLoc: property.value.loc,
-      valueType: this.checkExpression(property.value)
-    }
-  }
-
-  checkedFetchReceiverInfo(expression: AnyNode): CheckedFetchReceiverInfo {
-    return {
-      valueType: this.checkExpression(expression),
-      shape: this.resolveExpressionShape(expression)
-    }
-  }
-
-  supportsFetchHttps(): boolean {
-    return this.options.tlsBackend === 'boringssl' || this.options.tlsBackend === 'openssl'
-  }
-
   resolveMemberPathRootSymbol(path: readonly string[] | null | undefined): SymbolInfo | null {
     if (path === null || typeof path === 'undefined' || path.length === 0) {
       return null
@@ -5063,66 +5018,6 @@ class Checker {
     )
 
     return false
-  }
-
-  checkFetchAbortControllerMethodCall(expression: AnyNode): ValueType | null {
-    const method =
-      expression.callee.type === 'MemberExpression'
-        ? fetchAbortControllerRuntimeMethod(expression.callee.property)
-        : null
-
-    if (method === null || typeof method === 'undefined') {
-      return null
-    }
-
-    return checkFetchAbortControllerMethodCallInContext(
-      this.fetchCallContext(),
-      expression,
-      method,
-      this.checkedFetchReceiverInfo(expression.callee.object)
-    )
-  }
-
-  checkFetchResponseMethodCall(expression: AnyNode): ValueType | null {
-    const methodInfo =
-      expression.callee.type === 'MemberExpression' ? fetchResponseBodyMethodInfo(expression.callee.property) : null
-
-    if (methodInfo === null || typeof methodInfo === 'undefined') {
-      return null
-    }
-
-    return checkFetchResponseMethodCallInContext(
-      this.fetchCallContext(),
-      expression,
-      methodInfo,
-      this.checkedFetchReceiverInfo(expression.callee.object)
-    )
-  }
-
-  checkFetchUnsupportedResponseBodyMember(expression: AnyNode): ValueType | null {
-    return checkFetchUnsupportedResponseBodyMemberInContext(
-      this.fetchCallContext(),
-      expression,
-      isFetchUnsupportedResponseBodyMember(expression.property),
-      this.checkedFetchReceiverInfo(expression.object)
-    )
-  }
-
-  checkFetchHeadersMethodCall(expression: AnyNode): ValueType | null {
-    const method =
-      expression.callee.type === 'MemberExpression' ? fetchHeadersRuntimeMethodName(expression.callee.property) : null
-
-    if (method === null || typeof method === 'undefined') {
-      return null
-    }
-
-    return checkFetchHeadersMethodCallInContext(
-      this.fetchCallContext(),
-      expression,
-      method,
-      this.checkedFetchReceiverInfo(expression.callee.object),
-      this.checkedCallArgInfos(expression)
-    )
   }
 
   resolveClassMethodReceiverClassName(expression: AnyNode): string | null {
@@ -6395,26 +6290,6 @@ class Checker {
       }
 
       return 'set'
-    }
-
-    if (
-      fetchAbortControllerConstructorName(expression.callee.path, this.scope.resolve('AbortController')) ===
-      'AbortController'
-    ) {
-      this.requireLibuvBackend('AbortController', expression.loc)
-
-      if (expression.args.length !== 0) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `AbortController constructor expects 0 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      expression.fetchRuntimeMethod = 'abortControllerNew'
-      expression.valueType = 'object'
-      expression.shape = fetchAbortControllerObjectShape
-      return 'object'
     }
 
     let symbol = this.scope.resolve(constructorName)
@@ -8797,12 +8672,6 @@ class Checker {
   }
 
   callableSymbolContext(): CallableSymbolCheckerContext {
-    return {
-      diagnostics: this.diagnostics
-    }
-  }
-
-  fetchCallContext(): FetchCallCheckerContext {
     return {
       diagnostics: this.diagnostics
     }

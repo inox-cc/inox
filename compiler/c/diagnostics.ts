@@ -1,7 +1,6 @@
 import { diagnostic } from '../diagnostics.ts'
 import {
   isCollectionConstructorGlobalUsagePath,
-  isFetchGlobalRoot,
   jsonRuntimeMethodNameFromPath
 } from '../../stdlib/global/compiler/descriptor.ts'
 import type { Diagnostic, IrGlobalUsage, IrSyntaxFeatureUsage, SourceLocation } from '../types.ts'
@@ -37,8 +36,7 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
     path === 'Object.keys' ||
     path === 'Object.values' ||
     !!jsonRuntimeMethodNameFromPath(usage.path) ||
-    isCollectionConstructorGlobalUsagePath(usage.path) ||
-    isSupportedCFetchGlobalUsage(usage)
+    isCollectionConstructorGlobalUsagePath(usage.path)
   )
 }
 
@@ -54,10 +52,6 @@ function joinStrings(values: string[], separator: string): string {
   }
 
   return result
-}
-
-export function isSupportedCFetchGlobalUsage(usage: IrGlobalUsage): boolean {
-  return usage.path.length === 1 && isFetchGlobalRoot(usage.path[0])
 }
 
 export function reportCJsGlobalDiagnostic(diagnostics: Diagnostic[], loc: SourceLocation | null | undefined): void {

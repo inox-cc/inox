@@ -1,5 +1,4 @@
 import type { AnyNode, IrGlobalUsage, IrProgram, IrRuntimeRequirement } from '../types.ts'
-import { isSupportedCFetchGlobalUsage } from './diagnostics.ts'
 import type {
   CompilerLibrarySet,
   RuntimeEntrypointAdapterDescriptor,
@@ -18,7 +17,6 @@ export type CRuntimePreludeRequirements = {
   needsSetRuntime: boolean
   needsObjectRuntime: boolean
   needsJsonRuntime: boolean
-  needsFetchRuntime: boolean
   runtimeEntrypointAdapter: RuntimeEntrypointAdapterDescriptor | null
   libraryCPreludeIncludes: string[]
   libraryRuntimeRequirements: string[]
@@ -50,10 +48,8 @@ export function resolveCRuntimePreludeRequirements(
     runtimeRequirements.has('callback-values') ||
     signatureRuntimeTypes.has('function')
   const needsJsonRuntime = runtimeRequirements.has('json')
-  const needsFetchRuntime = runtimePlanHasSupportedFetchGlobalUsage(input.globalUsages)
   const needsAsyncRuntime =
     runtimeRequirements.has('async-runtime') ||
-    needsFetchRuntime ||
     signatureRuntimeTypes.has('promise')
   const needsCollectionRuntime =
     runtimeRequirements.has('collections') ||
@@ -78,13 +74,11 @@ export function resolveCRuntimePreludeRequirements(
     signatureRuntimeTypes.size > 0
   const needsObjectRuntime =
     runtimeRequirements.has('objects') ||
-    needsFetchRuntime ||
     needsClassRuntime ||
     signatureRuntimeTypes.has('object')
   const needsRuntime =
     input.throwingFunctionCount > 0 ||
     needsAsyncRuntime ||
-    needsFetchRuntime ||
     needsCallbackRuntime ||
     needsCollectionRuntime ||
     needsObjectRuntime ||
@@ -95,7 +89,6 @@ export function resolveCRuntimePreludeRequirements(
     runtimeRequirements.has('managed-values')
   const needsStringHeader =
     runtimeRequirements.has('string-bytes') ||
-    needsFetchRuntime ||
     signatureRuntimeTypes.has('string')
 
   return {
@@ -110,7 +103,6 @@ export function resolveCRuntimePreludeRequirements(
     needsSetRuntime,
     needsObjectRuntime,
     needsJsonRuntime,
-    needsFetchRuntime,
     runtimeEntrypointAdapter: libraryRuntime.entrypointAdapter,
     libraryCPreludeIncludes: libraryRuntime.includes,
     libraryRuntimeRequirements: orderedRuntimeRequirementIds(libraryRuntime.requirements)
@@ -409,18 +401,6 @@ function nodeMatchesRuntimePlanKind(
 
   if (kind === 'collection') {
     return nodeUsesCollectionKind(node, collectionKind)
-  }
-
-  return false
-}
-
-function runtimePlanHasSupportedFetchGlobalUsage(globalUsages: IrGlobalUsage[]): boolean {
-  for (let index = 0; index < globalUsages.length; index = index + 1) {
-    const usage = globalUsages[index] as IrGlobalUsage
-
-    if (isSupportedCFetchGlobalUsage(usage)) {
-      return true
-    }
   }
 
   return false

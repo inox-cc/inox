@@ -206,6 +206,10 @@ export type LibraryBackendConstraintDescriptor = {
   diagnosticMessage: string
 }
 
+export type LibraryStringPrefixBackendConstraintDescriptor = LibraryBackendConstraintDescriptor & {
+  prefixes: string[]
+}
+
 export type LibraryResultShapeFieldDescriptor = {
   name: string
   valueType: string
@@ -235,6 +239,7 @@ export type LibraryArgumentCheckDescriptor = {
   arrayLiteralRequired?: boolean
   arrayElementValueTypes?: string[]
   stringLiterals?: string[]
+  stringPrefixBackendConstraints?: LibraryStringPrefixBackendConstraintDescriptor[]
   literalDiagnosticCode?: string | null
   literalDiagnosticMessage?: string | null
   objectLiteralFields?: LibraryObjectLiteralFieldDescriptor[]
@@ -265,6 +270,9 @@ export type LibraryObjectLiteralFieldDescriptor = {
   valueTypes: string[]
   booleanLiterals?: boolean[]
   stringLiterals?: string[]
+  objectLiteralRequired?: boolean
+  objectFieldValueType?: string | null
+  objectTypeIds?: LibraryObjectTypeId[]
   optional?: boolean
 }
 

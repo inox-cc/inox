@@ -38,14 +38,6 @@ export function runtimeObjectReadValueMismatchCondition(name: string): string {
   return runtimeObjectLikeValueMismatchCondition(name)
 }
 
-export function runtimeFetchAbortControllerValueMismatchCondition(name: string): string {
-  return runtimeExactObjectValueMismatchCondition(name)
-}
-
-export function runtimeFetchResponseValueMismatchCondition(name: string): string {
-  return runtimeExactObjectValueMismatchCondition(name)
-}
-
 export function runtimeErrorObjectValueMismatchCondition(name: string): string {
   return runtimeExactObjectValueMismatchCondition(name)
 }

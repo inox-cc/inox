@@ -464,7 +464,6 @@ export function emitCModuleSource(
       prelude.needsSetRuntime,
       prelude.needsObjectRuntime,
       prelude.needsJsonRuntime,
-      prelude.needsFetchRuntime,
       prelude.libraryCPreludeIncludes
     )
   )

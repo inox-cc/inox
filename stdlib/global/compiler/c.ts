@@ -1,14 +1,4 @@
-export type { FetchLoweringDependencies } from '../fetch/compiler/c.ts'
 export type { JsonClassInstanceOperand, JsonDeclarationDependencies } from '../json/compiler/c.ts'
-export {
-  cFetchRuntimeExpressionMethod,
-  emitFetchStringArgument,
-  emitFetchHeadersBooleanVariableDeclaration,
-  emitPreparedFetchCallExpression,
-  emitPreparedFetchHeadersCallExpression,
-  emitPreparedFetchInitOperand,
-  isAsyncFetchRuntimeCallExpression
-} from '../fetch/compiler/c.ts'
 export {
   cJsonRuntimeCallName,
   emitJsonParseVariableDeclaration,

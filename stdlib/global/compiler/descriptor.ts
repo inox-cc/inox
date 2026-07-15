@@ -16,18 +16,4 @@ export {
   stringRuntimeMethodName,
   stringRuntimeReturnType
 } from '../strings/compiler/descriptor.ts'
-export {
-  fetchGlobalRoots,
-  fetchHeadersMethods,
-  fetchInitOptions,
-  fetchRedirectModes,
-  fetchResponseBodyMethods,
-  isAsyncFetchRuntimeMethod,
-  isFetchGlobalRoot,
-  isFetchHeadersMethod,
-  isFetchInitOption,
-  isFetchRedirectMode,
-  isFetchResponseBodyMethod,
-  isSupportedFetchResponseBodyMethod
-} from '../fetch/compiler/descriptor.ts'
 export { jsonRuntimeMethodNameFromPath } from '../json/compiler/descriptor.ts'
