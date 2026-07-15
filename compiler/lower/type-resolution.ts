@@ -348,6 +348,7 @@ function resolveFunctionType(typeInfo: LowerTypeNode, context: LowerContext): Lo
     kind: 'function',
     params,
     returnType: resolvedValueType(returnType, returnTypeName),
+    returnTypeRef: nullableNode(typeInfo.returnTypeRef),
     returnNullable: returnType.nullable,
     returnArrayElementType: returnType.arrayElementType,
     returnArrayElementDeclaredType: returnType.arrayElementDeclaredType,
@@ -372,8 +373,7 @@ function resolveFunctionParam(param: LowerTypeNode, context: LowerContext): Lowe
     valueType: resolvedValueType(declared, lowerNodeValueTypeOrUnknown(param)),
     nullable:
       declared.nullable ||
-      (param.optional === true &&
-        (param.defaultValue === null || typeof param.defaultValue === 'undefined')),
+      (param.optional === true && (param.defaultValue === null || typeof param.defaultValue === 'undefined')),
     arrayElementType: declared.arrayElementType,
     arrayElementDeclaredType: declared.arrayElementDeclaredType,
     arrayElementFunctionType: nullableNode(declared.arrayElementFunctionType),
@@ -445,7 +445,10 @@ function resolveObjectShapeField(
     declaredType: optionalFieldsAreNullable ? fieldDeclaredType(field) : nullableString(field.declaredType),
     valueType: resolvedValueType(declared, lowerNodeValueTypeOrUnknown(field)),
     nullable:
-      declared.nullable || field.nullable === true || weakField || (optionalFieldsAreNullable && field.optional === true),
+      declared.nullable ||
+      field.nullable === true ||
+      weakField ||
+      (optionalFieldsAreNullable && field.optional === true),
     arrayElementType: declared.arrayElementType,
     arrayElementDeclaredType: declared.arrayElementDeclaredType,
     arrayElementFunctionType: nullableNode(declared.arrayElementFunctionType),
@@ -647,6 +650,7 @@ function hydrateFunctionType(functionType: LowerTypeNode, context: LowerContext)
     params,
     declaredReturnType: functionType.declaredReturnType,
     returnType: functionType.returnType,
+    returnTypeRef: nullableNode(functionType.returnTypeRef),
     returnNullable: functionType.returnNullable,
     returnArrayElementType: functionType.returnArrayElementType,
     returnArrayElementDeclaredType: functionType.returnArrayElementDeclaredType,
@@ -940,7 +944,8 @@ function collectFunctionType(valueType: LowerTypeNode): LowerTypeNode {
   return {
     kind: 'function',
     params: collectFunctionParams(valueType.params),
-    returnType: valueType.returnType
+    returnType: valueType.returnType,
+    returnTypeRef: nullableNode(valueType.returnTypeRef)
   }
 }
 

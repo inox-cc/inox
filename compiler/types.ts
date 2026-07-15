@@ -190,6 +190,7 @@ export type SymbolInfo = {
   narrowingFalseNames?: string[]
   arrayElementType?: ValueType | null
   arrayElementDeclaredType?: string | null
+  arrayElementShape?: ObjectShapeInfo | null
   arrayElementFunctionType?: any
   mapKeyType?: ValueType | null
   mapValueType?: ValueType | null

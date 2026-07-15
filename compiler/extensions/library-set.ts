@@ -25,11 +25,7 @@ export function compilerLibraryNativeTypeForName(
   for (let typeIndex = 0; typeIndex < libraries.nativeTypes.length; typeIndex = typeIndex + 1) {
     const nativeType = libraries.nativeTypes[typeIndex]
 
-    if (
-      libraryId !== null &&
-      typeof libraryId !== 'undefined' &&
-      nativeType.libraryId !== libraryId
-    ) {
+    if (libraryId !== null && typeof libraryId !== 'undefined' && nativeType.libraryId !== libraryId) {
       continue
     }
 
@@ -109,9 +105,7 @@ export function compilerLibraryNativeTypeForId(
   return null
 }
 
-export function resolveCompilerLibrarySet(
-  libraries: CompilerLibrarySet | null | undefined
-): CompilerLibrarySet {
+export function resolveCompilerLibrarySet(libraries: CompilerLibrarySet | null | undefined): CompilerLibrarySet {
   if (libraries !== null && typeof libraries !== 'undefined') {
     return libraries
   }
@@ -178,7 +172,6 @@ export function compilerLibraryOperationForBinding(
   bindingId: string,
   kind: LibraryOperationKind
 ): LibraryOperationDescriptor | null {
-
   for (let index = 0; index < libraries.operations.length; index = index + 1) {
     const operation = libraries.operations[index]
 
@@ -208,6 +201,21 @@ export function compilerLibraryOperationForIntrinsic(
   }
 
   return null
+}
+
+export function compilerLibraryNativeTypeForIntrinsic(
+  libraries: CompilerLibrarySet,
+  role: IntrinsicRole,
+  kind: LibraryOperationKind
+): LibraryNativeTypeDescriptor | null {
+  const operation = compilerLibraryOperationForIntrinsic(libraries, role, kind)
+  const resultTypeRef = operation?.resultTypeRef
+
+  if (resultTypeRef?.kind !== 'nominal') {
+    return null
+  }
+
+  return compilerLibraryNativeTypeForId(libraries, resultTypeRef.typeId)
 }
 
 export function compilerLibraryIntrinsicRoleForBinding(
@@ -281,26 +289,14 @@ export function compilerLibraryOperationForReceiver(
     return exact
   }
 
-  return compilerLibraryOperationForReceiverBinding(
-    libraries,
-    receiverTypeId,
-    `${receiverTypeId}.*`,
-    kind
-  )
+  return compilerLibraryOperationForReceiverBinding(libraries, receiverTypeId, `${receiverTypeId}.*`, kind)
 }
 
-export function compilerLibraryHasModuleDeclaration(
-  libraries: CompilerLibrarySet,
-  source: string
-): boolean {
+export function compilerLibraryHasModuleDeclaration(libraries: CompilerLibrarySet, source: string): boolean {
   for (let index = 0; index < libraries.declarations.length; index = index + 1) {
     const declaration = libraries.declarations[index]
 
-    if (
-      declaration.kind === 'module' &&
-      declaration.source === source &&
-      declaration.compilerImplemented === true
-    ) {
+    if (declaration.kind === 'module' && declaration.source === source && declaration.compilerImplemented === true) {
       return true
     }
   }

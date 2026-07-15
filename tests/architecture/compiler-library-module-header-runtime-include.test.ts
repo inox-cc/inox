@@ -72,8 +72,32 @@ test('generated module header keeps native type of exported value', () => {
   const header = files.find((file) => file.path === 'index.h')
 
   assert.ok(header)
+  assert.match(header.code, /#include "inox\/set\.h"/)
   assert.match(header.code, /extern Set inox_mod_index_ts_[a-f0-9]+_values;/)
   assert.doesNotMatch(header.code, /extern inox_value inox_mod_index_ts_[a-f0-9]+_values;/)
+})
+
+test('generated module header derives exported native value include from package descriptor', () => {
+  const host = createMemoryCompilerHost(
+    [
+      {
+        path: '/pkg/index.ts',
+        source: 'export let value: Bridge\n'
+      }
+    ],
+    { root: '/' }
+  )
+  const files = compileFileToCModuleTextsSync('/pkg/index.ts', {
+    callMain: false,
+    host,
+    libraries: createCompilerLibrarySet([bridgeLibrary()]),
+    sourceRoot: '/pkg'
+  })
+  const header = files.find((file) => file.path === 'index.h')
+
+  assert.ok(header)
+  assert.match(header.code, /#include "fixture\/native\.h"/)
+  assert.match(header.code, /extern FixtureNative inox_mod_index_ts_[a-f0-9]+_value;/)
 })
 
 function bridgeLibrary(): CompilerLibraryDescriptor {

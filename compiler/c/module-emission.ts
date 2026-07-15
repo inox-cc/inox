@@ -132,6 +132,7 @@ type CModuleValueDeclaration = {
   exported: boolean
   functionType?: CFunctionType | null
   name: string
+  shape?: CObjectShape | null
   shapeBuiltin?: string | null
   symbolName: string
   valueType: string
@@ -669,7 +670,7 @@ export function emitCModuleHeader(
   const exportedValues = collectCModuleExportedValueDeclarations(plan)
   const runtimeRequirements = runtimeRequirementSetFromArray(collectIrRuntimeRequirements([plan.ir]))
 
-  addCModuleNativeSignatureRuntimeRequirements(runtimeRequirements, context, options.libraries)
+  addCModuleNativeSignatureRuntimeRequirements(runtimeRequirements, context, exportedValues, options.libraries)
 
   const libraryIncludes = emitLibraryCPreludeIncludeLines(
     resolveLibraryRuntimeCPreludeIncludes(runtimeRequirements, options.libraries)
@@ -714,6 +715,7 @@ export function emitCModuleHeader(
 function addCModuleNativeSignatureRuntimeRequirements(
   requirements: Set<IrRuntimeRequirement>,
   context: CEmitContext,
+  exportedValues: CModuleValueDeclaration[],
   libraries: CompilerLibrarySet | null | undefined
 ): void {
   if (libraries === null || typeof libraries === 'undefined') {
@@ -729,6 +731,35 @@ function addCModuleNativeSignatureRuntimeRequirements(
   for (const params of context.functionParams.values()) {
     for (let paramIndex = 0; paramIndex < params.length; paramIndex = paramIndex + 1) {
       addCModuleNativeShapeRuntimeRequirements(requirements, params[paramIndex].shape, libraries, seen)
+    }
+  }
+
+  for (let valueIndex = 0; valueIndex < exportedValues.length; valueIndex = valueIndex + 1) {
+    const value = exportedValues[valueIndex]
+
+    addCModuleNativeCppTypeRuntimeRequirements(requirements, value.cppType, libraries)
+    addCModuleNativeShapeRuntimeRequirements(requirements, value.shape, libraries, seen)
+  }
+}
+
+function addCModuleNativeCppTypeRuntimeRequirements(
+  requirements: Set<IrRuntimeRequirement>,
+  cppType: string | null | undefined,
+  libraries: CompilerLibrarySet
+): void {
+  if (cppType === null || typeof cppType === 'undefined') {
+    return
+  }
+
+  for (let typeIndex = 0; typeIndex < libraries.nativeTypes.length; typeIndex = typeIndex + 1) {
+    const nativeType = libraries.nativeTypes[typeIndex]
+
+    if (nativeType.cppType !== cppType) {
+      continue
+    }
+
+    for (let requirementIndex = 0; requirementIndex < nativeType.runtimeRequirements.length; requirementIndex = requirementIndex + 1) {
+      requirements.add(nativeType.runtimeRequirements[requirementIndex])
     }
   }
 }
@@ -2124,6 +2155,7 @@ function collectCModuleValueDeclarations(plan: CModulePlan, context?: CEmitConte
       exported: item.exported === true,
       functionType: cModuleValueFunctionType(item),
       name: item.name,
+      shape: cObjectShapeFromMetadata(item.shape ?? item.init?.shape ?? null),
       shapeBuiltin: cModuleValueShapeBuiltin(item),
       symbolName: emitCModuleValueName(plan, item.name),
       valueType

@@ -2,7 +2,8 @@ import { lowerParam, lowerStatementList } from './lower/statements.ts'
 import type { LowerContext, LowerResolvedType } from './lower/type-resolution.ts'
 import { createLowerContext, resolveDeclaredType, resolveObjectShape } from './lower/type-resolution.ts'
 import type { AnyNode, ProgramNode } from './types.ts'
-import type { CompilerLibrarySet } from './extensions/types.ts'
+import { compilerLibraryNativeTypeForId } from './extensions/library-set.ts'
+import type { CompilerLibrarySet, TypeRef } from './extensions/types.ts'
 
 export function lowerProgram(
   ast: ProgramNode,
@@ -77,7 +78,6 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
       const returnType = resolveDeclaredType(returnTypeName, context)
 
       if (item.returnShape !== null && typeof item.returnShape !== 'undefined') {
-        returnType.valueType = 'object'
         returnType.shape = resolveObjectShape(item.returnShape, context)
       }
 
@@ -89,7 +89,8 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
         loc: item.loc,
         params: lowerParamList(item.params, context),
         declaredReturnType: item.returnType,
-        returnType: resolvedValueType(returnType.valueType, returnTypeName),
+        returnType: lowerReturnValueType(returnType.valueType, returnTypeName, item.returnTypeRef, context.libraries),
+        returnTypeRef: nullableNode(item.returnTypeRef),
         returnNullable: returnType.nullable,
         returnArrayElementType: returnType.arrayElementType,
         returnArrayElementDeclaredType: returnType.arrayElementDeclaredType,
@@ -269,7 +270,8 @@ function lowerClassMethod(method: AnyNode, context: LowerContext): AnyNode {
     loc: method.loc,
     params: lowerParamList(method.params, context),
     declaredReturnType: nullableString(method.declaredReturnType),
-    returnType: resolvedValueType(returnType.valueType, returnTypeName),
+    returnType: lowerReturnValueType(returnType.valueType, returnTypeName, method.returnTypeRef, context.libraries),
+    returnTypeRef: nullableNode(method.returnTypeRef),
     returnNullable: returnType.nullable,
     returnArrayElementType: returnType.arrayElementType,
     returnArrayElementDeclaredType: returnType.arrayElementDeclaredType,
@@ -381,6 +383,23 @@ function resolvedValueType(value: string | null | undefined, fallback: string): 
   }
 
   return fallback
+}
+
+function lowerReturnValueType(
+  value: string | null | undefined,
+  fallback: string,
+  typeRef: TypeRef | null | undefined,
+  libraries: CompilerLibrarySet
+): string {
+  if (typeRef !== null && typeof typeRef !== 'undefined' && typeRef.kind === 'nominal') {
+    const nativeType = compilerLibraryNativeTypeForId(libraries, typeRef.typeId)
+
+    if (nativeType !== null) {
+      return nativeType.valueType
+    }
+  }
+
+  return resolvedValueType(value, fallback)
 }
 
 function nullableString(value: string | null | undefined): string | null {

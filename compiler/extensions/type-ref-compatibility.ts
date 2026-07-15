@@ -23,6 +23,7 @@ export type TypeRefCompatibilityMetadata = {
   arrayElementType: ValueType | null
   arrayElementTypeId: string | null
   arrayElementDeclaredType: string | null
+  arrayElementShape: ObjectShapeInfo | null
   mapKeyType: ValueType | null
   mapValueType: ValueType | null
   promiseValueType: ValueType | null
@@ -137,11 +138,13 @@ function baseTypeRefCompatibilityMetadata(
       const fieldMetadata = typeRefCompatibilityMetadata(field.typeRef, libraries, loc)
       fields.push({
         name: field.name,
+        optional: field.optional === true,
         valueType: fieldMetadata.valueType,
         readonly: field.readonly,
         nullable: fieldMetadata.nullable,
         arrayElementType: fieldMetadata.arrayElementType,
         arrayElementDeclaredType: fieldMetadata.arrayElementDeclaredType,
+        arrayElementShape: fieldMetadata.arrayElementShape,
         mapKeyType: fieldMetadata.mapKeyType,
         mapValueType: fieldMetadata.mapValueType,
         promiseValueType: fieldMetadata.promiseValueType,
@@ -154,7 +157,31 @@ function baseTypeRefCompatibilityMetadata(
       })
     }
 
-    metadata.shape = { kind: 'object', fields, libraryCppType: null }
+    metadata.shape = {
+      kind: 'object',
+      dynamic: typeRef.dynamic === true,
+      fields,
+      libraryCppType: null
+    }
+    if (typeRef.dynamicField !== null && typeof typeRef.dynamicField !== 'undefined') {
+      const dynamicMetadata = typeRefCompatibilityMetadata(typeRef.dynamicField, libraries, loc)
+      metadata.shape.dynamicField = {
+        name: '',
+        optional: true,
+        readonly: false,
+        valueType: dynamicMetadata.valueType,
+        nullable: dynamicMetadata.nullable,
+        arrayElementType: dynamicMetadata.arrayElementType,
+        arrayElementDeclaredType: dynamicMetadata.arrayElementDeclaredType,
+        arrayElementShape: dynamicMetadata.arrayElementShape,
+        mapKeyType: dynamicMetadata.mapKeyType,
+        mapValueType: dynamicMetadata.mapValueType,
+        promiseValueType: dynamicMetadata.promiseValueType,
+        shape: dynamicMetadata.shape,
+        loc
+      }
+    }
+
     return metadata
   }
 
@@ -177,6 +204,7 @@ function emptyCompatibilityMetadata(
     arrayElementType: null,
     arrayElementTypeId: null,
     arrayElementDeclaredType: null,
+    arrayElementShape: null,
     mapKeyType: null,
     mapValueType: null,
     promiseValueType: null,
@@ -266,10 +294,7 @@ function applyTypeTraits(
       metadata.arrayElementType = element.valueType
       metadata.arrayElementTypeId = element.libraryResultTypeId
       metadata.arrayElementDeclaredType = nativeDeclarationName(element.libraryResultTypeId, libraries)
-
-      if (metadata.valueType === 'array' && element.shape !== null) {
-        metadata.shape = element.shape
-      }
+      metadata.arrayElementShape = element.shape
     }
 
     if (trait.traitId === 'indexable' && trait.args.length > 1) {
@@ -286,6 +311,7 @@ function applyTypeTraits(
       metadata.arrayElementType = fulfilled.arrayElementType
       metadata.arrayElementTypeId = fulfilled.arrayElementTypeId
       metadata.arrayElementDeclaredType = fulfilled.arrayElementDeclaredType
+      metadata.arrayElementShape = fulfilled.arrayElementShape
       metadata.mapKeyType = fulfilled.mapKeyType
       metadata.mapValueType = fulfilled.mapValueType
 

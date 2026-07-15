@@ -122,17 +122,23 @@ function substituteTypeRefInScope(
     for (let index = 0; index < typeRef.fields.length; index = index + 1) {
       const field = typeRef.fields[index]
       fields.push({
-        name: field.name,
-        typeRef: substituteTypeRefInScope(field.typeRef, substitutions, resolving),
-        readonly: field.readonly
+        ...field,
+        typeRef: substituteTypeRefInScope(field.typeRef, substitutions, resolving)
       })
     }
 
+    if (typeRef.dynamicField !== null && typeof typeRef.dynamicField !== 'undefined') {
+      return {
+        ...typeRef,
+        fields,
+        dynamicField: substituteTypeRefInScope(typeRef.dynamicField, substitutions, resolving),
+        traits
+      }
+    }
+
     return {
-      kind: 'object',
+      ...typeRef,
       fields,
-      nullable: typeRef.nullable,
-      ownership: typeRef.ownership,
       traits
     }
   }

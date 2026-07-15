@@ -37,7 +37,8 @@ function nativeLibrary(): CompilerLibraryDescriptor {
         valueType: 'bytes',
         cppType: 'NativeBytes',
         baseTypeIds: [],
-        runtimeRequirements: ['native']
+        runtimeRequirements: ['native'],
+        cValueAdapter: 'NativeBytes($value)'
       }
     ],
     operations: [

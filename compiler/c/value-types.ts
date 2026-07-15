@@ -120,7 +120,10 @@ export function libraryNativeBoundaryCppType(
   optional: boolean,
   shape: CLibraryNativeShape | null | undefined
 ): string | null {
-  if (valueType !== 'object' || nullable || optional) {
+  const adapter = shape?.libraryCValueAdapter
+  const hasExplicitAdapter = adapter !== null && typeof adapter !== 'undefined' && adapter.length > 0
+
+  if ((valueType !== 'object' && !hasExplicitAdapter) || nullable || optional) {
     return null
   }
 

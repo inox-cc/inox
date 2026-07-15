@@ -6,6 +6,7 @@ import type {
 } from '../../../../compiler/extensions/types.ts'
 
 const libraryId = 'global:collections'
+export const arrayRuntimeRequirement = `${libraryId}#array`
 const mapRuntimeRequirement = `${libraryId}#map`
 const setRuntimeRequirement = `${libraryId}#set`
 
@@ -30,19 +31,6 @@ const unknownTypeRef: TypeRef = {
   traits: []
 }
 const voidTypeRef = primitiveTypeRef('void')
-
-const arrayIntrinsicOperation: LibraryOperationDescriptor = {
-  libraryId,
-  bindingId: arrayIntrinsicBindingId,
-  operationId: arrayIntrinsicBindingId,
-  kind: 'construct',
-  runtimeRequirements: ['collections', 'managed-values'],
-  typeParameters: [{ name: 'T', sources: [{ source: 'contextual-type-argument', argumentIndex: 0 }] }],
-  resultTypeRef: arrayTypeRef(parameterTypeRef),
-  minArgs: 0,
-  maxArgs: 0,
-  argumentChecks: []
-}
 
 /** Creates the package-owned semantic reference for Array<T>. */
 export function arrayTypeRef(elementType: TypeRef): NominalTypeRef {
@@ -97,6 +85,19 @@ export function setTypeRef(elementType: TypeRef): NominalTypeRef {
       }
     ]
   }
+}
+
+const arrayIntrinsicOperation: LibraryOperationDescriptor = {
+  libraryId,
+  bindingId: arrayIntrinsicBindingId,
+  operationId: arrayIntrinsicBindingId,
+  kind: 'construct',
+  runtimeRequirements: [arrayRuntimeRequirement],
+  typeParameters: [{ name: 'T', sources: [{ source: 'contextual-type-argument', argumentIndex: 0 }] }],
+  resultTypeRef: arrayTypeRef(parameterTypeRef),
+  minArgs: 0,
+  maxArgs: 0,
+  argumentChecks: []
 }
 
 const setOperations: LibraryOperationDescriptor[] = [
@@ -195,6 +196,8 @@ const mapOperations: LibraryOperationDescriptor[] = [
   mapReceiverCall('clear', 'clear', voidTypeRef, []),
   mapReceiverCall('delete', 'erase', booleanTypeRef, [keyParameterTypeRef]),
   mapReceiverCall('entries', 'entries', mapIteratorTypeRef(mapEntryIteratorNativeTypeId, []), []),
+  mapIndexRead(),
+  mapIndexWrite(),
   {
     ...mapReceiverCall('get', 'get', nullableValueParameterTypeRef, [keyParameterTypeRef]),
     cResultMapping: { cppType: 'inox::Value', fields: [] }
@@ -232,7 +235,8 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       valueType: 'array',
       cppType: 'ArrayClass',
       baseTypeIds: [],
-      runtimeRequirements: ['collections', 'managed-values'],
+      runtimeRequirements: [arrayRuntimeRequirement],
+      cRuntimeValueExpression: '$value.raw()',
       typeParameters: ['T'],
       traits: [{ traitId: 'iterable', args: [parameterTypeRef] }]
     },
@@ -245,6 +249,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       baseTypeIds: [],
       runtimeRequirements: [mapRuntimeRequirement],
       cValueAdapter: 'Map($value)',
+      cRuntimeValueExpression: '$value.raw()',
       typeParameters: ['K', 'V'],
       traits: [
         { traitId: 'indexable', args: [keyParameterTypeRef, valueParameterTypeRef] },
@@ -272,6 +277,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       baseTypeIds: [],
       runtimeRequirements: [setRuntimeRequirement],
       cValueAdapter: 'Set($value)',
+      cRuntimeValueExpression: '$value.raw()',
       typeParameters: ['T'],
       traits: [{ traitId: 'iterable', args: [parameterTypeRef] }],
       cIteration: {
@@ -288,6 +294,12 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   operations: [arrayIntrinsicOperation, ...mapOperations, ...setOperations],
   intrinsicBindings: [{ role: 'array-literal', bindingId: arrayIntrinsicBindingId }],
   runtimeRequirements: [
+    {
+      id: arrayRuntimeRequirement,
+      dependencies: ['collections', 'managed-values'],
+      cPreludeIncludes: ['inox/array.h'],
+      capabilities: []
+    },
     {
       id: mapRuntimeRequirement,
       dependencies: ['collections', 'managed-values'],
@@ -375,6 +387,57 @@ function mapReceiverCall(
     maxArgs: argumentChecks.length,
     argumentChecks
   }
+}
+
+function mapIndexRead(): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: `${mapNativeTypeId}.*`,
+    operationId: `${mapNativeTypeId}#index-read`,
+    kind: 'index-read',
+    runtimeRequirements: [mapRuntimeRequirement],
+    receiverTypeId: mapNativeTypeId,
+    typeParameters: mapReceiverTypeParameters(),
+    cExpression: 'get',
+    cArgumentKinds: ['receiver', 'runtime-value'],
+    cCallStyle: 'member',
+    cFailureMode: 'thrown',
+    resultTypeRef: nullableValueParameterTypeRef,
+    cResultMapping: { cppType: 'inox::Value', fields: [] },
+    minArgs: 1,
+    maxArgs: 1,
+    argumentChecks: [{ valueTypes: [], typeRef: keyParameterTypeRef }]
+  }
+}
+
+function mapIndexWrite(): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: `${mapNativeTypeId}.*`,
+    operationId: `${mapNativeTypeId}#index-write`,
+    kind: 'index-write',
+    runtimeRequirements: [mapRuntimeRequirement],
+    receiverTypeId: mapNativeTypeId,
+    typeParameters: mapReceiverTypeParameters(),
+    cExpression: 'set',
+    cArgumentKinds: ['receiver', 'runtime-value', 'runtime-value'],
+    cCallStyle: 'member',
+    cFailureMode: 'thrown',
+    resultTypeRef: mapTypeRef(keyParameterTypeRef, valueParameterTypeRef),
+    minArgs: 2,
+    maxArgs: 2,
+    argumentChecks: [
+      { valueTypes: [], typeRef: keyParameterTypeRef },
+      { valueTypes: [], typeRef: valueParameterTypeRef }
+    ]
+  }
+}
+
+function mapReceiverTypeParameters() {
+  return [
+    { name: 'K', sources: [{ source: 'receiver-type-argument' as const, argumentIndex: 0 }] },
+    { name: 'V', sources: [{ source: 'receiver-type-argument' as const, argumentIndex: 1 }] }
+  ]
 }
 
 function setReceiverCall(

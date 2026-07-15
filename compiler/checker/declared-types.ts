@@ -47,13 +47,18 @@ import type {
 } from './resolved-types.ts'
 import { mergeShapeFields } from './helpers.ts'
 import {
-  compilerLibraryNativeTypeForId,
-  compilerLibraryNativeTypeForName,
-  compilerLibraryOperationForIntrinsic
+  compilerLibraryNativeTypeForIntrinsic,
+  compilerLibraryNativeTypeForName
 } from '../extensions/library-set.ts'
 import { instantiateNativeTypeRef } from '../extensions/type-ref-substitution.ts'
 import { typeRefCompatibilityMetadata } from '../extensions/type-ref-compatibility.ts'
-import type { CompilerLibrarySet, CorePrimitiveType, TypeOwnership, TypeRef } from '../extensions/types.ts'
+import type {
+  CompilerLibrarySet,
+  CorePrimitiveType,
+  ObjectTypeRefField,
+  TypeOwnership,
+  TypeRef
+} from '../extensions/types.ts'
 import type { LibraryResultShapeFieldDescriptor } from '../extensions/types.ts'
 
 export type DeclaredTypeResolverContext = {
@@ -203,6 +208,7 @@ export function resolveDeclaredType(
       shape: inner.shape,
       arrayElementType: inner.arrayElementType,
       arrayElementDeclaredType: inner.arrayElementDeclaredType,
+      arrayElementShape: inner.arrayElementShape ?? null,
       mapKeyType: inner.mapKeyType,
       mapValueType: inner.mapValueType,
       mapValueShape: inner.mapValueShape,
@@ -231,20 +237,20 @@ export function resolveDeclaredType(
     info.valueType = 'array'
     info.arrayElementType = elementInfo.valueType
     info.arrayElementDeclaredType = arrayElementTypeName
+    info.arrayElementShape = elementInfo.shape
     info.arrayElementFunctionType = elementInfo.functionType
-    const providerOperation = compilerLibraryOperationForIntrinsic(context.libraries, 'array-literal', 'construct')
-    const providerTypeRef = providerOperation?.resultTypeRef
+    const providerType = compilerLibraryNativeTypeForIntrinsic(context.libraries, 'array-literal', 'construct')
 
-    if (providerTypeRef?.kind === 'nominal') {
-      const providerType = compilerLibraryNativeTypeForId(context.libraries, providerTypeRef.typeId)
+    if (providerType !== null && (providerType.typeParameters ?? []).length === 1) {
+      const typeRef = instantiateNativeTypeRef(providerType, [typeRefFromResolvedType(elementInfo)])
+      const metadata = typeRefCompatibilityMetadata(typeRef, context.libraries, loc)
 
-      if (providerType !== null && (providerType.typeParameters ?? []).length === 1) {
-        const typeRef = instantiateNativeTypeRef(providerType, [typeRefFromResolvedType(elementInfo)])
-        const metadata = typeRefCompatibilityMetadata(typeRef, context.libraries, loc)
+      info.typeRef = typeRef
+      info.shape = metadata.shape
+      info.arrayElementShape = elementInfo.shape ?? metadata.arrayElementShape
 
-        info.typeRef = typeRef
-        info.shape = metadata.shape
-        info.arrayElementType = metadata.arrayElementType ?? elementInfo.valueType
+      if (metadata.arrayElementType !== null && metadata.arrayElementType !== 'unknown') {
+        info.arrayElementType = metadata.arrayElementType
       }
     }
 
@@ -291,6 +297,7 @@ export function resolveDeclaredType(
         nullable: valueInfo.nullable,
         arrayElementType: valueInfo.arrayElementType,
         arrayElementDeclaredType: valueInfo.arrayElementDeclaredType,
+        arrayElementShape: valueInfo.arrayElementShape ?? null,
         mapKeyType: valueInfo.mapKeyType,
         mapValueType: valueInfo.mapValueType,
         mapValueShape: valueInfo.mapValueShape,
@@ -601,6 +608,7 @@ function refreshResolvedTypeInfo(target: ResolvedTypeInfo, source: ResolvedTypeI
   target.shape = refreshObjectShape(target.shape, source.shape)
   target.arrayElementType = source.arrayElementType
   target.arrayElementDeclaredType = source.arrayElementDeclaredType
+  target.arrayElementShape = refreshObjectShape(target.arrayElementShape ?? null, source.arrayElementShape ?? null)
   target.arrayElementFunctionType = refreshFunctionTypeMetadata(
     target.arrayElementFunctionType ?? null,
     source.arrayElementFunctionType ?? null
@@ -682,6 +690,7 @@ function applyGenericNativeType(
   resolved.typeRef = typeRef
   resolved.arrayElementType = metadata.arrayElementType
   resolved.arrayElementDeclaredType = metadata.arrayElementDeclaredType
+  resolved.arrayElementShape = metadata.arrayElementShape
   resolved.mapKeyType = metadata.mapKeyType
   resolved.mapValueType = metadata.mapValueType
   resolved.promiseValueType = metadata.promiseValueType
@@ -731,23 +740,44 @@ function typeRefFromResolvedTypeInScope(info: ResolvedTypeInfo, resolvingShapes:
         const fieldTypeRef =
           field.typeRef ?? typeRefFromResolvedTypeInScope(resolvedTypeInfoFromField(field), resolvingShapes)
 
-        fields.push({
+        const typeRefField: ObjectTypeRefField = {
           name: field.name,
           typeRef: fieldTypeRef,
           readonly: field.readonly === true
-        })
+        }
+
+        if (field.optional === true) {
+          typeRefField.optional = true
+        }
+
+        fields.push(typeRefField)
       }
     } finally {
       resolvingShapes.delete(info.shape)
     }
 
-    return {
+    const objectTypeRef: TypeRef = {
       kind: 'object',
       fields,
       nullable: info.nullable,
       ownership: 'value',
       traits: []
     }
+
+    if (info.shape.dynamic === true) {
+      objectTypeRef.dynamic = true
+    }
+
+    const dynamicField = info.shape.dynamicField
+
+    if (dynamicField !== null && typeof dynamicField !== 'undefined') {
+      objectTypeRef.dynamicField = typeRefFromResolvedTypeInScope(
+        resolvedTypeInfoFromField(dynamicField),
+        resolvingShapes
+      )
+    }
+
+    return objectTypeRef
   }
 
   return unknownTypeRef(info.nullable)
@@ -762,6 +792,7 @@ function resolvedTypeInfoFromField(field: AnyNode): ResolvedTypeInfo {
     shape: field.shape ?? null,
     arrayElementType: field.arrayElementType ?? null,
     arrayElementDeclaredType: field.arrayElementDeclaredType ?? null,
+    arrayElementShape: field.arrayElementShape ?? null,
     arrayElementFunctionType: field.arrayElementFunctionType ?? null,
     mapKeyType: field.mapKeyType ?? null,
     mapValueType: field.mapValueType ?? null,
@@ -973,6 +1004,7 @@ function resolveDeclaredFunctionAlias(
       params,
       declaredReturnType: shape.returnType,
       returnType: returnInfo.valueType,
+      returnTypeRef: returnInfo.typeRef,
       returnNullable: returnInfo.nullable,
       returnArrayElementType: returnInfo.arrayElementType,
       returnArrayElementDeclaredType: returnInfo.arrayElementDeclaredType,
@@ -1022,6 +1054,7 @@ function resolveFunctionTypeParams(
         (param.optional === true && (param.defaultValue === null || typeof param.defaultValue === 'undefined')),
       arrayElementType: paramInfo.arrayElementType,
       arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
+      arrayElementShape: paramInfo.arrayElementShape ?? null,
       mapKeyType: paramInfo.mapKeyType,
       mapValueType: paramInfo.mapValueType,
       promiseValueType: paramPromiseValueType,
@@ -1173,6 +1206,7 @@ export function resolveObjectShapeField(
     nullable: fieldInfo.nullable || field.nullable === true || weakField || field.optional === true,
     arrayElementType: fieldInfo.arrayElementType,
     arrayElementDeclaredType: fieldInfo.arrayElementDeclaredType,
+    arrayElementShape: fieldInfo.arrayElementShape ?? null,
     mapKeyType: fieldInfo.mapKeyType,
     mapValueType: fieldInfo.mapValueType,
     mapValueShape: fieldInfo.mapValueShape,
@@ -1224,6 +1258,7 @@ export function resolveFunctionTypeMetadata(
     params,
     declaredReturnType: functionType.returnType,
     returnType: returnInfo.valueType,
+    returnTypeRef: returnInfo.typeRef,
     returnNullable: returnInfo.nullable,
     returnArrayElementType: returnInfo.arrayElementType,
     returnArrayElementDeclaredType: returnInfo.arrayElementDeclaredType,
@@ -1336,6 +1371,7 @@ function resolvedSyntheticFieldType(field: AnyNode): ResolvedTypeInfo {
   info.shape = field.shape ?? null
   info.arrayElementType = field.arrayElementType ?? null
   info.arrayElementDeclaredType = field.arrayElementDeclaredType ?? null
+  info.arrayElementShape = field.arrayElementShape ?? null
   info.arrayElementFunctionType = field.arrayElementFunctionType ?? null
   info.mapKeyType = field.mapKeyType ?? null
   info.mapValueType = field.mapValueType ?? null
@@ -1478,6 +1514,7 @@ export function resolveWeakTargetObjectShape(
       nullable: declared.nullable || field.ownership === 'weak' || field.optional === true,
       arrayElementType: declared.arrayElementType,
       arrayElementDeclaredType: declared.arrayElementDeclaredType,
+      arrayElementShape: declared.arrayElementShape ?? null,
       mapKeyType: declared.mapKeyType,
       mapValueType: declared.mapValueType,
       mapValueArrayElementType: declared.mapValueArrayElementType ?? null,
@@ -1536,6 +1573,7 @@ export function resolveWeakTargetShapeTypeName(
       shape: inner.shape,
       arrayElementType: inner.arrayElementType,
       arrayElementDeclaredType: inner.arrayElementDeclaredType,
+      arrayElementShape: inner.arrayElementShape ?? null,
       mapKeyType: inner.mapKeyType,
       mapValueType: inner.mapValueType,
       mapValueShape: inner.mapValueShape,
@@ -1559,6 +1597,7 @@ export function resolveWeakTargetShapeTypeName(
     info.valueType = 'array'
     info.arrayElementType = elementInfo.valueType
     info.arrayElementDeclaredType = arrayElementTypeName
+    info.arrayElementShape = elementInfo.shape
     info.arrayElementFunctionType = elementInfo.functionType
 
     return info
@@ -1622,6 +1661,7 @@ export function cloneResolvedTypeInfo(info: ResolvedTypeInfo): ResolvedTypeInfo 
     shape: info.shape,
     arrayElementType: info.arrayElementType,
     arrayElementDeclaredType: info.arrayElementDeclaredType,
+    arrayElementShape: info.arrayElementShape ?? null,
     arrayElementFunctionType: info.arrayElementFunctionType ?? null,
     mapKeyType: info.mapKeyType,
     mapValueType: info.mapValueType,
@@ -1641,6 +1681,7 @@ export function unresolvedTypeInfo(): ResolvedTypeInfo {
     shape: null,
     arrayElementType: null,
     arrayElementDeclaredType: null,
+    arrayElementShape: null,
     arrayElementFunctionType: null,
     mapKeyType: null,
     mapValueType: null,
@@ -1712,11 +1753,9 @@ function qualifiedTypeRef(typeRef: TypeRef | null, nullable: boolean, ownership:
 
   if (typeRef.kind === 'object') {
     return {
-      kind: 'object',
-      fields: typeRef.fields,
+      ...typeRef,
       nullable,
-      ownership: resolvedOwnership,
-      traits: typeRef.traits
+      ownership: resolvedOwnership
     }
   }
 

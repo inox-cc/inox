@@ -2095,6 +2095,7 @@ function createFunctionReferenceArrayMapCall(
     callee: callback,
     args,
     valueType: functionType.returnType,
+    typeRef: functionType.returnTypeRef ?? null,
     nullable: functionType.returnNullable === true,
     arrayElementType: functionType.returnArrayElementType ?? null,
     arrayElementDeclaredType: functionType.returnArrayElementDeclaredType ?? null,

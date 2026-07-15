@@ -1,4 +1,5 @@
 import { diagnostic } from '../../diagnostics.ts'
+import { compilerLibraryNativeTypeForId } from '../../extensions/library-set.ts'
 import { irClassMethodEffectName } from '../../ir.ts'
 import { nodeStringListIncludes } from '../../stdlib/node/string-list.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
@@ -948,7 +949,7 @@ export function emitCClassDescriptorDeclarationsForNames(
   return lines
 }
 
-function emitCClassDescriptorDeclaration(info: CClassInfo, context: ClassInfoLookupContext): string[] {
+function emitCClassDescriptorDeclaration(info: CClassInfo, context: CEmitContext): string[] {
   const typeName = emitCClassInfoTypeName(info)
   const lines: string[] = []
 
@@ -980,7 +981,7 @@ function emitCClassDescriptorDeclaration(info: CClassInfo, context: ClassInfoLoo
   return lines
 }
 
-function emitCClassDescriptorFieldReaderDeclaration(info: CClassInfo, context: ClassInfoLookupContext): string[] {
+function emitCClassDescriptorFieldReaderDeclaration(info: CClassInfo, context: CEmitContext): string[] {
   const typeName = emitCClassInfoTypeName(info)
   const lines = [
     `inox_status ${typeName}::inox_read_field(const ${typeName}& value, uint32_t index, inox_value* out) {`
@@ -1015,7 +1016,7 @@ function pushIndentedClassFieldReadLines(target: string[], lines: string[]): voi
   }
 }
 
-function emitCClassDescriptorFieldReadLines(field: CObjectShapeField, context: ClassInfoLookupContext): string[] {
+function emitCClassDescriptorFieldReadLines(field: CObjectShapeField, context: CEmitContext): string[] {
   const reference = `value.${emitCClassFieldName(field.name)}`
 
   if (field.valueType === 'number') {
@@ -1040,11 +1041,51 @@ function emitCClassDescriptorFieldReadLines(field: CObjectShapeField, context: C
     ]
   }
 
+  const nativeRuntimeValueLines = emitCClassDescriptorNativeFieldReadLines(field, reference, context)
+
+  if (nativeRuntimeValueLines !== null) {
+    return nativeRuntimeValueLines
+  }
+
   if (field.className !== null && typeof field.className !== 'undefined') {
     return [`*out = ${reference};`, 'inox_retain(*out);', 'return INOX_OK;']
   }
 
   return ['*out = inox_undefined_value();', 'return INOX_OK;']
+}
+
+function emitCClassDescriptorNativeFieldReadLines(
+  field: CObjectShapeField,
+  reference: string,
+  context: CEmitContext
+): string[] | null {
+  if (classFieldLibraryNativeCppType(field) === null) {
+    return null
+  }
+
+  const typeRef = field.typeRef
+
+  if (typeRef === null || typeof typeRef === 'undefined' || typeRef.kind !== 'nominal') {
+    return null
+  }
+
+  const nativeType = compilerLibraryNativeTypeForId(context.libraries, typeRef.typeId)
+  const expression = nativeType?.cRuntimeValueExpression
+
+  if (expression === null || typeof expression === 'undefined') {
+    context.diagnostics.push(
+      diagnostic(
+        'INOX_C_CLASS',
+        `native class field ${field.name} type ${typeRef.typeId} requires a C++ runtime value expression`,
+        field.loc
+      )
+    )
+    return ['*out = inox_undefined_value();', 'return INOX_OK;']
+  }
+
+  const runtimeValue = expression.split('$value').join(reference)
+
+  return [`*out = ${runtimeValue};`, 'inox_retain(*out);', 'return INOX_OK;']
 }
 
 function emitCClassDescriptorString(value: string | null): string {

@@ -165,6 +165,7 @@ export function createArrowFunctionTypeMetadata(
     resolved: true,
     params,
     returnType: expression.returnType,
+    returnTypeRef: expression.returnTypeRef ?? null,
     declaredReturnType: expression.declaredReturnType,
     returnNullable: expression.returnNullable === true,
     returnArrayElementType: expression.returnArrayElementType ?? null,

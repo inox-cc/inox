@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
 import {
   arrayNativeTypeId,
+  arrayRuntimeRequirement,
   arrayTypeRef,
   compilerLibraryPackage as collectionsPackage,
   setNativeTypeId,
@@ -32,7 +33,8 @@ test('Array, Set и Promise принадлежат discoverable global packages 
       valueType: 'array',
       cppType: 'ArrayClass',
       baseTypeIds: [],
-      runtimeRequirements: ['collections', 'managed-values'],
+      runtimeRequirements: [arrayRuntimeRequirement],
+      cRuntimeValueExpression: '$value.raw()',
       typeParameters: ['T'],
       traits: [{ traitId: 'iterable', args: [{ kind: 'parameter', name: 'T' }] }]
     }
@@ -46,6 +48,7 @@ test('Array, Set и Promise принадлежат discoverable global packages 
       valueType: 'object',
       cppType: 'Set',
       cValueAdapter: 'Set($value)',
+      cRuntimeValueExpression: '$value.raw()',
       baseTypeIds: [],
       runtimeRequirements: ['global:collections#set'],
       typeParameters: ['T'],
@@ -64,6 +67,12 @@ test('Array, Set и Promise принадлежат discoverable global packages 
   assert.deepEqual(collectionsPackage.intrinsicBindings, [
     { role: 'array-literal', bindingId: 'global:collections#Array.intrinsic' }
   ])
+  assert.deepEqual(collectionsPackage.runtimeRequirements[0], {
+    id: arrayRuntimeRequirement,
+    dependencies: ['collections', 'managed-values'],
+    cPreludeIncludes: ['inox/array.h'],
+    capabilities: []
+  })
   assert.deepEqual(promisePackage.nativeTypes, [
     {
       libraryId: 'global:promise',

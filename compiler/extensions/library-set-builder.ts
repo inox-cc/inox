@@ -638,6 +638,7 @@ function validateNativeTypes(nativeTypes: LibraryNativeTypeDescriptor[]): void {
 
     validateTypeTraits(`native type ${nativeType.typeId}`, nativeType.traits ?? [], nativeTypes, typeParameters)
     validateNativeTypeValueAdapter(nativeType)
+    validateNativeTypeRuntimeValueExpression(nativeType)
     validateNativeTypeIteration(nativeType)
 
     for (let baseIndex = 0; baseIndex < nativeType.baseTypeIds.length; baseIndex = baseIndex + 1) {
@@ -655,6 +656,14 @@ function validateNativeTypeValueAdapter(nativeType: LibraryNativeTypeDescriptor)
 
   if (adapter !== null && typeof adapter !== 'undefined' && !adapter.includes('$value')) {
     throw new Error(`native type ${nativeType.typeId} C++ value adapter requires $value`)
+  }
+}
+
+function validateNativeTypeRuntimeValueExpression(nativeType: LibraryNativeTypeDescriptor): void {
+  const expression = nativeType.cRuntimeValueExpression
+
+  if (expression !== null && typeof expression !== 'undefined' && !expression.includes('$value')) {
+    throw new Error(`native type ${nativeType.typeId} C++ runtime value expression requires $value`)
   }
 }
 
@@ -1174,6 +1183,10 @@ function validateTypeRef(
       validateTypeRef(`${label} field ${field.name}`, field.typeRef, nativeTypes, typeParameters)
     }
 
+    if (typeRef.dynamicField !== null && typeof typeRef.dynamicField !== 'undefined') {
+      validateTypeRef(`${label} dynamic field`, typeRef.dynamicField, nativeTypes, typeParameters)
+    }
+
     return
   }
 }
@@ -1546,6 +1559,8 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           sortedStrings(item.runtimeRequirements).join(',') +
           ':value-adapter=' +
           (item.cValueAdapter ?? '') +
+          ':runtime-value-expression=' +
+          (item.cRuntimeValueExpression ?? '') +
           ':parameters=' +
           (item.typeParameters ?? []).map(fingerprintAtom).join(',') +
           ':traits=' +
@@ -1874,13 +1889,20 @@ function typeRefFingerprint(typeRef: TypeRef): string {
         fingerprintAtom(field.name) +
           ':' +
           (field.readonly ? 'readonly' : 'mutable') +
+          (field.optional === true ? ':optional' : '') +
           ':' +
           typeRefFingerprint(field.typeRef)
       )
     }
 
     fields.sort()
-    return 'object{' + fields.join(',') + '}' + common
+    let dynamic = typeRef.dynamic === true ? ':dynamic' : ''
+
+    if (typeRef.dynamicField !== null && typeof typeRef.dynamicField !== 'undefined') {
+      dynamic = dynamic + ':dynamic-field=' + typeRefFingerprint(typeRef.dynamicField)
+    }
+
+    return 'object{' + fields.join(',') + '}' + dynamic + common
   }
 
   return 'unknown' + common
