@@ -34,12 +34,10 @@ export type CExpressionTypeDependencies = {
   isFetchAbortControllerConstructorExpression: (expression: AnyNode) => boolean
   isIndexAccessExpression: (expression: AnyNode) => boolean
   isMemberAccessExpression: (expression: AnyNode) => boolean
-  isNumberConversionCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isNumberToStringCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isPromiseConstructorExpression: (expression: AnyNode) => boolean
   isPromiseReturningFunctionCallee: (callee: AnyNode, context: CFunctionContext) => boolean
   isStringCaseCall: (expression: AnyNode, context: CFunctionContext) => boolean
-  isStringConversionCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isStringPadStartCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isStringPredicateCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isStringSliceCall: (expression: AnyNode, context: CFunctionContext) => boolean
@@ -576,10 +574,6 @@ export function inferExpressionType(
     return 'string'
   }
 
-  if (deps.isNumberConversionCall(expression, context)) {
-    return 'number'
-  }
-
   if (deps.isNumberToStringCall(expression, context)) {
     return 'string'
   }
@@ -598,10 +592,6 @@ export function inferExpressionType(
 
   if (deps.isClassConstructorExpression(expression, context)) {
     return 'object'
-  }
-
-  if (deps.isStringConversionCall(expression, context)) {
-    return 'string'
   }
 
   if (deps.isStringCaseCall(expression, context)) {
@@ -801,6 +791,10 @@ export function inferExpressionType(
       return anyNodeValueType
     }
 
+    if (expression.templatePlaceholder === true && expression.valueType === 'unknown') {
+      return 'unknown'
+    }
+
     return 'number'
   }
 
@@ -853,6 +847,10 @@ export function inferExpressionType(
 
     if (anyNodeValueType !== null && typeof anyNodeValueType !== 'undefined') {
       return anyNodeValueType
+    }
+
+    if (expression.templatePlaceholder === true && expression.valueType === 'unknown') {
+      return 'unknown'
     }
 
     return 'number'

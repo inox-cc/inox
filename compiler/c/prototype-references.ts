@@ -75,6 +75,7 @@ function collectCReferencedFunctionPrototypeChildNames(
   collectCReferencedFunctionPrototypeNamesFromValue(item.elements, functionNames, target)
   collectCReferencedFunctionPrototypeNamesFromValue(item.properties, functionNames, target)
   collectCReferencedFunctionPrototypeNamesFromValue(item.expression, functionNames, target)
+  collectCReferencedFunctionPrototypeNamesFromValue(item.expressions, functionNames, target)
   collectCReferencedFunctionPrototypeNamesFromValue(item.declaration, functionNames, target)
   collectCReferencedFunctionPrototypeNamesFromValue(item.awaitedExpression, functionNames, target)
   collectCReferencedFunctionPrototypeNamesFromValue(item.awaitedPromiseExpression, functionNames, target)

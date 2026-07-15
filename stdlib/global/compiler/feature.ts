@@ -9,9 +9,7 @@ import {
   mapIndexSetFeature
 } from '../collections/compiler/feature.ts'
 import {
-  collectNumberFromStringNullIrFeatures,
   collectNumericCastsIrFeatures,
-  numberFromStringNullFeature,
   numericCastsFeature
 } from '../conversions/compiler/feature.ts'
 import { collectJsonIrFeatures, jsonFeature } from '../json/compiler/feature.ts'
@@ -21,7 +19,6 @@ export const globalStdlibFeatures: CompilerFeatureDescriptor[] = [
   jsonFeature,
   mapGetNullFeature,
   mapIndexSetFeature,
-  numberFromStringNullFeature,
   numericCastsFeature
 ]
 
@@ -30,7 +27,6 @@ export function collectGlobalStdlibIrFeatures(node: AnyNode, features: Set<IrFea
   collectJsonIrFeatures(node, features)
   collectMapGetNullIrFeatures(node, features)
   collectMapIndexSetIrFeatures(node, features)
-  collectNumberFromStringNullIrFeatures(node, features)
   collectNumericCastsIrFeatures(node, features)
 }
 

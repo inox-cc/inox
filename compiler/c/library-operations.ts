@@ -25,6 +25,7 @@ type CompilerLibraryCArgumentSource = {
 
 type CompilerLibraryExpressionNode = AnyNode & {
   libraryCExpression?: string | null
+  libraryCLowering?: string | null
   libraryCArgumentAdapters?: string[] | null
   libraryCArgumentKinds?: string[] | null
   libraryCArgumentSources?: Array<CompilerLibraryCArgumentSource | null> | null
@@ -52,6 +53,8 @@ type CompilerLibraryNativeFieldContext = {
 export type CompilerLibraryLoweringDependencies = {
   emitCValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
   emitPreparedNumberExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitPreparedNumberFromStringExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitPreparedStringConversionExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
   emitPreparedStringBytesOperand(
     expression: AnyNode,
     context: CFunctionContext,
@@ -227,6 +230,12 @@ export function emitPreparedCompilerLibraryCallExpression(
   options?: PreparedCallOptions | null
 ): PreparedExpression | null {
   const item = expression as CompilerLibraryExpressionNode
+  const lowered = emitPreparedCompilerLibraryIntrinsicExpression(expression, item, context, dependencies)
+
+  if (lowered !== null) {
+    return lowered
+  }
+
   const target = item.libraryCExpression
   const argumentKinds = item.libraryCArgumentKinds
   const argumentSources = item.libraryCArgumentSources
@@ -733,6 +742,29 @@ export function emitPreparedCompilerLibraryCallExpression(
     valueType: item.valueType ?? undefined,
     owned: item.libraryOwned === true
   }
+}
+
+function emitPreparedCompilerLibraryIntrinsicExpression(
+  expression: AnyNode,
+  item: CompilerLibraryExpressionNode,
+  context: CFunctionContext,
+  dependencies: CompilerLibraryLoweringDependencies
+): PreparedExpression | null {
+  if (expression.type !== 'CallExpression' || expression.args.length !== 1) {
+    return null
+  }
+
+  const argument = expression.args[0]
+
+  if (item.libraryCLowering === 'string-conversion') {
+    return dependencies.emitPreparedStringConversionExpression(argument, context)
+  }
+
+  if (item.libraryCLowering === 'number-from-string') {
+    return dependencies.emitPreparedNumberFromStringExpression(argument, context)
+  }
+
+  return null
 }
 
 function compilerLibraryScalarType(valueType: string | null | undefined): string | undefined {

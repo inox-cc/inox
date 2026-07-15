@@ -14,36 +14,17 @@ type NumericConversionFeatureNode = AnyNode & {
   type?: string | null
 }
 
-export const numberFromStringNullFeatureId: IrFeature = 'number-from-string-null'
 export const numericCastsFeatureId: IrFeature = 'numeric-casts'
 
-export const numberFromStringNullFeatureRuntimeRequirements: IrRuntimeRequirement[] = []
 export const numericCastsFeatureRuntimeRequirements: IrRuntimeRequirement[] = []
 
-export const numberFromStringNullFeatureCPreludeIncludes: string[] = []
 export const numericCastsFeatureCPreludeIncludes: string[] = []
 
-export const numberFromStringNullFeature: CompilerFeatureDescriptor = {
-  id: numberFromStringNullFeatureId,
-  runtimeRequirements: numberFromStringNullFeatureRuntimeRequirements,
-  cPreludeIncludes: numberFromStringNullFeatureCPreludeIncludes,
-  hasCPreludeHelpers: false
-}
 export const numericCastsFeature: CompilerFeatureDescriptor = {
   id: numericCastsFeatureId,
   runtimeRequirements: numericCastsFeatureRuntimeRequirements,
   cPreludeIncludes: numericCastsFeatureCPreludeIncludes,
   hasCPreludeHelpers: false
-}
-
-export function collectNumberFromStringNullIrFeatures(node: AnyNode, features: NumericConversionFeatureSet): void {
-  const item = node as NumericConversionFeatureNode
-
-  if (!isNumberConversionCall(item)) {
-    return
-  }
-
-  features.add('number-from-string-null')
 }
 
 export function collectNumericCastsIrFeatures(node: AnyNode, features: NumericConversionFeatureSet): void {
@@ -54,10 +35,6 @@ export function collectNumericCastsIrFeatures(node: AnyNode, features: NumericCo
   }
 
   features.add('numeric-casts')
-}
-
-function isNumberConversionCall(node: NumericConversionFeatureNode): boolean {
-  return referenceCallName(node) === 'Number'
 }
 
 function isNumericCastCall(node: NumericConversionFeatureNode): boolean {

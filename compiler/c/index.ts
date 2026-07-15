@@ -333,11 +333,9 @@ import {
   canEmitStringBytesOperand,
   collectTemplatePlaceholderExpressions,
   cookTemplateLiteralText,
-  emitCNumberConversionValueExpression,
   emitCNumberToStringValueExpression,
   emitCStringCaseValueExpression,
   emitCStringConcatValueExpression,
-  emitCStringConversionValueExpression,
   emitCStringIndexValueExpression,
   emitCStringPadStartValueExpression,
   emitCStringSliceValueExpression,
@@ -346,6 +344,8 @@ import {
   emitCTemplateLiteralFormatExpression,
   emitCTemplateLiteralValueExpression,
   emitPreparedCppStringArgument,
+  emitPreparedNumberFromStringExpression,
+  emitPreparedStringConversionExpression,
   emitPreparedStringBytesOperand,
   emitPreparedStringCharCodeAtExpression,
   emitPreparedStringCompareExpression,
@@ -353,12 +353,10 @@ import {
   emitPreparedStringLengthExpression,
   emitPreparedStringPredicateCall,
   emitStringExpression,
-  isNumberConversionCall,
   isNumberToStringCall,
   isRuntimeProducedStringExpression,
   isStringCaseCall,
   isStringConcatExpression,
-  isStringConversionCall,
   isStringPadStartCall,
   isStringPredicateCall,
   isStringSliceCall,
@@ -458,7 +456,6 @@ const nullableLoweringDependencies: NullableLoweringDependencies = {
   emitNullableScalarValueExpression,
   emitPreparedNumberExpression,
   inferExpressionType,
-  isNumberConversionCall,
   resolveRuntimeCallbackCalleeType
 }
 
@@ -754,7 +751,9 @@ fetchLoweringDependencies = {
 
 compilerLibraryLoweringDependencies = {
   emitCValueExpression,
+  emitPreparedNumberFromStringExpression,
   emitPreparedNumberExpression,
+  emitPreparedStringConversionExpression,
   emitPreparedStringBytesOperand,
   emitRuntimeCallbackValue,
   emitThrownCheckLines,
@@ -828,6 +827,7 @@ const stringLoweringDependencies: StringLoweringDependencies = {
   isBoxedRuntimeStringReference,
   isMemberAccessExpression,
   isNodeRuntimeProducedStringExpression: isConfiguredRuntimeProducedStringExpression,
+  isNullableScalarRuntimeExpression,
   nodeRuntimeStringConstantValue: runtimeStringConstantValue,
   resolveKnownObjectIndex,
   resolveKnownObjectMember,
@@ -1019,12 +1019,10 @@ const expressionTypeDependencies = {
   isFetchAbortControllerConstructorExpression,
   isIndexAccessExpression,
   isMemberAccessExpression,
-  isNumberConversionCall,
   isNumberToStringCall,
   isPromiseConstructorExpression,
   isPromiseReturningFunctionCallee,
   isStringCaseCall,
-  isStringConversionCall,
   isStringPadStartCall,
   isStringPredicateCall,
   isStringSliceCall,
@@ -1052,7 +1050,6 @@ function currentCExpressionErrorTarget(errorTargets: string[]): string {
 const cCallExpressionDependencies = {
   currentErrorTarget: currentCExpressionErrorTarget,
   emitCExpression,
-  emitCNumberConversionValueExpression,
   emitCObjectLiteralValueExpression,
   emitCValueExpression,
   emitFunctionPointerAdapter,
@@ -1162,14 +1159,12 @@ const cValueExpressionDependencies = {
   emitCAwaitValueExpression,
   emitCClassObjectValueExpression,
   emitCNullishCoalescingValueExpression,
-  emitCNumberConversionValueExpression,
   emitCNumberToStringValueExpression,
   emitCObjectLiteralValueExpression,
   emitCOptionalIndexValueExpression,
   emitCOptionalMemberValueExpression,
   emitCStringCaseValueExpression,
   emitCStringConcatValueExpression,
-  emitCStringConversionValueExpression,
   emitCStringIndexValueExpression,
   emitCStringPadStartValueExpression,
   emitCStringSliceValueExpression,
@@ -1223,7 +1218,6 @@ const cValueExpressionDependencies = {
   isStringCaseCall,
   isStringConcatExpression,
   isNumberToStringCall,
-  isStringConversionCall,
   isStringPadStartCall,
   isStringSliceCall,
   isStringSplitCall,
@@ -4764,6 +4758,10 @@ function emitNullableScalarValueExpression(expression: AnyNode, context: CFuncti
 
   const libraryValue = emitPreparedCompilerLibraryCallExpression(expression, context)
 
+  if (libraryValue !== null && libraryValue.cppType === 'inox::Value') {
+    return libraryValue
+  }
+
   if (libraryValue !== null && libraryValue.cppType === 'inox::String') {
     const lines: string[] = []
     const valueName = nextCName(context, 'inox_library_nullable_string')
@@ -4905,12 +4903,6 @@ function emitPreparedNullableScalarRuntimeValueExpression(
 
   if (fieldValue !== null && typeof fieldValue !== 'undefined') {
     return fieldValue
-  }
-
-  const numberConversion = emitCNumberConversionValueExpression(expression, context)
-
-  if (numberConversion !== null && typeof numberConversion !== 'undefined') {
-    return numberConversion
   }
 
   const mapIndexGet = emitPreparedMapIndexGetExpression(expression, context)

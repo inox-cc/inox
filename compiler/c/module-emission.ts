@@ -1819,6 +1819,7 @@ function addCModuleNestedFunctionReferenceChildNames(names: Set<string>, item: A
   addCModuleNestedFunctionReferenceNames(names, item.elements)
   addCModuleNestedFunctionReferenceNames(names, item.properties)
   addCModuleNestedFunctionReferenceNames(names, item.expression)
+  addCModuleNestedFunctionReferenceNames(names, item.expressions)
 }
 
 function addCModuleReferenceChildNames(names: Set<string>, item: AnyNode): void {
@@ -1850,6 +1851,7 @@ function addCModuleReferenceChildNames(names: Set<string>, item: AnyNode): void 
   addCModuleReferenceNames(names, item.elements)
   addCModuleReferenceNames(names, item.properties)
   addCModuleReferenceNames(names, item.expression)
+  addCModuleReferenceNames(names, item.expressions)
 }
 
 function isCModuleNestedFunctionLikeNode(node: AnyNode): boolean {

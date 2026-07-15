@@ -117,4 +117,5 @@ function visitSyntaxFeatureChildren(item: SyntaxFeatureChildNode, usages: IrSynt
   visitSyntaxFeatureChild(item.elements, usages)
   visitSyntaxFeatureChild(item.properties, usages)
   visitSyntaxFeatureChild(item.expression, usages)
+  visitSyntaxFeatureChild(item.expressions, usages)
 }

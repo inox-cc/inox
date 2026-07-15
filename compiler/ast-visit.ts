@@ -34,6 +34,7 @@ export type AstLikeObject = {
   elements?: unknown
   properties?: unknown
   expression?: unknown
+  expressions?: unknown
   child?: unknown
   siblings?: unknown
 }
@@ -111,6 +112,7 @@ function visitAstLikeNode(node: unknown, visitor: AstLikeVisitor, skipKeys: Set<
   visitAstLikeChild('elements', item.elements, visitor, skipKeys)
   visitAstLikeChild('properties', item.properties, visitor, skipKeys)
   visitAstLikeChild('expression', item.expression, visitor, skipKeys)
+  visitAstLikeChild('expressions', item.expressions, visitor, skipKeys)
   visitAstLikeChild('child', item.child, visitor, skipKeys)
   visitAstLikeChild('siblings', item.siblings, visitor, skipKeys)
 }

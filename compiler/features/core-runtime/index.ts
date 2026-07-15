@@ -354,16 +354,6 @@ function recordCallFeatures(expression: CoreRuntimeNode, features: CoreRuntimeFe
     features.add('runtime-values')
   }
 
-  if (isStringConversionCall(expression)) {
-    features.add('runtime-values')
-    features.add('string-bytes')
-  }
-
-  if (isNumberConversionCall(expression)) {
-    features.add('runtime-values')
-    features.add('string-bytes')
-  }
-
   const stringMethod = stringRuntimeMethodName(expression)
 
   if (stringMethod !== null && typeof stringMethod !== 'undefined') {
@@ -383,7 +373,7 @@ function plainFunctionCallHasStringArgument(expression: CoreRuntimeNode): boolea
     return false
   }
 
-  if (isStringConversionCall(expression) || isNumberConversionCall(expression) || isNumericCastCall(expression)) {
+  if (isNumericCastCall(expression)) {
     return false
   }
 
@@ -530,18 +520,6 @@ function isArrayIsArrayCall(expression: CoreRuntimeNode): boolean {
   return (
     path !== null && typeof path !== 'undefined' && path.length === 2 && path[0] === 'Array' && path[1] === 'isArray'
   )
-}
-
-function isStringConversionCall(expression: CoreRuntimeNode): boolean {
-  const calleePath = simpleReferencePath(expression.callee)
-
-  return calleePath !== null && typeof calleePath !== 'undefined' && calleePath[0] === 'String'
-}
-
-function isNumberConversionCall(expression: CoreRuntimeNode): boolean {
-  const calleePath = simpleReferencePath(expression.callee)
-
-  return calleePath !== null && typeof calleePath !== 'undefined' && calleePath[0] === 'Number'
 }
 
 function isNumericCastCall(expression: CoreRuntimeNode): boolean {

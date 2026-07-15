@@ -1076,7 +1076,8 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
         item.libraryId + ':' + item.bindingId + ':' + item.operationId + ':' + item.kind + ':' +
           sortedStrings(item.bindingAliases ?? []).join(',') + ':' +
           sortedStrings(item.runtimeRequirements).join(',') + ':' +
-          (item.cExpression ?? '') + ':' + (item.cClassFormatExpression ?? '') + ':' +
+          (item.cExpression ?? '') + ':' + (item.cLowering ?? '') + ':' +
+          (item.cClassFormatExpression ?? '') + ':' +
           (item.cArgumentKinds ?? []).join(',') + ':' +
           (item.cArgumentAdapters ?? []).join(',') + ':' + operationArgumentSourcesFingerprint(item.cArgumentSources) + ':' +
           (item.callbackLifetime ?? '') + ':' +
@@ -1218,11 +1219,28 @@ function operationArgumentChecksFingerprint(
         (check.functionReturnType ?? '') + ':' +
         (check.functionAsync === true ? 'async' : check.functionAsync === false ? 'sync' : '') + ':' +
         (check.functionAsyncDiagnosticCode ?? '') + ':' +
-        (check.functionAsyncDiagnosticMessage ?? '')
+        (check.functionAsyncDiagnosticMessage ?? '') + ':' +
+        objectMethodChecksFingerprint(check.objectMethods ?? [])
     )
   }
 
   return rows.join(';')
+}
+
+function objectMethodChecksFingerprint(
+  checks: NonNullable<LibraryArgumentCheckDescriptor['objectMethods']>
+): string {
+  const rows: string[] = []
+
+  for (let index = 0; index < checks.length; index = index + 1) {
+    const check = checks[index]
+    rows.push(
+      check.name + ':' + check.minArgs + ':' + check.maxArgs + ':' +
+        sortedStrings(check.returnValueTypes).join(',')
+    )
+  }
+
+  return rows.join(',')
 }
 
 function callbackParametersFingerprint(
@@ -1255,7 +1273,8 @@ function operationVariantsFingerprint(operation: LibraryOperationDescriptor): st
         (variant.argumentIndex ?? '') + ':' + sortedStrings(variant.stringLiterals ?? []).join(',') + ':' +
         sortedStrings(variant.argumentValueTypes ?? []).join(',') + ':' +
         (variant.objectFieldName ?? '') + ':' + sortedBooleans(variant.booleanLiterals ?? []).join(',') + ':' +
-        (variant.cExpression ?? '') + ':' + (variant.cClassFormatExpression ?? '') + ':' +
+        (variant.cExpression ?? '') + ':' + (variant.cLowering ?? '') + ':' +
+        (variant.cClassFormatExpression ?? '') + ':' +
         (variant.cArgumentKinds ?? []).join(',') + ':' +
         (variant.cArgumentAdapters ?? []).join(',') + ':' + operationArgumentSourcesFingerprint(variant.cArgumentSources) + ':' +
         (variant.callbackLifetime ?? '') + ':' +

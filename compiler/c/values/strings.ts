@@ -184,6 +184,7 @@ export type StringLoweringDependencies = {
   isBoxedRuntimeStringReference(expression: AnyNode, context: StringCContext): boolean
   isMemberAccessExpression(expression: AnyNode): boolean
   isNodeRuntimeProducedStringExpression(expression: AnyNode | null | undefined): boolean
+  isNullableScalarRuntimeExpression(expression: AnyNode, context: StringCContext): boolean
   nodeRuntimeStringConstantValue(expression: AnyNode | null | undefined): string | null
   resolveKnownObjectIndex(expression: AnyNode, context: StringCContext): CObjectFieldInfo | null
   resolveKnownObjectMember(expression: AnyNode, context: StringCContext): CObjectFieldInfo | null
@@ -220,6 +221,37 @@ function currentStringErrorTarget(context: StringCContext): string {
   }
 
   return targets[targets.length - 1]
+}
+
+function sourceLocationWithFile(loc: SourceLocation | undefined, line: number, column: number): SourceLocation {
+  const result: SourceLocation = {
+    line,
+    column
+  }
+
+  if (loc !== null && typeof loc !== 'undefined') {
+    const file = loc.file
+
+    if (file !== null && typeof file !== 'undefined') {
+      result.file = file
+    }
+  }
+
+  return result
+}
+
+function tokenizeLocationOptions(loc: SourceLocation | undefined): TokenizeLocationOptions {
+  const options: TokenizeLocationOptions = {}
+
+  if (loc !== null && typeof loc !== 'undefined') {
+    const file = loc.file
+
+    if (file !== null && typeof file !== 'undefined') {
+      options.file = file
+    }
+  }
+
+  return options
 }
 
 function currentStringErrorTargetRequiresActive(context: StringCContext): boolean {
@@ -291,37 +323,6 @@ function emitStringObjectGetValueLines(
   pushAllLines(lines, emitStringThrownCheckLines(context))
 
   return lines
-}
-
-function sourceLocationWithFile(loc: SourceLocation | undefined, line: number, column: number): SourceLocation {
-  const result: SourceLocation = {
-    line,
-    column
-  }
-
-  if (loc !== null && typeof loc !== 'undefined') {
-    const file = loc.file
-
-    if (file !== null && typeof file !== 'undefined') {
-      result.file = file
-    }
-  }
-
-  return result
-}
-
-function tokenizeLocationOptions(loc: SourceLocation | undefined): TokenizeLocationOptions {
-  const options: TokenizeLocationOptions = {}
-
-  if (loc !== null && typeof loc !== 'undefined') {
-    const file = loc.file
-
-    if (file !== null && typeof file !== 'undefined') {
-      options.file = file
-    }
-  }
-
-  return options
 }
 
 function nodeLocation(node: AnyNode | null | undefined): SourceLocation | null | undefined {
@@ -487,7 +488,7 @@ export function emitPreparedStringLengthExpression(
   if (
     isDynamicRuntimeStringFieldExpression(object, context) &&
     !stringDeps(context).isNodeRuntimeProducedStringExpression(object) &&
-    !isNarrowedNullableStringPath(object, context)
+    !isNarrowedNullableScalarPath(object, context)
   ) {
     return null
   }
@@ -1899,10 +1900,10 @@ function isNarrowedNullableStringField(
     return false
   }
 
-  return isNarrowedNullableStringPath(expression, context)
+  return isNarrowedNullableScalarPath(expression, context)
 }
 
-function isNarrowedNullableStringPath(expression: AnyNode, context: StringCContext): boolean {
+function isNarrowedNullableScalarPath(expression: AnyNode, context: StringCContext): boolean {
   const narrowedNullableScalars = context.narrowedNullableScalars
 
   if (narrowedNullableScalars === null || typeof narrowedNullableScalars === 'undefined') {
@@ -2439,13 +2440,13 @@ export function emitCStringConcatValueExpression(expression: AnyNode, context: S
     leftCpp === null &&
     stringDeps(context).inferExpressionType(expression.left, context) !== 'string'
   ) {
-    leftCpp = emitCStringConversionValueExpression(stringConversionExpression(expression.left), context)
+    leftCpp = emitPreparedStringConversionExpression(expression.left, context)
   }
 
   if (rightType === 'string') {
     right = emitPreparedCppStringArgument(expression.right, context, 'inox_concat_string')
   } else {
-    right = emitCStringConversionValueExpression(stringConversionExpression(expression.right), context)
+    right = emitPreparedStringConversionExpression(expression.right, context)
   }
 
   if (right === null || typeof right === 'undefined') {
@@ -2485,19 +2486,6 @@ export function emitCStringConcatValueExpression(expression: AnyNode, context: S
   }
 }
 
-function stringConversionExpression(expression: AnyNode): AnyNode {
-  return {
-    type: 'CallExpression',
-    callee: {
-      type: 'Reference',
-      path: ['String'],
-      loc: expression.loc
-    },
-    args: [expression],
-    loc: expression.loc
-  }
-}
-
 export function emitCTemplateLiteralValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
   if (expression.raw.includes('${')) {
     const formatted = emitCTemplateLiteralFormatExpression(expression, context)
@@ -2530,9 +2518,11 @@ export function emitCTemplateLiteralValueExpression(expression: AnyNode, context
 export function emitCTemplateLiteralFormatExpression(expression: AnyNode, context: StringCContext): PreparedStringFormat {
   const diagnostics = context.diagnostics ?? []
   const parts = parseTemplateLiteralParts(expression.raw, { diagnostics }, expression.loc)
+  const checkedExpressions = checkedTemplatePlaceholderExpressions(expression)
   const lines: string[] = []
   const formats: string[] = []
   const values: string[] = []
+  let placeholderIndex = 0
 
   for (const part of parts) {
     if (part.kind === 'text') {
@@ -2544,7 +2534,19 @@ export function emitCTemplateLiteralFormatExpression(expression: AnyNode, contex
       continue
     }
 
-    const placeholder = parseTemplatePlaceholderExpression(part.value, part.loc, context)
+    let placeholder: AnyNode | null = null
+
+    if (placeholderIndex < checkedExpressions.length) {
+      placeholder = checkedExpressions[placeholderIndex]
+
+      if (!validateTemplatePlaceholderExpressionReferences(placeholder, context)) {
+        placeholder = null
+      }
+    } else {
+      placeholder = parseTemplatePlaceholderExpression(part.value, part.loc, context)
+    }
+
+    placeholderIndex = placeholderIndex + 1
 
     if (placeholder === null || typeof placeholder === 'undefined') {
       continue
@@ -2566,6 +2568,18 @@ export function emitCTemplateLiteralFormatExpression(expression: AnyNode, contex
 
 function emitPreparedTemplatePlaceholderFormat(expression: AnyNode, context: StringCContext): PreparedStringFormat {
   const valueType = stringDeps(context).inferExpressionType(expression, context)
+
+  if (
+    stringDeps(context).isNullableScalarRuntimeExpression(expression, context) &&
+    !isNarrowedNullableScalarPath(expression, context)
+  ) {
+    const value = emitPreparedStringConversionExpression(expression, context)
+
+    return emitPreparedStringBytesFormat(
+      emitPreparedRuntimeStringValueBytesOperand(value, context, 'inox_template_string')
+    )
+  }
+
   const knownString = emitPreparedKnownTemplatePlaceholderStringBytesOperand(
     expression,
     context,
@@ -2617,19 +2631,7 @@ function emitPreparedTemplatePlaceholderFormat(expression: AnyNode, context: Str
   }
 
   if (valueType === 'unknown' || isManagedRuntimeReturnType(valueType) || isOpaqueRuntimeValueType(valueType)) {
-    const value = emitCStringConversionValueExpression(
-      {
-        type: 'CallExpression',
-        callee: {
-          type: 'Reference',
-          path: ['String'],
-          loc: expression.loc
-        },
-        args: [expression],
-        loc: expression.loc
-      },
-      context
-    )
+    const value = emitPreparedStringConversionExpression(expression, context)
 
     return emitPreparedStringBytesFormat(
       emitPreparedRuntimeStringValueBytesOperand(value, context, 'inox_template_string')
@@ -2763,8 +2765,7 @@ function runtimeObjectNameStringMemberObjectName(expression: AnyNode, context: S
   return objectName
 }
 
-export function emitCStringConversionValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
-  const arg = expression.args[0]
+export function emitPreparedStringConversionExpression(arg: AnyNode, context: StringCContext): PreparedExpression {
   const classString = stringDeps(context).emitPreparedClassToStringExpression(arg, context)
 
   if (classString !== null && typeof classString !== 'undefined') {
@@ -2772,6 +2773,24 @@ export function emitCStringConversionValueExpression(expression: AnyNode, contex
   }
 
   const valueType = stringDeps(context).inferExpressionType(arg, context)
+
+  if (
+    stringDeps(context).isNullableScalarRuntimeExpression(arg, context) &&
+    !isNarrowedNullableScalarPath(arg, context)
+  ) {
+    const value = stringDeps(context).emitCValueExpression(arg, context)
+    const lines: string[] = []
+
+    pushAllLines(lines, value.lines)
+
+    return {
+      lines,
+      expression: `inox::String::fromValue(${value.expression})`,
+      cppType: 'inox::String',
+      runtimeTypeChecked: true,
+      valueType: 'string'
+    }
+  }
 
   if (valueType === 'string') {
     const value = emitPreparedStringBytesOperand(arg, context, 'inox_string_conversion')
@@ -2861,15 +2880,11 @@ export function emitCNumberToStringValueExpression(expression: AnyNode, context:
   }
 }
 
-export function emitCNumberConversionValueExpression(
-  expression: AnyNode,
+export function emitPreparedNumberFromStringExpression(
+  argument: AnyNode,
   context: StringCContext
-): PreparedExpression | null {
-  if (!isNumberConversionCall(expression, context)) {
-    return null
-  }
-
-  const value = emitPreparedStringBytesOperand(expression.args[0], context, 'inox_number_conversion')
+): PreparedExpression {
+  const value = emitPreparedStringBytesOperand(argument, context, 'inox_number_conversion')
   const temp = nextCName(context, 'inox_value')
   const lines: string[] = []
   registerOwnedValue(context, temp)
@@ -2880,7 +2895,11 @@ export function emitCNumberConversionValueExpression(
 
   return {
     lines,
-    expression: temp
+    expression: temp,
+    cppType: 'inox::Value',
+    nullable: true,
+    runtimeTypeChecked: true,
+    valueType: 'number'
   }
 }
 
@@ -3188,56 +3207,6 @@ export function isRawStringLiteralExpression(expression: AnyNode | null | undefi
   }
 
   return expression.type === 'TemplateLiteral' && !expression.raw.includes('${')
-}
-
-export function isStringConversionCall(expression: AnyNode | null | undefined, context: StringCContext): boolean {
-  if (
-    expression === null ||
-    typeof expression === 'undefined' ||
-    expression.type !== 'CallExpression' ||
-    expression.callee.type !== 'Reference' ||
-    expression.callee.path.length !== 1 ||
-    expression.args.length !== 1
-  ) {
-    return false
-  }
-
-  const path: string[] = expression.callee.path
-
-  if (path[0] !== 'String') {
-    return false
-  }
-
-  const arg = stringNodeAt(expression.args, 0)
-
-  if (stringDeps(context).hasClassToStringExpression(arg, context)) {
-    return true
-  }
-
-  const valueType = stringDeps(context).inferExpressionType(arg, context)
-
-  return valueType === 'boolean' || valueType === 'null' || valueType === 'number' || valueType === 'string'
-}
-
-export function isNumberConversionCall(expression: AnyNode | null | undefined, context: StringCContext): boolean {
-  if (
-    expression === null ||
-    typeof expression === 'undefined' ||
-    expression.type !== 'CallExpression' ||
-    expression.callee.type !== 'Reference' ||
-    expression.callee.path.length !== 1 ||
-    expression.args.length !== 1
-  ) {
-    return false
-  }
-
-  const path: string[] = expression.callee.path
-
-  if (path[0] !== 'Number') {
-    return false
-  }
-
-  return stringDeps(context).inferExpressionType(stringNodeAt(expression.args, 0), context) === 'string'
 }
 
 export function isNumberToStringCall(expression: AnyNode | null | undefined, context: StringCContext): boolean {
@@ -3754,6 +3723,12 @@ export function collectTemplatePlaceholderExpressions(expression: AnyNode | null
     return []
   }
 
+  const checkedExpressions = checkedTemplatePlaceholderExpressions(expression)
+
+  if (checkedExpressions.length > 0) {
+    return checkedExpressions
+  }
+
   const diagnostics: Diagnostic[] = []
   const parts = parseTemplateLiteralParts(expression.raw, { diagnostics }, expression.loc)
   const result: AnyNode[] = []
@@ -3771,6 +3746,16 @@ export function collectTemplatePlaceholderExpressions(expression: AnyNode | null
   }
 
   return result
+}
+
+function checkedTemplatePlaceholderExpressions(expression: AnyNode): AnyNode[] {
+  const expressions: unknown = expression.expressions
+
+  if (Array.isArray(expressions)) {
+    return expressions as AnyNode[]
+  }
+
+  return []
 }
 
 function parseTemplatePlaceholderCaptureExpression(value: string, loc: SourceLocation): AnyNode | null {
@@ -3910,7 +3895,7 @@ function visitTemplatePlaceholderValue(
   if (node.type === 'Reference') {
     const name = node.path[0]
 
-    if (!isKnownTemplatePlaceholderReference(node, parent, key, state.context)) {
+    if (!isKnownTemplatePlaceholderReference(node, state.context)) {
       reportUnknownTemplatePlaceholderReference(node, name, state)
     }
   }
@@ -3947,6 +3932,11 @@ function visitTemplatePlaceholderChildren(
   _key: string,
   state: TemplateReferenceValidationState
 ): void {
+  if (typeof node.libraryOperationId === 'string') {
+    visitTemplateLibraryOperationChildren(node, state)
+    return
+  }
+
   if (node.type === 'BinaryExpression') {
     visitTemplatePlaceholderValue(node.left, node, 'left', state)
     visitTemplatePlaceholderValue(node.right, node, 'right', state)
@@ -4000,10 +3990,38 @@ function visitTemplatePlaceholderChildren(
   }
 }
 
+function visitTemplateLibraryOperationChildren(node: AnyNode, state: TemplateReferenceValidationState): void {
+  visitTemplatePlaceholderValue(node.args, node, 'args', state)
+  visitTemplatePlaceholderValue(node.index, node, 'index', state)
+  visitTemplatePlaceholderValue(node.value, node, 'value', state)
+
+  const callee = node.callee
+
+  if (
+    callee !== null &&
+    typeof callee !== 'undefined' &&
+    (
+      callee.type === 'MemberExpression' ||
+      callee.type === 'OptionalMemberExpression' ||
+      callee.type === 'IndexExpression' ||
+      callee.type === 'OptionalIndexExpression'
+    )
+  ) {
+    visitTemplatePlaceholderValue(callee.object, callee, 'object', state)
+  }
+
+  if (node.type === 'MemberExpression' || node.type === 'OptionalMemberExpression') {
+    visitTemplatePlaceholderValue(node.object, node, 'object', state)
+  }
+
+  if (node.type === 'AssignmentExpression') {
+    visitTemplatePlaceholderValue(node.target?.object, node.target, 'object', state)
+    visitTemplatePlaceholderValue(node.target?.index, node.target, 'index', state)
+  }
+}
+
 function isKnownTemplatePlaceholderReference(
   expression: AnyNode,
-  parent: AnyNode | null,
-  key: string,
   context: StringCContext
 ): boolean {
   const name = expression.path[0]
@@ -4027,16 +4045,6 @@ function isKnownTemplatePlaceholderReference(
 
   if (jsGlobalRoots !== null && typeof jsGlobalRoots !== 'undefined' && isCJsGlobalRoot(name, { jsGlobalRoots })) {
     return true
-  }
-
-  if (
-    key === 'callee' &&
-    parent !== null &&
-    typeof parent !== 'undefined' &&
-    parent.type === 'CallExpression' &&
-    expression.path.length === 1
-  ) {
-    return name === 'Number' || name === 'String'
   }
 
   return false

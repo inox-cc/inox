@@ -751,6 +751,21 @@ function collectEscapingThrowValueTypesFromExpression(
     return types
   }
 
+  if (expression.type === 'TemplateLiteral') {
+    pushExpressionListThrowValueTypes(
+      types,
+      nodeList(expression.expressions),
+      functionThrowValueTypes,
+      functionNames,
+      exceptionValueNames,
+      classInstanceTypes,
+      includeClassMethods,
+      hasErrorTarget
+    )
+
+    return types
+  }
+
   if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
     return collectEscapingThrowValueTypesFromExpression(
       expression.object,

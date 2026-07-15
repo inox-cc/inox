@@ -59,38 +59,6 @@ function checkAssignableType(
   report(context, 'INOX_TYPE_MISMATCH', `cannot assign ${actualLabel} to ${expected}`, loc)
 }
 
-export function isStringConversionCall(expression: AnyNode): boolean {
-  return (
-    expression.callee.type === 'Reference' &&
-    expression.callee.path.length === 1 &&
-    firstPathSegment(expression.callee.path) === 'String'
-  )
-}
-
-export function checkStringConversionCall(
-  context: PrimitiveCallCheckerContext,
-  expression: AnyNode,
-  argTypes: ValueType[],
-  hasClassToString: boolean
-): ValueType {
-  if (expression.args.length !== 1) {
-    report(context, 'INOX_ARG_COUNT', `String expects 1 argument(s), got ${expression.args.length}`, expression.loc)
-    return 'string'
-  }
-
-  if (
-    argTypes[0] !== 'boolean' &&
-    argTypes[0] !== 'null' &&
-    argTypes[0] !== 'number' &&
-    argTypes[0] !== 'string' &&
-    !hasClassToString
-  ) {
-    report(context, 'INOX_TYPE_MISMATCH', `cannot convert ${argTypes[0]} to string with String`, expression.args[0].loc)
-  }
-
-  return 'string'
-}
-
 export function isArrayFromCall(expression: AnyNode, arrayShadowed: boolean): boolean {
   return (
     expression.callee.type === 'MemberExpression' &&
@@ -127,39 +95,6 @@ export function checkArrayFromCall(
   expression.arrayElementDeclaredType = 'string'
 
   return 'array'
-}
-
-export function isNumberConversionCall(expression: AnyNode): boolean {
-  return (
-    expression.callee.type === 'Reference' &&
-    expression.callee.path.length === 1 &&
-    firstPathSegment(expression.callee.path) === 'Number'
-  )
-}
-
-export function checkNumberConversionCall(
-  context: PrimitiveCallCheckerContext,
-  expression: AnyNode,
-  argTypes: ValueType[]
-): ValueType {
-  expression.valueType = 'number'
-  expression.nullable = true
-
-  if (expression.args.length !== 1) {
-    report(context, 'INOX_ARG_COUNT', `Number expects 1 argument(s), got ${expression.args.length}`, expression.loc)
-    return 'number'
-  }
-
-  checkAssignableType(
-    context,
-    argTypes[0],
-    'string',
-    expression.args[0].loc,
-    false,
-    expressionCanBeNull(expression.args[0])
-  )
-
-  return 'number'
 }
 
 export function numericCastName(expression: AnyNode): string | null {

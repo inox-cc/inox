@@ -29,6 +29,10 @@ import type { CallableSymbolCheckerContext } from './checker/callable-symbols.ts
 import { runtimeImportValueType } from './stdlib/node/runtime-imports.ts'
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
 import {
+  parseTemplateLiteralParts,
+  parseTemplatePlaceholderExpression
+} from './template-literals.ts'
+import {
   compilerLibraryHasModuleDeclaration,
   compilerLibraryIntrinsicRoleForBinding,
   compilerLibraryNativeTypeForId,
@@ -52,6 +56,7 @@ import type {
   LibraryOperationDescriptor,
   LibraryOperationKind,
   LibraryArgumentCheckDescriptor,
+  LibraryObjectMethodCheckDescriptor,
   LibraryObjectLiteralFieldDescriptor,
   LibraryOperationVariantDescriptor,
   LibraryResultShapeFieldDescriptor
@@ -139,12 +144,10 @@ import {
 } from './checker/expression-metadata.ts'
 import {
   checkArrayFromCall as checkArrayFromCallInContext,
-  checkNumberConversionCall as checkNumberConversionCallInContext,
   checkNumberToStringCall as checkNumberToStringCallInContext,
   checkNumericCastCall as checkNumericCastCallInContext,
   checkStringCaseCall as checkStringCaseCallInContext,
   checkStringCharCodeAtCall as checkStringCharCodeAtCallInContext,
-  checkStringConversionCall as checkStringConversionCallInContext,
   checkStringIndexCall as checkStringIndexCallInContext,
   checkStringPadStartCall as checkStringPadStartCallInContext,
   checkStringPredicateCall as checkStringPredicateCallInContext,
@@ -152,11 +155,9 @@ import {
   checkStringSplitCall as checkStringSplitCallInContext,
   checkStringTrimCall as checkStringTrimCallInContext,
   isArrayFromCall,
-  isNumberConversionCall,
   isNumberToStringCall,
   isStringCaseCall,
   isStringCharCodeAtCall,
-  isStringConversionCall,
   isStringPadStartCall,
   isStringPredicateCall,
   numericCastName,
@@ -1679,8 +1680,12 @@ class Checker {
   }
 
   checkExpression(expression: AnyNode): ValueType {
-    if (expression.type === 'StringLiteral' || expression.type === 'TemplateLiteral') {
+    if (expression.type === 'StringLiteral') {
       return 'string'
+    }
+
+    if (expression.type === 'TemplateLiteral') {
+      return this.checkTemplateLiteral(expression)
     }
 
     if (expression.type === 'RegExpLiteral') {
@@ -2226,6 +2231,49 @@ class Checker {
     }
 
     return 'unknown'
+  }
+
+  checkTemplateLiteral(expression: AnyNode): ValueType {
+    const parts = parseTemplateLiteralParts(expression.raw, this.diagnostics, expression.loc)
+    const expressions: AnyNode[] = []
+
+    for (const part of parts) {
+      if (part.kind !== 'placeholder' || part.loc === null || typeof part.loc === 'undefined') {
+        continue
+      }
+
+      const placeholder = parseTemplatePlaceholderExpression(part.value, part.loc, this.diagnostics)
+
+      if (placeholder === null || typeof placeholder === 'undefined') {
+        continue
+      }
+
+      markTemplatePlaceholderNodes(placeholder)
+
+      const outerDiagnostics = this.diagnostics
+      const placeholderDiagnostics: Diagnostic[] = []
+
+      this.diagnostics = placeholderDiagnostics
+
+      try {
+        this.checkExpression(placeholder)
+      } finally {
+        this.diagnostics = outerDiagnostics
+      }
+
+      if (templatePlaceholderHasLibraryOperation(placeholder)) {
+        for (const item of placeholderDiagnostics) {
+          outerDiagnostics.push(item)
+        }
+      }
+
+      expressions.push(placeholder)
+    }
+
+    expression.expressions = expressions
+    expression.valueType = 'string'
+
+    return 'string'
   }
 
   arrayLiteralElementDeclaredType(expression: AnyNode, elementType: ValueType): string {
@@ -3519,7 +3567,10 @@ class Checker {
     return className !== null && typeof className !== 'undefined'
   }
 
-  hasStringReturningClassToStringMethod(expression: AnyNode): boolean {
+  classMethodMatchesLibraryCheck(
+    expression: AnyNode,
+    check: LibraryObjectMethodCheckDescriptor
+  ): boolean {
     const className = this.resolveClassMethodReceiverClassName(expression)
 
     if (className === null || typeof className === 'undefined') {
@@ -3541,7 +3592,7 @@ class Checker {
     for (let index = 0; index < classMethods.length; index = index + 1) {
       const method = checkerNodeAt(classMethods, index)
 
-      if (!nodeNameEquals(method, 'toString')) {
+      if (!nodeNameEquals(method, check.name)) {
         continue
       }
 
@@ -3555,7 +3606,11 @@ class Checker {
 
       const returnInfo = this.resolveDeclaredType(method.returnType, method.loc)
 
-      return returnInfo.valueType === 'string' && acceptsArgumentCount(params, 0)
+      return (
+        check.returnValueTypes.includes(returnInfo.valueType) &&
+        acceptsArgumentCount(params, check.minArgs) &&
+        acceptsArgumentCount(params, check.maxArgs)
+      )
     }
 
     return false
@@ -3630,18 +3685,6 @@ class Checker {
 
     if (libraryDiagnosticType !== null) {
       return libraryDiagnosticType
-    }
-
-    const stringConversionType = this.checkStringConversionCall(expression)
-
-    if (stringConversionType !== null && typeof stringConversionType !== 'undefined') {
-      return stringConversionType
-    }
-
-    const numberConversionType = this.checkNumberConversionCall(expression)
-
-    if (numberConversionType !== null && typeof numberConversionType !== 'undefined') {
-      return numberConversionType
     }
 
     const numericCastType = this.checkNumericCastCall(expression)
@@ -4030,6 +4073,22 @@ class Checker {
           info.loc
         )
         continue
+      }
+
+      if (info.valueType === 'object') {
+        const methodChecks = check.objectMethods ?? []
+
+        for (let methodIndex = 0; methodIndex < methodChecks.length; methodIndex = methodIndex + 1) {
+          const methodCheck = methodChecks[methodIndex]
+
+          if (!this.classMethodMatchesLibraryCheck(argument, methodCheck)) {
+            this.report(
+              'INOX_TYPE_MISMATCH',
+              `library operation ${operation.operationId} requires object method ${methodCheck.name}`,
+              info.loc
+            )
+          }
+        }
       }
 
       const arrayElementValueTypes = check.arrayElementValueTypes ?? []
@@ -4529,6 +4588,7 @@ class Checker {
     expression.libraryRuntimeRequirements = runtimeRequirements
     expression.libraryCapabilities = capabilities
     expression.libraryCExpression = variant?.cExpression ?? operation.cExpression ?? null
+    expression.libraryCLowering = variant?.cLowering ?? operation.cLowering ?? null
     expression.libraryCClassFormatExpression =
       variant?.cClassFormatExpression ?? operation.cClassFormatExpression ?? null
     const cArgumentKinds = variant?.cArgumentKinds ?? operation.cArgumentKinds
@@ -6074,21 +6134,6 @@ class Checker {
     }
   }
 
-  checkStringConversionCall(expression: AnyNode): ValueType | null {
-    if (!isStringConversionCall(expression)) {
-      return null
-    }
-
-    const argTypes = this.checkCallArgumentTypes(expression)
-    let hasClassToString = false
-
-    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-      hasClassToString = this.hasStringReturningClassToStringMethod(checkerNodeAt(expression.args, 0))
-    }
-
-    return checkStringConversionCallInContext(this.primitiveCallContext(), expression, argTypes, hasClassToString)
-  }
-
   checkRegExpLiteral(expression: AnyNode): ValueType {
     if (Array.isArray(expression.args) && typeof expression.valueType === 'string') {
       return expression.valueType as ValueType
@@ -6151,18 +6196,6 @@ class Checker {
     }
 
     return checkArrayFromCallInContext(this.primitiveCallContext(), expression, sourceType)
-  }
-
-  checkNumberConversionCall(expression: AnyNode): ValueType | null {
-    if (!isNumberConversionCall(expression)) {
-      return null
-    }
-
-    return checkNumberConversionCallInContext(
-      this.primitiveCallContext(),
-      expression,
-      this.checkCallArgumentTypes(expression)
-    )
   }
 
   checkNumericCastCall(expression: AnyNode): ValueType | null {
@@ -9122,6 +9155,77 @@ class Checker {
     const diagnostics = this.diagnostics
     diagnostics.push(item)
   }
+}
+
+function templatePlaceholderHasLibraryOperation(
+  value: AnyNode | AnyNode[] | null | undefined
+): boolean {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (templatePlaceholderHasLibraryOperation(item)) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  if (value === null || typeof value === 'undefined') {
+    return false
+  }
+
+  if (typeof value.libraryOperationId === 'string') {
+    return true
+  }
+
+  return (
+    templatePlaceholderHasLibraryOperation(value.args) ||
+    templatePlaceholderHasLibraryOperation(value.callee) ||
+    templatePlaceholderHasLibraryOperation(value.object) ||
+    templatePlaceholderHasLibraryOperation(value.index) ||
+    templatePlaceholderHasLibraryOperation(value.argument) ||
+    templatePlaceholderHasLibraryOperation(value.expression) ||
+    templatePlaceholderHasLibraryOperation(value.left) ||
+    templatePlaceholderHasLibraryOperation(value.right) ||
+    templatePlaceholderHasLibraryOperation(value.elements) ||
+    templatePlaceholderHasLibraryOperation(value.properties) ||
+    templatePlaceholderHasLibraryOperation(value.value) ||
+    templatePlaceholderHasLibraryOperation(value.target) ||
+    templatePlaceholderHasLibraryOperation(value.test) ||
+    templatePlaceholderHasLibraryOperation(value.consequent) ||
+    templatePlaceholderHasLibraryOperation(value.alternate)
+  )
+}
+
+function markTemplatePlaceholderNodes(value: AnyNode | AnyNode[] | null | undefined): void {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      markTemplatePlaceholderNodes(item)
+    }
+
+    return
+  }
+
+  if (value === null || typeof value === 'undefined' || typeof value !== 'object') {
+    return
+  }
+
+  value.templatePlaceholder = true
+  markTemplatePlaceholderNodes(value.args)
+  markTemplatePlaceholderNodes(value.callee)
+  markTemplatePlaceholderNodes(value.object)
+  markTemplatePlaceholderNodes(value.index)
+  markTemplatePlaceholderNodes(value.argument)
+  markTemplatePlaceholderNodes(value.expression)
+  markTemplatePlaceholderNodes(value.left)
+  markTemplatePlaceholderNodes(value.right)
+  markTemplatePlaceholderNodes(value.elements)
+  markTemplatePlaceholderNodes(value.properties)
+  markTemplatePlaceholderNodes(value.value)
+  markTemplatePlaceholderNodes(value.target)
+  markTemplatePlaceholderNodes(value.test)
+  markTemplatePlaceholderNodes(value.consequent)
+  markTemplatePlaceholderNodes(value.alternate)
 }
 
 function isNonNullableTypeofName(value: string): boolean {

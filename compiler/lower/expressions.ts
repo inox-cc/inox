@@ -29,7 +29,7 @@ function lowerExpressionWithContext(
   }
 
   if (expression.type === 'TemplateLiteral') {
-    return cloneTemplateLiteral(expression)
+    return cloneTemplateLiteral(expression, context)
   }
 
   if (expression.type === 'NumberLiteral') {
@@ -415,6 +415,11 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.libraryCExpression = libraryCExpression
   }
 
+  const libraryCLowering = nullableString(source.libraryCLowering)
+  if (libraryCLowering !== null && typeof libraryCLowering !== 'undefined') {
+    target.libraryCLowering = libraryCLowering
+  }
+
   const libraryCClassFormatExpression = nullableString(source.libraryCClassFormatExpression)
   if (libraryCClassFormatExpression !== null && typeof libraryCClassFormatExpression !== 'undefined') {
     target.libraryCClassFormatExpression = libraryCClassFormatExpression
@@ -447,6 +452,10 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
 
   if (source.libraryOwned === true) {
     target.libraryOwned = true
+  }
+
+  if (source.templatePlaceholder === true) {
+    target.templatePlaceholder = true
   }
 
   copyStringMetadataArray(target, source, 'libraryRuntimeRequirements')
@@ -598,11 +607,21 @@ function cloneRegExpLiteral(expression: LowerExpressionNode): LowerExpressionNod
   )
 }
 
-function cloneTemplateLiteral(expression: LowerExpressionNode): LowerExpressionNode {
+function cloneTemplateLiteral(
+  expression: LowerExpressionNode,
+  context: LowerExpressionContext
+): LowerExpressionNode {
+  let expressions: LowerExpressionNode[] = []
+
+  if (Array.isArray(expression.expressions)) {
+    expressions = lowerExpressionList(expression.expressions, context)
+  }
+
   return copyRuntimeMetadata(
     {
       type: 'TemplateLiteral',
       raw: expression.raw,
+      expressions,
       valueType: 'string',
       loc: expression.loc
     },

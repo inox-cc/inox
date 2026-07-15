@@ -292,6 +292,7 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('libraryIntrinsicRole', 'string', null, true, loc),
       anyNodeField('libraryCCallStyle', 'string', null, true, loc),
       anyNodeField('libraryCFailureMode', 'string', null, true, loc),
+      anyNodeField('libraryCLowering', 'string', null, true, loc),
       anyNodeField('libraryCClassFormatExpression', 'string', null, true, loc),
       anyNodeField('libraryCallbackLifetime', 'string', null, true, loc)
     ]

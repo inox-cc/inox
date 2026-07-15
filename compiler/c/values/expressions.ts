@@ -1872,7 +1872,6 @@ export type CScalarExpressionDependencies = {
 export type CCallExpressionDependencies = {
   currentErrorTarget(errorTargets: string[]): string
   emitCExpression(expression: CValueNode, context: CFunctionContext): string
-  emitCNumberConversionValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitCObjectLiteralValueExpression(
     expression: CValueNode,
     context: CFunctionContext,
@@ -1978,12 +1977,6 @@ export function emitPreparedCallExpression(
 
   if (libraryCall !== null) {
     return libraryCall
-  }
-
-  const numberConversion = deps.emitCNumberConversionValueExpression(expression, context)
-
-  if (numberConversion !== null && typeof numberConversion !== 'undefined') {
-    return numberConversion
   }
 
   const classMethodCall = deps.emitPreparedClassMethodCallExpression(expression, context, {})
@@ -4885,7 +4878,6 @@ export type CValueExpressionDependencies = {
   emitCAwaitValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCClassObjectValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCNullishCoalescingValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitCNumberConversionValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitCObjectLiteralValueExpression(
     expression: CValueNode,
     context: CFunctionContext,
@@ -4895,7 +4887,6 @@ export type CValueExpressionDependencies = {
   emitCOptionalIndexValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCOptionalMemberValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCStringConcatValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitCStringConversionValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCNumberToStringValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCStringCaseValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCStringIndexValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
@@ -4994,7 +4985,6 @@ export type CValueExpressionDependencies = {
   isStringConcatExpression(expression: CValueNode, context: CFunctionContext): boolean
   isNumberToStringCall(expression: CValueNode, context: CFunctionContext): boolean
   isStringCaseCall(expression: CValueNode, context: CFunctionContext): boolean
-  isStringConversionCall(expression: CValueNode, context: CFunctionContext): boolean
   isStringPadStartCall(expression: CValueNode, context: CFunctionContext): boolean
   isStringSliceCall(expression: CValueNode, context: CFunctionContext): boolean
   isStringSplitCall(expression: CValueNode, context: CFunctionContext): boolean
@@ -5108,18 +5098,8 @@ export function emitCValueExpression(
     return deps.emitOptionalRuntimeCallbackCallValueExpression(expression, context)
   }
 
-  const numberConversion = deps.emitCNumberConversionValueExpression(expression, context)
-
-  if (numberConversion !== null && typeof numberConversion !== 'undefined') {
-    return numberConversion
-  }
-
   if (deps.isNullableScalarRuntimeExpression(expression, context)) {
     return deps.emitPreparedNullableScalarRuntimeValueExpression(expression, context)
-  }
-
-  if (deps.isStringConversionCall(expression, context)) {
-    return deps.emitCStringConversionValueExpression(expression, context)
   }
 
   if (deps.isNumberToStringCall(expression, context)) {

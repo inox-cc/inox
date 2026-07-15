@@ -34,6 +34,7 @@ export const compilerAnyNodeStringFields: readonly string[] = [
   'libraryCResultMode',
   'libraryCReceiverAdapter',
   'libraryCExpression',
+  'libraryCLowering',
   'libraryCClassFormatExpression',
   'libraryCppType',
   'libraryConstantValue',
@@ -72,6 +73,7 @@ export const compilerAnyNodeBooleanFields: readonly string[] = [
   'returnNullable',
   'spread',
   'static',
+  'templatePlaceholder',
   'typeOnly',
   'weakTypeValidated'
 ]

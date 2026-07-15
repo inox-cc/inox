@@ -173,6 +173,10 @@ export type LibraryCArgumentKind =
   | 'runtime-callback'
   | 'optional-runtime-callback'
 
+export type LibraryCLoweringKind =
+  | 'number-from-string'
+  | 'string-conversion'
+
 export type LibraryCArgumentSourceDescriptor = {
   argumentIndex: number
   objectFieldName?: string
@@ -225,6 +229,7 @@ export type LibraryNestedResultShapeFieldDescriptor = {
 
 export type LibraryArgumentCheckDescriptor = {
   valueTypes: string[]
+  objectMethods?: LibraryObjectMethodCheckDescriptor[]
   objectTypeIds?: LibraryObjectTypeId[]
   objectFieldValueType?: string | null
   arrayLiteralRequired?: boolean
@@ -238,6 +243,13 @@ export type LibraryArgumentCheckDescriptor = {
   functionAsync?: boolean | null
   functionAsyncDiagnosticCode?: string | null
   functionAsyncDiagnosticMessage?: string | null
+}
+
+export type LibraryObjectMethodCheckDescriptor = {
+  name: string
+  minArgs: number
+  maxArgs: number
+  returnValueTypes: string[]
 }
 
 export type LibraryCallbackParameterDescriptor = {
@@ -267,6 +279,7 @@ export type LibraryOperationVariantDescriptor = {
   objectFieldName?: string | null
   booleanLiterals?: boolean[]
   cExpression?: string | null
+  cLowering?: LibraryCLoweringKind | null
   cClassFormatExpression?: string | null
   cArgumentKinds?: LibraryCArgumentKind[]
   cArgumentAdapters?: string[]
@@ -296,6 +309,7 @@ export type LibraryOperationDescriptor = {
   kind: LibraryOperationKind
   runtimeRequirements: RuntimeRequirementId[]
   cExpression?: string | null
+  cLowering?: LibraryCLoweringKind | null
   cClassFormatExpression?: string | null
   cArgumentKinds?: LibraryCArgumentKind[]
   cArgumentAdapters?: string[]

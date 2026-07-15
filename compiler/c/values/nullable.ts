@@ -201,7 +201,6 @@ export type NullableLoweringDependencies = {
   emitPreparedNumberExpression(expression: AnyNode, context: NullableFunctionContext): PreparedExpression
   emitNullableScalarValueExpression(expression: AnyNode, context: NullableFunctionContext): PreparedExpression
   inferExpressionType(expression: AnyNode, context: NullableFunctionContext): string
-  isNumberConversionCall(expression: AnyNode, context: NullableFunctionContext): boolean
   resolveRuntimeCallbackCalleeType(callee: AnyNode, context: NullableFunctionContext): CFunctionType | null
 }
 
@@ -704,10 +703,6 @@ export function isNullableRuntimeExpression(expression: AnyNode, context: Nullab
     const name = nullableStringAt(expression.path, 0)
 
     return context.nullableVariables.has(name)
-  }
-
-  if (nullableDeps(context).isNumberConversionCall(expression, context)) {
-    return true
   }
 
   if (isMapGetCallExpression(expression, context)) {

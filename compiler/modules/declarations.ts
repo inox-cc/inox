@@ -36,6 +36,11 @@ type AmbientNamespaceParseResult = {
   position: number
 }
 
+type FunctionSignatureBoundary = {
+  end: number
+  position: number
+}
+
 type AmbientNamespaceNormalizeState = {
   nextId: number
   nodes: AmbientNamespaceNode[]
@@ -227,10 +232,7 @@ export function parseModuleDeclarationContractResult(
   }
 }
 
-export function parseGlobalDeclarationContract(
-  source: string,
-  file: string | null = null
-): ProgramNode {
+export function parseGlobalDeclarationContract(source: string, file: string | null = null): ProgramNode {
   const result = parseGlobalDeclarationContractResult(source, file)
 
   throwDiagnostics(result.diagnostics)
@@ -389,10 +391,7 @@ function appendModuleDeclarationClass(lines: string[], item: AnyNode): void {
   lines.push('}')
 }
 
-function appendModuleDeclarationClassIndexSignatures(
-  lines: string[],
-  signatures: AnyNode[] | null | undefined
-): void {
+function appendModuleDeclarationClassIndexSignatures(lines: string[], signatures: AnyNode[] | null | undefined): void {
   if (signatures === null || typeof signatures === 'undefined') {
     return
   }
@@ -692,16 +691,20 @@ function normalizeGlobalDeclarationContractSource(
 
       foundGlobalBlock = true
       const bodyParts: string[] = []
+      let previousLine = tokenAt(tokens, open).line
 
       for (let index = open + 1; index < close; index = index + 1) {
-        bodyParts.push(tokenSource(tokenAt(tokens, index)))
+        const token = tokenAt(tokens, index)
+
+        if (token.line > previousLine) {
+          bodyParts.push('\n')
+        }
+
+        bodyParts.push(tokenSource(token))
+        previousLine = token.line
       }
 
-      const normalized = normalizeGlobalDeclarationBlockSource(
-        joinParts(bodyParts),
-        file,
-        diagnostics
-      )
+      const normalized = normalizeGlobalDeclarationBlockSource(joinParts(bodyParts), file, diagnostics)
 
       parts.push(normalized.source)
       position = close + 1
@@ -748,6 +751,7 @@ function normalizeGlobalDeclarationBlockSource(
   const namespaceIndexes: number[] = []
   const state: AmbientNamespaceNormalizeState = { nextId: 0, nodes: [] }
   let position = 0
+  let previousLine = tokenAt(tokens, 0).line
 
   while (!tokenIs(tokens, position, 'eof', '<eof>')) {
     const parsed = readAmbientNamespaceDeclaration(tokens, position, state, diagnostics)
@@ -755,10 +759,21 @@ function normalizeGlobalDeclarationBlockSource(
     if (parsed !== null) {
       namespaceIndexes.push(parsed.nodeIndex)
       position = parsed.position
+
+      if (position > 0) {
+        previousLine = tokenAt(tokens, position - 1).line
+      }
       continue
     }
 
-    parts.push(tokenSource(tokenAt(tokens, position)))
+    const token = tokenAt(tokens, position)
+
+    if (token.line > previousLine) {
+      parts.push('\n')
+    }
+
+    parts.push(tokenSource(token))
+    previousLine = token.line
     position = position + 1
   }
 
@@ -900,9 +915,9 @@ function readAmbientNamespaceFunction(
   position: number,
   diagnostics: Diagnostic[]
 ): { parts: string[]; position: number } | null {
-  const end = findFunctionSignatureEnd(tokens, position)
+  const boundary = findFunctionSignatureBoundary(tokens, position)
 
-  if (end === -1) {
+  if (boundary === null) {
     diagnostics.push(
       diagnostic(
         'INOX_DECLARATION_UNSUPPORTED_NAMESPACE_MEMBER',
@@ -929,26 +944,24 @@ function readAmbientNamespaceFunction(
     )
     return {
       parts: [],
-      position: end + 1
+      position: boundary.position
     }
   }
 
   current = current + 1
   const parts: string[] = []
 
-  while (current <= end) {
+  while (current < boundary.end) {
     parts.push(tokenSource(tokenAt(tokens, current)))
     current = current + 1
   }
 
-  return { parts, position: end + 1 }
+  parts.push(';')
+
+  return { parts, position: boundary.position }
 }
 
-function appendAmbientNamespaceSource(
-  parts: string[],
-  state: AmbientNamespaceNormalizeState,
-  nodeIndex: number
-): void {
+function appendAmbientNamespaceSource(parts: string[], state: AmbientNamespaceNormalizeState, nodeIndex: number): void {
   const node = ambientNamespaceNodeAt(state, nodeIndex)
 
   for (let index = 0; index < node.namespaceIndexes.length; index = index + 1) {
@@ -1131,16 +1144,16 @@ function appendNormalizedClassDeclaration(parts: string[], tokens: Token[], posi
 }
 
 function appendNormalizedClassMethodSignature(parts: string[], tokens: Token[], position: number): number {
-  const end = findFunctionSignatureEnd(tokens, position)
+  const boundary = findFunctionSignatureBoundary(tokens, position)
 
-  if (end === -1) {
+  if (boundary === null) {
     parts.push(tokenSource(tokenAt(tokens, position)))
     return position + 1
   }
 
   let current = position
 
-  while (current < end) {
+  while (current < boundary.end) {
     parts.push(tokenSource(tokenAt(tokens, current)))
     current = current + 1
   }
@@ -1148,7 +1161,7 @@ function appendNormalizedClassMethodSignature(parts: string[], tokens: Token[], 
   parts.push('{')
   parts.push('}')
 
-  return end + 1
+  return boundary.position
 }
 
 function appendNormalizedInterfaceDeclaration(parts: string[], tokens: Token[], position: number): number {
@@ -1208,16 +1221,16 @@ function appendNormalizedInterfaceDeclaration(parts: string[], tokens: Token[], 
 }
 
 function appendNormalizedFunctionSignature(parts: string[], tokens: Token[], position: number): number {
-  const end = findFunctionSignatureEnd(tokens, position)
+  const boundary = findFunctionSignatureBoundary(tokens, position)
 
-  if (end === -1) {
+  if (boundary === null) {
     parts.push(tokenSource(tokenAt(tokens, position)))
     return position + 1
   }
 
   let current = position
 
-  while (current < end) {
+  while (current < boundary.end) {
     parts.push(tokenSource(tokenAt(tokens, current)))
     current = current + 1
   }
@@ -1225,15 +1238,27 @@ function appendNormalizedFunctionSignature(parts: string[], tokens: Token[], pos
   parts.push('{')
   parts.push('}')
 
-  return end + 1
+  return boundary.position
 }
 
-function findFunctionSignatureEnd(tokens: Token[], position: number): number {
+function findFunctionSignatureBoundary(tokens: Token[], position: number): FunctionSignatureBoundary | null {
   let current = position
   let parenDepth = 0
   let genericDepth = 0
+  let hasReturnType = false
 
   while (!tokenIs(tokens, current, 'eof', '<eof>')) {
+    if (
+      current > position &&
+      parenDepth === 0 &&
+      genericDepth === 0 &&
+      hasReturnType &&
+      tokenAt(tokens, current).line > tokenAt(tokens, current - 1).line &&
+      isDeclarationContractStatementStart(tokens, current)
+    ) {
+      return { end: current, position: current }
+    }
+
     const value = tokenValue(tokens, current)
 
     if (value === '(') {
@@ -1244,16 +1269,47 @@ function findFunctionSignatureEnd(tokens: Token[], position: number): number {
       genericDepth = genericDepth + 1
     } else if (value === '>' && genericDepth > 0) {
       genericDepth = genericDepth - 1
+    } else if (value === ':' && parenDepth === 0 && genericDepth === 0) {
+      hasReturnType = true
     } else if (value === '{' && parenDepth === 0) {
-      return -1
+      return null
+    } else if (value === '}' && parenDepth === 0 && genericDepth === 0 && hasReturnType) {
+      return { end: current, position: current }
     } else if (value === ';' && parenDepth === 0 && genericDepth === 0) {
-      return current
+      return { end: current, position: current + 1 }
     }
 
     current = current + 1
   }
 
-  return -1
+  if (hasReturnType && parenDepth === 0 && genericDepth === 0) {
+    return { end: current, position: current }
+  }
+
+  return null
+}
+
+function isDeclarationContractStatementStart(tokens: Token[], position: number): boolean {
+  if (
+    isFunctionSignatureStart(tokens, position) ||
+    isInterfaceDeclarationStart(tokens, position) ||
+    isClassDeclarationStart(tokens, position) ||
+    isClassMethodSignatureStart(tokens, position)
+  ) {
+    return true
+  }
+
+  const value = tokenValue(tokens, position)
+
+  if (value === 'const' || value === 'let' || value === 'namespace' || value === 'declare') {
+    return true
+  }
+
+  if (value === 'type') {
+    return isDeclarationLocalNameToken(tokenAt(tokens, position + 1)) && tokenValue(tokens, position + 2) === '='
+  }
+
+  return value === 'export'
 }
 
 function isFunctionSignatureStart(tokens: Token[], position: number): boolean {
@@ -1819,7 +1875,8 @@ function cloneVariableDeclaration(item: AnyNode): AnyNode {
       inferred.arrayElementDeclaredType ??
       nullableMetadata(item.arrayElementDeclaredType),
     mapKeyType: knownStringMetadata(item.mapKeyType) ?? inferred.mapKeyType ?? nullableMetadata(item.mapKeyType),
-    mapValueType: knownStringMetadata(item.mapValueType) ?? inferred.mapValueType ?? nullableMetadata(item.mapValueType),
+    mapValueType:
+      knownStringMetadata(item.mapValueType) ?? inferred.mapValueType ?? nullableMetadata(item.mapValueType),
     mapValueShape: nullableMetadata(item.mapValueShape),
     promiseValueType: nullableMetadata(item.promiseValueType),
     setElementType:
@@ -1921,12 +1978,7 @@ function newExpressionDeclarationValueMetadata(expression: AnyNode): Declaration
 function newExpressionCalleeName(expression: AnyNode): string | null {
   const callee = expression.callee
 
-  if (
-    callee === null ||
-    typeof callee === 'undefined' ||
-    callee.type !== 'Reference' ||
-    callee.path.length !== 1
-  ) {
+  if (callee === null || typeof callee === 'undefined' || callee.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }
 

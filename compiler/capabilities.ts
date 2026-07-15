@@ -154,6 +154,7 @@ function visitCapabilityChildren(item: CapabilityNode, usages: CapabilityUsage[]
   visitCapabilityChild(item.elements, usages)
   visitCapabilityChild(item.properties, usages)
   visitCapabilityChild(item.expression, usages)
+  visitCapabilityChild(item.expressions, usages)
 }
 
 function recordNodeCapabilityUsages(expression: CapabilityNode, usages: CapabilityUsage[]): void {

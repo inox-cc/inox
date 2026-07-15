@@ -152,6 +152,7 @@ function visitRuntimeRequirementNode(
   visitRuntimeRequirementChild(item.elements, requirements)
   visitRuntimeRequirementChild(item.properties, requirements)
   visitRuntimeRequirementChild(item.expression, requirements)
+  visitRuntimeRequirementChild(item.expressions, requirements)
 }
 
 function visitRuntimeRequirementChild(value: unknown, requirements: IrRuntimeRequirementSet): void {
@@ -261,6 +262,7 @@ function visitFeatureChildren(item: ChildNode, features: IrFeatureSet): void {
   visitFeatureChild(item.elements, features)
   visitFeatureChild(item.properties, features)
   visitFeatureChild(item.expression, features)
+  visitFeatureChild(item.expressions, features)
 }
 
 function addRuntimeRequirements(requirements: IrRuntimeRequirementSet, values: IrRuntimeRequirement[]): void {

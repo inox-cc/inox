@@ -224,6 +224,7 @@ function visitGlobalUsageChildren(item: GlobalUsageNode, usages: IrGlobalUsage[]
   visitGlobalUsageChild(item.elements, usages)
   visitGlobalUsageChild(item.properties, usages)
   visitGlobalUsageChild(item.expression, usages)
+  visitGlobalUsageChild(item.expressions, usages)
 }
 
 function globalUsagePath(expression: GlobalUsageNode | null | undefined): string[] | null {
