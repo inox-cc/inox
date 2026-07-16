@@ -50,10 +50,9 @@ export type CShapeValueMetadata = {
   arrayElementType?: string | null
   arrayElementDeclaredType?: string | null
   declaredType?: string | null
-  mapKeyType?: string | null
-  mapValueType?: string | null
   nullable?: boolean
   promiseValueType?: string | null
+  typeRef?: TypeRef | null
   valueType: string
 }
 
@@ -174,8 +173,6 @@ export type CFunctionParam = {
   functionTypeOwnership?: 'weak'
   functionType?: CFunctionType | null
   loc?: AnyNode['loc']
-  mapKeyType?: string | null
-  mapValueType?: string | null
   name: string
   nullable?: boolean
   optional?: boolean
@@ -190,8 +187,6 @@ export type CFunctionType = {
   kind?: 'function'
   params: CFunctionParam[]
   returnArrayElementType?: string | null
-  returnMapKeyType?: string | null
-  returnMapValueType?: string | null
   returnNullable?: boolean
   returnPromiseValueType?: string | null
   returnShape?: CObjectShape | null
@@ -213,11 +208,6 @@ export type CFunctionPointerRuntimeAdapter = {
   finalizerName: string
   functionType: CFunctionType
   seenTypes: string[]
-}
-
-export type CFunctionReturnMapType = {
-  key: string | null
-  value: string | null
 }
 
 export type CRuntimeArrowCapture = {
@@ -309,8 +299,6 @@ export type CAsyncTaskPrefixLocal = {
   fieldName: string
   arrayElementType?: string | null
   forceRuntimeStringDeclaration?: boolean
-  mapKeyType?: string | null
-  mapValueType?: string | null
   shape?: CObjectShape | null
 }
 
@@ -326,8 +314,6 @@ export type CAsyncTaskAwaitStep = {
   arrayElementType?: string | null
   awaitedExpression: AnyNode | null
   awaitedPromiseExpression: AnyNode | null
-  mapKeyType?: string | null
-  mapValueType?: string | null
   shape?: CObjectShape | null
 }
 

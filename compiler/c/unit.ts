@@ -99,7 +99,6 @@ import {
   emitCClassTypeName,
   emitCNativeClassDeclarations
 } from './values/classes.ts'
-import type { CollectionLoweringDependencies } from './values/collections.ts'
 import type { NullableLoweringDependencies } from './values/nullable.ts'
 import type { StatementLoweringDependencies } from './values/statements.ts'
 import type { StringLoweringDependencies } from './values/strings.ts'
@@ -110,7 +109,6 @@ export type CUnitDependencies = {
   callbackLoweringDependencies: CallbackLoweringDependencies
   classLoweringDependencies: ClassLoweringDependencies
   collectExternalEventLoopFunctions: (functions: AnyNode[], seedNames?: Set<string>) => Set<string>
-  collectionLoweringDependencies: CollectionLoweringDependencies
   createBaseContext(
     diagnostics: Diagnostic[],
     functionDeclarations: IrFunctionDeclaration[],
@@ -1120,21 +1118,10 @@ function cUnitFunctionPointerAdapterContextFunctionType(name: string, context: C
     return null
   }
 
-  const returnMapType = context.functionReturnMapTypes.get(name)
-  let returnMapKeyType: string | null = null
-  let returnMapValueType: string | null = null
-
-  if (returnMapType !== null && typeof returnMapType !== 'undefined') {
-    returnMapKeyType = returnMapType.key
-    returnMapValueType = returnMapType.value
-  }
-
   return {
     kind: 'function',
     params,
     returnArrayElementType: context.functionReturnArrayElementTypes.get(name) ?? null,
-    returnMapKeyType,
-    returnMapValueType,
     returnNullable: context.functionReturnNullables.get(name) === true,
     returnPromiseValueType: context.functionReturnPromiseValueTypes.get(name) ?? null,
     returnShape: context.functionReturnShapes.get(name) ?? null,
@@ -1283,8 +1270,6 @@ function pushCUnitClassMethodFunctionDeclarations(target: IrFunctionDeclaration[
         returnNullable: method.returnNullable === true,
         returnArrayElementType: method.returnArrayElementType,
         returnArrayElementDeclaredType: method.returnArrayElementDeclaredType,
-        returnMapKeyType: method.returnMapKeyType,
-        returnMapValueType: method.returnMapValueType,
         returnPromiseValueType: method.returnPromiseValueType,
         returnShape: method.returnShape,
         loc: method.loc
@@ -1400,7 +1385,6 @@ export function emitCUnit(
   const needsCppValueRuntime: boolean = preludeRequirements.needsCppValueRuntime
   const needsStringHeader: boolean = preludeRequirements.needsStringHeader
   const needsCollectionRuntime: boolean = preludeRequirements.needsCollectionRuntime
-  const needsMapRuntime: boolean = preludeRequirements.needsMapRuntime
   const needsObjectRuntime: boolean = preludeRequirements.needsObjectRuntime
   baseContext.runtimeEntrypointAdapter = preludeRequirements.runtimeEntrypointAdapter
   baseContext.runtimeInitializerDefinitions = emitCompilerLibraryRuntimeInitializerDefinitions(
@@ -1424,7 +1408,6 @@ export function emitCUnit(
     needsCppValueRuntime,
     needsStringHeader,
     needsCollectionRuntime,
-    needsMapRuntime,
     needsObjectRuntime,
     preludeRequirements.libraryCPreludeIncludes
   )

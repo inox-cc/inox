@@ -280,6 +280,11 @@ export type LibraryOperationTypeParameterSourceDescriptor =
       argumentIndex: number
     }
   | {
+      source: 'argument-array-literal-column'
+      argumentIndex: number
+      elementIndex: number
+    }
+  | {
       source: 'argument-trait'
       argumentIndex: number
       traitId: TypeTraitId

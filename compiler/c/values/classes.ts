@@ -553,8 +553,7 @@ function classFieldSupportsNativeLowering(field: CObjectShapeField): boolean {
 
   return (
     field.valueType === 'object' ||
-    field.valueType === 'array' ||
-    field.valueType === 'map'
+    field.valueType === 'array'
   )
 }
 
@@ -2224,8 +2223,6 @@ function resolveClassShapeField(field: CObjectShapeField): CObjectShapeField {
     arrayElementDeclaredType: field.arrayElementDeclaredType,
     className: field.className,
     declaredType: field.declaredType,
-    mapKeyType: field.mapKeyType,
-    mapValueType: field.mapValueType,
     shape: field.shape,
     typeRef: field.typeRef,
     functionType: field.functionType,
@@ -2493,8 +2490,6 @@ export function registerClassObjectShape(context: ClassFunctionContext, name: st
       arrayElementDeclaredType: field.arrayElementDeclaredType,
       className: field.className,
       declaredType: field.declaredType,
-      mapKeyType: field.mapKeyType,
-      mapValueType: field.mapValueType,
       shape: field.shape,
       typeRef: field.typeRef,
       functionType: field.functionType,
@@ -3711,7 +3706,7 @@ export function emitNativeClassFieldAssignment(expression: AnyNode, context: Cla
   if (classFieldUsesRuntimeValueStorage(access.field)) {
     const cppValueReference = cppValueRuntimeStringReference(expression.value, context)
 
-    if (cppValueReference !== null) {
+    if (cppValueReference !== null && typeof cppValueReference !== 'undefined') {
       pushAllLines(lines, emitCClassFieldWriteLines(access.reference, cppValueReference, access.field))
       return lines
     }

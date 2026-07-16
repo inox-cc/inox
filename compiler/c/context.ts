@@ -9,7 +9,6 @@ import type {
   CFunctionParam,
   CFunctionPointerAdapter,
   CFunctionPointerRuntimeAdapter,
-  CFunctionReturnMapType,
   CFunctionType,
   CObjectAccessorReturnPath,
   CObjectShape,
@@ -27,7 +26,6 @@ import {
 } from './value-types.ts'
 import type { ArrayLoweringDependencies } from './values/arrays.ts'
 import type { ClassLoweringDependencies } from './values/classes.ts'
-import type { CollectionLoweringDependencies } from './values/collections.ts'
 import type { NullableLoweringDependencies } from './values/nullable.ts'
 import type { StatementLoweringDependencies } from './values/statements.ts'
 import type { StringLoweringDependencies } from './values/strings.ts'
@@ -42,7 +40,6 @@ export type CArrayShapeMap = Map<string, CArrayElementInfo[]>
 export type CAsyncTaskWrapperMap = Map<string, CAsyncTaskWrapper>
 export type CBooleanMap = Map<string, boolean>
 export type CCallbackWrapperMap = Map<string, CCallbackWrapper>
-export type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
 export type CFunctionTypeMap = Map<string, CFunctionType>
 export type CFunctionPointerAdapterMap = Map<string, string>
 export type CNumberMap = Map<string, number>
@@ -98,18 +95,6 @@ export function cloneCFunctionTypeMap(values: CFunctionTypeMap | null | undefine
   return new Map(values)
 }
 
-export function cloneCFunctionReturnMapTypeMap(
-  values: CFunctionReturnMapTypeMap | null | undefined
-): CFunctionReturnMapTypeMap {
-  const result: CFunctionReturnMapTypeMap = new Map()
-
-  if (values === null || typeof values === 'undefined') {
-    return result
-  }
-
-  return new Map(values)
-}
-
 export function cloneCObjectShapeFieldMap(values: CObjectShapeFieldMap | null | undefined): CObjectShapeFieldMap {
   const result: CObjectShapeFieldMap = new Map()
 
@@ -141,7 +126,6 @@ export type CEmitContext = {
   callbackWrappers: CCallbackWrapperMap
   classInfos: Map<string, CClassInfo>
   classLoweringDependencies: ClassLoweringDependencies
-  collectionLoweringDependencies: CollectionLoweringDependencies
   diagnostics: Diagnostic[]
   explicitEventLoop?: boolean | null
   exceptionValueShape: CObjectShape | null
@@ -156,7 +140,6 @@ export type CEmitContext = {
   functionReturnArrayElementDeclaredTypes: CStringNullableMap
   functionReturnArrayElementTypes: CStringNullableMap
   functionReturnDeclaredTypes: CStringNullableMap
-  functionReturnMapTypes: CFunctionReturnMapTypeMap
   functionReturnNullables: CBooleanMap
   functionReturnPromiseValueTypes: CStringNullableMap
   functionReturnShapes: Map<string, CObjectShape | null>
@@ -232,13 +215,11 @@ type CVariableScopeContext = {
   boxedVariables: CStringSet
   classInstanceTypes: CStringMap
   cppArrayValues: CStringSet
-  cppMapValues: CStringSet
   cppStringValues: CStringSet
   cppValueTypes: CStringMap
   exceptionValueNames: CStringSet
   functionTypes: CFunctionTypeMap
   localValueNames: CStringSet
-  mapTypes: CFunctionReturnMapTypeMap
   moduleValueDeclarationScope: boolean
   narrowedNullableScalars: CStringSet
   nullableVariables: CStringSet
@@ -269,7 +250,6 @@ export type CFunctionContext = CEmitContext & {
   continueFlowUsed: boolean
   continueTargets: CLoopFlowTarget[]
   cppArrayValues: CStringSet
-  cppMapValues: CStringSet
   cppStringValues: CStringSet
   cppValueTypes: CStringMap
   errorChannelUsed: boolean
@@ -285,7 +265,6 @@ export type CFunctionContext = CEmitContext & {
   functionReturnOut: string | null
   functionTypes: CFunctionTypeMap
   localValueNames: CStringSet
-  mapTypes: CFunctionReturnMapTypeMap
   moduleValueDeclarationScope: boolean
   narrowedNullableScalars: CStringSet
   nullableVariables: CStringSet
@@ -324,13 +303,11 @@ export type CVariableScopeSnapshot = {
   boxedVariables: CStringSet
   classInstanceTypes: CStringMap
   cppArrayValues: CStringSet
-  cppMapValues: CStringSet
   cppStringValues: CStringSet
   cppValueTypes: CStringMap
   exceptionValueNames: CStringSet
   functionTypes: CFunctionTypeMap
   localValueNames: CStringSet
-  mapTypes: CFunctionReturnMapTypeMap
   narrowedNullableScalars: CStringSet
   nullableVariables: CStringSet
   objectAliases: CStringMap
@@ -366,7 +343,6 @@ export function createFunctionContext(
     callbackWrappers: baseContext.callbackWrappers,
     classInfos: baseContext.classInfos,
     classLoweringDependencies: baseContext.classLoweringDependencies,
-    collectionLoweringDependencies: baseContext.collectionLoweringDependencies,
     diagnostics: baseContext.diagnostics,
     exceptionValueShape: baseContext.exceptionValueShape,
     externalEventLoopFunctions: baseContext.externalEventLoopFunctions,
@@ -381,7 +357,6 @@ export function createFunctionContext(
     functionReturnArrayElementDeclaredTypes: baseContext.functionReturnArrayElementDeclaredTypes,
     functionReturnArrayElementTypes: baseContext.functionReturnArrayElementTypes,
     functionReturnDeclaredTypes: baseContext.functionReturnDeclaredTypes,
-    functionReturnMapTypes: baseContext.functionReturnMapTypes,
     functionReturnNullables: baseContext.functionReturnNullables,
     functionReturnPromiseValueTypes: baseContext.functionReturnPromiseValueTypes,
     functionReturnShapes: baseContext.functionReturnShapes,
@@ -416,7 +391,6 @@ export function createFunctionContext(
     boxedVariables: new Set(),
     classInstanceTypes: new Map(),
     cppArrayValues: new Set(),
-    cppMapValues: new Set(),
     cppStringValues: new Set(),
     cppValueTypes: cloneCStringMap(baseContext.moduleValueCppTypes),
     continueFlowUsed: false,
@@ -433,7 +407,6 @@ export function createFunctionContext(
     eventLoopUsed: false,
     explicitEventLoop: false,
     externalEventLoop: false,
-    mapTypes: new Map(),
     moduleValueDeclarationScope: false,
     narrowedNullableScalars: new Set(),
     nullableVariables: new Set(),
@@ -897,13 +870,11 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   const previousBoxedVariables = context.boxedVariables
   const previousClassInstanceTypes = context.classInstanceTypes
   const previousCppArrayValues = context.cppArrayValues
-  const previousCppMapValues = context.cppMapValues
   const previousCppStringValues = context.cppStringValues
   const previousCppValueTypes = context.cppValueTypes
   const previousExceptionValueNames = context.exceptionValueNames
   const previousFunctionTypes = context.functionTypes
   const previousLocalValueNames = context.localValueNames
-  const previousMapTypes = context.mapTypes
   const previousNarrowedNullableScalars = context.narrowedNullableScalars
   const previousNullableVariables = context.nullableVariables
   const previousObjectAliases = context.objectAliases
@@ -924,13 +895,11 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   context.boxedVariables = cloneCStringSet(previousBoxedVariables)
   context.classInstanceTypes = cloneCStringMap(previousClassInstanceTypes)
   context.cppArrayValues = cloneCStringSet(previousCppArrayValues)
-  context.cppMapValues = cloneCStringSet(previousCppMapValues)
   context.cppStringValues = cloneCStringSet(previousCppStringValues)
   context.cppValueTypes = cloneCStringMap(previousCppValueTypes)
   context.exceptionValueNames = cloneCStringSet(previousExceptionValueNames)
   context.functionTypes = cloneCFunctionTypeMap(previousFunctionTypes)
   context.localValueNames = cloneCStringSet(previousLocalValueNames)
-  context.mapTypes = cloneCFunctionReturnMapTypeMap(previousMapTypes)
   context.narrowedNullableScalars = cloneCStringSet(previousNarrowedNullableScalars)
   context.nullableVariables = cloneCStringSet(previousNullableVariables)
   context.objectAliases = cloneCStringMap(previousObjectAliases)
@@ -951,13 +920,11 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
     boxedVariables: previousBoxedVariables,
     classInstanceTypes: previousClassInstanceTypes,
     cppArrayValues: previousCppArrayValues,
-    cppMapValues: previousCppMapValues,
     cppStringValues: previousCppStringValues,
     cppValueTypes: previousCppValueTypes,
     exceptionValueNames: previousExceptionValueNames,
     functionTypes: previousFunctionTypes,
     localValueNames: previousLocalValueNames,
-    mapTypes: previousMapTypes,
     narrowedNullableScalars: previousNarrowedNullableScalars,
     nullableVariables: previousNullableVariables,
     objectAliases: previousObjectAliases,
@@ -984,13 +951,11 @@ export function restoreVariableScope(context: CVariableScopeContext, snapshot: C
   context.boxedVariables = snapshot.boxedVariables
   context.classInstanceTypes = snapshot.classInstanceTypes
   context.cppArrayValues = snapshot.cppArrayValues
-  context.cppMapValues = snapshot.cppMapValues
   context.cppStringValues = snapshot.cppStringValues
   context.cppValueTypes = snapshot.cppValueTypes
   context.exceptionValueNames = snapshot.exceptionValueNames
   context.functionTypes = snapshot.functionTypes
   context.localValueNames = snapshot.localValueNames
-  context.mapTypes = snapshot.mapTypes
   context.narrowedNullableScalars = snapshot.narrowedNullableScalars
   context.nullableVariables = snapshot.nullableVariables
   context.objectAliases = snapshot.objectAliases

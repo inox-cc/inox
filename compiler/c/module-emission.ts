@@ -122,7 +122,6 @@ import {
   emitCClassTypeNameForClassName,
   emitCNativeClassDeclarations
 } from './values/classes.ts'
-import type { CollectionLoweringDependencies } from './values/collections.ts'
 import type { NullableLoweringDependencies } from './values/nullable.ts'
 import type { StatementLoweringDependencies } from './values/statements.ts'
 import type { StringLoweringDependencies } from './values/strings.ts'
@@ -221,8 +220,6 @@ function pushCModuleClassMethodFunctionDeclarations(target: IrFunctionDeclaratio
           returnNullable: method.returnNullable === true,
           returnArrayElementType: method.returnArrayElementType,
           returnArrayElementDeclaredType: method.returnArrayElementDeclaredType,
-          returnMapKeyType: method.returnMapKeyType,
-          returnMapValueType: method.returnMapValueType,
           returnPromiseValueType: method.returnPromiseValueType,
           returnShape: method.returnShape,
           loc: method.loc
@@ -350,7 +347,6 @@ export type CModuleEmissionDependencies = {
   callbackLoweringDependencies: CallbackLoweringDependencies
   classLoweringDependencies: ClassLoweringDependencies
   collectExternalEventLoopFunctions(functions: AnyNode[], seedNames?: Set<string>): Set<string>
-  collectionLoweringDependencies: CollectionLoweringDependencies
   createBaseContext(
     diagnostics: Diagnostic[],
     functionDeclarations: IrFunctionDeclaration[],
@@ -473,7 +469,6 @@ export function emitCModuleSource(
       prelude.needsCppValueRuntime,
       prelude.needsStringHeader,
       prelude.needsCollectionRuntime,
-      prelude.needsMapRuntime,
       prelude.needsObjectRuntime,
       prelude.libraryCPreludeIncludes
     )
@@ -1336,21 +1331,10 @@ function functionPointerAdapterContextFunctionType(name: string, context: CEmitC
     return null
   }
 
-  const returnMapType = context.functionReturnMapTypes.get(name)
-  let returnMapKeyType: string | null = null
-  let returnMapValueType: string | null = null
-
-  if (returnMapType !== null && typeof returnMapType !== 'undefined') {
-    returnMapKeyType = returnMapType.key
-    returnMapValueType = returnMapType.value
-  }
-
   return {
     kind: 'function',
     params,
     returnArrayElementType: context.functionReturnArrayElementTypes.get(name) ?? null,
-    returnMapKeyType,
-    returnMapValueType,
     returnNullable: context.functionReturnNullables.get(name) === true,
     returnPromiseValueType: context.functionReturnPromiseValueTypes.get(name) ?? null,
     returnShape: context.functionReturnShapes.get(name) ?? null,
@@ -3248,8 +3232,6 @@ function cloneImportedCModuleFunctionDeclaration(
     returnNullable: declaration.returnNullable,
     returnArrayElementType: declaration.returnArrayElementType,
     returnArrayElementDeclaredType: declaration.returnArrayElementDeclaredType,
-    returnMapKeyType: declaration.returnMapKeyType,
-    returnMapValueType: declaration.returnMapValueType,
     declaredReturnType: declaration.declaredReturnType,
     returnPromiseValueType: declaration.returnPromiseValueType,
     returnShape: declaration.returnShape,

@@ -17,7 +17,6 @@ type CoreRuntimeRawNode = AnyNode
 
 type CoreRuntimeChildNode = AnyNode & {
   arrayElementFunctionType?: CoreRuntimeFunctionType | null
-  collectionKind?: string | null
   elements?: CoreRuntimeRawNode[]
   functionType?: CoreRuntimeFunctionType | null
   path?: string[]
@@ -32,7 +31,6 @@ type CoreRuntimeNode = AnyNode & {
   arrayElementType?: string | null
   arrayElementFunctionType?: CoreRuntimeFunctionType | null
   callee?: CoreRuntimeChildNode | null
-  collectionKind?: string | null
   elements?: CoreRuntimeRawNode[]
   functionType?: CoreRuntimeFunctionType | null
   index?: CoreRuntimeChildNode | null
@@ -182,14 +180,6 @@ export function collectCoreRuntimeIrFeatures(node: AnyNode, features: CoreRuntim
     features.add('collections')
   }
 
-  if (item.type === 'NewExpression' && runtimeConstructorName(item)) {
-    features.add('runtime-values')
-
-    if (collectionConstructorName(item)) {
-      features.add('collections')
-    }
-  }
-
   if (item.type === 'CallExpression' || item.type === 'OptionalCallExpression' || item.type === 'NewExpression') {
     recordCallFeatures(item, features)
   }
@@ -203,11 +193,6 @@ export function collectCoreRuntimeIrFeatures(node: AnyNode, features: CoreRuntim
     }
   }
 
-  if (item.type === 'IndexExpression' && item.collectionKind === 'map' && item.nullable === true) {
-    features.add('collections')
-    features.add('runtime-values')
-  }
-
   if (isArrayIndexExpression(item)) {
     features.add('collections')
   }
@@ -215,20 +200,6 @@ export function collectCoreRuntimeIrFeatures(node: AnyNode, features: CoreRuntim
   if (isStringIndexExpression(item)) {
     features.add('runtime-values')
     features.add('string-bytes')
-  }
-
-  if (item.type === 'AssignmentExpression') {
-    const target = item.target
-
-    if (
-      target !== null &&
-      typeof target !== 'undefined' &&
-      target.type === 'IndexExpression' &&
-      target.collectionKind === 'map'
-    ) {
-      features.add('collections')
-      features.add('runtime-values')
-    }
   }
 
   if (item.type === 'AssignmentExpression' && isObjectFieldExpression(item.target)) {
@@ -349,7 +320,7 @@ function recordCallFeatures(expression: CoreRuntimeNode, features: CoreRuntimeFe
     features.add('runtime-values')
   }
 
-  if (isCollectionMethodCall(expression) || isArrayMethodCall(expression)) {
+  if (isArrayMethodCall(expression)) {
     features.add('collections')
     features.add('runtime-values')
   }
@@ -394,18 +365,6 @@ function plainFunctionCallHasStringArgument(expression: CoreRuntimeNode): boolea
   return false
 }
 
-function runtimeConstructorName(expression: CoreRuntimeNode): string | null {
-  return collectionConstructorName(expression)
-}
-
-function collectionConstructorName(expression: CoreRuntimeNode): string | null {
-  if (expression.valueType === 'map') {
-    return 'Map'
-  }
-
-  return null
-}
-
 function isObjectFieldExpression(expression: CoreRuntimeNode | null | undefined): boolean {
   if (expression === null || typeof expression === 'undefined') {
     return false
@@ -435,9 +394,7 @@ function isObjectFieldExpression(expression: CoreRuntimeNode | null | undefined)
 
   const shape = object.shape
 
-  return (
-    shape !== null && typeof shape !== 'undefined' && shape.kind === 'object' && expression.collectionKind !== 'map'
-  )
+  return shape !== null && typeof shape !== 'undefined' && shape.kind === 'object'
 }
 
 function isStringIndexExpression(expression: CoreRuntimeNode | null | undefined): boolean {
@@ -470,22 +427,6 @@ function isArrayIndexExpression(expression: CoreRuntimeNode | null | undefined):
   const object = expression.object
 
   return object !== null && typeof object !== 'undefined' && object.valueType === 'array'
-}
-
-function isCollectionMethodCall(expression: CoreRuntimeNode): boolean {
-  const callee = expression.callee
-
-  if (callee === null || typeof callee === 'undefined' || callee.type !== 'MemberExpression') {
-    return false
-  }
-
-  const object = callee.object
-
-  if (object === null || typeof object === 'undefined') {
-    return false
-  }
-
-  return object.valueType === 'map'
 }
 
 function isArrayMethodCall(expression: CoreRuntimeNode): boolean {
@@ -607,8 +548,7 @@ function isSupportedRuntimeCallbackReturnType(returnType: string | null | undefi
     returnType === 'string' ||
     returnType === 'bytes' ||
     returnType === 'object' ||
-    returnType === 'array' ||
-    returnType === 'map'
+    returnType === 'array'
   )
 }
 

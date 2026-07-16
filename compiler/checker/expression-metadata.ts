@@ -6,7 +6,7 @@ import {
   nodeNameEquals,
   resolvedFunctionTypeMetadata
 } from './resolved-types.ts'
-import type { CheckerMapType, FunctionTypeMetadata, ResolvedTypeInfo } from './resolved-types.ts'
+import type { FunctionTypeMetadata, ResolvedTypeInfo } from './resolved-types.ts'
 import type { IntrinsicRole } from '../extensions/types.ts'
 import type { AnyNode, ObjectShapeInfo, SourceLocation, SymbolInfo, ValueType } from '../types.ts'
 
@@ -115,45 +115,6 @@ export function findShapeField(shape: ObjectShapeInfo, name: string): AnyNode | 
   }
 
   return null
-}
-
-function mapTypeFromMetadata(source: AnyNode | SymbolInfo): CheckerMapType {
-  let key: ValueType | null = null
-  let value: ValueType | null = null
-  let valueShape: ObjectShapeInfo | null = null
-  let valueArrayElementType: ValueType | null = null
-  let valueArrayElementDeclaredType: string | null = null
-
-  if (source.mapKeyType !== null && typeof source.mapKeyType !== 'undefined') {
-    key = source.mapKeyType
-  }
-
-  if (source.mapValueType !== null && typeof source.mapValueType !== 'undefined') {
-    value = source.mapValueType
-  }
-
-  if (source.mapValueShape !== null && typeof source.mapValueShape !== 'undefined') {
-    valueShape = source.mapValueShape
-  }
-
-  if (source.mapValueArrayElementType !== null && typeof source.mapValueArrayElementType !== 'undefined') {
-    valueArrayElementType = source.mapValueArrayElementType
-  }
-
-  if (
-    source.mapValueArrayElementDeclaredType !== null &&
-    typeof source.mapValueArrayElementDeclaredType !== 'undefined'
-  ) {
-    valueArrayElementDeclaredType = source.mapValueArrayElementDeclaredType
-  }
-
-  return {
-    key,
-    value,
-    valueShape,
-    valueArrayElementType,
-    valueArrayElementDeclaredType
-  }
 }
 
 export function resolveExpressionArrayElementType(
@@ -486,66 +447,6 @@ export function resolveArrayIterableElementShape(
     ) {
       return field.shape
     }
-  }
-
-  return null
-}
-
-export function resolveExpressionMapType(
-  context: ExpressionMetadataResolverContext,
-  expression: AnyNode | null | undefined
-): CheckerMapType | null {
-  if (expression === null || typeof expression === 'undefined') {
-    return null
-  }
-
-  if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
-    if (expression.valueType === 'map') {
-      return mapTypeFromMetadata(expression)
-    }
-
-    return null
-  }
-
-  if (expression.type === 'Reference' && expression.path.length === 1) {
-    const name = firstPathSegment(expression.path)
-    const symbol = resolveSymbol(context.scopeBindings, name)
-
-    if (symbol !== null && typeof symbol !== 'undefined' && symbol.valueType === 'map') {
-      return mapTypeFromMetadata(symbol)
-    }
-
-    return null
-  }
-
-  if (expression.type === 'MemberExpression') {
-    const shape = resolveExpressionShape(context, expression.object)
-    let field: AnyNode | null = null
-
-    if (shape !== null && typeof shape !== 'undefined') {
-      field = findShapeField(shape, expression.property)
-    }
-
-    if (field !== null && typeof field !== 'undefined' && field.valueType === 'map') {
-      return mapTypeFromMetadata(field)
-    }
-
-    return null
-  }
-
-  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
-    const shape = resolveExpressionShape(context, expression.object)
-    let field: AnyNode | null = null
-
-    if (shape !== null && typeof shape !== 'undefined') {
-      field = findShapeField(shape, expression.index.value)
-    }
-
-    if (field !== null && typeof field !== 'undefined' && field.valueType === 'map') {
-      return mapTypeFromMetadata(field)
-    }
-
-    return null
   }
 
   return null

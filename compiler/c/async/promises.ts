@@ -287,10 +287,6 @@ export function knownValueType(valueType: string | null | undefined): string | n
     return 'function'
   }
 
-  if (valueType === 'map') {
-    return 'map'
-  }
-
   if (valueType === 'null') {
     return 'null'
   }

@@ -176,8 +176,6 @@ export function createNewExpression(
     callee,
     args,
     typeArguments,
-    mapKeyType: 'unknown',
-    mapValueType: 'unknown',
     loc: locFromToken(start)
   }
 }

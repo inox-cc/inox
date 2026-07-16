@@ -2,7 +2,6 @@ import {
   arrayElementTypeNameFromKnownTypeName,
   isArrayTypeName,
   isNullableTypeName,
-  mapTypeNamesFromTypeName,
   nullableTypeNameFromKnownTypeName
 } from '../type-names.ts'
 import { diagnostic } from '../diagnostics.ts'
@@ -233,12 +232,6 @@ function ownershipTargetsFromTypeName(name: string | null | undefined): string[]
     const arrayElementTypeName = arrayElementTypeNameFromKnownTypeName(name)
 
     return ownershipTargetsFromTypeName(arrayElementTypeName)
-  }
-
-  const mapTypeNames = mapTypeNamesFromTypeName(name)
-
-  if (mapTypeNames !== null && typeof mapTypeNames !== 'undefined') {
-    return ownershipTargetsFromTypeName(mapTypeNames.value)
   }
 
   return [name]

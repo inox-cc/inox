@@ -40,8 +40,6 @@ export type IrFeature =
   | 'async-runtime'
   | 'callback-values'
   | 'collections'
-  | 'map-index-set'
-  | 'map-get-null'
   | 'numeric-casts'
   | 'objects'
   | 'runtime-values'
@@ -68,8 +66,6 @@ export type IrFunctionDeclaration = {
   returnNullable: boolean
   returnArrayElementType?: ValueType | null
   returnArrayElementDeclaredType?: string | null
-  returnMapKeyType?: ValueType | null
-  returnMapValueType?: ValueType | null
   returnPromiseValueType?: ValueType | null
   returnShape?: any
   loc?: SourceLocation
@@ -167,8 +163,6 @@ export type CallableOverloadInfo = {
   returnNullable?: boolean
   returnArrayElementType?: ValueType | null
   returnArrayElementDeclaredType?: string | null
-  returnMapKeyType?: ValueType | null
-  returnMapValueType?: ValueType | null
   returnPromiseValueType?: ValueType | null
   returnShape?: ObjectShapeInfo | null
   async?: boolean
@@ -192,11 +186,6 @@ export type SymbolInfo = {
   arrayElementDeclaredType?: string | null
   arrayElementShape?: ObjectShapeInfo | null
   arrayElementFunctionType?: any
-  mapKeyType?: ValueType | null
-  mapValueType?: ValueType | null
-  mapValueShape?: ObjectShapeInfo | null
-  mapValueArrayElementType?: ValueType | null
-  mapValueArrayElementDeclaredType?: string | null
   promiseValueType?: ValueType | null
   promiseRejectionIntrinsicRole?: IntrinsicRole | null
   params?: AnyNode[]
@@ -205,8 +194,6 @@ export type SymbolInfo = {
   returnNullable?: boolean
   returnArrayElementType?: ValueType | null
   returnArrayElementDeclaredType?: string | null
-  returnMapKeyType?: ValueType | null
-  returnMapValueType?: ValueType | null
   returnPromiseValueType?: ValueType | null
   returnShape?: ObjectShapeInfo | null
   async?: boolean

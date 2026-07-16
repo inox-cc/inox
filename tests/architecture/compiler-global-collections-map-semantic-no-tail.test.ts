@@ -19,8 +19,9 @@ const forbiddenPatterns = [
   /\bdeleteKey\b/,
   /(?:===|!==)\s*['"]Map['"]/,
   /['"]Map['"]\s*(?:===|!==)/,
-  /(?:===|!==)\s*['"]map['"]/,
-  /['"]map['"]\s*(?:===|!==)/,
+  /\b(?:collectionKind|valueType|returnType|targetType|inferred)\s*(?:===|!==)\s*['"]map['"]/,
+  /['"]map['"]\s*(?:===|!==)\s*\b(?:collectionKind|valueType|returnType|targetType|inferred)\b/,
+  /array, map and void values/,
   /inox\/map\.h/
 ]
 

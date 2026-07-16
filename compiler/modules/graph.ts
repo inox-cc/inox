@@ -988,8 +988,6 @@ function applyImportedDeclarationMetadata(specifier: AnyNode, declaration: AnyNo
   specifier.valueType = stdlibDeclarationNodeValueType(declaration)
   specifier.arrayElementType = declaration.arrayElementType ?? null
   specifier.arrayElementDeclaredType = declaration.arrayElementDeclaredType ?? null
-  specifier.mapKeyType = declaration.mapKeyType ?? null
-  specifier.mapValueType = declaration.mapValueType ?? null
   specifier.promiseValueType = declaration.promiseValueType ?? null
   specifier.shape = declaration.shape ?? null
 }
@@ -1022,8 +1020,6 @@ function applyImportedFunctionDeclarationMetadata(specifier: AnyNode, declaratio
   specifier.returnNullable = declaration.returnNullable === true
   specifier.returnArrayElementType = declaration.returnArrayElementType ?? null
   specifier.returnArrayElementDeclaredType = declaration.returnArrayElementDeclaredType ?? null
-  specifier.returnMapKeyType = declaration.returnMapKeyType ?? null
-  specifier.returnMapValueType = declaration.returnMapValueType ?? null
   specifier.returnPromiseValueType = declaration.returnPromiseValueType ?? null
   specifier.returnShape = declaration.returnShape ?? null
 }

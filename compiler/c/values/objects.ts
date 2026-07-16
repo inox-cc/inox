@@ -448,11 +448,10 @@ function normalizedObjectShapeField(field: CObjectShapeField): CObjectShapeField
     nullable: field.nullable,
     loc: field.loc,
     declaredType: field.declaredType,
+    typeRef: field.typeRef,
     valueType: field.valueType,
     arrayElementType: field.arrayElementType,
     arrayElementDeclaredType: field.arrayElementDeclaredType,
-    mapKeyType: field.mapKeyType,
-    mapValueType: field.mapValueType,
     promiseValueType: field.promiseValueType,
     libraryCMember: field.libraryCMember,
     libraryCppType: field.libraryCppType,
@@ -612,8 +611,7 @@ function knownObjectMemberField(objectName: string, index: number, field: CObjec
     valueType: field.valueType,
     arrayElementType: field.arrayElementType,
     declaredType: field.declaredType,
-    mapKeyType: field.mapKeyType,
-    mapValueType: field.mapValueType,
+    typeRef: field.typeRef,
     shape: field.shape,
     functionType: field.functionType
   }
@@ -759,8 +757,6 @@ function knownObjectIndexField(
     valueType: field.valueType,
     arrayElementType: field.arrayElementType,
     declaredType: field.declaredType,
-    mapKeyType: field.mapKeyType,
-    mapValueType: field.mapValueType,
     shape: field.shape,
     functionType: field.functionType
   }
@@ -810,8 +806,6 @@ function resolveObjectExpressionShapeField(objectExpression: AnyNode, key: strin
     valueType: field.valueType,
     arrayElementType: field.arrayElementType,
     declaredType: field.declaredType,
-    mapKeyType: field.mapKeyType,
-    mapValueType: field.mapValueType,
     shape: field.shape,
     functionType: field.functionType
   }
@@ -1434,7 +1428,6 @@ function isManagedObjectFieldValueType(valueType: string): boolean {
     valueType === 'boolean' ||
     valueType === 'bytes' ||
     valueType === 'array' ||
-    valueType === 'map' ||
     valueType === 'object' ||
     valueType === 'string'
   )
@@ -1454,7 +1447,7 @@ function unsupportedObjectFieldStorageMessage(valueType: string): string {
     return 'stored callback object fields need delayed closure lifetime support and are not supported by the current C backend slice'
   }
 
-  return 'this object field type is not supported by the current C backend slice'
+  return `object field type ${valueType} is not supported by the current C backend slice`
 }
 
 function unsupportedObjectFieldValueExpression(
@@ -2073,11 +2066,10 @@ function objectShapeFieldWithPropertyMetadata(
     readonly: field.readonly,
     readonlyField: field.readonlyField,
     declaredType: field.declaredType,
+    typeRef: field.typeRef,
     nullable: field.nullable,
     valueType: field.valueType,
     arrayElementType: field.arrayElementType,
-    mapKeyType: field.mapKeyType,
-    mapValueType: field.mapValueType,
     shapeOwnership: field.shapeOwnership,
     shape: field.shape,
     functionTypeOwnership: field.functionTypeOwnership,
@@ -2085,8 +2077,20 @@ function objectShapeFieldWithPropertyMetadata(
     loc: field.loc
   }
 
-  if (next.valueType === 'unknown') {
+  if (
+    next.valueType === 'unknown' ||
+    !isSupportedObjectFieldStorageType(next.valueType) ||
+    libraryNativeCppType(value.shape) !== null
+  ) {
     next.valueType = objectPropertyValueType(property, context, dependencies)
+  }
+
+  if (
+    (next.typeRef === null || typeof next.typeRef === 'undefined') &&
+    value.typeRef !== null &&
+    typeof value.typeRef !== 'undefined'
+  ) {
+    next.typeRef = value.typeRef
   }
 
   if (shouldUseObjectPropertyStringMetadata(next.declaredType, declaredType)) {
@@ -2095,14 +2099,6 @@ function objectShapeFieldWithPropertyMetadata(
 
   if (shouldUseObjectPropertyStringMetadata(next.arrayElementType, value.arrayElementType)) {
     next.arrayElementType = value.arrayElementType
-  }
-
-  if (shouldUseObjectPropertyStringMetadata(next.mapKeyType, value.mapKeyType)) {
-    next.mapKeyType = value.mapKeyType
-  }
-
-  if (shouldUseObjectPropertyStringMetadata(next.mapValueType, value.mapValueType)) {
-    next.mapValueType = value.mapValueType
   }
 
   if (next.shape === null || typeof next.shape === 'undefined') {
@@ -2127,10 +2123,9 @@ function objectShapeFieldFromProperty(
     readonly: property.value.readonly,
     readonlyField: false,
     declaredType: objectPropertyDeclaredType(property.value),
+    typeRef: property.value.typeRef ?? null,
     valueType,
     arrayElementType: property.value.arrayElementType,
-    mapKeyType: property.value.mapKeyType,
-    mapValueType: property.value.mapValueType,
     shape,
     functionType
   }

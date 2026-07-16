@@ -27,6 +27,9 @@ test('global:collections владеет Map declarations, operations, iteration 
       const size = values.size
       for (const entry of values) {}
       values.clear()
+      const flags = new Map<string, boolean>()
+      const optionalFlag = flags.get('enabled')
+      if (optionalFlag) {}
     `,
     { libraries, target: 'cc' }
   )
@@ -43,6 +46,7 @@ test('global:collections владеет Map declarations, operations, iteration 
   assert.match(result.code, /Map::from\(/)
   assert.match(result.code, /\.entries\(\)/)
   assert.doesNotMatch(result.code, /MapStorage|Map::create|deleteKey/)
+  assert.doesNotMatch(result.code, /inox_nullable_value_\d+ = inox_library_result_\d+\.as\.boolean/)
   assert.throws(
     () => compileSource("const values = new Map<string, number>()\nvalues.set(1, 2)\n", { libraries }),
     (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_TYPE_MISMATCH'

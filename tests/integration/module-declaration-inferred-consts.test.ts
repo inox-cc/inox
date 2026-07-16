@@ -33,8 +33,8 @@ export const imports = new Map([
 
   assert.match(seedCode, /export const methods: array<string>;/)
   assert.match(seedCode, /export const names: unknown;/)
-  assert.match(seedCode, /export const constants: map<string,number>;/)
-  assert.match(seedCode, /export const imports: map<string,string>;/)
+  assert.match(seedCode, /export const constants: unknown;/)
+  assert.match(seedCode, /export const imports: unknown;/)
 
   const checked = checkProgram(seedProgram, { libraries: defaultCompilerLibrarySet })
   const hir = lowerProgram(checked.ast, defaultCompilerLibrarySet)
@@ -42,8 +42,8 @@ export const imports = new Map([
 
   assert.match(refinedCode, /export const methods: Array<string>;/)
   assert.match(refinedCode, /export const names: Set<string>;/)
-  assert.match(refinedCode, /export const constants: map<string,number>;/)
-  assert.match(refinedCode, /export const imports: map<string,string>;/)
+  assert.match(refinedCode, /export const constants: Map<string, number>;/)
+  assert.match(refinedCode, /export const imports: Map<string, string>;/)
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

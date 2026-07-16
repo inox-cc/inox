@@ -34,7 +34,6 @@ import type {
   CFunctionParam,
   CFunctionPointerAdapter,
   CFunctionPointerRuntimeAdapter,
-  CFunctionReturnMapType,
   CFunctionType,
   CKnownArrayElement,
   CKnownObjectField,
@@ -74,12 +73,6 @@ import {
   emitPreparedClassInstanceRefValueExpression
 } from './classes.ts'
 import type { ClassLoweringDependencies } from './classes.ts'
-import type { CollectionLoweringDependencies } from './collections.ts'
-import {
-  resolveRuntimeForOfMapEntries,
-  resolveRuntimeForOfMapKeys,
-  resolveRuntimeMapType
-} from './collections.ts'
 import { emitCConditionClause, emitCNegatedConditionClause, objectExpressionPathName } from './expressions.ts'
 import type { NullableLoweringDependencies } from './nullable.ts'
 import { emitNullableRuntimeValueVariableDeclaration } from './nullable.ts'
@@ -140,11 +133,9 @@ type CFunctionContext = {
   classInstanceTypes: CStringMap
   classLoweringDependencies: ClassLoweringDependencies
   cleanupEnabled: boolean
-  collectionLoweringDependencies: CollectionLoweringDependencies
   continueFlowUsed: boolean
   continueTargets: CLoopFlowTarget[]
   cppArrayValues: CStringSet
-  cppMapValues: CStringSet
   cppStringValues: CStringSet
   cppValueTypes: CStringMap
   diagnostics: Diagnostic[]
@@ -171,7 +162,6 @@ type CFunctionContext = {
   functionReturnArrayElementDeclaredTypes: Map<string, string | null>
   functionReturnArrayElementTypes: Map<string, string | null>
   functionReturnDeclaredTypes: Map<string, string | null>
-  functionReturnMapTypes: Map<string, CFunctionReturnMapType>
   functionReturnNullables: Map<string, boolean>
   functionReturnOut: string | null
   functionReturnPromiseValueTypes: Map<string, string | null>
@@ -183,7 +173,6 @@ type CFunctionContext = {
   libraries: CompilerLibrarySet
   runtimeInitializerDefinitions: string[]
   localValueNames: CStringSet
-  mapTypes: Map<string, CFunctionReturnMapType>
   moduleObjectShapes: Map<string, CObjectShapeField[]>
   moduleValueDeclarationScope: boolean
   moduleValueCppTypes: CStringMap
@@ -244,27 +233,6 @@ type RuntimeForOfArray = {
   name: string
 }
 
-type RuntimeForOfMap = {
-  cppObject: boolean
-  keyType: string
-  lines: string[]
-  name: string
-  valueType: string
-}
-
-type RuntimeForOfMapValues = {
-  cppObject: boolean
-  elementType: string
-  lines: string[]
-  name: string
-  useKey: boolean
-}
-
-type RuntimeMapMetadata = {
-  key: string
-  value: string
-}
-
 type NullableScalarConditionNarrowing = {
   trueNames: string[]
   falseNames: string[]
@@ -308,7 +276,6 @@ export type StatementLoweringDependencies = {
     shape?: CObjectShape | null
   ): PreparedExpression
   emitCValueExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression
-  collectionConstructorName(expression: StatementNode): string | null
   emitDynamicObjectMemberVariableDeclaration(
     statement: StatementNode,
     member: CKnownObjectIndexField,
@@ -400,8 +367,6 @@ export type StatementLoweringDependencies = {
     context: CFunctionContext,
     options?: PreparedCallOptions
   ): PreparedExpression | null
-  emitPreparedCollectionCallExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedMapIndexAssignment(expression: StatementNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNumberExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression
   emitPreparedInlineObjectRuntimeCallExpression(
     expression: StatementNode,
@@ -454,7 +419,6 @@ export type StatementLoweringDependencies = {
   isArrayMethodCall(expression: StatementNode): boolean
   isBoxedRuntimeValueAssignment(expression: StatementNode, context: CFunctionContext): boolean
   isClassConstructorExpression(expression: StatementNode, context: CFunctionContext): boolean
-  isCollectionConstructorExpression(expression: StatementNode): boolean
   isExceptionValueExpression(expression: StatementNode, context: CFunctionContext): boolean
   isObjectRuntimeCallExpression(expression: StatementNode): boolean
   isIndexAccessExpression(expression: StatementNode): boolean
@@ -475,8 +439,6 @@ export type StatementLoweringDependencies = {
   resolveRuntimeStringReference(expression: StatementNode, context: CFunctionContext): string | null
   resolveRuntimeArrayIndex(expression: StatementNode, context: CFunctionContext): CRuntimeArrayElement | null
   resolveRuntimeForOfArray(expression: StatementNode, context: CFunctionContext): RuntimeForOfArray | null
-  resolveRuntimeForOfMap(expression: StatementNode, context: CFunctionContext): RuntimeForOfMap | null
-  resolveRuntimeForOfMapValues(expression: StatementNode, context: CFunctionContext): RuntimeForOfMapValues | null
   emitBoxedRuntimeValueAssignment(expression: StatementNode, context: CFunctionContext): string[]
 }
 
@@ -620,8 +582,6 @@ function functionTypeFromArrowFunctionExpression(expression: StatementNode | nul
     kind: 'function',
     params,
     returnArrayElementType: stringOrNull(expression.returnArrayElementType),
-    returnMapKeyType: stringOrNull(expression.returnMapKeyType),
-    returnMapValueType: stringOrNull(expression.returnMapValueType),
     returnNullable: expression.returnNullable === true,
     returnPromiseValueType: stringOrNull(expression.returnPromiseValueType),
     returnShape,
@@ -792,13 +752,6 @@ function statementBodyDefinitelyReturns(statements: StatementNode[]): boolean {
   }
 
   return false
-}
-
-function runtimeMapMetadata(key: string, value: string): RuntimeMapMetadata {
-  return {
-    key,
-    value
-  }
 }
 
 function emptyRuntimeArrayConditionNarrowing(): RuntimeArrayConditionNarrowing {
@@ -1783,20 +1736,6 @@ export function registerRuntimeValueMetadata(
     registerRuntimeObjectDeclaredType(context, name, declaration, expression)
   } else if (valueType === 'array') {
     context.runtimeArrayElementTypes.set(name, resolveRuntimeArrayMetadataElementType(declaration, expression, context))
-  } else if (valueType === 'map') {
-    let mapType: RuntimeMapMetadata | null = null
-
-    if (expression !== null && typeof expression !== 'undefined') {
-      mapType = resolveRuntimeMapType(expression, context)
-    }
-
-    context.mapTypes.set(
-      name,
-      runtimeMapMetadata(
-        resolveRuntimeMapMetadataKeyType(declaration, expression, mapType),
-        resolveRuntimeMapMetadataValueType(declaration, expression, mapType)
-      )
-    )
   }
 }
 
@@ -2021,8 +1960,6 @@ function resolveRuntimeObjectLiteralShapeField(property: StatementNode, context:
     declaredType: runtimeObjectLiteralFieldDeclaredType(value),
     valueType: runtimeObjectLiteralFieldValueType(value, context),
     arrayElementType: value.arrayElementType,
-    mapKeyType: value.mapKeyType,
-    mapValueType: value.mapValueType,
     shape,
     functionType: value.functionType
   }
@@ -2097,56 +2034,6 @@ function resolveRuntimeArrayMetadataElementType(
   return 'unknown'
 }
 
-function resolveRuntimeMapMetadataKeyType(
-  declaration: StatementNode,
-  expression: StatementNode | null | undefined,
-  mapType: RuntimeMapMetadata | null
-): string {
-  if (declaration.mapKeyType !== null && typeof declaration.mapKeyType !== 'undefined') {
-    return declaration.mapKeyType
-  }
-
-  if (mapType !== null && typeof mapType !== 'undefined') {
-    return mapType.key
-  }
-
-  if (
-    expression !== null &&
-    typeof expression !== 'undefined' &&
-    expression.mapKeyType !== null &&
-    typeof expression.mapKeyType !== 'undefined'
-  ) {
-    return expression.mapKeyType
-  }
-
-  return 'unknown'
-}
-
-function resolveRuntimeMapMetadataValueType(
-  declaration: StatementNode,
-  expression: StatementNode | null | undefined,
-  mapType: RuntimeMapMetadata | null
-): string {
-  if (declaration.mapValueType !== null && typeof declaration.mapValueType !== 'undefined') {
-    return declaration.mapValueType
-  }
-
-  if (mapType !== null && typeof mapType !== 'undefined') {
-    return mapType.value
-  }
-
-  if (
-    expression !== null &&
-    typeof expression !== 'undefined' &&
-    expression.mapValueType !== null &&
-    typeof expression.mapValueType !== 'undefined'
-  ) {
-    return expression.mapValueType
-  }
-
-  return 'unknown'
-}
-
 export function isRuntimeValueLocalExpression(expression: StatementNode, context: CFunctionContext): boolean {
   const valueType = statementDeps(context).inferExpressionType(expression, context)
 
@@ -2206,31 +2093,6 @@ export function emitBoxedRuntimeValueVariableDeclaration(
   return lines
 }
 
-export function reportCCollectionHashability(
-  valueType: string | null | undefined,
-  subject: string,
-  loc: CSourceLocation,
-  context: CFunctionContext
-): void {
-  if (
-    valueType === null ||
-    typeof valueType === 'undefined' ||
-    valueType === 'unknown' ||
-    isCCollectionHashableType(valueType)
-  ) {
-    return
-  }
-
-  pushDiagnostic(
-    context,
-    diagnostic('INOX_C_COLLECTION', `${subject} must be hashable in the current C backend slice`, loc)
-  )
-}
-
-function isCCollectionHashableType(valueType: string): boolean {
-  return valueType === 'number' || valueType === 'boolean' || isManagedRuntimeReturnType(valueType)
-}
-
 function isCForOfArrayElementType(valueType: string): boolean {
   return isCForOfValueType(valueType)
 }
@@ -2261,11 +2123,6 @@ function registerForOfElementMetadata(
     registerForOfObjectElementDeclaredType(context, name, statement)
   } else if (elementType === 'array') {
     context.runtimeArrayElementTypes.set(name, stringOrUnknown(statement.arrayElementType))
-  } else if (elementType === 'map') {
-    context.mapTypes.set(
-      name,
-      runtimeMapMetadata(stringOrUnknown(statement.mapKeyType), stringOrUnknown(statement.mapValueType))
-    )
   }
 }
 
@@ -2317,144 +2174,6 @@ function emitForOfElementDeclaration(
 
 function shouldEmitRuntimeArrayValueBinding(elementType: string): boolean {
   return elementType === 'unknown' || elementType === 'object'
-}
-
-function emitCollectionVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] {
-  const deps = statementDeps(context)
-  const collectionConstructor = deps.collectionConstructorName(statement.init)
-
-  if (collectionConstructor === null || typeof collectionConstructor === 'undefined') {
-    pushDiagnostic(
-      context,
-      diagnostic(
-        'INOX_C_COLLECTION',
-        'this collection constructor is not supported by the current C backend slice',
-        statement.loc
-      )
-    )
-    return [`double ${emitCIdentifier(statement.name)} = 0;`]
-  }
-
-  const args: StatementNode[] = statement.init.args
-
-  if (args.length > 1) {
-    pushDiagnostic(
-      context,
-      diagnostic(
-        'INOX_C_COLLECTION',
-        'C collection constructors currently support at most one array literal iterable',
-        statement.init.loc
-      )
-    )
-  }
-
-  let constructorArg: StatementNode | null = null
-
-  if (args.length > 0) {
-    constructorArg = args[0]
-  }
-
-  const mapKeyType = stringOrUnknown(statement.mapKeyType)
-  const mapValueType = stringOrUnknown(statement.mapValueType)
-  context.variables.set(statement.name, 'map')
-  context.cppMapValues.add(statement.name)
-  context.mapTypes.set(statement.name, runtimeMapMetadata(mapKeyType, mapValueType))
-  reportCCollectionHashability(statement.mapKeyType, 'Map keys', statement.loc, context)
-
-  const copied = emitCollectionVariableCopyConstructor(statement, context)
-
-  if (copied !== null && typeof copied !== 'undefined') {
-    return copied
-  }
-
-  const lines: string[] = []
-  lines.push(`auto ${emitCIdentifier(statement.name)} = Map::create();`)
-  lines.push(emitRuntimeTypeCheck(`!${emitCIdentifier(statement.name)}.valid()`, context))
-
-  pushAllLines(lines, emitMapConstructorEntries(statement.name, constructorArg, context, statement.init.loc))
-
-  return lines
-}
-
-function emitCollectionVariableCopyConstructor(statement: StatementNode, context: CFunctionContext): string[] | null {
-  const args: StatementNode[] = statement.init.args
-  let expression: StatementNode | null = null
-
-  if (args.length > 0) {
-    expression = args[0]
-  }
-
-  if (expression === null || typeof expression === 'undefined' || expression.type === 'ArrayLiteral') {
-    return null
-  }
-
-  const value = statementDeps(context).emitCValueExpression(statement.init, context)
-  const lines: string[] = []
-
-  pushAllLines(lines, value.lines)
-  lines.push(`auto ${emitCIdentifier(statement.name)} = ${value.expression};`)
-
-  return lines
-}
-
-function emitMapConstructorEntries(
-  name: string,
-  expression: StatementNode | null | undefined,
-  context: CFunctionContext,
-  loc: CSourceLocation
-): string[] {
-  const deps = statementDeps(context)
-
-  if (expression === null || typeof expression === 'undefined') {
-    return []
-  }
-
-  if (expression.type !== 'ArrayLiteral') {
-    pushDiagnostic(
-      context,
-      diagnostic(
-        'INOX_C_COLLECTION',
-        'C Map constructor currently supports only array literal entries or Map copy sources',
-        nodeLocOrFallback(expression, loc)
-      )
-    )
-    return []
-  }
-
-  const lines: string[] = []
-
-  for (const entry of expression.elements) {
-    if (entry.type !== 'ArrayLiteral' || entry.elements.length !== 2) {
-      pushDiagnostic(
-        context,
-        diagnostic(
-          'INOX_C_COLLECTION',
-          'C Map constructor entries must be [key, value] array literals',
-          nodeLocOrFallback(entry, loc)
-        )
-      )
-      continue
-    }
-
-    const entryElements: StatementNode[] = entry.elements
-    const keyNode = entryElements[0]
-    const valueNode = entryElements[1]
-    const key = deps.emitCValueExpression(keyNode, context)
-    const value = deps.emitCValueExpression(valueNode, context)
-    reportCCollectionHashability(
-      deps.inferExpressionType(keyNode, context),
-      'Map keys',
-      nodeLocOrFallback(keyNode, nodeLocOrFallback(entry, loc)),
-      context
-    )
-
-    pushAllLines(lines, key.lines)
-    pushAllLines(lines, value.lines)
-    lines.push(`${emitCIdentifier(name)}.set(${key.expression}, ${value.expression});`)
-    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
-  }
-
-  return lines
 }
 
 function emitPreparedForInitializer(
@@ -2528,13 +2247,6 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
         lines: classMethodCall.lines,
         expression: ''
       }
-    }
-  }
-
-  if (deps.isCollectionConstructorExpression(statement.init)) {
-    return {
-      lines: emitCollectionVariableDeclaration(statement, context),
-      expression: ''
     }
   }
 
@@ -2851,10 +2563,6 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
   const setup: string[] = []
   let array: KnownForOfArray | null = statementDeps(context).resolveKnownForOfArray(statement.iterable, context)
   let runtimeArray: RuntimeForOfArray | null = null
-  let runtimeMap: RuntimeForOfMap | null = null
-  let runtimeMapEntries: RuntimeForOfMap | null = null
-  let runtimeMapKeys: RuntimeForOfMapValues | null = null
-  let runtimeMapValues: RuntimeForOfMapValues | null = null
 
   if (array === null || typeof array === 'undefined') {
     const iterable = statement.iterable
@@ -2877,53 +2585,9 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
     (array === null || typeof array === 'undefined') &&
     (runtimeArray === null || typeof runtimeArray === 'undefined')
   ) {
-    runtimeMapEntries = resolveRuntimeForOfMapEntries(statement.iterable, context)
-  }
-
-  if (runtimeMapEntries !== null && typeof runtimeMapEntries !== 'undefined') {
-    return emitRuntimeMapForOfStatement(statement, runtimeMapEntries, context)
-  }
-
-  if (
-    (array === null || typeof array === 'undefined') &&
-    (runtimeArray === null || typeof runtimeArray === 'undefined')
-  ) {
-    runtimeMapKeys = resolveRuntimeForOfMapKeys(statement.iterable, context)
-  }
-
-  if (runtimeMapKeys !== null && typeof runtimeMapKeys !== 'undefined') {
-    return emitRuntimeMapValuesForOfStatement(statement, runtimeMapKeys, context)
-  }
-
-  if (
-    (array === null || typeof array === 'undefined') &&
-    (runtimeArray === null || typeof runtimeArray === 'undefined')
-  ) {
-    runtimeMapValues = statementDeps(context).resolveRuntimeForOfMapValues(statement.iterable, context)
-  }
-
-  if (runtimeMapValues !== null && typeof runtimeMapValues !== 'undefined') {
-    return emitRuntimeMapValuesForOfStatement(statement, runtimeMapValues, context)
-  }
-
-  if (
-    (array === null || typeof array === 'undefined') &&
-    (runtimeArray === null || typeof runtimeArray === 'undefined')
-  ) {
-    runtimeMap = statementDeps(context).resolveRuntimeForOfMap(statement.iterable, context)
-  }
-
-  if (runtimeMap !== null && typeof runtimeMap !== 'undefined') {
-    return emitRuntimeMapForOfStatement(statement, runtimeMap, context)
-  }
-
-  if (
-    (array === null || typeof array === 'undefined') &&
-    (runtimeArray === null || typeof runtimeArray === 'undefined')
-  ) {
     pushDiagnostic(
       context,
-      diagnostic('INOX_C_FOR_OF', 'C for-of currently supports arrays and Map values', statement.loc)
+      diagnostic('INOX_C_FOR_OF', 'C for-of currently supports arrays and library iterables', statement.loc)
     )
     return []
   }
@@ -3215,169 +2879,6 @@ function knownForOfArrayElementType(array: KnownForOfArray, context: CFunctionCo
   }
 
   return statementDeps(context).resolveForOfElementType(array.elements)
-}
-
-function emitRuntimeMapForOfStatement(
-  statement: StatementNode,
-  runtimeMap: RuntimeForOfMap,
-  context: CFunctionContext
-): string[] {
-  const keyType = stringOrUnknown(runtimeMap.keyType)
-  const valueType = stringOrUnknown(runtimeMap.valueType)
-
-  if (!isCForOfValueType(keyType) || !isCForOfValueType(valueType)) {
-    pushDiagnostic(
-      context,
-      diagnostic(
-        'INOX_C_FOR_OF',
-        'C for-of currently supports only Map entries with number/boolean/string or managed runtime keys and values',
-        statement.loc
-      )
-    )
-    return []
-  }
-
-  const index = nextCName(context, 'inox_for_map_index')
-  const map = nextCName(context, 'inox_for_map')
-  const breakTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_break'), throughFinally: false }
-  const continueTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_continue'), throughFinally: false }
-  const fields = [{ valueType: keyType }, { valueType }]
-
-  registerOwnedValue(context, statement.name)
-
-  const variableScope = pushVariableScope(context)
-
-  try {
-    context.variables.set(statement.name, 'array')
-    context.arrayShapes.set(statement.name, fields)
-    context.arrayLengths.set(statement.name, fields.length)
-    pushFlowTarget(context.breakTargets, breakTarget)
-    pushFlowTarget(context.continueTargets, continueTarget)
-    const body = emitScopedStatementBody(statement.body, context, [], [], [], [])
-    popFlowTarget(context.continueTargets)
-    popFlowTarget(context.breakTargets)
-    const entryName = emitCIdentifier(statement.name)
-
-    const lines: string[] = []
-    pushAllLines(lines, runtimeMap.lines)
-    lines.push(`MapStorage* ${map} = ${runtimeMap.cppObject ? runtimeMap.name : `Map(${runtimeMap.name})`}.data();`)
-    lines.push(emitRuntimeTypeCheck(`${map} == nullptr`, context))
-    lines.push(`for (size_t ${index} = 0; ${index} < ${map}->capacity; ++${index}) {`)
-    lines.push(`  if (${map}->entries[${index}].state != MapSlotOccupied) continue;`)
-    const hasContinueLabel = shouldEmitFlowTargetLabel(continueTarget)
-    const loopBody: string[] = []
-    pushAllLines(loopBody, emitPrepareOwnedValueWrite(statement.name))
-    loopBody.push(`${entryName} = ArrayClass::create(2);`)
-    loopBody.push(emitRuntimeTypeCheck('inox::thrown()', context))
-    loopBody.push(`ArrayClass(${entryName}).set(0, ${map}->entries[${index}].key);`)
-    loopBody.push(emitRuntimeTypeCheck('inox::thrown()', context))
-    loopBody.push(`ArrayClass(${entryName}).set(1, ${map}->entries[${index}].value);`)
-    loopBody.push(emitRuntimeTypeCheck('inox::thrown()', context))
-    pushAllLines(loopBody, body)
-    pushLoopBodyLines(lines, loopBody, '  ', hasContinueLabel)
-    if (hasContinueLabel) {
-      pushAllLines(lines, emitContinueTargetLabel(continueTarget.label, context))
-    }
-    lines.push('}')
-    if (shouldEmitFlowTargetLabel(breakTarget)) {
-      pushAllLines(lines, emitBreakTargetLabel(breakTarget.label, context))
-    }
-    pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
-
-    return lines
-  } finally {
-    restoreVariableScope(context, variableScope)
-  }
-}
-
-function emitRuntimeMapValuesForOfStatement(
-  statement: StatementNode,
-  runtimeMapValues: RuntimeForOfMapValues,
-  context: CFunctionContext
-): string[] {
-  return emitRuntimeCollectionValueForOfStatement(
-    statement,
-    runtimeMapValues.name,
-    runtimeMapValues.elementType,
-    runtimeMapValues.lines,
-    runtimeMapValues.useKey,
-    runtimeMapValues.cppObject,
-    context
-  )
-}
-
-function emitRuntimeCollectionValueForOfStatement(
-  statement: StatementNode,
-  collectionName: string,
-  elementType: string,
-  setupLines: string[],
-  useKey: boolean,
-  cppObject: boolean,
-  context: CFunctionContext
-): string[] {
-  if (!isCForOfValueType(elementType)) {
-    pushDiagnostic(
-      context,
-      diagnostic(
-        'INOX_C_FOR_OF',
-        'C for-of currently supports only uniform number/boolean/string or managed runtime Map values',
-        statement.loc
-      )
-    )
-    return []
-  }
-
-  const index = nextCName(context, 'inox_for_map_index')
-  const collection = nextCName(context, 'inox_for_map')
-  const value = nextCName(context, 'inox_for_value')
-  const breakTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_break'), throughFinally: false }
-  const continueTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_continue'), throughFinally: false }
-
-  registerOwnedValue(context, value)
-
-  const variableScope = pushVariableScope(context)
-
-  try {
-    registerForOfElementMetadata(context, statement.name, elementType, statement)
-    pushFlowTarget(context.breakTargets, breakTarget)
-    pushFlowTarget(context.continueTargets, continueTarget)
-    const body = emitScopedStatementBody(statement.body, context, [], [], [], [])
-    popFlowTarget(context.continueTargets)
-    popFlowTarget(context.breakTargets)
-    const element = emitForOfElementDeclaration(statement.name, value, elementType, context)
-
-    const lines: string[] = []
-    pushAllLines(lines, setupLines)
-    const collectionData = cppObject ? `${collectionName}.data()` : `Map(${collectionName}).data()`
-    lines.push(`MapStorage* ${collection} = ${collectionData};`)
-    lines.push(emitRuntimeTypeCheck(`${collection} == nullptr`, context))
-    lines.push(`for (size_t ${index} = 0; ${index} < ${collection}->capacity; ++${index}) {`)
-    lines.push(`  if (${collection}->entries[${index}].state != MapSlotOccupied) continue;`)
-    const loopBody: string[] = []
-    pushAllLines(loopBody, emitPrepareOwnedValueWrite(value))
-    if (useKey) {
-      loopBody.push(`${value} = ${collection}->entries[${index}].key;`)
-    } else {
-      loopBody.push(`${value} = ${collection}->entries[${index}].value;`)
-    }
-    pushAllLines(loopBody, element.lines)
-    loopBody.push(element.expression)
-    pushAllLines(loopBody, body)
-    const hasContinueLabel = shouldEmitFlowTargetLabel(continueTarget)
-    pushLoopBodyLines(lines, loopBody, '  ', hasContinueLabel)
-    if (hasContinueLabel) {
-      pushAllLines(lines, emitContinueTargetLabel(continueTarget.label, context))
-    }
-    lines.push('}')
-    if (shouldEmitFlowTargetLabel(breakTarget)) {
-      pushAllLines(lines, emitBreakTargetLabel(breakTarget.label, context))
-    }
-    pushAllLines(lines, emitPrepareOwnedValueWrite(value))
-
-    return lines
-  } finally {
-    restoreVariableScope(context, variableScope)
-  }
 }
 
 export function emitSwitchStatement(statement: StatementNode, context: CFunctionContext): string[] {
@@ -4017,6 +3518,11 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
       deps.registerExceptionValueShape(context, statement.name)
     }
 
+    context.variables.set(statement.name, 'object')
+    if (libraryObject.cppType !== null && typeof libraryObject.cppType !== 'undefined') {
+      context.cppValueTypes.set(statement.name, libraryObject.cppType)
+    }
+    registerRuntimeValueMetadata(statement.name, 'object', statement, statement.init, context)
     return libraryObject.lines
   }
 
@@ -4040,6 +3546,32 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     context.variables.set(statement.name, libraryObject.valueType)
     context.cppValueTypes.set(statement.name, libraryObject.cppType)
     registerRuntimeValueMetadata(statement.name, libraryObject.valueType, statement, statement.init, context)
+    return lines
+  }
+
+  if (libraryObject !== null && libraryObject.cppType === 'inox::Value') {
+    const lines: string[] = []
+    let valueType = 'unknown'
+
+    if (libraryObject.valueType !== null && typeof libraryObject.valueType !== 'undefined') {
+      valueType = libraryObject.valueType
+    } else if (statement.valueType !== null && typeof statement.valueType !== 'undefined') {
+      valueType = statement.valueType
+    } else if (statement.init.valueType !== null && typeof statement.init.valueType !== 'undefined') {
+      valueType = statement.init.valueType
+    }
+
+    pushAllLines(lines, libraryObject.lines)
+
+    if (libraryObject.cppDeclaredName === null || typeof libraryObject.cppDeclaredName === 'undefined') {
+      lines.push(
+        `${constPrefix(statement.kind === 'const')}auto ${emitCIdentifier(statement.name)} = ${libraryObject.expression};`
+      )
+    }
+
+    context.variables.set(statement.name, valueType)
+    context.cppValueTypes.set(statement.name, libraryObject.cppType)
+    registerRuntimeValueMetadata(statement.name, valueType, statement, statement.init, context)
     return lines
   }
 
@@ -4105,10 +3637,6 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
       registerPromiseVariableMetadata(statement, classMethodCall, context)
       return classMethodCall.lines
     }
-  }
-
-  if (deps.isCollectionConstructorExpression(statement.init)) {
-    return emitCollectionVariableDeclaration(statement, context)
   }
 
   const arrayFromCall = deps.emitPreparedArrayFromCallExpression(statement.init, context)
@@ -4437,8 +3965,9 @@ function emitRuntimeValueAssignment(expression: StatementNode, context: CFunctio
   const target = path[0]
   const reference = emitCIdentifier(target)
   const targetType = context.variables.get(target)
+  const targetCppType = context.cppValueTypes.get(target)
 
-  if (!isRuntimeValueDeclarationValueType(targetType)) {
+  if (!isRuntimeValueDeclarationValueType(targetType) && targetCppType !== 'inox::Value') {
     return null
   }
 
@@ -4448,8 +3977,6 @@ function emitRuntimeValueAssignment(expression: StatementNode, context: CFunctio
   const lines: string[] = []
 
   pushAllLines(lines, value.lines)
-
-  const targetCppType = context.cppValueTypes.get(target)
 
   if (targetCppType !== null && typeof targetCppType !== 'undefined') {
     if (value.cppType !== null && typeof value.cppType !== 'undefined') {
@@ -4517,8 +4044,7 @@ function isRuntimeValueDeclarationValueType(valueType: string | null | undefined
     isOpaqueRuntimeValueType(valueType) ||
     valueType === 'bytes' ||
     valueType === 'object' ||
-    valueType === 'array' ||
-    valueType === 'map'
+    valueType === 'array'
   )
 }
 
@@ -4604,12 +4130,6 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
       return []
     }
 
-    const collectionCall = deps.emitPreparedCollectionCallExpression(expression, context)
-
-    if (collectionCall !== null && typeof collectionCall !== 'undefined') {
-      return collectionCall.lines
-    }
-
     const promise = deps.emitPreparedPromiseStaticExpression(expression, context)
 
     if (promise !== null && typeof promise !== 'undefined') {
@@ -4648,12 +4168,6 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
 
     if (moduleValueAssignment !== null && typeof moduleValueAssignment !== 'undefined') {
       return moduleValueAssignment
-    }
-
-    const mapIndexAssignment = deps.emitPreparedMapIndexAssignment(expression, context)
-
-    if (mapIndexAssignment !== null && typeof mapIndexAssignment !== 'undefined') {
-      return mapIndexAssignment.lines
     }
 
     const libraryAssignment = deps.emitPreparedCompilerLibraryCallExpression(expression, context)
@@ -4802,8 +4316,6 @@ function emitModuleValueAssignmentExpression(
       functionType: expression.target.functionType,
       arrayElementType: expression.target.arrayElementType,
       arrayElementDeclaredType: expression.target.arrayElementDeclaredType,
-      mapKeyType: expression.target.mapKeyType,
-      mapValueType: expression.target.mapValueType,
       promiseValueType: expression.target.promiseValueType,
       loc: expression.loc
     },

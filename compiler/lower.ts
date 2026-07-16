@@ -94,8 +94,6 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
         returnNullable: returnType.nullable,
         returnArrayElementType: returnType.arrayElementType,
         returnArrayElementDeclaredType: returnType.arrayElementDeclaredType,
-        returnMapKeyType: returnType.mapKeyType,
-        returnMapValueType: returnType.mapValueType,
         returnPromiseValueType: nullableString(returnType.promiseValueType),
         returnShape: returnType.shape,
         body: lowerStatementList(item.body, context)
@@ -236,8 +234,6 @@ function lowerClassField(field: AnyNode): AnyNode {
     nullable: field.nullable === true,
     arrayElementType: nullableString(field.arrayElementType),
     arrayElementDeclaredType: nullableString(field.arrayElementDeclaredType),
-    mapKeyType: nullableString(field.mapKeyType),
-    mapValueType: nullableString(field.mapValueType),
     promiseValueType: nullableString(field.promiseValueType),
     shape: nullableNode(field.shape),
     functionType: nullableNode(field.functionType),
@@ -275,8 +271,6 @@ function lowerClassMethod(method: AnyNode, context: LowerContext): AnyNode {
     returnNullable: returnType.nullable,
     returnArrayElementType: returnType.arrayElementType,
     returnArrayElementDeclaredType: returnType.arrayElementDeclaredType,
-    returnMapKeyType: returnType.mapKeyType,
-    returnMapValueType: returnType.mapValueType,
     returnPromiseValueType: nullableString(returnType.promiseValueType),
     returnShape: nullableNode(returnType.shape),
     body: lowerStatementList(method.body, context)

@@ -13,7 +13,6 @@ import { cStringLiteral, emitCIdentifier } from '../identifiers.ts'
 import { emitRuntimeNullableValueCheck, runtimeObjectReadValueMismatchCondition } from '../runtime-values.ts'
 import { isCoalesceExpression } from '../syntax.ts'
 import type {
-  CFunctionReturnMapType,
   CFunctionType,
   CObjectFieldInfo,
   CObjectIndexFieldInfo,
@@ -39,7 +38,6 @@ import {
 } from './objects.ts'
 
 type CBooleanMap = Map<string, boolean>
-type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
 type CFunctionTypeMap = Map<string, CFunctionType>
 type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
 type CStringMap = Map<string, string>
@@ -58,7 +56,6 @@ type NullableFunctionContext = {
   functionReturnArrayElementTypes: CStringNullableMap
   functionReturnNullables: CBooleanMap
   functionTypes: CFunctionTypeMap
-  mapTypes: CFunctionReturnMapTypeMap
   narrowedNullableScalars: CStringSet
   nextId: number
   nullableLoweringDependencies: NullableLoweringDependencies
@@ -705,10 +702,6 @@ export function isNullableRuntimeExpression(expression: AnyNode, context: Nullab
     return context.nullableVariables.has(name)
   }
 
-  if (isMapGetCallExpression(expression, context)) {
-    return true
-  }
-
   if (
     expression.type === 'CallExpression' &&
     expression.callee.type === 'Reference' &&
@@ -738,24 +731,6 @@ export function isNullableRuntimeExpression(expression: AnyNode, context: Nullab
     expression.nullable === true &&
     isRuntimeNullableType(nullableDeps(context).inferExpressionType(expression, context))
   )
-}
-
-function isMapGetCallExpression(expression: AnyNode, context: NullableFunctionContext): boolean {
-  if (expression.type !== 'CallExpression') {
-    return false
-  }
-
-  const callee = expression.callee
-
-  if (callee.type !== 'MemberExpression' || callee.property !== 'get') {
-    return false
-  }
-
-  if (expression.collectionKind === 'map') {
-    return true
-  }
-
-  return nullableDeps(context).inferExpressionType(callee.object, context) === 'map'
 }
 
 export function emitNullableRuntimeValueVariableDeclaration(
@@ -788,22 +763,6 @@ export function emitNullableRuntimeValueVariableDeclaration(
     }
 
     context.runtimeArrayElementTypes.set(statement.name, arrayElementType)
-  } else if (valueType === 'map') {
-    let mapKeyType = 'unknown'
-    let mapValueType = 'unknown'
-
-    if (statement.mapKeyType !== null && typeof statement.mapKeyType !== 'undefined') {
-      mapKeyType = statement.mapKeyType
-    }
-
-    if (statement.mapValueType !== null && typeof statement.mapValueType !== 'undefined') {
-      mapValueType = statement.mapValueType
-    }
-
-    context.mapTypes.set(statement.name, {
-      key: mapKeyType,
-      value: mapValueType
-    })
   } else if (valueType === 'function') {
     context.functionTypes.set(statement.name, normalizeNullableFunctionType(statement.functionType))
     context.runtimeCallbacks.add(statement.name)

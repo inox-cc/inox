@@ -12,6 +12,7 @@ export type LibraryOperationTypeRefContext = {
   receiverTypeRef: TypeRef | null
   contextualTypeRef: TypeRef | null
   argumentTypeRefs: TypeRef[]
+  argumentArrayLiteralColumns: TypeRef[][]
 }
 
 /** Resolves a data-only operation TypeRef template for one call site. */
@@ -68,6 +69,17 @@ function resolveOperationTypeParameterSource(
     return nominalTypeArgument(context.contextualTypeRef, source.argumentIndex)
   }
 
+  if (source.source === 'argument-array-literal-column') {
+    const columns = typeRefListAt(context.argumentArrayLiteralColumns, source.argumentIndex)
+    const elementIndex = source.elementIndex
+
+    if (columns === null || typeof elementIndex !== 'number') {
+      return null
+    }
+
+    return typeRefAt(columns, elementIndex)
+  }
+
   if (source.source !== 'argument-trait') {
     return null
   }
@@ -106,6 +118,14 @@ function nominalTypeArgument(typeRef: TypeRef | null, index: number): TypeRef | 
 }
 
 function typeRefAt(typeRefs: TypeRef[], index: number): TypeRef | null {
+  if (index < 0 || index >= typeRefs.length) {
+    return null
+  }
+
+  return typeRefs[index]
+}
+
+function typeRefListAt(typeRefs: TypeRef[][], index: number): TypeRef[] | null {
   if (index < 0 || index >= typeRefs.length) {
     return null
   }

@@ -20,7 +20,6 @@ import type {
   CCallbackWrapper,
   CClassInfo,
   CFunctionParam,
-  CFunctionReturnMapType,
   CFunctionType,
   CKnownArrayElement,
   CKnownObjectField,
@@ -58,7 +57,6 @@ type AsyncTaskCallbackArrowWrapperMap = Map<AsyncTaskAstNode, CCallbackWrapper>
 type AsyncTaskCallbackWrapperMap = Map<string, CCallbackWrapper>
 type AsyncTaskFunctionParamMap = Map<string, CFunctionParam[]>
 type AsyncTaskFunctionTypeMap = Map<string, CFunctionType>
-type AsyncTaskMapTypeMap = Map<string, CFunctionReturnMapType>
 type AsyncTaskObjectShapeFieldMap = Map<string, CObjectShapeField[]>
 type AsyncTaskPromiseChainWrapperMap = Map<AsyncTaskAstNode, CPromiseChainWrapper>
 type AsyncTaskPromiseConstructorHandlerMap = Map<string, CPromiseConstructorHandler>
@@ -123,7 +121,6 @@ type AsyncTaskFunctionContext = AsyncTaskEmitContext & {
   functionErrorOut: string | null
   functionReturnOut: string | null
   functionTypes: AsyncTaskFunctionTypeMap
-  mapTypes: AsyncTaskMapTypeMap
   narrowedNullableScalars: AsyncTaskStringSet
   nullableVariables: AsyncTaskStringSet
   objectAliases: AsyncTaskStringMap
@@ -155,7 +152,6 @@ type AsyncTaskFunctionContext = AsyncTaskEmitContext & {
 }
 
 type AsyncTaskLocalMetadataContext = {
-  mapTypes: AsyncTaskMapTypeMap
   objectDeclaredTypes: AsyncTaskStringMap
   objectShapes: AsyncTaskObjectShapeFieldMap
   runtimeArrayElementTypes: AsyncTaskStringMap
@@ -171,7 +167,6 @@ type AsyncTaskVariableScopeSnapshot = {
   classInstanceTypes: AsyncTaskStringMap
   exceptionValueNames: AsyncTaskStringSet
   functionTypes: AsyncTaskFunctionTypeMap
-  mapTypes: AsyncTaskMapTypeMap
   narrowedNullableScalars: AsyncTaskStringSet
   nullableVariables: AsyncTaskStringSet
   objectAliases: AsyncTaskStringMap
@@ -250,17 +245,8 @@ export type AsyncTaskLoweringDependencies = {
   resolveKnownObjectMember(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): CKnownObjectField | null
   resolveRuntimeArrayElementType(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): string | null
   resolveRuntimeArrayIndex(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): CRuntimeArrayElement | null
-  resolveRuntimeMapType(
-    expression: AsyncTaskAstNode,
-    context: AsyncTaskFunctionContext
-  ): CAsyncTaskRuntimeMapType | null
   resolveRuntimeStringReference(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): string | null
   restoreVariableScope(context: AsyncTaskFunctionContext, snapshot: AsyncTaskVariableScopeSnapshot): void
-}
-
-export type CAsyncTaskRuntimeMapType = {
-  key: string
-  value: string
 }
 
 function asyncTaskDeps(context: AsyncTaskEmitContext): AsyncTaskLoweringDependencies {
@@ -463,10 +449,6 @@ function asyncTaskMetadataStringOrUnknown(value: string | null | undefined): str
   return value
 }
 
-function asyncTaskMapKeyType(item: AsyncTaskMetadataItem): string {
-  return asyncTaskMetadataStringOrUnknown(item.mapKeyType)
-}
-
 function asyncTaskStatementsBeforeLast(statements: AsyncTaskAstNode[]): AsyncTaskAstNode[] {
   const out: AsyncTaskAstNode[] = []
 
@@ -529,8 +511,6 @@ function createAsyncTaskFrameLocals(
       fieldName: local.fieldName,
       arrayElementType: local.arrayElementType,
       forceRuntimeStringDeclaration: local.forceRuntimeStringDeclaration,
-      mapKeyType: local.mapKeyType,
-      mapValueType: local.mapValueType,
       shape: local.shape,
       kind: 'prefix'
     })
@@ -554,8 +534,6 @@ function createAsyncTaskFrameLocals(
       arrayElementType: item.arrayElementType,
       awaitedExpression: item.awaitedExpression,
       awaitedPromiseExpression: item.awaitedPromiseExpression,
-      mapKeyType: item.mapKeyType,
-      mapValueType: item.mapValueType,
       shape: item.shape,
       kind: 'await'
     })
@@ -965,7 +943,6 @@ function isSupportedAsyncTaskValueType(valueType: string): boolean {
     valueType === 'bytes' ||
     valueType === 'object' ||
     valueType === 'array' ||
-    valueType === 'map' ||
     valueType === 'void'
   )
 }
@@ -1574,8 +1551,6 @@ function resolveAsyncTaskPrefixLocals(
     if (isSupportedAsyncTaskFramePrefixLocal(statement, valueType, context)) {
       let shape: CObjectShape | null = null
       let arrayElementType: string | null = null
-      let mapKeyType: string | null = null
-      let mapValueType: string | null = null
 
       if (valueType === 'object') {
         if (statement.shape !== null && typeof statement.shape !== 'undefined') {
@@ -1616,47 +1591,11 @@ function resolveAsyncTaskPrefixLocals(
         }
       }
 
-      if (valueType === 'map') {
-        const resolvedMapType = asyncTaskDeps(context).resolveRuntimeMapType(statement.init, context)
-
-        if (statement.mapKeyType !== null && typeof statement.mapKeyType !== 'undefined') {
-          mapKeyType = statement.mapKeyType
-        } else if (resolvedMapType !== null && typeof resolvedMapType !== 'undefined') {
-          mapKeyType = resolvedMapType.key
-        } else if (
-          statement.init !== null &&
-          typeof statement.init !== 'undefined' &&
-          statement.init.mapKeyType !== null &&
-          typeof statement.init.mapKeyType !== 'undefined'
-        ) {
-          mapKeyType = statement.init.mapKeyType
-        } else {
-          mapKeyType = 'unknown'
-        }
-
-        if (statement.mapValueType !== null && typeof statement.mapValueType !== 'undefined') {
-          mapValueType = statement.mapValueType
-        } else if (resolvedMapType !== null && typeof resolvedMapType !== 'undefined') {
-          mapValueType = resolvedMapType.value
-        } else if (
-          statement.init !== null &&
-          typeof statement.init !== 'undefined' &&
-          statement.init.mapValueType !== null &&
-          typeof statement.init.mapValueType !== 'undefined'
-        ) {
-          mapValueType = statement.init.mapValueType
-        } else {
-          mapValueType = 'unknown'
-        }
-      }
-
       locals.push({
         name: statement.name,
         type: valueType,
         shape: shape,
         arrayElementType: arrayElementType,
-        mapKeyType: mapKeyType,
-        mapValueType: mapValueType,
         fieldName: `prefix_${emitCIdentifier(statement.name)}`,
         forceRuntimeStringDeclaration: valueType === 'string' && isRawStringLiteralExpression(statement.init)
       })
@@ -1693,8 +1632,7 @@ function isSupportedAsyncTaskPrefixLocalType(valueType: string): boolean {
     valueType === 'string' ||
     valueType === 'bytes' ||
     valueType === 'object' ||
-    valueType === 'array' ||
-    valueType === 'map'
+    valueType === 'array'
   )
 }
 
@@ -1705,8 +1643,7 @@ function isSupportedAsyncTaskFramePrefixLocalType(valueType: string): boolean {
     valueType === 'string' ||
     valueType === 'bytes' ||
     valueType === 'object' ||
-    valueType === 'array' ||
-    valueType === 'map'
+    valueType === 'array'
   )
 }
 
@@ -2049,8 +1986,6 @@ function resolveAsyncTaskDirectAwaitStep(
 
   let shape: CObjectShape | null = null
   let arrayElementType = 'unknown'
-  let mapKeyType: string | null = null
-  let mapValueType: string | null = null
 
   if (awaitedType === 'object') {
     if (statement.shape !== null && typeof statement.shape !== 'undefined') {
@@ -2082,38 +2017,6 @@ function resolveAsyncTaskDirectAwaitStep(
     arrayElementType = awaitedExpression.arrayElementType
   }
 
-  if (awaitedType === 'map') {
-    if (statement.mapKeyType !== null && typeof statement.mapKeyType !== 'undefined') {
-      mapKeyType = statement.mapKeyType
-    } else if (statement.init.mapKeyType !== null && typeof statement.init.mapKeyType !== 'undefined') {
-      mapKeyType = statement.init.mapKeyType
-    } else if (
-      awaitedExpression !== null &&
-      typeof awaitedExpression !== 'undefined' &&
-      awaitedExpression.mapKeyType !== null &&
-      typeof awaitedExpression.mapKeyType !== 'undefined'
-    ) {
-      mapKeyType = awaitedExpression.mapKeyType
-    } else {
-      mapKeyType = 'unknown'
-    }
-
-    if (statement.mapValueType !== null && typeof statement.mapValueType !== 'undefined') {
-      mapValueType = statement.mapValueType
-    } else if (statement.init.mapValueType !== null && typeof statement.init.mapValueType !== 'undefined') {
-      mapValueType = statement.init.mapValueType
-    } else if (
-      awaitedExpression !== null &&
-      typeof awaitedExpression !== 'undefined' &&
-      awaitedExpression.mapValueType !== null &&
-      typeof awaitedExpression.mapValueType !== 'undefined'
-    ) {
-      mapValueType = awaitedExpression.mapValueType
-    } else {
-      mapValueType = 'unknown'
-    }
-  }
-
   let storedAwaitedExpression: AsyncTaskAstNode | null = awaitedExpression
 
   if (awaitedPromiseExpression !== null && typeof awaitedPromiseExpression !== 'undefined') {
@@ -2127,8 +2030,6 @@ function resolveAsyncTaskDirectAwaitStep(
     fieldName: `local_${emitCIdentifier(statement.name)}`,
     shape: shape,
     arrayElementType: arrayElementType,
-    mapKeyType: mapKeyType,
-    mapValueType: mapValueType,
     awaitedExpression: storedAwaitedExpression,
     awaitedPromiseExpression: awaitedPromiseExpression
   }
@@ -2226,8 +2127,6 @@ function resolveAsyncTaskLocalPromiseAwaitStep(
 
   let shape: CObjectShape | null = null
   let arrayElementType: string | null = null
-  let mapKeyType: string | null = null
-  let mapValueType: string | null = null
 
   if (awaitedType === 'object') {
     if (awaitStatement.shape !== null && typeof awaitStatement.shape !== 'undefined') {
@@ -2256,34 +2155,6 @@ function resolveAsyncTaskLocalPromiseAwaitStep(
     }
   }
 
-  if (awaitedType === 'map') {
-    if (awaitStatement.mapKeyType !== null && typeof awaitStatement.mapKeyType !== 'undefined') {
-      mapKeyType = awaitStatement.mapKeyType
-    } else if (awaitStatement.init.mapKeyType !== null && typeof awaitStatement.init.mapKeyType !== 'undefined') {
-      mapKeyType = awaitStatement.init.mapKeyType
-    } else if (
-      awaitedPromiseExpression.mapKeyType !== null &&
-      typeof awaitedPromiseExpression.mapKeyType !== 'undefined'
-    ) {
-      mapKeyType = awaitedPromiseExpression.mapKeyType
-    } else {
-      mapKeyType = 'unknown'
-    }
-
-    if (awaitStatement.mapValueType !== null && typeof awaitStatement.mapValueType !== 'undefined') {
-      mapValueType = awaitStatement.mapValueType
-    } else if (awaitStatement.init.mapValueType !== null && typeof awaitStatement.init.mapValueType !== 'undefined') {
-      mapValueType = awaitStatement.init.mapValueType
-    } else if (
-      awaitedPromiseExpression.mapValueType !== null &&
-      typeof awaitedPromiseExpression.mapValueType !== 'undefined'
-    ) {
-      mapValueType = awaitedPromiseExpression.mapValueType
-    } else {
-      mapValueType = 'unknown'
-    }
-  }
-
   return {
     index: index,
     name: awaitStatement.name,
@@ -2291,8 +2162,6 @@ function resolveAsyncTaskLocalPromiseAwaitStep(
     fieldName: `local_${emitCIdentifier(awaitStatement.name)}`,
     shape: shape,
     arrayElementType: arrayElementType,
-    mapKeyType: mapKeyType,
-    mapValueType: mapValueType,
     awaitedExpression: null,
     awaitedPromiseExpression: awaitedPromiseExpression
   }
@@ -2789,14 +2658,6 @@ function registerAsyncTaskLocalMetadata(
   } else if (valueType === 'array') {
     const arrayElementType = asyncTaskMetadataStringOrUnknown(item.arrayElementType)
     context.runtimeArrayElementTypes.set(name, arrayElementType)
-  } else if (valueType === 'map') {
-    const mapKeyType = asyncTaskMapKeyType(item)
-    const mapValueType = asyncTaskMetadataStringOrUnknown(item.mapValueType)
-
-    context.mapTypes.set(name, {
-      key: mapKeyType,
-      value: mapValueType
-    })
   }
 }
 

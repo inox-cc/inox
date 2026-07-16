@@ -1,6 +1,7 @@
 import type {
   CompilerLibraryPackageDescriptor,
   LibraryOperationDescriptor,
+  LibraryOperationTypeParameterDescriptor,
   NominalTypeRef,
   TypeRef
 } from '../../../../compiler/extensions/types.ts'
@@ -165,14 +166,16 @@ const mapOperations: LibraryOperationDescriptor[] = [
         name: 'K',
         sources: [
           { source: 'explicit-type-argument', argumentIndex: 0 },
-          { source: 'contextual-type-argument', argumentIndex: 0 }
+          { source: 'contextual-type-argument', argumentIndex: 0 },
+          { source: 'argument-array-literal-column', argumentIndex: 0, elementIndex: 0 }
         ]
       },
       {
         name: 'V',
         sources: [
           { source: 'explicit-type-argument', argumentIndex: 1 },
-          { source: 'contextual-type-argument', argumentIndex: 1 }
+          { source: 'contextual-type-argument', argumentIndex: 1 },
+          { source: 'argument-array-literal-column', argumentIndex: 0, elementIndex: 1 }
         ]
       }
     ],
@@ -433,7 +436,7 @@ function mapIndexWrite(): LibraryOperationDescriptor {
   }
 }
 
-function mapReceiverTypeParameters() {
+function mapReceiverTypeParameters(): LibraryOperationTypeParameterDescriptor[] {
   return [
     { name: 'K', sources: [{ source: 'receiver-type-argument' as const, argumentIndex: 0 }] },
     { name: 'V', sources: [{ source: 'receiver-type-argument' as const, argumentIndex: 1 }] }

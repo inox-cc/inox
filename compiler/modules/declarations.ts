@@ -56,13 +56,6 @@ type DeclarationValueMetadata = {
   valueType: ValueType | null
   arrayElementType: ValueType | null
   arrayElementDeclaredType: string | null
-  mapKeyType: ValueType | null
-  mapValueType: ValueType | null
-}
-
-type DeclarationMapMetadata = {
-  keyType: ValueType | null
-  valueType: ValueType | null
 }
 
 export function createModuleDeclarationProgram(program: ProgramNode): ProgramNode {
@@ -1608,8 +1601,6 @@ function declarationReturnType(item: AnyNode): string {
       nullable: item.returnNullable,
       arrayElementDeclaredType: item.returnArrayElementDeclaredType,
       arrayElementType: item.returnArrayElementType,
-      mapKeyType: item.returnMapKeyType,
-      mapValueType: item.returnMapValueType,
       promiseValueType: item.returnPromiseValueType,
       shape: item.returnShape
     },
@@ -1651,8 +1642,6 @@ function typeNameFromMetadata(item: AnyNode, fallback: string): string {
 
   if (valueType === 'array') {
     typeName = `array<${stringMetadata(item.arrayElementDeclaredType, stringMetadata(item.arrayElementType, 'unknown'))}>`
-  } else if (valueType === 'map') {
-    typeName = `map<${stringMetadata(item.mapKeyType, 'unknown')},${stringMetadata(item.mapValueType, 'unknown')}>`
   } else if (valueType === 'promise') {
     typeName = `promise<${stringMetadata(item.promiseValueType, 'unknown')}>`
   }
@@ -1835,8 +1824,6 @@ function cloneFunctionDeclaration(item: AnyNode): AnyNode {
     returnNullable: item.returnNullable === true,
     returnArrayElementType: nullableMetadata(item.returnArrayElementType),
     returnArrayElementDeclaredType: nullableMetadata(item.returnArrayElementDeclaredType),
-    returnMapKeyType: nullableMetadata(item.returnMapKeyType),
-    returnMapValueType: nullableMetadata(item.returnMapValueType),
     returnPromiseValueType: nullableMetadata(item.returnPromiseValueType),
     returnShape: nullableMetadata(item.returnShape),
     body: []
@@ -1891,10 +1878,6 @@ function cloneVariableDeclaration(item: AnyNode): AnyNode {
       knownStringMetadata(item.arrayElementDeclaredType) ??
       inferred.arrayElementDeclaredType ??
       nullableMetadata(item.arrayElementDeclaredType),
-    mapKeyType: knownStringMetadata(item.mapKeyType) ?? inferred.mapKeyType ?? nullableMetadata(item.mapKeyType),
-    mapValueType:
-      knownStringMetadata(item.mapValueType) ?? inferred.mapValueType ?? nullableMetadata(item.mapValueType),
-    mapValueShape: nullableMetadata(item.mapValueShape),
     promiseValueType: nullableMetadata(item.promiseValueType),
     init: null
   }
@@ -1930,7 +1913,7 @@ function inferExpressionDeclarationMetadata(expression: AnyNode | null | undefin
   }
 
   if (expression.type === 'NewExpression') {
-    return newExpressionDeclarationValueMetadata(expression)
+    return emptyDeclarationValueMetadata()
   }
 
   return emptyDeclarationValueMetadata()
@@ -1941,8 +1924,6 @@ function scalarDeclarationValueMetadata(valueType: ValueType): DeclarationValueM
     valueType,
     arrayElementType: null,
     arrayElementDeclaredType: null,
-    mapKeyType: null,
-    mapValueType: null
   }
 }
 
@@ -1953,105 +1934,6 @@ function arrayLiteralDeclarationValueMetadata(expression: AnyNode): DeclarationV
     valueType: 'array',
     arrayElementType: elementType,
     arrayElementDeclaredType: elementType,
-    mapKeyType: null,
-    mapValueType: null
-  }
-}
-
-function newExpressionDeclarationValueMetadata(expression: AnyNode): DeclarationValueMetadata {
-  const calleeName = newExpressionCalleeName(expression)
-
-  if (calleeName === 'Map') {
-    const mapType = mapConstructorType(expression)
-
-    return {
-      valueType: 'map',
-      arrayElementType: null,
-      arrayElementDeclaredType: null,
-      mapKeyType: mapType?.keyType ?? null,
-      mapValueType: mapType?.valueType ?? null
-    }
-  }
-
-  return emptyDeclarationValueMetadata()
-}
-
-function newExpressionCalleeName(expression: AnyNode): string | null {
-  const callee = expression.callee
-
-  if (callee === null || typeof callee === 'undefined' || callee.type !== 'Reference' || callee.path.length !== 1) {
-    return null
-  }
-
-  return callee.path[0]
-}
-
-function mapConstructorType(expression: AnyNode): DeclarationMapMetadata | null {
-  if (expression.args.length === 0) {
-    return null
-  }
-
-  const first = expression.args[0]
-
-  if (first.type === 'ArrayLiteral') {
-    return mapEntryArrayType(first)
-  }
-
-  const metadata = inferExpressionDeclarationMetadata(first)
-
-  if (metadata.valueType === 'map') {
-    return {
-      keyType: metadata.mapKeyType,
-      valueType: metadata.mapValueType
-    }
-  }
-
-  return null
-}
-
-function mapEntryArrayType(expression: AnyNode): DeclarationMapMetadata | null {
-  if (expression.elements.length === 0) {
-    return null
-  }
-
-  let keyType: ValueType | null = null
-  let valueType: ValueType | null = null
-
-  for (const entry of expression.elements) {
-    if (entry.type !== 'ArrayLiteral' || entry.elements.length < 2) {
-      return null
-    }
-
-    const entryKey = entry.elements[0]
-    const entryValue = entry.elements[1]
-    const entryKeyMetadata = inferExpressionDeclarationMetadata(entryKey)
-    const entryValueMetadata = inferExpressionDeclarationMetadata(entryValue)
-
-    if (
-      entryKeyMetadata.valueType === null ||
-      entryKeyMetadata.valueType === 'unknown' ||
-      entryValueMetadata.valueType === null ||
-      entryValueMetadata.valueType === 'unknown'
-    ) {
-      return null
-    }
-
-    if (keyType === null) {
-      keyType = entryKeyMetadata.valueType
-    } else if (keyType !== entryKeyMetadata.valueType) {
-      return null
-    }
-
-    if (valueType === null) {
-      valueType = entryValueMetadata.valueType
-    } else if (valueType !== entryValueMetadata.valueType) {
-      return null
-    }
-  }
-
-  return {
-    keyType,
-    valueType
   }
 }
 
@@ -2084,8 +1966,6 @@ function emptyDeclarationValueMetadata(): DeclarationValueMetadata {
     valueType: null,
     arrayElementType: null,
     arrayElementDeclaredType: null,
-    mapKeyType: null,
-    mapValueType: null
   }
 }
 
@@ -2156,8 +2036,6 @@ function cloneClassFields(fields: AnyNode[] | null | undefined): AnyNode[] {
       nullable: field.nullable === true,
       arrayElementType: nullableMetadata(field.arrayElementType),
       arrayElementDeclaredType: nullableMetadata(field.arrayElementDeclaredType),
-      mapKeyType: nullableMetadata(field.mapKeyType),
-      mapValueType: nullableMetadata(field.mapValueType),
       promiseValueType: nullableMetadata(field.promiseValueType),
       shape: nullableMetadata(field.shape),
       functionType: nullableMetadata(field.functionType),
@@ -2189,8 +2067,6 @@ function cloneClassMethods(methods: AnyNode[] | null | undefined): AnyNode[] {
       returnNullable: method.returnNullable === true,
       returnArrayElementType: nullableMetadata(method.returnArrayElementType),
       returnArrayElementDeclaredType: nullableMetadata(method.returnArrayElementDeclaredType),
-      returnMapKeyType: nullableMetadata(method.returnMapKeyType),
-      returnMapValueType: nullableMetadata(method.returnMapValueType),
       returnPromiseValueType: nullableMetadata(method.returnPromiseValueType),
       body: []
     })
@@ -2216,8 +2092,6 @@ function cloneParams(params: AnyNode[] | null | undefined): AnyNode[] {
       nullable: param.nullable === true,
       arrayElementType: nullableMetadata(param.arrayElementType),
       arrayElementDeclaredType: nullableMetadata(param.arrayElementDeclaredType),
-      mapKeyType: nullableMetadata(param.mapKeyType),
-      mapValueType: nullableMetadata(param.mapValueType),
       promiseValueType: nullableMetadata(param.promiseValueType),
       shape: nullableMetadata(param.shape),
       functionType: nullableMetadata(param.functionType),

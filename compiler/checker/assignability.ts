@@ -2,7 +2,6 @@ import {
   isArrayTypeName,
   isNullableTypeName,
   isPromiseTypeName,
-  mapTypeNamesFromTypeName,
   nullableTypeNameFromKnownTypeName,
   unionTypeNamesFromTypeName
 } from '../type-names.ts'
@@ -59,8 +58,7 @@ export function isEqualityComparableType(left: ValueType, right: ValueType): boo
       left === 'null' ||
       left === 'object' ||
       left === 'array' ||
-      left === 'bytes' ||
-      left === 'map') &&
+      left === 'bytes') &&
     left === right
   )
 }
@@ -142,10 +140,6 @@ function assignabilityBaseType(valueType: ValueType): ValueType {
 
   if (isArrayTypeName(valueType)) {
     return 'array'
-  }
-
-  if (mapTypeNamesFromTypeName(valueType)) {
-    return 'map'
   }
 
   if (isPromiseTypeName(valueType)) {

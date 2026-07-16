@@ -402,12 +402,6 @@ function registerFunctionParamsInContext(
     } else if (param.valueType === 'array') {
       context.variables.set(param.name, 'array')
       context.runtimeArrayElementTypes.set(param.name, declarationTypeOrUnknown(param.arrayElementType))
-    } else if (param.valueType === 'map') {
-      context.variables.set(param.name, 'map')
-      context.mapTypes.set(param.name, {
-        key: declarationTypeOrUnknown(param.mapKeyType),
-        value: declarationTypeOrUnknown(param.mapValueType)
-      })
     } else if (param.valueType === 'promise') {
       context.variables.set(param.name, 'promise')
       context.promiseValueTypes.set(param.name, declarationTypeOrUnknown(param.promiseValueType))
@@ -439,10 +433,11 @@ function registerFunctionParamsInContext(
 }
 
 export function emitFunctionHead(statement: CNode, context: CEmitContext): string {
-  let name = context.functionNames.get(statement.name)
+  const statementName: string = statement.name
+  let name = context.functionNames.get(statementName)
 
   if (name === null || typeof name === 'undefined') {
-    name = emitCFunctionName(statement.name)
+    name = emitCFunctionName(statementName)
   }
 
   const returnInfo = resolveCFunctionReturnInfo(statement, context)
@@ -680,7 +675,7 @@ function emitFunctionHeadParam(param: CFunctionParam, index: number, statement: 
     return `inox_value ${emitCLocalName(param.name)}`
   }
 
-  if (param.valueType === 'array' || param.valueType === 'map') {
+  if (param.valueType === 'array') {
     return `inox_value ${emitCLocalName(param.name)}`
   }
 
@@ -1169,7 +1164,7 @@ function emitClassMethodParam(param: CFunctionParam, index: number, method: CNod
     return `inox_value ${emitCLocalName(param.name)}`
   }
 
-  if (param.valueType === 'array' || param.valueType === 'map') {
+  if (param.valueType === 'array') {
     return `inox_value ${emitCLocalName(param.name)}`
   }
 
@@ -1191,12 +1186,13 @@ function emitClassMethodParam(param: CFunctionParam, index: number, method: CNod
 function resolveCFunctionReturnInfo(statement: CNode, context: CEmitContext): CFunctionReturnInfo {
   const returnType = resolveFunctionReturnType(statement.name, statement.returnType, context)
   const returnNullable = resolveFunctionReturnNullable(statement.name, statement.returnNullable, context)
+  const declaredPromiseValueType: string | null | undefined = statement.returnPromiseValueType
 
   if (cBooleanValueIsTrue(context.functionAsyncFlags.get(statement.name)) && returnType === 'promise') {
     let promiseValueType = context.functionReturnPromiseValueTypes.get(statement.name)
 
     if (promiseValueType === null || typeof promiseValueType === 'undefined') {
-      promiseValueType = statement.returnPromiseValueType
+      promiseValueType = declaredPromiseValueType
     }
 
     if (promiseValueType === null || typeof promiseValueType === 'undefined') {
@@ -1406,7 +1402,7 @@ function emitRuntimeParamPreludeForParam(
     return lines
   }
 
-  if (param.valueType === 'array' || param.valueType === 'map') {
+  if (param.valueType === 'array') {
     const tag = cRuntimeValueTag(param.valueType)
 
     if (param.nullable === true || param.optional === true) {

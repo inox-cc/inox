@@ -4,7 +4,6 @@ import type { AnyNode, ArrayBindingElement } from '../../types.ts'
 import type { CFunctionContext } from '../context.ts'
 import {
   cloneCArrayShapeMap,
-  cloneCFunctionReturnMapTypeMap,
   cloneCFunctionTypeMap,
   cloneCNumberMap,
   cloneCObjectShapeFieldMap,
@@ -21,7 +20,6 @@ import { emitCIdentifier } from '../identifiers.ts'
 import { emitRuntimeFieldValueCheck, runtimeObjectLikeValueMismatchCondition } from '../runtime-values.ts'
 import type {
   CArrayElementInfo,
-  CFunctionReturnMapType,
   CFunctionType,
   CKnownArrayElement,
   CObjectFieldInfo,
@@ -32,12 +30,11 @@ import type {
   CPreparedExpression as PreparedExpression,
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
-import { cRuntimeValueTag } from '../value-types.ts'
+import { cRuntimeValueTag, libraryNativeCppType } from '../value-types.ts'
 import { emitCConditionClause } from './expressions.ts'
 import { emitSliceIndexNormalizationLines } from './slices.ts'
 import { inferExpressionType, isAnyNodeLikeArrayFieldName, isAnyNodeLikeDeclaredType } from './types.ts'
 
-type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
 type CFunctionTypeMap = Map<string, CFunctionType>
 type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
 type CPromiseConstructorHandlerMap = Map<string, CPromiseConstructorHandler>
@@ -54,7 +51,6 @@ type ArrayVariableScopeSnapshot = {
   classInstanceTypes: CStringMap
   exceptionValueNames: CStringSet
   functionTypes: CFunctionTypeMap
-  mapTypes: CFunctionReturnMapTypeMap
   narrowedNullableScalars: CStringSet
   nullableVariables: CStringSet
   objectShapes: CObjectShapeFieldMap
@@ -262,22 +258,12 @@ function ensurePromiseValueTypes(context: ArrayFunctionContext): CStringMap {
   return nextPromiseValueTypes
 }
 
-function maybeArrayShapes(context: ArrayFunctionContext): Map<string, CArrayElementInfo[]> | null {
+function findArrayShape(context: ArrayFunctionContext, name: string): CArrayElementInfo[] | null {
   if (context.arrayShapes === null || typeof context.arrayShapes === 'undefined') {
     return null
   }
 
-  return context.arrayShapes
-}
-
-function findArrayShape(context: ArrayFunctionContext, name: string): CArrayElementInfo[] | null {
-  const shapes = maybeArrayShapes(context)
-
-  if (shapes === null || typeof shapes === 'undefined') {
-    return null
-  }
-
-  const shape = shapes.get(name)
+  const shape = context.arrayShapes.get(name)
 
   if (shape === null || typeof shape === 'undefined') {
     return null
@@ -311,7 +297,6 @@ function pushArrayVariableScope(context: ArrayFunctionContext): ArrayVariableSco
     classInstanceTypes: ensureClassInstanceTypes(context),
     exceptionValueNames: ensureExceptionValueNames(context),
     functionTypes: context.functionTypes,
-    mapTypes: context.mapTypes,
     narrowedNullableScalars: context.narrowedNullableScalars,
     nullableVariables: context.nullableVariables,
     objectShapes: context.objectShapes,
@@ -330,7 +315,6 @@ function pushArrayVariableScope(context: ArrayFunctionContext): ArrayVariableSco
   context.classInstanceTypes = cloneCStringMap(snapshot.classInstanceTypes)
   context.exceptionValueNames = cloneCStringSet(snapshot.exceptionValueNames)
   context.functionTypes = cloneCFunctionTypeMap(snapshot.functionTypes)
-  context.mapTypes = cloneCFunctionReturnMapTypeMap(snapshot.mapTypes)
   context.narrowedNullableScalars = cloneCStringSet(snapshot.narrowedNullableScalars)
   context.nullableVariables = cloneCStringSet(snapshot.nullableVariables)
   context.objectShapes = cloneCObjectShapeFieldMap(snapshot.objectShapes)
@@ -352,7 +336,6 @@ function restoreArrayVariableScope(context: ArrayFunctionContext, snapshot: Arra
   context.classInstanceTypes = snapshot.classInstanceTypes
   context.exceptionValueNames = snapshot.exceptionValueNames
   context.functionTypes = snapshot.functionTypes
-  context.mapTypes = snapshot.mapTypes
   context.narrowedNullableScalars = snapshot.narrowedNullableScalars
   context.nullableVariables = snapshot.nullableVariables
   context.objectShapes = snapshot.objectShapes
@@ -1158,7 +1141,10 @@ export function emitPreparedRuntimeArrayIndexValueExpression(
       }
     }
 
-    const tag = cRuntimeValueTag(runtimeElement.valueType) ?? ''
+    const tag =
+      runtimeElement.valueType === 'object' && libraryNativeCppType(expression.shape) !== null
+        ? ''
+        : (cRuntimeValueTag(runtimeElement.valueType) ?? '')
 
     if (tag === '') {
       return value
@@ -2508,8 +2494,6 @@ function arrayMapCallbackExpression(callback: ArrayMaybeNode | null | undefined)
       nullable: param.nullable === true,
       arrayElementType: param.arrayElementType ?? null,
       arrayElementDeclaredType: param.arrayElementDeclaredType ?? null,
-      mapKeyType: param.mapKeyType ?? null,
-      mapValueType: param.mapValueType ?? null,
       promiseValueType: param.promiseValueType ?? null,
       functionType: param.functionType ?? null,
       shape: param.shape ?? null,
@@ -2530,8 +2514,6 @@ function arrayMapCallbackExpression(callback: ArrayMaybeNode | null | undefined)
       nullable: functionType.returnNullable === true,
       arrayElementType: functionType.returnArrayElementType ?? null,
       arrayElementDeclaredType: functionType.returnArrayElementDeclaredType ?? null,
-      mapKeyType: functionType.returnMapKeyType ?? null,
-      mapValueType: functionType.returnMapValueType ?? null,
       promiseValueType: functionType.returnPromiseValueType ?? null,
       shape: functionType.returnShape ?? null,
       loc: callback.loc
@@ -3573,7 +3555,7 @@ function emitPreparedArrayReceiver(
       const shape = findArrayShape(context, name)
 
       if (shape === null || typeof shape === 'undefined') {
-        elementType = resolveForOfElementType([])
+        elementType = 'unknown'
       } else {
         elementType = resolveForOfElementType(shape)
       }
@@ -3700,7 +3682,7 @@ function resolveArrayJoinReceiverElementType(expression: ArrayMaybeNode, context
     const shape = findArrayShape(context, name)
 
     if (shape === null || typeof shape === 'undefined') {
-      return resolveForOfElementType([])
+      return 'unknown'
     }
 
     return resolveForOfElementType(shape)

@@ -38,8 +38,7 @@ function isConcreteManagedRuntimeReturnType(valueType: CValueTypeInput): boolean
     valueType === 'bytes' ||
     valueType === 'string' ||
     valueType === 'object' ||
-    valueType === 'array' ||
-    valueType === 'map'
+    valueType === 'array'
   )
 }
 
@@ -224,10 +223,6 @@ export function cRuntimeValueTag(valueType: CValueTypeInput): CRuntimeValueTag {
 
   if (valueType === 'function') {
     return 'INOX_TAG_FUNCTION'
-  }
-
-  if (valueType === 'map') {
-    return 'INOX_TAG_MAP'
   }
 
   return null

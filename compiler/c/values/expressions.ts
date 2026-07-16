@@ -42,7 +42,6 @@ import {
 import type {
   CFunctionParam,
   CFunctionPointerRuntimeAdapter,
-  CFunctionReturnMapType,
   CFunctionType,
   CArrayElementInfo,
   CKnownArrayElement,
@@ -78,7 +77,6 @@ import {
   emitPreparedNativeClassFieldValueExpression
 } from './classes.ts'
 import type { ClassLoweringDependencies } from './classes.ts'
-import type { CollectionLoweringDependencies } from './collections.ts'
 import type { NullableLoweringDependencies } from './nullable.ts'
 import {
   canLowerCScalarNullishCoalescingExpression,
@@ -91,7 +89,6 @@ import type { StatementLoweringDependencies } from './statements.ts'
 import type { StringLoweringDependencies } from './strings.ts'
 
 type CBooleanMap = Map<string, boolean>
-type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
 type CFunctionTypeMap = Map<string, CFunctionType>
 type CObjectAccessorReturnPathMap = Map<string, CObjectAccessorReturnPath>
 type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
@@ -174,7 +171,6 @@ type CFunctionContext = CEmitContext & {
   classInfos: Map<string, CClassInfo>
   classInstanceTypes: CStringMap
   classLoweringDependencies: ClassLoweringDependencies
-  collectionLoweringDependencies: CollectionLoweringDependencies
   externalEventLoop: boolean
   externalEventLoopFunctions: CStringSet
   errorChannelUsed: boolean
@@ -195,7 +191,6 @@ type CFunctionContext = CEmitContext & {
   functionTypes: CFunctionTypeMap
   jsGlobalRoots: CStringSet
   localValueNames: CStringSet
-  mapTypes: CFunctionReturnMapTypeMap
   moduleObjectShapes: CObjectShapeFieldMap
   moduleValueNames: CStringMap
   moduleValueTypes: CStringMap
@@ -419,8 +414,7 @@ function isRuntimeReferenceEqualityType(valueType: string): boolean {
   return (
     valueType === 'object' ||
     valueType === 'array' ||
-    valueType === 'bytes' ||
-    valueType === 'map'
+    valueType === 'bytes'
   )
 }
 
@@ -1139,8 +1133,6 @@ function runtimeCallbackBridgeFunctionType(functionType: CFunctionType): CFuncti
       functionTypeOwnership: param.functionTypeOwnership,
       functionType: param.functionType,
       loc: param.loc,
-      mapKeyType: param.mapKeyType,
-      mapValueType: param.mapValueType,
       name: param.name,
       nullable: param.nullable,
       optional: param.optional,
@@ -1156,8 +1148,6 @@ function runtimeCallbackBridgeFunctionType(functionType: CFunctionType): CFuncti
     kind: functionType.kind,
     params,
     returnArrayElementType: functionType.returnArrayElementType,
-    returnMapKeyType: functionType.returnMapKeyType,
-    returnMapValueType: functionType.returnMapValueType,
     returnNullable: functionType.returnNullable,
     returnPromiseValueType: functionType.returnPromiseValueType,
     returnShape: functionType.returnShape,
@@ -1926,8 +1916,6 @@ export type CScalarExpressionDependencies = {
     context: CFunctionContext,
     options?: PreparedCallOptions
   ): PreparedExpression | null
-  emitPreparedCollectionCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedCollectionSizeExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitNullableScalarValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedNullableScalarRuntimeValueExpression(
     expression: CValueNode,
@@ -2040,7 +2028,6 @@ export type CCallExpressionDependencies = {
     context: CFunctionContext,
     options?: PreparedCallOptions
   ): PreparedExpression | null
-  emitPreparedCollectionCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNumberExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedPromiseMethodExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedPromiseStaticExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
@@ -2143,12 +2130,6 @@ export function emitPreparedCallExpression(
 
   if (arraySortCall !== null && typeof arraySortCall !== 'undefined') {
     return arraySortCall
-  }
-
-  const collectionCall = deps.emitPreparedCollectionCallExpression(expression, context)
-
-  if (collectionCall !== null && typeof collectionCall !== 'undefined') {
-    return collectionCall
   }
 
   const promise = deps.emitPreparedPromiseStaticExpression(expression, context)
@@ -3155,12 +3136,6 @@ export function emitPreparedNumberExpression(
       return stringIndexCall
     }
 
-    const collectionCall = deps.emitPreparedCollectionCallExpression(expression, context)
-
-    if (collectionCall !== null && typeof collectionCall !== 'undefined') {
-      return collectionCall
-    }
-
     return deps.emitPreparedCallExpression(expression, context)
   }
 
@@ -3200,12 +3175,6 @@ export function emitPreparedNumberExpression(
 
     if (length !== null && typeof length !== 'undefined') {
       return length
-    }
-
-    const collectionSize = deps.emitPreparedCollectionSizeExpression(expression, context)
-
-    if (collectionSize !== null && typeof collectionSize !== 'undefined') {
-      return collectionSize
     }
 
     const nativeClassField = emitPreparedNativeClassFieldScalarExpression(expression, context)
@@ -4025,8 +3994,6 @@ function asRequiredCallExpression(expression: CValueNode): CValueNode {
     nullable: expression.nullable === true,
     arrayElementType: expression.arrayElementType,
     arrayElementDeclaredType: expression.arrayElementDeclaredType,
-    mapKeyType: expression.mapKeyType,
-    mapValueType: expression.mapValueType,
     promiseValueType: expression.promiseValueType,
     functionType: expression.functionType,
     shape: expression.shape,
@@ -5089,12 +5056,6 @@ export type CValueExpressionDependencies = {
     context: CFunctionContext,
     options?: PreparedCallOptions
   ): PreparedExpression | null
-  emitPreparedCollectionCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedCollectionConstructorValueExpression(
-    expression: CValueNode,
-    context: CFunctionContext
-  ): PreparedExpression | null
-  emitPreparedCollectionSizeExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedKnownArrayIndexValueExpression(
     expression: CValueNode,
     context: CFunctionContext
@@ -5107,7 +5068,6 @@ export type CValueExpressionDependencies = {
     expression: CValueNode,
     context: CFunctionContext
   ): PreparedExpression | null
-  emitPreparedMapIndexGetExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNullableScalarRuntimeValueExpression(
     expression: CValueNode,
     context: CFunctionContext
@@ -5213,27 +5173,6 @@ export function emitCValueExpression(
 
   if (arraySliceCall !== null && typeof arraySliceCall !== 'undefined') {
     return arraySliceCall
-  }
-
-  const mapIndexGet = deps.emitPreparedMapIndexGetExpression(expression, context)
-
-  if (mapIndexGet !== null && typeof mapIndexGet !== 'undefined') {
-    return mapIndexGet
-  }
-
-  const collectionConstructor = deps.emitPreparedCollectionConstructorValueExpression(expression, context)
-
-  if (collectionConstructor !== null && typeof collectionConstructor !== 'undefined') {
-    return collectionConstructor
-  }
-
-  const collectionSize = deps.emitPreparedCollectionSizeExpression(expression, context)
-
-  if (collectionSize !== null && typeof collectionSize !== 'undefined') {
-    return {
-      lines: collectionSize.lines,
-      expression: `inox_number_value(${collectionSize.expression})`
-    }
   }
 
   if (expression.type === 'MemberExpression' && expression.property === 'length') {
@@ -5512,13 +5451,6 @@ export function emitCValueExpression(
       }
     }
 
-    if (valueType === 'map') {
-      return {
-        lines: [],
-        expression: reference
-      }
-    }
-
     if (valueType === 'unknown' || isOpaqueRuntimeValueType(valueType)) {
       return {
         lines: [],
@@ -5676,12 +5608,6 @@ export function emitCValueExpression(
       !isOpaqueRuntimeValueType(valueType)
     ) {
       return emitUnsupportedCValueExpression(expression, context, deps)
-    }
-
-    const collectionCall = deps.emitPreparedCollectionCallExpression(expression, context)
-
-    if (collectionCall !== null && typeof collectionCall !== 'undefined') {
-      return collectionCall
     }
 
     const classMethodCall = deps.emitPreparedClassMethodCallExpression(expression, context, {})

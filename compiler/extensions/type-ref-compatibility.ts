@@ -24,8 +24,6 @@ export type TypeRefCompatibilityMetadata = {
   arrayElementTypeId: string | null
   arrayElementDeclaredType: string | null
   arrayElementShape: ObjectShapeInfo | null
-  mapKeyType: ValueType | null
-  mapValueType: ValueType | null
   promiseValueType: ValueType | null
   promiseRejectionValueType: ValueType | null
   promiseRejectionIntrinsicRole: IntrinsicRole | null
@@ -145,8 +143,6 @@ function baseTypeRefCompatibilityMetadata(
         arrayElementType: fieldMetadata.arrayElementType,
         arrayElementDeclaredType: fieldMetadata.arrayElementDeclaredType,
         arrayElementShape: fieldMetadata.arrayElementShape,
-        mapKeyType: fieldMetadata.mapKeyType,
-        mapValueType: fieldMetadata.mapValueType,
         promiseValueType: fieldMetadata.promiseValueType,
         promiseRejectionValueType: fieldMetadata.promiseRejectionValueType,
         promiseRejectionIntrinsicRole: fieldMetadata.promiseRejectionIntrinsicRole,
@@ -174,8 +170,6 @@ function baseTypeRefCompatibilityMetadata(
         arrayElementType: dynamicMetadata.arrayElementType,
         arrayElementDeclaredType: dynamicMetadata.arrayElementDeclaredType,
         arrayElementShape: dynamicMetadata.arrayElementShape,
-        mapKeyType: dynamicMetadata.mapKeyType,
-        mapValueType: dynamicMetadata.mapValueType,
         promiseValueType: dynamicMetadata.promiseValueType,
         shape: dynamicMetadata.shape,
         loc
@@ -205,8 +199,6 @@ function emptyCompatibilityMetadata(
     arrayElementTypeId: null,
     arrayElementDeclaredType: null,
     arrayElementShape: null,
-    mapKeyType: null,
-    mapValueType: null,
     promiseValueType: null,
     promiseRejectionValueType: null,
     promiseRejectionIntrinsicRole: null
@@ -297,11 +289,6 @@ function applyTypeTraits(
       metadata.arrayElementShape = element.shape
     }
 
-    if (trait.traitId === 'indexable' && trait.args.length > 1) {
-      metadata.mapKeyType = typeRefCompatibilityMetadata(trait.args[0], libraries, loc).valueType
-      metadata.mapValueType = typeRefCompatibilityMetadata(trait.args[1], libraries, loc).valueType
-    }
-
     if (trait.traitId === 'awaitable' && trait.args.length > 0) {
       const fulfilled = typeRefCompatibilityMetadata(trait.args[0], libraries, loc)
 
@@ -312,9 +299,6 @@ function applyTypeTraits(
       metadata.arrayElementTypeId = fulfilled.arrayElementTypeId
       metadata.arrayElementDeclaredType = fulfilled.arrayElementDeclaredType
       metadata.arrayElementShape = fulfilled.arrayElementShape
-      metadata.mapKeyType = fulfilled.mapKeyType
-      metadata.mapValueType = fulfilled.mapValueType
-
       if (trait.args.length > 1) {
         const rejected = typeRefCompatibilityMetadata(trait.args[1], libraries, loc)
 

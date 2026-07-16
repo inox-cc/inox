@@ -1,8 +1,3 @@
-export type MapTypeNames = {
-  key: string
-  value: string
-}
-
 export type RecordTypeNames = {
   key: string
   value: string
@@ -60,25 +55,6 @@ export function weakTypeNameFromTypeName(name: string): string | null {
 
 export function isWeakTypeName(name: string): boolean {
   return hasGenericTypeInner(name, 'weak')
-}
-
-export function mapTypeNamesFromTypeName(name: string): MapTypeNames | null {
-  const inner = genericTypeInner(name, 'map')
-
-  if (inner !== null && typeof inner !== 'undefined') {
-    const args = splitGenericArgs(inner)
-
-    if (args.length !== 2) {
-      return null
-    }
-
-    return {
-      key: args[0],
-      value: args[1]
-    }
-  }
-
-  return null
 }
 
 export function recordTypeNamesFromTypeName(name: string): RecordTypeNames | null {
@@ -264,18 +240,6 @@ export function normalizeTypeName(name: string): string {
     return `array<${normalizeTypeName(arrayInner)}>`
   }
 
-  const normalizedMapInner = genericTypeInner(name, 'map')
-
-  if (normalizedMapInner !== null && typeof normalizedMapInner !== 'undefined') {
-    const args = splitGenericArgs(normalizedMapInner)
-
-    if (args.length === 2) {
-      return `map<${normalizeTypeName(args[0])},${normalizeTypeName(args[1])}>`
-    }
-
-    return 'map'
-  }
-
   const normalizedRecordInner = genericTypeInner(name, 'record')
 
   if (normalizedRecordInner !== null && typeof normalizedRecordInner !== 'undefined') {
@@ -330,10 +294,6 @@ export function normalizeTypeName(name: string): string {
 
   if (name === 'Array' || name === 'array') {
     return 'array'
-  }
-
-  if (name === 'map') {
-    return 'map'
   }
 
   if (name === 'Promise' || name === 'promise') {
@@ -500,7 +460,7 @@ export function isBuiltinTypeDependencyName(name: string): boolean {
     return true
   }
 
-  if (name === 'any' || name === 'class' || name === 'false' || name === 'map') {
+  if (name === 'any' || name === 'class' || name === 'false') {
     return true
   }
 

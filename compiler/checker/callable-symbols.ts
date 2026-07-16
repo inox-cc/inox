@@ -81,20 +81,6 @@ export function applyCallableSymbolCall(
     returnArrayElementDeclaredType = symbolReturnArrayElementDeclaredType
   }
 
-  let returnMapKeyType: ValueType | null = null
-  const symbolReturnMapKeyType = symbol.returnMapKeyType ?? null
-
-  if (symbolReturnMapKeyType !== null && typeof symbolReturnMapKeyType !== 'undefined') {
-    returnMapKeyType = symbolReturnMapKeyType
-  }
-
-  let returnMapValueType: ValueType | null = null
-  const symbolReturnMapValueType = symbol.returnMapValueType ?? null
-
-  if (symbolReturnMapValueType !== null && typeof symbolReturnMapValueType !== 'undefined') {
-    returnMapValueType = symbolReturnMapValueType
-  }
-
   let returnPromiseValueType: ValueType | null = null
   const symbolReturnPromiseValueType = symbol.returnPromiseValueType ?? null
 
@@ -114,8 +100,6 @@ export function applyCallableSymbolCall(
   expression.nullable = symbol.returnNullable === true
   expression.arrayElementType = returnArrayElementType
   expression.arrayElementDeclaredType = returnArrayElementDeclaredType
-  expression.mapKeyType = returnMapKeyType
-  expression.mapValueType = returnMapValueType
   expression.promiseValueType = returnPromiseValueType
   if (returnShape !== null) {
     expression.shape = returnShape

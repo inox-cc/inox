@@ -850,6 +850,19 @@ function validateOperationTypeParameterSource(
     )
   }
 
+  if (source.source === 'argument-array-literal-column') {
+    const elementIndex = source.elementIndex
+
+    if (typeof elementIndex !== 'number' || elementIndex < 0 || Math.floor(elementIndex) !== elementIndex) {
+      throw new Error(
+        `operation ${operationId} type parameter ${parameterName} has invalid literal element index ` +
+          `${elementIndex}`
+      )
+    }
+
+    return
+  }
+
   if (source.source !== 'argument-trait') {
     return
   }
@@ -1707,6 +1720,8 @@ function operationTypeParametersFingerprint(operation: LibraryOperationDescripto
 
       if (source.source === 'argument-trait') {
         row = row + ':' + source.traitId + ':' + source.traitArgumentIndex
+      } else if (source.source === 'argument-array-literal-column') {
+        row = row + ':' + (source.elementIndex ?? '')
       }
 
       sources.push(row)

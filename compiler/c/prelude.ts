@@ -164,7 +164,6 @@ export function emitCPrelude(
   needsCppValueRuntime: boolean,
   needsStringHeader: boolean,
   needsCollectionRuntime: boolean,
-  needsMapRuntime: boolean,
   needsObjectRuntime: boolean,
   libraryCPreludeIncludes: string[]
 ): string[] {
@@ -200,9 +199,6 @@ export function emitCPrelude(
     }
     if (needsCallbackRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/callback.h"')
-    }
-    if (needsMapRuntime) {
-      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/map.h"')
     }
     if (needsObjectRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/object.h"')

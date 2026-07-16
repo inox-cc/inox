@@ -183,8 +183,6 @@ function callbackArrowFunctionType(expression: AnyNode | null | undefined): CFun
     kind: 'function',
     params,
     returnArrayElementType: callbackStringOrNull(expression.returnArrayElementType),
-    returnMapKeyType: callbackStringOrNull(expression.returnMapKeyType),
-    returnMapValueType: callbackStringOrNull(expression.returnMapValueType),
     returnNullable: expression.returnNullable === true,
     returnPromiseValueType: callbackStringOrNull(expression.returnPromiseValueType),
     returnShape,
@@ -466,7 +464,6 @@ function isBuiltinObjectShapeValueType(valueType: string): boolean {
     valueType === 'boolean' ||
     valueType === 'bytes' ||
     valueType === 'function' ||
-    valueType === 'map' ||
     valueType === 'number' ||
     valueType === 'object' ||
     valueType === 'promise' ||
@@ -1550,8 +1547,6 @@ function refineArrowCallbackFunctionType(expression: AnyNode, functionType: CFun
     refined.arrayElementType = param.arrayElementType
     refined.declaredType = param.declaredType
     refined.functionType = param.functionType
-    refined.mapKeyType = param.mapKeyType
-    refined.mapValueType = param.mapValueType
     refined.promiseValueType = param.promiseValueType
     refined.shape = param.shape
 
@@ -1590,14 +1585,6 @@ function refineArrowCallbackFunctionType(expression: AnyNode, functionType: CFun
         refined.functionType = arrowParam.functionType
       }
 
-      if (arrowParam.mapKeyType !== null && typeof arrowParam.mapKeyType !== 'undefined') {
-        refined.mapKeyType = arrowParam.mapKeyType
-      }
-
-      if (arrowParam.mapValueType !== null && typeof arrowParam.mapValueType !== 'undefined') {
-        refined.mapValueType = arrowParam.mapValueType
-      }
-
       if (arrowParam.nullable === true) {
         refined.nullable = true
       }
@@ -1621,8 +1608,6 @@ function refineArrowCallbackFunctionType(expression: AnyNode, functionType: CFun
   }
 
   result.returnArrayElementType = functionType.returnArrayElementType
-  result.returnMapKeyType = functionType.returnMapKeyType
-  result.returnMapValueType = functionType.returnMapValueType
   result.returnPromiseValueType = functionType.returnPromiseValueType
   result.returnShape = functionType.returnShape
 
@@ -1640,14 +1625,6 @@ function refineArrowCallbackFunctionType(expression: AnyNode, functionType: CFun
 
   if (expression.returnArrayElementType !== null && typeof expression.returnArrayElementType !== 'undefined') {
     result.returnArrayElementType = expression.returnArrayElementType
-  }
-
-  if (expression.returnMapKeyType !== null && typeof expression.returnMapKeyType !== 'undefined') {
-    result.returnMapKeyType = expression.returnMapKeyType
-  }
-
-  if (expression.returnMapValueType !== null && typeof expression.returnMapValueType !== 'undefined') {
-    result.returnMapValueType = expression.returnMapValueType
   }
 
   if (expression.returnNullable === true) {
@@ -1702,8 +1679,6 @@ function mergeArrowCallbackFunctionTypes(left: CFunctionType, right: CFunctionTy
   }
 
   result.returnArrayElementType = preferredCallbackMetadata(left.returnArrayElementType, right.returnArrayElementType)
-  result.returnMapKeyType = preferredCallbackMetadata(left.returnMapKeyType, right.returnMapKeyType)
-  result.returnMapValueType = preferredCallbackMetadata(left.returnMapValueType, right.returnMapValueType)
   result.returnPromiseValueType = preferredCallbackMetadata(left.returnPromiseValueType, right.returnPromiseValueType)
   result.returnShape = preferredCallbackShape(left.returnShape, right.returnShape)
 
@@ -1723,8 +1698,6 @@ function mergeCallbackFunctionParam(left: CFunctionParam, right: CFunctionParam)
   result.arrayElementType = preferredCallbackMetadata(left.arrayElementType, right.arrayElementType)
   result.declaredType = preferredCallbackMetadata(left.declaredType, right.declaredType)
   result.functionType = preferredCallbackFunctionType(left.functionType, right.functionType)
-  result.mapKeyType = preferredCallbackMetadata(left.mapKeyType, right.mapKeyType)
-  result.mapValueType = preferredCallbackMetadata(left.mapValueType, right.mapValueType)
   result.promiseValueType = preferredCallbackMetadata(left.promiseValueType, right.promiseValueType)
   result.shape = preferredCallbackShape(left.shape, right.shape)
 
@@ -1761,8 +1734,6 @@ function cloneCallbackFunctionParam(param: CFunctionParam): CFunctionParam {
   result.declaredType = param.declaredType
   result.defaultValue = param.defaultValue
   result.functionType = param.functionType
-  result.mapKeyType = param.mapKeyType
-  result.mapValueType = param.mapValueType
   result.promiseValueType = param.promiseValueType
   result.shape = param.shape
 
@@ -3407,10 +3378,11 @@ export function emitRuntimeCallbackWrapperDeclaration(
 
   const callArgs = emitNamedRuntimeCallbackTargetArgs(wrapper, args, targetTakesEventLoop, context)
 
-  let functionName = context.functionNames.get(wrapper.target)
+  const wrapperTarget = wrapper.target
+  let functionName = context.functionNames.get(wrapperTarget)
 
   if (functionName === null || typeof functionName === 'undefined') {
-    functionName = emitCFunctionName(wrapper.target)
+    functionName = emitCFunctionName(wrapperTarget)
   }
 
   const call = `${functionName}(${joinStrings(callArgs, ', ')})`
@@ -3418,7 +3390,7 @@ export function emitRuntimeCallbackWrapperDeclaration(
   if (
     context.throwingFunctions !== null &&
     typeof context.throwingFunctions !== 'undefined' &&
-    context.throwingFunctions.has(wrapper.target)
+    context.throwingFunctions.has(wrapperTarget)
   ) {
     pushLines(lines, emitThrowingRuntimeCallbackTargetCall(wrapper, functionName, callArgs))
     lines.push('}')
@@ -3632,8 +3604,6 @@ function namedRuntimeCallbackTargetFunctionType(
     kind: wrapper.functionType.kind,
     params,
     returnArrayElementType: wrapper.functionType.returnArrayElementType,
-    returnMapKeyType: wrapper.functionType.returnMapKeyType,
-    returnMapValueType: wrapper.functionType.returnMapValueType,
     returnNullable: wrapper.functionType.returnNullable,
     returnPromiseValueType: wrapper.functionType.returnPromiseValueType,
     returnShape: wrapper.functionType.returnShape,

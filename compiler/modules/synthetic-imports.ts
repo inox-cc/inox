@@ -349,8 +349,6 @@ function collectFunctionDeclarationTypeDependencyNames(declaration: SyntheticImp
   collectTypeNameDependencyNames(declaration.returnType, names)
   collectTypeNameDependencyNames(declaration.returnArrayElementDeclaredType, names)
   collectTypeNameDependencyNames(declaration.returnArrayElementType, names)
-  collectTypeNameDependencyNames(declaration.returnMapKeyType, names)
-  collectTypeNameDependencyNames(declaration.returnMapValueType, names)
   collectTypeNameDependencyNames(declaration.returnPromiseValueType, names)
 }
 
@@ -359,8 +357,6 @@ function collectValueDeclarationTypeDependencyNames(declaration: SyntheticImport
   collectTypeNameDependencyNames(declaration.valueType, names)
   collectTypeNameDependencyNames(declaration.arrayElementDeclaredType, names)
   collectTypeNameDependencyNames(declaration.arrayElementType, names)
-  collectTypeNameDependencyNames(declaration.mapKeyType, names)
-  collectTypeNameDependencyNames(declaration.mapValueType, names)
   collectTypeNameDependencyNames(declaration.promiseValueType, names)
 
   if (declaration.functionType !== null && typeof declaration.functionType !== 'undefined') {
@@ -554,8 +550,6 @@ function createFunctionAliasDeclaration(
     nullable: target.returnNullable === true,
     arrayElementType: nullableNodeValue(target.returnArrayElementType),
     arrayElementDeclaredType: nullableNodeValue(target.returnArrayElementDeclaredType),
-    mapKeyType: nullableNodeValue(target.returnMapKeyType),
-    mapValueType: nullableNodeValue(target.returnMapValueType),
     promiseValueType: nullableNodeValue(target.returnPromiseValueType),
     shape: nullableNodeValue(target.returnShape)
   }
@@ -572,8 +566,6 @@ function createFunctionAliasDeclaration(
     returnNullable: target.returnNullable === true,
     returnArrayElementType: nullableNodeValue(target.returnArrayElementType),
     returnArrayElementDeclaredType: nullableNodeValue(target.returnArrayElementDeclaredType),
-    returnMapKeyType: nullableNodeValue(target.returnMapKeyType),
-    returnMapValueType: nullableNodeValue(target.returnMapValueType),
     returnPromiseValueType: nullableNodeValue(target.returnPromiseValueType),
     returnShape: nullableNodeValue(target.returnShape),
     body: createFunctionAliasBody(target, call, loc)
@@ -648,8 +640,6 @@ function cloneTypeAliasField(field: AnyNode): AnyNode {
     nullable: field.nullable === true,
     arrayElementType: nullableNodeValue(field.arrayElementType),
     arrayElementDeclaredType: nullableNodeValue(field.arrayElementDeclaredType),
-    mapKeyType: nullableNodeValue(field.mapKeyType),
-    mapValueType: nullableNodeValue(field.mapValueType),
     promiseValueType: nullableNodeValue(field.promiseValueType),
     shape: nullableNodeValue(field.shape),
     functionType: nullableNodeValue(field.functionType),
@@ -687,8 +677,6 @@ function cloneParam(param: AnyNode): AnyNode {
     nullable: param.nullable === true,
     arrayElementType: nullableNodeValue(param.arrayElementType),
     arrayElementDeclaredType: nullableNodeValue(param.arrayElementDeclaredType),
-    mapKeyType: nullableNodeValue(param.mapKeyType),
-    mapValueType: nullableNodeValue(param.mapValueType),
     promiseValueType: nullableNodeValue(param.promiseValueType),
     shape: nullableNodeValue(param.shape),
     functionType: nullableNodeValue(param.functionType),

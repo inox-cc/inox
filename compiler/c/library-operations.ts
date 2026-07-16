@@ -743,7 +743,11 @@ export function emitPreparedCompilerLibraryCallExpression(
     lines.push(`auto ${out} = ${callExpression};`)
     pushCompilerLibraryFailureCheck(lines, item.libraryCFailureMode, out, context, dependencies)
 
-    if (cppType === 'inox::Value' && (item.valueType === 'number' || item.valueType === 'boolean')) {
+    if (
+      cppType === 'inox::Value' &&
+      item.nullable !== true &&
+      (item.valueType === 'number' || item.valueType === 'boolean')
+    ) {
       const tag = item.valueType === 'boolean' ? 'INOX_TAG_BOOL' : 'INOX_TAG_NUMBER'
       const value = item.valueType === 'boolean' ? `${out}.as.boolean` : `${out}.as.number`
 

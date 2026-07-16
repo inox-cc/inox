@@ -7,7 +7,6 @@ import {
   indexedAccessTypeNameFromTypeName,
   isNullableTypeName,
   isPromiseTypeName,
-  mapTypeNamesFromTypeName,
   nullableTypeNameFromKnownTypeName,
   promiseValueTypeNameFromKnownTypeName,
   recordTypeNamesFromTypeName,
@@ -28,9 +27,6 @@ import { hasWeakOwnershipMarker } from './ownership.ts'
 import {
   anyNodeResolvedTypeInfo,
   commonResolvedArrayElementType,
-  commonResolvedMapKeyType,
-  commonResolvedMapValueShape,
-  commonResolvedMapValueType,
   commonResolvedObjectShape,
   commonResolvedPromiseValueType,
   isOptionalParam,
@@ -209,9 +205,6 @@ export function resolveDeclaredType(
       arrayElementType: inner.arrayElementType,
       arrayElementDeclaredType: inner.arrayElementDeclaredType,
       arrayElementShape: inner.arrayElementShape ?? null,
-      mapKeyType: inner.mapKeyType,
-      mapValueType: inner.mapValueType,
-      mapValueShape: inner.mapValueShape,
       promiseValueType: inner.promiseValueType
     }
   }
@@ -257,27 +250,6 @@ export function resolveDeclaredType(
     return info
   }
 
-  const mapTypeNames = mapTypeNamesFromTypeName(name)
-
-  if (name === 'map' || (mapTypeNames !== null && typeof mapTypeNames !== 'undefined')) {
-    const info = unresolvedTypeInfo()
-    info.valueType = 'map'
-    info.mapKeyType = 'unknown'
-    info.mapValueType = 'unknown'
-
-    if (mapTypeNames !== null && typeof mapTypeNames !== 'undefined') {
-      const keyInfo = resolveDeclaredType(context, mapTypeNames.key, loc)
-      const valueInfo = resolveDeclaredType(context, mapTypeNames.value, loc)
-      info.mapKeyType = keyInfo.valueType
-      info.mapValueType = valueInfo.valueType
-      info.mapValueShape = valueInfo.shape
-      info.mapValueArrayElementType = valueInfo.arrayElementType
-      info.mapValueArrayElementDeclaredType = valueInfo.arrayElementDeclaredType
-    }
-
-    return info
-  }
-
   const recordTypeNames = recordTypeNamesFromTypeName(name)
 
   if (recordTypeNames !== null && typeof recordTypeNames !== 'undefined') {
@@ -298,9 +270,6 @@ export function resolveDeclaredType(
         arrayElementType: valueInfo.arrayElementType,
         arrayElementDeclaredType: valueInfo.arrayElementDeclaredType,
         arrayElementShape: valueInfo.arrayElementShape ?? null,
-        mapKeyType: valueInfo.mapKeyType,
-        mapValueType: valueInfo.mapValueType,
-        mapValueShape: valueInfo.mapValueShape,
         promiseValueType: valueInfo.promiseValueType,
         functionType: valueInfo.functionType,
         shape: valueInfo.shape,
@@ -613,11 +582,6 @@ function refreshResolvedTypeInfo(target: ResolvedTypeInfo, source: ResolvedTypeI
     target.arrayElementFunctionType ?? null,
     source.arrayElementFunctionType ?? null
   )
-  target.mapKeyType = source.mapKeyType
-  target.mapValueType = source.mapValueType
-  target.mapValueShape = refreshObjectShape(target.mapValueShape, source.mapValueShape)
-  target.mapValueArrayElementType = source.mapValueArrayElementType ?? null
-  target.mapValueArrayElementDeclaredType = source.mapValueArrayElementDeclaredType ?? null
   target.promiseValueType = source.promiseValueType
 }
 
@@ -691,8 +655,6 @@ function applyGenericNativeType(
   resolved.arrayElementType = metadata.arrayElementType
   resolved.arrayElementDeclaredType = metadata.arrayElementDeclaredType
   resolved.arrayElementShape = metadata.arrayElementShape
-  resolved.mapKeyType = metadata.mapKeyType
-  resolved.mapValueType = metadata.mapValueType
   resolved.promiseValueType = metadata.promiseValueType
 
   if (resolved.shape === null) {
@@ -794,11 +756,6 @@ function resolvedTypeInfoFromField(field: AnyNode): ResolvedTypeInfo {
     arrayElementDeclaredType: field.arrayElementDeclaredType ?? null,
     arrayElementShape: field.arrayElementShape ?? null,
     arrayElementFunctionType: field.arrayElementFunctionType ?? null,
-    mapKeyType: field.mapKeyType ?? null,
-    mapValueType: field.mapValueType ?? null,
-    mapValueShape: field.mapValueShape ?? null,
-    mapValueArrayElementType: field.mapValueArrayElementType ?? null,
-    mapValueArrayElementDeclaredType: field.mapValueArrayElementDeclaredType ?? null,
     promiseValueType: field.promiseValueType ?? null
   }
 }
@@ -1008,8 +965,6 @@ function resolveDeclaredFunctionAlias(
       returnNullable: returnInfo.nullable,
       returnArrayElementType: returnInfo.arrayElementType,
       returnArrayElementDeclaredType: returnInfo.arrayElementDeclaredType,
-      returnMapKeyType: returnInfo.mapKeyType,
-      returnMapValueType: returnInfo.mapValueType,
       returnPromiseValueType,
       returnShape: returnInfo.shape
     }
@@ -1055,8 +1010,6 @@ function resolveFunctionTypeParams(
       arrayElementType: paramInfo.arrayElementType,
       arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
       arrayElementShape: paramInfo.arrayElementShape ?? null,
-      mapKeyType: paramInfo.mapKeyType,
-      mapValueType: paramInfo.mapValueType,
       promiseValueType: paramPromiseValueType,
       functionType: paramInfo.functionType,
       shape: paramInfo.shape
@@ -1092,10 +1045,6 @@ export function resolveUnionDeclaredType(
 
   if (valueType === 'array') {
     result.arrayElementType = commonResolvedArrayElementType(infos)
-  } else if (valueType === 'map') {
-    result.mapKeyType = commonResolvedMapKeyType(infos)
-    result.mapValueType = commonResolvedMapValueType(infos)
-    result.mapValueShape = commonResolvedMapValueShape(infos)
   } else if (valueType === 'promise') {
     result.promiseValueType = commonResolvedPromiseValueType(infos)
   } else if (valueType === 'object') {
@@ -1207,11 +1156,6 @@ export function resolveObjectShapeField(
     arrayElementType: fieldInfo.arrayElementType,
     arrayElementDeclaredType: fieldInfo.arrayElementDeclaredType,
     arrayElementShape: fieldInfo.arrayElementShape ?? null,
-    mapKeyType: fieldInfo.mapKeyType,
-    mapValueType: fieldInfo.mapValueType,
-    mapValueShape: fieldInfo.mapValueShape,
-    mapValueArrayElementType: fieldInfo.mapValueArrayElementType ?? null,
-    mapValueArrayElementDeclaredType: fieldInfo.mapValueArrayElementDeclaredType ?? null,
     promiseValueType,
     functionType,
     functionOverloads,
@@ -1262,8 +1206,6 @@ export function resolveFunctionTypeMetadata(
     returnNullable: returnInfo.nullable,
     returnArrayElementType: returnInfo.arrayElementType,
     returnArrayElementDeclaredType: returnInfo.arrayElementDeclaredType,
-    returnMapKeyType: returnInfo.mapKeyType,
-    returnMapValueType: returnInfo.mapValueType,
     returnPromiseValueType,
     returnShape: returnInfo.shape
   }
@@ -1373,11 +1315,6 @@ function resolvedSyntheticFieldType(field: AnyNode): ResolvedTypeInfo {
   info.arrayElementDeclaredType = field.arrayElementDeclaredType ?? null
   info.arrayElementShape = field.arrayElementShape ?? null
   info.arrayElementFunctionType = field.arrayElementFunctionType ?? null
-  info.mapKeyType = field.mapKeyType ?? null
-  info.mapValueType = field.mapValueType ?? null
-  info.mapValueShape = field.mapValueShape ?? null
-  info.mapValueArrayElementType = field.mapValueArrayElementType ?? null
-  info.mapValueArrayElementDeclaredType = field.mapValueArrayElementDeclaredType ?? null
   info.promiseValueType = field.promiseValueType ?? null
 
   return info
@@ -1515,10 +1452,6 @@ export function resolveWeakTargetObjectShape(
       arrayElementType: declared.arrayElementType,
       arrayElementDeclaredType: declared.arrayElementDeclaredType,
       arrayElementShape: declared.arrayElementShape ?? null,
-      mapKeyType: declared.mapKeyType,
-      mapValueType: declared.mapValueType,
-      mapValueArrayElementType: declared.mapValueArrayElementType ?? null,
-      mapValueArrayElementDeclaredType: declared.mapValueArrayElementDeclaredType ?? null,
       promiseValueType,
       functionType,
       shape: null
@@ -1574,9 +1507,6 @@ export function resolveWeakTargetShapeTypeName(
       arrayElementType: inner.arrayElementType,
       arrayElementDeclaredType: inner.arrayElementDeclaredType,
       arrayElementShape: inner.arrayElementShape ?? null,
-      mapKeyType: inner.mapKeyType,
-      mapValueType: inner.mapValueType,
-      mapValueShape: inner.mapValueShape,
       promiseValueType: inner.promiseValueType
     }
   }
@@ -1599,24 +1529,6 @@ export function resolveWeakTargetShapeTypeName(
     info.arrayElementDeclaredType = arrayElementTypeName
     info.arrayElementShape = elementInfo.shape
     info.arrayElementFunctionType = elementInfo.functionType
-
-    return info
-  }
-
-  const mapTypeNames = mapTypeNamesFromTypeName(name)
-
-  if (name === 'map' || (mapTypeNames !== null && typeof mapTypeNames !== 'undefined')) {
-    const info = unresolvedTypeInfo()
-    info.valueType = 'map'
-    info.mapKeyType = 'unknown'
-    info.mapValueType = 'unknown'
-
-    if (mapTypeNames !== null && typeof mapTypeNames !== 'undefined') {
-      const keyInfo = resolveWeakTargetShapeTypeName(context, mapTypeNames.key, loc)
-      const valueInfo = resolveWeakTargetShapeTypeName(context, mapTypeNames.value, loc)
-      info.mapKeyType = keyInfo.valueType
-      info.mapValueType = valueInfo.valueType
-    }
 
     return info
   }
@@ -1663,11 +1575,6 @@ export function cloneResolvedTypeInfo(info: ResolvedTypeInfo): ResolvedTypeInfo 
     arrayElementDeclaredType: info.arrayElementDeclaredType,
     arrayElementShape: info.arrayElementShape ?? null,
     arrayElementFunctionType: info.arrayElementFunctionType ?? null,
-    mapKeyType: info.mapKeyType,
-    mapValueType: info.mapValueType,
-    mapValueShape: info.mapValueShape,
-    mapValueArrayElementType: info.mapValueArrayElementType ?? null,
-    mapValueArrayElementDeclaredType: info.mapValueArrayElementDeclaredType ?? null,
     promiseValueType: info.promiseValueType
   }
 }
@@ -1683,11 +1590,6 @@ export function unresolvedTypeInfo(): ResolvedTypeInfo {
     arrayElementDeclaredType: null,
     arrayElementShape: null,
     arrayElementFunctionType: null,
-    mapKeyType: null,
-    mapValueType: null,
-    mapValueShape: null,
-    mapValueArrayElementType: null,
-    mapValueArrayElementDeclaredType: null,
     promiseValueType: null
   }
 }

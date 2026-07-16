@@ -13,7 +13,6 @@ export type CRuntimePreludeRequirements = {
   needsCppValueRuntime: boolean
   needsStringHeader: boolean
   needsCollectionRuntime: boolean
-  needsMapRuntime: boolean
   needsObjectRuntime: boolean
   runtimeEntrypointAdapter: RuntimeEntrypointAdapterDescriptor | null
   libraryCPreludeIncludes: string[]
@@ -47,9 +46,7 @@ export function resolveCRuntimePreludeRequirements(
     runtimeRequirements.has('collections') ||
     irProgramsUseArrayIsArray(input.irPrograms) ||
     irProgramsUseArrayIncludes(input.irPrograms) ||
-    signatureRuntimeTypes.has('array') ||
-    signatureRuntimeTypes.has('map')
-  const needsMapRuntime = signatureRuntimeTypes.has('map') || irProgramsUseCollectionKind(input.irPrograms, 'map')
+    signatureRuntimeTypes.has('array')
   const needsClassRuntime = input.classDescriptorCount > 0
   const needsClassDescriptorRuntime = needsClassRuntime
   const needsCppValueRuntime =
@@ -80,7 +77,6 @@ export function resolveCRuntimePreludeRequirements(
     needsCppValueRuntime,
     needsStringHeader,
     needsCollectionRuntime,
-    needsMapRuntime,
     needsObjectRuntime,
     runtimeEntrypointAdapter: libraryRuntime.entrypointAdapter,
     libraryCPreludeIncludes: libraryRuntime.includes,
@@ -240,41 +236,6 @@ function nodeIsArrayIncludesCall(node: AnyNode): boolean {
   )
 }
 
-function irProgramsUseCollectionKind(programs: IrProgram[], kind: string): boolean {
-  return irProgramsUseNode(programs, 'collection', kind)
-}
-
-function nodeUsesCollectionKind(node: AnyNode, kind: string): boolean {
-  return (
-    node.collectionKind === kind ||
-    node.valueType === kind ||
-    node.returnType === kind ||
-    nodeIsCollectionConstructor(node, kind)
-  )
-}
-
-function nodeIsCollectionConstructor(value: AnyNode, kind: string): boolean {
-  if (value.type !== 'NewExpression') {
-    return false
-  }
-
-  const callee = value.callee
-
-  if (callee === null || typeof callee === 'undefined' || callee.type !== 'Reference') {
-    return false
-  }
-
-  if (!Array.isArray(callee.path) || callee.path.length !== 1) {
-    return false
-  }
-
-  if (kind === 'map') {
-    return callee.path[0] === 'Map'
-  }
-
-  return false
-}
-
 function irProgramsUseNode(programs: IrProgram[], kind: string, collectionKind: string): boolean {
   for (let index = 0; index < programs.length; index = index + 1) {
     const program = programs[index] as IrProgram
@@ -353,10 +314,6 @@ function nodeMatchesRuntimePlanKind(node: AnyNode, kind: string, collectionKind:
 
   if (kind === 'array-is-array') {
     return node.arrayIsArrayCall === true
-  }
-
-  if (kind === 'collection') {
-    return nodeUsesCollectionKind(node, collectionKind)
   }
 
   return false

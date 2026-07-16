@@ -13,20 +13,13 @@ export type ResolvedTypeInfo = {
   arrayElementDeclaredType: string | null
   arrayElementShape?: ObjectShapeInfo | null
   arrayElementFunctionType?: FunctionTypeMetadata | null
-  mapKeyType: ValueType | null
-  mapValueType: ValueType | null
-  mapValueShape: ObjectShapeInfo | null
-  mapValueArrayElementType?: ValueType | null
-  mapValueArrayElementDeclaredType?: string | null
   promiseValueType: ValueType | null
 }
 
 export type ResolvedTypeInfoValueKind = number
 
 export const resolvedArrayElementTypeKind: ResolvedTypeInfoValueKind = 0
-export const resolvedMapKeyTypeKind: ResolvedTypeInfoValueKind = 1
-export const resolvedMapValueTypeKind: ResolvedTypeInfoValueKind = 2
-export const resolvedPromiseValueTypeKind: ResolvedTypeInfoValueKind = 3
+export const resolvedPromiseValueTypeKind: ResolvedTypeInfoValueKind = 1
 
 export type OwnershipGraphEdge = {
   from: string
@@ -73,11 +66,6 @@ export type FunctionTypeParamMetadata = {
   arrayElementShape?: ObjectShapeInfo | null
   arrayElementFunctionType?: FunctionTypeMetadata | null
   arrayElementFunctionTypeOwnership?: 'weak'
-  mapKeyType?: ValueType | null
-  mapValueType?: ValueType | null
-  mapValueShape?: ObjectShapeInfo | null
-  mapValueArrayElementType?: ValueType | null
-  mapValueArrayElementDeclaredType?: string | null
   promiseValueType?: ValueType | null
   functionType?: FunctionTypeMetadata | null
   functionTypeOwnership?: 'weak'
@@ -95,20 +83,10 @@ export type FunctionTypeMetadata = {
   returnNullable: boolean
   returnArrayElementType?: ValueType | null
   returnArrayElementDeclaredType?: string | null
-  returnMapKeyType?: ValueType | null
-  returnMapValueType?: ValueType | null
   returnPromiseValueType?: ValueType | null
   returnShape?: ObjectShapeInfo | null
   loc?: SourceLocation
   [key: string]: any
-}
-
-export type CheckerMapType = {
-  key: ValueType | null
-  value: ValueType | null
-  valueShape?: ObjectShapeInfo | null
-  valueArrayElementType?: ValueType | null
-  valueArrayElementDeclaredType?: string | null
 }
 
 export type NullableConditionNarrowing = {
@@ -167,9 +145,6 @@ export function anyNodeResolvedTypeInfo(loc: SourceLocation): ResolvedTypeInfo {
     shape: anyNodeObjectShape(loc),
     arrayElementType: null,
     arrayElementDeclaredType: null,
-    mapKeyType: null,
-    mapValueType: null,
-    mapValueShape: null,
     promiseValueType: null
   }
 }
@@ -260,10 +235,6 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('arrayElementDeclaredType', 'string', null, true, loc),
       anyNodeField('arrayElementShape', 'object', null, true, loc, { shape: objectShapeMetadata }),
       anyNodeField('arrayElementFunctionType', 'object', null, true, loc),
-      anyNodeField('mapKeyType', 'string', null, true, loc),
-      anyNodeField('mapValueType', 'string', null, true, loc),
-      anyNodeField('mapValueArrayElementType', 'string', null, true, loc),
-      anyNodeField('mapValueArrayElementDeclaredType', 'string', null, true, loc),
       anyNodeField('constraint', 'string', null, true, loc),
       anyNodeField('promiseValueType', 'string', null, true, loc),
       anyNodeField('promiseRejectionValueType', 'string', null, true, loc),
@@ -274,8 +245,6 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('declaredReturnType', 'string', null, true, loc),
       anyNodeField('returnArrayElementType', 'string', null, true, loc),
       anyNodeField('returnArrayElementDeclaredType', 'string', null, true, loc),
-      anyNodeField('returnMapKeyType', 'string', null, true, loc),
-      anyNodeField('returnMapValueType', 'string', null, true, loc),
       anyNodeField('returnPromiseValueType', 'string', null, true, loc),
       anyNodeField('returnNullable', 'boolean', null, false, loc),
       anyNodeField('returnShape', 'object', null, true, loc, { shape: objectShapeMetadata }),
@@ -359,8 +328,6 @@ export function anyNodeField(
     arrayElementDeclaredType: options.arrayElementDeclaredType ?? null,
     arrayElementShape: null,
     arrayElementFunctionType: null,
-    mapKeyType: null,
-    mapValueType: null,
     promiseValueType: null,
     functionType: null,
     shape: options.shape ?? null,
@@ -387,11 +354,6 @@ export function cloneObjectShapeField(field: AnyNode): AnyNode {
     arrayElementDeclaredType: field.arrayElementDeclaredType ?? null,
     arrayElementShape: field.arrayElementShape ?? null,
     arrayElementFunctionType: field.arrayElementFunctionType ?? null,
-    mapKeyType: field.mapKeyType ?? null,
-    mapValueType: field.mapValueType ?? null,
-    mapValueShape: field.mapValueShape ?? null,
-    mapValueArrayElementType: field.mapValueArrayElementType ?? null,
-    mapValueArrayElementDeclaredType: field.mapValueArrayElementDeclaredType ?? null,
     promiseValueType: field.promiseValueType ?? null,
     promiseRejectionValueType: field.promiseRejectionValueType ?? null,
     functionType: field.functionType ?? null,
@@ -627,32 +589,6 @@ export function commonResolvedArrayElementType(infos: ResolvedTypeInfo[]): Value
   return commonResolvedOptionalValueType(infos, resolvedArrayElementTypeKind)
 }
 
-export function commonResolvedMapKeyType(infos: ResolvedTypeInfo[]): ValueType | null {
-  return commonResolvedOptionalValueType(infos, resolvedMapKeyTypeKind)
-}
-
-export function commonResolvedMapValueType(infos: ResolvedTypeInfo[]): ValueType | null {
-  return commonResolvedOptionalValueType(infos, resolvedMapValueTypeKind)
-}
-
-export function commonResolvedMapValueShape(infos: ResolvedTypeInfo[]): ObjectShapeInfo | null {
-  let shape: ObjectShapeInfo | null = null
-
-  for (let index = 0; index < infos.length; index = index + 1) {
-    const info = resolvedTypeInfoAt(infos, index)
-
-    if (info.mapValueShape === null || typeof info.mapValueShape === 'undefined') {
-      return null
-    }
-
-    if (shape === null || typeof shape === 'undefined') {
-      shape = info.mapValueShape
-    }
-  }
-
-  return shape
-}
-
 export function commonResolvedPromiseValueType(infos: ResolvedTypeInfo[]): ValueType | null {
   return commonResolvedOptionalValueType(infos, resolvedPromiseValueTypeKind)
 }
@@ -760,9 +696,6 @@ export function commonResolvedObjectShapeField(name: string, infos: ResolvedType
     nullable,
     arrayElementType: commonResolvedObjectShapeFieldArrayElementType(fields),
     arrayElementDeclaredType: commonResolvedObjectShapeFieldArrayElementDeclaredType(fields),
-    mapKeyType: commonResolvedObjectShapeFieldMapKeyType(fields),
-    mapValueType: commonResolvedObjectShapeFieldMapValueType(fields),
-    mapValueShape: commonResolvedObjectShapeFieldMapValueShape(fields),
     promiseValueType: commonResolvedObjectShapeFieldPromiseValueType(fields),
     functionType: commonResolvedObjectShapeFieldFunctionType(fields),
     shape: commonResolvedObjectShapeFieldShape(fields)
@@ -881,56 +814,6 @@ export function commonResolvedObjectShapeFieldArrayElementDeclaredType(fields: A
   return declaredType
 }
 
-export function commonResolvedObjectShapeFieldMapKeyType(fields: AnyNode[]): ValueType | null {
-  const values: ValueType[] = []
-
-  for (let index = 0; index < fields.length; index = index + 1) {
-    const value = fields[index].mapKeyType
-
-    if (value === null || typeof value === 'undefined') {
-      return null
-    }
-
-    values.push(value)
-  }
-
-  return commonValueType(values)
-}
-
-export function commonResolvedObjectShapeFieldMapValueType(fields: AnyNode[]): ValueType | null {
-  const values: ValueType[] = []
-
-  for (let index = 0; index < fields.length; index = index + 1) {
-    const value = fields[index].mapValueType
-
-    if (value === null || typeof value === 'undefined') {
-      return null
-    }
-
-    values.push(value)
-  }
-
-  return commonValueType(values)
-}
-
-export function commonResolvedObjectShapeFieldMapValueShape(fields: AnyNode[]): ObjectShapeInfo | null {
-  let shape: ObjectShapeInfo | null = null
-
-  for (let index = 0; index < fields.length; index = index + 1) {
-    const value = fields[index].mapValueShape
-
-    if (value === null || typeof value === 'undefined') {
-      return null
-    }
-
-    if (shape === null || typeof shape === 'undefined') {
-      shape = value
-    }
-  }
-
-  return shape
-}
-
 export function commonResolvedObjectShapeFieldPromiseValueType(fields: AnyNode[]): ValueType | null {
   const values: ValueType[] = []
 
@@ -1025,14 +908,6 @@ export function commonResolvedObjectShapeFieldShape(fields: AnyNode[]): ObjectSh
 export function resolvedTypeInfoValue(info: ResolvedTypeInfo, kind: ResolvedTypeInfoValueKind): ValueType | null {
   if (kind === resolvedArrayElementTypeKind) {
     return info.arrayElementType
-  }
-
-  if (kind === resolvedMapKeyTypeKind) {
-    return info.mapKeyType
-  }
-
-  if (kind === resolvedMapValueTypeKind) {
-    return info.mapValueType
   }
 
   if (kind === resolvedPromiseValueTypeKind) {

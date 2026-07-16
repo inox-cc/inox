@@ -209,7 +209,6 @@ export function isConditionValueType(valueType: ValueType): boolean {
     valueType === 'object' ||
     valueType === 'array' ||
     valueType === 'bytes' ||
-    valueType === 'map' ||
     valueType === 'promise' ||
     valueType === 'function'
   )
@@ -258,7 +257,6 @@ export function isRuntimeNullableType(valueType: ValueType | null | undefined): 
     valueType === 'bytes' ||
     valueType === 'object' ||
     valueType === 'array' ||
-    valueType === 'map' ||
     valueType === 'function'
   )
 }

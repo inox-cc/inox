@@ -30,7 +30,6 @@ import {
 
 export type CExpressionTypeDependencies = {
   cPromiseRuntimeCallName: (callee: AnyNode) => string | null
-  collectionConstructorName: (expression: AnyNode) => string | null
   isArrayIncludesCall: (expression: AnyNode) => boolean
   isArrayIsArrayCall: (expression: AnyNode) => boolean
   isArrayJoinCall: (expression: AnyNode, context: CFunctionContext) => boolean
@@ -761,10 +760,6 @@ export function inferExpressionType(
 
     if (narrowedType !== null && typeof narrowedType !== 'undefined') {
       return narrowedType
-    }
-
-    if (expression.collectionKind === 'map') {
-      return cValueTypeOrUnknown(expression)
     }
 
     const element = deps.resolveKnownArrayIndex(expression, context)

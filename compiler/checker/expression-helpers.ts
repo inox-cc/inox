@@ -1,6 +1,5 @@
 import { commonValueType } from './assignability.ts'
-import { checkerNodeAt, nodeValueTypeOrUnknown } from './resolved-types.ts'
-import type { CheckerMapType, FunctionTypeMetadata, FunctionTypeParamMetadata } from './resolved-types.ts'
+import type { FunctionTypeMetadata, FunctionTypeParamMetadata } from './resolved-types.ts'
 import type { IntrinsicRole } from '../extensions/types.ts'
 import type { AnyNode, ObjectShapeInfo, SourceLocation, ValueType } from '../types.ts'
 
@@ -31,45 +30,6 @@ export function callExpressionArgumentLabel(expression: AnyNode): string {
   return 'function'
 }
 
-export function resolveMapEntryArrayType(expression: AnyNode): CheckerMapType | null {
-  if (expression.elements.length === 0) {
-    return null
-  }
-
-  let key: ValueType | null = null
-  let value: ValueType | null = null
-
-  for (const entry of expression.elements) {
-    if (entry.type !== 'ArrayLiteral' || entry.elements.length < 2) {
-      return null
-    }
-
-    const entryKeyType = nodeValueTypeOrUnknown(checkerNodeAt(entry.elements, 0))
-    const entryValueType = nodeValueTypeOrUnknown(checkerNodeAt(entry.elements, 1))
-
-    if (entryKeyType === 'unknown' || entryValueType === 'unknown') {
-      return null
-    }
-
-    if (key === null) {
-      key = entryKeyType
-    } else if (key !== entryKeyType) {
-      return null
-    }
-
-    if (value === null) {
-      value = entryValueType
-    } else if (value !== entryValueType) {
-      return null
-    }
-  }
-
-  return {
-    key,
-    value
-  }
-}
-
 export function dynamicShapeField(shape: ObjectShapeInfo, name: string): AnyNode {
   if (shape.dynamicField !== null && typeof shape.dynamicField !== 'undefined') {
     const field = shape.dynamicField
@@ -89,8 +49,6 @@ export function dynamicShapeField(shape: ObjectShapeInfo, name: string): AnyNode
       nullable: field.nullable,
       arrayElementType: field.arrayElementType,
       arrayElementDeclaredType: field.arrayElementDeclaredType,
-      mapKeyType: field.mapKeyType,
-      mapValueType: field.mapValueType,
       promiseValueType: field.promiseValueType,
       functionType: field.functionType,
       shape: field.shape,
@@ -104,44 +62,6 @@ export function dynamicShapeField(shape: ObjectShapeInfo, name: string): AnyNode
     readonly: false,
     ownership: 'strong',
     valueType: 'unknown'
-  }
-}
-
-export function createMapEntryShape(mapType: CheckerMapType | null, loc: SourceLocation): ObjectShapeInfo {
-  let keyType: ValueType = 'unknown'
-  let valueType: ValueType = 'unknown'
-
-  if (mapType !== null && typeof mapType !== 'undefined') {
-    const key = mapType.key
-    const value = mapType.value
-
-    if (key !== null && typeof key !== 'undefined') {
-      keyType = key
-    }
-
-    if (value !== null && typeof value !== 'undefined') {
-      valueType = value
-    }
-  }
-
-  return {
-    kind: 'object',
-    fields: [
-      {
-        name: 'key',
-        readonly: true,
-        declaredType: keyType,
-        valueType: keyType,
-        loc
-      },
-      {
-        name: 'value',
-        readonly: true,
-        declaredType: valueType,
-        valueType,
-        loc
-      }
-    ]
   }
 }
 
@@ -170,8 +90,6 @@ export function createArrowFunctionTypeMetadata(
     returnNullable: expression.returnNullable === true,
     returnArrayElementType: expression.returnArrayElementType ?? null,
     returnArrayElementDeclaredType: expression.returnArrayElementDeclaredType ?? null,
-    returnMapKeyType: expression.returnMapKeyType ?? null,
-    returnMapValueType: expression.returnMapValueType ?? null,
     returnPromiseValueType: expression.returnPromiseValueType ?? null,
     returnShape
   }
