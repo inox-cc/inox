@@ -127,11 +127,6 @@ import {
 } from './checker/helpers.ts'
 import { ownershipCycleDiagnostics } from './checker/ownership.ts'
 import { memberExpressionPath } from './member-paths.ts'
-import { isStdlibModuleImportSource } from './stdlib/node/modules.ts'
-import {
-  isUnsupportedRuntimeBuiltinImportSource,
-  unsupportedRuntimeBuiltinImportMessageFromKnownSource
-} from './stdlib/node/builtins.ts'
 import {
   isArrayTypeName,
   isBuiltinValueType,
@@ -5071,30 +5066,13 @@ class Checker {
       statement.source
     )
 
-    if (
-      !isStdlibModuleImportSource(statement.source) &&
-      !isRelativeImportSource(statement.source) &&
-      !libraryDeclaration
-    ) {
+    if (!isRelativeImportSource(statement.source) && !libraryDeclaration) {
       this.report(
         'INOX_UNSUPPORTED_IMPORT_SOURCE',
         `only relative imports are implemented, got ${statement.source}`,
         statement.loc
       )
-      return
     }
-
-    if (isUnsupportedRuntimeBuiltinImportSource(statement.source) && !libraryDeclaration) {
-      const unsupportedMessage = unsupportedRuntimeBuiltinImportMessageFromKnownSource(statement.source)
-
-      this.report('INOX_NOT_IMPLEMENTED', unsupportedMessage, statement.loc)
-      return
-    }
-
-    if (libraryDeclaration && isUnsupportedRuntimeBuiltinImportSource(statement.source)) {
-      return
-    }
-
   }
 
   requireLibuvBackend(feature: string, loc: SourceLocation): boolean {

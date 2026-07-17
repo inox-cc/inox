@@ -39,7 +39,9 @@ test('удаление node:path убирает declaration, operations и nativ
 
   assert.throws(
     () => compileSource("import { join } from 'node:path'\njoin('a', 'b')\n", { libraries }),
-    (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_NOT_IMPLEMENTED'
+    (error: unknown) =>
+      error instanceof CompileError &&
+      error.diagnostics[0].code === 'INOX_UNSUPPORTED_IMPORT_SOURCE'
   )
 })
 

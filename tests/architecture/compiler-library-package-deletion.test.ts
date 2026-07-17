@@ -43,8 +43,8 @@ test('удаление package убирает его из generated registry и 
     () => compileSource("import { platform } from 'node:os'\nplatform()\n", { libraries }),
     (error: unknown) =>
       error instanceof CompileError &&
-      error.diagnostics[0].code === 'INOX_NOT_IMPLEMENTED' &&
-      error.diagnostics[0].message.startsWith('node:os ')
+      error.diagnostics[0].code === 'INOX_UNSUPPORTED_IMPORT_SOURCE' &&
+      error.diagnostics[0].message === 'only relative imports are implemented, got node:os'
   )
 })
 

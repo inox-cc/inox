@@ -39,7 +39,9 @@ test('удаление node:child_process убирает declaration, operations
 
   assert.throws(
     () => compileSource("import { execSync } from 'node:child_process'\nexecSync('printf hi', { encoding: 'utf8' })\n", { libraries }),
-    (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_NOT_IMPLEMENTED'
+    (error: unknown) =>
+      error instanceof CompileError &&
+      error.diagnostics[0].code === 'INOX_UNSUPPORTED_IMPORT_SOURCE'
   )
 })
 

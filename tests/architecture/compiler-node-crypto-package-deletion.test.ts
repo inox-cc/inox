@@ -35,7 +35,9 @@ test('удаление crypto packages убирает module/global API и nativ
   const globalOnly = createCompilerLibrarySetFromDiscovered(await discoverCompilerLibraries(fixtureRoot))
   assert.throws(
     () => compileSource("import { randomBytes } from 'node:crypto'\nrandomBytes(4)\n", { libraries: globalOnly }),
-    (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_NOT_IMPLEMENTED'
+    (error: unknown) =>
+      error instanceof CompileError &&
+      error.diagnostics[0].code === 'INOX_UNSUPPORTED_IMPORT_SOURCE'
   )
 
   await rm(resolve(fixtureRoot, 'stdlib/global/crypto'), { recursive: true, force: true })

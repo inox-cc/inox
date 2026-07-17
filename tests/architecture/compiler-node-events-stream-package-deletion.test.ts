@@ -99,5 +99,8 @@ function operation(
 }
 
 function isUnsupportedModuleError(error: unknown): boolean {
-  return error instanceof CompileError && error.diagnostics[0].code === 'INOX_NOT_IMPLEMENTED'
+  return (
+    error instanceof CompileError &&
+    error.diagnostics[0].code === 'INOX_UNSUPPORTED_IMPORT_SOURCE'
+  )
 }

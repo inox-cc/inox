@@ -75,7 +75,9 @@ test('удаление node:timers убирает module, globals, operations и
     () => compileSource("import { setTimeout } from 'node:timers'\nsetTimeout(() => {}, 0)\n", { libraries: after }),
     (error: unknown) =>
       error instanceof CompileError &&
-      error.diagnostics.some((diagnostic) => diagnostic.code === 'INOX_NOT_IMPLEMENTED')
+      error.diagnostics.some(
+        (diagnostic) => diagnostic.code === 'INOX_UNSUPPORTED_IMPORT_SOURCE'
+      )
   )
 })
 

@@ -39,7 +39,9 @@ test('удаление node:url убирает declaration, operations и native
 
   assert.throws(
     () => compileSource("import { pathToFileURL } from 'node:url'\npathToFileURL('/tmp/a')\n", { libraries }),
-    (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_NOT_IMPLEMENTED'
+    (error: unknown) =>
+      error instanceof CompileError &&
+      error.diagnostics[0].code === 'INOX_UNSUPPORTED_IMPORT_SOURCE'
   )
 })
 

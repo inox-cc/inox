@@ -50,7 +50,8 @@ test('удаление node:dgram убирает API и native plan без centr
         loopBackend: 'libuv'
       }),
     (error: unknown) =>
-      error instanceof CompileError && error.diagnostics[0].code === 'INOX_NOT_IMPLEMENTED'
+      error instanceof CompileError &&
+      error.diagnostics[0].code === 'INOX_UNSUPPORTED_IMPORT_SOURCE'
   )
 })
 
