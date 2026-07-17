@@ -32,18 +32,16 @@ test('portable compiler не содержит inox.__debug semantic tails', asyn
     }
   }
 
-  const centralDescriptor = await readFile('stdlib/global/compiler/descriptor.ts', 'utf8')
-
+  await assert.rejects(access('stdlib/global/compiler/descriptor.ts'))
   await assert.rejects(access('stdlib/global/compiler/feature.ts'))
+  await assert.rejects(access('stdlib/global/compiler/string-list.ts'))
 
   assert.deepEqual(
     {
-      centralDebugImports: centralDescriptor.includes('../debug/compiler') ? 1 : 0,
       packageCompilerFiles: (await readdir('stdlib/global/debug/compiler')).sort(),
       tails
     },
     {
-      centralDebugImports: 0,
       packageCompilerFiles: ['index.ts'],
       tails: []
     }
