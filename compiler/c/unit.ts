@@ -1,7 +1,4 @@
 import { throwDiagnostics } from '../diagnostics.ts'
-import { resolveCompilerLibrarySet } from '../extensions/library-set.ts'
-import { compilerLibraryIntrinsicResultMetadata } from '../extensions/intrinsic-metadata.ts'
-import type { CompilerLibrarySet } from '../extensions/types.ts'
 import {
   collectIrFunctionDeclarations,
   collectIrFunctionEffectsWithExternalEffects,
@@ -61,17 +58,27 @@ import {
   emitAsyncTaskWrapperDeclaration,
   emitAsyncTaskWrapperPrototypes
 } from './async/tasks.ts'
-import type { CAsyncTaskWrapperMap, CCallbackWrapperMap, CEmitContext, CPromiseChainWrapperMap } from './context.ts'
+import type {
+  CAsyncTaskWrapperMap,
+  CCallbackWrapperMap,
+  CEmitContextWithDependencies,
+  CPromiseChainWrapperMap
+} from './context.ts'
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
+import type { CDeclarationEmissionDependencies } from './declarations.ts'
 import { emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { emitCompilerLibraryRuntimeInitializerDefinitions } from './library-initializers.ts'
 import { emitCPrelude, filterUnusedCPreludeIncludes } from './prelude.ts'
 import { collectCReferencedFunctionPrototypeNames } from './prototype-references.ts'
 import { resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
-import { cObjectShapeFromMetadata } from './types.ts'
+import {
+  cObjectShapeFromMetadata,
+  cTypeRefMapValue
+} from './types.ts'
 import type {
   CClassInfo,
   CClassMethod,
+  CCompilerLibrarySet,
   CEmitOptions,
   CFunctionType,
   CFunctionPointerAdapter,
@@ -81,10 +88,14 @@ import type {
   CRuntimeArrowCallbackWrapper
 } from './types.ts'
 import {
+  compilerLibraryIntrinsicResultCShape,
+  compilerLibraryIntrinsicNativeCppType,
   emitCType,
   isManagedRuntimeReturnType,
   isOpaqueRuntimeValueType,
-  isRuntimeNullableType
+  isRuntimeNullableType,
+  libraryCppValueStorageType,
+  resolveCCompilerLibrarySet
 } from './value-types.ts'
 import type { ArrayLoweringDependencies } from './values/arrays.ts'
 import type { CClassMethodPrototypeMap, ClassLoweringDependencies } from './values/classes.ts'
@@ -103,27 +114,54 @@ import type { NullableLoweringDependencies } from './values/nullable.ts'
 import type { StatementLoweringDependencies } from './values/statements.ts'
 import type { StringLoweringDependencies } from './values/strings.ts'
 
+type CEmitContext = CEmitContextWithDependencies<
+  ArrayLoweringDependencies,
+  AsyncTaskLoweringDependencies,
+  ClassLoweringDependencies,
+  NullableLoweringDependencies,
+  StatementLoweringDependencies,
+  StringLoweringDependencies
+>
+
 export type CUnitDependencies = {
   arrayLoweringDependencies: ArrayLoweringDependencies
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
   callbackLoweringDependencies: CallbackLoweringDependencies
   classLoweringDependencies: ClassLoweringDependencies
   collectExternalEventLoopFunctions: (functions: AnyNode[], seedNames?: Set<string>) => Set<string>
+  declarationEmissionDependencies: CDeclarationEmissionDependencies
   createBaseContext(
     diagnostics: Diagnostic[],
     functionDeclarations: IrFunctionDeclaration[],
     functionEffects: IrFunctionEffect[],
     jsGlobalRoots: Set<string>,
     topLevelNodes: AnyNode[],
-    libraries?: CompilerLibrarySet
+    libraries?: CCompilerLibrarySet
   ): CEmitContext
-  emitClassConstructorDeclaration: (info: CClassInfo, baseContext: CEmitContext) => string[]
-  emitClassMethodDeclaration: (info: CClassInfo, method: AnyNode, baseContext: CEmitContext) => string[]
+  emitClassConstructorDeclaration(
+    info: CClassInfo,
+    baseContext: CEmitContext,
+    dependencies: CDeclarationEmissionDependencies
+  ): string[]
+  emitClassMethodDeclaration(
+    info: CClassInfo,
+    method: AnyNode,
+    baseContext: CEmitContext,
+    dependencies: CDeclarationEmissionDependencies
+  ): string[]
   emitClassMethodHead: (info: CClassInfo, method: AnyNode, context: CEmitContext) => string
   emitClassMethodPrototype: (info: CClassInfo, method: AnyNode, context: CEmitContext) => string
-  emitFunctionDeclaration: (statement: AnyNode, baseContext: CEmitContext) => string[]
+  emitFunctionDeclaration(
+    statement: AnyNode,
+    baseContext: CEmitContext,
+    dependencies: CDeclarationEmissionDependencies
+  ): string[]
   emitFunctionHead: (statement: AnyNode, context: CEmitContext) => string
-  emitMainWrapper: (irPrograms: IrProgram[], baseContext: CEmitContext) => string[]
+  emitMainWrapper(
+    irPrograms: IrProgram[],
+    baseContext: CEmitContext,
+    dependencies: CDeclarationEmissionDependencies
+  ): string[]
   nullableLoweringDependencies: NullableLoweringDependencies
   promiseChainLoweringDependencies: PromiseChainLoweringDependencies
   statementLoweringDependencies: StatementLoweringDependencies
@@ -136,6 +174,7 @@ type CUnitFunctionNodeEntry = {
 
 type CUnitValueDeclaration = {
   cppType?: string | null
+  declaredType?: string | null
   functionType?: CFunctionType | null
   name: string
   shapeBuiltin?: string | null
@@ -258,6 +297,7 @@ function collectCUnitValueDeclarations(programs: IrProgram[], context: CEmitCont
 
     values.push({
       cppType: cUnitValueLibraryCppType(item),
+      declaredType: item.declaredType ?? item.inferredDeclaredType ?? null,
       functionType: cUnitValueFunctionType(item),
       name: item.name,
       shapeBuiltin: cUnitValueShapeBuiltin(item),
@@ -291,13 +331,9 @@ function cUnitValueLibraryCppType(node: AnyNode): string | null {
   }
 
   const shape = node.shape ?? node.init?.shape
-  const cppType = shape?.libraryCppType
+  const nullable = node.nullable === true || node.init?.nullable === true
 
-  if (cppType === null || typeof cppType === 'undefined') {
-    return null
-  }
-
-  return cppType
+  return libraryCppValueStorageType(nullable, shape)
 }
 
 function registerCUnitSyntheticImportNames(context: CEmitContext, programs: IrProgram[]): void {
@@ -393,7 +429,14 @@ function emitCUnitValueFunctionFieldDefinitions(
       continue
     }
 
-    if (emitCUnitObjectFunctionFieldDefinitions(lines, item.name, fields, cUnitObjectFunctionFieldSeenTypes())) {
+    if (
+      emitCUnitObjectFunctionFieldDefinitions(
+        lines,
+        item.name,
+        fields,
+        cUnitObjectFunctionFieldSeenTypes(item.declaredType)
+      )
+    ) {
       emitted = true
     }
   }
@@ -421,8 +464,14 @@ function collectCUnitClassMethodPrototypes(context: CEmitContext, deps: CUnitDep
   return prototypes
 }
 
-function cUnitObjectFunctionFieldSeenTypes(): string[] {
-  return ['CFunctionContext']
+function cUnitObjectFunctionFieldSeenTypes(declaredType: string | null | undefined): string[] {
+  const seenTypes = ['CFunctionContext']
+
+  if (declaredType !== null && typeof declaredType !== 'undefined' && !seenTypes.includes(declaredType)) {
+    seenTypes.push(declaredType)
+  }
+
+  return seenTypes
 }
 
 function emitCUnitObjectFunctionFieldDefinitions(
@@ -439,7 +488,7 @@ function emitCUnitObjectFunctionFieldDefinitions(
     if (field.valueType === 'function') {
       const name = emitCObjectFunctionFieldName(objectName, field.name)
 
-      if (isPlainObjectFunctionField(field)) {
+      if (isPlainObjectFunctionField(field, seenTypes)) {
         lines.push(
           `static ${emitFunctionPointerReturnType(field.functionType)} (*${name})(${emitFunctionPointerParams(
             field.functionType,
@@ -905,6 +954,7 @@ function emitCUnitFunctionPointerAdapterTargetArgs(
       adapter,
       targetFunctionType,
       adapterReturnType,
+      context,
       defaultLines,
       cleanupLines
     )
@@ -1001,6 +1051,7 @@ function emitCUnitFunctionPointerAdapterDefaultTargetArg(
   adapter: CFunctionPointerAdapter,
   targetFunctionType: CFunctionType | null | undefined,
   adapterReturnType: string,
+  context: CEmitContext,
   defaultLines: string[],
   cleanupLines: string[]
 ): string | null {
@@ -1019,7 +1070,13 @@ function emitCUnitFunctionPointerAdapterDefaultTargetArg(
       return null
     }
 
-    return emitCUnitFunctionPointerAdapterDefaultParamValue(param, adapterReturnType, defaultLines, cleanupLines)
+    return emitCUnitFunctionPointerAdapterDefaultParamValue(
+      param,
+      adapterReturnType,
+      context,
+      defaultLines,
+      cleanupLines
+    )
   }
 
   return null
@@ -1028,6 +1085,7 @@ function emitCUnitFunctionPointerAdapterDefaultTargetArg(
 function emitCUnitFunctionPointerAdapterDefaultParamValue(
   param: CFunctionParam,
   adapterReturnType: string,
+  context: CEmitContext,
   defaultLines: string[],
   cleanupLines: string[]
 ): string {
@@ -1037,8 +1095,9 @@ function emitCUnitFunctionPointerAdapterDefaultParamValue(
     if (value.type === 'ArrayLiteral' && value.elements.length === 0 && param.valueType === 'array') {
       const name = `inox_adapter_default_${defaultLines.length}`
       const arrayName = `${name}_array`
+      const cppType = compilerLibraryIntrinsicNativeCppType(context.libraries, 'array-literal') ?? 'inox::Value'
 
-      defaultLines.push(`  auto ${arrayName} = ArrayClass::create(0);`)
+      defaultLines.push(`  auto ${arrayName} = ${cppType}::create(0);`)
       defaultLines.push('  if (inox::thrown()) {')
       defaultLines.push(`    return ${cUnitFunctionPointerAdapterDefaultReturnValue(adapterReturnType)};`)
       defaultLines.push('  }')
@@ -1121,7 +1180,7 @@ function cUnitFunctionPointerAdapterContextFunctionType(name: string, context: C
   return {
     kind: 'function',
     params,
-    returnArrayElementType: context.functionReturnArrayElementTypes.get(name) ?? null,
+    returnTypeRef: cTypeRefMapValue(context.functionReturnTypeRefs, name),
     returnNullable: context.functionReturnNullables.get(name) === true,
     returnPromiseValueType: context.functionReturnPromiseValueTypes.get(name) ?? null,
     returnShape: context.functionReturnShapes.get(name) ?? null,
@@ -1190,7 +1249,7 @@ function emitCUnitThrowingFunctionPointerAdapterTargetCall(
 
   if (returnType !== 'void') {
     lines.push(`  ${returnType} inox_adapter_result = ${cUnitFunctionPointerAdapterDefaultReturnValue(returnType)};`)
-    callArgs.push('&inox_adapter_result')
+    callArgs.push('std::addressof(inox_adapter_result)')
   }
 
   lines.push('  inox_value inox_adapter_error = inox_undefined_value();')
@@ -1233,11 +1292,7 @@ function cUnitFunctionPointerAdapterDefaultReturnValue(returnType: string): stri
     return 'inox_undefined_value()'
   }
 
-  if (returnType.includes('*')) {
-    return '0'
-  }
-
-  return '0'
+  return '{}'
 }
 
 function emitCUnitFunctionPointerAdapterHead(adapter: CFunctionPointerAdapter): string {
@@ -1267,9 +1322,8 @@ function pushCUnitClassMethodFunctionDeclarations(target: IrFunctionDeclaration[
         async: method.async === true,
         params: method.params,
         returnType: methodReturnType,
+        returnTypeRef: method.returnTypeRef ?? null,
         returnNullable: method.returnNullable === true,
-        returnArrayElementType: method.returnArrayElementType,
-        returnArrayElementDeclaredType: method.returnArrayElementDeclaredType,
         returnPromiseValueType: method.returnPromiseValueType,
         returnShape: method.returnShape,
         loc: method.loc
@@ -1340,12 +1394,11 @@ export function emitCUnit(
     options.libraries
   )
   baseContext.exceptionValueShape = cObjectShapeFromMetadata(
-    compilerLibraryIntrinsicResultMetadata(
-      resolveCompilerLibrarySet(options.libraries),
+    compilerLibraryIntrinsicResultCShape(
+      options.libraries,
       'exception-value',
-      'construct',
       { line: 1, column: 1 }
-    )?.shape ?? null
+    )
   )
   baseContext.runtimeEntryPath = entryPath
   baseContext.classInfos = createClassInfos(classes, diagnostics)
@@ -1388,7 +1441,7 @@ export function emitCUnit(
   const needsObjectRuntime: boolean = preludeRequirements.needsObjectRuntime
   baseContext.runtimeEntrypointAdapter = preludeRequirements.runtimeEntrypointAdapter
   baseContext.runtimeInitializerDefinitions = emitCompilerLibraryRuntimeInitializerDefinitions(
-    resolveCompilerLibrarySet(options.libraries),
+    resolveCCompilerLibrarySet(options.libraries),
     preludeRequirements.libraryRuntimeRequirements,
     options.libraryOptions
   )
@@ -1529,12 +1582,23 @@ export function emitCUnit(
   }
 
   for (const classInfo of baseContext.classInfos.values()) {
-    pushUnitLines(lines, deps.emitClassConstructorDeclaration(classInfo, baseContext))
+    pushUnitLines(
+      lines,
+      deps.emitClassConstructorDeclaration(classInfo, baseContext, deps.declarationEmissionDependencies)
+    )
     lines.push('')
   }
 
   for (const classMethod of classMethods) {
-    pushUnitLines(lines, deps.emitClassMethodDeclaration(classMethod.info, classMethod.method, baseContext))
+    pushUnitLines(
+      lines,
+      deps.emitClassMethodDeclaration(
+        classMethod.info,
+        classMethod.method,
+        baseContext,
+        deps.declarationEmissionDependencies
+      )
+    )
     lines.push('')
   }
 
@@ -1579,11 +1643,11 @@ export function emitCUnit(
   }
 
   for (const item of functions) {
-    pushUnitLines(lines, deps.emitFunctionDeclaration(item, baseContext))
+    pushUnitLines(lines, deps.emitFunctionDeclaration(item, baseContext, deps.declarationEmissionDependencies))
     lines.push('')
   }
 
-  const mainLines = deps.emitMainWrapper(entryIrPrograms, baseContext)
+  const mainLines = deps.emitMainWrapper(entryIrPrograms, baseContext, deps.declarationEmissionDependencies)
 
   emitCUnitFunctionPointerRuntimeAdapterDefinitions(lines, baseContext)
   emitCUnitFunctionPointerAdapterDefinitions(lines, baseContext)
@@ -1697,6 +1761,8 @@ function collectCUnitNeededFunctionPrototypeNames(
   for (const wrapper of context.callbackWrappers.values()) {
     if (wrapper.kind === 'named') {
       prototypeNames.add(wrapper.target)
+    } else {
+      collectCReferencedFunctionPrototypeNames(wrapper.expression, functionNames, prototypeNames)
     }
   }
 

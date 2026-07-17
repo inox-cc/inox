@@ -6,8 +6,10 @@ import { CompileError } from '../../compiler/diagnostics.ts'
 import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-fixtures.ts'
 import type {
   CompilerLibraryDescriptor,
-  LibraryObjectLiteralFieldDescriptor
+  LibraryObjectLiteralFieldDescriptor,
+  TypeRef
 } from '../../compiler/extensions/types.ts'
+import { arrayTypeRef } from '../../stdlib/global/collections/compiler/index.ts'
 
 test('library object options validate, lower and preserve nominal array elements', () => {
   const libraries = createCompilerLibrarySetWithConsole([objectOptionsLibrary()])
@@ -38,9 +40,8 @@ test('library object options validate, lower and preserve nominal array elements
   const entries = irResult.ir.body[1].init
   const entry = irResult.ir.body[2].init
 
-  assert.equal(names.arrayElementType, 'string')
-  assert.equal(entries.arrayElementType, 'object')
-  assert.equal(entries.arrayElementTypeId, 'bridge#Entry')
+  assert.deepEqual(names.typeRef, arrayTypeRef(primitiveTypeRef('string')))
+  assert.deepEqual(entries.typeRef, arrayTypeRef(bridgeEntryTypeRef()))
   assert.equal(entry.shape?.libraryTypeId, 'bridge#Entry')
   assert.equal(irResult.ir.body[3].expression.args[0].libraryOperationId, 'bridge#Entry.isFile')
 
@@ -136,17 +137,12 @@ function objectOptionsLibrary(): CompilerLibraryDescriptor {
             booleanLiterals: [true],
             cExpression: 'bridge.listEntries',
             cArgumentKinds: [],
-            cppType: 'Array',
-            valueType: 'array',
-            resultArrayElementType: 'object',
-            resultArrayElementTypeId: 'bridge#Entry'
+            resultTypeRef: arrayTypeRef(bridgeEntryTypeRef())
           },
           {
             cExpression: 'bridge.listNames',
             cArgumentKinds: [],
-            cppType: 'Array',
-            valueType: 'array',
-            resultArrayElementType: 'string'
+            resultTypeRef: arrayTypeRef(primitiveTypeRef('string'))
           }
         ]
       },
@@ -181,4 +177,19 @@ function booleanField(name: string): LibraryObjectLiteralFieldDescriptor {
     booleanLiterals: [false, true],
     optional: true
   }
+}
+
+function bridgeEntryTypeRef(): TypeRef {
+  return {
+    kind: 'nominal',
+    typeId: 'bridge#Entry',
+    args: [],
+    nullable: false,
+    ownership: 'value',
+    traits: []
+  }
+}
+
+function primitiveTypeRef(name: 'string'): TypeRef {
+  return { kind: 'primitive', name, nullable: false, ownership: 'value', traits: [] }
 }

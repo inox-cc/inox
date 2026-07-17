@@ -3,7 +3,16 @@ import { test } from 'node:test'
 
 import { compileSourceToIr } from '../../compiler/core.ts'
 import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-fixtures.ts'
-import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
+import type { CompilerLibraryDescriptor, TypeRef } from '../../compiler/extensions/types.ts'
+import { arrayTypeRef } from '../../stdlib/global/collections/compiler/index.ts'
+import {
+  compilerLibraryPackage as errorCompilerLibraryPackage,
+  errorTypeRef
+} from '../../stdlib/global/error/compiler/index.ts'
+import {
+  compilerLibraryPackage as promiseCompilerLibraryPackage,
+  promiseTypeRef
+} from '../../stdlib/global/promise/compiler/index.ts'
 
 test('native type fields come only from library metadata', () => {
   const result = compileSourceToIr(
@@ -11,7 +20,7 @@ test('native type fields come only from library metadata', () => {
       'const entries = await fixture.list()\n' +
       'const entry = entries[0]\n' +
       'console.log(entry.name, entry.size)\n',
-    { libraries: createCompilerLibrarySetWithConsole([nativeFieldLibrary()]) }
+    { libraries: nativeFieldLibrarySet() }
   )
 
   const parameterField = result.ir.body[0].body[0].argument
@@ -30,8 +39,8 @@ test('native type fields come only from library metadata', () => {
   fields[0].readonly = false
 
   assert.notEqual(
-    createCompilerLibrarySetWithConsole([changed]).fingerprint,
-    createCompilerLibrarySetWithConsole([nativeFieldLibrary()]).fingerprint
+    nativeFieldLibrarySet(changed).fingerprint,
+    nativeFieldLibrarySet(nativeFieldLibrary()).fingerprint
   )
 })
 
@@ -67,15 +76,29 @@ function nativeFieldLibrary(): CompilerLibraryDescriptor {
         minArgs: 0,
         maxArgs: 0,
         argumentChecks: [],
-        resultArrayElementType: 'object',
-        resultArrayElementTypeId: 'fixture#Entry',
-        cppType: 'inox::Promise',
-        valueType: 'promise',
-        promiseValueType: 'array',
-        promiseRejectionValueType: 'error'
+        resultTypeRef: promiseTypeRef(arrayTypeRef(fixtureEntryTypeRef()), errorTypeRef())
       }
     ],
     intrinsicBindings: [],
     runtimeRequirements: []
+  }
+}
+
+function nativeFieldLibrarySet(library: CompilerLibraryDescriptor = nativeFieldLibrary()) {
+  return createCompilerLibrarySetWithConsole([
+    { ...errorCompilerLibraryPackage, declarations: [] },
+    { ...promiseCompilerLibraryPackage, declarations: [] },
+    library
+  ])
+}
+
+function fixtureEntryTypeRef(): TypeRef {
+  return {
+    kind: 'nominal',
+    typeId: 'fixture#Entry',
+    args: [],
+    nullable: false,
+    ownership: 'value',
+    traits: []
   }
 }

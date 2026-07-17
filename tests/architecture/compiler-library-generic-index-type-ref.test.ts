@@ -12,13 +12,16 @@ const valueTypeRef: TypeRef = { kind: 'parameter', name: 'V' }
 
 test('generic index operations связывают key/value TypeRef из receiver', () => {
   const libraries = createCompilerLibrarySet([fixtureLibrary()])
-  const result = compileSourceToIr("const table = new Table<string, number>()\ntable['answer'] = 42\nconst value = table['answer']\n", {
-    libraries
-  })
-  const read = result.ast.body[2].init
+  const result = compileSourceToIr(
+    "type Item = { name: string }\nconst table = new Table<string, Item>()\ntable['answer'] = { name: 'ready' }\nconst value = table['answer']\n",
+    { libraries }
+  )
+  const read = result.ast.body[3].init
 
   assert.equal(read.libraryOperationId, `${tableTypeId}#index-read`)
-  assert.equal(read.valueType, 'number')
+  assert.equal(read.valueType, 'object')
+  assert.equal(read.declaredType, 'Item')
+  assert.equal(read.typeRef.declaredName, 'Item')
   assert.equal(read.nullable, true)
   assert.throws(
     () => compileSourceToIr("const table = new Table<string, number>()\ntable[1] = 'wrong'\n", { libraries }),

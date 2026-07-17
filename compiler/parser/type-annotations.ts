@@ -23,6 +23,7 @@ export function readTypeAnnotation(
   options: TypeAnnotationReadOptions | null
 ): TypeAnnotationReadResult {
   const parts: string[] = []
+  let bracketDepth = 0
   let genericDepth = 0
   let parenDepth = 0
   let position = startPosition
@@ -42,8 +43,9 @@ export function readTypeAnnotation(
     if (
       genericDepth === 0 &&
       parenDepth === 0 &&
+      bracketDepth === 0 &&
       stringArrayIncludes(stopValues, token.value) &&
-      !isArrayTypeSuffixClose(parts, token.value)
+      token.value !== '['
     ) {
       break
     }
@@ -73,6 +75,10 @@ export function readTypeAnnotation(
       genericDepth = genericDepth + 1
     } else if (token.value === '>' && genericDepth > 0) {
       genericDepth = genericDepth - 1
+    } else if (token.value === '[') {
+      bracketDepth = bracketDepth + 1
+    } else if (token.value === ']' && bracketDepth > 0) {
+      bracketDepth = bracketDepth - 1
     } else if (token.value === '(') {
       parenDepth = parenDepth + 1
     } else if (token.value === ')' && parenDepth > 0) {
@@ -172,10 +178,6 @@ function stringArrayIncludes(values: string[], value: string): boolean {
   }
 
   return false
-}
-
-function isArrayTypeSuffixClose(parts: string[], value: string): boolean {
-  return value === ']' && parts.length > 0 && parts[parts.length - 1] === '['
 }
 
 function isStatementBoundaryToken(token: Token): boolean {

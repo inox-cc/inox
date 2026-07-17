@@ -9,9 +9,8 @@ export const compilerAnyNodeStringFields: readonly string[] = [
   'property',
   'operator',
   'declaredType',
+  'declaredName',
   'valueType',
-  'arrayElementType',
-  'arrayElementDeclaredType',
   'arrayElementTypeId',
   'promiseValueType',
   'promiseRejectionValueType',
@@ -26,6 +25,7 @@ export const compilerAnyNodeStringFields: readonly string[] = [
   'libraryCFailureMode',
   'libraryCResultMode',
   'libraryCReceiverAdapter',
+  'libraryCResultAdapter',
   'libraryCIteratorMethod',
   'libraryCIteratorNextMethod',
   'libraryCIteratorDoneMember',
@@ -44,8 +44,6 @@ export const compilerAnyNodeStringFields: readonly string[] = [
   'numericCast',
   'returnType',
   'declaredReturnType',
-  'returnArrayElementType',
-  'returnArrayElementDeclaredType',
   'returnPromiseValueType',
   'className',
   'collectionKind',
@@ -101,6 +99,18 @@ export const compilerAnyNodeArrayFields: readonly string[] = [
   'typeParameters'
 ]
 
+export const compilerAnyNodeStringArrayFields: readonly string[] = [
+  'libraryCapabilities',
+  'libraryCArgumentAdapters',
+  'libraryCArgumentKinds',
+  'libraryCArgumentMethodNames',
+  'libraryCResultShapeFields',
+  'libraryRuntimeRequirements',
+  'narrowingFalseNames',
+  'narrowingTrueNames',
+  'path'
+]
+
 export const compilerAnyNodeObjectFields: readonly string[] = [
   'argument',
   'block',
@@ -113,10 +123,10 @@ export const compilerAnyNodeObjectFields: readonly string[] = [
   'alternate',
   'expression',
   'finalizer',
-  'arrayElementShape',
-  'arrayElementFunctionType',
   'functionType',
   'functionOverloads',
+  'libraryArgumentNarrowing',
+  'libraryRuntimeCallbackFunctionType',
   'handler',
   'index',
   'init',

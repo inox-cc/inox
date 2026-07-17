@@ -35,8 +35,9 @@ console.log(label)
 
   assert.match(
     source,
-    /^#include "index\.h"\n#include <string\.h>\n#include "inox\/main\.h"\n#include "inox\/value\.h"\n#include "inox\/console\.h"\n#include "inox\/loop\.h"\n#include "inox\/array\.h"\n#include "inox\/object\.h"/
+    /^#include "index\.h"\n#include <string\.h>\n#include "inox\/main\.h"\n#include "inox\/value\.h"\n#include "inox\/console\.h"\n#include "inox\/loop\.h"\n#include "inox\/object\.h"/
   )
+  assert.doesNotMatch(source, /#include "inox\/array\.h"/)
   assert.doesNotMatch(source, /#include "inox\/allocator\.h"/)
   assert.doesNotMatch(source, /#include <stdio\.h>/)
   assert.doesNotMatch(source, /^#include [^\n]+\n\n#include /)

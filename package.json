@@ -8,7 +8,7 @@
     "inox": "./compiler/index.ts"
   },
   "scripts": {
-    "build": "node scripts/build.ts",
+    "build": "node --max-old-space-size=6144 --expose-gc scripts/build.ts",
     "example:simple": "pnpm run example:simple:libuv-boringssl",
     "example:simple:inox": "pnpm run libuv:bootstrap && pnpm run boringssl:bootstrap && cmake -S examples/simple -B dist/examples/simple/build-inox-libuv-boringssl -DINOX_COMPILER_MODE=native -DINOX_LOOP_BACKEND=libuv -DINOX_TLS_BACKEND=boringssl && cmake --build dist/examples/simple/build-inox-libuv-boringssl && ./dist/examples/simple/build-inox-libuv-boringssl/inox_cmake_example",
     "example:simple:libuv": "pnpm run libuv:bootstrap && cmake -S examples/simple -B dist/examples/simple/build-libuv -DINOX_COMPILER_MODE=node -DINOX_LOOP_BACKEND=libuv && cmake --build dist/examples/simple/build-libuv && ./dist/examples/simple/build-libuv/inox_cmake_example",

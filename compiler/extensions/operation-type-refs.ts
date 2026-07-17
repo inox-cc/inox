@@ -12,6 +12,7 @@ export type LibraryOperationTypeRefContext = {
   receiverTypeRef: TypeRef | null
   contextualTypeRef: TypeRef | null
   argumentTypeRefs: TypeRef[]
+  argumentFunctionReturnTypeRefs: TypeRef[]
   argumentArrayLiteralColumns: TypeRef[][]
 }
 
@@ -67,6 +68,14 @@ function resolveOperationTypeParameterSource(
 
   if (source.source === 'contextual-type-argument') {
     return nominalTypeArgument(context.contextualTypeRef, source.argumentIndex)
+  }
+
+  if (source.source === 'argument-function-return') {
+    return typeRefAt(context.argumentFunctionReturnTypeRefs, source.argumentIndex)
+  }
+
+  if (source.source === 'argument-type') {
+    return typeRefAt(context.argumentTypeRefs, source.argumentIndex)
   }
 
   if (source.source === 'argument-array-literal-column') {

@@ -334,33 +334,33 @@ inox::String Hmac::digest(inox::StringView encoding) {
 #endif
 }
 
-ArrayClass crypto::getHashes() const {
+Array crypto::getHashes() const {
 #if INOX_CRYPTO_HASH_HAS_EVP
-  auto hashes = ArrayClass::create(1);
+  auto hashes = Array::create(1);
 
   if (inox::thrown() || !hashes.valid()) {
     inox_crypto_throw_failed("crypto.getHashes failed");
-    return ArrayClass();
+    return Array();
   }
 
   auto sha256 = inox::String("sha256", 6);
 
   if (!sha256.valid()) {
     inox_crypto_throw_failed("crypto.getHashes failed");
-    return ArrayClass();
+    return Array();
   }
 
   hashes.set(0, sha256);
 
   if (inox::thrown()) {
     inox_crypto_throw_failed("crypto.getHashes failed");
-    return ArrayClass();
+    return Array();
   }
 
   return hashes;
 #else
   inox_crypto_throw_failed("crypto.getHashes failed");
-  return ArrayClass();
+  return Array();
 #endif
 }
 

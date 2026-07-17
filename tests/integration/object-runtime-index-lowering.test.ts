@@ -41,26 +41,17 @@ for (const a of foo.v) {
   ) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(
-    source,
-    /auto inox_object_value_\d+ = inox::object_value_at\(a, 0\);\n\s+if \(inox::thrown\(\)\) return;\n\s+console\.log\(inox_object_value_\d+\);/
-  )
-  assert.match(
-    source,
-    /auto inox_object_entry_\d+ = inox::object_entry_at\(a, 0\);\n\s+if \(inox::thrown\(\)\) return;\n\s+console\.log\(inox_object_entry_\d+\);/
-  )
-  assert.doesNotMatch(source, /if \(inox_object_entry_\d+\.tag != INOX_TAG_UNDEFINED/)
-  assert.match(source, /ArrayStorage\* inox_for_array_\d+ = Array\.raw\(inox_value_\d+\);/)
-  assert.match(
-    source,
-    /if \(inox_for_array_\d+ == nullptr\) \{\n\s+inox::throw_value\(inox::String\("TypeError: value is not iterable"\)\);\n\s+return;\n\s+\}/
-  )
-  assert.match(
-    source,
-    /for \(size_t inox_for_index_\d+ = 0; inox_for_index_\d+ < inox_for_array_\d+->length; \+\+inox_for_index_\d+\) \{\n\s+inox::Value a = inox_for_array_\d+->items\[inox_for_index_\d+\];/
-  )
-  assert.doesNotMatch(source, /if \(\(a\.tag != INOX_TAG_OBJECT && a\.tag != INOX_TAG_CLASS_INSTANCE\)/)
-  assert.doesNotMatch(source, /if \(\(inox_for_value_\d+\.tag != INOX_TAG_OBJECT && inox_for_value_\d+\.tag != INOX_TAG_CLASS_INSTANCE\)/)
+  assert.match(source, /auto inox_values_\d+ = Object\.values\(a\);/)
+  assert.match(source, /Array\(inox_values_\d+\)\.get\(0\)/)
+  assert.match(source, /auto inox_entries_\d+ = Object\.entries\(a\);/)
+  assert.match(source, /Array\(inox_entries_\d+\)\.get\(0\)/)
+  assert.match(source, /auto inox_library_iterator_\d+ = \(Array\(inox_value_\d+\)\)\.values\(\);/)
+  assert.match(source, /while \(true\) \{/)
+  assert.match(source, /auto inox_library_step_\d+ = inox_library_iterator_\d+\.next\(\);/)
+  assert.match(source, /if \(inox_library_step_\d+\.done\) break;/)
+  assert.doesNotMatch(source, /ArrayStorage|->items|Array\.raw/)
+  assert.doesNotMatch(source, /inox::object_(?:value|entry)_at/)
+  assert.match(source, /if \(\(inox_library_value_\d+\.tag != INOX_TAG_OBJECT && inox_library_value_\d+\.tag != INOX_TAG_CLASS_INSTANCE\)/)
   assert.doesNotMatch(source, /inox_object_values\(&inox_default_allocator, a, &inox_object_values_\d+\)/)
   assert.doesNotMatch(source, /inox_object_entries\(&inox_default_allocator, a, &inox_object_entries_\d+\)/)
   assert.doesNotMatch(source, /inox_status inox_object_values_status_\d+/)

@@ -4,9 +4,13 @@ import { test } from 'node:test'
 import { compileSourceToIr } from '../../compiler/core.ts'
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
 import type { CompilerLibraryDescriptor, TypeRef } from '../../compiler/extensions/types.ts'
+import {
+  arrayTypeRef,
+  compilerLibraryPackage as collectionsCompilerLibraryPackage
+} from '../../stdlib/global/collections/compiler/index.ts'
 
 test('package behavior hook infers a literal result without target API knowledge in core', () => {
-  const libraries = createCompilerLibrarySet([fixtureLibrary()])
+  const libraries = fixtureLibrarySet()
   const result = compileSourceToIr(
     "const value = decodeFixture('record')\nconst score = value.score\n",
     { libraries },
@@ -23,7 +27,7 @@ test('package behavior hook infers a literal result without target API knowledge
 })
 
 test('package literal result inference can prefer contextual declared metadata', () => {
-  const libraries = createCompilerLibrarySet([fixtureLibrary()])
+  const libraries = fixtureLibrarySet()
   const result = compileSourceToIr(
     "const values: number[] = decodeFixture('record')\n",
     { libraries },
@@ -32,9 +36,16 @@ test('package literal result inference can prefer contextual declared metadata',
   const call = result.ast.body[0].init
 
   assert.equal(call.valueType, 'array')
-  assert.equal(call.arrayElementType, 'number')
+  assert.deepEqual(call.typeRef, arrayTypeRef(primitiveTypeRef('number')))
   assert.equal(call.libraryCppType, 'inox::Value')
 })
+
+function fixtureLibrarySet() {
+  return createCompilerLibrarySet([
+    { ...collectionsCompilerLibraryPackage, declarations: [] },
+    fixtureLibrary()
+  ])
+}
 
 function fixtureLibrary(): CompilerLibraryDescriptor {
   return {
@@ -115,4 +126,8 @@ function unknownTypeRef(): TypeRef {
     ownership: 'value',
     traits: []
   }
+}
+
+function primitiveTypeRef(name: 'number'): TypeRef {
+  return { kind: 'primitive', name, nullable: false, ownership: 'value', traits: [] }
 }

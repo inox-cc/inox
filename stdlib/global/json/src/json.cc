@@ -764,7 +764,7 @@ static inox_status inox_json_parse_array(JsonParser* parser, size_t depth, inox_
 
   *out = inox_undefined_value();
 
-  ArrayClass array = ArrayClass::create(0);
+  Array array = Array::create(0);
 
   if (inox::thrown()) {
     return INOX_ERR_TYPE;
@@ -1024,7 +1024,8 @@ static inox_status inox_json_stringify_number(JsonBuffer* buffer, double number)
 
 static inox_status
 inox_json_stringify_array(JsonBuffer* buffer, JsonStringifyStack* stack, inox_value value, size_t depth) {
-  ArrayStorage* array = (ArrayStorage*)value.as.ref;
+  Array array{inox::Value(value)};
+  size_t length = array.length();
   inox_status status = inox_json_stringify_stack_push(stack, value.as.ref);
 
   if (status != INOX_OK) {
@@ -1037,7 +1038,7 @@ inox_json_stringify_array(JsonBuffer* buffer, JsonStringifyStack* stack, inox_va
     goto done;
   }
 
-  for (size_t index = 0; index < array->length; index += 1) {
+  for (size_t index = 0; index < length; index += 1) {
     if (index != 0) {
       status = inox_json_buffer_push_char(buffer, ',');
 
@@ -1046,7 +1047,7 @@ inox_json_stringify_array(JsonBuffer* buffer, JsonStringifyStack* stack, inox_va
       }
     }
 
-    status = inox_json_stringify_value(buffer, stack, array->items[index], depth + 1);
+    status = inox_json_stringify_value(buffer, stack, array.get(index).raw(), depth + 1);
 
     if (status != INOX_OK) {
       goto done;

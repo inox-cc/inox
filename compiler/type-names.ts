@@ -292,7 +292,7 @@ export function normalizeTypeName(name: string): string {
     return name
   }
 
-  if (name === 'Array' || name === 'array') {
+  if (name === 'array') {
     return 'array'
   }
 
@@ -456,7 +456,7 @@ export function isBuiltinTypeDependencyName(name: string): boolean {
     return true
   }
 
-  if (name === 'Array' || name === 'Function' || name === 'Promise' || name === 'Record') {
+  if (name === 'Function' || name === 'Promise' || name === 'Record') {
     return true
   }
 

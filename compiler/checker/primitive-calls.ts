@@ -17,7 +17,12 @@ export type PrimitiveCallCheckerContext = {
   diagnostics: Diagnostic[]
 }
 
-function report(context: PrimitiveCallCheckerContext, code: string, message: string, loc: SourceLocation): void {
+function report(
+  context: PrimitiveCallCheckerContext,
+  code: string,
+  message: string,
+  loc: SourceLocation | null | undefined
+): void {
   context.diagnostics.push(diagnostic(code, message, loc))
 }
 
@@ -33,7 +38,7 @@ function checkAssignableType(
   context: PrimitiveCallCheckerContext,
   actual: ValueType | null | undefined,
   expected: ValueType | null | undefined,
-  loc: SourceLocation,
+  loc: SourceLocation | null | undefined,
   expectedNullable?: boolean,
   actualNullable?: boolean
 ): void {
@@ -57,44 +62,6 @@ function checkAssignableType(
   }
 
   report(context, 'INOX_TYPE_MISMATCH', `cannot assign ${actualLabel} to ${expected}`, loc)
-}
-
-export function isArrayFromCall(expression: AnyNode, arrayShadowed: boolean): boolean {
-  return (
-    expression.callee.type === 'MemberExpression' &&
-    expression.callee.property === 'from' &&
-    expression.callee.object.type === 'Reference' &&
-    expression.callee.object.path.length === 1 &&
-    firstPathSegment(expression.callee.object.path) === 'Array' &&
-    !arrayShadowed
-  )
-}
-
-export function checkArrayFromCall(
-  context: PrimitiveCallCheckerContext,
-  expression: AnyNode,
-  sourceType: ValueType
-): ValueType {
-  if (expression.args.length !== 1) {
-    report(context, 'INOX_ARG_COUNT', `Array.from expects 1 argument(s), got ${expression.args.length}`, expression.loc)
-  }
-
-  if (sourceType !== 'string') {
-    const source = expression.args[0]
-    let loc = expression.loc
-
-    if (source !== null && typeof source !== 'undefined') {
-      loc = source.loc
-    }
-
-    report(context, 'INOX_TYPE_MISMATCH', `Array.from expects string, got ${sourceType}`, loc)
-  }
-
-  expression.valueType = 'array'
-  expression.arrayElementType = 'string'
-  expression.arrayElementDeclaredType = 'string'
-
-  return 'array'
 }
 
 export function numericCastName(expression: AnyNode): string | null {
@@ -469,8 +436,6 @@ export function checkStringSplitCall(
   }
 
   expression.valueType = 'array'
-  expression.arrayElementType = 'string'
-  expression.arrayElementDeclaredType = 'string'
   expression.stringRuntimeMethod = method
 
   return 'array'

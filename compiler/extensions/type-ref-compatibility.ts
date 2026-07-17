@@ -8,6 +8,7 @@ import type {
   LibraryCResultMappingDescriptor,
   LibraryResultShapeFieldDescriptor,
   TypeRef,
+  TypeTraitId,
   TypeTraitRef
 } from './types.ts'
 import type { AnyNode, ObjectShapeInfo, SourceLocation, ValueType } from '../types.ts'
@@ -20,10 +21,7 @@ export type TypeRefCompatibilityMetadata = {
   libraryCppType: string | null
   libraryResultTypeId: string | null
   shape: ObjectShapeInfo | null
-  arrayElementType: ValueType | null
   arrayElementTypeId: string | null
-  arrayElementDeclaredType: string | null
-  arrayElementShape: ObjectShapeInfo | null
   promiseValueType: ValueType | null
   promiseRejectionValueType: ValueType | null
   promiseRejectionIntrinsicRole: IntrinsicRole | null
@@ -77,6 +75,258 @@ export function typeRefTraits(typeRef: ConcreteTypeRef, libraries: CompilerLibra
     if (!explicitTraitIds.has(nativeTraits[index].traitId)) {
       result.push(nativeTraits[index])
     }
+  }
+
+  return result
+}
+
+export function typeRefTraitArgument(
+  typeRef: TypeRef | null | undefined,
+  traitId: TypeTraitId,
+  argumentIndex: number,
+  libraries: CompilerLibrarySet
+): TypeRef | null {
+  if (typeRef === null || typeof typeRef === 'undefined' || typeRef.kind === 'parameter') {
+    return null
+  }
+
+  const traits = typeRefTraits(typeRef, libraries)
+
+  for (let index = 0; index < traits.length; index = index + 1) {
+    const trait = traits[index]
+
+    if (trait.traitId === traitId && argumentIndex >= 0 && argumentIndex < trait.args.length) {
+      return trait.args[argumentIndex]
+    }
+  }
+
+  return null
+}
+
+export function typeRefDeclaredName(
+  typeRef: TypeRef | null | undefined,
+  libraries: CompilerLibrarySet
+): string | null {
+  if (typeRef === null || typeof typeRef === 'undefined' || typeRef.kind === 'parameter') {
+    return null
+  }
+
+  if (typeRef.kind === 'primitive') {
+    return typeRef.name
+  }
+
+  if (typeRef.kind === 'nominal') {
+    const nativeType = compilerLibraryNativeTypeForId(libraries, typeRef.typeId)
+
+    if (nativeType === null || nativeType.declarationNames.length === 0) {
+      return null
+    }
+
+    const name = nativeType.declarationNames[0]
+
+    if (typeRef.args.length === 0) {
+      return name
+    }
+
+    const argumentNames: string[] = []
+
+    for (let index = 0; index < typeRef.args.length; index = index + 1) {
+      argumentNames.push(typeRefDeclaredName(typeRef.args[index], libraries) ?? 'unknown')
+    }
+
+    return `${name}<${argumentNames.join(', ')}>`
+  }
+
+  if (typeRef.kind === 'function') {
+    return 'function'
+  }
+
+  if (typeRef.kind === 'object') {
+    return typeRef.declaredName ?? 'object'
+  }
+
+  return 'unknown'
+}
+
+export function typeRefIterableElementDeclaredName(
+  typeRef: TypeRef | null | undefined,
+  libraries: CompilerLibrarySet
+): string | null {
+  let current = typeRef
+
+  for (let depth = 0; depth < 32; depth = depth + 1) {
+    const element = typeRefTraitArgument(current, 'iterable', 0, libraries)
+
+    if (element !== null) {
+      return typeRefDeclaredName(element, libraries)
+    }
+
+    const fulfilled = typeRefTraitArgument(current, 'awaitable', 0, libraries)
+
+    if (fulfilled === null) {
+      return null
+    }
+
+    current = fulfilled
+  }
+
+  return null
+}
+
+export function typeRefIterableElementValueType(
+  typeRef: TypeRef | null | undefined,
+  libraries: CompilerLibrarySet
+): ValueType | null {
+  let current = typeRef
+
+  for (let depth = 0; depth < 32; depth = depth + 1) {
+    const element = typeRefTraitArgument(current, 'iterable', 0, libraries)
+
+    if (element !== null) {
+      return typeRefValueType(element, libraries)
+    }
+
+    const fulfilled = typeRefTraitArgument(current, 'awaitable', 0, libraries)
+
+    if (fulfilled === null) {
+      return null
+    }
+
+    current = fulfilled
+  }
+
+  return null
+}
+
+export function typeRefValueType(typeRef: TypeRef, libraries: CompilerLibrarySet): ValueType {
+  if (typeRef.kind === 'parameter' || typeRef.kind === 'unknown') {
+    return 'unknown'
+  }
+
+  if (typeRef.kind === 'primitive') {
+    return typeRef.name
+  }
+
+  if (typeRef.kind === 'function') {
+    return 'function'
+  }
+
+  if (typeRef.kind === 'object') {
+    return 'object'
+  }
+
+  const nativeType = compilerLibraryNativeTypeForId(libraries, typeRef.typeId)
+
+  if (nativeType === null) {
+    throw new Error(`Missing compiler library native type ${typeRef.typeId}`)
+  }
+
+  return nativeType.valueType as ValueType
+}
+
+/** Preserves a contextual TypeRef while filling only its unknown leaves from an observed value. */
+export function refineTypeRefUnknowns(contextual: TypeRef, observed: TypeRef): TypeRef {
+  if (contextual.kind === 'unknown' && observed.kind !== 'parameter') {
+    return qualifyObservedTypeRef(observed, contextual)
+  }
+
+  if (contextual.kind !== observed.kind || contextual.kind === 'parameter' || contextual.kind === 'primitive') {
+    return contextual
+  }
+
+  if (contextual.kind === 'nominal' && observed.kind === 'nominal') {
+    if (contextual.typeId !== observed.typeId || contextual.args.length !== observed.args.length) {
+      return contextual
+    }
+
+    return {
+      ...contextual,
+      args: refineTypeRefList(contextual.args, observed.args),
+      traits: refineTypeRefTraits(contextual.traits, observed.traits)
+    }
+  }
+
+  if (contextual.kind === 'function' && observed.kind === 'function') {
+    if (contextual.params.length !== observed.params.length) {
+      return contextual
+    }
+
+    return {
+      ...contextual,
+      params: refineTypeRefList(contextual.params, observed.params),
+      result: refineTypeRefUnknowns(contextual.result, observed.result),
+      traits: refineTypeRefTraits(contextual.traits, observed.traits)
+    }
+  }
+
+  if (contextual.kind === 'object' && observed.kind === 'object') {
+    const fields = []
+
+    for (let index = 0; index < contextual.fields.length; index = index + 1) {
+      const contextualField = contextual.fields[index]
+      const observedField = observed.fields.find((field) => field.name === contextualField.name)
+
+      fields.push(
+        observedField === null || typeof observedField === 'undefined'
+          ? contextualField
+          : {
+              ...contextualField,
+              typeRef: refineTypeRefUnknowns(contextualField.typeRef, observedField.typeRef)
+            }
+      )
+    }
+
+    return {
+      ...contextual,
+      fields,
+      dynamicField:
+        contextual.dynamicField !== null &&
+        typeof contextual.dynamicField !== 'undefined' &&
+        observed.dynamicField !== null &&
+        typeof observed.dynamicField !== 'undefined'
+          ? refineTypeRefUnknowns(contextual.dynamicField, observed.dynamicField)
+          : contextual.dynamicField,
+      traits: refineTypeRefTraits(contextual.traits, observed.traits)
+    }
+  }
+
+  return contextual
+}
+
+function qualifyObservedTypeRef(observed: ConcreteTypeRef, contextual: ConcreteTypeRef): TypeRef {
+  return {
+    ...observed,
+    nullable: contextual.nullable,
+    ownership: contextual.ownership
+  }
+}
+
+function refineTypeRefList(contextual: TypeRef[], observed: TypeRef[]): TypeRef[] {
+  const result: TypeRef[] = []
+
+  for (let index = 0; index < contextual.length; index = index + 1) {
+    result.push(refineTypeRefUnknowns(contextual[index], observed[index]))
+  }
+
+  return result
+}
+
+function refineTypeRefTraits(contextual: TypeTraitRef[], observed: TypeTraitRef[]): TypeTraitRef[] {
+  const result: TypeTraitRef[] = []
+
+  for (let index = 0; index < contextual.length; index = index + 1) {
+    const contextualTrait = contextual[index]
+    const observedTrait = observed.find(
+      (trait) => trait.traitId === contextualTrait.traitId && trait.args.length === contextualTrait.args.length
+    )
+
+    result.push({
+      traitId: contextualTrait.traitId,
+      args:
+        observedTrait === null || typeof observedTrait === 'undefined'
+          ? contextualTrait.args
+          : refineTypeRefList(contextualTrait.args, observedTrait.args)
+    })
   }
 
   return result
@@ -137,12 +387,11 @@ function baseTypeRefCompatibilityMetadata(
       fields.push({
         name: field.name,
         optional: field.optional === true,
+        declaredType: typeRefDeclaredName(field.typeRef, libraries),
         valueType: fieldMetadata.valueType,
         readonly: field.readonly,
         nullable: fieldMetadata.nullable,
-        arrayElementType: fieldMetadata.arrayElementType,
-        arrayElementDeclaredType: fieldMetadata.arrayElementDeclaredType,
-        arrayElementShape: fieldMetadata.arrayElementShape,
+        typeRef: field.typeRef,
         promiseValueType: fieldMetadata.promiseValueType,
         promiseRejectionValueType: fieldMetadata.promiseRejectionValueType,
         promiseRejectionIntrinsicRole: fieldMetadata.promiseRejectionIntrinsicRole,
@@ -167,9 +416,7 @@ function baseTypeRefCompatibilityMetadata(
         readonly: false,
         valueType: dynamicMetadata.valueType,
         nullable: dynamicMetadata.nullable,
-        arrayElementType: dynamicMetadata.arrayElementType,
-        arrayElementDeclaredType: dynamicMetadata.arrayElementDeclaredType,
-        arrayElementShape: dynamicMetadata.arrayElementShape,
+        typeRef: typeRef.dynamicField,
         promiseValueType: dynamicMetadata.promiseValueType,
         shape: dynamicMetadata.shape,
         loc
@@ -195,10 +442,7 @@ function emptyCompatibilityMetadata(
     libraryCppType: null,
     libraryResultTypeId: null,
     shape: null,
-    arrayElementType: null,
     arrayElementTypeId: null,
-    arrayElementDeclaredType: null,
-    arrayElementShape: null,
     promiseValueType: null,
     promiseRejectionValueType: null,
     promiseRejectionIntrinsicRole: null
@@ -283,10 +527,7 @@ function applyTypeTraits(
     if (trait.traitId === 'iterable' && trait.args.length > 0) {
       const element = typeRefCompatibilityMetadata(trait.args[0], libraries, loc)
 
-      metadata.arrayElementType = element.valueType
       metadata.arrayElementTypeId = element.libraryResultTypeId
-      metadata.arrayElementDeclaredType = nativeDeclarationName(element.libraryResultTypeId, libraries)
-      metadata.arrayElementShape = element.shape
     }
 
     if (trait.traitId === 'awaitable' && trait.args.length > 0) {
@@ -295,10 +536,7 @@ function applyTypeTraits(
       metadata.promiseValueType = fulfilled.valueType
       metadata.libraryResultTypeId = fulfilled.libraryResultTypeId
       metadata.shape = fulfilled.shape
-      metadata.arrayElementType = fulfilled.arrayElementType
       metadata.arrayElementTypeId = fulfilled.arrayElementTypeId
-      metadata.arrayElementDeclaredType = fulfilled.arrayElementDeclaredType
-      metadata.arrayElementShape = fulfilled.arrayElementShape
       if (trait.args.length > 1) {
         const rejected = typeRefCompatibilityMetadata(trait.args[1], libraries, loc)
 
@@ -307,20 +545,6 @@ function applyTypeTraits(
       }
     }
   }
-}
-
-function nativeDeclarationName(typeId: string | null, libraries: CompilerLibrarySet): string | null {
-  if (typeId === null) {
-    return null
-  }
-
-  const nativeType = compilerLibraryNativeTypeForId(libraries, typeId)
-
-  if (nativeType === null || nativeType.declarationNames.length === 0) {
-    return null
-  }
-
-  return nativeType.declarationNames[0]
 }
 
 function legacyResultShapeField(field: LibraryResultShapeFieldDescriptor, loc: SourceLocation): AnyNode {

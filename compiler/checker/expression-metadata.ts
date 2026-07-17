@@ -1,18 +1,60 @@
-import { resolveDeclaredType, resolveFieldDeclaredType as resolveFieldDeclaredTypeInContext } from './declared-types.ts'
+import {
+  functionTypeMetadataFromTypeRef,
+  resolveDeclaredType,
+  resolveFieldDeclaredType as resolveFieldDeclaredTypeInContext
+} from './declared-types.ts'
 import type { DeclaredTypeResolverContext } from './declared-types.ts'
 import { dynamicShapeField } from './expression-helpers.ts'
-import {
-  firstPathSegment,
-  nodeNameEquals,
-  resolvedFunctionTypeMetadata
-} from './resolved-types.ts'
+import { firstPathSegment, nodeNameEquals } from './resolved-types.ts'
 import type { FunctionTypeMetadata, ResolvedTypeInfo } from './resolved-types.ts'
-import type { IntrinsicRole } from '../extensions/types.ts'
+import {
+  typeRefCompatibilityMetadata,
+  typeRefDeclaredName,
+  typeRefIterableElementDeclaredName,
+  typeRefIterableElementValueType,
+  typeRefTraitArgument
+} from '../extensions/type-ref-compatibility.ts'
+import type { IntrinsicRole, LibraryCResultMappingDescriptor, TypeRef } from '../extensions/types.ts'
+import { arrayElementTypeNameFromTypeName } from '../type-names.ts'
 import type { AnyNode, ObjectShapeInfo, SourceLocation, SymbolInfo, ValueType } from '../types.ts'
 
 export type ExpressionMetadataResolverContext = {
   declaredTypes: DeclaredTypeResolverContext
   scopeBindings: Map<string, SymbolInfo>[]
+}
+
+export function applyTypeRefMetadataToExpression(
+  context: DeclaredTypeResolverContext,
+  expression: AnyNode,
+  typeRef: TypeRef,
+  cResultMapping: LibraryCResultMappingDescriptor | null = null
+): void {
+  const loc = expressionSourceLocation(expression)
+  const metadata = typeRefCompatibilityMetadata(typeRef, context.libraries, loc, cResultMapping)
+
+  expression.typeRef = typeRef
+  expression.declaredType = typeRefDeclaredName(typeRef, context.libraries)
+  expression.valueType = metadata.valueType
+  expression.functionType = functionTypeMetadataFromTypeRef(context, typeRef, loc)
+  expression.shape = metadata.shape
+  expression.libraryCppType = metadata.libraryCppType
+  expression.arrayElementTypeId = metadata.arrayElementTypeId
+  expression.promiseValueType = metadata.promiseValueType
+  expression.promiseRejectionValueType = metadata.promiseRejectionValueType
+  expression.promiseRejectionIntrinsicRole = metadata.promiseRejectionIntrinsicRole
+  expression.libraryIntrinsicRole = metadata.intrinsicRole ?? expression.libraryIntrinsicRole
+  expression.libraryOwned = metadata.owned
+  expression.libraryResultTypeId = metadata.libraryResultTypeId
+  expression.nullable = metadata.nullable
+
+  const fields = metadata.shape?.fields ?? []
+  const cResultShapeFields: string[] = []
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    cResultShapeFields.push(fields[index].name)
+  }
+
+  expression.libraryCResultShapeFields = cResultShapeFields
 }
 
 function resolveSymbol(scopeBindings: Map<string, SymbolInfo>[], name: string): SymbolInfo | null {
@@ -55,7 +97,7 @@ export function resolveExpressionShape(
       return expression.shape
     }
 
-    return null
+    return resolveDeclaredExpressionShape(context, expression)
   }
 
   const name = firstPathSegment(expression.path)
@@ -70,24 +112,28 @@ export function resolveExpressionShape(
     return symbol.shape
   }
 
-  if (symbol !== null && typeof symbol !== 'undefined' && symbol.valueType === 'object') {
-    const elementShape = resolveArrayElementObjectShape(
-      context,
-      symbol.valueType,
-      symbol.arrayElementDeclaredType,
-      expression.loc
-    )
-
-    if (elementShape !== null && typeof elementShape !== 'undefined') {
-      return elementShape
-    }
-  }
-
   if (expression.shape !== null && typeof expression.shape !== 'undefined') {
     return expression.shape
   }
 
-  return null
+  return resolveDeclaredExpressionShape(context, expression)
+}
+
+function resolveDeclaredExpressionShape(
+  context: ExpressionMetadataResolverContext,
+  expression: AnyNode
+): ObjectShapeInfo | null {
+  const declaredType = expression.declaredType
+
+  if (
+    expression.valueType !== 'object' ||
+    typeof declaredType !== 'string' ||
+    !context.declaredTypes.types.has(declaredType)
+  ) {
+    return null
+  }
+
+  return resolveDeclaredType(context.declaredTypes, declaredType, expressionSourceLocation(expression)).shape
 }
 
 export function resolveArrayElementObjectShape(
@@ -104,10 +150,10 @@ export function resolveArrayElementObjectShape(
 }
 
 export function findShapeField(shape: ObjectShapeInfo, name: string): AnyNode | null {
-  for (const field of shape.fields) {
-    if (nodeNameEquals(field, name)) {
-      return field
-    }
+  const explicit = findExplicitShapeField(shape, name)
+
+  if (explicit !== null) {
+    return explicit
   }
 
   if (shape.dynamic === true) {
@@ -115,6 +161,49 @@ export function findShapeField(shape: ObjectShapeInfo, name: string): AnyNode | 
   }
 
   return null
+}
+
+export function findExplicitShapeField(shape: ObjectShapeInfo, name: string): AnyNode | null {
+  for (const field of shape.fields) {
+    if (nodeNameEquals(field, name)) {
+      return field
+    }
+  }
+
+  return null
+}
+
+export function resolveExpressionShapeField(
+  context: ExpressionMetadataResolverContext,
+  expression: AnyNode,
+  shape: ObjectShapeInfo,
+  name: string
+): AnyNode | null {
+  const explicit = findExplicitShapeField(shape, name)
+
+  if (explicit !== null) {
+    return explicit
+  }
+
+  const declaredType = expression.declaredType
+
+  if (typeof declaredType === 'string' && context.declaredTypes.types.has(declaredType)) {
+    const declaredShape = resolveDeclaredType(
+      context.declaredTypes,
+      declaredType,
+      expressionSourceLocation(expression)
+    ).shape
+
+    if (declaredShape !== null) {
+      const declaredField = findExplicitShapeField(declaredShape, name)
+
+      if (declaredField !== null) {
+        return declaredField
+      }
+    }
+  }
+
+  return findShapeField(shape, name)
 }
 
 export function resolveExpressionArrayElementType(
@@ -125,82 +214,13 @@ export function resolveExpressionArrayElementType(
     return null
   }
 
-  if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
-    return expression.arrayElementType
-  }
-
-  if (expression.type === 'ArrayLiteral') {
-    return null
-  }
-
-  if (expression.type === 'CallExpression') {
-    return null
-  }
-
-  if (expression.type === 'AwaitExpression') {
-    return null
-  }
-
-  if (expression.type === 'Reference' && expression.path.length === 1) {
-    const name = firstPathSegment(expression.path)
-    const symbol = resolveSymbol(context.scopeBindings, name)
-
-    if (
-      symbol !== null &&
-      typeof symbol !== 'undefined' &&
-      symbol.arrayElementType !== null &&
-      typeof symbol.arrayElementType !== 'undefined'
-    ) {
-      return symbol.arrayElementType
-    }
-
-    return null
-  }
-
-  if (expression.type === 'MemberExpression') {
-    const shape = resolveExpressionShape(context, expression.object)
-    let field: AnyNode | null = null
-
-    if (shape !== null && typeof shape !== 'undefined') {
-      field = findShapeField(shape, expression.property)
-    }
-
-    if (
-      field !== null &&
-      typeof field !== 'undefined' &&
-      field.arrayElementType !== null &&
-      typeof field.arrayElementType !== 'undefined'
-    ) {
-      return field.arrayElementType
-    }
-
-    return null
-  }
-
-  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
-    const shape = resolveExpressionShape(context, expression.object)
-    let field: AnyNode | null = null
-
-    if (shape !== null && typeof shape !== 'undefined') {
-      field = findShapeField(shape, expression.index.value)
-    }
-
-    if (
-      field !== null &&
-      typeof field !== 'undefined' &&
-      field.arrayElementType !== null &&
-      typeof field.arrayElementType !== 'undefined'
-    ) {
-      return field.arrayElementType
-    }
-
-    return null
-  }
-
-  return null
+  return typeRefIterableElementValueType(
+    resolveExpressionTypeRef(context, expression),
+    context.declaredTypes.libraries
+  )
 }
 
-export function resolveExpressionArrayElementDeclaredType(
+export function resolveExpressionIterableElementDeclaredName(
   context: ExpressionMetadataResolverContext,
   expression: AnyNode | null | undefined
 ): string | null {
@@ -208,113 +228,21 @@ export function resolveExpressionArrayElementDeclaredType(
     return null
   }
 
-  if (expression.arrayElementDeclaredType !== null && typeof expression.arrayElementDeclaredType !== 'undefined') {
-    return expression.arrayElementDeclaredType
+  if (typeof expression.declaredType === 'string') {
+    const declaredElement = arrayElementTypeNameFromTypeName(expression.declaredType)
+
+    if (declaredElement !== null) {
+      return declaredElement
+    }
   }
 
-  if (expression.type === 'ArrayLiteral' || expression.type === 'CallExpression') {
-    if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
-      return expression.arrayElementType
-    }
-
-    return null
-  }
-
-  if (expression.type === 'AwaitExpression') {
-    if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
-      return expression.arrayElementType
-    }
-
-    return null
-  }
-
-  if (expression.type === 'Reference' && expression.path.length === 1) {
-    const name = firstPathSegment(expression.path)
-    const symbol = resolveSymbol(context.scopeBindings, name)
-
-    if (
-      symbol !== null &&
-      typeof symbol !== 'undefined' &&
-      symbol.arrayElementDeclaredType !== null &&
-      typeof symbol.arrayElementDeclaredType !== 'undefined'
-    ) {
-      return symbol.arrayElementDeclaredType
-    }
-
-    if (
-      symbol !== null &&
-      typeof symbol !== 'undefined' &&
-      symbol.arrayElementType !== null &&
-      typeof symbol.arrayElementType !== 'undefined'
-    ) {
-      return symbol.arrayElementType
-    }
-
-    return null
-  }
-
-  if (expression.type === 'MemberExpression') {
-    const shape = resolveExpressionShape(context, expression.object)
-    let field: AnyNode | null = null
-
-    if (shape !== null && typeof shape !== 'undefined') {
-      field = findShapeField(shape, expression.property)
-    }
-
-    if (
-      field !== null &&
-      typeof field !== 'undefined' &&
-      field.arrayElementDeclaredType !== null &&
-      typeof field.arrayElementDeclaredType !== 'undefined'
-    ) {
-      return field.arrayElementDeclaredType
-    }
-
-    if (
-      field !== null &&
-      typeof field !== 'undefined' &&
-      field.arrayElementType !== null &&
-      typeof field.arrayElementType !== 'undefined'
-    ) {
-      return field.arrayElementType
-    }
-
-    return null
-  }
-
-  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
-    const shape = resolveExpressionShape(context, expression.object)
-    let field: AnyNode | null = null
-
-    if (shape !== null && typeof shape !== 'undefined') {
-      field = findShapeField(shape, expression.index.value)
-    }
-
-    if (
-      field !== null &&
-      typeof field !== 'undefined' &&
-      field.arrayElementDeclaredType !== null &&
-      typeof field.arrayElementDeclaredType !== 'undefined'
-    ) {
-      return field.arrayElementDeclaredType
-    }
-
-    if (
-      field !== null &&
-      typeof field !== 'undefined' &&
-      field.arrayElementType !== null &&
-      typeof field.arrayElementType !== 'undefined'
-    ) {
-      return field.arrayElementType
-    }
-
-    return null
-  }
-
-  return null
+  return typeRefIterableElementDeclaredName(
+    resolveExpressionTypeRef(context, expression),
+    context.declaredTypes.libraries
+  )
 }
 
-export function resolveExpressionArrayElementFunctionType(
+export function resolveExpressionIterableElementFunctionType(
   context: ExpressionMetadataResolverContext,
   expression: AnyNode | null | undefined
 ): FunctionTypeMetadata | null {
@@ -322,38 +250,33 @@ export function resolveExpressionArrayElementFunctionType(
     return null
   }
 
-  if (
-    expression.type === 'ArrayLiteral' ||
-    expression.type === 'CallExpression' ||
-    expression.type === 'AwaitExpression'
-  ) {
-    if (
-      expression.arrayElementFunctionType !== null &&
-      typeof expression.arrayElementFunctionType !== 'undefined'
-    ) {
-      return expression.arrayElementFunctionType
-    }
+  const typeRef = resolveExpressionTypeRef(context, expression)
+  const elementTypeRef = typeRefTraitArgument(typeRef, 'iterable', 0, context.declaredTypes.libraries)
 
+  if (elementTypeRef === null) {
     return null
+  }
+
+  return functionTypeMetadataFromTypeRef(
+    context.declaredTypes,
+    elementTypeRef,
+    expressionSourceLocation(expression)
+  )
+}
+
+function resolveExpressionTypeRef(
+  context: ExpressionMetadataResolverContext,
+  expression: AnyNode
+): TypeRef | null {
+  if (expression.typeRef !== null && typeof expression.typeRef !== 'undefined') {
+    return expression.typeRef
   }
 
   if (expression.type === 'Reference' && expression.path.length === 1) {
-    const name = firstPathSegment(expression.path)
-    const symbol = resolveSymbol(context.scopeBindings, name)
-
-    if (
-      symbol !== null &&
-      typeof symbol !== 'undefined' &&
-      symbol.arrayElementFunctionType !== null &&
-      typeof symbol.arrayElementFunctionType !== 'undefined'
-    ) {
-      return symbol.arrayElementFunctionType
-    }
-
-    return null
+    return resolveSymbol(context.scopeBindings, firstPathSegment(expression.path))?.typeRef ?? null
   }
 
-  if (expression.type === 'MemberExpression') {
+  if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
     const shape = resolveExpressionShape(context, expression.object)
     let field: AnyNode | null = null
 
@@ -363,14 +286,16 @@ export function resolveExpressionArrayElementFunctionType(
 
     if (field !== null && typeof field !== 'undefined') {
       const fieldType = resolveFieldDeclaredTypeInContext(context.declaredTypes, field)
-
-      return resolvedFunctionTypeMetadata(field.arrayElementFunctionType, fieldType.arrayElementFunctionType)
+      return field.typeRef ?? fieldType.typeRef
     }
 
     return null
   }
 
-  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+  if (
+    (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') &&
+    expression.index.type === 'StringLiteral'
+  ) {
     const shape = resolveExpressionShape(context, expression.object)
     let field: AnyNode | null = null
 
@@ -380,11 +305,8 @@ export function resolveExpressionArrayElementFunctionType(
 
     if (field !== null && typeof field !== 'undefined') {
       const fieldType = resolveFieldDeclaredTypeInContext(context.declaredTypes, field)
-
-      return resolvedFunctionTypeMetadata(field.arrayElementFunctionType, fieldType.arrayElementFunctionType)
+      return field.typeRef ?? fieldType.typeRef
     }
-
-    return null
   }
 
   return null
@@ -394,11 +316,38 @@ export function resolveArrayIterableElementShape(
   context: ExpressionMetadataResolverContext,
   expression: AnyNode
 ): ObjectShapeInfo | null {
+  const typeRef = resolveExpressionTypeRef(context, expression)
+  const elementTypeRef = typeRefTraitArgument(typeRef, 'iterable', 0, context.declaredTypes.libraries)
+  const elementDeclaredType = resolveExpressionIterableElementDeclaredName(context, expression)
+
+  if (elementTypeRef !== null && elementTypeRef.kind !== 'parameter') {
+    const elementMetadata = typeRefCompatibilityMetadata(
+      elementTypeRef,
+      context.declaredTypes.libraries,
+      expressionSourceLocation(expression)
+    )
+
+    if (
+      elementMetadata.shape !== null &&
+      !(
+        elementDeclaredType !== null &&
+        elementMetadata.shape.dynamic === true &&
+        elementMetadata.shape.fields.length === 0
+      )
+    ) {
+      return elementMetadata.shape
+    }
+  }
+
   const elementType = resolveExpressionArrayElementType(context, expression)
-  const elementDeclaredType = resolveExpressionArrayElementDeclaredType(context, expression)
 
   if (elementType === 'object' && elementDeclaredType !== null && typeof elementDeclaredType !== 'undefined') {
-    const elementShape = resolveArrayElementObjectShape(context, elementType, elementDeclaredType, expression.loc)
+    const elementShape = resolveArrayElementObjectShape(
+      context,
+      elementType,
+      elementDeclaredType,
+      expressionSourceLocation(expression)
+    )
 
     if (elementShape !== null && typeof elementShape !== 'undefined') {
       return elementShape
@@ -450,6 +399,17 @@ export function resolveArrayIterableElementShape(
   }
 
   return null
+}
+
+function expressionSourceLocation(expression: AnyNode): SourceLocation {
+  let loc: SourceLocation = { line: 1, column: 1 }
+  const expressionLoc = expression.loc
+
+  if (expressionLoc !== null && typeof expressionLoc !== 'undefined') {
+    loc = expressionLoc
+  }
+
+  return loc
 }
 
 export function resolveExpressionPromiseValueType(

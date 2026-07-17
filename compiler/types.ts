@@ -11,6 +11,13 @@ export type ArrayBindingElement = {
   name: string
   index: number
   loc: SourceLocation
+  declaredType?: string | null
+  valueType?: ValueType
+  typeRef?: TypeRef | null
+  nullable?: boolean
+  promiseValueType?: ValueType | null
+  functionType?: AnyNode | null
+  shape?: ObjectShapeInfo | null
   [key: string]: any
 }
 
@@ -63,9 +70,8 @@ export type IrFunctionDeclaration = {
   params: AnyNode[]
   declaredReturnType?: string | null
   returnType: string
+  returnTypeRef?: TypeRef | null
   returnNullable: boolean
-  returnArrayElementType?: ValueType | null
-  returnArrayElementDeclaredType?: string | null
   returnPromiseValueType?: ValueType | null
   returnShape?: any
   loc?: SourceLocation
@@ -140,6 +146,7 @@ export type ObjectShapeInfo = {
   dynamic?: boolean
   dynamicField?: AnyNode | null
   fields: AnyNode[]
+  functionCompanions?: boolean
   libraryTypeId?: string | null
   libraryCppType?: string | null
   libraryCValueAdapter?: string | null
@@ -161,8 +168,6 @@ export type CallableOverloadInfo = {
   returnType?: ValueType
   returnTypeRef?: TypeRef | null
   returnNullable?: boolean
-  returnArrayElementType?: ValueType | null
-  returnArrayElementDeclaredType?: string | null
   returnPromiseValueType?: ValueType | null
   returnShape?: ObjectShapeInfo | null
   async?: boolean
@@ -173,6 +178,7 @@ export type SymbolInfo = {
   kind: string
   mutable?: boolean
   valueType: ValueType
+  declaredType?: string | null
   typeRef?: TypeRef | null
   libraryId?: string | null
   libraryBindingId?: string | null
@@ -182,18 +188,12 @@ export type SymbolInfo = {
   nullable?: boolean
   narrowingTrueNames?: string[]
   narrowingFalseNames?: string[]
-  arrayElementType?: ValueType | null
-  arrayElementDeclaredType?: string | null
-  arrayElementShape?: ObjectShapeInfo | null
-  arrayElementFunctionType?: any
   promiseValueType?: ValueType | null
   promiseRejectionIntrinsicRole?: IntrinsicRole | null
   params?: AnyNode[]
   returnType?: ValueType
   returnTypeRef?: TypeRef | null
   returnNullable?: boolean
-  returnArrayElementType?: ValueType | null
-  returnArrayElementDeclaredType?: string | null
   returnPromiseValueType?: ValueType | null
   returnShape?: ObjectShapeInfo | null
   async?: boolean
@@ -255,6 +255,7 @@ export type ModuleDeclarationImport = {
   functionEffects?: IrFunctionEffect[]
   functionEffectsPath?: string
   program?: ProgramNode
+  resolvedProgram?: ProgramNode
 }
 
 export type CompileOptions = {

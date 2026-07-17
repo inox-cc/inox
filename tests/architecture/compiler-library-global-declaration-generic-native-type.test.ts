@@ -19,7 +19,7 @@ test('ambient generic получает package-owned native TypeRef и substitut
     ownership: 'value',
     traits: [{ traitId: 'iterable', args: [stringType] }]
   })
-  assert.equal(current.arrayElementType, 'string')
+  assert.equal(Object.prototype.hasOwnProperty.call(current, 'arrayElementType'), false)
   assert.equal(current.shape.libraryTypeId, 'fixture#Box')
   assert.equal(current.shape.libraryCppType, 'Box')
   assert.equal(result.hir.body[0].init.shape.libraryTypeId, 'fixture#Box')

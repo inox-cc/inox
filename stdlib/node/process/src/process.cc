@@ -170,7 +170,7 @@ static inox_status process_hrtime_component(inox_value previous, size_t index, i
     return INOX_ERR_TYPE;
   }
 
-  inox::Value value = ArrayClass(previous).get(index);
+  inox::Value value = Array(previous).get(index);
 
   if (inox::thrown()) {
     return INOX_ERR_TYPE;
@@ -368,7 +368,7 @@ inox::Value process::hrtime() const {
     return inox::Value();
   }
 
-  ArrayClass result = ArrayClass::create(2);
+  Array result = Array::create(2);
 
   if (inox::thrown() || !result.valid()) {
     return inox::Value();
@@ -413,7 +413,7 @@ inox::Value process::hrtime(const inox::Value& previous) const {
     nanoseconds += 1000000000ll;
   }
 
-  ArrayClass result = ArrayClass::create(2);
+  Array result = Array::create(2);
 
   if (inox::thrown() || !result.valid()) {
     return inox::Value();

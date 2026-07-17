@@ -9,17 +9,12 @@ export type ResolvedTypeInfo = {
   typeRef: TypeRef | null
   functionType: FunctionTypeMetadata | null
   shape: ObjectShapeInfo | null
-  arrayElementType: ValueType | null
-  arrayElementDeclaredType: string | null
-  arrayElementShape?: ObjectShapeInfo | null
-  arrayElementFunctionType?: FunctionTypeMetadata | null
   promiseValueType: ValueType | null
 }
 
 export type ResolvedTypeInfoValueKind = number
 
-export const resolvedArrayElementTypeKind: ResolvedTypeInfoValueKind = 0
-export const resolvedPromiseValueTypeKind: ResolvedTypeInfoValueKind = 1
+export const resolvedPromiseValueTypeKind: ResolvedTypeInfoValueKind = 0
 
 export type OwnershipGraphEdge = {
   from: string
@@ -61,11 +56,6 @@ export type FunctionTypeParamMetadata = {
   valueType: ValueType
   typeRef?: TypeRef | null
   nullable?: boolean
-  arrayElementType?: ValueType | null
-  arrayElementDeclaredType?: string | null
-  arrayElementShape?: ObjectShapeInfo | null
-  arrayElementFunctionType?: FunctionTypeMetadata | null
-  arrayElementFunctionTypeOwnership?: 'weak'
   promiseValueType?: ValueType | null
   functionType?: FunctionTypeMetadata | null
   functionTypeOwnership?: 'weak'
@@ -81,8 +71,6 @@ export type FunctionTypeMetadata = {
   returnTypeRef?: TypeRef | null
   declaredReturnType?: string
   returnNullable: boolean
-  returnArrayElementType?: ValueType | null
-  returnArrayElementDeclaredType?: string | null
   returnPromiseValueType?: ValueType | null
   returnShape?: ObjectShapeInfo | null
   loc?: SourceLocation
@@ -112,8 +100,6 @@ export type RuntimeCallInfo = {
 }
 
 export type AnyNodeFieldOptions = {
-  arrayElementType?: ValueType | null
-  arrayElementDeclaredType?: string | null
   shape?: ObjectShapeInfo | null
 }
 
@@ -143,8 +129,6 @@ export function anyNodeResolvedTypeInfo(loc: SourceLocation): ResolvedTypeInfo {
     typeRef: null,
     functionType: null,
     shape: anyNodeObjectShape(loc),
-    arrayElementType: null,
-    arrayElementDeclaredType: null,
     promiseValueType: null
   }
 }
@@ -164,46 +148,18 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('imported', 'string', null, false, loc),
       anyNodeField('local', 'string', null, false, loc),
       anyNodeField('source', 'string', null, false, loc),
-      anyNodeField('path', 'array', null, false, loc, {
-        arrayElementType: 'string',
-        arrayElementDeclaredType: 'string'
-      }),
-      anyNodeField('args', 'array', null, false, loc, {
-        arrayElementType: 'object',
-        arrayElementDeclaredType: 'AnyNode'
-      }),
-      anyNodeField('params', 'array', null, false, loc, {
-        arrayElementType: 'object'
-      }),
-      anyNodeField('typeParameters', 'array', null, false, loc, {
-        arrayElementType: 'object',
-        arrayElementDeclaredType: 'AnyNode'
-      }),
-      anyNodeField('methods', 'array', null, false, loc, {
-        arrayElementType: 'object'
-      }),
-      anyNodeField('fields', 'array', null, false, loc, {
-        arrayElementType: 'object'
-      }),
-      anyNodeField('properties', 'array', null, false, loc, {
-        arrayElementType: 'object'
-      }),
-      anyNodeField('elements', 'array', null, false, loc, {
-        arrayElementType: 'object'
-      }),
-      anyNodeField('cases', 'array', null, false, loc, {
-        arrayElementType: 'object'
-      }),
-      anyNodeField('narrowingFalseNames', 'array', null, false, loc, {
-        arrayElementType: 'string'
-      }),
-      anyNodeField('narrowingTrueNames', 'array', null, false, loc, {
-        arrayElementType: 'string'
-      }),
-      anyNodeField('specifiers', 'array', null, false, loc, {
-        arrayElementType: 'object',
-        arrayElementDeclaredType: 'AnyNode'
-      }),
+      anyNodeField('path', 'array', 'array<string>', false, loc),
+      anyNodeField('args', 'array', 'array<AnyNode>', false, loc),
+      anyNodeField('params', 'array', 'array<AnyNode>', false, loc),
+      anyNodeField('typeParameters', 'array', 'array<AnyNode>', false, loc),
+      anyNodeField('methods', 'array', 'array<AnyNode>', false, loc),
+      anyNodeField('fields', 'array', 'array<AnyNode>', false, loc),
+      anyNodeField('properties', 'array', 'array<AnyNode>', false, loc),
+      anyNodeField('elements', 'array', 'array<AnyNode>', false, loc),
+      anyNodeField('cases', 'array', 'array<AnyNode>', false, loc),
+      anyNodeField('narrowingFalseNames', 'array', 'array<string>', false, loc),
+      anyNodeField('narrowingTrueNames', 'array', 'array<string>', false, loc),
+      anyNodeField('specifiers', 'array', 'array<AnyNode>', false, loc),
       anyNodeField('body', 'unknown', null, false, loc),
       anyNodeField('callee', 'unknown', null, false, loc),
       anyNodeField('expression', 'unknown', null, false, loc),
@@ -222,6 +178,7 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('paramLoc', 'object', null, true, loc, { shape: anyNodeLocObjectShape(loc) }),
       anyNodeField('expressionBody', 'boolean', null, false, loc),
       anyNodeField('default', 'boolean', null, true, loc),
+      anyNodeField('nullable', 'boolean', null, true, loc),
       anyNodeField('typeOnly', 'boolean', null, false, loc),
       anyNodeField('property', 'string', null, false, loc),
       anyNodeField('operator', 'string', null, false, loc),
@@ -229,12 +186,9 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('pattern', 'string', null, false, loc),
       anyNodeField('flags', 'string', null, false, loc),
       anyNodeField('declaredType', 'string', null, true, loc),
+      anyNodeField('declaredName', 'string', null, true, loc),
       anyNodeField('typeRef', 'object', null, true, loc),
       anyNodeField('valueType', 'string', null, true, loc),
-      anyNodeField('arrayElementType', 'string', null, true, loc),
-      anyNodeField('arrayElementDeclaredType', 'string', null, true, loc),
-      anyNodeField('arrayElementShape', 'object', null, true, loc, { shape: objectShapeMetadata }),
-      anyNodeField('arrayElementFunctionType', 'object', null, true, loc),
       anyNodeField('constraint', 'string', null, true, loc),
       anyNodeField('promiseValueType', 'string', null, true, loc),
       anyNodeField('promiseRejectionValueType', 'string', null, true, loc),
@@ -243,8 +197,6 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('returnType', 'string', null, true, loc),
       anyNodeField('returnTypeRef', 'object', null, true, loc),
       anyNodeField('declaredReturnType', 'string', null, true, loc),
-      anyNodeField('returnArrayElementType', 'string', null, true, loc),
-      anyNodeField('returnArrayElementDeclaredType', 'string', null, true, loc),
       anyNodeField('returnPromiseValueType', 'string', null, true, loc),
       anyNodeField('returnNullable', 'boolean', null, false, loc),
       anyNodeField('returnShape', 'object', null, true, loc, { shape: objectShapeMetadata }),
@@ -260,6 +212,7 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('libraryCFailureMode', 'string', null, true, loc),
       anyNodeField('libraryCResultMode', 'string', null, true, loc),
       anyNodeField('libraryCReceiverAdapter', 'string', null, true, loc),
+      anyNodeField('libraryCResultAdapter', 'string', null, true, loc),
       anyNodeField('libraryCExpression', 'string', null, true, loc),
       anyNodeField('libraryCLowering', 'string', null, true, loc),
       anyNodeField('libraryCClassFormatExpression', 'string', null, true, loc),
@@ -267,13 +220,13 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('libraryConstantValue', 'string', null, true, loc),
       anyNodeField('libraryCallbackLifetime', 'string', null, true, loc),
       anyNodeField('libraryOwned', 'boolean', null, false, loc),
-      anyNodeField('libraryCapabilities', 'array', null, false, loc, { arrayElementType: 'string' }),
-      anyNodeField('libraryCArgumentAdapters', 'array', null, false, loc, { arrayElementType: 'string' }),
-      anyNodeField('libraryCArgumentKinds', 'array', null, true, loc, { arrayElementType: 'string' }),
-      anyNodeField('libraryCArgumentMethodNames', 'array', null, false, loc, { arrayElementType: 'string' }),
-      anyNodeField('libraryCArgumentSources', 'array', null, false, loc, { arrayElementType: 'object' }),
-      anyNodeField('libraryCResultShapeFields', 'array', null, false, loc, { arrayElementType: 'string' }),
-      anyNodeField('libraryRuntimeRequirements', 'array', null, false, loc, { arrayElementType: 'string' })
+      anyNodeField('libraryCapabilities', 'array', 'array<string>', false, loc),
+      anyNodeField('libraryCArgumentAdapters', 'array', 'array<string>', false, loc),
+      anyNodeField('libraryCArgumentKinds', 'array', 'array<string>', true, loc),
+      anyNodeField('libraryCArgumentMethodNames', 'array', 'array<string>', false, loc),
+      anyNodeField('libraryCArgumentSources', 'array', 'array<AnyNode>', false, loc),
+      anyNodeField('libraryCResultShapeFields', 'array', 'array<string>', false, loc),
+      anyNodeField('libraryRuntimeRequirements', 'array', 'array<string>', false, loc)
     ]
   }
 }
@@ -283,14 +236,11 @@ function objectShapeInfoMetadataShape(loc: SourceLocation): ObjectShapeInfo {
     kind: 'object',
     fields: [
       anyNodeField('kind', 'string', null, false, loc),
-      anyNodeField('baseTypes', 'array', null, true, loc, { arrayElementType: 'string' }),
+      anyNodeField('baseTypes', 'array', 'array<string>', true, loc),
       anyNodeField('builtin', 'string', null, true, loc),
       anyNodeField('dynamic', 'boolean', null, true, loc),
       anyNodeField('dynamicField', 'object', null, true, loc),
-      anyNodeField('fields', 'array', null, false, loc, {
-        arrayElementType: 'object',
-        arrayElementDeclaredType: 'AnyNode'
-      }),
+      anyNodeField('fields', 'array', 'array<AnyNode>', false, loc),
       anyNodeField('libraryTypeId', 'string', null, true, loc),
       anyNodeField('libraryCppType', 'string', null, true, loc)
     ]
@@ -324,10 +274,6 @@ export function anyNodeField(
     declaredType,
     valueType,
     nullable,
-    arrayElementType: options.arrayElementType ?? null,
-    arrayElementDeclaredType: options.arrayElementDeclaredType ?? null,
-    arrayElementShape: null,
-    arrayElementFunctionType: null,
     promiseValueType: null,
     functionType: null,
     shape: options.shape ?? null,
@@ -350,10 +296,6 @@ export function cloneObjectShapeField(field: AnyNode): AnyNode {
     typeRef: field.typeRef ?? null,
     valueType: field.valueType ?? 'unknown',
     nullable: field.nullable === true,
-    arrayElementType: field.arrayElementType ?? null,
-    arrayElementDeclaredType: field.arrayElementDeclaredType ?? null,
-    arrayElementShape: field.arrayElementShape ?? null,
-    arrayElementFunctionType: field.arrayElementFunctionType ?? null,
     promiseValueType: field.promiseValueType ?? null,
     promiseRejectionValueType: field.promiseRejectionValueType ?? null,
     functionType: field.functionType ?? null,
@@ -585,10 +527,6 @@ export function resolvedTypeListHasNullable(infos: ResolvedTypeInfo[]): boolean 
   return false
 }
 
-export function commonResolvedArrayElementType(infos: ResolvedTypeInfo[]): ValueType | null {
-  return commonResolvedOptionalValueType(infos, resolvedArrayElementTypeKind)
-}
-
 export function commonResolvedPromiseValueType(infos: ResolvedTypeInfo[]): ValueType | null {
   return commonResolvedOptionalValueType(infos, resolvedPromiseValueTypeKind)
 }
@@ -692,10 +630,9 @@ export function commonResolvedObjectShapeField(name: string, infos: ResolvedType
     weakTypeValidated: first.weakTypeValidated,
     loc: first.loc,
     declaredType: commonResolvedObjectShapeFieldDeclaredType(fields),
+    typeRef: commonResolvedObjectShapeFieldTypeRef(fields),
     valueType,
     nullable,
-    arrayElementType: commonResolvedObjectShapeFieldArrayElementType(fields),
-    arrayElementDeclaredType: commonResolvedObjectShapeFieldArrayElementDeclaredType(fields),
     promiseValueType: commonResolvedObjectShapeFieldPromiseValueType(fields),
     functionType: commonResolvedObjectShapeFieldFunctionType(fields),
     shape: commonResolvedObjectShapeFieldShape(fields)
@@ -774,44 +711,23 @@ export function commonResolvedObjectShapeFieldDeclaredType(fields: AnyNode[]): s
   return declaredType
 }
 
-export function commonResolvedObjectShapeFieldArrayElementType(fields: AnyNode[]): ValueType | null {
-  const values: ValueType[] = []
-
-  for (let index = 0; index < fields.length; index = index + 1) {
-    const value = fields[index].arrayElementType
-
-    if (value === null || typeof value === 'undefined') {
-      return null
-    }
-
-    values.push(value)
-  }
-
-  return commonValueType(values)
-}
-
-export function commonResolvedObjectShapeFieldArrayElementDeclaredType(fields: AnyNode[]): string | null {
+export function commonResolvedObjectShapeFieldTypeRef(fields: AnyNode[]): TypeRef | null {
   const first = fields[0]
-  let declaredType: string | null = null
+  const typeRef: TypeRef | null = first.typeRef ?? null
 
-  if (first.arrayElementDeclaredType !== null && typeof first.arrayElementDeclaredType !== 'undefined') {
-    declaredType = first.arrayElementDeclaredType
+  if (typeRef === null) {
+    return null
   }
 
   for (let index = 1; index < fields.length; index = index + 1) {
-    const field = fields[index]
-    let current: string | null = null
+    const current: TypeRef | null = fields[index].typeRef ?? null
 
-    if (field.arrayElementDeclaredType !== null && typeof field.arrayElementDeclaredType !== 'undefined') {
-      current = field.arrayElementDeclaredType
-    }
-
-    if (current !== declaredType) {
+    if (current === null || !typeRefsEqual(typeRef, current)) {
       return null
     }
   }
 
-  return declaredType
+  return typeRef
 }
 
 export function commonResolvedObjectShapeFieldPromiseValueType(fields: AnyNode[]): ValueType | null {
@@ -854,33 +770,6 @@ export function commonResolvedObjectShapeFieldFunctionType(fields: AnyNode[]): F
   return functionType
 }
 
-export function commonExpressionFunctionType(values: AnyNode[]): FunctionTypeMetadata | null {
-  let functionType: FunctionTypeMetadata | null = null
-  let seen = false
-
-  for (let index = 0; index < values.length; index = index + 1) {
-    const value = values[index]
-    let current: FunctionTypeMetadata | null = null
-
-    if (value.functionType !== null && typeof value.functionType !== 'undefined') {
-      current = value.functionType
-    }
-
-    if (current === null || typeof current === 'undefined') {
-      return null
-    }
-
-    if (!seen) {
-      functionType = current
-      seen = true
-    } else if (current !== functionType) {
-      return null
-    }
-  }
-
-  return functionType
-}
-
 export function commonResolvedObjectShapeFieldShape(fields: AnyNode[]): ObjectShapeInfo | null {
   const first = fields[0]
   let shape: ObjectShapeInfo | null = null
@@ -906,10 +795,6 @@ export function commonResolvedObjectShapeFieldShape(fields: AnyNode[]): ObjectSh
 }
 
 export function resolvedTypeInfoValue(info: ResolvedTypeInfo, kind: ResolvedTypeInfoValueKind): ValueType | null {
-  if (kind === resolvedArrayElementTypeKind) {
-    return info.arrayElementType
-  }
-
   if (kind === resolvedPromiseValueTypeKind) {
     return info.promiseValueType ?? null
   }
@@ -939,6 +824,89 @@ export function commonResolvedOptionalValueType(
   }
 
   return commonValueType(values)
+}
+
+function typeRefsEqual(left: TypeRef, right: TypeRef): boolean {
+  if (left.kind !== right.kind) {
+    return false
+  }
+
+  if (left.kind === 'parameter' && right.kind === 'parameter') {
+    return left.name === right.name && left.nullable === right.nullable
+  }
+
+  if (left.kind === 'primitive' && right.kind === 'primitive') {
+    return left.name === right.name && left.nullable === right.nullable && left.ownership === right.ownership
+  }
+
+  if (left.kind === 'nominal' && right.kind === 'nominal') {
+    return (
+      left.typeId === right.typeId &&
+      left.nullable === right.nullable &&
+      left.ownership === right.ownership &&
+      typeRefListsEqual(left.args, right.args)
+    )
+  }
+
+  if (left.kind === 'function' && right.kind === 'function') {
+    return (
+      left.nullable === right.nullable &&
+      left.ownership === right.ownership &&
+      typeRefListsEqual(left.params, right.params) &&
+      typeRefsEqual(left.result, right.result)
+    )
+  }
+
+  if (left.kind === 'object' && right.kind === 'object') {
+    if (
+      left.nullable !== right.nullable ||
+      left.ownership !== right.ownership ||
+      left.dynamic !== right.dynamic ||
+      left.fields.length !== right.fields.length
+    ) {
+      return false
+    }
+
+    for (let index = 0; index < left.fields.length; index = index + 1) {
+      const leftField = left.fields[index]
+      const rightField = right.fields[index]
+
+      if (
+        leftField.name !== rightField.name ||
+        leftField.readonly !== rightField.readonly ||
+        leftField.optional !== rightField.optional ||
+        !typeRefsEqual(leftField.typeRef, rightField.typeRef)
+      ) {
+        return false
+      }
+    }
+
+    if (left.dynamicField === null || typeof left.dynamicField === 'undefined') {
+      return right.dynamicField === null || typeof right.dynamicField === 'undefined'
+    }
+
+    return (
+      right.dynamicField !== null &&
+      typeof right.dynamicField !== 'undefined' &&
+      typeRefsEqual(left.dynamicField, right.dynamicField)
+    )
+  }
+
+  return left.kind === 'unknown' && right.kind === 'unknown' && left.nullable === right.nullable && left.ownership === right.ownership
+}
+
+function typeRefListsEqual(left: TypeRef[], right: TypeRef[]): boolean {
+  if (left.length !== right.length) {
+    return false
+  }
+
+  for (let index = 0; index < left.length; index = index + 1) {
+    if (!typeRefsEqual(left[index], right[index])) {
+      return false
+    }
+  }
+
+  return true
 }
 
 function joinStrings(values: readonly string[], separator: string): string {

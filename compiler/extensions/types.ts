@@ -57,6 +57,7 @@ export type ObjectTypeRefField = {
 
 export type ObjectTypeRef = {
   kind: 'object'
+  declaredName?: string
   fields: ObjectTypeRefField[]
   dynamic?: boolean
   dynamicField?: TypeRef | null
@@ -269,6 +270,7 @@ export type LibraryArgumentCheckDescriptor = {
   objectLiteralFields?: LibraryObjectLiteralFieldDescriptor[]
   functionParameters?: LibraryCallbackParameterDescriptor[]
   functionReturnType?: string | null
+  functionReturnTypeRef?: TypeRef | null
   functionAsync?: boolean | null
   functionAsyncDiagnosticCode?: string | null
   functionAsyncDiagnosticMessage?: string | null
@@ -277,6 +279,10 @@ export type LibraryArgumentCheckDescriptor = {
 export type LibraryOperationTypeParameterSourceDescriptor =
   | {
       source: 'explicit-type-argument' | 'receiver-type-argument' | 'contextual-type-argument'
+      argumentIndex: number
+    }
+  | {
+      source: 'argument-function-return' | 'argument-type'
       argumentIndex: number
     }
   | {
@@ -306,6 +312,7 @@ export type LibraryObjectMethodCheckDescriptor = {
 export type LibraryCallbackParameterDescriptor = {
   name: string
   valueType: string
+  typeRef?: TypeRef | null
   nullable?: boolean
   resultTypeId?: LibraryObjectTypeId | null
   shapeFields?: LibraryResultShapeFieldDescriptor[]
@@ -340,6 +347,7 @@ export type LibraryOperationVariantDescriptor = {
   cArgumentMethodNames?: string[]
   cArgumentSources?: Array<LibraryCArgumentSourceDescriptor | null>
   cReceiverAdapter?: string | null
+  cResultAdapter?: string | null
   cResultMode?: LibraryCResultMode | null
   cResultMapping?: LibraryCResultMappingDescriptor | null
   resultTypeRef?: TypeRef | null
@@ -355,6 +363,14 @@ export type LibraryOperationVariantDescriptor = {
   nullable?: boolean
   owned?: boolean
   callbackLifetime?: LibraryCallbackLifetime | null
+}
+
+export type LibraryArgumentNarrowingDescriptor = {
+  argumentIndex: number
+  trueValueType?: string | null
+  falseValueType?: string | null
+  trueNonNullable?: boolean
+  falseNonNullable?: boolean
 }
 
 export type LibraryOperationDescriptor = {
@@ -373,6 +389,7 @@ export type LibraryOperationDescriptor = {
   cArgumentMethodNames?: string[]
   cArgumentSources?: Array<LibraryCArgumentSourceDescriptor | null>
   cReceiverAdapter?: string | null
+  cResultAdapter?: string | null
   cResultMode?: LibraryCResultMode | null
   cResultMapping?: LibraryCResultMappingDescriptor | null
   resultTypeRef?: TypeRef | null
@@ -398,6 +415,7 @@ export type LibraryOperationDescriptor = {
   diagnosticCode?: string | null
   diagnosticMessage?: string | null
   callbackLifetime?: LibraryCallbackLifetime | null
+  argumentNarrowing?: LibraryArgumentNarrowingDescriptor | null
 }
 
 export type IntrinsicRole = 'array-literal' | 'async-result' | 'exception-value' | 'dynamic-object' | 'regexp-literal'

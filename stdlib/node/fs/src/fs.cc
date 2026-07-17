@@ -446,7 +446,7 @@ Buffer fs::readFileSync(inox::StringView path) {
   return Buffer(inox::adopt(out));
 }
 
-ArrayClass fs::readdirSync(inox::StringView path) {
+Array fs::readdirSync(inox::StringView path) {
   inox_value out = inox_undefined_value();
   inox_status status = INOX_ERR_UNSUPPORTED;
 
@@ -461,13 +461,13 @@ ArrayClass fs::readdirSync(inox::StringView path) {
   }
 
   if (inox_fs_throw_sync_status(status, &out)) {
-    return ArrayClass();
+    return Array();
   }
 
-  return ArrayClass(inox::adopt(out));
+  return Array(inox::adopt(out));
 }
 
-ArrayClass fs::readdirSync(inox::StringView path, inox::StringView encoding) {
+Array fs::readdirSync(inox::StringView path, inox::StringView encoding) {
   (void)encoding;
   inox_value out = inox_undefined_value();
   inox_status status = INOX_ERR_UNSUPPORTED;
@@ -483,13 +483,13 @@ ArrayClass fs::readdirSync(inox::StringView path, inox::StringView encoding) {
   }
 
   if (inox_fs_throw_sync_status(status, &out)) {
-    return ArrayClass();
+    return Array();
   }
 
-  return ArrayClass(inox::adopt(out));
+  return Array(inox::adopt(out));
 }
 
-ArrayClass fs::readdirSync(inox::StringView path, FsReadDirOptions options) {
+Array fs::readdirSync(inox::StringView path, FsReadDirOptions options) {
   (void)options;
   inox_value out = inox_undefined_value();
   inox_status status = INOX_ERR_UNSUPPORTED;
@@ -505,10 +505,10 @@ ArrayClass fs::readdirSync(inox::StringView path, FsReadDirOptions options) {
   }
 
   if (inox_fs_throw_sync_status(status, &out)) {
-    return ArrayClass();
+    return Array();
   }
 
-  return ArrayClass(inox::adopt(out));
+  return Array(inox::adopt(out));
 }
 
 FsStats fs::statSync(inox::StringView path) {
@@ -1467,7 +1467,7 @@ static inox_status inox_fs_libuv_read_dir_entries(uv_fs_t* req, inox_allocator* 
 
   *out = inox_undefined_value();
 
-  ArrayClass entries = ArrayClass::create(0);
+  Array entries = Array::create(0);
 
   if (inox::thrown()) {
     return INOX_ERR_TYPE;
@@ -2834,7 +2834,7 @@ inox_fs_default_read_dir(void* user, inox_allocator* allocator, const char* path
     return INOX_ERR_FIELD;
   }
 
-  ArrayClass entries = ArrayClass::create(0);
+  Array entries = Array::create(0);
 
   if (inox::thrown()) {
     closedir(dir);
@@ -2941,7 +2941,7 @@ inox_fs_default_read_dir_dirents(void* user, inox_allocator* allocator, const ch
     return INOX_ERR_FIELD;
   }
 
-  ArrayClass entries = ArrayClass::create(0);
+  Array entries = Array::create(0);
 
   if (inox::thrown()) {
     free(path_copy);

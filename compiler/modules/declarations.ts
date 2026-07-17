@@ -54,18 +54,16 @@ type DeclareConstDeclaration = {
 
 type DeclarationValueMetadata = {
   valueType: ValueType | null
-  arrayElementType: ValueType | null
-  arrayElementDeclaredType: string | null
+  declaredType: string | null
 }
 
 export function createModuleDeclarationProgram(program: ProgramNode): ProgramNode {
   const body: AnyNode[] = []
-  const syntheticTypeImportNames = collectModuleDeclarationSyntheticTypeImportNames(program)
-  const importedTypeNames = collectModuleDeclarationImportedTypeNames(program, syntheticTypeImportNames)
+  const promotedTypeImportNames = collectPromotedTypeImportNames(program)
 
   for (const item of program.body) {
     if (item.type === 'ImportDeclaration' && item.typeOnly === true) {
-      const declaration = createModuleDeclarationImportNode(item, syntheticTypeImportNames)
+      const declaration = createModuleDeclarationImportNode(item, promotedTypeImportNames)
 
       if (declaration !== null) {
         body.push(declaration)
@@ -73,7 +71,11 @@ export function createModuleDeclarationProgram(program: ProgramNode): ProgramNod
       continue
     }
 
-    if (item.type === 'TypeAliasDeclaration' && item.syntheticTypeImport === true && importedTypeNames.has(item.name)) {
+    if (
+      item.type === 'TypeAliasDeclaration' &&
+      item.syntheticTypeImport === true &&
+      item.syntheticTypeImportSourceTypeOnly === true
+    ) {
       continue
     }
 
@@ -90,11 +92,16 @@ export function createModuleDeclarationProgram(program: ProgramNode): ProgramNod
   }
 }
 
-function collectModuleDeclarationSyntheticTypeImportNames(program: ProgramNode): Set<string> {
+function collectPromotedTypeImportNames(program: ProgramNode): Set<string> {
   const names: Set<string> = new Set()
 
   for (const item of program.body) {
-    if (item.type === 'TypeAliasDeclaration' && item.syntheticTypeImport === true) {
+    if (
+      item.type === 'TypeAliasDeclaration' &&
+      item.syntheticTypeImport === true &&
+      item.exported === true &&
+      item.syntheticTypeImportSourceTypeOnly !== true
+    ) {
       names.add(item.name)
     }
   }
@@ -102,34 +109,15 @@ function collectModuleDeclarationSyntheticTypeImportNames(program: ProgramNode):
   return names
 }
 
-function collectModuleDeclarationImportedTypeNames(
-  program: ProgramNode,
-  syntheticTypeImportNames: Set<string>
-): Set<string> {
-  const names: Set<string> = new Set()
-
-  for (const item of program.body) {
-    if (item.type !== 'ImportDeclaration' || item.typeOnly !== true) {
-      continue
-    }
-
-    for (const specifier of item.specifiers) {
-      if (!syntheticTypeImportNames.has(specifier.local)) {
-        names.add(specifier.local)
-      }
-    }
-  }
-
-  return names
-}
-
-function createModuleDeclarationImportNode(item: AnyNode, syntheticTypeImportNames: Set<string>): AnyNode | null {
+function createModuleDeclarationImportNode(item: AnyNode, omittedNames: Set<string>): AnyNode | null {
   const specifiers: AnyNode[] = []
 
   for (const specifier of item.specifiers) {
-    if (!syntheticTypeImportNames.has(specifier.local)) {
-      specifiers.push(specifier)
+    if (omittedNames.has(specifier.local)) {
+      continue
     }
+
+    specifiers.push(specifier)
   }
 
   if (specifiers.length === 0) {
@@ -1599,8 +1587,6 @@ function declarationReturnType(item: AnyNode): string {
     {
       valueType: item.returnType,
       nullable: item.returnNullable,
-      arrayElementDeclaredType: item.returnArrayElementDeclaredType,
-      arrayElementType: item.returnArrayElementType,
       promiseValueType: item.returnPromiseValueType,
       shape: item.returnShape
     },
@@ -1641,7 +1627,7 @@ function typeNameFromMetadata(item: AnyNode, fallback: string): string {
   let typeName = valueType
 
   if (valueType === 'array') {
-    typeName = `array<${stringMetadata(item.arrayElementDeclaredType, stringMetadata(item.arrayElementType, 'unknown'))}>`
+    typeName = 'array<unknown>'
   } else if (valueType === 'promise') {
     typeName = `promise<${stringMetadata(item.promiseValueType, 'unknown')}>`
   }
@@ -1822,8 +1808,6 @@ function cloneFunctionDeclaration(item: AnyNode): AnyNode {
     returnType: stringMetadata(item.returnType, 'void'),
     returnTypeRef: nullableMetadata(item.returnTypeRef),
     returnNullable: item.returnNullable === true,
-    returnArrayElementType: nullableMetadata(item.returnArrayElementType),
-    returnArrayElementDeclaredType: nullableMetadata(item.returnArrayElementDeclaredType),
     returnPromiseValueType: nullableMetadata(item.returnPromiseValueType),
     returnShape: nullableMetadata(item.returnShape),
     body: []
@@ -1865,19 +1849,12 @@ function cloneVariableDeclaration(item: AnyNode): AnyNode {
     declarationOnly: true,
     name: item.name,
     loc: nullableMetadata(item.loc),
-    declaredType: nullableMetadata(item.declaredType ?? item.inferredDeclaredType),
+    declaredType: nullableMetadata(item.declaredType ?? item.inferredDeclaredType ?? inferred.declaredType),
+    typeRef: nullableMetadata(item.typeRef),
     valueType: knownStringMetadata(item.valueType) ?? inferred.valueType ?? stringMetadata(item.valueType, 'unknown'),
     nullable: item.nullable === true,
     shape: nullableMetadata(item.shape),
     functionType: nullableMetadata(item.functionType),
-    arrayElementType:
-      knownStringMetadata(item.arrayElementType) ??
-      inferred.arrayElementType ??
-      nullableMetadata(item.arrayElementType),
-    arrayElementDeclaredType:
-      knownStringMetadata(item.arrayElementDeclaredType) ??
-      inferred.arrayElementDeclaredType ??
-      nullableMetadata(item.arrayElementDeclaredType),
     promiseValueType: nullableMetadata(item.promiseValueType),
     init: null
   }
@@ -1922,8 +1899,7 @@ function inferExpressionDeclarationMetadata(expression: AnyNode | null | undefin
 function scalarDeclarationValueMetadata(valueType: ValueType): DeclarationValueMetadata {
   return {
     valueType,
-    arrayElementType: null,
-    arrayElementDeclaredType: null,
+    declaredType: valueType
   }
 }
 
@@ -1932,8 +1908,7 @@ function arrayLiteralDeclarationValueMetadata(expression: AnyNode): DeclarationV
 
   return {
     valueType: 'array',
-    arrayElementType: elementType,
-    arrayElementDeclaredType: elementType,
+    declaredType: `array<${elementType ?? 'unknown'}>`
   }
 }
 
@@ -1964,8 +1939,7 @@ function arrayLiteralElementType(expression: AnyNode): ValueType | null {
 function emptyDeclarationValueMetadata(): DeclarationValueMetadata {
   return {
     valueType: null,
-    arrayElementType: null,
-    arrayElementDeclaredType: null,
+    declaredType: null
   }
 }
 
@@ -2031,11 +2005,10 @@ function cloneClassFields(fields: AnyNode[] | null | undefined): AnyNode[] {
       weakLoc: nullableMetadata(field.weakLoc),
       loc: nullableMetadata(field.loc),
       declaredType: nullableMetadata(field.declaredType),
+      typeRef: nullableMetadata(field.typeRef),
       optional: field.optional === true,
       valueType: stringMetadata(field.valueType, 'unknown'),
       nullable: field.nullable === true,
-      arrayElementType: nullableMetadata(field.arrayElementType),
-      arrayElementDeclaredType: nullableMetadata(field.arrayElementDeclaredType),
       promiseValueType: nullableMetadata(field.promiseValueType),
       shape: nullableMetadata(field.shape),
       functionType: nullableMetadata(field.functionType),
@@ -2060,13 +2033,12 @@ function cloneClassMethods(methods: AnyNode[] | null | undefined): AnyNode[] {
       static: method.static === true,
       staticLoc: nullableMetadata(method.staticLoc),
       loc: nullableMetadata(method.loc),
+      typeParameters: cloneTypeParameters(method.typeParameters),
       params: cloneParams(method.params),
       declaredReturnType: nullableMetadata(method.declaredReturnType),
       returnType: stringMetadata(method.returnType, 'void'),
       returnTypeRef: nullableMetadata(method.returnTypeRef),
       returnNullable: method.returnNullable === true,
-      returnArrayElementType: nullableMetadata(method.returnArrayElementType),
-      returnArrayElementDeclaredType: nullableMetadata(method.returnArrayElementDeclaredType),
       returnPromiseValueType: nullableMetadata(method.returnPromiseValueType),
       body: []
     })
@@ -2089,9 +2061,8 @@ function cloneParams(params: AnyNode[] | null | undefined): AnyNode[] {
       valueType: stringMetadata(param.valueType, 'unknown'),
       loc: nullableMetadata(param.loc),
       declaredType: nullableMetadata(param.declaredType),
+      typeRef: nullableMetadata(param.typeRef),
       nullable: param.nullable === true,
-      arrayElementType: nullableMetadata(param.arrayElementType),
-      arrayElementDeclaredType: nullableMetadata(param.arrayElementDeclaredType),
       promiseValueType: nullableMetadata(param.promiseValueType),
       shape: nullableMetadata(param.shape),
       functionType: nullableMetadata(param.functionType),

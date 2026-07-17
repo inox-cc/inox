@@ -3,7 +3,7 @@ import type { CompilerLibraryOptionValue, CompilerLibrarySet, TypeRef } from '..
 import type { AnyNode, IrProgram, ModuleRecord, ObjectShapeInfo } from '../types.ts'
 
 export type CEmitOptions = {
-  libraries?: CompilerLibrarySet
+  libraries?: CCompilerLibrarySet
   libraryOptions?: CompilerLibraryOptionValue[]
 }
 
@@ -46,13 +46,44 @@ export type CPreparedCallOptions = {
   prepareOut?: boolean
 }
 
+/** Opaque storage boundary that keeps recursive TypeRef out of large C context shapes. */
+export type CTypeRef = object
+export type CTypeRefMap = Map<string, CTypeRef | null>
+
+/** Opaque storage boundary for library descriptors that contain recursive TypeRef values. */
+export type CCompilerLibrarySet = object
+
+export function cCompilerLibrarySetValue(value: CCompilerLibrarySet): CompilerLibrarySet {
+  return value as CompilerLibrarySet
+}
+
+export function cOptionalCompilerLibrarySetValue(
+  value: CCompilerLibrarySet | null | undefined
+): CompilerLibrarySet | null {
+  if (value === null || typeof value === 'undefined') {
+    return null
+  }
+
+  return cCompilerLibrarySetValue(value)
+}
+
+export function cTypeRefValue(value: CTypeRef | null | undefined): TypeRef | null {
+  if (value === null || typeof value === 'undefined') {
+    return null
+  }
+
+  return value as TypeRef
+}
+
+export function cTypeRefMapValue(values: CTypeRefMap, name: string): TypeRef | null {
+  return cTypeRefValue(values.get(name))
+}
+
 export type CShapeValueMetadata = {
-  arrayElementType?: string | null
-  arrayElementDeclaredType?: string | null
   declaredType?: string | null
   nullable?: boolean
   promiseValueType?: string | null
-  typeRef?: TypeRef | null
+  typeRef?: CTypeRef | null
   valueType: string
 }
 
@@ -67,7 +98,7 @@ export type CObjectShapeField = CShapeValueMetadata & {
   readonlyField?: boolean
   shapeOwnership?: 'weak'
   shape?: CObjectShape | null
-  typeRef?: TypeRef | null
+  typeRef?: CTypeRef | null
   [key: string]: any
 }
 
@@ -87,6 +118,7 @@ export function isReadonlyCObjectShapeField(field: AnyNode): boolean {
 
 export type CObjectShape = {
   builtin?: string | null
+  functionCompanions?: boolean
   libraryCValueAdapter?: string | null
   libraryCppType?: string | null
   libraryTypeId?: string | null
@@ -108,6 +140,7 @@ export function cObjectShapeFromMetadata(shape: ObjectShapeInfo | null): CObject
 
   return {
     builtin: shape.builtin ?? null,
+    functionCompanions: shape.functionCompanions === true,
     libraryCValueAdapter: shape.libraryCValueAdapter ?? null,
     libraryCppType: shape.libraryCppType ?? null,
     libraryTypeId: shape.libraryTypeId ?? null,
@@ -166,7 +199,6 @@ export type CRuntimeArrayElement = CArrayElementInfo & {
 }
 
 export type CFunctionParam = {
-  arrayElementType?: string | null
   className?: string | null
   declaredType?: string | null
   defaultValue?: AnyNode | null
@@ -180,17 +212,18 @@ export type CFunctionParam = {
   promiseValueType?: string | null
   rest?: boolean
   shape?: CObjectShape | null
+  typeRef?: CTypeRef | null
   valueType: string
 }
 
 export type CFunctionType = {
   kind?: 'function'
   params: CFunctionParam[]
-  returnArrayElementType?: string | null
   returnNullable?: boolean
   returnPromiseValueType?: string | null
   returnShape?: CObjectShape | null
   returnType: string
+  returnTypeRef?: CTypeRef | null
 }
 
 export type CFunctionPointerAdapter = {
@@ -244,6 +277,8 @@ export type CNamedCallbackWrapper = {
   name: string
   functionType: CFunctionType
   target: string
+  cTarget?: string | null
+  targetFunctionType?: CFunctionType | null
 }
 
 export type CRuntimeArrowCallbackWrapper = {
@@ -297,9 +332,9 @@ export type CAsyncTaskPrefixLocal = {
   name: string
   type: string
   fieldName: string
-  arrayElementType?: string | null
   forceRuntimeStringDeclaration?: boolean
   shape?: CObjectShape | null
+  typeRef?: CTypeRef | null
 }
 
 export type CAsyncTaskPrefixFrameLocal = CAsyncTaskPrefixLocal & {
@@ -311,10 +346,10 @@ export type CAsyncTaskAwaitStep = {
   name: string | null
   type: string
   fieldName: string | null
-  arrayElementType?: string | null
   awaitedExpression: AnyNode | null
   awaitedPromiseExpression: AnyNode | null
   shape?: CObjectShape | null
+  typeRef?: CTypeRef | null
 }
 
 export type CAsyncTaskAwaitFrameLocal = CAsyncTaskAwaitStep & {

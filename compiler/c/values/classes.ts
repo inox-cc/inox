@@ -1,8 +1,7 @@
 import { diagnostic } from '../../diagnostics.ts'
-import { compilerLibraryNativeTypeForId } from '../../extensions/library-set.ts'
 import { irClassMethodEffectName } from '../../ir.ts'
 import { nodeStringListIncludes } from '../../stdlib/node/string-list.ts'
-import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
+import type { AnyNode, Diagnostic, IrProgram, SourceLocation } from '../../types.ts'
 import {
   emitFunctionPointerParams,
   emitFunctionPointerReturnType,
@@ -13,7 +12,7 @@ import {
 } from '../async/callbacks.ts'
 import { functionTakesEventLoopParam } from '../async/promises.ts'
 import type {
-  CEmitContext,
+  CEmitContextWithDependencies,
   CEventLoopContext,
   CFailureContext,
   CNameContext,
@@ -42,10 +41,11 @@ import type {
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression
 } from '../types.ts'
-import { isReadonlyCObjectShapeField } from '../types.ts'
+import { cTypeRefValue, isReadonlyCObjectShapeField } from '../types.ts'
 import {
   emitCType,
   cRuntimeValueTag,
+  compilerLibraryNativeRuntimeValueExpressionForId,
   isManagedRuntimeReturnType,
   isNullableScalarType,
   isOpaqueRuntimeValueType,
@@ -54,6 +54,8 @@ import {
 } from '../value-types.ts'
 import { emitObjectValueReference, resolveCObjectExpressionName } from './objects.ts'
 import { collectTemplatePlaceholderExpressions } from './strings.ts'
+
+type CEmitContext = CEmitContextWithDependencies<object, object, object, object, object, object>
 
 export type ClassLoweringDependencies = {
   emitCFieldFlags(field: CObjectShapeField): string
@@ -423,6 +425,10 @@ export function classParamUsesCppValueStorage(param: CFunctionParam): boolean {
     return false
   }
 
+  if (classParamLibraryNativeCppType(param) !== null) {
+    return false
+  }
+
   if (classParamUsesCppStringStorage(param)) {
     return false
   }
@@ -451,11 +457,11 @@ function classObjectShapeHasFunctionFields(shape: CObjectShape | null | undefine
     return false
   }
 
-  const fields = shape.fields
-
-  if (fields === null || typeof fields === 'undefined') {
+  if (shape.fields === null || typeof shape.fields === 'undefined') {
     return false
   }
+
+  const fields: CObjectShapeField[] = shape.fields
 
   for (const field of fields) {
     if (field.valueType === 'function') {
@@ -507,11 +513,10 @@ function classFieldUsesNativeClassStorage(field: CObjectShapeField): boolean {
 }
 
 function classFieldLibraryNativeCppType(field: CObjectShapeField): string | null {
-  const typeRef = field.typeRef
+  const typeRef = cTypeRefValue(field.typeRef)
 
   if (
     typeRef === null ||
-    typeof typeRef === 'undefined' ||
     typeRef.kind !== 'nominal' ||
     typeRef.nullable ||
     typeRef.ownership === 'weak'
@@ -615,6 +620,12 @@ function emitCClassParamType(param: CFunctionParam, context: ClassInfoLookupCont
     return 'const ' + emitCClassTypeNameForClassName(context, param.className) + '&'
   }
 
+  const libraryCppType = classParamLibraryNativeCppType(param)
+
+  if (libraryCppType !== null) {
+    return libraryCppType
+  }
+
   if (classParamUsesCppValueStorage(param)) {
     return 'const inox::Value&'
   }
@@ -624,6 +635,15 @@ function emitCClassParamType(param: CFunctionParam, context: ClassInfoLookupCont
   }
 
   return emitCType(param.valueType)
+}
+
+function classParamLibraryNativeCppType(param: CFunctionParam): string | null {
+  return libraryNativeBoundaryCppType(
+    param.valueType,
+    param.nullable === true,
+    param.optional === true,
+    param.shape
+  )
 }
 
 function emitCClassParamName(param: CFunctionParam): string {
@@ -677,11 +697,11 @@ function pushCClassObjectShapeFunctionFieldParamDeclarations(
     return
   }
 
-  const fields = shape.fields
-
-  if (fields === null || typeof fields === 'undefined') {
+  if (shape.fields === null || typeof shape.fields === 'undefined') {
     return
   }
+
+  const fields: CObjectShapeField[] = shape.fields
 
   for (const field of fields) {
     if (field.valueType === 'function') {
@@ -1062,20 +1082,25 @@ function emitCClassDescriptorNativeFieldReadLines(
     return null
   }
 
-  const typeRef = field.typeRef
+  const typeRef = cTypeRefValue(field.typeRef)
 
-  if (typeRef === null || typeof typeRef === 'undefined' || typeRef.kind !== 'nominal') {
+  if (typeRef === null || typeRef.kind !== 'nominal') {
     return null
   }
 
-  const nativeType = compilerLibraryNativeTypeForId(context.libraries, typeRef.typeId)
-  const expression = nativeType?.cRuntimeValueExpression
+  const typeId = typeRef.typeId
+
+  if (typeId === null || typeof typeId === 'undefined' || typeId === '') {
+    return null
+  }
+
+  const expression = compilerLibraryNativeRuntimeValueExpressionForId(context.libraries, typeId)
 
   if (expression === null || typeof expression === 'undefined') {
     context.diagnostics.push(
       diagnostic(
         'INOX_C_CLASS',
-        `native class field ${field.name} type ${typeRef.typeId} requires a C++ runtime value expression`,
+        `native class field ${field.name} type ${typeId} requires a C++ runtime value expression`,
         field.loc
       )
     )
@@ -1170,7 +1195,7 @@ export function createClassInfos(
   return infos
 }
 
-export function collectCClassDescriptorNames(programs: AnyNode[], classInfos: CClassInfoMap): CClassDescriptorNameSet {
+export function collectCClassDescriptorNames(programs: IrProgram[], classInfos: CClassInfoMap): CClassDescriptorNameSet {
   const names: CClassDescriptorNameSet = new Set()
 
   for (const program of programs) {
@@ -2219,8 +2244,6 @@ function resolveClassShapeField(field: CObjectShapeField): CObjectShapeField {
     readonlyField: isReadonlyCObjectShapeField(field),
     ownership,
     valueType,
-    arrayElementType: field.arrayElementType,
-    arrayElementDeclaredType: field.arrayElementDeclaredType,
     className: field.className,
     declaredType: field.declaredType,
     shape: field.shape,
@@ -2486,8 +2509,6 @@ export function registerClassObjectShape(context: ClassFunctionContext, name: st
       ownership: classFieldOwnership(field),
       readonlyField: isReadonlyCObjectShapeField(field),
       valueType: field.valueType,
-      arrayElementType: field.arrayElementType,
-      arrayElementDeclaredType: field.arrayElementDeclaredType,
       className: field.className,
       declaredType: field.declaredType,
       shape: field.shape,
@@ -3093,7 +3114,11 @@ function emitPreparedThrowingClassMethodCallExpression(
       lines.push(`double ${result} = 0;`)
     }
 
-    callArgs.push(`&${result}`)
+    if (returnCppType !== null) {
+      callArgs.push(`std::addressof(${result})`)
+    } else {
+      callArgs.push(`&${result}`)
+    }
   }
 
   callArgs.push('&inox_error')

@@ -35,6 +35,7 @@ type FieldDefinitionOptions = {
 type MethodDefinitionOptions = {
   name: Token
   staticToken: Token | null
+  typeParameters: AnyNode[]
   params: AnyNode[]
   declaredReturnType: string | null
   returnType: string
@@ -106,9 +107,6 @@ export function createParam(
     declaredType: null,
     typeRef: null,
     nullable: false,
-    arrayElementType: null,
-    arrayElementDeclaredType: null,
-    arrayElementFunctionType: null,
     promiseValueType: null,
     promiseRejectionIntrinsicRole: null,
     functionType: null,
@@ -134,8 +132,6 @@ export function createFunctionDeclaration(options: FunctionDeclarationOptions): 
     returnType: options.returnType,
     returnTypeRef: null,
     returnNullable: false,
-    returnArrayElementType: null,
-    returnArrayElementDeclaredType: null,
     returnPromiseValueType: null,
     returnShape: options.returnShape,
     body: options.body
@@ -250,6 +246,7 @@ export function createMethodDefinition(options: MethodDefinitionOptions): AnyNod
     static: options.staticToken !== null && typeof options.staticToken !== 'undefined',
     staticLoc: nullableTokenLocation(options.staticToken),
     loc: locFromToken(options.name),
+    typeParameters: options.typeParameters,
     params: options.params,
     declaredReturnType: options.declaredReturnType,
     returnType: options.returnType,
@@ -269,9 +266,6 @@ export function createVariableDeclaration(options: VariableDeclarationOptions): 
     init: options.init,
     valueType: 'unknown',
     nullable: false,
-    arrayElementType: null,
-    arrayElementDeclaredType: null,
-    arrayElementFunctionType: null,
     promiseValueType: null,
     promiseRejectionIntrinsicRole: null,
     functionType: null,

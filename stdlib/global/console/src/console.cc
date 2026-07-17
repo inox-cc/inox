@@ -190,14 +190,15 @@ static inox_status inox_console_format_array(ConsoleFormatBuffer* buffer, inox_v
     return INOX_ERR_TYPE;
   }
 
-  ArrayStorage* array = (ArrayStorage*)value.as.ref;
+  Array array{inox::Value(value)};
+  size_t length = array.length();
   inox_status status = inox_console_format_append(buffer, "[", 1);
 
   if (status != INOX_OK) {
     return status;
   }
 
-  for (size_t index = 0; index < array->length; index += 1) {
+  for (size_t index = 0; index < length; index += 1) {
     if (index != 0) {
       status = inox_console_format_append(buffer, ", ", 2);
 
@@ -206,7 +207,7 @@ static inox_status inox_console_format_array(ConsoleFormatBuffer* buffer, inox_v
       }
     }
 
-    status = inox_console_format_value_into(buffer, array->items[index], depth + 1);
+    status = inox_console_format_value_into(buffer, array.get(index).raw(), depth + 1);
 
     if (status != INOX_OK) {
       return status;

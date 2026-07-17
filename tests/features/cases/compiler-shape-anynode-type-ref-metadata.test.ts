@@ -4,8 +4,8 @@
 
 type AnyNode = { [key: string]: any }
 
-function attachArrayFunctionTypeMetadata(statement: AnyNode): void {
-  statement.arrayElementFunctionType = null
+function attachTypeRefMetadata(statement: AnyNode): void {
+  statement.typeRef = null
   statement.valueType = 'array'
 }
 
@@ -15,5 +15,5 @@ const statement: AnyNode = {
   valueType: 'unknown'
 }
 
-attachArrayFunctionTypeMetadata(statement)
+attachTypeRefMetadata(statement)
 console.log(`${statement.name} ${statement.valueType}`)

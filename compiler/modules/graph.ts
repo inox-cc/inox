@@ -60,6 +60,7 @@ type ModuleGraphDeclarationImport = {
   functionEffects: IrFunctionEffect[]
   functionEffectsPath: string | null
   program: ProgramNode | null
+  resolvedProgram: ProgramNode | null
 }
 
 export async function buildModuleGraph(
@@ -501,7 +502,8 @@ function visitModuleGraphDeclarationImport(
   context.visiting.add(path)
 
   const source = moduleGraphDeclarationImportSource(context, declarationImport)
-  const program = moduleGraphDeclarationImportProgram(context, declarationImport, source)
+  const resolvedProgram = declarationImport.resolvedProgram
+  const program = resolvedProgram ?? moduleGraphDeclarationImportProgram(context, declarationImport, source)
 
   if (program === null || typeof program === 'undefined') {
     context.visiting.delete(path)
@@ -541,6 +543,16 @@ function visitModuleGraphDeclarationImport(
 
   context.modules.set(path, module)
   prepareModuleTypeImportDeclarations(context, module, libraryLiteralTypeInference)
+
+  if (resolvedProgram !== null) {
+    module.hir = resolvedProgram
+    module.declarationProgram = resolvedProgram
+    module.exports = collectExports(resolvedProgram)
+    context.visiting.delete(path)
+    context.order.push(module)
+    return true
+  }
+
   const checked = checkProgram(
     insertImportSyntheticDeclarations(program, module.typeImportDeclarations),
     context.options,
@@ -593,7 +605,10 @@ function moduleGraphDeclarationImportSource(
     return declarationSource
   }
 
-  if (declarationImport.program !== null && typeof declarationImport.program !== 'undefined') {
+  if (
+    (declarationImport.program !== null && typeof declarationImport.program !== 'undefined') ||
+    (declarationImport.resolvedProgram !== null && typeof declarationImport.resolvedProgram !== 'undefined')
+  ) {
     return null
   }
 
@@ -934,6 +949,7 @@ function appendSyntheticDeclarations(program: ProgramNode, declarations: AnyNode
       if (existingIndex !== null && typeof existingIndex !== 'undefined') {
         if (declaration.exported === true && body[existingIndex].type === 'TypeAliasDeclaration') {
           body[existingIndex].exported = true
+          body[existingIndex].syntheticTypeImportSourceTypeOnly = false
         }
 
         continue
@@ -986,8 +1002,7 @@ function applyImportedDeclarationMetadata(specifier: AnyNode, declaration: AnyNo
   }
 
   specifier.valueType = stdlibDeclarationNodeValueType(declaration)
-  specifier.arrayElementType = declaration.arrayElementType ?? null
-  specifier.arrayElementDeclaredType = declaration.arrayElementDeclaredType ?? null
+  specifier.typeRef = declaration.typeRef ?? null
   specifier.promiseValueType = declaration.promiseValueType ?? null
   specifier.shape = declaration.shape ?? null
 }
@@ -1018,8 +1033,6 @@ function applyImportedFunctionDeclarationMetadata(specifier: AnyNode, declaratio
   specifier.returnType = declaration.returnType ?? declaration.declaredReturnType ?? 'unknown'
   specifier.returnTypeRef = declaration.returnTypeRef ?? null
   specifier.returnNullable = declaration.returnNullable === true
-  specifier.returnArrayElementType = declaration.returnArrayElementType ?? null
-  specifier.returnArrayElementDeclaredType = declaration.returnArrayElementDeclaredType ?? null
   specifier.returnPromiseValueType = declaration.returnPromiseValueType ?? null
   specifier.returnShape = declaration.returnShape ?? null
 }
@@ -1099,6 +1112,10 @@ function requireModuleGraphRecord(context: ModuleGraphContext, path: string): Mo
 
 function moduleProgramForTypeImports(module: ModuleRecord): ProgramNode {
   if (module.declarationProgram !== null && typeof module.declarationProgram !== 'undefined') {
+    if (module.typeImportDeclarations.size > 0) {
+      return insertImportSyntheticDeclarations(module.declarationProgram, module.typeImportDeclarations)
+    }
+
     return module.declarationProgram
   }
 
@@ -1127,7 +1144,7 @@ function resolveModuleGraphImport(
   context: ModuleGraphContext,
   fromPath: string,
   specifier: string,
-  loc: SourceLocation
+  loc: SourceLocation | null | undefined
 ): string {
   const declarationImportPath = resolveDeclarationImportSpecifier(context, fromPath, specifier)
 
@@ -1173,7 +1190,8 @@ function prepareModuleGraphDeclarationImports(
       declarationSource: item.declarationSource ?? null,
       functionEffects: item.functionEffects ?? [],
       functionEffectsPath,
-      program: item.program ?? null
+      program: item.program ?? null,
+      resolvedProgram: item.resolvedProgram ?? null
     })
   }
 

@@ -69,9 +69,9 @@ public:
 
   Buffer readFileSync(inox::StringView path);
   inox::String readFileSync(inox::StringView path, inox::StringView encoding);
-  ArrayClass readdirSync(inox::StringView path);
-  ArrayClass readdirSync(inox::StringView path, inox::StringView encoding);
-  ArrayClass readdirSync(inox::StringView path, FsReadDirOptions options);
+  Array readdirSync(inox::StringView path);
+  Array readdirSync(inox::StringView path, inox::StringView encoding);
+  Array readdirSync(inox::StringView path, FsReadDirOptions options);
   FsStats statSync(inox::StringView path);
   FsStats lstatSync(inox::StringView path);
   inox::String realpathSync(inox::StringView path);

@@ -20,7 +20,7 @@ console.log(new Values([1, 2]))
     { libraries: defaultCompilerLibrarySet, target: 'cc' }
   )
 
-  assert.match(result.code, /ArrayClass items;/)
+  assert.match(result.code, /Array items;/)
   assert.match(result.code, /\*out = value\.items\.raw\(\);/)
   assert.match(result.code, /inox_retain\(\*out\);/)
   assert.doesNotMatch(result.code, /case 0:\n\s+\*out = inox_undefined_value\(\);/)

@@ -1,3 +1,5 @@
+import { typeRefIterableElementValueType } from '../extensions/type-ref-compatibility.ts'
+import type { CompilerLibrarySet, TypeRef } from '../extensions/types.ts'
 import type { AnyNode, ValueType } from '../types.ts'
 import {
   checkerNodeAt,
@@ -90,14 +92,16 @@ export function paramForArgument(params: OptionalParamInfo[], index: number): Op
   return null
 }
 
-export function argumentParamValueType(param: OptionalParamInfo): ValueType {
-  if (
-    param.rest === true &&
-    param.valueType === 'array' &&
-    param.arrayElementType !== null &&
-    typeof param.arrayElementType !== 'undefined'
-  ) {
-    return param.arrayElementType as ValueType
+export function argumentParamValueType(param: OptionalParamInfo, libraries: CompilerLibrarySet): ValueType {
+  if (param.rest === true && param.valueType === 'array') {
+    const elementValueType = typeRefIterableElementValueType(
+      param.typeRef as TypeRef | null | undefined,
+      libraries
+    )
+
+    if (elementValueType !== null) {
+      return elementValueType
+    }
   }
 
   return param.valueType as ValueType

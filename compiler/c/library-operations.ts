@@ -1,4 +1,5 @@
 import type { AnyNode } from '../types.ts'
+import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
 import {
   emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
@@ -7,7 +8,7 @@ import {
   registerOwnedPromise,
   registerOwnedValue
 } from './context.ts'
-import type { CFunctionContext } from './context.ts'
+import type { CFunctionContextWithDependencies } from './context.ts'
 import { cStringLiteral, emitCIdentifier } from './identifiers.ts'
 import type {
   CFunctionType,
@@ -17,6 +18,20 @@ import type {
   CPreparedExpression as PreparedExpression,
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from './types.ts'
+import type { ArrayLoweringDependencies } from './values/arrays.ts'
+import type { ClassLoweringDependencies } from './values/classes.ts'
+import type { NullableLoweringDependencies } from './values/nullable.ts'
+import type { StatementLoweringDependencies } from './values/statements.ts'
+import type { StringLoweringDependencies } from './values/strings.ts'
+
+type CFunctionContext = CFunctionContextWithDependencies<
+  ArrayLoweringDependencies,
+  AsyncTaskLoweringDependencies,
+  ClassLoweringDependencies,
+  NullableLoweringDependencies,
+  StatementLoweringDependencies,
+  StringLoweringDependencies
+>
 
 type CompilerLibraryCArgumentSource = {
   argumentIndex: number
@@ -35,6 +50,7 @@ type CompilerLibraryExpressionNode = AnyNode & {
   libraryCFailureMode?: string | null
   libraryCResultMode?: string | null
   libraryCReceiverAdapter?: string | null
+  libraryCResultAdapter?: string | null
   libraryConstantValue?: string | null
   libraryCallbackLifetime?: string | null
   libraryCppType?: string | null
@@ -467,7 +483,11 @@ export function emitPreparedCompilerLibraryCallExpression(
         continue
       }
 
-      const prepared = dependencies.emitRuntimeCallbackValue(callback, callback.functionType, context)
+      const prepared = dependencies.emitRuntimeCallbackValue(
+        callback,
+        callback.libraryRuntimeCallbackFunctionType ?? callback.functionType,
+        context
+      )
       pushLines(lines, prepared.lines)
       argumentsList.push(prepared.expression)
 
@@ -763,7 +783,7 @@ export function emitPreparedCompilerLibraryCallExpression(
 
     const result: PreparedExpression = {
       lines,
-      expression: out,
+      expression: applyCompilerLibraryValueAdapter(out, item.libraryCResultAdapter),
       cppType,
       nullable: item.nullable === true,
       owned: item.libraryOwned === true,
@@ -780,7 +800,7 @@ export function emitPreparedCompilerLibraryCallExpression(
 
   return {
     lines,
-    expression: callExpression,
+    expression: applyCompilerLibraryValueAdapter(callExpression, item.libraryCResultAdapter),
     cppType: declaredCppType ?? undefined,
     scalarType,
     nullable: item.nullable === true,
@@ -857,7 +877,7 @@ export function compilerLibraryRuntimeCallbackArgumentInfo(
     if (kind === 'runtime-callback' || kind === 'optional-runtime-callback') {
       const index = argumentSource?.argumentIndex ?? sourceArgumentIndex
       const callback = expression.args[index]
-      const functionType = callback?.functionType
+      const functionType = callback?.libraryRuntimeCallbackFunctionType ?? callback?.functionType
 
       if (functionType !== null && typeof functionType !== 'undefined') {
         return { functionType: functionType as CFunctionType, index }

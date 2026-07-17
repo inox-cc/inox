@@ -257,7 +257,8 @@ function sendVariant(
 ): LibraryOperationVariantDescriptor {
   const kinds: LibraryCArgumentKind[] = ['receiver']
   const adapters: string[] = ['']
-  const sources: Array<{ argumentIndex: number } | null> = [null]
+  const sources: Array<{ argumentIndex: number } | null> = []
+  sources.push(null)
 
   if (messageType === 'string') {
     kinds.push('string-view')

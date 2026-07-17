@@ -74,11 +74,12 @@ console.log(strNum, strBool, strNull, strTpl, numText, hexText)
   )
   assert.match(source, /inox_return = inox_return_value_\d+;/)
   assert.doesNotMatch(source, /inox_return = inox::String\([^\n]+\)\.slice\([^\n]*\);/)
+  assert.match(source, /static Array words\(inox_value inox_param_value\)/)
   assert.match(
     source,
-    /auto inox_return_value_\d+ = \(inox_string_value_\d+ == nullptr \? inox::String\(\) : inox::String\(inox_string_value_\d+->bytes, inox_string_value_\d+->len\)\)\.split\(","\);/
+    /inox_return = \(inox_string_value_\d+ == nullptr \? inox::String\(\) : inox::String\(inox_string_value_\d+->bytes, inox_string_value_\d+->len\)\)\.split\(","\);/
   )
-  assert.doesNotMatch(source, /inox_return = inox::String\([^\n]+\)\.split\([^\n]*\);/)
+  assert.doesNotMatch(source, /static inox_value words\(/)
   assert.doesNotMatch(source, /inox::String\([^\n]+\)\.slice\([^\n]*\)\.(tag|as\.ref)/)
   assert.match(source, /auto value_default_\d+ = inox::String\("fallback", 8\);/)
   assert.match(source, /inox_retain\(inox_param_value\);/)

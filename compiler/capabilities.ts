@@ -24,11 +24,6 @@ type CapabilityMemberNode = AnyNode & {
   type?: string | null
 }
 
-type CapabilityArrayDeclarationNode = {
-  loweredArrayMethod: boolean
-  loweredArrayMethodName?: string | null
-}
-
 type RuntimeCapabilityKey = string
 
 type CapabilityUsage = {
@@ -176,48 +171,6 @@ function recordNodeCapabilityUsages(expression: CapabilityNode, usages: Capabili
     }
   }
 
-  const arrayMethod = arrayProducingMethodName(expression)
-
-  if (arrayMethod !== null && typeof arrayMethod !== 'undefined') {
-    pushCapability(usages, 'heap', 'heap', `Array.${arrayMethod}`, loc)
-  }
-}
-
-function arrayProducingMethodName(expression: CapabilityNode): string | null {
-  const expressionType = expression.type
-
-  if (expressionType === 'VariableDeclaration') {
-    const declaration = expression as CapabilityArrayDeclarationNode
-    const isLoweredArrayMethod = declaration.loweredArrayMethod
-
-    if (isLoweredArrayMethod !== true) {
-      return null
-    }
-
-    const method = declaration.loweredArrayMethodName
-
-    if (method === 'filter' || method === 'map') {
-      return method
-    }
-  }
-
-  if (expressionType !== 'CallExpression' || expression.valueType !== 'array') {
-    return null
-  }
-
-  const callee = expression.callee
-
-  if (callee === null || typeof callee === 'undefined' || callee.type !== 'MemberExpression') {
-    return null
-  }
-
-  const property = callee.property
-
-  if (property === 'filter' || property === 'map') {
-    return property
-  }
-
-  return null
 }
 
 function locationKey(loc: SourceLocation | undefined): string {

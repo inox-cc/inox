@@ -58,12 +58,12 @@ createServer((request, response) => {
     source,
     /static inox_status inox_callback_arrow_\d+\(void\* inox_context, const inox_value\* args, size_t arg_count, inox_value\* out\)/
   )
-  assert.match(source, /arg_count != 2/)
-  assert.match(source, /inox_value request = args\[0\];/)
-  assert.match(source, /inox_value response = args\[1\];/)
-  assert.match(source, /HttpRequest\(request\)\.url\(\)/)
-  assert.match(source, /HttpResponse\(response\)\.end\(/)
-  assert.match(source, /HttpResponse\(response\)\.setStatusCode\(404\)/)
+  assert.match(source, /arg_count < 2/)
+  assert.match(source, /HttpRequest request = args\[0\];/)
+  assert.match(source, /HttpResponse response = args\[1\];/)
+  assert.match(source, /request\.url\(\)/)
+  assert.match(source, /response\.end\(/)
+  assert.match(source, /response\.setStatusCode\(404\)/)
   assert.match(source, /http\.createServer\(inox_callback_\d+\)/)
   assert.doesNotMatch(source, /inox_http_|inox_http_handler_|HttpHandlerFn/)
   assert.doesNotMatch(source, /sendFsFile|\.raw\(\)/)

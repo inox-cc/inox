@@ -21,6 +21,8 @@ import {
 } from '../runtime-values.ts'
 import { cUnsupportedExpressionCode } from '../syntax.ts'
 import type {
+  CCompilerLibrarySet,
+  CFunctionParam,
   CFunctionType,
   CKnownObjectField,
   CKnownObjectIndexField,
@@ -35,6 +37,7 @@ import type {
 import { isReadonlyCObjectShapeField } from '../types.ts'
 import {
   applyLibraryNativeValueAdapter,
+  cIterableElementDeclaredName,
   cRuntimeValueTag,
   isManagedRuntimeReturnType,
   isNullableScalarType,
@@ -71,6 +74,7 @@ type ObjectFunctionContext = ObjectShapeContext &
   ObjectNameContext & {
     cleanupEnabled: boolean
     diagnostics: Diagnostic[]
+    libraries?: CCompilerLibrarySet
     errorChannelUsed?: boolean
     errorTargetActiveFlags?: boolean[]
     errorTargets?: string[]
@@ -287,7 +291,28 @@ function appendCompilerAnyNodeFallbackShapeFieldGroup(
   shape: CObjectShape | null = null
 ): void {
   for (const name of names) {
-    if (findObjectShapeFieldIndex(fields, name) !== -1) {
+    const existingIndex = findObjectShapeFieldIndex(fields, name)
+
+    if (existingIndex !== -1) {
+      const existing = fields[existingIndex]
+
+      if (
+        existing !== null &&
+        typeof existing !== 'undefined' &&
+        existing.valueType === 'unknown' &&
+        valueType !== 'unknown'
+      ) {
+        existing.valueType = valueType
+
+        if (declaredType !== null && typeof declaredType !== 'undefined') {
+          existing.declaredType = declaredType
+        }
+
+        if (shape !== null && typeof shape !== 'undefined') {
+          existing.shape = shape
+        }
+      }
+
       continue
     }
 
@@ -450,8 +475,6 @@ function normalizedObjectShapeField(field: CObjectShapeField): CObjectShapeField
     declaredType: field.declaredType,
     typeRef: field.typeRef,
     valueType: field.valueType,
-    arrayElementType: field.arrayElementType,
-    arrayElementDeclaredType: field.arrayElementDeclaredType,
     promiseValueType: field.promiseValueType,
     libraryCMember: field.libraryCMember,
     libraryCppType: field.libraryCppType,
@@ -609,7 +632,6 @@ function knownObjectMemberField(objectName: string, index: number, field: CObjec
     optional: field.optional,
     nullable: field.nullable,
     valueType: field.valueType,
-    arrayElementType: field.arrayElementType,
     declaredType: field.declaredType,
     typeRef: field.typeRef,
     shape: field.shape,
@@ -755,8 +777,8 @@ function knownObjectIndexField(
     optional: field.optional,
     nullable: field.nullable,
     valueType: field.valueType,
-    arrayElementType: field.arrayElementType,
     declaredType: field.declaredType,
+    typeRef: field.typeRef,
     shape: field.shape,
     functionType: field.functionType
   }
@@ -804,8 +826,8 @@ function resolveObjectExpressionShapeField(objectExpression: AnyNode, key: strin
     optional: field.optional,
     nullable: field.nullable,
     valueType: field.valueType,
-    arrayElementType: field.arrayElementType,
     declaredType: field.declaredType,
+    typeRef: field.typeRef,
     shape: field.shape,
     functionType: field.functionType
   }
@@ -917,7 +939,8 @@ export function emitPreparedObjectExpressionScalarMemberValueExpression(
       expression,
       expression.object,
       context,
-      dependencies
+      dependencies,
+      true
     )
   }
 
@@ -1143,9 +1166,13 @@ function emitPreparedObjectExpressionFieldValueExpression(
   expression: AnyNode,
   objectExpression: AnyNode,
   context: ObjectFunctionContext,
-  dependencies: ObjectExpressionFieldDependencies
+  dependencies: ObjectExpressionFieldDependencies,
+  allowScalar: boolean = false
 ): PreparedExpression | null {
-  if (!isManagedObjectFieldValueType(field.valueType)) {
+  if (
+    !isManagedObjectFieldValueType(field.valueType) &&
+    (!allowScalar || !isScalarObjectFieldValueType(field.valueType))
+  ) {
     return null
   }
 
@@ -1218,6 +1245,7 @@ function preparedObjectFieldReadValue(
     lines,
     expression: value,
     cppType: 'inox::Value',
+    nullable: objectFieldValueMayBeNullish(field),
     runtimeTypeChecked: libraryNativeCppType(field.shape) !== null,
     valueType: field.valueType
   }
@@ -1495,7 +1523,7 @@ function emitObjectFunctionFieldVariableDeclaration(
 ): string[] {
   const name = emitCObjectFunctionFieldName(objectName, field.name)
 
-  if (isRuntimeObjectFunctionField(field)) {
+  if (isRuntimeObjectFunctionField(field, seenTypes)) {
     registerOwnedValue(context, name)
     return dependencies.emitRuntimeCallbackValueInto(property.value, field.functionType, name, context)
   }
@@ -1571,11 +1599,11 @@ function emitObjectShapeFunctionFieldVariableDeclarations(
     return lines
   }
 
-  const fields = shape.fields
+  const fields: CObjectShapeField[] = shape.fields
 
   for (const field of fields) {
     if (field.valueType === 'function') {
-      if (isSupportedObjectFunctionField(field)) {
+      if (isSupportedObjectFunctionField(field, seenTypes)) {
         appendLines(
           lines,
           emitObjectShapeFunctionFieldVariableDeclaration(objectName, field, source, context, dependencies, seenTypes)
@@ -1629,7 +1657,7 @@ function emitObjectShapeFunctionFieldVariableDeclaration(
   const value = objectFunctionFieldSourcePropertyValue(source, field.name)
   const name = emitCObjectFunctionFieldName(objectName, field.name)
 
-  if (isRuntimeObjectFunctionField(field)) {
+  if (isRuntimeObjectFunctionField(field, seenTypes)) {
     return emitRuntimeObjectShapeFunctionFieldVariableDeclaration(name, field, source, value, context, dependencies)
   }
 
@@ -1648,6 +1676,8 @@ function emitObjectShapeFunctionFieldVariableDeclaration(
   }
 
   if (source.pathName !== null && typeof source.pathName !== 'undefined') {
+    refineObjectFunctionFieldNativeBoundaryMetadata(field, source.pathName, context)
+
     return [
       `${dependencies.emitFunctionPointerVariableWithCInitializer(
         name,
@@ -1688,6 +1718,86 @@ function emitObjectShapeFunctionFieldVariableDeclaration(
       seenTypes
     )};`
   ]
+}
+
+function refineObjectFunctionFieldNativeBoundaryMetadata(
+  field: CObjectShapeField,
+  sourceObjectName: string,
+  context: ObjectFunctionContext
+): void {
+  const targetType = field.functionType
+  const sourceFields = context.objectShapes.get(sourceObjectName)
+
+  if (
+    targetType === null ||
+    typeof targetType === 'undefined' ||
+    sourceFields === null ||
+    typeof sourceFields === 'undefined'
+  ) {
+    return
+  }
+
+  const sourceIndex = findObjectShapeFieldIndex(sourceFields, field.name)
+  const sourceField = objectShapeFieldAt(sourceFields, sourceIndex)
+  const sourceType = sourceField?.functionType
+
+  if (
+    sourceType === null ||
+    typeof sourceType === 'undefined' ||
+    targetType.returnType !== sourceType.returnType ||
+    targetType.returnNullable === true !== (sourceType.returnNullable === true) ||
+    targetType.params.length !== sourceType.params.length
+  ) {
+    return
+  }
+
+  const params: CFunctionParam[] = []
+  let changed = false
+
+  for (let index = 0; index < targetType.params.length; index = index + 1) {
+    const targetParam = targetType.params[index]
+    const sourceParam = sourceType.params[index]
+
+    if (
+      targetParam.valueType !== sourceParam.valueType ||
+      (targetParam.nullable === true) !== (sourceParam.nullable === true) ||
+      (targetParam.optional === true) !== (sourceParam.optional === true) ||
+      (targetParam.rest === true) !== (sourceParam.rest === true)
+    ) {
+      return
+    }
+
+    if (libraryNativeCppType(targetParam.shape) === null && libraryNativeCppType(sourceParam.shape) !== null) {
+      params.push({
+        ...targetParam,
+        typeRef: sourceParam.typeRef ?? targetParam.typeRef,
+        shape: sourceParam.shape
+      })
+      changed = true
+    } else {
+      params.push(targetParam)
+    }
+  }
+
+  let returnTypeRef = targetType.returnTypeRef
+  let returnShape = targetType.returnShape
+
+  if (libraryNativeCppType(returnShape) === null && libraryNativeCppType(sourceType.returnShape) !== null) {
+    returnTypeRef = sourceType.returnTypeRef ?? returnTypeRef
+    returnShape = sourceType.returnShape
+    changed = true
+  }
+
+  if (!changed) {
+    return
+  }
+
+  field.functionType = {
+    ...targetType,
+    params,
+    returnTypeRef,
+    returnShape
+  }
 }
 
 function emitRuntimeObjectShapeFunctionFieldVariableDeclaration(
@@ -1861,7 +1971,7 @@ export function emitObjectVariableDeclaration(
 
     if (property !== null && typeof property !== 'undefined') {
       if (field.valueType === 'function') {
-        if (isSupportedObjectFunctionField(field)) {
+        if (isSupportedObjectFunctionField(field, seenTypes)) {
           appendLines(
             lines,
             emitObjectFunctionFieldVariableDeclaration(
@@ -1986,12 +2096,12 @@ function objectSpreadPropertyHasField(property: ObjectPropertyNode, fieldName: s
   return false
 }
 
-function isSupportedObjectFunctionField(field: CObjectShapeField): boolean {
-  return isPlainObjectFunctionField(field) || isRuntimeFunctionType(field.functionType)
+function isSupportedObjectFunctionField(field: CObjectShapeField, seenTypes: string[] = []): boolean {
+  return isPlainObjectFunctionField(field, seenTypes) || isRuntimeFunctionType(field.functionType)
 }
 
-function isRuntimeObjectFunctionField(field: CObjectShapeField): boolean {
-  return !isPlainObjectFunctionField(field) && isRuntimeFunctionType(field.functionType)
+function isRuntimeObjectFunctionField(field: CObjectShapeField, seenTypes: string[] = []): boolean {
+  return !isPlainObjectFunctionField(field, seenTypes) && isRuntimeFunctionType(field.functionType)
 }
 
 function objectVariableDeclaredTypes(statement: AnyNode): string[] {
@@ -2041,11 +2151,18 @@ function shouldUseObjectPropertyStringMetadata(
   return target === null || typeof target === 'undefined' || target === 'unknown'
 }
 
-function objectPropertyDeclaredType(value: ObjectFieldNode): string | null | undefined {
-  const arrayElementDeclaredType = value.arrayElementDeclaredType
+function objectPropertyDeclaredType(
+  value: ObjectFieldNode,
+  context: ObjectFunctionContext
+): string | null | undefined {
+  const libraries = context.libraries
 
-  if (arrayElementDeclaredType !== null && typeof arrayElementDeclaredType !== 'undefined') {
-    return arrayElementDeclaredType
+  if (libraries !== null && typeof libraries !== 'undefined') {
+    const elementDeclaredName = cIterableElementDeclaredName(value.typeRef, libraries)
+
+    if (elementDeclaredName !== null) {
+      return elementDeclaredName
+    }
   }
 
   return value.declaredType
@@ -2058,7 +2175,7 @@ function objectShapeFieldWithPropertyMetadata(
   dependencies: ObjectVariableDeclarationDependencies
 ): CObjectShapeField {
   const value = property.value
-  const declaredType = objectPropertyDeclaredType(value)
+  const declaredType = objectPropertyDeclaredType(value, context)
   const next: CObjectShapeField = {
     name: field.name,
     optional: field.optional,
@@ -2069,7 +2186,6 @@ function objectShapeFieldWithPropertyMetadata(
     typeRef: field.typeRef,
     nullable: field.nullable,
     valueType: field.valueType,
-    arrayElementType: field.arrayElementType,
     shapeOwnership: field.shapeOwnership,
     shape: field.shape,
     functionTypeOwnership: field.functionTypeOwnership,
@@ -2097,10 +2213,6 @@ function objectShapeFieldWithPropertyMetadata(
     next.declaredType = declaredType
   }
 
-  if (shouldUseObjectPropertyStringMetadata(next.arrayElementType, value.arrayElementType)) {
-    next.arrayElementType = value.arrayElementType
-  }
-
   if (next.shape === null || typeof next.shape === 'undefined') {
     next.shape = value.shape
   }
@@ -2116,16 +2228,16 @@ function objectShapeFieldFromProperty(
   property: ObjectPropertyNode,
   valueType: string,
   shape: CObjectShape | null | undefined,
-  functionType: CFunctionType | null
+  functionType: CFunctionType | null,
+  context: ObjectFunctionContext
 ): CObjectShapeField {
   return {
     name: property.key,
     readonly: property.value.readonly,
     readonlyField: false,
-    declaredType: objectPropertyDeclaredType(property.value),
+    declaredType: objectPropertyDeclaredType(property.value, context),
     typeRef: property.value.typeRef ?? null,
     valueType,
-    arrayElementType: property.value.arrayElementType,
     shape,
     functionType
   }
@@ -2212,7 +2324,7 @@ function objectVariableShapeFields(
       }
     }
 
-    fields.push(objectShapeFieldFromProperty(property, valueType, shape, functionType))
+    fields.push(objectShapeFieldFromProperty(property, valueType, shape, functionType, context))
   }
 
   if (shouldAppendAnyNodeFallback) {

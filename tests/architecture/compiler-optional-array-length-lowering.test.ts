@@ -14,6 +14,6 @@ function size(values: number[] | null): number {
     { libraries: defaultCompilerLibrarySet, target: 'cc' }
   )
 
-  assert.match(result.code, /ArrayClass\(values\)\.length\(\)/)
+  assert.match(result.code, /Array\(values\)\.length\(\)/)
   assert.doesNotMatch(result.code, /inox::get\(values, "length"\)/)
 })

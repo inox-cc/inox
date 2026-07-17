@@ -191,9 +191,6 @@ export function emitCPrelude(
   if (needsRuntime) {
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/allocator.h"')
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/loop.h"')
-    if (needsCollectionRuntime) {
-      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/array.h"')
-    }
     if (needsAsyncRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/promise.h"')
     }

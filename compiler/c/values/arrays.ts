@@ -1,15 +1,13 @@
-import { arrayRuntimeMethodName } from '../../../stdlib/global/compiler/descriptor.ts'
 import { memberExpressionPath } from '../../member-paths.ts'
-import type { AnyNode, ArrayBindingElement } from '../../types.ts'
-import type { CFunctionContext } from '../context.ts'
 import {
-  cloneCArrayShapeMap,
-  cloneCFunctionTypeMap,
-  cloneCNumberMap,
-  cloneCObjectShapeFieldMap,
-  cloneCPromiseConstructorHandlerMap,
-  cloneCStringMap,
-  cloneCStringSet,
+  arrayElementTypeNameFromTypeName,
+  isArrayTypeName,
+  isBuiltinValueType,
+  nullableTypeNameFromTypeName
+} from '../../type-names.ts'
+import type { AnyNode, SourceLocation } from '../../types.ts'
+import type { CFunctionContextWithDependencies } from '../context.ts'
+import {
   emitPrepareOwnedValueWrite,
   emitFailureStatement,
   emitRuntimeTypeCheck,
@@ -23,45 +21,43 @@ import type {
   CFunctionType,
   CKnownArrayElement,
   CObjectFieldInfo,
-  CObjectShapeField,
-  CPromiseConstructorHandler,
   CRuntimeArrayElement,
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression,
-  CPreparedStringBytesOperand as PreparedStringBytesOperand
+  CPreparedStringBytesOperand as PreparedStringBytesOperand,
+  CTypeRefMap
 } from '../types.ts'
-import { cRuntimeValueTag, libraryNativeCppType } from '../value-types.ts'
+import { cTypeRefMapValue } from '../types.ts'
+import {
+  applyLibraryNativeValueAdapter,
+  cIterableElementFunctionType,
+  cIterableElementValueType,
+  cRuntimeValueTag,
+  compilerLibraryIntrinsicNativeCppType,
+  compilerLibraryIntrinsicNativeValueAdapter,
+  libraryNativeCppType,
+  libraryNativeValueAdapter
+} from '../value-types.ts'
 import { emitCConditionClause } from './expressions.ts'
 import { emitSliceIndexNormalizationLines } from './slices.ts'
-import { inferExpressionType, isAnyNodeLikeArrayFieldName, isAnyNodeLikeDeclaredType } from './types.ts'
+import {
+  anyNodeLikeArrayFieldElementValueType,
+  inferExpressionType,
+  isAnyNodeLikeArrayFieldName,
+  isAnyNodeLikeDeclaredType
+} from './types.ts'
 
-type CFunctionTypeMap = Map<string, CFunctionType>
-type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
-type CPromiseConstructorHandlerMap = Map<string, CPromiseConstructorHandler>
-type CStringMap = Map<string, string>
 type CNumberMap = Map<string, number>
-type CStringSet = Set<string>
 
-type ArrayFunctionContext = CFunctionContext
+type ArrayFunctionContext = CFunctionContextWithDependencies<
+  ArrayLoweringDependencies,
+  object,
+  object,
+  object,
+  object,
+  object
+>
 
-type ArrayVariableScopeSnapshot = {
-  arrayLengths: CNumberMap
-  arrayShapes: Map<string, CArrayElementInfo[]>
-  boxedVariables: CStringSet
-  classInstanceTypes: CStringMap
-  exceptionValueNames: CStringSet
-  functionTypes: CFunctionTypeMap
-  narrowedNullableScalars: CStringSet
-  nullableVariables: CStringSet
-  objectShapes: CObjectShapeFieldMap
-  promiseConstructorHandlers: CPromiseConstructorHandlerMap
-  promiseRejectionValueTypes: CStringMap
-  promiseValueTypes: CStringMap
-  runtimeArrayElementTypes: CStringMap
-  runtimeCallbacks: CStringSet
-  runtimeStrings: CStringSet
-  variables: CStringMap
-}
 
 export type ArrayLoweringDependencies = {
   emitCArrayLiteralValueExpression(expression: AnyNode, context: ArrayFunctionContext): PreparedExpression
@@ -93,6 +89,7 @@ type PreparedArrayReceiver = {
   expression: string
   elementType: string
   cppType?: string
+  valueAdapter?: string | null
 }
 
 type KnownForOfArray = {
@@ -108,16 +105,6 @@ type RuntimeForOfArray = {
 
 type ArrayNode = AnyNode
 type ArrayMaybeNode = ArrayNode | null | undefined
-
-type ArrayCallbackBody =
-  | {
-      kind: 'prepared-return'
-      returnExpression: AnyNode
-    }
-  | {
-      kind: 'statement-list'
-      statements: AnyNode[]
-    }
 
 function arrayDeps(context: ArrayFunctionContext): ArrayLoweringDependencies {
   const deps = context.arrayLoweringDependencies
@@ -141,19 +128,9 @@ function isSupportedRuntimeArrayElementType(valueType: string): boolean {
   return valueType === 'number' || valueType === 'boolean' || valueType === 'string'
 }
 
-function isSupportedArrayMapElementType(valueType: string): boolean {
-  return isSupportedRuntimeArrayElementType(valueType) || valueType === 'object' || valueType === 'array'
-}
-
 function appendLines(out: string[], lines: string[]): void {
   for (const line of lines) {
     out.push(line)
-  }
-}
-
-function appendPrefixedLines(out: string[], lines: string[], prefix: string): void {
-  for (const line of lines) {
-    out.push(`${prefix}${line}`)
   }
 }
 
@@ -193,70 +170,6 @@ function ensureArrayLengths(context: ArrayFunctionContext): CNumberMap {
   return nextLengths
 }
 
-function ensureClassInstanceTypes(context: ArrayFunctionContext): CStringMap {
-  let classInstanceTypes = context.classInstanceTypes
-
-  if (classInstanceTypes !== null && typeof classInstanceTypes !== 'undefined') {
-    return classInstanceTypes
-  }
-
-  const nextClassInstanceTypes: CStringMap = new Map()
-  context.classInstanceTypes = nextClassInstanceTypes
-
-  return nextClassInstanceTypes
-}
-
-function ensureExceptionValueNames(context: ArrayFunctionContext): CStringSet {
-  let exceptionValueNames = context.exceptionValueNames
-
-  if (exceptionValueNames !== null && typeof exceptionValueNames !== 'undefined') {
-    return exceptionValueNames
-  }
-
-  const nextExceptionValueNames: CStringSet = new Set()
-  context.exceptionValueNames = nextExceptionValueNames
-
-  return nextExceptionValueNames
-}
-
-function ensurePromiseConstructorHandlers(context: ArrayFunctionContext): CPromiseConstructorHandlerMap {
-  let promiseConstructorHandlers = context.promiseConstructorHandlers
-
-  if (promiseConstructorHandlers !== null && typeof promiseConstructorHandlers !== 'undefined') {
-    return promiseConstructorHandlers
-  }
-
-  const nextPromiseConstructorHandlers: CPromiseConstructorHandlerMap = new Map()
-  context.promiseConstructorHandlers = nextPromiseConstructorHandlers
-
-  return nextPromiseConstructorHandlers
-}
-
-function ensurePromiseRejectionValueTypes(context: ArrayFunctionContext): CStringMap {
-  let promiseRejectionValueTypes = context.promiseRejectionValueTypes
-
-  if (promiseRejectionValueTypes !== null && typeof promiseRejectionValueTypes !== 'undefined') {
-    return promiseRejectionValueTypes
-  }
-
-  const nextPromiseRejectionValueTypes: CStringMap = new Map()
-  context.promiseRejectionValueTypes = nextPromiseRejectionValueTypes
-
-  return nextPromiseRejectionValueTypes
-}
-
-function ensurePromiseValueTypes(context: ArrayFunctionContext): CStringMap {
-  let promiseValueTypes = context.promiseValueTypes
-
-  if (promiseValueTypes !== null && typeof promiseValueTypes !== 'undefined') {
-    return promiseValueTypes
-  }
-
-  const nextPromiseValueTypes: CStringMap = new Map()
-  context.promiseValueTypes = nextPromiseValueTypes
-
-  return nextPromiseValueTypes
-}
 
 function findArrayShape(context: ArrayFunctionContext, name: string): CArrayElementInfo[] | null {
   if (context.arrayShapes === null || typeof context.arrayShapes === 'undefined') {
@@ -272,81 +185,11 @@ function findArrayShape(context: ArrayFunctionContext, name: string): CArrayElem
   return shape
 }
 
-function resolveFunctionReturnArrayElementType(context: ArrayFunctionContext, name: string): string | null {
-  if (
-    context.functionReturnArrayElementTypes === null ||
-    typeof context.functionReturnArrayElementTypes === 'undefined'
-  ) {
-    return null
-  }
-
-  const elementType = context.functionReturnArrayElementTypes.get(name)
-
-  if (elementType === null || typeof elementType === 'undefined') {
-    return null
-  }
-
-  return elementType
+function resolveFunctionReturnIterableElementType(context: ArrayFunctionContext, name: string): string | null {
+  const returnTypeRef = cTypeRefMapValue(context.functionReturnTypeRefs, name)
+  return cIterableElementValueType(returnTypeRef, context.libraries)
 }
 
-function pushArrayVariableScope(context: ArrayFunctionContext): ArrayVariableScopeSnapshot {
-  const snapshot = {
-    arrayLengths: ensureArrayLengths(context),
-    arrayShapes: ensureArrayShapes(context),
-    boxedVariables: context.boxedVariables,
-    classInstanceTypes: ensureClassInstanceTypes(context),
-    exceptionValueNames: ensureExceptionValueNames(context),
-    functionTypes: context.functionTypes,
-    narrowedNullableScalars: context.narrowedNullableScalars,
-    nullableVariables: context.nullableVariables,
-    objectShapes: context.objectShapes,
-    promiseConstructorHandlers: ensurePromiseConstructorHandlers(context),
-    promiseRejectionValueTypes: ensurePromiseRejectionValueTypes(context),
-    promiseValueTypes: ensurePromiseValueTypes(context),
-    runtimeArrayElementTypes: context.runtimeArrayElementTypes,
-    runtimeCallbacks: context.runtimeCallbacks,
-    runtimeStrings: context.runtimeStrings,
-    variables: context.variables
-  }
-
-  context.arrayLengths = cloneCNumberMap(snapshot.arrayLengths)
-  context.arrayShapes = cloneCArrayShapeMap(snapshot.arrayShapes)
-  context.boxedVariables = cloneCStringSet(snapshot.boxedVariables)
-  context.classInstanceTypes = cloneCStringMap(snapshot.classInstanceTypes)
-  context.exceptionValueNames = cloneCStringSet(snapshot.exceptionValueNames)
-  context.functionTypes = cloneCFunctionTypeMap(snapshot.functionTypes)
-  context.narrowedNullableScalars = cloneCStringSet(snapshot.narrowedNullableScalars)
-  context.nullableVariables = cloneCStringSet(snapshot.nullableVariables)
-  context.objectShapes = cloneCObjectShapeFieldMap(snapshot.objectShapes)
-  context.promiseConstructorHandlers = cloneCPromiseConstructorHandlerMap(snapshot.promiseConstructorHandlers)
-  context.promiseRejectionValueTypes = cloneCStringMap(snapshot.promiseRejectionValueTypes)
-  context.promiseValueTypes = cloneCStringMap(snapshot.promiseValueTypes)
-  context.runtimeArrayElementTypes = cloneCStringMap(snapshot.runtimeArrayElementTypes)
-  context.runtimeCallbacks = cloneCStringSet(snapshot.runtimeCallbacks)
-  context.runtimeStrings = cloneCStringSet(snapshot.runtimeStrings)
-  context.variables = cloneCStringMap(snapshot.variables)
-
-  return snapshot
-}
-
-function restoreArrayVariableScope(context: ArrayFunctionContext, snapshot: ArrayVariableScopeSnapshot): void {
-  context.arrayLengths = snapshot.arrayLengths
-  context.arrayShapes = snapshot.arrayShapes
-  context.boxedVariables = snapshot.boxedVariables
-  context.classInstanceTypes = snapshot.classInstanceTypes
-  context.exceptionValueNames = snapshot.exceptionValueNames
-  context.functionTypes = snapshot.functionTypes
-  context.narrowedNullableScalars = snapshot.narrowedNullableScalars
-  context.nullableVariables = snapshot.nullableVariables
-  context.objectShapes = snapshot.objectShapes
-  context.promiseConstructorHandlers = snapshot.promiseConstructorHandlers
-  context.promiseRejectionValueTypes = snapshot.promiseRejectionValueTypes
-  context.promiseValueTypes = snapshot.promiseValueTypes
-  context.runtimeArrayElementTypes = snapshot.runtimeArrayElementTypes
-  context.runtimeCallbacks = snapshot.runtimeCallbacks
-  context.runtimeStrings = snapshot.runtimeStrings
-  context.variables = snapshot.variables
-}
 
 function parseArrayIndex(value: string): number {
   let out = 0
@@ -432,14 +275,6 @@ function arrayElementInfoAt(elements: CArrayElementInfo[], index: number): CArra
   return elements[index]
 }
 
-function arrayCallbackStatementAt(statements: ArrayNode[], index: number): ArrayNode {
-  return statements[index]
-}
-
-function arrayNodeAt(nodes: ArrayNode[], index: number): ArrayNode {
-  return nodes[index]
-}
-
 function arrayElementInfoWithoutLast(elements: CArrayElementInfo[]): CArrayElementInfo[] {
   const out: CArrayElementInfo[] = []
 
@@ -450,53 +285,6 @@ function arrayElementInfoWithoutLast(elements: CArrayElementInfo[]): CArrayEleme
   return out
 }
 
-export function isArrayMethodCall(expression: ArrayMaybeNode): boolean {
-  if (expression === null || typeof expression === 'undefined') {
-    return false
-  }
-
-  if (expression.type !== 'CallExpression') {
-    return false
-  }
-
-  const callee = expression.callee
-
-  if (callee.type !== 'MemberExpression') {
-    return false
-  }
-
-  return !!arrayRuntimeMethodName(callee.property)
-}
-
-export function isArrayReduceCall(expression: ArrayMaybeNode): boolean {
-  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
-    return false
-  }
-
-  const callee = expression.callee
-
-  return callee.type === 'MemberExpression' && callee.property === 'reduce'
-}
-
-function isArrayFromCall(expression: ArrayMaybeNode): boolean {
-  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
-    return false
-  }
-
-  if (expression.args.length !== 1) {
-    return false
-  }
-
-  const callee = expression.callee
-
-  return (
-    callee.type === 'MemberExpression' &&
-    callee.property === 'from' &&
-    callee.object.type === 'Reference' &&
-    callee.object.path.length === 1 &&
-    callee.object.path[0] === 'Array'
-  )
-}
 
 export function isArrayIncludesCall(expression: ArrayMaybeNode): boolean {
   if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
@@ -682,8 +470,14 @@ function resolveRuntimeArrayElementFunctionType(
     return null
   }
 
-  if (expression.arrayElementFunctionType !== null && typeof expression.arrayElementFunctionType !== 'undefined') {
-    return expression.arrayElementFunctionType
+  const typeRefFunctionType = cIterableElementFunctionType(
+    expression.typeRef,
+    context.libraries,
+    arrayExpressionSourceLocation(expression)
+  )
+
+  if (typeRefFunctionType !== null) {
+    return typeRefFunctionType
   }
 
   if (expression.type === 'Reference') {
@@ -703,6 +497,17 @@ function resolveRuntimeArrayElementFunctionType(
   return null
 }
 
+function arrayExpressionSourceLocation(expression: AnyNode): SourceLocation {
+  let loc: SourceLocation = { line: 1, column: 1 }
+  const expressionLoc = expression.loc
+
+  if (expressionLoc !== null && typeof expressionLoc !== 'undefined') {
+    loc = expressionLoc
+  }
+
+  return loc
+}
+
 export function resolveRuntimeArrayElementType(
   expression: ArrayMaybeNode,
   context: ArrayFunctionContext
@@ -711,12 +516,16 @@ export function resolveRuntimeArrayElementType(
     return null
   }
 
-  if (expression.valueType === 'array') {
-    if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
-      return expression.arrayElementType
-    }
+  const typeRefElementValueType = cIterableElementValueType(expression.typeRef, context.libraries)
 
-    return 'unknown'
+  if (typeRefElementValueType !== null) {
+    return typeRefElementValueType
+  }
+
+  const declaredElementValueType = declaredArrayElementValueType(expression.declaredType)
+
+  if (declaredElementValueType !== null) {
+    return declaredElementValueType
   }
 
   if (expression.type === 'Reference') {
@@ -747,10 +556,6 @@ export function resolveRuntimeArrayElementType(
     const objectRuntimeCall = objectRuntimeArrayCallName(expression)
 
     if (objectRuntimeCall !== null && typeof objectRuntimeCall !== 'undefined') {
-      if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
-        return expression.arrayElementType
-      }
-
       if (objectRuntimeCall === 'entries') {
         return 'array'
       }
@@ -767,7 +572,7 @@ export function resolveRuntimeArrayElementType(
         const functionReturnType = context.functionReturnTypes.get(functionReturn)
 
         if (functionReturnType === 'array') {
-          const functionElementType = resolveFunctionReturnArrayElementType(context, functionReturn)
+          const functionElementType = resolveFunctionReturnIterableElementType(context, functionReturn)
 
           if (functionElementType !== null && typeof functionElementType !== 'undefined') {
             return functionElementType
@@ -780,12 +585,8 @@ export function resolveRuntimeArrayElementType(
       return null
     }
 
-    if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
-      return expression.arrayElementType
-    }
-
     if (functionReturn !== null && typeof functionReturn !== 'undefined') {
-      const functionElementType = resolveFunctionReturnArrayElementType(context, functionReturn)
+      const functionElementType = resolveFunctionReturnIterableElementType(context, functionReturn)
 
       if (functionElementType !== null && typeof functionElementType !== 'undefined') {
         return functionElementType
@@ -803,16 +604,32 @@ export function resolveRuntimeArrayElementType(
       member = deps.resolveKnownObjectMember(expression, context)
     }
 
+    if (
+      deps !== null &&
+      typeof deps !== 'undefined' &&
+      isAnyNodeLikeArrayFieldReceiver(expression, context, deps)
+    ) {
+      const fieldName = anyNodeLikeArrayFieldReceiverName(expression)
+
+      if (fieldName !== null && typeof fieldName !== 'undefined') {
+        const elementValueType = anyNodeLikeArrayFieldElementValueType(fieldName)
+
+        if (elementValueType !== null) {
+          return elementValueType
+        }
+      }
+
+      if (isAnyNodeLikeBlockBodyArrayReceiver(expression, context)) {
+        return 'object'
+      }
+    }
+
     if (member !== null && typeof member !== 'undefined') {
       if (member.valueType !== 'array') {
         return null
       }
 
-      if (member.arrayElementType !== null && typeof member.arrayElementType !== 'undefined') {
-        return member.arrayElementType
-      }
-
-      return 'unknown'
+      return cIterableElementValueType(member.typeRef, context.libraries) ?? 'unknown'
     }
 
     if (
@@ -839,11 +656,7 @@ export function resolveRuntimeArrayElementType(
         return null
       }
 
-      if (field.arrayElementType !== null && typeof field.arrayElementType !== 'undefined') {
-        return field.arrayElementType
-      }
-
-      return 'unknown'
+      return cIterableElementValueType(field.typeRef, context.libraries) ?? 'unknown'
     }
 
     if (
@@ -865,7 +678,35 @@ export function resolveRuntimeArrayElementType(
     }
   }
 
+  if (expression.valueType === 'array') {
+    return 'unknown'
+  }
+
   return null
+}
+
+function declaredArrayElementValueType(declaredType: string | null | undefined): string | null {
+  if (declaredType === null || typeof declaredType === 'undefined') {
+    return null
+  }
+
+  const rawElementType = arrayElementTypeNameFromTypeName(declaredType)
+
+  if (rawElementType === null) {
+    return null
+  }
+
+  const elementType = nullableTypeNameFromTypeName(rawElementType) ?? rawElementType
+
+  if (isArrayTypeName(elementType)) {
+    return 'array'
+  }
+
+  if (isBuiltinValueType(elementType)) {
+    return elementType
+  }
+
+  return 'object'
 }
 
 function objectRuntimeArrayCallName(expression: ArrayMaybeNode): string | null {
@@ -958,12 +799,13 @@ export function emitPreparedRuntimeArrayIndexValue(
   const array = arrayDeps(context).emitCValueExpression(expression.object, context)
   const index = emitPreparedRuntimeArrayIndexExpression(element, context)
   const value = nextCName(context, prefix)
+  const arrayFacade = preparedRuntimeArrayFacadeExpression(expression.object, array, context)
   const lines: string[] = []
 
   appendLines(lines, array.lines)
   appendLines(lines, index.lines)
   lines.push(`inox::Value ${value};`)
-  appendLines(lines, emitRuntimeArrayGetAllowMissing(array.expression, index.expression, value, context))
+  appendLines(lines, emitRuntimeArrayGetAllowMissing(arrayFacade, index.expression, value, context))
 
   return {
     lines,
@@ -973,14 +815,43 @@ export function emitPreparedRuntimeArrayIndexValue(
   }
 }
 
+function preparedRuntimeArrayFacadeExpression(
+  expression: AnyNode,
+  value: PreparedExpression,
+  context: ArrayFunctionContext
+): string {
+  if (
+    value.cppType !== null &&
+    typeof value.cppType !== 'undefined' &&
+    value.cppType !== 'inox::Value' &&
+    value.cppType !== 'inox_value'
+  ) {
+    return value.expression
+  }
+
+  return applyLibraryNativeValueAdapter(value.expression, arrayNativeValueAdapter(expression, context))
+}
+
+function arrayNativeValueAdapter(expression: AnyNode, context: ArrayFunctionContext): string | null {
+  return (
+    libraryNativeValueAdapter(expression.shape) ??
+    compilerLibraryIntrinsicNativeValueAdapter(context.libraries, 'array-literal') ??
+    null
+  )
+}
+
+function arrayNativeCppType(context: ArrayFunctionContext): string | undefined {
+  return compilerLibraryIntrinsicNativeCppType(context.libraries, 'array-literal') ?? undefined
+}
+
 function emitRuntimeArrayGetAllowMissing(
-  arrayExpression: string,
+  arrayFacadeExpression: string,
   indexExpression: string,
   out: string,
   context: ArrayFunctionContext
 ): string[] {
   return [
-    `${out} = ArrayClass(${arrayExpression}).get(${indexExpression});`,
+    `${out} = ${arrayFacadeExpression}.get(${indexExpression});`,
     emitArrayThrownCheck(context)
   ]
 }
@@ -1046,9 +917,13 @@ export function emitPreparedKnownArrayIndexValueExpression(
 
     registerOwnedValue(context, temp)
     const lines: string[] = []
+    const facade = applyLibraryNativeValueAdapter(
+      element.arrayName,
+      arrayNativeValueAdapter(expression.object, context)
+    )
 
     appendLines(lines, emitPrepareOwnedValueWrite(temp))
-    lines.push(`${temp} = ArrayClass(${element.arrayName}).get(${element.index});`)
+    lines.push(`${temp} = ${facade}.get(${element.index});`)
     lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
     appendLines(lines, emitRuntimeFieldValueCheck(temp, tag, expression, context))
 
@@ -1242,90 +1117,44 @@ export function emitPreparedArrayLengthExpression(
     return null
   }
 
-  const knownLength = resolveKnownArrayLength(expression, context)
+  let receiver = emitPreparedArrayReceiver(expression.object, context)
 
-  if (knownLength !== null && typeof knownLength !== 'undefined') {
-    return {
-      lines: [],
-      expression: knownLength
+  if (receiver === null) {
+    const deps = arrayDeps(context)
+
+    if (!isArrayLengthReceiver(expression.object, context, deps)) {
+      return null
+    }
+
+    const valueAdapter = arrayNativeValueAdapter(expression.object, context)
+
+    if (valueAdapter === null) {
+      return null
+    }
+
+    const value = deps.emitCValueExpression(expression.object, context)
+
+    receiver = {
+      lines: value.lines,
+      expression: value.expression,
+      elementType: 'unknown',
+      cppType: value.cppType,
+      valueAdapter
     }
   }
 
-  const directReference = arrayLengthDirectReferenceName(expression.object, context)
-
-  if (directReference !== null && typeof directReference !== 'undefined') {
-    return emitPreparedDirectRuntimeArrayLengthExpression(directReference, context)
-  }
-
-  const deps = arrayDeps(context)
-
-  if (!isArrayLengthReceiver(expression.object, context, deps)) {
-    return null
-  }
-
-  const value = deps.emitCValueExpression(expression.object, context)
-
-  return emitPreparedRuntimeArrayLengthExpression(value.expression, value.lines, context)
-}
-
-function emitPreparedDirectRuntimeArrayLengthExpression(
-  arrayExpression: string,
-  context: ArrayFunctionContext
-): PreparedExpression {
   const temp = nextCName(context, 'inox_array_len')
-
-  return {
-    lines: [
-      `size_t ${temp} = ArrayClass(${arrayExpression}).length();`,
-      emitArrayThrownCheck(context)
-    ],
-    expression: `((double)${temp})`
-  }
-}
-
-function emitPreparedRuntimeArrayLengthExpression(
-  arrayExpression: string,
-  valueLines: string[],
-  context: ArrayFunctionContext
-): PreparedExpression {
-  const temp = nextCName(context, 'inox_array_len')
+  const facade = preparedArrayReceiverFacadeExpression(receiver)
   const lines: string[] = []
 
-  appendLines(lines, valueLines)
-  lines.push(`size_t ${temp} = ArrayClass(${arrayExpression}).length();`)
+  appendLines(lines, receiver.lines)
+  lines.push(`size_t ${temp} = ${facade}.length();`)
   lines.push(emitArrayThrownCheck(context))
 
   return {
     lines,
     expression: `((double)${temp})`
   }
-}
-
-function arrayLengthDirectReferenceName(
-  expression: ArrayMaybeNode,
-  context: ArrayFunctionContext
-): string | null {
-  if (expression === null || typeof expression === 'undefined') {
-    return null
-  }
-
-  if (expression.type !== 'Reference') {
-    return null
-  }
-
-  const path: string[] = expression.path
-
-  if (path.length !== 1) {
-    return null
-  }
-
-  const name: string = path[0]
-
-  if (context.runtimeArrayElementTypes.has(name)) {
-    return name
-  }
-
-  return null
 }
 
 function isArrayLengthReceiver(
@@ -1703,86 +1532,6 @@ export function updateKnownArrayElementValueType(
   }
 }
 
-export function emitArraySortVariableDeclaration(
-  statement: AnyNode,
-  sorted: PreparedArrayExpression,
-  context: ArrayFunctionContext
-): string[] {
-  registerOwnedValue(context, statement.name)
-  context.variables.set(statement.name, 'array')
-
-  const shape = findArrayShape(context, sorted.expression)
-
-  if (shape !== null && typeof shape !== 'undefined') {
-    const clonedShape = cloneArrayShape(shape)
-
-    ensureArrayShapes(context).set(statement.name, clonedShape)
-    ensureArrayLengths(context).set(statement.name, clonedShape.length)
-  } else {
-    let elementType = sorted.elementType
-
-    if (statement.arrayElementType !== null && typeof statement.arrayElementType !== 'undefined') {
-      elementType = statement.arrayElementType
-    }
-
-    context.runtimeArrayElementTypes.set(statement.name, elementType)
-  }
-
-  const lines: string[] = []
-
-  appendLines(lines, sorted.lines)
-  lines.push(`${statement.name} = ${sorted.expression};`)
-
-  return lines
-}
-
-export function emitArrayFilterVariableDeclaration(
-  statement: AnyNode,
-  filtered: PreparedArrayExpression,
-  context: ArrayFunctionContext
-): string[] {
-  registerOwnedValue(context, statement.name)
-  context.variables.set(statement.name, 'array')
-
-  let elementType = filtered.elementType
-
-  if (statement.arrayElementType !== null && typeof statement.arrayElementType !== 'undefined') {
-    elementType = statement.arrayElementType
-  }
-
-  context.runtimeArrayElementTypes.set(statement.name, elementType)
-
-  const lines: string[] = []
-
-  appendLines(lines, filtered.lines)
-  lines.push(`${statement.name} = ${filtered.expression};`)
-
-  return lines
-}
-
-export function emitArrayMapVariableDeclaration(
-  statement: AnyNode,
-  mapped: PreparedArrayExpression,
-  context: ArrayFunctionContext
-): string[] {
-  registerOwnedValue(context, statement.name)
-  context.variables.set(statement.name, 'array')
-
-  let elementType = mapped.elementType
-
-  if (statement.arrayElementType !== null && typeof statement.arrayElementType !== 'undefined') {
-    elementType = statement.arrayElementType
-  }
-
-  context.runtimeArrayElementTypes.set(statement.name, elementType)
-
-  const lines: string[] = []
-
-  appendLines(lines, mapped.lines)
-  lines.push(`${statement.name} = ${mapped.expression};`)
-
-  return lines
-}
 
 export function emitArraySliceVariableDeclaration(
   statement: AnyNode,
@@ -1792,11 +1541,7 @@ export function emitArraySliceVariableDeclaration(
   registerOwnedValue(context, statement.name)
   context.variables.set(statement.name, 'array')
 
-  let elementType = sliced.elementType
-
-  if (statement.arrayElementType !== null && typeof statement.arrayElementType !== 'undefined') {
-    elementType = statement.arrayElementType
-  }
+  const elementType = cIterableElementValueType(statement.typeRef, context.libraries) ?? sliced.elementType
 
   context.runtimeArrayElementTypes.set(statement.name, elementType)
 
@@ -1808,44 +1553,6 @@ export function emitArraySliceVariableDeclaration(
   return lines
 }
 
-export function emitPreparedArraySortCallExpression(
-  expression: ArrayMaybeNode,
-  context: ArrayFunctionContext
-): PreparedArrayExpression | null {
-  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
-    return null
-  }
-
-  const callee = expression.callee
-
-  if (callee.type !== 'MemberExpression' || callee.property !== 'sort' || expression.args.length > 1) {
-    return null
-  }
-
-  const receiver = emitPreparedArrayReceiver(callee.object, context)
-
-  if (receiver !== null && typeof receiver !== 'undefined') {
-    if (expression.args.length === 1) {
-      return emitPreparedArrayComparatorSortCallExpression(expression, receiver, context)
-    }
-
-    const lines: string[] = []
-    const sorted = nextCName(context, 'inox_array_sort')
-
-    appendLines(lines, receiver.lines)
-    lines.push(`auto ${sorted} = ArrayClass(${receiver.expression}).sort();`)
-    lines.push(emitArrayThrownCheck(context))
-
-    return {
-      lines,
-      expression: sorted,
-      elementType: receiver.elementType,
-      cppType: 'Array'
-    }
-  }
-
-  return null
-}
 
 export function emitPreparedArraySliceCallExpression(
   expression: ArrayMaybeNode,
@@ -1881,6 +1588,7 @@ export function emitPreparedArraySliceCallExpression(
     expression: `((double)${lengthName})`
   }
   const out = nextCName(context, 'inox_array_slice')
+  const facade = preparedArrayReceiverFacadeExpression(receiver)
   const lines: string[] = []
 
   if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
@@ -1894,7 +1602,7 @@ export function emitPreparedArraySliceCallExpression(
   appendLines(lines, receiver.lines)
   appendLines(lines, start.lines)
   appendLines(lines, end.lines)
-  lines.push(`size_t ${lengthName} = ArrayClass(${receiver.expression}).length();`)
+  lines.push(`size_t ${lengthName} = ${facade}.length();`)
   lines.push(emitArrayThrownCheck(context))
   lines.push(`double ${startRaw} = ${start.expression};`)
   lines.push(`double ${endRaw} = ${end.expression};`)
@@ -1904,14 +1612,14 @@ export function emitPreparedArraySliceCallExpression(
   )
   appendLines(lines, emitSliceIndexNormalizationLines(endRaw, lengthName, endIndex, context, 'inox_array_slice_end'))
   lines.push(`if (${endIndex} < ${startIndex}) ${endIndex} = ${startIndex};`)
-  lines.push(`auto ${out} = ArrayClass(${receiver.expression}).slice(${startIndex}, ${endIndex});`)
+  lines.push(`auto ${out} = ${facade}.slice(${startIndex}, ${endIndex});`)
   lines.push(emitArrayThrownCheck(context))
 
   return {
     lines,
     expression: out,
     elementType: receiver.elementType,
-    cppType: 'Array'
+    cppType: arrayNativeCppType(context)
   }
 }
 
@@ -1939,7 +1647,7 @@ export function emitPreparedArrayJoinCallExpression(
     return null
   }
 
-  if (receiver.cppType === 'Array') {
+  if (receiver.cppType === arrayNativeCppType(context)) {
     let separator: PreparedExpression = {
       lines: [],
       expression: '","'
@@ -1976,6 +1684,7 @@ export function emitPreparedArrayJoinCallExpression(
     expression: '","'
   }
   const lines: string[] = []
+  const facade = preparedArrayReceiverFacadeExpression(receiver)
 
   if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
     const preparedSeparator = arrayDeps(context).emitPreparedCppStringArgument(
@@ -1991,7 +1700,7 @@ export function emitPreparedArrayJoinCallExpression(
 
   appendLines(lines, receiver.lines)
   appendLines(lines, separator.lines)
-  lines.push(`auto ${out} = ArrayClass(${receiver.expression}).join(${separator.expression});`)
+  lines.push(`auto ${out} = ${facade}.join(${separator.expression});`)
   lines.push(emitRuntimeTypeCheck(`!${out}.valid()`, context))
 
   return {
@@ -2041,11 +1750,12 @@ export function emitPreparedArrayIncludesCallExpression(
   }
   const searchValue = emitPreparedArrayElementValue(search, searchType, context)
   const found = nextCName(context, 'inox_array_includes')
+  const facade = preparedArrayReceiverFacadeExpression(receiver)
   const lines: string[] = []
 
   appendLines(lines, receiver.lines)
   appendLines(lines, searchValue.lines)
-  lines.push(`bool ${found} = ArrayClass(${receiver.expression}).includes(${searchValue.expression});`)
+  lines.push(`bool ${found} = ${facade}.includes(${searchValue.expression});`)
   lines.push(emitArrayThrownCheck(context))
 
   return {
@@ -2085,10 +1795,11 @@ export function emitPreparedArrayPushCallExpression(
     updatePushedArrayMetadata(callee.object, valueType, context)
 
     const lines: string[] = []
+    const facade = preparedArrayReceiverFacadeExpression(receiver)
 
     appendLines(lines, receiver.lines)
     appendLines(lines, value.lines)
-    lines.push(`ArrayClass(${receiver.expression}).push(${value.expression});`)
+    lines.push(`${facade}.push(${value.expression});`)
     lines.push(emitArrayThrownCheck(context))
 
     return {
@@ -2130,13 +1841,14 @@ export function emitPreparedArrayUnshiftCallExpression(
   const valueType = arrayDeps(context).inferExpressionType(arg, context)
   const value = emitPreparedArrayElementValue(arg, valueType, context)
   const length = nextCName(context, 'inox_array_unshift_len')
+  const facade = preparedArrayReceiverFacadeExpression(receiver)
   const lines: string[] = []
 
   updateUnshiftedArrayMetadata(callee.object, valueType, context)
 
   appendLines(lines, receiver.lines)
   appendLines(lines, value.lines)
-  lines.push(`double ${length} = ArrayClass(${receiver.expression}).unshift(${value.expression});`)
+  lines.push(`double ${length} = ${facade}.unshift(${value.expression});`)
   lines.push(emitArrayThrownCheck(context))
 
   return {
@@ -2164,12 +1876,13 @@ export function emitPreparedArrayPopCallExpression(
 
   if (receiver !== null && typeof receiver !== 'undefined') {
     const value = nextCName(context, 'inox_array_pop')
+    const facade = preparedArrayReceiverFacadeExpression(receiver)
     updatePoppedArrayMetadata(callee.object, context)
 
     const lines: string[] = []
 
     appendLines(lines, receiver.lines)
-    lines.push(`auto ${value} = ArrayClass(${receiver.expression}).pop();`)
+    lines.push(`auto ${value} = ${facade}.pop();`)
     lines.push(emitArrayThrownCheck(context))
 
     return {
@@ -2182,1113 +1895,6 @@ export function emitPreparedArrayPopCallExpression(
   return null
 }
 
-function emitPreparedArrayComparatorSortCallExpression(
-  expression: AnyNode,
-  receiver: PreparedArrayReceiver,
-  context: ArrayFunctionContext
-): PreparedArrayExpression | null {
-  const callback = expression.args[0]
-  const returnExpression = resolveArrowReturnExpression(callback)
-
-  if (
-    callback === null ||
-    typeof callback === 'undefined' ||
-    callback.type !== 'ArrowFunctionExpression' ||
-    returnExpression === null ||
-    typeof returnExpression === 'undefined' ||
-    callback.params.length > 2 ||
-    !isSupportedRuntimeArrayElementType(receiver.elementType)
-  ) {
-    return null
-  }
-
-  const length = nextCName(context, 'inox_sort_length')
-  const index = nextCName(context, 'inox_sort_index')
-  const scan = nextCName(context, 'inox_sort_scan')
-  const left = nextCName(context, 'inox_sort_left')
-  const right = nextCName(context, 'inox_sort_right')
-  const compare = nextCName(context, 'inox_sort_compare')
-  const view = nextCName(context, 'inox_sort_array')
-
-  const bodyScope = pushArrayVariableScope(context)
-  let body: string[] = []
-  const input = emitPreparedArraySortComparatorInput(callback, receiver, left, right, context)
-  const result = arrayDeps(context).emitPreparedNumberExpression(returnExpression, context)
-
-  appendLines(body, input)
-  appendLines(body, result.lines)
-  body.push(`double ${compare} = ${result.expression};`)
-  body.push(`if (!(${compare} > 0)) break;`)
-  body.push(`${view}.set(${scan} - 1, ${right});`)
-  body.push(emitArrayThrownCheck(context))
-  body.push(`${view}.set(${scan}, ${left});`)
-  body.push(emitArrayThrownCheck(context))
-  restoreArrayVariableScope(context, bodyScope)
-
-  const lines: string[] = []
-
-  appendLines(lines, receiver.lines)
-  lines.push(`auto ${view} = ArrayClass(${receiver.expression});`)
-  lines.push(`size_t ${length} = ${view}.length();`)
-  lines.push(emitArrayThrownCheck(context))
-  lines.push(`for (size_t ${index} = 1; ${index} < ${length}; ++${index}) {`)
-  lines.push(`  for (size_t ${scan} = ${index}; ${scan} > 0; --${scan}) {`)
-  lines.push(`    auto ${left} = ${view}.get(${scan} - 1);`)
-  lines.push(`    ${emitArrayThrownCheck(context)}`)
-  lines.push(`    auto ${right} = ${view}.get(${scan});`)
-  lines.push(`    ${emitArrayThrownCheck(context)}`)
-  appendPrefixedLines(lines, body, '    ')
-  lines.push('  }')
-  lines.push('}')
-
-  return {
-    lines,
-    expression: view,
-    elementType: receiver.elementType,
-    cppType: 'Array'
-  }
-}
-
-export function emitPreparedArrayFromCallExpression(
-  expression: ArrayMaybeNode,
-  context: ArrayFunctionContext
-): PreparedArrayExpression | null {
-  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
-    return null
-  }
-
-  if (!isArrayFromCall(expression)) {
-    return null
-  }
-
-  if (arrayDeps(context).inferExpressionType(expression.args[0], context) !== 'string') {
-    return null
-  }
-
-  const source = arrayDeps(context).emitPreparedStringBytesOperand(expression.args[0], context, 'inox_array_from_string')
-  const out = nextCName(context, 'inox_array_from')
-  const index = nextCName(context, 'inox_array_from_index')
-  const item = nextCName(context, 'inox_array_from_item')
-  const lines: string[] = []
-
-  appendLines(lines, source.lines)
-  lines.push(`auto ${out} = ArrayClass::create(0);`)
-  lines.push(emitArrayThrownCheck(context))
-  lines.push(`for (size_t ${index} = 0; ${index} < ${source.length}; ++${index}) {`)
-  lines.push(`  auto ${item} = inox::String(${source.bytes}, ${source.length}).slice(${index}, ${index} + 1);`)
-  lines.push(`  ${out}.push(${item});`)
-  lines.push(`  ${emitArrayThrownCheck(context)}`)
-  lines.push('}')
-
-  return {
-    lines,
-    expression: out,
-    elementType: 'string',
-    cppType: 'Array'
-  }
-}
-
-export function emitPreparedArrayReduceCallExpression(
-  expression: ArrayMaybeNode,
-  context: ArrayFunctionContext
-): PreparedExpression | null {
-  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
-    return null
-  }
-
-  if (!isArrayReduceCall(expression) || expression.args.length !== 2) {
-    return null
-  }
-
-  const callback = expression.args[0]
-  const initial = expression.args[1]
-  const returnExpression = resolveArrowReturnExpression(callback)
-
-  if (
-    callback === null ||
-    typeof callback === 'undefined' ||
-    callback.type !== 'ArrowFunctionExpression' ||
-    callback.params.length > 3 ||
-    returnExpression === null ||
-    typeof returnExpression === 'undefined' ||
-    initial === null ||
-    typeof initial === 'undefined'
-  ) {
-    return null
-  }
-
-  const callee = expression.callee
-
-  if (callee.type !== 'MemberExpression') {
-    return null
-  }
-
-  const receiver = emitPreparedArrayReceiver(callee.object, context)
-
-  if (receiver === null || typeof receiver === 'undefined' || receiver.elementType !== 'number') {
-    return null
-  }
-
-  const accumulator = nextCName(context, 'inox_reduce_acc')
-  const length = nextCName(context, 'inox_reduce_length')
-  const index = nextCName(context, 'inox_reduce_index')
-  const value = nextCName(context, 'inox_reduce_value')
-  const view = nextCName(context, 'inox_reduce_array')
-  const initialValue = arrayDeps(context).emitPreparedNumberExpression(initial, context)
-  const bodyScope = pushArrayVariableScope(context)
-  const body: string[] = []
-  const input = emitPreparedArrayReduceCallbackInput(callback, accumulator, value, index, context)
-  const reduced = arrayDeps(context).emitPreparedNumberExpression(returnExpression, context)
-
-  appendLines(body, input)
-  appendLines(body, reduced.lines)
-  body.push(`${accumulator} = ${reduced.expression};`)
-  restoreArrayVariableScope(context, bodyScope)
-
-  const lines: string[] = []
-
-  appendLines(lines, receiver.lines)
-  appendLines(lines, initialValue.lines)
-  lines.push(`double ${accumulator} = ${initialValue.expression};`)
-  lines.push(`auto ${view} = ArrayClass(${receiver.expression});`)
-  lines.push(`size_t ${length} = ${view}.length();`)
-  lines.push(emitArrayThrownCheck(context))
-  lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ++${index}) {`)
-  lines.push(`  auto ${value} = ${view}.get(${index});`)
-  lines.push(`  ${emitArrayThrownCheck(context)}`)
-  appendPrefixedLines(lines, body, '  ')
-  lines.push('}')
-
-  return {
-    lines,
-    expression: accumulator
-  }
-}
-
-export function emitPreparedArrayMapCallExpression(
-  expression: ArrayMaybeNode,
-  context: ArrayFunctionContext
-): PreparedArrayExpression | null {
-  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
-    return null
-  }
-
-  const callee = expression.callee
-
-  if (callee.type !== 'MemberExpression' || callee.property !== 'map' || expression.args.length !== 1) {
-    return null
-  }
-
-  const callback = arrayMapCallbackExpression(expression.args[0])
-
-  if (
-    callback === null ||
-    typeof callback === 'undefined' ||
-    callback.type !== 'ArrowFunctionExpression' ||
-    callback.params.length > 2
-  ) {
-    return null
-  }
-
-  const callbackBody = resolveArrayCallbackBody(callback)
-
-  if (callbackBody === null || typeof callbackBody === 'undefined') {
-    return null
-  }
-
-  const receiver = emitPreparedArrayReceiver(callee.object, context)
-
-  if (receiver !== null && typeof receiver !== 'undefined') {
-    if (!isSupportedArrayMapElementType(receiver.elementType)) {
-      return null
-    }
-
-    const out = nextCName(context, 'inox_map_array')
-    const length = nextCName(context, 'inox_map_length')
-    const index = nextCName(context, 'inox_map_index')
-    const value = nextCName(context, 'inox_map_value')
-    const view = nextCName(context, 'inox_map_source')
-    let mappedElementType = 'unknown'
-
-    if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
-      mappedElementType = expression.arrayElementType
-    }
-
-    const bodyScope = pushArrayVariableScope(context)
-    let body: string[] = []
-    let bodyReady = false
-    const input = emitPreparedArrayCallbackInput(callback, receiver, value, index, context)
-
-    if (mappedElementType === 'unknown') {
-      mappedElementType = resolveArrayCallbackReturnType(callbackBody, context)
-    }
-
-    if (!isSupportedArrayMapElementType(mappedElementType)) {
-      bodyReady = false
-    } else {
-      appendLines(body, input)
-      appendLines(body, emitArrayMapCallbackBodyLines(callbackBody, mappedElementType, out, context))
-      bodyReady = true
-    }
-    restoreArrayVariableScope(context, bodyScope)
-
-    if (!bodyReady) {
-      return null
-    }
-
-    const lines: string[] = []
-
-    appendLines(lines, receiver.lines)
-    lines.push(`auto ${out} = ArrayClass::create(0);`)
-    lines.push(emitArrayThrownCheck(context))
-    lines.push(`auto ${view} = ArrayClass(${receiver.expression});`)
-    lines.push(`size_t ${length} = ${view}.length();`)
-    lines.push(emitArrayThrownCheck(context))
-    lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ++${index}) {`)
-    lines.push(`  auto ${value} = ${view}.get(${index});`)
-    lines.push(`  ${emitArrayThrownCheck(context)}`)
-    appendPrefixedLines(lines, body, '  ')
-    lines.push('}')
-
-    return {
-      lines,
-      expression: out,
-      elementType: mappedElementType,
-      cppType: 'Array'
-    }
-  }
-
-  return null
-}
-
-function arrayMapCallbackExpression(callback: ArrayMaybeNode | null | undefined): ArrayMaybeNode | null {
-  if (callback === null || typeof callback === 'undefined') {
-    return null
-  }
-
-  if (callback.type === 'ArrowFunctionExpression') {
-    return callback
-  }
-
-  const functionType = callback.functionType
-
-  if (
-    callback.type !== 'Reference' ||
-    functionType === null ||
-    typeof functionType === 'undefined' ||
-    functionType.params.length > 2
-  ) {
-    return null
-  }
-
-  const params: AnyNode[] = []
-  const args: AnyNode[] = []
-
-  for (let index = 0; index < functionType.params.length; index = index + 1) {
-    const param = functionType.params[index]
-    params.push(param)
-    args.push({
-      type: 'Reference',
-      path: [param.name],
-      valueType: param.valueType,
-      nullable: param.nullable === true,
-      arrayElementType: param.arrayElementType ?? null,
-      arrayElementDeclaredType: param.arrayElementDeclaredType ?? null,
-      promiseValueType: param.promiseValueType ?? null,
-      functionType: param.functionType ?? null,
-      shape: param.shape ?? null,
-      loc: callback.loc
-    })
-  }
-
-  return {
-    type: 'ArrowFunctionExpression',
-    async: false,
-    expressionBody: true,
-    params,
-    body: {
-      type: 'CallExpression',
-      callee: callback,
-      args,
-      valueType: functionType.returnType,
-      nullable: functionType.returnNullable === true,
-      arrayElementType: functionType.returnArrayElementType ?? null,
-      arrayElementDeclaredType: functionType.returnArrayElementDeclaredType ?? null,
-      promiseValueType: functionType.returnPromiseValueType ?? null,
-      shape: functionType.returnShape ?? null,
-      loc: callback.loc
-    },
-    returnType: functionType.returnType,
-    returnNullable: functionType.returnNullable === true,
-    loc: callback.loc
-  }
-}
-
-export function emitPreparedArrayFilterCallExpression(
-  expression: ArrayMaybeNode,
-  context: ArrayFunctionContext
-): PreparedArrayExpression | null {
-  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
-    return null
-  }
-
-  const callee = expression.callee
-
-  if (callee.type !== 'MemberExpression' || callee.property !== 'filter' || expression.args.length !== 1) {
-    return null
-  }
-
-  const callback = expression.args[0]
-
-  if (callback === null || typeof callback === 'undefined') {
-    return null
-  }
-
-  const booleanCallback = isArrayFilterBooleanCallback(callback)
-  let callbackBody: ArrayCallbackBody | null = null
-
-  if (!booleanCallback) {
-    if (callback.type !== 'ArrowFunctionExpression' || callback.params.length > 2) {
-      return null
-    }
-
-    callbackBody = resolveArrayCallbackBody(callback)
-
-    if (callbackBody === null || typeof callbackBody === 'undefined') {
-      return null
-    }
-  }
-
-  const receiver = emitPreparedArrayReceiver(callee.object, context)
-
-  if (receiver !== null && typeof receiver !== 'undefined') {
-    if (!isSupportedRuntimeArrayElementType(receiver.elementType)) {
-      return null
-    }
-
-    const out = nextCName(context, 'inox_filter_array')
-    const length = nextCName(context, 'inox_filter_length')
-    const index = nextCName(context, 'inox_filter_index')
-    const value = nextCName(context, 'inox_filter_value')
-    const view = nextCName(context, 'inox_filter_source')
-
-    const bodyScope = pushArrayVariableScope(context)
-    let body: string[] = []
-    let bodyReady = true
-
-    if (booleanCallback) {
-      appendLines(body, emitArrayFilterBooleanCallbackBodyLines(receiver.elementType, out, value, context))
-    } else {
-      if (callbackBody === null || typeof callbackBody === 'undefined') {
-        bodyReady = false
-      } else {
-        const input = emitPreparedArrayCallbackInput(callback, receiver, value, index, context)
-
-        appendLines(body, input)
-        appendLines(body, emitArrayFilterCallbackBodyLines(callbackBody, out, value, context))
-      }
-    }
-    restoreArrayVariableScope(context, bodyScope)
-
-    if (!bodyReady) {
-      return null
-    }
-
-    const lines: string[] = []
-
-    appendLines(lines, receiver.lines)
-    lines.push(`auto ${out} = ArrayClass::create(0);`)
-    lines.push(emitArrayThrownCheck(context))
-    lines.push(`auto ${view} = ArrayClass(${receiver.expression});`)
-    lines.push(`size_t ${length} = ${view}.length();`)
-    lines.push(emitArrayThrownCheck(context))
-    lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ++${index}) {`)
-    lines.push(`  auto ${value} = ${view}.get(${index});`)
-    lines.push(`  ${emitArrayThrownCheck(context)}`)
-    appendPrefixedLines(lines, body, '  ')
-    lines.push('}')
-
-    return {
-      lines,
-      expression: out,
-      elementType: receiver.elementType,
-      cppType: 'Array'
-    }
-  }
-
-  return null
-}
-
-function isArrayFilterBooleanCallback(callback: ArrayMaybeNode): boolean {
-  if (callback === null || typeof callback === 'undefined') {
-    return false
-  }
-
-  return callback.type === 'Reference' && callback.path.length === 1 && callback.path[0] === 'Boolean'
-}
-
-function resolveArrowReturnExpression(callback: ArrayMaybeNode): AnyNode | null {
-  if (callback === null || typeof callback === 'undefined' || callback.type !== 'ArrowFunctionExpression') {
-    return null
-  }
-
-  if (callback.expressionBody) {
-    return callback.body
-  }
-
-  let statements: AnyNode[] | null = null
-
-  if (Array.isArray(callback.body)) {
-    statements = callback.body
-  } else if (
-    callback.body !== null &&
-    typeof callback.body !== 'undefined' &&
-    callback.body.type === 'BlockStatement'
-  ) {
-    statements = callback.body.body
-  }
-
-  if (statements !== null && typeof statements !== 'undefined') {
-    if (statements.length !== 1) {
-      return null
-    }
-
-    const statement = arrayCallbackStatementAt(statements, 0)
-
-    if (
-      statement.type !== 'ReturnStatement' ||
-      statement.argument === null ||
-      typeof statement.argument === 'undefined'
-    ) {
-      return null
-    }
-
-    return statement.argument
-  }
-
-  return null
-}
-
-function resolveArrayCallbackBody(callback: ArrayMaybeNode): ArrayCallbackBody | null {
-  const returnExpression = resolveArrowReturnExpression(callback)
-
-  if (returnExpression !== null && typeof returnExpression !== 'undefined') {
-    return {
-      kind: 'prepared-return',
-      returnExpression
-    }
-  }
-
-  if (
-    callback === null ||
-    typeof callback === 'undefined' ||
-    callback.type !== 'ArrowFunctionExpression' ||
-    callback.expressionBody
-  ) {
-    return null
-  }
-
-  let statements: AnyNode[] | null = null
-
-  if (Array.isArray(callback.body)) {
-    statements = callback.body
-  } else if (
-    callback.body !== null &&
-    typeof callback.body !== 'undefined' &&
-    callback.body.type === 'BlockStatement'
-  ) {
-    statements = callback.body.body
-  }
-
-  if (statements === null || typeof statements === 'undefined' || !canLowerArrayCallbackStatementList(statements)) {
-    return null
-  }
-
-  return {
-    kind: 'statement-list',
-    statements
-  }
-}
-
-function canLowerArrayCallbackStatementList(statements: AnyNode[] | null | undefined): boolean {
-  if (statements === null || typeof statements === 'undefined' || statements.length === 0) {
-    return false
-  }
-
-  for (let index = 0; index < statements.length; index = index + 1) {
-    const statement = statements[index]
-
-    if (index === statements.length - 1) {
-      if (!canLowerArrayCallbackTerminalStatement(statement)) {
-        return false
-      }
-    } else if (!canLowerArrayCallbackEarlyReturnStatement(statement)) {
-      return false
-    }
-  }
-
-  return true
-}
-
-function canLowerArrayCallbackTerminalStatement(statement: AnyNode | null | undefined): boolean {
-  if (statement === null || typeof statement === 'undefined') {
-    return false
-  }
-
-  if (statement.type === 'ReturnStatement') {
-    return statement.argument !== null && typeof statement.argument !== 'undefined'
-  }
-
-  if (statement.type === 'BlockStatement') {
-    return canLowerArrayCallbackStatementList(statement.body)
-  }
-
-  if (statement.type !== 'IfStatement' || statement.alternate === null || typeof statement.alternate === 'undefined') {
-    return false
-  }
-
-  return (
-    canLowerArrayCallbackTerminalStatement(statement.consequent) &&
-    canLowerArrayCallbackTerminalStatement(statement.alternate)
-  )
-}
-
-function canLowerArrayCallbackReturnStatement(statement: AnyNode | null | undefined): boolean {
-  if (statement === null || typeof statement === 'undefined') {
-    return false
-  }
-
-  if (statement.type === 'ReturnStatement') {
-    return statement.argument !== null && typeof statement.argument !== 'undefined'
-  }
-
-  return false
-}
-
-function canLowerArrayCallbackEarlyReturnStatement(statement: AnyNode | null | undefined): boolean {
-  if (statement === null || typeof statement === 'undefined') {
-    return false
-  }
-
-  if (statement.type === 'BlockStatement') {
-    return canLowerArrayCallbackStatementList(statement.body)
-  }
-
-  if (statement.type !== 'IfStatement') {
-    return false
-  }
-
-  return (
-    canLowerArrayCallbackBranch(statement.consequent) &&
-    (statement.alternate === null ||
-      typeof statement.alternate === 'undefined' ||
-      canLowerArrayCallbackBranch(statement.alternate))
-  )
-}
-
-function canLowerArrayCallbackBranch(statement: AnyNode | null | undefined): boolean {
-  if (canLowerArrayCallbackReturnStatement(statement)) {
-    return true
-  }
-
-  if (statement === null || typeof statement === 'undefined') {
-    return false
-  }
-
-  if (statement.type === 'BlockStatement') {
-    return canLowerArrayCallbackStatementList(statement.body)
-  }
-
-  return canLowerArrayCallbackEarlyReturnStatement(statement)
-}
-
-function resolveArrayCallbackReturnType(body: ArrayCallbackBody, context: ArrayFunctionContext): string {
-  const expressions = collectArrayCallbackReturnExpressions(body)
-
-  if (expressions.length === 0) {
-    return 'unknown'
-  }
-
-  const firstExpression = arrayNodeAt(expressions, 0)
-  const firstType = arrayDeps(context).inferExpressionType(firstExpression, context)
-
-  if (firstType === 'unknown') {
-    return 'unknown'
-  }
-
-  for (const expression of expressions) {
-    if (arrayDeps(context).inferExpressionType(expression, context) !== firstType) {
-      return 'unknown'
-    }
-  }
-
-  return firstType
-}
-
-function collectArrayCallbackReturnExpressions(body: ArrayCallbackBody): AnyNode[] {
-  if (body.kind === 'prepared-return') {
-    const preparedExpressions: AnyNode[] = []
-    const returnExpression = body.returnExpression
-
-    if (returnExpression === null || typeof returnExpression === 'undefined') {
-      return preparedExpressions
-    }
-
-    preparedExpressions.push(returnExpression)
-
-    return preparedExpressions
-  }
-
-  const expressions: AnyNode[] = []
-  let statements: ArrayNode[] = []
-
-  if (body.statements !== null && typeof body.statements !== 'undefined') {
-    statements = body.statements
-  }
-
-  for (const statement of statements) {
-    collectArrayCallbackReturnExpressionsFromStatement(statement, expressions)
-  }
-
-  return expressions
-}
-
-function collectArrayCallbackReturnExpressionsFromStatement(
-  statement: AnyNode | null | undefined,
-  expressions: AnyNode[]
-): void {
-  if (statement === null || typeof statement === 'undefined') {
-    return
-  }
-
-  if (statement.type === 'ReturnStatement') {
-    if (statement.argument !== null && typeof statement.argument !== 'undefined') {
-      expressions.push(statement.argument)
-    }
-
-    return
-  }
-
-  if (statement.type === 'BlockStatement') {
-    const body: ArrayNode[] = statement.body
-
-    for (const child of body) {
-      collectArrayCallbackReturnExpressionsFromStatement(child, expressions)
-    }
-
-    return
-  }
-
-  if (statement.type === 'IfStatement') {
-    collectArrayCallbackReturnExpressionsFromStatement(statement.consequent, expressions)
-    collectArrayCallbackReturnExpressionsFromStatement(statement.alternate, expressions)
-  }
-}
-
-function emitArrayMapCallbackBodyLines(
-  body: ArrayCallbackBody,
-  elementType: string,
-  out: string,
-  context: ArrayFunctionContext
-): string[] {
-  return emitArrayCallbackBodyLines(body, 'map', elementType, out, '', context)
-}
-
-function emitArrayFilterCallbackBodyLines(
-  body: ArrayCallbackBody,
-  out: string,
-  value: string,
-  context: ArrayFunctionContext
-): string[] {
-  return emitArrayCallbackBodyLines(body, 'filter', '', out, value, context)
-}
-
-function emitArrayFilterBooleanCallbackBodyLines(
-  elementType: string,
-  out: string,
-  value: string,
-  context: ArrayFunctionContext
-): string[] {
-  const lines: string[] = []
-
-  appendLines(lines, emitArrayFilterBooleanTypeCheckLines(elementType, value, context))
-  lines.push(`if ${emitCConditionClause(arrayFilterBooleanPredicateExpression(elementType, value))} {`)
-  lines.push(`  ${out}.push(${value});`)
-  lines.push(`  ${emitArrayThrownCheck(context)}`)
-  lines.push('}')
-
-  return lines
-}
-
-function emitArrayFilterBooleanTypeCheckLines(
-  elementType: string,
-  value: string,
-  context: ArrayFunctionContext
-): string[] {
-  if (elementType === 'string') {
-    return [emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context)]
-  }
-
-  if (elementType === 'boolean') {
-    return [emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_BOOL`, context)]
-  }
-
-  return [emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_NUMBER`, context)]
-}
-
-function arrayFilterBooleanPredicateExpression(elementType: string, value: string): string {
-  if (elementType === 'string') {
-    return `((inox_string*)${value}.as.ref)->len > 0`
-  }
-
-  if (elementType === 'boolean') {
-    return `${value}.as.boolean`
-  }
-
-  return `(${value}.as.number == ${value}.as.number && ${value}.as.number != 0)`
-}
-
-function emitArrayCallbackBodyLines(
-  body: ArrayCallbackBody,
-  returnKind: string,
-  elementType: string,
-  out: string,
-  value: string,
-  context: ArrayFunctionContext
-): string[] {
-  if (body.kind === 'prepared-return') {
-    const returnExpression = body.returnExpression
-
-    if (returnExpression === null || typeof returnExpression === 'undefined') {
-      return []
-    }
-
-    return emitArrayCallbackReturnLines(returnExpression, returnKind, elementType, out, value, context)
-  }
-
-  const doneLabel = nextCName(context, 'inox_array_callback_done')
-  let statements: ArrayNode[] = []
-
-  if (body.statements !== null && typeof body.statements !== 'undefined') {
-    statements = body.statements
-  }
-
-  const lines = emitArrayCallbackStatementListLines(
-    statements,
-    doneLabel,
-    returnKind,
-    elementType,
-    out,
-    value,
-    context
-  )
-
-  lines.push(`${doneLabel}:;`)
-
-  return lines
-}
-
-function emitArrayCallbackStatementListLines(
-  statements: AnyNode[],
-  doneLabel: string,
-  returnKind: string,
-  elementType: string,
-  outValue: string,
-  currentValue: string,
-  context: ArrayFunctionContext
-): string[] {
-  const out: string[] = []
-
-  for (const statement of statements) {
-    appendLines(
-      out,
-      emitArrayCallbackStatementLines(statement, doneLabel, returnKind, elementType, outValue, currentValue, context)
-    )
-  }
-
-  return out
-}
-
-function emitArrayCallbackStatementLines(
-  statement: ArrayMaybeNode,
-  doneLabel: string,
-  returnKind: string,
-  elementType: string,
-  outValue: string,
-  currentValue: string,
-  context: ArrayFunctionContext
-): string[] {
-  if (statement === null || typeof statement === 'undefined') {
-    return []
-  }
-
-  if (statement.type === 'ReturnStatement') {
-    const lines = emitArrayCallbackReturnLines(
-      statement.argument,
-      returnKind,
-      elementType,
-      outValue,
-      currentValue,
-      context
-    )
-
-    lines.push(`goto ${doneLabel};`)
-
-    return lines
-  }
-
-  if (statement.type === 'BlockStatement') {
-    const lines: string[] = []
-
-    lines.push('{')
-    appendPrefixedLines(
-      lines,
-      emitArrayCallbackStatementListLines(
-        statement.body,
-        doneLabel,
-        returnKind,
-        elementType,
-        outValue,
-        currentValue,
-        context
-      ),
-      '  '
-    )
-    lines.push('}')
-
-    return lines
-  }
-
-  if (statement.type !== 'IfStatement') {
-    return []
-  }
-
-  const condition = arrayDeps(context).emitPreparedNumberExpression(statement.condition, context)
-  const consequent = emitArrayCallbackStatementLines(
-    statement.consequent,
-    doneLabel,
-    returnKind,
-    elementType,
-    outValue,
-    currentValue,
-    context
-  )
-  const lines: string[] = []
-
-  appendLines(lines, condition.lines)
-  lines.push(`if ${emitCConditionClause(condition.expression)} {`)
-  appendPrefixedLines(lines, consequent, '  ')
-  lines.push('}')
-
-  if (statement.alternate !== null && typeof statement.alternate !== 'undefined') {
-    lines[lines.length - 1] = '} else {'
-    appendPrefixedLines(
-      lines,
-      emitArrayCallbackStatementLines(
-        statement.alternate,
-        doneLabel,
-        returnKind,
-        elementType,
-        outValue,
-        currentValue,
-        context
-      ),
-      '  '
-    )
-    lines.push('}')
-  }
-
-  return lines
-}
-
-function emitArrayCallbackReturnLines(
-  expression: AnyNode,
-  returnKind: string,
-  elementType: string,
-  out: string,
-  value: string,
-  context: ArrayFunctionContext
-): string[] {
-  if (returnKind === 'map') {
-    return emitArrayMapReturnLines(expression, elementType, out, context)
-  }
-
-  return emitArrayFilterReturnLines(expression, out, value, context)
-}
-
-function emitArrayMapReturnLines(
-  expression: AnyNode,
-  elementType: string,
-  out: string,
-  context: ArrayFunctionContext
-): string[] {
-  const mappedValue = emitPreparedArrayMapValue(expression, elementType, context)
-  const lines: string[] = []
-
-  appendLines(lines, mappedValue.lines)
-  lines.push(`${out}.push(${mappedValue.expression});`)
-  lines.push(emitArrayThrownCheck(context))
-
-  return lines
-}
-
-function emitArrayFilterReturnLines(
-  expression: AnyNode,
-  out: string,
-  value: string,
-  context: ArrayFunctionContext
-): string[] {
-  const predicate = arrayDeps(context).emitPreparedNumberExpression(expression, context)
-
-  const lines: string[] = []
-
-  appendLines(lines, predicate.lines)
-  lines.push(`if ${emitCConditionClause(predicate.expression)} {`)
-  lines.push(`  ${out}.push(${value});`)
-  lines.push(`  ${emitArrayThrownCheck(context)}`)
-  lines.push('}')
-
-  return lines
-}
-
-function emitPreparedArrayCallbackInput(
-  callback: AnyNode,
-  receiver: PreparedArrayReceiver,
-  value: string,
-  index: string,
-  context: ArrayFunctionContext
-): string[] {
-  const lines: string[] = []
-  let valueParam: ArrayNode | null = null
-  let indexParam: ArrayNode | null = null
-
-  if (callback.params.length > 0) {
-    valueParam = arrayNodeAt(callback.params, 0)
-  }
-
-  if (callback.params.length > 1) {
-    indexParam = arrayNodeAt(callback.params, 1)
-  }
-
-  if (valueParam !== null && typeof valueParam !== 'undefined') {
-    context.variables.set(valueParam.name, receiver.elementType)
-
-    if (receiver.elementType === 'string') {
-      context.runtimeStrings.add(valueParam.name)
-      lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
-      lines.push(`inox_string* ${valueParam.name} = (inox_string*)${value}.as.ref;`)
-    } else if (receiver.elementType === 'object') {
-      lines.push(emitRuntimeTypeCheck(runtimeObjectLikeValueMismatchCondition(value), context))
-      lines.push(`auto ${valueParam.name} = ${value};`)
-    } else if (receiver.elementType === 'array') {
-      const nestedElementType = valueParam.arrayElementType ?? 'unknown'
-
-      context.runtimeArrayElementTypes.set(valueParam.name, nestedElementType)
-      lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_ARRAY || ${value}.as.ref == 0`, context))
-      lines.push(`auto ${valueParam.name} = ${value};`)
-    } else if (receiver.elementType === 'boolean') {
-      lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_BOOL`, context))
-      lines.push(`double ${valueParam.name} = (double)(${value}.as.boolean != 0);`)
-    } else {
-      lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_NUMBER`, context))
-      lines.push(`double ${valueParam.name} = ${value}.as.number;`)
-    }
-
-    appendLines(lines, emitPreparedArrayBindingElements(valueParam, context))
-  }
-
-  if (indexParam !== null && typeof indexParam !== 'undefined') {
-    context.variables.set(indexParam.name, 'number')
-    lines.push(`double ${indexParam.name} = (double)${index};`)
-  }
-
-  return lines
-}
-
-function emitPreparedArrayBindingElements(
-  param: ArrayNode,
-  context: ArrayFunctionContext
-): string[] {
-  const bindingElements: ArrayBindingElement[] = param.bindingElements ?? []
-  const lines: string[] = []
-
-  for (let index = 0; index < bindingElements.length; index = index + 1) {
-    const binding = bindingElements[index]
-    const value = nextCName(context, 'inox_array_binding')
-    const name = emitCIdentifier(binding.name)
-    const valueType = binding.valueType ?? 'unknown'
-
-    lines.push(`auto ${value} = ArrayClass(${emitCIdentifier(param.name)}).get(${binding.index});`)
-    lines.push(emitArrayThrownCheck(context))
-    context.variables.set(binding.name, valueType)
-
-    if (valueType === 'string') {
-      context.runtimeStrings.add(binding.name)
-      lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
-      lines.push(`inox_string* ${name} = (inox_string*)${value}.as.ref;`)
-    } else if (valueType === 'number') {
-      lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_NUMBER`, context))
-      lines.push(`double ${name} = ${value}.as.number;`)
-    } else if (valueType === 'boolean') {
-      lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_BOOL`, context))
-      lines.push(`double ${name} = (double)(${value}.as.boolean != 0);`)
-    } else if (valueType === 'array') {
-      context.runtimeArrayElementTypes.set(binding.name, binding.arrayElementType ?? 'unknown')
-      lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_ARRAY || ${value}.as.ref == 0`, context))
-      lines.push(`auto ${name} = ${value};`)
-    } else if (valueType === 'object') {
-      lines.push(emitRuntimeTypeCheck(runtimeObjectLikeValueMismatchCondition(value), context))
-      lines.push(`auto ${name} = ${value};`)
-    } else {
-      lines.push(`auto ${name} = ${value};`)
-    }
-  }
-
-  return lines
-}
-
-function emitPreparedArrayReduceCallbackInput(
-  callback: AnyNode,
-  accumulator: string,
-  value: string,
-  index: string,
-  context: ArrayFunctionContext
-): string[] {
-  const lines: string[] = []
-  let accumulatorParam: ArrayNode | null = null
-  let valueParam: ArrayNode | null = null
-  let indexParam: ArrayNode | null = null
-
-  if (callback.params.length > 0) {
-    accumulatorParam = arrayNodeAt(callback.params, 0)
-  }
-
-  if (callback.params.length > 1) {
-    valueParam = arrayNodeAt(callback.params, 1)
-  }
-
-  if (callback.params.length > 2) {
-    indexParam = arrayNodeAt(callback.params, 2)
-  }
-
-  if (accumulatorParam !== null && typeof accumulatorParam !== 'undefined') {
-    context.variables.set(accumulatorParam.name, 'number')
-    lines.push(`double ${accumulatorParam.name} = ${accumulator};`)
-  }
-
-  if (valueParam !== null && typeof valueParam !== 'undefined') {
-    context.variables.set(valueParam.name, 'number')
-    lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_NUMBER`, context))
-    lines.push(`double ${valueParam.name} = ${value}.as.number;`)
-  }
-
-  if (indexParam !== null && typeof indexParam !== 'undefined') {
-    context.variables.set(indexParam.name, 'number')
-    lines.push(`double ${indexParam.name} = (double)${index};`)
-  }
-
-  return lines
-}
 
 function updatePushedArrayMetadata(receiver: ArrayMaybeNode, valueType: string, context: ArrayFunctionContext): void {
   if (
@@ -3418,13 +2024,6 @@ function updatePoppedArrayMetadata(receiver: ArrayMaybeNode, context: ArrayFunct
   }
 }
 
-function emitPreparedArrayMapValue(
-  expression: AnyNode,
-  valueType: string,
-  context: ArrayFunctionContext
-): PreparedExpression {
-  return emitPreparedArrayElementValue(expression, valueType, context)
-}
 
 function emitPreparedArrayElementValue(
   expression: AnyNode,
@@ -3443,61 +2042,6 @@ function emitPreparedArrayElementValue(
   }
 }
 
-function emitPreparedArraySortComparatorInput(
-  callback: AnyNode,
-  receiver: PreparedArrayReceiver,
-  left: string,
-  right: string,
-  context: ArrayFunctionContext
-): string[] {
-  const lines: string[] = []
-  let leftParam: ArrayNode | null = null
-  let rightParam: ArrayNode | null = null
-
-  if (callback.params.length > 0) {
-    leftParam = arrayNodeAt(callback.params, 0)
-  }
-
-  if (callback.params.length > 1) {
-    rightParam = arrayNodeAt(callback.params, 1)
-  }
-
-  if (leftParam !== null && typeof leftParam !== 'undefined') {
-    appendLines(lines, emitPreparedArraySortComparatorParam(leftParam.name, receiver.elementType, left, context))
-  }
-
-  if (rightParam !== null && typeof rightParam !== 'undefined') {
-    appendLines(lines, emitPreparedArraySortComparatorParam(rightParam.name, receiver.elementType, right, context))
-  }
-
-  return lines
-}
-
-function emitPreparedArraySortComparatorParam(
-  name: string,
-  elementType: string,
-  value: string,
-  context: ArrayFunctionContext
-): string[] {
-  context.variables.set(name, elementType)
-
-  if (elementType === 'string') {
-    context.runtimeStrings.add(name)
-    return [
-      emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context),
-      `inox_string* ${name} = (inox_string*)${value}.as.ref;`
-    ]
-  }
-
-  if (elementType === 'boolean') {
-    return [
-      emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_BOOL`, context),
-      `double ${name} = (double)(${value}.as.boolean != 0);`
-    ]
-  }
-
-  return [emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_NUMBER`, context), `double ${name} = ${value}.as.number;`]
-}
 
 function emitPreparedArrayReceiver(
   expression: ArrayMaybeNode,
@@ -3523,7 +2067,9 @@ function emitPreparedArrayReceiver(
     return {
       lines: value.lines,
       expression: value.expression,
-      elementType: resolveForOfElementType(elements)
+      elementType: resolveForOfElementType(elements),
+      cppType: value.cppType,
+      valueAdapter: arrayNativeValueAdapter(expression, context)
     }
   }
 
@@ -3538,7 +2084,8 @@ function emitPreparedArrayReceiver(
       lines: value.lines,
       expression: value.expression,
       elementType: resolvePreparedArrayReceiverElementType(expression, context),
-      cppType: value.cppType
+      cppType: value.cppType,
+      valueAdapter: arrayNativeValueAdapter(expression, context)
     }
   }
 
@@ -3561,19 +2108,23 @@ function emitPreparedArrayReceiver(
       }
     }
 
-    if (context.cppArrayValues.has(name)) {
+    const cppType = context.cppValueTypes.get(name)
+
+    if (cppType !== null && typeof cppType !== 'undefined') {
       return {
         lines: [],
         expression: emitArrayReferenceName(name, context),
         elementType,
-        cppType: 'Array'
+        cppType,
+        valueAdapter: arrayNativeValueAdapter(expression, context)
       }
     }
 
     return {
       lines: [],
       expression: emitArrayReferenceName(name, context),
-      elementType
+      elementType,
+      valueAdapter: arrayNativeValueAdapter(expression, context)
     }
   }
 
@@ -3590,7 +2141,8 @@ function emitPreparedArrayReceiver(
       lines: value.lines,
       expression: value.expression,
       elementType: resolvePreparedArrayReceiverElementType(expression, context),
-      cppType: value.cppType
+      cppType: value.cppType,
+      valueAdapter: arrayNativeValueAdapter(expression, context)
     }
   }
 
@@ -3601,23 +2153,7 @@ function emitPreparedArrayReceiver(
       return null
     }
 
-    let call = emitPreparedArrayMapCallExpression(expression, context)
-
-    if (call === null || typeof call === 'undefined') {
-      call = emitPreparedArrayFilterCallExpression(expression, context)
-    }
-
-    if (call === null || typeof call === 'undefined') {
-      call = emitPreparedArraySliceCallExpression(expression, context)
-    }
-
-    if (call === null || typeof call === 'undefined') {
-      call = emitPreparedArraySortCallExpression(expression, context)
-    }
-
-    if (call === null || typeof call === 'undefined') {
-      call = emitPreparedArrayFromCallExpression(expression, context)
-    }
+    let call = emitPreparedArraySliceCallExpression(expression, context)
 
     if (
       (call === null || typeof call === 'undefined') &&
@@ -3631,7 +2167,8 @@ function emitPreparedArrayReceiver(
         lines: call.lines,
         expression: call.expression,
         elementType: call.elementType,
-        cppType: call.cppType
+        cppType: call.cppType,
+        valueAdapter: arrayNativeValueAdapter(expression, context)
       }
     }
 
@@ -3641,11 +2178,25 @@ function emitPreparedArrayReceiver(
       lines: value.lines,
       expression: value.expression,
       elementType: resolvePreparedArrayReceiverElementType(expression, context),
-      cppType: value.cppType
+      cppType: value.cppType,
+      valueAdapter: arrayNativeValueAdapter(expression, context)
     }
   }
 
   return null
+}
+
+function preparedArrayReceiverFacadeExpression(receiver: PreparedArrayReceiver): string {
+  if (
+    receiver.cppType !== null &&
+    typeof receiver.cppType !== 'undefined' &&
+    receiver.cppType !== 'inox::Value' &&
+    receiver.cppType !== 'inox_value'
+  ) {
+    return receiver.expression
+  }
+
+  return applyLibraryNativeValueAdapter(receiver.expression, receiver.valueAdapter ?? null)
 }
 
 function resolveArrayJoinReceiverElementType(expression: ArrayMaybeNode, context: ArrayFunctionContext): string | null {
@@ -3705,10 +2256,6 @@ function resolvePreparedArrayReceiverElementType(expression: AnyNode, context: A
 
   if (runtimeElementType !== null && typeof runtimeElementType !== 'undefined') {
     return runtimeElementType
-  }
-
-  if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
-    return expression.arrayElementType
   }
 
   return 'unknown'

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 test('dynamic typeof number не включает string length lowering', () => {
   const result = compileSource(
@@ -12,7 +13,7 @@ test('dynamic typeof number не включает string length lowering', () =>
         return typeof node.value === 'number' && node.value.length > 0
       }
     `,
-    { target: 'cc' }
+    { libraries: defaultCompilerLibrarySet, target: 'cc' }
   )
 
   assert.doesNotMatch(result.code, /codeUnitLength\(\)/)

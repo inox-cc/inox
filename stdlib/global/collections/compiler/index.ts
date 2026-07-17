@@ -8,6 +8,7 @@ import type {
 
 const libraryId = 'global:collections'
 export const arrayRuntimeRequirement = `${libraryId}#array`
+const arrayCallbackRuntimeRequirement = `${libraryId}#array-callback`
 const mapRuntimeRequirement = `${libraryId}#map`
 const setRuntimeRequirement = `${libraryId}#set`
 
@@ -19,6 +20,7 @@ const mapKeyIteratorNativeTypeId = `${libraryId}#MapKeyIterator`
 const mapValueIteratorNativeTypeId = `${libraryId}#MapValueIterator`
 
 const parameterTypeRef: TypeRef = { kind: 'parameter', name: 'T' }
+const mappedParameterTypeRef: TypeRef = { kind: 'parameter', name: 'U' }
 const keyParameterTypeRef: TypeRef = { kind: 'parameter', name: 'K' }
 const valueParameterTypeRef: TypeRef = { kind: 'parameter', name: 'V' }
 const nullableValueParameterTypeRef: TypeRef = { kind: 'parameter', name: 'V', nullable: true }
@@ -101,6 +103,73 @@ const arrayIntrinsicOperation: LibraryOperationDescriptor = {
   argumentChecks: []
 }
 
+const arrayOperations: LibraryOperationDescriptor[] = [
+  arrayStaticCall('from', 'Array::from', arrayTypeRef(primitiveTypeRef('string')), ['string-view'], [
+    { valueTypes: ['string'] }
+  ]),
+  arrayStaticCall('isArray', 'Array::isArray', booleanTypeRef, ['runtime-value'], [], 1, 1, {
+    argumentIndex: 0,
+    trueValueType: 'array',
+    falseValueType: 'object',
+    trueNonNullable: true
+  }),
+  arrayMemberRead('length', numberTypeRef, 'static_cast<double>($value)'),
+  arrayReceiverCall('includes', booleanTypeRef, ['runtime-value'], [{ valueTypes: [], typeRef: parameterTypeRef }]),
+  arrayReceiverCall(
+    'join',
+    primitiveTypeRef('string'),
+    ['optional-string-view'],
+    [{ valueTypes: ['string'] }],
+    { cppType: 'inox::String', fields: [] },
+    0
+  ),
+  arrayReceiverCall('pop', nullableParameterTypeRef(), [], [], { cppType: 'inox::Value', fields: [] }),
+  {
+    ...arrayReceiverCall('push', numberTypeRef, ['runtime-value'], [{ valueTypes: [], typeRef: parameterTypeRef }]),
+    cResultAdapter: 'static_cast<double>($value)'
+  },
+  arrayReduceOperation(),
+  arrayReceiverCall(
+    'slice',
+    arrayTypeRef(parameterTypeRef),
+    ['optional-number', 'optional-number'],
+    [{ valueTypes: ['number'] }, { valueTypes: ['number'] }],
+    null,
+    0
+  ),
+  arrayCallbackReceiverCall(
+    'filter',
+    arrayTypeRef(parameterTypeRef),
+    arrayPredicateParameters(),
+    'boolean'
+  ),
+  arrayCallbackReceiverCall(
+    'find',
+    nullableParameterTypeRef(),
+    arrayPredicateParameters(),
+    'boolean',
+    { cppType: 'inox::Value', fields: [] }
+  ),
+  arrayCallbackReceiverCall(
+    'map',
+    arrayTypeRef(mappedParameterTypeRef),
+    arrayPredicateParameters(),
+    null,
+    null,
+    [
+      ...arrayTypeParameters(),
+      { name: 'U', sources: [{ source: 'argument-function-return', argumentIndex: 0 }] }
+    ]
+  ),
+  arrayCallbackReceiverCall('some', booleanTypeRef, [
+    ...arrayPredicateParameters()
+  ], 'boolean'),
+  arraySortOperation(),
+  arrayReceiverCall('unshift', numberTypeRef, ['runtime-value'], [{ valueTypes: [], typeRef: parameterTypeRef }]),
+  arrayIndexRead(),
+  arrayIndexWrite()
+]
+
 const setOperations: LibraryOperationDescriptor[] = [
   {
     libraryId,
@@ -150,6 +219,7 @@ const setOperations: LibraryOperationDescriptor[] = [
     cArgumentKinds: ['receiver'],
     cCallStyle: 'member',
     cFailureMode: 'thrown',
+    cResultAdapter: 'static_cast<double>($value)',
     resultTypeRef: numberTypeRef
   }
 ]
@@ -222,6 +292,7 @@ const mapOperations: LibraryOperationDescriptor[] = [
     cArgumentKinds: ['receiver'],
     cCallStyle: 'member',
     cFailureMode: 'thrown',
+    cResultAdapter: 'static_cast<double>($value)',
     resultTypeRef: numberTypeRef
   },
   mapReceiverCall('values', 'values', mapIteratorTypeRef(mapValueIteratorNativeTypeId, [valueParameterTypeRef]), [])
@@ -236,12 +307,22 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       typeId: arrayNativeTypeId,
       declarationNames: ['Array'],
       valueType: 'array',
-      cppType: 'ArrayClass',
+      cppType: 'Array',
       baseTypeIds: [],
       runtimeRequirements: [arrayRuntimeRequirement],
+      cValueAdapter: 'Array($value)',
       cRuntimeValueExpression: '$value.raw()',
       typeParameters: ['T'],
-      traits: [{ traitId: 'iterable', args: [parameterTypeRef] }]
+      traits: [{ traitId: 'iterable', args: [parameterTypeRef] }],
+      cIteration: {
+        iteratorMethod: 'values',
+        nextMethod: 'next',
+        doneMember: 'done',
+        valueMember: 'value',
+        receiverAdapter: 'Array($value)',
+        valueAdapter: '$value.raw()',
+        failureMode: 'thrown'
+      }
     },
     {
       libraryId,
@@ -294,13 +375,19 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       }
     }
   ],
-  operations: [arrayIntrinsicOperation, ...mapOperations, ...setOperations],
+  operations: [arrayIntrinsicOperation, ...arrayOperations, ...mapOperations, ...setOperations],
   intrinsicBindings: [{ role: 'array-literal', bindingId: arrayIntrinsicBindingId }],
   runtimeRequirements: [
     {
       id: arrayRuntimeRequirement,
       dependencies: ['collections', 'managed-values'],
       cPreludeIncludes: ['inox/array.h'],
+      capabilities: []
+    },
+    {
+      id: arrayCallbackRuntimeRequirement,
+      dependencies: ['callback-values'],
+      cPreludeIncludes: [],
       capabilities: []
     },
     {
@@ -320,6 +407,267 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
 
 function mapEntryTypeRef(): TypeRef {
   return arrayTypeRef(unknownTypeRef)
+}
+
+function nullableParameterTypeRef(): TypeRef {
+  return { kind: 'parameter', name: 'T', nullable: true }
+}
+
+function arrayTypeParameters(): LibraryOperationTypeParameterDescriptor[] {
+  return [{ name: 'T', sources: [{ source: 'receiver-type-argument', argumentIndex: 0 }] }]
+}
+
+function arrayStaticCall(
+  name: string,
+  cExpression: string,
+  resultTypeRef: TypeRef,
+  cArgumentKinds: Array<'runtime-value' | 'string-view'>,
+  argumentChecks: Array<{ valueTypes: string[] }>,
+  minArgs: number = argumentChecks.length,
+  maxArgs: number = argumentChecks.length,
+  argumentNarrowing: LibraryOperationDescriptor['argumentNarrowing'] = null
+): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: `global:Array.${name}`,
+    operationId: `${arrayNativeTypeId}.${name}`,
+    kind: 'call',
+    runtimeRequirements: [arrayRuntimeRequirement],
+    cExpression,
+    cArgumentKinds,
+    cFailureMode: 'thrown',
+    cResultMode: 'value',
+    resultTypeRef,
+    argumentNarrowing,
+    minArgs,
+    maxArgs,
+    argumentChecks
+  }
+}
+
+function arrayMemberRead(
+  name: string,
+  resultTypeRef: TypeRef,
+  cResultAdapter: string | null = null
+): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: `${arrayNativeTypeId}.${name}`,
+    operationId: `${arrayNativeTypeId}.${name}`,
+    kind: 'member-read',
+    runtimeRequirements: [arrayRuntimeRequirement],
+    receiverTypeId: arrayNativeTypeId,
+    typeParameters: arrayTypeParameters(),
+    cExpression: name,
+    cArgumentKinds: ['receiver'],
+    cCallStyle: 'member',
+    cFailureMode: 'thrown',
+    cResultAdapter,
+    resultTypeRef
+  }
+}
+
+function arrayReceiverCall(
+  name: string,
+  resultTypeRef: TypeRef,
+  cArgumentKinds: Array<'optional-number' | 'optional-string-view' | 'runtime-value'>,
+  argumentChecks: Array<{ valueTypes: string[]; typeRef?: TypeRef }>,
+  cResultMapping: { cppType: string; fields: [] } | null = null,
+  minArgs: number = argumentChecks.length
+): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: `${arrayNativeTypeId}.${name}`,
+    operationId: `${arrayNativeTypeId}.${name}`,
+    kind: 'call',
+    runtimeRequirements: [arrayRuntimeRequirement],
+    receiverTypeId: arrayNativeTypeId,
+    typeParameters: arrayTypeParameters(),
+    cExpression: name,
+    cArgumentKinds: ['receiver', ...cArgumentKinds],
+    cCallStyle: 'member',
+    cFailureMode: 'thrown',
+    cResultMode: 'value',
+    cResultMapping,
+    resultTypeRef,
+    minArgs,
+    maxArgs: argumentChecks.length,
+    argumentChecks
+  }
+}
+
+function arrayCallbackReceiverCall(
+  name: string,
+  resultTypeRef: TypeRef,
+  functionParameters: Array<{
+    name: string
+    valueType: string
+    typeRef: TypeRef
+  }>,
+  functionReturnType: string | null,
+  cResultMapping: { cppType: string; fields: [] } | null = null,
+  typeParameters: LibraryOperationTypeParameterDescriptor[] = arrayTypeParameters()
+): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: `${arrayNativeTypeId}.${name}`,
+    operationId: `${arrayNativeTypeId}.${name}`,
+    kind: 'call',
+    runtimeRequirements: [arrayRuntimeRequirement, arrayCallbackRuntimeRequirement],
+    receiverTypeId: arrayNativeTypeId,
+    typeParameters,
+    cExpression: name,
+    cArgumentKinds: ['receiver', 'runtime-callback'],
+    cCallStyle: 'member',
+    cFailureMode: 'thrown',
+    cResultMode: 'value',
+    cResultMapping,
+    resultTypeRef,
+    minArgs: 1,
+    maxArgs: 1,
+    argumentChecks: [
+      {
+        valueTypes: ['function'],
+        functionParameters,
+        functionReturnType,
+        functionAsync: false
+      }
+    ]
+  }
+}
+
+function arrayPredicateParameters(): Array<{
+  name: string
+  valueType: string
+  typeRef: TypeRef
+}> {
+  return [
+    { name: 'value', valueType: 'unknown', typeRef: parameterTypeRef },
+    { name: 'index', valueType: 'number', typeRef: numberTypeRef }
+  ]
+}
+
+function arraySortOperation(): LibraryOperationDescriptor {
+  const callbackCheck = {
+    valueTypes: ['function'],
+    functionParameters: [
+      { name: 'left', valueType: 'unknown', typeRef: parameterTypeRef },
+      { name: 'right', valueType: 'unknown', typeRef: parameterTypeRef }
+    ],
+    functionReturnType: 'number',
+    functionAsync: false
+  }
+
+  return {
+    libraryId,
+    bindingId: `${arrayNativeTypeId}.sort`,
+    operationId: `${arrayNativeTypeId}.sort`,
+    kind: 'call',
+    runtimeRequirements: [arrayRuntimeRequirement],
+    receiverTypeId: arrayNativeTypeId,
+    typeParameters: arrayTypeParameters(),
+    cExpression: 'sort',
+    cCallStyle: 'member',
+    cFailureMode: 'thrown',
+    cResultMode: 'value',
+    resultTypeRef: arrayTypeRef(parameterTypeRef),
+    minArgs: 0,
+    maxArgs: 1,
+    variants: [
+      {
+        minArgs: 0,
+        maxArgs: 0,
+        runtimeRequirements: [arrayRuntimeRequirement],
+        cArgumentKinds: ['receiver'],
+        argumentChecks: []
+      },
+      {
+        minArgs: 1,
+        maxArgs: 1,
+        runtimeRequirements: [arrayRuntimeRequirement, arrayCallbackRuntimeRequirement],
+        cArgumentKinds: ['receiver', 'runtime-callback'],
+        argumentChecks: [callbackCheck]
+      }
+    ]
+  }
+}
+
+function arrayReduceOperation(): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: `${arrayNativeTypeId}.reduce`,
+    operationId: `${arrayNativeTypeId}.reduce`,
+    kind: 'call',
+    runtimeRequirements: [arrayRuntimeRequirement, arrayCallbackRuntimeRequirement],
+    receiverTypeId: arrayNativeTypeId,
+    typeParameters: [
+      ...arrayTypeParameters(),
+      { name: 'U', sources: [{ source: 'argument-type', argumentIndex: 1 }] }
+    ],
+    cExpression: 'reduce',
+    cArgumentKinds: ['receiver', 'runtime-callback', 'runtime-value'],
+    cCallStyle: 'member',
+    cFailureMode: 'thrown',
+    cResultMode: 'value',
+    cResultMapping: { cppType: 'inox::Value', fields: [] },
+    resultTypeRef: mappedParameterTypeRef,
+    minArgs: 2,
+    maxArgs: 2,
+    argumentChecks: [
+      {
+        valueTypes: ['function'],
+        functionParameters: [
+          { name: 'accumulator', valueType: 'unknown', typeRef: mappedParameterTypeRef },
+          { name: 'value', valueType: 'unknown', typeRef: parameterTypeRef },
+          { name: 'index', valueType: 'number', typeRef: numberTypeRef }
+        ],
+        functionReturnTypeRef: mappedParameterTypeRef,
+        functionAsync: false
+      },
+      { valueTypes: [], typeRef: mappedParameterTypeRef }
+    ]
+  }
+}
+
+function arrayIndexRead(): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: `${arrayNativeTypeId}.*`,
+    operationId: `${arrayNativeTypeId}#index-read`,
+    kind: 'index-read',
+    runtimeRequirements: [arrayRuntimeRequirement],
+    receiverTypeId: arrayNativeTypeId,
+    typeParameters: arrayTypeParameters(),
+    cExpression: 'get',
+    cArgumentKinds: ['receiver', 'number'],
+    cCallStyle: 'member',
+    cFailureMode: 'thrown',
+    resultTypeRef: parameterTypeRef,
+    cResultMapping: { cppType: 'inox::Value', fields: [] },
+    minArgs: 1,
+    maxArgs: 1,
+    argumentChecks: [{ valueTypes: ['number'] }]
+  }
+}
+
+function arrayIndexWrite(): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: `${arrayNativeTypeId}.*`,
+    operationId: `${arrayNativeTypeId}#index-write`,
+    kind: 'index-write',
+    runtimeRequirements: [arrayRuntimeRequirement],
+    receiverTypeId: arrayNativeTypeId,
+    typeParameters: arrayTypeParameters(),
+    cExpression: 'set',
+    cArgumentKinds: ['receiver', 'number', 'runtime-value'],
+    cCallStyle: 'member',
+    cFailureMode: 'thrown',
+    resultTypeRef: parameterTypeRef,
+    minArgs: 2,
+    maxArgs: 2,
+    argumentChecks: [{ valueTypes: ['number'] }, { valueTypes: [], typeRef: parameterTypeRef }]
+  }
 }
 
 function mapIteratorTypeRef(typeId: string, args: TypeRef[]): NominalTypeRef {
@@ -474,7 +822,7 @@ function setReceiverCall(
   }
 }
 
-function primitiveTypeRef(name: 'boolean' | 'number' | 'void'): TypeRef {
+function primitiveTypeRef(name: 'boolean' | 'number' | 'string' | 'void'): TypeRef {
   return {
     kind: 'primitive',
     name,

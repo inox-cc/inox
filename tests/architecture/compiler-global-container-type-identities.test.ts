@@ -31,12 +31,22 @@ test('Array, Set и Promise принадлежат discoverable global packages 
       typeId: 'global:collections#Array',
       declarationNames: ['Array'],
       valueType: 'array',
-      cppType: 'ArrayClass',
+      cppType: 'Array',
       baseTypeIds: [],
       runtimeRequirements: [arrayRuntimeRequirement],
+      cValueAdapter: 'Array($value)',
       cRuntimeValueExpression: '$value.raw()',
       typeParameters: ['T'],
-      traits: [{ traitId: 'iterable', args: [{ kind: 'parameter', name: 'T' }] }]
+      traits: [{ traitId: 'iterable', args: [{ kind: 'parameter', name: 'T' }] }],
+      cIteration: {
+        iteratorMethod: 'values',
+        nextMethod: 'next',
+        doneMember: 'done',
+        valueMember: 'value',
+        receiverAdapter: 'Array($value)',
+        valueAdapter: '$value.raw()',
+        failureMode: 'thrown'
+      }
     }
   )
   assert.deepEqual(

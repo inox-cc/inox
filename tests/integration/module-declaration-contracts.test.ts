@@ -98,6 +98,7 @@ export type User = ExternalUser;
     name: 'ExternalUser',
     syntheticTypeImport: true,
     syntheticTypeImportDirect: true,
+    syntheticTypeImportSourceTypeOnly: true,
     importedName: 'ExternalUser',
     valueType: {
       kind: 'alias',
@@ -107,8 +108,8 @@ export type User = ExternalUser;
 
   const syntheticCode = emitModuleDeclarationContract(createModuleDeclarationProgram(withSynthetic))
 
-  assert.doesNotMatch(syntheticCode, /import type \{ ExternalUser \}/)
-  assert.match(syntheticCode, /type ExternalUser = unknown;/)
+  assert.match(syntheticCode, /import type \{ ExternalUser \} from '\.\/user\.ts';/)
+  assert.doesNotMatch(syntheticCode, /type ExternalUser = unknown;/)
   assert.match(syntheticCode, /export type User = ExternalUser;/)
 }
 

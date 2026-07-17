@@ -12,6 +12,13 @@
 #include "inox/set.h"
 #include "inox/string.h"
 
+struct ArrayStorage {
+  inox_ref header;
+  size_t length;
+  size_t capacity;
+  inox_value* items;
+};
+
 enum MapSlotState { MapSlotEmpty, MapSlotOccupied, MapSlotTombstone };
 
 struct MapEntry {
@@ -37,6 +44,32 @@ static bool inox_value_equal(inox_value left, inox_value right);
 
 static void inox_collection_throw(const char* message) {
   inox::throw_value(inox::String(message));
+}
+
+static bool inox_array_call_predicate(
+  inox::Callback& predicate,
+  inox_value item,
+  size_t index,
+  const char* method,
+  bool* match
+) {
+  inox::Value arguments[] = {
+    inox::Value(item),
+    inox::Value(inox_number_value((double)index))
+  };
+  inox::Value result = predicate.call(std::span<const inox::Value>(arguments, 2));
+
+  if (inox::thrown()) {
+    return false;
+  }
+
+  if (result.tag != INOX_TAG_BOOL) {
+    inox_collection_throw(method);
+    return false;
+  }
+
+  *match = result.as.boolean;
+  return true;
 }
 
 static void inox_map_init_entries(MapEntry* entries, size_t cap) {
@@ -198,7 +231,7 @@ static MapStorage* map_data(const Map& value) {
 }
 
 static bool inox_map_add_entry(Map& map, const inox::Value& entry_value) {
-  ArrayClass entry(entry_value);
+  Array entry(entry_value);
 
   if (!entry.valid() || entry.length() < 2) {
     inox_collection_throw("TypeError: Map constructor entry is not a key/value pair");
@@ -268,7 +301,7 @@ Map Map::from(const inox::Value& values) {
   inox_value raw_values = values.raw();
 
   if (raw_values.tag == INOX_TAG_ARRAY) {
-    ArrayClass entries(values);
+    Array entries(values);
     size_t length = entries.length();
 
     if (inox::thrown()) {
@@ -593,7 +626,7 @@ MapIterationResult MapIterator::next() {
       return { false, inox::Value(entry->value) };
     }
 
-    ArrayClass pair = ArrayClass::create(0);
+    Array pair = Array::create(0);
     pair.push(inox::Value(entry->key));
     pair.push(inox::Value(entry->value));
 
@@ -795,7 +828,7 @@ Set Set::from(const inox::Value& values) {
   inox_value raw_values = values.raw();
 
   if (raw_values.tag == INOX_TAG_ARRAY) {
-    ArrayClass array(values);
+    Array array(values);
     size_t length = array.length();
 
     if (inox::thrown()) {
@@ -1424,6 +1457,16 @@ Array::Array(const inox::Value& value) : inox::Value(value) {}
 
 Array::Array(inox::Value&& value) : inox::Value(std::move(value)) {}
 
+static ArrayStorage* array_data(const Array& value) {
+  inox_value raw = value.raw();
+
+  if (raw.tag != INOX_TAG_ARRAY || raw.as.ref == 0) {
+    return 0;
+  }
+
+  return (ArrayStorage*)raw.as.ref;
+}
+
 bool Array::valid() const {
   inox_value value = inox::Value::raw();
 
@@ -1478,7 +1521,7 @@ bool Array::includes(const inox::Value& value) const {
   return false;
 }
 
-class Array Array::create(size_t len) {
+Array Array::create(size_t len) {
   ArrayStorage* array = inox_array_alloc_storage(&inox_default_allocator, len);
 
   if (array == 0) {
@@ -1487,6 +1530,131 @@ class Array Array::create(size_t len) {
   }
 
   return Array(inox::adopt(inox_array_adopt_storage(array)));
+}
+
+Array Array::from(inox::StringView value) {
+  Array result = Array::create(value.len);
+
+  if (!result.valid() || inox::thrown()) {
+    return result;
+  }
+
+  for (size_t index = 0; index < value.len; index += 1) {
+    result.set(index, inox::String(value.bytes + index, 1));
+
+    if (inox::thrown()) {
+      return result;
+    }
+  }
+
+  return result;
+}
+
+Array Array::filter(inox::Callback predicate) const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox_collection_throw("TypeError: Array.filter receiver is not an Array");
+    return Array();
+  }
+
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
+  Array result = Array::create(0);
+
+  if (inox::thrown()) {
+    return Array();
+  }
+
+  for (size_t index = 0; index < instance->length; index += 1) {
+    bool match = false;
+
+    if (!inox_array_call_predicate(
+          predicate,
+          instance->items[index],
+          index,
+          "TypeError: Array.filter callback must return boolean",
+          &match
+        )) {
+      return Array();
+    }
+
+    if (match) {
+      result.push(inox::Value(instance->items[index]));
+
+      if (inox::thrown()) {
+        return Array();
+      }
+    }
+  }
+
+  return result;
+}
+
+inox::Value Array::find(inox::Callback predicate) const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox_collection_throw("TypeError: Array.find receiver is not an Array");
+    return inox::Value();
+  }
+
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
+
+  for (size_t index = 0; index < instance->length; index += 1) {
+    bool match = false;
+
+    if (!inox_array_call_predicate(
+          predicate,
+          instance->items[index],
+          index,
+          "TypeError: Array.find callback must return boolean",
+          &match
+        )) {
+      return inox::Value();
+    }
+
+    if (match) {
+      return inox::Value(instance->items[index]);
+    }
+  }
+
+  return inox::Value(inox_null_value());
+}
+
+Array Array::map(inox::Callback callback) const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox_collection_throw("TypeError: Array.map receiver is not an Array");
+    return Array();
+  }
+
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
+  Array result = Array::create(0);
+
+  if (inox::thrown()) {
+    return Array();
+  }
+
+  for (size_t index = 0; index < instance->length; index += 1) {
+    inox::Value arguments[] = {
+      inox::Value(instance->items[index]),
+      inox::Value(inox_number_value((double)index))
+    };
+    inox::Value mapped = callback.call(std::span<const inox::Value>(arguments, 2));
+
+    if (inox::thrown()) {
+      return Array();
+    }
+
+    result.push(mapped);
+
+    if (inox::thrown()) {
+      return Array();
+    }
+  }
+
+  return result;
 }
 
 inox::Value Array::pop() const {
@@ -1507,12 +1675,12 @@ inox::Value Array::pop() const {
   return inox::adopt(std::exchange(instance->items[instance->length], inox_undefined_value()));
 }
 
-void Array::push(const inox::Value& value) const {
+size_t Array::push(const inox::Value& value) const {
   inox_value array = inox::Value::raw();
 
   if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
     inox_collection_throw("TypeError: Array push receiver is not an Array");
-    return;
+    return 0;
   }
 
   ArrayStorage* instance = (ArrayStorage*)array.as.ref;
@@ -1520,37 +1688,66 @@ void Array::push(const inox::Value& value) const {
 
   if (status != INOX_OK) {
     inox_collection_throw("TypeError: Array push failed");
-    return;
+    return 0;
   }
 
   inox_value item = value.raw();
   inox_retain(item);
   instance->items[instance->length] = item;
   instance->length += 1;
+  return instance->length;
 }
 
-void Array::set(size_t index, const inox::Value& value) const {
+inox::Value Array::reduce(inox::Callback callback, const inox::Value& initial) const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox_collection_throw("TypeError: Array.reduce receiver is not an Array");
+    return inox::Value();
+  }
+
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
+  inox::Value accumulator = initial;
+
+  for (size_t index = 0; index < instance->length; index += 1) {
+    inox::Value arguments[] = {
+      accumulator,
+      inox::Value(instance->items[index]),
+      inox::Value(inox_number_value((double)index))
+    };
+    accumulator = callback.call(std::span<const inox::Value>(arguments, 3));
+
+    if (inox::thrown()) {
+      return inox::Value();
+    }
+  }
+
+  return accumulator;
+}
+
+inox::Value Array::set(size_t index, const inox::Value& value) const {
   inox_value array = inox::Value::raw();
 
   if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
     inox_collection_throw("TypeError: Array assignment receiver is not an Array");
-    return;
+    return inox::Value();
   }
 
   ArrayStorage* instance = (ArrayStorage*)array.as.ref;
 
   if (index >= instance->length) {
     inox_collection_throw("TypeError: Array assignment failed");
-    return;
+    return inox::Value();
   }
 
   inox_value item = value.raw();
   inox_retain(item);
   inox_release(instance->items[index]);
   instance->items[index] = item;
+  return value;
 }
 
-class Array Array::slice(size_t start, size_t end) const {
+Array Array::slice(size_t start, size_t end) const {
   inox_value array = inox::Value::raw();
 
   if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
@@ -1590,7 +1787,38 @@ class Array Array::slice(size_t start, size_t end) const {
   return Array(inox::adopt(inox_array_adopt_storage(target)));
 }
 
-class Array Array::sort() const {
+bool Array::some(inox::Callback predicate) const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox_collection_throw("TypeError: Array.some receiver is not an Array");
+    return false;
+  }
+
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
+
+  for (size_t index = 0; index < instance->length; index += 1) {
+    bool match = false;
+
+    if (!inox_array_call_predicate(
+          predicate,
+          instance->items[index],
+          index,
+          "TypeError: Array.some callback must return boolean",
+          &match
+        )) {
+      return false;
+    }
+
+    if (match) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+Array Array::sort() const {
   inox_value array = inox::Value::raw();
 
   if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
@@ -1609,6 +1837,50 @@ class Array Array::sort() const {
     size_t scan = index;
 
     while (scan > 0 && inox_array_sort_compare(&instance->items[scan - 1], &value) > 0) {
+      instance->items[scan] = instance->items[scan - 1];
+      scan -= 1;
+    }
+
+    instance->items[scan] = value;
+  }
+
+  return Array(*this);
+}
+
+Array Array::sort(inox::Callback compare) const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox_collection_throw("TypeError: Array.sort receiver is not an Array");
+    return Array();
+  }
+
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
+
+  for (size_t index = 1; index < instance->length; index += 1) {
+    inox_value value = instance->items[index];
+    size_t scan = index;
+
+    while (scan > 0) {
+      inox::Value arguments[] = {
+        inox::Value(instance->items[scan - 1]),
+        inox::Value(value)
+      };
+      inox::Value compared = compare.call(std::span<const inox::Value>(arguments, 2));
+
+      if (inox::thrown()) {
+        return Array();
+      }
+
+      if (compared.tag != INOX_TAG_NUMBER) {
+        inox_collection_throw("TypeError: Array.sort callback must return number");
+        return Array();
+      }
+
+      if (compared.as.number <= 0) {
+        break;
+      }
+
       instance->items[scan] = instance->items[scan - 1];
       scan -= 1;
     }
@@ -1730,18 +2002,34 @@ inox::String Array::join(inox::StringView separator) const {
   return result;
 }
 
-bool Array::isArray(const inox::Value& value) const {
+bool Array::isArray(const inox::Value& value) {
   return value.raw().tag == INOX_TAG_ARRAY;
 }
 
-ArrayStorage* Array::raw(const inox::Value& value) const {
-  inox_value raw_value = value.raw();
-
-  if (raw_value.tag != INOX_TAG_ARRAY || raw_value.as.ref == 0) {
-    return 0;
+ArrayIterator Array::values() const {
+  if (!valid()) {
+    inox_collection_throw("TypeError: Array.values receiver is not an Array");
   }
 
-  return (ArrayStorage*)raw_value.as.ref;
+  return ArrayIterator(*this);
 }
 
-class Array Array;
+ArrayIterator::ArrayIterator() : owner_(), index_(0) {}
+
+ArrayIterator::ArrayIterator(const Array& value) : owner_(value), index_(0) {}
+
+ArrayIterationResult ArrayIterator::next() {
+  Array value(owner_);
+  ArrayStorage* instance = array_data(value);
+
+  if (instance == 0) {
+    inox_collection_throw("TypeError: Array iterator receiver is not an Array");
+    return { true, inox::Value() };
+  }
+
+  if (index_ >= instance->length) {
+    return { true, inox::Value() };
+  }
+
+  return { false, inox::Value(instance->items[index_++]) };
+}

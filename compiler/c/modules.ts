@@ -9,6 +9,7 @@ import type { AnyNode, Diagnostic, IrProgram, ModuleGraph, ModuleRecord } from '
 import { formatGeneratedC } from './format.ts'
 import { emitCFunctionName, emitCIdentifier } from './identifiers.ts'
 import type { CModuleEmitOptions, CModuleImportPlan, CModuleOutputFile, CModulePlan } from './types.ts'
+import { cOptionalCompilerLibrarySetValue } from './types.ts'
 
 const cModuleSourceExtensions = ['', '.ts', '.js']
 
@@ -296,7 +297,7 @@ function cModulePlanIr(record: ModuleRecord, options: CModuleEmitOptions): IrPro
     record.declarationProgram !== null &&
     typeof record.declarationProgram !== 'undefined'
   ) {
-    const libraries = resolveCompilerLibrarySet(options.libraries)
+    const libraries = resolveCompilerLibrarySet(cOptionalCompilerLibrarySetValue(options.libraries))
     const ir = lowerHirToIr(
       record.declarationProgram,
       libraries.fingerprint,

@@ -1,6 +1,26 @@
 export {}
 
 declare global {
+  class Array<T> {
+    readonly length: number;
+
+    static from(value: string): Array<string>;
+    static isArray(value: unknown): boolean;
+
+    filter(predicate: (value: T, index: number) => boolean): Array<T>;
+    find(predicate: (value: T, index: number) => boolean): T | undefined;
+    includes(value: T): boolean;
+    join(separator?: string): string;
+    map<U>(callback: (value: T, index: number) => U): Array<U>;
+    pop(): T | undefined;
+    push(value: T): number;
+    reduce<U>(callback: (accumulator: U, value: T, index: number) => U, initialValue: U): U;
+    slice(start?: number, end?: number): Array<T>;
+    some(predicate: (value: T, index: number) => boolean): boolean;
+    sort(compare?: (left: T, right: T) => number): Array<T>;
+    unshift(value: T): number;
+  }
+
   class Map<K, V> {
     readonly size: number;
 

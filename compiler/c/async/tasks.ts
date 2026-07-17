@@ -1,5 +1,7 @@
 import { diagnostic } from '../../diagnostics.ts'
+import type { TypeRef } from '../../extensions/types.ts'
 import type { AnyNode, Diagnostic, IrFunctionDeclaration, SourceLocation } from '../../types.ts'
+import type { CEmitContextWithDependencies, CFunctionContextWithDependencies } from '../context.ts'
 import { emitPrepareOwnedValueWrite, emitRuntimeTypeCheck, nextCName } from '../context.ts'
 import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
@@ -19,6 +21,7 @@ import type {
   CAsyncTaskWrapper,
   CCallbackWrapper,
   CClassInfo,
+  CCompilerLibrarySet,
   CFunctionParam,
   CFunctionType,
   CKnownArrayElement,
@@ -35,8 +38,13 @@ import type {
   CRuntimeArrowCapture,
   CPreparedExpression as PreparedExpression
 } from '../types.ts'
-import { cRuntimeValueTag, emitCType, isManagedRuntimeReturnType } from '../value-types.ts'
+import { cIterableElementValueType, cRuntimeValueTag, emitCType, isManagedRuntimeReturnType } from '../value-types.ts'
 import { isPromiseChainCallbackWrapperWithContext } from './callbacks.ts'
+import type { ArrayLoweringDependencies } from '../values/arrays.ts'
+import type { ClassLoweringDependencies } from '../values/classes.ts'
+import type { NullableLoweringDependencies } from '../values/nullable.ts'
+import type { StatementLoweringDependencies } from '../values/statements.ts'
+import type { StringLoweringDependencies } from '../values/strings.ts'
 import {
   cPromiseRuntimeCallName,
   isAsyncFunctionCallee,
@@ -66,27 +74,14 @@ type AsyncTaskStringNullableMap = Map<string, string | null>
 type AsyncTaskStringSet = Set<string>
 type AsyncTaskMetadataItem = CAsyncTaskFrameLocal | CAsyncTaskAwaitStep | CAsyncTaskParam | CAsyncTaskPrefixLocal
 
-type AsyncTaskEmitContext = {
-  asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
-  asyncTaskWrappers: AsyncTaskAsyncWrapperMap
-  boxedMutableCaptureDeclarations: AsyncTaskAnyNodeSet
-  callbackArrowWrappers: AsyncTaskCallbackArrowWrapperMap
-  callbackWrappers: AsyncTaskCallbackWrapperMap
-  classInfos: Map<string, CClassInfo>
-  diagnostics: Diagnostic[]
-  externalEventLoopFunctions: AsyncTaskStringSet
-  forceRuntimeStringDeclarations?: AsyncTaskStringSet
-  functionAsyncFlags: AsyncTaskBooleanMap
-  functionNames: AsyncTaskStringMap
-  functionParams: AsyncTaskFunctionParamMap
-  functionReturnPromiseValueTypes: AsyncTaskStringNullableMap
-  functionReturnTypes: AsyncTaskStringMap
-  jsGlobalRoots: AsyncTaskStringSet
-  nextId: number
-  promiseChainArrowWrappers: AsyncTaskPromiseChainWrapperMap
-  runtimeFunctionParams: AsyncTaskFunctionTypeMap
-  throwingFunctions: AsyncTaskStringSet
-}
+type AsyncTaskEmitContext = CEmitContextWithDependencies<
+  ArrayLoweringDependencies,
+  AsyncTaskLoweringDependencies,
+  ClassLoweringDependencies,
+  NullableLoweringDependencies,
+  StatementLoweringDependencies,
+  StringLoweringDependencies
+>
 
 function asyncTaskStatementValueType(statement: AsyncTaskAstNode, context: AsyncTaskFunctionContext): string {
   const valueType = statement.valueType
@@ -98,60 +93,17 @@ function asyncTaskStatementValueType(statement: AsyncTaskAstNode, context: Async
   return asyncTaskDeps(context).inferExpressionType(statement.init, context)
 }
 
-type AsyncTaskFunctionContext = AsyncTaskEmitContext & {
-  arrayLengths: AsyncTaskNumberMap
-  arrayShapes: AsyncTaskArrayShapeMap
-  breakFlowUsed: boolean
-  breakTargets: AsyncTaskLoopFlowTarget[]
-  boxedValueTypes: AsyncTaskStringMap
-  boxedValues: string[]
-  boxedVariables: AsyncTaskStringSet
-  classInstanceTypes: AsyncTaskStringMap
-  cleanupEnabled: boolean
-  continueFlowUsed: boolean
-  continueTargets: AsyncTaskLoopFlowTarget[]
-  errorChannelUsed: boolean
-  exceptionValueNames: AsyncTaskStringSet
-  errorTargets: string[]
-  eventLoopUsed: boolean
-  explicitEventLoop: boolean
-  externalEventLoop: boolean
-  failureStatement?: string | null
-  failureStatementUsed?: boolean
-  functionErrorOut: string | null
-  functionReturnOut: string | null
-  functionTypes: AsyncTaskFunctionTypeMap
-  narrowedNullableScalars: AsyncTaskStringSet
-  nullableVariables: AsyncTaskStringSet
-  objectAliases: AsyncTaskStringMap
-  objectDeclaredTypes: AsyncTaskStringMap
-  objectShapes: AsyncTaskObjectShapeFieldMap
-  ownedPromises: string[]
-  ownedValues: string[]
-  promiseConstructorHandlers: AsyncTaskPromiseConstructorHandlerMap
-  promiseRejectionValueTypes: AsyncTaskStringMap
-  promiseValueTypes: AsyncTaskStringMap
-  returnFlowUsed: boolean
-  returnNullable: boolean
-  returnShape?: CObjectShape | null
-  returnTargets: string[]
-  returnType: string
-  runtimeArrayElementTypes: AsyncTaskStringMap
-  runtimeCallbackCleanupLabel?: string
-  runtimeCallbackReturnOut?: string
-  runtimeCallbackReturnShape?: CObjectShape | null
-  runtimeCallbackReturnType?: string
-  runtimeCallbacks: AsyncTaskStringSet
-  runtimeStringValues: AsyncTaskStringMap
-  runtimeStrings: AsyncTaskStringSet
-  statusReturn: boolean
-  throwingFunction: boolean
-  usedCleanupGoto: boolean
-  usedRuntimeCallbackCleanupGoto?: boolean
-  variables: AsyncTaskStringMap
-}
+type AsyncTaskFunctionContext = CFunctionContextWithDependencies<
+  ArrayLoweringDependencies,
+  AsyncTaskLoweringDependencies,
+  ClassLoweringDependencies,
+  NullableLoweringDependencies,
+  StatementLoweringDependencies,
+  StringLoweringDependencies
+>
 
 type AsyncTaskLocalMetadataContext = {
+  libraries: CCompilerLibrarySet
   objectDeclaredTypes: AsyncTaskStringMap
   objectShapes: AsyncTaskObjectShapeFieldMap
   runtimeArrayElementTypes: AsyncTaskStringMap
@@ -441,14 +393,6 @@ function asyncTaskFrameLocalAt(locals: CAsyncTaskFrameLocal[], index: number): C
   return locals[index]
 }
 
-function asyncTaskMetadataStringOrUnknown(value: string | null | undefined): string {
-  if (value === null || typeof value === 'undefined' || value === '') {
-    return 'unknown'
-  }
-
-  return value
-}
-
 function asyncTaskStatementsBeforeLast(statements: AsyncTaskAstNode[]): AsyncTaskAstNode[] {
   const out: AsyncTaskAstNode[] = []
 
@@ -509,9 +453,9 @@ function createAsyncTaskFrameLocals(
       name: local.name,
       type: local.type,
       fieldName: local.fieldName,
-      arrayElementType: local.arrayElementType,
       forceRuntimeStringDeclaration: local.forceRuntimeStringDeclaration,
       shape: local.shape,
+      typeRef: local.typeRef,
       kind: 'prefix'
     })
   }
@@ -531,10 +475,10 @@ function createAsyncTaskFrameLocals(
       name: item.name,
       type: item.type,
       fieldName: item.fieldName,
-      arrayElementType: item.arrayElementType,
       awaitedExpression: item.awaitedExpression,
       awaitedPromiseExpression: item.awaitedPromiseExpression,
       shape: item.shape,
+      typeRef: item.typeRef,
       kind: 'await'
     })
   }
@@ -1550,7 +1494,6 @@ function resolveAsyncTaskPrefixLocals(
 
     if (isSupportedAsyncTaskFramePrefixLocal(statement, valueType, context)) {
       let shape: CObjectShape | null = null
-      let arrayElementType: string | null = null
 
       if (valueType === 'object') {
         if (statement.shape !== null && typeof statement.shape !== 'undefined') {
@@ -1567,35 +1510,11 @@ function resolveAsyncTaskPrefixLocals(
         }
       }
 
-      if (valueType === 'array') {
-        if (statement.arrayElementType !== null && typeof statement.arrayElementType !== 'undefined') {
-          arrayElementType = statement.arrayElementType
-        } else if (
-          statement.init !== null &&
-          typeof statement.init !== 'undefined' &&
-          statement.init.arrayElementType !== null &&
-          typeof statement.init.arrayElementType !== 'undefined'
-        ) {
-          arrayElementType = statement.init.arrayElementType
-        } else {
-          const resolvedArrayElementType = asyncTaskDeps(context).resolveRuntimeArrayElementType(
-            statement.init,
-            context
-          )
-
-          if (resolvedArrayElementType !== null && typeof resolvedArrayElementType !== 'undefined') {
-            arrayElementType = resolvedArrayElementType
-          } else {
-            arrayElementType = 'unknown'
-          }
-        }
-      }
-
       locals.push({
         name: statement.name,
         type: valueType,
         shape: shape,
-        arrayElementType: arrayElementType,
+        typeRef: statement.typeRef ?? statement.init?.typeRef ?? null,
         fieldName: `prefix_${emitCIdentifier(statement.name)}`,
         forceRuntimeStringDeclaration: valueType === 'string' && isRawStringLiteralExpression(statement.init)
       })
@@ -1985,8 +1904,6 @@ function resolveAsyncTaskDirectAwaitStep(
   }
 
   let shape: CObjectShape | null = null
-  let arrayElementType = 'unknown'
-
   if (awaitedType === 'object') {
     if (statement.shape !== null && typeof statement.shape !== 'undefined') {
       shape = statement.shape
@@ -2004,19 +1921,6 @@ function resolveAsyncTaskDirectAwaitStep(
     }
   }
 
-  if (statement.arrayElementType !== null && typeof statement.arrayElementType !== 'undefined') {
-    arrayElementType = statement.arrayElementType
-  } else if (statement.init.arrayElementType !== null && typeof statement.init.arrayElementType !== 'undefined') {
-    arrayElementType = statement.init.arrayElementType
-  } else if (
-    awaitedExpression !== null &&
-    typeof awaitedExpression !== 'undefined' &&
-    awaitedExpression.arrayElementType !== null &&
-    typeof awaitedExpression.arrayElementType !== 'undefined'
-  ) {
-    arrayElementType = awaitedExpression.arrayElementType
-  }
-
   let storedAwaitedExpression: AsyncTaskAstNode | null = awaitedExpression
 
   if (awaitedPromiseExpression !== null && typeof awaitedPromiseExpression !== 'undefined') {
@@ -2029,7 +1933,7 @@ function resolveAsyncTaskDirectAwaitStep(
     type: awaitedType,
     fieldName: `local_${emitCIdentifier(statement.name)}`,
     shape: shape,
-    arrayElementType: arrayElementType,
+    typeRef: statement.typeRef ?? statement.init.typeRef ?? null,
     awaitedExpression: storedAwaitedExpression,
     awaitedPromiseExpression: awaitedPromiseExpression
   }
@@ -2126,8 +2030,6 @@ function resolveAsyncTaskLocalPromiseAwaitStep(
   }
 
   let shape: CObjectShape | null = null
-  let arrayElementType: string | null = null
-
   if (awaitedType === 'object') {
     if (awaitStatement.shape !== null && typeof awaitStatement.shape !== 'undefined') {
       shape = awaitStatement.shape
@@ -2140,28 +2042,13 @@ function resolveAsyncTaskLocalPromiseAwaitStep(
     }
   }
 
-  if (awaitStatement.arrayElementType !== null && typeof awaitStatement.arrayElementType !== 'undefined') {
-    arrayElementType = awaitStatement.arrayElementType
-  } else if (
-    awaitStatement.init.arrayElementType !== null &&
-    typeof awaitStatement.init.arrayElementType !== 'undefined'
-  ) {
-    arrayElementType = awaitStatement.init.arrayElementType
-  } else {
-    arrayElementType = awaitedPromiseExpression.arrayElementType
-
-    if (arrayElementType === null || typeof arrayElementType === 'undefined') {
-      arrayElementType = null
-    }
-  }
-
   return {
     index: index,
     name: awaitStatement.name,
     type: awaitedType,
     fieldName: `local_${emitCIdentifier(awaitStatement.name)}`,
     shape: shape,
-    arrayElementType: arrayElementType,
+    typeRef: awaitStatement.typeRef ?? awaitStatement.init.typeRef ?? null,
     awaitedExpression: null,
     awaitedPromiseExpression: awaitedPromiseExpression
   }
@@ -2477,7 +2364,9 @@ function emitAsyncTaskStartDeclaration(wrapper: CAsyncTaskWrapper, baseContext: 
   lines.push('  inox_promise_retain(frame->promise);')
   lines.push('  *out = frame->promise;')
   appendIndentedAsyncTaskLines(lines, emitAsyncTaskVisibleLocalReads(wrapper, 0, { includePrefixLocals: false }), '  ')
-  appendIndentedAsyncTaskLines(lines, prefixAndScheduleLines, '  ')
+  lines.push('  {')
+  appendIndentedAsyncTaskLines(lines, prefixAndScheduleLines, '    ')
+  lines.push('  }')
   appendIndentedAsyncTaskLines(lines, asyncTaskDeps(context).emitOwnedValueCleanup(context), '  ')
   lines.push('  return INOX_OK;')
 
@@ -2656,8 +2545,10 @@ function registerAsyncTaskLocalMetadata(
   } else if (valueType === 'object') {
     registerAsyncTaskObjectShape(context, name, item.shape)
   } else if (valueType === 'array') {
-    const arrayElementType = asyncTaskMetadataStringOrUnknown(item.arrayElementType)
-    context.runtimeArrayElementTypes.set(name, arrayElementType)
+    context.runtimeArrayElementTypes.set(
+      name,
+      cIterableElementValueType(item.typeRef, context.libraries) ?? 'unknown'
+    )
   }
 }
 
@@ -3334,18 +3225,12 @@ function emitPreparedAsyncTaskAwaitedPromiseChainForWrapper(
 ): PreparedAsyncTaskPromise {
   const source = nextCName(context, 'inox_async_task_source')
   let sourceType: string = item.type
+  const callbackParamValueType: string | null = callback?.params?.[0]?.valueType ?? null
 
   if (receiver.promiseValueType !== null && typeof receiver.promiseValueType !== 'undefined') {
     sourceType = receiver.promiseValueType
-  } else if (
-    callback !== null &&
-    typeof callback !== 'undefined' &&
-    callback.params[0] !== null &&
-    typeof callback.params[0] !== 'undefined' &&
-    callback.params[0].valueType !== null &&
-    typeof callback.params[0].valueType !== 'undefined'
-  ) {
-    sourceType = callback.params[0].valueType
+  } else if (callbackParamValueType !== null) {
+    sourceType = callbackParamValueType
   }
 
   const value = emitPreparedAsyncTaskValueExpression(receiver.args[0], sourceType, context)

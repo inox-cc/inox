@@ -17,5 +17,5 @@ const node = checkerNodeAt(
 )
 
 node.shape = null
-node.arrayElementType = null
+node.typeRef = null
 console.log(`${node.name}:${node.params.length}:${node.loc.line}`)

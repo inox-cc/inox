@@ -495,7 +495,7 @@ class Parser {
       return createTypeAliasDeclaration(exported, name, typeParameters, this.parseFunctionType(false))
     }
 
-    if (this.is('identifier') && this.peek(1).value === '&') {
+    if (this.isIntersectionObjectTypeStart()) {
       return createTypeAliasDeclaration(exported, name, typeParameters, this.parseIntersectionObjectType())
     }
 
@@ -569,7 +569,11 @@ class Parser {
     const baseTypes: string[] = []
 
     while (this.is('identifier')) {
-      baseTypes.push(this.advance().value)
+      baseTypes.push(
+        this.parseTypeAnnotation(['&', '{', ';'], {
+          stopAtStatementBoundary: true
+        })
+      )
 
       if (!this.matchValue('&')) {
         break
@@ -583,6 +587,19 @@ class Parser {
     this.matchValue(';')
 
     return createObjectType([], baseTypes, true)
+  }
+
+  isIntersectionObjectTypeStart(): boolean {
+    if (!this.is('identifier')) {
+      return false
+    }
+
+    const result = readTypeAnnotation(this.tokens, this.position, ['&', ';'], {
+      stopAtStatementBoundary: true
+    })
+    const next = this.tokens[result.position]
+
+    return next !== null && typeof next !== 'undefined' && next.value === '&'
   }
 
   parseObjectType(baseTypes: string[] | null): AnyNode {
@@ -772,11 +789,11 @@ class Parser {
 
     const name = this.parseClassMemberName()
 
-    if (!modifiers.readOnly && this.isValue('(')) {
+    if (!modifiers.readOnly && (this.isValue('(') || this.isValue('<'))) {
       return this.parseClassMethod(name, staticToken)
     }
 
-    if (modifiers.readOnly && this.isValue('(')) {
+    if (modifiers.readOnly && (this.isValue('(') || this.isValue('<'))) {
       this.report('INOX_EXPECTED_TYPE', 'class method ownership modifiers are not supported; use fields', null)
     }
 
@@ -858,6 +875,7 @@ class Parser {
   }
 
   parseClassMethod(name: Token, staticToken: Token | null): AnyNode {
+    const typeParameters = this.parseFunctionTypeParameters()
     const params: AnyNode[] = []
 
     this.expectValue('(', 'INOX_EXPECTED_PAREN', 'expected ( after method name')
@@ -886,6 +904,7 @@ class Parser {
     return createMethodDefinition({
       name,
       staticToken,
+      typeParameters,
       params,
       declaredReturnType,
       returnType,
@@ -1204,8 +1223,6 @@ class Parser {
       valueType: 'unknown',
       nullable: false,
       inferredDeclaredType: null,
-      arrayElementType: null,
-      arrayElementDeclaredType: null,
       functionType: null,
       shape: null,
       loc: locFromToken(start),
@@ -1525,9 +1542,6 @@ class Parser {
           declaredType: null,
           valueType: 'unknown',
           nullable: false,
-          arrayElementType: null,
-          arrayElementDeclaredType: null,
-          arrayElementFunctionType: null,
           promiseValueType: null,
           functionType: null,
           shape: null
@@ -1969,7 +1983,14 @@ class Parser {
       if (this.matchValue(':')) {
         value = this.parseExpression()
       } else if (key.kind === 'identifier') {
-        value = createReferenceFromName(key.name, key.loc)
+        let keyLoc: SourceLocation = { line: 1, column: 1 }
+        const parsedKeyLoc = key.loc
+
+        if (parsedKeyLoc !== null && typeof parsedKeyLoc !== 'undefined') {
+          keyLoc = parsedKeyLoc
+        }
+
+        value = createReferenceFromName(key.name, keyLoc)
       } else {
         this.report('INOX_EXPECTED_OBJECT_VALUE', 'expected : after object property key', null)
       }
@@ -2379,6 +2400,13 @@ class Parser {
 }
 
 function appendObjectTypeMethodField(fields: AnyNode[], field: AnyNode): void {
+  const functionType = field.functionType
+
+  if (functionType === null || typeof functionType === 'undefined') {
+    fields.push(field)
+    return
+  }
+
   for (const existing of fields) {
     if (
       existing.name === field.name &&
@@ -2386,7 +2414,7 @@ function appendObjectTypeMethodField(fields: AnyNode[], field: AnyNode): void {
       typeof existing.functionType !== 'undefined'
     ) {
       const overloads: AnyNode[] = existing.functionOverloads ?? [existing.functionType]
-      overloads.push(field.functionType)
+      overloads.push(functionType)
       existing.functionOverloads = overloads
       return
     }

@@ -285,8 +285,9 @@ static inox_status inox_array_object_values(inox_allocator* allocator, inox_valu
     return INOX_ERR_TYPE;
   }
 
-  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
-  ArrayClass result = ArrayClass::create(instance->length);
+  Array values{inox::Value(array)};
+  size_t length = values.length();
+  Array result = Array::create(length);
 
   if (inox::thrown() || !result.valid()) {
     inox::take_exception();
@@ -294,8 +295,8 @@ static inox_status inox_array_object_values(inox_allocator* allocator, inox_valu
     return INOX_ERR_OOM;
   }
 
-  for (size_t index = 0; index < instance->length; index += 1) {
-    result.set(index, instance->items[index]);
+  for (size_t index = 0; index < length; index += 1) {
+    result.set(index, values.get(index));
 
     if (inox::thrown()) {
       inox::take_exception();
@@ -314,8 +315,9 @@ static inox_status inox_array_object_keys(inox_allocator* allocator, inox_value 
     return INOX_ERR_TYPE;
   }
 
-  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
-  ArrayClass result = ArrayClass::create(instance->length);
+  Array values{inox::Value(array)};
+  size_t length = values.length();
+  Array result = Array::create(length);
 
   if (inox::thrown() || !result.valid()) {
     inox::take_exception();
@@ -323,7 +325,7 @@ static inox_status inox_array_object_keys(inox_allocator* allocator, inox_value 
     return INOX_ERR_OOM;
   }
 
-  for (size_t index = 0; index < instance->length; index += 1) {
+  for (size_t index = 0; index < length; index += 1) {
     char key_bytes[64];
     int key_len = snprintf(key_bytes, sizeof(key_bytes), "%zu", index);
     inox_status status = INOX_OK;
@@ -361,8 +363,9 @@ static inox_status inox_array_object_entries(inox_allocator* allocator, inox_val
     return INOX_ERR_TYPE;
   }
 
-  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
-  ArrayClass result = ArrayClass::create(instance->length);
+  Array values{inox::Value(array)};
+  size_t length = values.length();
+  Array result = Array::create(length);
 
   if (inox::thrown() || !result.valid()) {
     inox::take_exception();
@@ -370,17 +373,17 @@ static inox_status inox_array_object_entries(inox_allocator* allocator, inox_val
     return INOX_ERR_OOM;
   }
 
-  for (size_t index = 0; index < instance->length; index += 1) {
+  for (size_t index = 0; index < length; index += 1) {
     char key_bytes[64];
     int key_len = snprintf(key_bytes, sizeof(key_bytes), "%zu", index);
-    ArrayClass pair;
+    Array pair;
     inox::String key;
     inox_status status = INOX_OK;
 
     if (key_len < 0 || (size_t)key_len >= sizeof(key_bytes)) {
       status = INOX_ERR_TYPE;
     } else {
-      pair = ArrayClass::create(2);
+      pair = Array::create(2);
 
       if (inox::thrown() || !pair.valid()) {
         inox::take_exception();
@@ -406,7 +409,7 @@ static inox_status inox_array_object_entries(inox_allocator* allocator, inox_val
     }
 
     if (status == INOX_OK) {
-      pair.set(1, instance->items[index]);
+      pair.set(1, values.get(index));
 
       if (inox::thrown()) {
         inox::take_exception();
@@ -445,7 +448,7 @@ static inox_status inox_object_entry_from_key_value(
     return INOX_ERR_TYPE;
   }
 
-  ArrayClass pair = ArrayClass::create(2);
+  Array pair = Array::create(2);
   inox::String key;
   inox_status status = INOX_OK;
 
@@ -522,7 +525,7 @@ inox_status inox_class_instance_keys(
   }
 
   uint32_t field_count = inox_class_descriptor_enumerable_count(descriptor);
-  ArrayClass result = ArrayClass::create(field_count);
+  Array result = Array::create(field_count);
 
   if (inox::thrown() || !result.valid()) {
     inox::take_exception();
@@ -576,7 +579,7 @@ inox_status inox_class_instance_values(
   }
 
   uint32_t field_count = inox_class_descriptor_enumerable_count(descriptor);
-  ArrayClass result = ArrayClass::create(field_count);
+  Array result = Array::create(field_count);
 
   if (inox::thrown() || !result.valid()) {
     inox::take_exception();
@@ -632,7 +635,7 @@ inox_status inox_class_instance_entries(
   }
 
   uint32_t field_count = inox_class_descriptor_enumerable_count(descriptor);
-  ArrayClass result = ArrayClass::create(field_count);
+  Array result = Array::create(field_count);
 
   if (inox::thrown() || !result.valid()) {
     inox::take_exception();
@@ -651,11 +654,11 @@ inox_status inox_class_instance_entries(
     }
 
     const char* name = field->name == 0 ? "" : field->name;
-    ArrayClass pair;
+    Array pair;
     inox::String key;
     inox_value value = inox_undefined_value();
 
-    pair = ArrayClass::create(2);
+    pair = Array::create(2);
 
     if (inox::thrown() || !pair.valid()) {
       inox::take_exception();
@@ -722,15 +725,14 @@ inox_status inox_object_value_at(inox_value object, size_t index, inox_value* ou
   }
 
   if (object.tag == INOX_TAG_ARRAY) {
-    ArrayStorage* instance = (ArrayStorage*)object.as.ref;
+    Array values{inox::Value(object)};
 
-    if (index >= instance->length) {
+    if (index >= values.length()) {
       *out = inox_undefined_value();
       return INOX_ERR_FIELD;
     }
 
-    *out = instance->items[index];
-    inox_retain(*out);
+    *out = values.get(index).release();
 
     return INOX_OK;
   }
@@ -753,9 +755,9 @@ inox_status inox_object_entry_at(inox_allocator* allocator, inox_value object, s
   }
 
   if (object.tag == INOX_TAG_ARRAY) {
-    ArrayStorage* instance = (ArrayStorage*)object.as.ref;
+    Array values{inox::Value(object)};
 
-    if (index >= instance->length) {
+    if (index >= values.length()) {
       *out = inox_undefined_value();
       return INOX_ERR_FIELD;
     }
@@ -768,8 +770,7 @@ inox_status inox_object_entry_at(inox_allocator* allocator, inox_value object, s
     if (key_len < 0 || (size_t)key_len >= sizeof(key_bytes)) {
       status = INOX_ERR_TYPE;
     } else {
-      value = instance->items[index];
-      inox_retain(value);
+      value = values.get(index).release();
     }
 
     if (status == INOX_OK) {
@@ -824,7 +825,7 @@ inox_status inox_object_keys(inox_allocator* allocator, inox_value object, inox_
   }
 
   inox_object* instance = (inox_object*)object.as.ref;
-  ArrayClass result = ArrayClass::create(instance->shape->field_count);
+  Array result = Array::create(instance->shape->field_count);
 
   if (inox::thrown() || !result.valid()) {
     inox::take_exception();
@@ -871,7 +872,7 @@ inox_status inox_object_values(inox_allocator* allocator, inox_value object, ino
   }
 
   inox_object* instance = (inox_object*)object.as.ref;
-  ArrayClass result = ArrayClass::create(instance->shape->field_count);
+  Array result = Array::create(instance->shape->field_count);
 
   if (inox::thrown() || !result.valid()) {
     inox::take_exception();
@@ -920,7 +921,7 @@ inox_status inox_object_entries(inox_allocator* allocator, inox_value object, in
   }
 
   inox_object* instance = (inox_object*)object.as.ref;
-  ArrayClass result = ArrayClass::create(instance->shape->field_count);
+  Array result = Array::create(instance->shape->field_count);
 
   if (inox::thrown() || !result.valid()) {
     inox::take_exception();
@@ -930,12 +931,12 @@ inox_status inox_object_entries(inox_allocator* allocator, inox_value object, in
 
   for (uint32_t index = 0; index < instance->shape->field_count; index += 1) {
     const char* name = instance->shape->fields[index].name == 0 ? "" : instance->shape->fields[index].name;
-    ArrayClass pair;
+    Array pair;
     inox::String key;
     inox_value value = inox_undefined_value();
     inox_status status = INOX_OK;
 
-    pair = ArrayClass::create(2);
+    pair = Array::create(2);
 
     if (inox::thrown() || !pair.valid()) {
       inox::take_exception();

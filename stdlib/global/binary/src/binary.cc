@@ -264,7 +264,7 @@ Uint8Array::Uint8Array(const inox::Value& value) : inox::Value() {
     return;
   }
 
-  ArrayClass array(value);
+  Array array(value);
 
   if (!array.valid()) {
     inox::Value::operator=(value);

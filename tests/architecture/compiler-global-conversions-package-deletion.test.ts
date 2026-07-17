@@ -14,7 +14,7 @@ import {
 const fixture = resolve('dist/test-tmp/compiler-global-conversions-package-deletion')
 const output = resolve(fixture, 'dist/compiler-libraries')
 
-test('удаление global:conversions убирает String и Number без central edit', async () => {
+test('удаление global:conversions убирает Boolean, String и Number без central edit', async () => {
   await createFixture()
   await generateCompilerLibraryRegistry(fixture, output)
 
@@ -24,7 +24,7 @@ test('удаление global:conversions убирает String и Number без
   assert.ok(before.declarations.some((item) => item.libraryId === 'global:conversions'))
   assert.ok(before.operations.some((item) => item.libraryId === 'global:conversions'))
   assert.match(beforeRegistry, /stdlib\/global\/conversions\/compiler\/index\.ts/)
-  assert.doesNotThrow(() => compileSource("String(7)\nNumber('7')\n", { libraries: before }))
+  assert.doesNotThrow(() => compileSource("Boolean(1)\nString(7)\nNumber('7')\n", { libraries: before }))
 
   await rm(resolve(fixture, 'stdlib/global/conversions'), { recursive: true, force: true })
   await generateCompilerLibraryRegistry(fixture, output)
@@ -45,6 +45,7 @@ test('удаление global:conversions убирает String и Number без
   assert.match(afterPlan, /stdlib\/global\/strings\/src\/strings\.cc/)
   assertUnknownGlobal(after, 'String(7)\n')
   assertUnknownGlobal(after, "Number('7')\n")
+  assertUnknownGlobal(after, 'Boolean(1)\n')
 })
 
 function assertUnknownGlobal(

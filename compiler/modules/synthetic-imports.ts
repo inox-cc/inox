@@ -4,25 +4,34 @@ import type { AnyNode, ProgramNode, SourceLocation } from '../types.ts'
 type SyntheticImportNode = AnyNode
 type ExportedDeclarationMap = Map<string, SyntheticImportNode>
 
-type TypeAliasValueNode = {
-  kind: string
-  valueType: string
-  params: AnyNode[]
-  returnType: string
-  baseTypes: string[]
-  fields: AnyNode[]
-  dynamic?: boolean
-  dynamicField?: AnyNode | null
-}
+type TypeAliasValueNode =
+  | {
+      kind: 'alias'
+      valueType: string
+    }
+  | {
+      kind: 'function'
+      params: AnyNode[]
+      returnType: string
+    }
+  | {
+      kind: 'object'
+      baseTypes: string[]
+      fields: AnyNode[]
+      dynamic?: boolean
+      dynamicField?: AnyNode | null
+    }
 
 type TypeAliasDeclarationNode = {
   type: string
   exported?: boolean
   name: string
   loc: SourceLocation
+  typeParameters?: AnyNode[]
   valueType: TypeAliasValueNode
   syntheticTypeImport?: boolean
   syntheticTypeImportDirect?: boolean
+  syntheticTypeImportSourceTypeOnly?: boolean
   importedName?: string
 }
 
@@ -57,6 +66,10 @@ export function insertImportSyntheticDeclarations(
         ) {
           const declaration = declarations[declarationIndex]
 
+          if (importDeclarationHasTypeOnlySpecifiers(item)) {
+            declaration.syntheticTypeImportSourceTypeOnly = true
+          }
+
           if (declaration.type === 'TypeAliasDeclaration') {
             if (sourceDeclaredTypes.has(declaration.name) && declaration.syntheticTypeImportDirect !== true) {
               continue
@@ -88,6 +101,20 @@ export function insertImportSyntheticDeclarations(
     loc: program.loc,
     body
   }
+}
+
+function importDeclarationHasTypeOnlySpecifiers(item: AnyNode): boolean {
+  if (item.typeOnly === true) {
+    return true
+  }
+
+  for (const specifier of item.specifiers) {
+    if (specifier.typeOnly === true) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function collectProgramTypeDeclarationNames(program: ProgramNode): Set<string> {
@@ -151,7 +178,13 @@ function createAliasDeclaration(
   }
 
   if (declaration.type === 'FunctionDeclaration') {
-    return createFunctionAliasDeclaration(specifier.local, targetName, declaration, specifier.loc, exported)
+    return createFunctionAliasDeclaration(
+      specifier.local,
+      targetName,
+      declaration,
+      syntheticImportSourceLocation(specifier),
+      exported
+    )
   }
 
   return {
@@ -172,7 +205,24 @@ function createAliasDeclaration(
 }
 
 export function createTypeImportDeclaration(specifier: AnyNode, exported: TypeAliasDeclarationNode): AnyNode {
-  return cloneTypeAliasDeclaration(exported, specifier.local, specifier.loc, specifier.imported, true)
+  return cloneTypeAliasDeclaration(
+    exported,
+    specifier.local,
+    syntheticImportSourceLocation(specifier),
+    specifier.imported,
+    true
+  )
+}
+
+function syntheticImportSourceLocation(node: AnyNode): SourceLocation {
+  let loc: SourceLocation = { line: 1, column: 1 }
+  const nodeLoc = node.loc
+
+  if (nodeLoc !== null && typeof nodeLoc !== 'undefined') {
+    loc = nodeLoc
+  }
+
+  return loc
 }
 
 export function createTypeImportDeclarations(
@@ -347,16 +397,12 @@ function collectFunctionDeclarationTypeDependencyNames(declaration: SyntheticImp
 
   collectTypeNameDependencyNames(declaration.declaredReturnType, names)
   collectTypeNameDependencyNames(declaration.returnType, names)
-  collectTypeNameDependencyNames(declaration.returnArrayElementDeclaredType, names)
-  collectTypeNameDependencyNames(declaration.returnArrayElementType, names)
   collectTypeNameDependencyNames(declaration.returnPromiseValueType, names)
 }
 
 function collectValueDeclarationTypeDependencyNames(declaration: SyntheticImportNode, names: string[]): void {
   collectTypeNameDependencyNames(declaration.declaredType, names)
   collectTypeNameDependencyNames(declaration.valueType, names)
-  collectTypeNameDependencyNames(declaration.arrayElementDeclaredType, names)
-  collectTypeNameDependencyNames(declaration.arrayElementType, names)
   collectTypeNameDependencyNames(declaration.promiseValueType, names)
 
   if (declaration.functionType !== null && typeof declaration.functionType !== 'undefined') {
@@ -386,7 +432,7 @@ function cloneTypeAliasDeclaration(
   importedName: string,
   direct: boolean = false
 ): AnyNode {
-  return {
+  const declaration: TypeAliasDeclarationNode = {
     type: 'TypeAliasDeclaration',
     exported: false,
     name,
@@ -396,6 +442,13 @@ function cloneTypeAliasDeclaration(
     importedName,
     valueType: cloneTypeAliasValue(exported.valueType)
   }
+  const typeParameters = cloneTypeParameters(exported.typeParameters)
+
+  if (typeParameters.length > 0) {
+    declaration.typeParameters = typeParameters
+  }
+
+  return declaration
 }
 
 function createUnknownTypeAliasDeclaration(name: string): AnyNode {
@@ -415,9 +468,15 @@ function createUnknownTypeAliasDeclaration(name: string): AnyNode {
 
 function typeAliasDependencyNames(alias: TypeAliasDeclarationNode): string[] {
   const names: string[] = []
+  const typeParameterNames: Set<string> = new Set()
+
+  for (const typeParameter of alias.typeParameters ?? []) {
+    typeParameterNames.add(typeParameter.name)
+    collectTypeNameDependencyNames(typeParameter.constraint, names)
+  }
 
   collectTypeAliasDependencyNames(alias.valueType, names)
-  return uniqueTypeNames(names)
+  return uniqueTypeNames(names).filter((name) => !typeParameterNames.has(name))
 }
 
 function collectTypeAliasDependencyNames(valueType: TypeAliasValueNode, names: string[]): void {
@@ -491,21 +550,21 @@ function uniqueTypeNames(names: string[]): string[] {
   return result
 }
 
-function cloneTypeAliasValue(valueType: TypeAliasValueNode): AnyNode {
+function cloneTypeAliasValue(valueType: TypeAliasValueNode): TypeAliasValueNode {
   if (valueType.kind === 'object') {
     return {
       kind: 'object',
       baseTypes: cloneStringArray(stringArray(valueType.baseTypes)),
       dynamic: valueType.dynamic === true,
       dynamicField: cloneNullableTypeAliasField(valueType.dynamicField),
-      fields: cloneTypeAliasFields(valueType.fields)
+      fields: cloneTypeAliasFields(valueType.fields ?? [])
     }
   }
 
   if (valueType.kind === 'function') {
     return {
       kind: 'function',
-      params: cloneParams(valueType.params),
+      params: cloneParams(valueType.params ?? []),
       returnType: valueType.returnType
     }
   }
@@ -548,8 +607,6 @@ function createFunctionAliasDeclaration(
     valueType: target.returnType,
     typeRef: nullableNodeValue(target.returnTypeRef),
     nullable: target.returnNullable === true,
-    arrayElementType: nullableNodeValue(target.returnArrayElementType),
-    arrayElementDeclaredType: nullableNodeValue(target.returnArrayElementDeclaredType),
     promiseValueType: nullableNodeValue(target.returnPromiseValueType),
     shape: nullableNodeValue(target.returnShape)
   }
@@ -564,13 +621,11 @@ function createFunctionAliasDeclaration(
     returnType: target.returnType,
     returnTypeRef: nullableNodeValue(target.returnTypeRef),
     returnNullable: target.returnNullable === true,
-    returnArrayElementType: nullableNodeValue(target.returnArrayElementType),
-    returnArrayElementDeclaredType: nullableNodeValue(target.returnArrayElementDeclaredType),
     returnPromiseValueType: nullableNodeValue(target.returnPromiseValueType),
     returnShape: nullableNodeValue(target.returnShape),
     body: createFunctionAliasBody(target, call, loc)
   }
-  const typeParameters = cloneFunctionTypeParameters(target.typeParameters)
+  const typeParameters = cloneTypeParameters(target.typeParameters)
 
   if (typeParameters.length > 0) {
     declaration.typeParameters = typeParameters
@@ -579,7 +634,7 @@ function createFunctionAliasDeclaration(
   return declaration
 }
 
-function cloneFunctionTypeParameters(typeParameters: AnyNode[] | null | undefined): AnyNode[] {
+function cloneTypeParameters(typeParameters: AnyNode[] | null | undefined): AnyNode[] {
   const cloned: AnyNode[] = []
 
   if (typeParameters === null || typeof typeParameters === 'undefined') {
@@ -637,9 +692,8 @@ function cloneTypeAliasField(field: AnyNode): AnyNode {
     weakLoc: nullableNodeValue(field.weakLoc),
     valueType: field.valueType,
     declaredType: nullableNodeValue(field.declaredType),
+    typeRef: nullableNodeValue(field.typeRef),
     nullable: field.nullable === true,
-    arrayElementType: nullableNodeValue(field.arrayElementType),
-    arrayElementDeclaredType: nullableNodeValue(field.arrayElementDeclaredType),
     promiseValueType: nullableNodeValue(field.promiseValueType),
     shape: nullableNodeValue(field.shape),
     functionType: nullableNodeValue(field.functionType),
@@ -674,9 +728,8 @@ function cloneParam(param: AnyNode): AnyNode {
     valueType: param.valueType,
     loc: param.loc,
     declaredType: nullableNodeValue(param.declaredType),
+    typeRef: nullableNodeValue(param.typeRef),
     nullable: param.nullable === true,
-    arrayElementType: nullableNodeValue(param.arrayElementType),
-    arrayElementDeclaredType: nullableNodeValue(param.arrayElementDeclaredType),
     promiseValueType: nullableNodeValue(param.promiseValueType),
     shape: nullableNodeValue(param.shape),
     functionType: nullableNodeValue(param.functionType),

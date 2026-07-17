@@ -11,9 +11,6 @@ import {
   irClassMethodEffectName,
   mergeIrFunctionEffects
 } from '../ir.ts'
-import { compilerLibraryNativeTypeForId, resolveCompilerLibrarySet } from '../extensions/library-set.ts'
-import { compilerLibraryIntrinsicResultMetadata } from '../extensions/intrinsic-metadata.ts'
-import type { CompilerLibrarySet } from '../extensions/types.ts'
 import { reexportImportAliasName } from '../modules/synthetic-imports.ts'
 import type {
   AnyNode,
@@ -60,7 +57,7 @@ import {
   emitAsyncTaskWrapperDeclaration,
   emitAsyncTaskWrapperPrototypes
 } from './async/tasks.ts'
-import type { CEmitContext, CFunctionContext } from './context.ts'
+import type { CEmitContextWithDependencies, CFunctionContextWithDependencies } from './context.ts'
 import {
   createFunctionContext,
   emitBoxedValueCleanup,
@@ -81,17 +78,22 @@ import {
   shouldEmitCleanupLabel
 } from './context.ts'
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
+import type { CDeclarationEmissionDependencies } from './declarations.ts'
 import { cStringLiteral, emitCFunctionName, emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { relativeCIncludePath, uniqueCModuleImports } from './modules.ts'
 import { emitCompilerLibraryRuntimeInitializerDefinitions } from './library-initializers.ts'
 import { emitCPrelude, emitLibraryCPreludeIncludeLines, filterUnusedCPreludeIncludes } from './prelude.ts'
 import { collectCReferencedFunctionPrototypeNames } from './prototype-references.ts'
 import { resolveCRuntimePreludeRequirements, resolveLibraryRuntimeCPreludeIncludes } from './runtime-plan.ts'
-import { cObjectShapeFromMetadata } from './types.ts'
+import {
+  cObjectShapeFromMetadata,
+  cTypeRefMapValue
+} from './types.ts'
 import type {
   CCallbackWrapper,
   CClassInfo,
   CClassMethod,
+  CCompilerLibrarySet,
   CFunctionParam,
   CFunctionPointerAdapter,
   CFunctionType,
@@ -104,10 +106,15 @@ import type {
   CRuntimeArrowCallbackWrapper
 } from './types.ts'
 import {
+  compilerLibraryIntrinsicResultCShape,
+  compilerLibraryNativeRuntimeRequirementsForCppType,
+  compilerLibraryNativeRuntimeRequirementsForId,
   emitCType,
   isManagedRuntimeReturnType,
   isOpaqueRuntimeValueType,
-  isRuntimeNullableType
+  isRuntimeNullableType,
+  libraryCppValueStorageType,
+  resolveCCompilerLibrarySet
 } from './value-types.ts'
 import type { ArrayLoweringDependencies } from './values/arrays.ts'
 import type { CClassMethodPrototypeMap, ClassLoweringDependencies } from './values/classes.ts'
@@ -126,8 +133,26 @@ import type { NullableLoweringDependencies } from './values/nullable.ts'
 import type { StatementLoweringDependencies } from './values/statements.ts'
 import type { StringLoweringDependencies } from './values/strings.ts'
 
+type CEmitContext = CEmitContextWithDependencies<
+  ArrayLoweringDependencies,
+  AsyncTaskLoweringDependencies,
+  ClassLoweringDependencies,
+  NullableLoweringDependencies,
+  StatementLoweringDependencies,
+  StringLoweringDependencies
+>
+type CFunctionContext = CFunctionContextWithDependencies<
+  ArrayLoweringDependencies,
+  AsyncTaskLoweringDependencies,
+  ClassLoweringDependencies,
+  NullableLoweringDependencies,
+  StatementLoweringDependencies,
+  StringLoweringDependencies
+>
+
 type CModuleValueDeclaration = {
   cppType?: string | null
+  declaredType?: string | null
   exported: boolean
   functionType?: CFunctionType | null
   name: string
@@ -217,9 +242,8 @@ function pushCModuleClassMethodFunctionDeclarations(target: IrFunctionDeclaratio
           async: method.async === true,
           params: method.params,
           returnType: methodReturnType,
+          returnTypeRef: method.returnTypeRef ?? null,
           returnNullable: method.returnNullable === true,
-          returnArrayElementType: method.returnArrayElementType,
-          returnArrayElementDeclaredType: method.returnArrayElementDeclaredType,
           returnPromiseValueType: method.returnPromiseValueType,
           returnShape: method.returnShape,
           loc: method.loc
@@ -347,19 +371,33 @@ export type CModuleEmissionDependencies = {
   callbackLoweringDependencies: CallbackLoweringDependencies
   classLoweringDependencies: ClassLoweringDependencies
   collectExternalEventLoopFunctions(functions: AnyNode[], seedNames?: Set<string>): Set<string>
+  declarationEmissionDependencies: CDeclarationEmissionDependencies
   createBaseContext(
     diagnostics: Diagnostic[],
     functionDeclarations: IrFunctionDeclaration[],
     functionEffects: IrFunctionEffect[],
     jsGlobalRoots: Set<string>,
     topLevelNodes: AnyNode[],
-    libraries?: CompilerLibrarySet
+    libraries?: CCompilerLibrarySet
   ): CEmitContext
-  emitClassConstructorDeclaration(info: CClassInfo, baseContext: CEmitContext): string[]
-  emitClassMethodDeclaration(info: CClassInfo, method: AnyNode, baseContext: CEmitContext): string[]
+  emitClassConstructorDeclaration(
+    info: CClassInfo,
+    baseContext: CEmitContext,
+    dependencies: CDeclarationEmissionDependencies
+  ): string[]
+  emitClassMethodDeclaration(
+    info: CClassInfo,
+    method: AnyNode,
+    baseContext: CEmitContext,
+    dependencies: CDeclarationEmissionDependencies
+  ): string[]
   emitClassMethodHead(info: CClassInfo, method: AnyNode, context: CEmitContext): string
   emitClassMethodPrototype(info: CClassInfo, method: AnyNode, context: CEmitContext): string
-  emitFunctionDeclaration(statement: AnyNode, baseContext: CEmitContext): string[]
+  emitFunctionDeclaration(
+    statement: AnyNode,
+    baseContext: CEmitContext,
+    dependencies: CDeclarationEmissionDependencies
+  ): string[]
   emitFunctionHead(statement: AnyNode, context: CEmitContext): string
   emitStatementList(body: AnyNode[], context: CFunctionContext): string[]
   nullableLoweringDependencies: NullableLoweringDependencies
@@ -380,12 +418,11 @@ export function emitCModuleSource(
   const functions: AnyNode[] = []
   const context = createCModuleBaseContext(plan, diagnostics, deps, options.libraries)
   context.exceptionValueShape = cObjectShapeFromMetadata(
-    compilerLibraryIntrinsicResultMetadata(
-      resolveCompilerLibrarySet(options.libraries),
+    compilerLibraryIntrinsicResultCShape(
+      options.libraries,
       'exception-value',
-      'construct',
       { line: 1, column: 1 }
-    )?.shape ?? null
+    )
   )
   const runtimeRequirements = runtimeRequirementSetFromArray(collectIrRuntimeRequirements(irPrograms))
   const emitsMain = plan.isEntry || plan.initName === null || typeof plan.initName === 'undefined'
@@ -427,7 +464,7 @@ export function emitCModuleSource(
   context.runtimeEntrypointAdapter = prelude.runtimeEntrypointAdapter
   context.runtimeInitializerDefinitions = ownsProgramRuntime
     ? emitCompilerLibraryRuntimeInitializerDefinitions(
-        resolveCompilerLibrarySet(options.libraries),
+        resolveCCompilerLibrarySet(options.libraries),
         prelude.libraryRuntimeRequirements,
         options.libraryOptions
       )
@@ -482,7 +519,10 @@ export function emitCModuleSource(
   const bodyLines: string[] = []
 
   for (const classInfo of context.classInfos.values()) {
-    pushCModuleLines(bodyLines, deps.emitClassConstructorDeclaration(classInfo, context))
+    pushCModuleLines(
+      bodyLines,
+      deps.emitClassConstructorDeclaration(classInfo, context, deps.declarationEmissionDependencies)
+    )
     bodyLines.push('')
   }
 
@@ -491,7 +531,10 @@ export function emitCModuleSource(
     const info = item.info
     const method = item.method
 
-    pushCModuleLines(bodyLines, deps.emitClassMethodDeclaration(info, method, context))
+    pushCModuleLines(
+      bodyLines,
+      deps.emitClassMethodDeclaration(info, method, context, deps.declarationEmissionDependencies)
+    )
     bodyLines.push('')
   }
 
@@ -711,7 +754,7 @@ function addCModuleNativeSignatureRuntimeRequirements(
   requirements: Set<IrRuntimeRequirement>,
   context: CEmitContext,
   exportedValues: CModuleValueDeclaration[],
-  libraries: CompilerLibrarySet | null | undefined
+  libraries: CCompilerLibrarySet | null | undefined
 ): void {
   if (libraries === null || typeof libraries === 'undefined') {
     return
@@ -740,29 +783,23 @@ function addCModuleNativeSignatureRuntimeRequirements(
 function addCModuleNativeCppTypeRuntimeRequirements(
   requirements: Set<IrRuntimeRequirement>,
   cppType: string | null | undefined,
-  libraries: CompilerLibrarySet
+  libraries: CCompilerLibrarySet
 ): void {
   if (cppType === null || typeof cppType === 'undefined') {
     return
   }
 
-  for (let typeIndex = 0; typeIndex < libraries.nativeTypes.length; typeIndex = typeIndex + 1) {
-    const nativeType = libraries.nativeTypes[typeIndex]
+  const nativeRequirements = compilerLibraryNativeRuntimeRequirementsForCppType(libraries, cppType)
 
-    if (nativeType.cppType !== cppType) {
-      continue
-    }
-
-    for (let requirementIndex = 0; requirementIndex < nativeType.runtimeRequirements.length; requirementIndex = requirementIndex + 1) {
-      requirements.add(nativeType.runtimeRequirements[requirementIndex])
-    }
+  for (let index = 0; index < nativeRequirements.length; index = index + 1) {
+    requirements.add(nativeRequirements[index])
   }
 }
 
 function addCModuleNativeShapeRuntimeRequirements(
   requirements: Set<IrRuntimeRequirement>,
   shape: CObjectShape | null | undefined,
-  libraries: CompilerLibrarySet,
+  libraries: CCompilerLibrarySet,
   seen: Set<CObjectShape>
 ): void {
   if (shape === null || typeof shape === 'undefined' || seen.has(shape)) {
@@ -773,16 +810,14 @@ function addCModuleNativeShapeRuntimeRequirements(
   const typeId = shape.libraryTypeId
 
   if (typeId !== null && typeof typeId !== 'undefined') {
-    const nativeType = compilerLibraryNativeTypeForId(libraries, typeId)
+    const nativeRequirements = compilerLibraryNativeRuntimeRequirementsForId(libraries, typeId)
 
-    if (nativeType !== null) {
-      for (let index = 0; index < nativeType.runtimeRequirements.length; index = index + 1) {
-        requirements.add(nativeType.runtimeRequirements[index])
-      }
+    for (let index = 0; index < nativeRequirements.length; index = index + 1) {
+      requirements.add(nativeRequirements[index])
     }
   }
 
-  const fields = shape.fields ?? []
+  const fields: CObjectShapeField[] = shape.fields ?? []
 
   for (let index = 0; index < fields.length; index = index + 1) {
     addCModuleNativeShapeRuntimeRequirements(requirements, fields[index].shape, libraries, seen)
@@ -1027,7 +1062,7 @@ function emitCModuleFunctionDeclaration(
   context: CEmitContext,
   deps: CModuleEmissionDependencies
 ): string[] {
-  const lines = deps.emitFunctionDeclaration(statement, context)
+  const lines = deps.emitFunctionDeclaration(statement, context, deps.declarationEmissionDependencies)
 
   if (isCModuleExportedFunction(plan, statement.name)) {
     return lines
@@ -1334,7 +1369,7 @@ function functionPointerAdapterContextFunctionType(name: string, context: CEmitC
   return {
     kind: 'function',
     params,
-    returnArrayElementType: context.functionReturnArrayElementTypes.get(name) ?? null,
+    returnTypeRef: cTypeRefMapValue(context.functionReturnTypeRefs, name),
     returnNullable: context.functionReturnNullables.get(name) === true,
     returnPromiseValueType: context.functionReturnPromiseValueTypes.get(name) ?? null,
     returnShape: context.functionReturnShapes.get(name) ?? null,
@@ -1397,7 +1432,7 @@ function emitThrowingFunctionPointerAdapterTargetCall(
 
   if (returnType !== 'void') {
     lines.push(`${returnType} inox_adapter_result = ${cFunctionPointerAdapterDefaultReturnValue(returnType)};`)
-    callArgs.push('&inox_adapter_result')
+    callArgs.push('std::addressof(inox_adapter_result)')
   }
 
   lines.push('inox_value inox_adapter_error = inox_undefined_value();')
@@ -1436,11 +1471,7 @@ function cFunctionPointerAdapterDefaultReturnValue(returnType: string): string {
     return 'inox_undefined_value()'
   }
 
-  if (returnType.includes('*')) {
-    return '0'
-  }
-
-  return '0'
+  return '{}'
 }
 
 function emitFunctionPointerAdapterTargetArgs(
@@ -1855,7 +1886,7 @@ function createCModuleBaseContext(
   plan: CModulePlan,
   diagnostics: Diagnostic[],
   deps: CModuleEmissionDependencies,
-  libraries?: CompilerLibrarySet
+  libraries?: CCompilerLibrarySet
 ): CEmitContext {
   const ir = plan.ir
   const irPrograms = [ir]
@@ -2136,6 +2167,7 @@ function collectCModuleValueDeclarations(plan: CModulePlan, context?: CEmitConte
 
     values.push({
       cppType: cModuleValueLibraryCppType(item),
+      declaredType: item.declaredType ?? item.inferredDeclaredType ?? null,
       exported: item.exported === true,
       functionType: cModuleValueFunctionType(item),
       name: item.name,
@@ -2155,13 +2187,9 @@ function cModuleValueLibraryCppType(node: AnyNode): string | null {
   }
 
   const shape = node.shape ?? node.init?.shape
-  const cppType = shape?.libraryCppType
+  const nullable = node.nullable === true || node.init?.nullable === true
 
-  if (cppType === null || typeof cppType === 'undefined') {
-    return null
-  }
-
-  return cppType
+  return libraryCppValueStorageType(nullable, shape)
 }
 
 function collectCModuleStaticValueDeclarations(plan: CModulePlan, context: CEmitContext): CModuleValueDeclaration[] {
@@ -2466,7 +2494,14 @@ function emitCModuleValueFunctionFieldDefinitions(
       continue
     }
 
-    if (emitCModuleObjectFunctionFieldDefinitions(lines, item.name, fields, cModuleObjectFunctionFieldSeenTypes())) {
+    if (
+      emitCModuleObjectFunctionFieldDefinitions(
+        lines,
+        item.name,
+        fields,
+        cModuleObjectFunctionFieldSeenTypes(item.declaredType)
+      )
+    ) {
       emitted = true
     }
   }
@@ -2476,8 +2511,14 @@ function emitCModuleValueFunctionFieldDefinitions(
   }
 }
 
-function cModuleObjectFunctionFieldSeenTypes(): string[] {
-  return ['CFunctionContext']
+function cModuleObjectFunctionFieldSeenTypes(declaredType?: string | null): string[] {
+  const seenTypes = ['CFunctionContext']
+
+  if (declaredType !== null && typeof declaredType !== 'undefined' && !seenTypes.includes(declaredType)) {
+    seenTypes.push(declaredType)
+  }
+
+  return seenTypes
 }
 
 function emitCModuleObjectFunctionFieldDefinitions(
@@ -2492,7 +2533,7 @@ function emitCModuleObjectFunctionFieldDefinitions(
     if (field.valueType === 'function') {
       const name = emitCObjectFunctionFieldName(objectName, field.name)
 
-      if (isPlainObjectFunctionField(field)) {
+      if (isPlainObjectFunctionField(field, seenTypes)) {
         lines.push(
           `static ${emitFunctionPointerReturnType(field.functionType)} (*${name})(${emitFunctionPointerParams(
             field.functionType,
@@ -3229,9 +3270,8 @@ function cloneImportedCModuleFunctionDeclaration(
     async: declaration.async,
     params: declaration.params,
     returnType: declaration.returnType,
+    returnTypeRef: declaration.returnTypeRef ?? null,
     returnNullable: declaration.returnNullable,
-    returnArrayElementType: declaration.returnArrayElementType,
-    returnArrayElementDeclaredType: declaration.returnArrayElementDeclaredType,
     declaredReturnType: declaration.declaredReturnType,
     returnPromiseValueType: declaration.returnPromiseValueType,
     returnShape: declaration.returnShape,

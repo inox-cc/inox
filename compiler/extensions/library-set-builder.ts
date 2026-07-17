@@ -180,6 +180,7 @@ function validateCompilerLibrarySet(
   validateNativeTypes(nativeTypes)
   validateOperationTypeRefs(operations, nativeTypes)
   validateOperationResultInferences(operations)
+  validateOperationResultAdapters(operations)
   validateUniqueOperationIds(operations)
   validateUniqueIntrinsicRoles(intrinsicBindings)
   validateIntrinsicOperationBindings(intrinsicBindings, operations)
@@ -755,6 +756,8 @@ function validateOperationTypeRefs(
     const typeParameters = validateOperationTypeParameters(operation)
     const operationTypeRef = operation.resultTypeRef
 
+    validateOperationArgumentNarrowing(operation)
+
     if (operationTypeRef !== null && typeof operationTypeRef !== 'undefined') {
       validateTypeRef(`operation ${operation.operationId} result`, operationTypeRef, nativeTypes, typeParameters)
       validateTypeRefHasNoLegacyResultMetadata(operation.operationId, operation, null)
@@ -805,6 +808,37 @@ function validateOperationTypeRefs(
   }
 }
 
+function validateOperationArgumentNarrowing(operation: LibraryOperationDescriptor): void {
+  const narrowing = operation.argumentNarrowing
+
+  if (narrowing === null || typeof narrowing === 'undefined') {
+    return
+  }
+
+  if (narrowing.argumentIndex < 0 || Math.floor(narrowing.argumentIndex) !== narrowing.argumentIndex) {
+    throw new Error(`operation ${operation.operationId} has invalid narrowing argument index ${narrowing.argumentIndex}`)
+  }
+
+  if (
+    typeof operation.maxArgs === 'number' &&
+    narrowing.argumentIndex >= operation.maxArgs
+  ) {
+    throw new Error(`operation ${operation.operationId} narrows missing argument ${narrowing.argumentIndex}`)
+  }
+
+  const trueValueType = narrowing.trueValueType
+  const falseValueType = narrowing.falseValueType
+
+  if (
+    (trueValueType === null || typeof trueValueType === 'undefined' || trueValueType.length === 0) &&
+    (falseValueType === null || typeof falseValueType === 'undefined' || falseValueType.length === 0) &&
+    narrowing.trueNonNullable !== true &&
+    narrowing.falseNonNullable !== true
+  ) {
+    throw new Error(`operation ${operation.operationId} has empty argument narrowing`)
+  }
+}
+
 function validateOperationTypeParameters(operation: LibraryOperationDescriptor): Set<string> | null {
   const parameters = operation.typeParameters ?? []
 
@@ -844,9 +878,15 @@ function validateOperationTypeParameterSource(
   parameterName: string,
   source: NonNullable<LibraryOperationDescriptor['typeParameters']>[number]['sources'][number]
 ): void {
-  if (source.argumentIndex < 0 || Math.floor(source.argumentIndex) !== source.argumentIndex) {
+  const argumentIndex = source.argumentIndex
+
+  if (
+    typeof argumentIndex !== 'number' ||
+    argumentIndex < 0 ||
+    Math.floor(argumentIndex) !== argumentIndex
+  ) {
     throw new Error(
-      `operation ${operationId} type parameter ${parameterName} has invalid source argument index ${source.argumentIndex}`
+      `operation ${operationId} type parameter ${parameterName} has invalid source argument index ${argumentIndex}`
     )
   }
 
@@ -890,10 +930,37 @@ function validateOperationArgumentTypeRefs(
   const values = checks ?? []
 
   for (let index = 0; index < values.length; index = index + 1) {
-    const typeRef = values[index].typeRef
+    const check = values[index]
+    const typeRef = check.typeRef
 
     if (typeRef !== null && typeof typeRef !== 'undefined') {
       validateTypeRef(`operation ${label} argument ${index}`, typeRef, nativeTypes, typeParameters)
+    }
+
+    const functionReturnTypeRef = check.functionReturnTypeRef
+
+    if (functionReturnTypeRef !== null && typeof functionReturnTypeRef !== 'undefined') {
+      validateTypeRef(
+        `operation ${label} argument ${index} callback result`,
+        functionReturnTypeRef,
+        nativeTypes,
+        typeParameters
+      )
+    }
+
+    const functionParameters = check.functionParameters ?? []
+
+    for (let parameterIndex = 0; parameterIndex < functionParameters.length; parameterIndex = parameterIndex + 1) {
+      const parameterTypeRef = functionParameters[parameterIndex].typeRef
+
+      if (parameterTypeRef !== null && typeof parameterTypeRef !== 'undefined') {
+        validateTypeRef(
+          `operation ${label} argument ${index} callback parameter ${parameterIndex}`,
+          parameterTypeRef,
+          nativeTypes,
+          typeParameters
+        )
+      }
     }
   }
 }
@@ -921,6 +988,29 @@ function validateOperationResultInferences(operations: LibraryOperationDescripto
         variant.cArgumentMethodNames ?? operation.cArgumentMethodNames
       )
     }
+  }
+}
+
+function validateOperationResultAdapters(operations: LibraryOperationDescriptor[]): void {
+  for (let index = 0; index < operations.length; index = index + 1) {
+    const operation = operations[index]
+
+    validateOperationResultAdapter(`operation ${operation.operationId}`, operation.cResultAdapter)
+
+    const variants = operation.variants ?? []
+
+    for (let variantIndex = 0; variantIndex < variants.length; variantIndex = variantIndex + 1) {
+      validateOperationResultAdapter(
+        `operation ${operation.operationId} variant ${variantIndex}`,
+        variants[variantIndex].cResultAdapter
+      )
+    }
+  }
+}
+
+function validateOperationResultAdapter(label: string, adapter: string | null | undefined): void {
+  if (adapter !== null && typeof adapter !== 'undefined' && !adapter.includes('$value')) {
+    throw new Error(`${label} C++ result adapter requires $value`)
   }
 }
 
@@ -1430,11 +1520,15 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           ':' +
           (item.callbackLifetime ?? '') +
           ':' +
+          operationArgumentNarrowingFingerprint(item.argumentNarrowing) +
+          ':' +
           (item.cResultMode ?? '') +
           ':' +
           cResultMappingFingerprint(item.cResultMapping) +
           ':' +
           (item.cReceiverAdapter ?? '') +
+          ':' +
+          (item.cResultAdapter ?? '') +
           ':' +
           typeRefFingerprintOrEmpty(item.resultTypeRef) +
           ':' +
@@ -1693,6 +1787,8 @@ function operationArgumentChecksFingerprint(operation: { argumentChecks?: Librar
         ':' +
         (check.functionReturnType ?? '') +
         ':' +
+        typeRefFingerprintOrEmpty(check.functionReturnTypeRef) +
+        ':' +
         (check.functionAsync === true ? 'async' : check.functionAsync === false ? 'sync' : '') +
         ':' +
         (check.functionAsyncDiagnosticCode ?? '') +
@@ -1758,6 +1854,8 @@ function callbackParametersFingerprint(parameters: LibraryCallbackParameterDescr
         ':' +
         (parameter.nullable === true ? 'nullable' : '') +
         ':' +
+        typeRefFingerprintOrEmpty(parameter.typeRef) +
+        ':' +
         (parameter.resultTypeId ?? '') +
         ':' +
         resultShapeFieldsFingerprint(parameter.shapeFields ?? [])
@@ -1814,6 +1912,8 @@ function operationVariantsFingerprint(operation: LibraryOperationDescriptor): st
         ':' +
         (variant.cReceiverAdapter ?? '') +
         ':' +
+        (variant.cResultAdapter ?? '') +
+        ':' +
         typeRefFingerprintOrEmpty(variant.resultTypeRef) +
         ':' +
         resultInferenceFingerprint(variant.resultInference) +
@@ -1841,6 +1941,22 @@ function operationVariantsFingerprint(operation: LibraryOperationDescriptor): st
   }
 
   return rows.join(';')
+}
+
+function operationArgumentNarrowingFingerprint(
+  narrowing: LibraryOperationDescriptor['argumentNarrowing']
+): string {
+  if (narrowing === null || typeof narrowing === 'undefined') {
+    return ''
+  }
+
+  return (
+    `${narrowing.argumentIndex}:` +
+    `${fingerprintAtom(narrowing.trueValueType ?? '')}:` +
+    `${fingerprintAtom(narrowing.falseValueType ?? '')}:` +
+    `${narrowing.trueNonNullable === true ? 'true-required' : 'true-nullable'}:` +
+    (narrowing.falseNonNullable === true ? 'false-required' : 'false-nullable')
+  )
 }
 
 function typeRefFingerprintOrEmpty(typeRef: TypeRef | null | undefined): string {

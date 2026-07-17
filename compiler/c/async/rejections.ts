@@ -1,5 +1,20 @@
 import type { AnyNode } from '../../types.ts'
-import type { CFunctionContext } from '../context.ts'
+import type { CFunctionContextWithDependencies } from '../context.ts'
+import type { ArrayLoweringDependencies } from '../values/arrays.ts'
+import type { ClassLoweringDependencies } from '../values/classes.ts'
+import type { NullableLoweringDependencies } from '../values/nullable.ts'
+import type { StatementLoweringDependencies } from '../values/statements.ts'
+import type { StringLoweringDependencies } from '../values/strings.ts'
+import type { AsyncTaskLoweringDependencies } from './tasks.ts'
+
+type CFunctionContext = CFunctionContextWithDependencies<
+  ArrayLoweringDependencies,
+  AsyncTaskLoweringDependencies,
+  ClassLoweringDependencies,
+  NullableLoweringDependencies,
+  StatementLoweringDependencies,
+  StringLoweringDependencies
+>
 
 type RejectionNameSet = Set<string>
 type RejectionStringMap = Map<string, string>

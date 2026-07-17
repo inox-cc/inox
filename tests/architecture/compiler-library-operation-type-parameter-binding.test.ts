@@ -5,6 +5,7 @@ import { compileSourceToIr } from '../../compiler/core.ts'
 import { CompileError } from '../../compiler/diagnostics.ts'
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
 import type { CompilerLibraryDescriptor, TypeRef } from '../../compiler/extensions/types.ts'
+import { compilerLibraryPackage as collectionsCompilerLibraryPackage } from '../../stdlib/global/collections/compiler/index.ts'
 
 const boxTypeId = 'fixture#Box'
 const parameterTypeRef: TypeRef = { kind: 'parameter', name: 'T' }
@@ -17,7 +18,10 @@ const voidTypeRef: TypeRef = {
 }
 
 test('operation TypeRef связывает T из explicit argument и receiver', () => {
-  const libraries = createCompilerLibrarySet([fixtureLibrary()])
+  const libraries = createCompilerLibrarySet([
+    { ...collectionsCompilerLibraryPackage, declarations: [] },
+    fixtureLibrary()
+  ])
   const result = compileSourceToIr("const box = new Box<string>()\nbox.put('ready')\n", { libraries })
   const contextual = compileSourceToIr('const box: Box<string> = new Box()\n', { libraries })
   const inferred = compileSourceToIr("const box = new Box(['ready'])\n", { libraries })

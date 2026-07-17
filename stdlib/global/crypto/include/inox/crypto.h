@@ -61,7 +61,7 @@ public:
 
 class crypto {
 public:
-  ArrayClass getHashes() const;
+  Array getHashes() const;
   Uint8Array getRandomValues(Uint8Array value) const;
   Buffer randomBytes(inox_number size) const;
   Uint8Array randomFillSync(Uint8Array value) const;

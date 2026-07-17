@@ -1,4 +1,3 @@
-import { memberExpressionPath } from '../../member-paths.ts'
 import type { AnyNode, IrFeature } from '../../types.ts'
 import type { CompilerFeatureDescriptor } from '../types.ts'
 
@@ -16,7 +15,6 @@ type CoreRuntimeFunctionType = AnyNode & {
 type CoreRuntimeRawNode = AnyNode
 
 type CoreRuntimeChildNode = AnyNode & {
-  arrayElementFunctionType?: CoreRuntimeFunctionType | null
   elements?: CoreRuntimeRawNode[]
   functionType?: CoreRuntimeFunctionType | null
   path?: string[]
@@ -28,8 +26,6 @@ type CoreRuntimeChildNode = AnyNode & {
 
 type CoreRuntimeNode = AnyNode & {
   args?: CoreRuntimeChildNode[]
-  arrayElementType?: string | null
-  arrayElementFunctionType?: CoreRuntimeFunctionType | null
   callee?: CoreRuntimeChildNode | null
   elements?: CoreRuntimeRawNode[]
   functionType?: CoreRuntimeFunctionType | null
@@ -150,11 +146,6 @@ export function collectCoreRuntimeIrFeatures(node: AnyNode, features: CoreRuntim
   }
 
   if (item.type === 'ObjectLiteral' || item.type === 'ArrayLiteral') {
-    features.add('runtime-values')
-  }
-
-  if (item.arrayElementFunctionType !== null && typeof item.arrayElementFunctionType !== 'undefined') {
-    features.add('callback-values')
     features.add('runtime-values')
   }
 
@@ -309,22 +300,6 @@ function recordCallFeatures(expression: CoreRuntimeNode, features: CoreRuntimeFe
     features.add('string-bytes')
   }
 
-  if (isArrayFromCall(expression)) {
-    features.add('collections')
-    features.add('runtime-values')
-    features.add('string-bytes')
-  }
-
-  if (isArrayIsArrayCall(expression)) {
-    features.add('collections')
-    features.add('runtime-values')
-  }
-
-  if (isArrayMethodCall(expression)) {
-    features.add('collections')
-    features.add('runtime-values')
-  }
-
   const stringMethod = stringRuntimeMethodName(expression)
 
   if (stringMethod !== null && typeof stringMethod !== 'undefined') {
@@ -427,36 +402,6 @@ function isArrayIndexExpression(expression: CoreRuntimeNode | null | undefined):
   const object = expression.object
 
   return object !== null && typeof object !== 'undefined' && object.valueType === 'array'
-}
-
-function isArrayMethodCall(expression: CoreRuntimeNode): boolean {
-  const callee = expression.callee
-
-  if (callee === null || typeof callee === 'undefined' || callee.type !== 'MemberExpression') {
-    return false
-  }
-
-  const object = callee.object
-
-  if (object === null || typeof object === 'undefined' || object.valueType !== 'array') {
-    return false
-  }
-
-  return true
-}
-
-function isArrayFromCall(expression: CoreRuntimeNode): boolean {
-  const path = memberExpressionPath(expression.callee)
-
-  return path !== null && typeof path !== 'undefined' && path.length === 2 && path[0] === 'Array' && path[1] === 'from'
-}
-
-function isArrayIsArrayCall(expression: CoreRuntimeNode): boolean {
-  const path = memberExpressionPath(expression.callee)
-
-  return (
-    path !== null && typeof path !== 'undefined' && path.length === 2 && path[0] === 'Array' && path[1] === 'isArray'
-  )
 }
 
 function isNumericCastCall(expression: CoreRuntimeNode): boolean {

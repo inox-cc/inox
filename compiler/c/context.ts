@@ -1,6 +1,5 @@
 import type { AnyNode, Diagnostic, IrFunctionEffect } from '../types.ts'
-import type { CompilerLibrarySet, RuntimeEntrypointAdapterDescriptor } from '../extensions/types.ts'
-import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
+import type { RuntimeEntrypointAdapterDescriptor } from '../extensions/types.ts'
 import type {
   CArrayElementInfo,
   CAsyncTaskWrapper,
@@ -14,7 +13,9 @@ import type {
   CObjectShape,
   CObjectShapeField,
   CPromiseChainWrapper,
-  CPromiseConstructorHandler
+  CPromiseConstructorHandler,
+  CCompilerLibrarySet,
+  CTypeRefMap
 } from './types.ts'
 import { emitCIdentifier } from './identifiers.ts'
 import {
@@ -24,11 +25,6 @@ import {
   isOpaqueRuntimeValueType,
   libraryNativeCppType
 } from './value-types.ts'
-import type { ArrayLoweringDependencies } from './values/arrays.ts'
-import type { ClassLoweringDependencies } from './values/classes.ts'
-import type { NullableLoweringDependencies } from './values/nullable.ts'
-import type { StatementLoweringDependencies } from './values/statements.ts'
-import type { StringLoweringDependencies } from './values/strings.ts'
 
 export type CLoopFlowTarget = {
   label: string
@@ -117,15 +113,22 @@ export function cloneCPromiseConstructorHandlerMap(
   return new Map(values)
 }
 
-export type CEmitContext = {
-  arrayLoweringDependencies: ArrayLoweringDependencies
-  asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
+export type CEmitContextWithDependencies<
+  ArrayDependencies,
+  AsyncTaskDependencies,
+  ClassDependencies,
+  NullableDependencies,
+  StatementDependencies,
+  StringDependencies
+> = {
+  arrayLoweringDependencies: ArrayDependencies
+  asyncTaskLoweringDependencies: AsyncTaskDependencies
   asyncTaskWrappers: CAsyncTaskWrapperMap
   boxedMutableCaptureDeclarations: Set<AnyNode>
   callbackArrowWrappers: Map<AnyNode, CCallbackWrapper>
   callbackWrappers: CCallbackWrapperMap
   classInfos: Map<string, CClassInfo>
-  classLoweringDependencies: ClassLoweringDependencies
+  classLoweringDependencies: ClassDependencies
   diagnostics: Diagnostic[]
   explicitEventLoop?: boolean | null
   exceptionValueShape: CObjectShape | null
@@ -137,17 +140,16 @@ export type CEmitContext = {
   functionPointerAdapters: CFunctionPointerAdapter[]
   functionPointerRuntimeAdapterNames: Map<string, CFunctionPointerRuntimeAdapter>
   functionPointerRuntimeAdapters: CFunctionPointerRuntimeAdapter[]
-  functionReturnArrayElementDeclaredTypes: CStringNullableMap
-  functionReturnArrayElementTypes: CStringNullableMap
   functionReturnDeclaredTypes: CStringNullableMap
   functionReturnNullables: CBooleanMap
   functionReturnPromiseValueTypes: CStringNullableMap
   functionReturnShapes: Map<string, CObjectShape | null>
+  functionReturnTypeRefs: CTypeRefMap
   functionReturnTypes: CStringMap
   functionThrowValueTypes: Map<string, IrFunctionEffect['throwValueTypes']>
   forceRuntimeStringDeclarations?: CStringSet
   jsGlobalRoots: CStringSet
-  libraries: CompilerLibrarySet
+  libraries: CCompilerLibrarySet
   runtimeInitializerDefinitions: string[]
   moduleValueNames: CStringMap
   moduleValueCppTypes: CStringMap
@@ -156,22 +158,26 @@ export type CEmitContext = {
   moduleObjectShapes: CObjectShapeFieldMap
   moduleValueTypes: CStringMap
   nextId: number
-  nullableLoweringDependencies: NullableLoweringDependencies
+  nullableLoweringDependencies: NullableDependencies
   runtimeEntryPath: string | null
   runtimeEntrypointAdapter: RuntimeEntrypointAdapterDescriptor | null
   promiseChainArrowWrappers: Map<AnyNode, CPromiseChainWrapper>
   promiseChainWrappers: CPromiseChainWrapperMap
   runtimeFunctionParams: CFunctionTypeMap
-  statementLoweringDependencies: StatementLoweringDependencies
-  stringLoweringDependencies: StringLoweringDependencies
+  statementLoweringDependencies: StatementDependencies
+  stringLoweringDependencies: StringDependencies
   throwingFunctions: CStringSet
   unhandledRejectionFlag: string | null
 }
+
+export type CEmitContext = CEmitContextWithDependencies<object, object, object, object, object, object>
 
 export type CFailureContext = {
   cleanupEnabled: boolean
   failureStatement?: string | null
   failureStatementUsed?: boolean
+  returnNullable?: boolean
+  returnShape?: CObjectShape | null
   returnType?: string
   statusReturn: boolean
   throwingFunction: boolean
@@ -214,7 +220,6 @@ type CVariableScopeContext = {
   arrayShapes: CArrayShapeMap
   boxedVariables: CStringSet
   classInstanceTypes: CStringMap
-  cppArrayValues: CStringSet
   cppStringValues: CStringSet
   cppValueTypes: CStringMap
   exceptionValueNames: CStringSet
@@ -237,7 +242,21 @@ type CVariableScopeContext = {
   variables: CStringMap
 }
 
-export type CFunctionContext = CEmitContext & {
+export type CFunctionContextWithDependencies<
+  ArrayDependencies,
+  AsyncTaskDependencies,
+  ClassDependencies,
+  NullableDependencies,
+  StatementDependencies,
+  StringDependencies
+> = CEmitContextWithDependencies<
+  ArrayDependencies,
+  AsyncTaskDependencies,
+  ClassDependencies,
+  NullableDependencies,
+  StatementDependencies,
+  StringDependencies
+> & {
   arrayLengths: CNumberMap
   arrayShapes: CArrayShapeMap
   breakFlowUsed: boolean
@@ -249,7 +268,6 @@ export type CFunctionContext = CEmitContext & {
   cleanupEnabled: boolean
   continueFlowUsed: boolean
   continueTargets: CLoopFlowTarget[]
-  cppArrayValues: CStringSet
   cppStringValues: CStringSet
   cppValueTypes: CStringMap
   errorChannelUsed: boolean
@@ -297,12 +315,13 @@ export type CFunctionContext = CEmitContext & {
   variables: CStringMap
 }
 
+export type CFunctionContext = CFunctionContextWithDependencies<object, object, object, object, object, object>
+
 export type CVariableScopeSnapshot = {
   arrayLengths: CNumberMap
   arrayShapes: CArrayShapeMap
   boxedVariables: CStringSet
   classInstanceTypes: CStringMap
-  cppArrayValues: CStringSet
   cppStringValues: CStringSet
   cppValueTypes: CStringMap
   exceptionValueNames: CStringSet
@@ -329,11 +348,32 @@ export type CNullableScalarNarrowingSnapshot = {
   narrowedNullableScalars: CStringSet
 }
 
-export function createFunctionContext(
-  baseContext: CEmitContext,
+export function createFunctionContext<
+  ArrayDependencies,
+  AsyncTaskDependencies,
+  ClassDependencies,
+  NullableDependencies,
+  StatementDependencies,
+  StringDependencies
+>(
+  baseContext: CEmitContextWithDependencies<
+    ArrayDependencies,
+    AsyncTaskDependencies,
+    ClassDependencies,
+    NullableDependencies,
+    StatementDependencies,
+    StringDependencies
+  >,
   returnType: string,
   returnNullable: boolean
-): CFunctionContext {
+): CFunctionContextWithDependencies<
+  ArrayDependencies,
+  AsyncTaskDependencies,
+  ClassDependencies,
+  NullableDependencies,
+  StatementDependencies,
+  StringDependencies
+> {
   return {
     arrayLoweringDependencies: baseContext.arrayLoweringDependencies,
     asyncTaskLoweringDependencies: baseContext.asyncTaskLoweringDependencies,
@@ -354,12 +394,11 @@ export function createFunctionContext(
     functionPointerAdapters: baseContext.functionPointerAdapters,
     functionPointerRuntimeAdapterNames: baseContext.functionPointerRuntimeAdapterNames,
     functionPointerRuntimeAdapters: baseContext.functionPointerRuntimeAdapters,
-    functionReturnArrayElementDeclaredTypes: baseContext.functionReturnArrayElementDeclaredTypes,
-    functionReturnArrayElementTypes: baseContext.functionReturnArrayElementTypes,
     functionReturnDeclaredTypes: baseContext.functionReturnDeclaredTypes,
     functionReturnNullables: baseContext.functionReturnNullables,
     functionReturnPromiseValueTypes: baseContext.functionReturnPromiseValueTypes,
     functionReturnShapes: baseContext.functionReturnShapes,
+    functionReturnTypeRefs: baseContext.functionReturnTypeRefs,
     functionReturnTypes: baseContext.functionReturnTypes,
     functionThrowValueTypes: baseContext.functionThrowValueTypes,
     jsGlobalRoots: baseContext.jsGlobalRoots,
@@ -390,7 +429,6 @@ export function createFunctionContext(
     boxedValues: [],
     boxedVariables: new Set(),
     classInstanceTypes: new Map(),
-    cppArrayValues: new Set(),
     cppStringValues: new Set(),
     cppValueTypes: cloneCStringMap(baseContext.moduleValueCppTypes),
     continueFlowUsed: false,
@@ -466,6 +504,10 @@ export function emitFailureStatement(context: CFailureContext): string {
 
   if (context.returnType === 'void') {
     return 'return;'
+  }
+
+  if (context.returnNullable !== true && libraryNativeCppType(context.returnShape) !== null) {
+    return 'return {};'
   }
 
   if (
@@ -621,7 +663,7 @@ export function emitReturnValueDeclarations(context: CReturnValueDeclarationCont
 
   const libraryCppType = libraryNativeCppType(context.returnShape)
 
-  if (returnType === 'object' && context.returnNullable !== true && libraryCppType !== null) {
+  if (context.returnNullable !== true && libraryCppType !== null) {
     return [`${emitCReturnType(returnType, false, context.returnShape)} inox_return{};`]
   }
 
@@ -869,7 +911,6 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   const previousArrayShapes = context.arrayShapes
   const previousBoxedVariables = context.boxedVariables
   const previousClassInstanceTypes = context.classInstanceTypes
-  const previousCppArrayValues = context.cppArrayValues
   const previousCppStringValues = context.cppStringValues
   const previousCppValueTypes = context.cppValueTypes
   const previousExceptionValueNames = context.exceptionValueNames
@@ -894,7 +935,6 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   context.arrayShapes = cloneCArrayShapeMap(previousArrayShapes)
   context.boxedVariables = cloneCStringSet(previousBoxedVariables)
   context.classInstanceTypes = cloneCStringMap(previousClassInstanceTypes)
-  context.cppArrayValues = cloneCStringSet(previousCppArrayValues)
   context.cppStringValues = cloneCStringSet(previousCppStringValues)
   context.cppValueTypes = cloneCStringMap(previousCppValueTypes)
   context.exceptionValueNames = cloneCStringSet(previousExceptionValueNames)
@@ -919,7 +959,6 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
     arrayShapes: previousArrayShapes,
     boxedVariables: previousBoxedVariables,
     classInstanceTypes: previousClassInstanceTypes,
-    cppArrayValues: previousCppArrayValues,
     cppStringValues: previousCppStringValues,
     cppValueTypes: previousCppValueTypes,
     exceptionValueNames: previousExceptionValueNames,
@@ -950,7 +989,6 @@ export function restoreVariableScope(context: CVariableScopeContext, snapshot: C
   context.arrayShapes = snapshot.arrayShapes
   context.boxedVariables = snapshot.boxedVariables
   context.classInstanceTypes = snapshot.classInstanceTypes
-  context.cppArrayValues = snapshot.cppArrayValues
   context.cppStringValues = snapshot.cppStringValues
   context.cppValueTypes = snapshot.cppValueTypes
   context.exceptionValueNames = snapshot.exceptionValueNames

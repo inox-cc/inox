@@ -25,8 +25,6 @@ type IrTopLevelNode = AnyNode & {
   loc?: SourceLocation
   name?: string | null
   params?: AnyNode[]
-  returnArrayElementDeclaredType?: string | null
-  returnArrayElementType?: ValueType | null
   returnNullable?: boolean | null
   returnPromiseValueType?: ValueType | null
   returnShape?: ObjectShapeInfo | null
@@ -354,12 +352,8 @@ function createFunctionDeclaration(item: IrTopLevelNode, name: string): IrFuncti
     declaration.declaredReturnType = item.declaredReturnType
   }
 
-  if (item.returnArrayElementType !== null && typeof item.returnArrayElementType !== 'undefined') {
-    declaration.returnArrayElementType = item.returnArrayElementType
-  }
-
-  if (item.returnArrayElementDeclaredType !== null && typeof item.returnArrayElementDeclaredType !== 'undefined') {
-    declaration.returnArrayElementDeclaredType = item.returnArrayElementDeclaredType
+  if (item.returnTypeRef !== null && typeof item.returnTypeRef !== 'undefined') {
+    declaration.returnTypeRef = item.returnTypeRef
   }
 
   if (item.returnPromiseValueType !== null && typeof item.returnPromiseValueType !== 'undefined') {

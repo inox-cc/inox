@@ -1,4 +1,5 @@
 import { diagnostic } from '../diagnostics.ts'
+import { compilerLibraryIntrinsicNativeCppType } from './value-types.ts'
 import { collectIrTopLevelNodesFromPrograms, irClassMethodEffectName } from '../ir.ts'
 import type { AnyNode as CNode, IrProgram, SourceLocation } from '../types.ts'
 import {
@@ -13,7 +14,7 @@ import {
 import { functionTakesEventLoopParam } from './async/promises.ts'
 import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
 import { emitAsyncTaskFunctionStubDeclaration } from './async/tasks.ts'
-import type { CEmitContext, CFunctionContext } from './context.ts'
+import type { CEmitContextWithDependencies, CFunctionContextWithDependencies } from './context.ts'
 import {
   createFunctionContext,
   emitBoxedValueCleanup,
@@ -49,8 +50,16 @@ import {
   utf8ByteLength
 } from './identifiers.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from './runtime-values.ts'
-import type { CClassInfo, CFunctionParam, CFunctionType, CObjectShape, CObjectShapeField } from './types.ts'
+import type {
+  CClassInfo,
+  CFunctionParam,
+  CFunctionType,
+  CObjectShape,
+  CObjectShapeField,
+  CPreparedExpression as PreparedExpression
+} from './types.ts'
 import {
+  cIterableElementValueType,
   cRuntimeValueTag,
   emitCObjectParamName,
   emitCReturnType,
@@ -66,6 +75,8 @@ import {
   libraryNativeBoundaryCppType,
   libraryNativeCppType
 } from './value-types.ts'
+import type { ArrayLoweringDependencies } from './values/arrays.ts'
+import type { ClassLoweringDependencies } from './values/classes.ts'
 import {
   classFieldUsesCppStringStorage,
   classParamUsesCppStringStorage,
@@ -77,8 +88,28 @@ import {
   registerClassObjectShape
 } from './values/classes.ts'
 import { isThrowingFunctionName } from './values/expressions.ts'
+import type { NullableLoweringDependencies } from './values/nullable.ts'
 import { registerObjectShape } from './values/objects.ts'
+import type { StatementLoweringDependencies } from './values/statements.ts'
 import { registerErrorChannel } from './values/statements.ts'
+import type { StringLoweringDependencies } from './values/strings.ts'
+
+type CEmitContext = CEmitContextWithDependencies<
+  ArrayLoweringDependencies,
+  AsyncTaskLoweringDependencies,
+  ClassLoweringDependencies,
+  NullableLoweringDependencies,
+  StatementLoweringDependencies,
+  StringLoweringDependencies
+>
+type CFunctionContext = CFunctionContextWithDependencies<
+  ArrayLoweringDependencies,
+  AsyncTaskLoweringDependencies,
+  ClassLoweringDependencies,
+  NullableLoweringDependencies,
+  StatementLoweringDependencies,
+  StringLoweringDependencies
+>
 
 type CSourceLocation = SourceLocation | null | undefined
 
@@ -110,6 +141,7 @@ type NativeClassConstructorInitializer = {
 
 export type CDeclarationEmissionDependencies = {
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
+  emitPreparedNumberExpression: (expression: CNode, context: CFunctionContext) => PreparedExpression
   emitStatementList: (statements: CNode[], context: CFunctionContext) => string[]
 }
 
@@ -294,7 +326,7 @@ export function emitFunctionDeclaration(
   const bodyLines: string[] = []
   const lines: string[] = []
 
-  pushIndentedDeclarationLines(bodyLines, emitRuntimeParamPreludeForParams(statement, params, context))
+  pushIndentedDeclarationLines(bodyLines, emitRuntimeParamPreludeForParams(statement, params, context, deps))
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(statement.body, context))
   pushIndentedDeclarationLines(bodyLines, emitEventLoopDrain(context))
   const needsCleanup = shouldEmitCleanupLabel(context)
@@ -401,7 +433,10 @@ function registerFunctionParamsInContext(
       }
     } else if (param.valueType === 'array') {
       context.variables.set(param.name, 'array')
-      context.runtimeArrayElementTypes.set(param.name, declarationTypeOrUnknown(param.arrayElementType))
+      context.runtimeArrayElementTypes.set(
+        param.name,
+        cIterableElementValueType(param.typeRef, context.libraries) ?? 'unknown'
+      )
     } else if (param.valueType === 'promise') {
       context.variables.set(param.name, 'promise')
       context.promiseValueTypes.set(param.name, declarationTypeOrUnknown(param.promiseValueType))
@@ -579,6 +614,7 @@ function isContextDeclaredType(value: string): boolean {
 function isDependencyCarrierDeclaredType(value: string): boolean {
   return (
     value === 'CModuleEmissionDependencies' ||
+    value === 'CDeclarationEmissionDependencies' ||
     value === 'ArrayLoweringDependencies' ||
     value === 'AsyncTaskLoweringDependencies' ||
     value === 'CallbackLoweringDependencies' ||
@@ -611,7 +647,7 @@ function pushObjectShapeFunctionFieldParams(
 
   for (const field of fields) {
     if (field.valueType === 'function') {
-      if (!isPlainObjectFunctionField(field) && !isRuntimeFunctionType(field.functionType)) {
+      if (!isPlainObjectFunctionField(field, seenTypes) && !isRuntimeFunctionType(field.functionType)) {
         continue
       }
 
@@ -730,7 +766,7 @@ export function emitClassMethodDeclaration(
   const bodyLines: string[] = []
   const lines: string[] = []
 
-  pushIndentedDeclarationLines(bodyLines, emitRuntimeParamPreludeForParams(method, params, context))
+  pushIndentedDeclarationLines(bodyLines, emitRuntimeParamPreludeForParams(method, params, context, deps))
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(method.body, context))
   pushIndentedDeclarationLines(bodyLines, emitEventLoopDrain(context))
 
@@ -961,7 +997,7 @@ function emitNativeClassConstructorDeclaration(
 
   pushIndentedDeclarationLines(
     bodyLines,
-    emitConstructorRuntimeParamPreludeForParams(constructorMethod, params, context)
+    emitConstructorRuntimeParamPreludeForParams(constructorMethod, params, context, deps)
   )
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(body, context))
   pushIndentedDeclarationLines(bodyLines, emitEventLoopDrain(context))
@@ -999,12 +1035,16 @@ function emitNativeClassConstructorDeclaration(
 function emitConstructorRuntimeParamPreludeForParams(
   statement: CNode,
   params: CFunctionParam[],
-  context: CDeclarationFunctionContext
+  context: CDeclarationFunctionContext,
+  deps: CDeclarationEmissionDependencies
 ): string[] {
   const lines: string[] = []
 
   for (let index = 0; index < params.length; index = index + 1) {
-    pushDeclarationLines(lines, emitConstructorRuntimeParamPreludeForParam(statement, params[index], index, context))
+    pushDeclarationLines(
+      lines,
+      emitConstructorRuntimeParamPreludeForParam(statement, params[index], index, context, deps)
+    )
   }
 
   return lines
@@ -1014,13 +1054,14 @@ function emitConstructorRuntimeParamPreludeForParam(
   statement: CNode,
   param: CFunctionParam,
   index: number,
-  context: CDeclarationFunctionContext
+  context: CDeclarationFunctionContext,
+  deps: CDeclarationEmissionDependencies
 ): string[] {
   if (classParamUsesCppValueStorage(param) || classParamUsesCppStringStorage(param)) {
     return []
   }
 
-  return emitRuntimeParamPreludeForParam(statement, param, index, context)
+  return emitRuntimeParamPreludeForParam(statement, param, index, context, deps)
 }
 
 function registerNativeClassConstructorCppValueParams(
@@ -1218,9 +1259,9 @@ export function emitFunctionParameter(
   loc: CSourceLocation,
   seenTypes: string[] = []
 ): string {
-  reportUnsupportedCFunctionType(functionType, context, loc)
+  reportUnsupportedCFunctionType(functionType, context, loc, seenTypes)
 
-  if (!isPlainFunctionPointerType(functionType) && isRuntimeFunctionType(functionType)) {
+  if (!isPlainFunctionPointerType(functionType, seenTypes) && isRuntimeFunctionType(functionType)) {
     return `inox_value ${emitCLocalName(name)}`
   }
 
@@ -1238,13 +1279,14 @@ export function emitFunctionPointerParameter(
 export function reportUnsupportedCFunctionType(
   functionType: CFunctionType | null | undefined,
   context: CEmitContext,
-  loc: CSourceLocation
+  loc: CSourceLocation,
+  seenTypes: string[] = []
 ): void {
   if (functionType === null || typeof functionType === 'undefined') {
     return
   }
 
-  if (isPlainFunctionPointerType(functionType) || isRuntimeFunctionType(functionType)) {
+  if (isPlainFunctionPointerType(functionType, seenTypes) || isRuntimeFunctionType(functionType)) {
     return
   }
 
@@ -1307,12 +1349,13 @@ export function emitMainWrapper(
 function emitRuntimeParamPreludeForParams(
   statement: CNode,
   params: CFunctionParam[],
-  context: CFunctionContext
+  context: CFunctionContext,
+  deps: CDeclarationEmissionDependencies
 ): string[] {
   const lines: string[] = []
 
   for (let index = 0; index < params.length; index = index + 1) {
-    pushDeclarationLines(lines, emitRuntimeParamPreludeForParam(statement, params[index], index, context))
+    pushDeclarationLines(lines, emitRuntimeParamPreludeForParam(statement, params[index], index, context, deps))
   }
 
   return lines
@@ -1322,7 +1365,8 @@ function emitRuntimeParamPreludeForParam(
   statement: CNode,
   param: CFunctionParam,
   index: number,
-  context: CFunctionContext
+  context: CFunctionContext,
+  deps: CDeclarationEmissionDependencies
 ): string[] {
   const lines: string[] = []
   const localName = emitCLocalName(param.name)
@@ -1331,7 +1375,7 @@ function emitRuntimeParamPreludeForParam(
     return lines
   }
 
-  pushDeclarationLines(lines, emitDefaultRuntimeParamPreludeForParam(param, context))
+  pushDeclarationLines(lines, emitDefaultRuntimeParamPreludeForParam(param, context, deps))
 
   if (isNullableScalarParam(param)) {
     const paramName = emitCScalarParamName(param.name)
@@ -1457,7 +1501,11 @@ function nativeClassParamName(param: CFunctionParam, context: CFunctionContext):
   return className
 }
 
-function emitDefaultRuntimeParamPreludeForParam(param: CFunctionParam, context: CFunctionContext): string[] {
+function emitDefaultRuntimeParamPreludeForParam(
+  param: CFunctionParam,
+  context: CFunctionContext,
+  deps: CDeclarationEmissionDependencies
+): string[] {
   const value = param.defaultValue
   const localName = emitCLocalName(param.name)
 
@@ -1465,11 +1513,20 @@ function emitDefaultRuntimeParamPreludeForParam(param: CFunctionParam, context: 
     param.valueType === 'number' &&
     value !== null &&
     typeof value !== 'undefined' &&
-    value.type === 'NumberLiteral'
+    param.optional === true
   ) {
     const paramName = emitCScalarParamName(param.name)
+    const prepared = deps.emitPreparedNumberExpression(value, context)
+    const lines = [`if (${paramName}.tag == INOX_TAG_UNDEFINED) {`]
 
-    return [`if (${paramName}.tag == INOX_TAG_UNDEFINED) {`, `  ${paramName} = inox_number_value(${value.value});`, '}']
+    for (const line of prepared.lines) {
+      lines.push(`  ${line}`)
+    }
+
+    lines.push(`  ${paramName} = inox_number_value(static_cast<double>(${prepared.expression}));`)
+    lines.push('}')
+
+    return lines
   }
 
   if (
@@ -1541,11 +1598,12 @@ function emitDefaultRuntimeParamPreludeForParam(param: CFunctionParam, context: 
     value.elements.length === 0
   ) {
     const temp = nextCName(context, `${param.name}_default`)
+    const cppType = compilerLibraryIntrinsicNativeCppType(context.libraries, 'array-literal') ?? 'inox::Value'
     registerOwnedValue(context, temp)
 
     return [
       `if (${localName}.tag == INOX_TAG_UNDEFINED) {`,
-      `  ${temp} = ArrayClass::create(0);`,
+      `  ${temp} = ${cppType}::create(0);`,
       `  if (inox::thrown()) ${emitFailureStatement(context)}`,
       `  ${localName} = ${temp};`,
       '}'

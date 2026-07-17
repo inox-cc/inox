@@ -1,4 +1,30 @@
+import {
+  compilerLibraryNativeTypeForId,
+  compilerLibraryNativeTypeForIntrinsic,
+  resolveCompilerLibrarySet
+} from '../extensions/library-set.ts'
+import { compilerLibraryIntrinsicResultMetadata } from '../extensions/intrinsic-metadata.ts'
+import {
+  typeRefCompatibilityMetadata,
+  typeRefDeclaredName,
+  typeRefIterableElementDeclaredName,
+  typeRefIterableElementValueType,
+  typeRefTraitArgument
+} from '../extensions/type-ref-compatibility.ts'
+import type {
+  CompilerLibrarySet,
+  IntrinsicRole,
+  LibraryNativeIterationDescriptor,
+  TypeRef
+} from '../extensions/types.ts'
+import type { ObjectShapeInfo, SourceLocation } from '../types.ts'
 import { emitCIdentifier } from './identifiers.ts'
+import {
+  cCompilerLibrarySetValue,
+  cOptionalCompilerLibrarySetValue,
+  cTypeRefValue
+} from './types.ts'
+import type { CCompilerLibrarySet, CFunctionParam, CFunctionType, CTypeRef } from './types.ts'
 
 type CLibraryNativeShape = {
   libraryCValueAdapter?: string | null
@@ -32,6 +58,114 @@ type CNullableScalarParamRecord = {
 }
 
 export type CRuntimeValueTag = string | null
+
+export function cTypeRefDeclaredName(
+  typeRef: CTypeRef | null | undefined,
+  libraries: CCompilerLibrarySet
+): string | null {
+  return typeRefDeclaredName(cTypeRefValue(typeRef), cCompilerLibrarySetValue(libraries))
+}
+
+export function cIterableElementDeclaredName(
+  typeRef: CTypeRef | null | undefined,
+  libraries: CCompilerLibrarySet
+): string | null {
+  return typeRefIterableElementDeclaredName(cTypeRefValue(typeRef), cCompilerLibrarySetValue(libraries))
+}
+
+export function cIterableElementValueType(
+  typeRef: CTypeRef | null | undefined,
+  libraries: CCompilerLibrarySet
+): string | null {
+  return typeRefIterableElementValueType(cTypeRefValue(typeRef), cCompilerLibrarySetValue(libraries))
+}
+
+export function cIterableElementFunctionType(
+  typeRef: CTypeRef | null | undefined,
+  libraries: CCompilerLibrarySet,
+  loc: SourceLocation
+): CFunctionType | null {
+  const resolvedTypeRef = cTypeRefValue(typeRef)
+  const resolvedLibraries = cCompilerLibrarySetValue(libraries)
+  return cFunctionTypeFromTypeRef(
+    typeRefTraitArgument(resolvedTypeRef, 'iterable', 0, resolvedLibraries),
+    resolvedLibraries,
+    loc
+  )
+}
+
+export function cFunctionTypeFromTypeRef(
+  typeRef: CTypeRef | null | undefined,
+  libraries: CCompilerLibrarySet,
+  loc: SourceLocation
+): CFunctionType | null {
+  const resolvedTypeRef = cTypeRefValue(typeRef)
+  const resolvedLibraries = cCompilerLibrarySetValue(libraries)
+
+  if (resolvedTypeRef === null || resolvedTypeRef.kind !== 'function') {
+    return null
+  }
+
+  const params: CFunctionParam[] = []
+
+  for (let index = 0; index < resolvedTypeRef.params.length; index = index + 1) {
+    const paramTypeRef = resolvedTypeRef.params[index]
+    const metadata = cTypeRefMetadata(paramTypeRef, resolvedLibraries, loc)
+    params.push({
+      name: `arg${index}`,
+      valueType: metadata.valueType,
+      typeRef: paramTypeRef,
+      nullable: metadata.nullable,
+      declaredType: null,
+      promiseValueType: metadata.promiseValueType,
+      functionType: cFunctionTypeFromTypeRef(paramTypeRef, resolvedLibraries, loc),
+      shape: metadata.shape
+    })
+  }
+
+  const resultTypeRef = cTypeRefValue(resolvedTypeRef.result)
+
+  if (resultTypeRef === null) {
+    return null
+  }
+
+  const result = cTypeRefMetadata(resultTypeRef, resolvedLibraries, loc)
+
+  return {
+    kind: 'function',
+    params,
+    returnType: result.valueType,
+    returnTypeRef: resultTypeRef,
+    returnNullable: result.nullable,
+    returnPromiseValueType: result.promiseValueType,
+    returnShape: result.shape
+  }
+}
+
+function cTypeRefMetadata(typeRef: TypeRef, libraries: CompilerLibrarySet, loc: SourceLocation): {
+  valueType: string
+  nullable: boolean
+  promiseValueType: string | null
+  shape: CFunctionParam['shape']
+} {
+  if (typeRef.kind === 'parameter') {
+    return {
+      valueType: 'unknown',
+      nullable: typeRef.nullable === true,
+      promiseValueType: null,
+      shape: null
+    }
+  }
+
+  const metadata = typeRefCompatibilityMetadata(typeRef, libraries, loc)
+
+  return {
+    valueType: metadata.valueType,
+    nullable: metadata.nullable,
+    promiseValueType: metadata.promiseValueType,
+    shape: metadata.shape as CFunctionParam['shape']
+  }
+}
 
 function isConcreteManagedRuntimeReturnType(valueType: CValueTypeInput): boolean {
   return (
@@ -113,6 +247,19 @@ export function libraryNativeCppType(shape: CLibraryNativeShape | null | undefin
   return cppType
 }
 
+export function libraryCppValueStorageType(
+  nullable: boolean,
+  shape: CLibraryNativeShape | null | undefined
+): string | null {
+  const cppType = shape?.libraryCppType
+
+  if (nullable || cppType === null || typeof cppType === 'undefined' || cppType === '') {
+    return null
+  }
+
+  return cppType
+}
+
 export function libraryNativeBoundaryCppType(
   valueType: CValueTypeInput,
   nullable: boolean,
@@ -141,6 +288,109 @@ export function applyLibraryNativeValueAdapter(value: string, adapter: string | 
   }
 
   return adapter.split('$value').join(value)
+}
+
+export function compilerLibraryIntrinsicNativeCppType(
+  libraries: CCompilerLibrarySet,
+  role: IntrinsicRole
+): string | null {
+  return compilerLibraryNativeTypeForIntrinsic(cCompilerLibrarySetValue(libraries), role, 'construct')?.cppType ?? null
+}
+
+export function resolveCCompilerLibrarySet(
+  libraries: CCompilerLibrarySet | null | undefined
+): CCompilerLibrarySet {
+  return resolveCompilerLibrarySet(cOptionalCompilerLibrarySetValue(libraries))
+}
+
+export function compilerLibraryIntrinsicResultCShape(
+  libraries: CCompilerLibrarySet | null | undefined,
+  role: IntrinsicRole,
+  loc: SourceLocation
+): ObjectShapeInfo | null {
+  return compilerLibraryIntrinsicResultMetadata(
+    resolveCompilerLibrarySet(cOptionalCompilerLibrarySetValue(libraries)),
+    role,
+    'construct',
+    loc
+  )?.shape ?? null
+}
+
+export function compilerLibraryIntrinsicNativeValueAdapter(
+  libraries: CCompilerLibrarySet,
+  role: IntrinsicRole
+): string | null {
+  return compilerLibraryNativeTypeForIntrinsic(
+    cCompilerLibrarySetValue(libraries),
+    role,
+    'construct'
+  )?.cValueAdapter ?? null
+}
+
+export function compilerLibraryNativeRuntimeRequirementsForCppType(
+  libraries: CCompilerLibrarySet,
+  cppType: string
+): string[] {
+  const nativeTypes = cCompilerLibrarySetValue(libraries).nativeTypes
+
+  for (let index = 0; index < nativeTypes.length; index = index + 1) {
+    if (nativeTypes[index].cppType === cppType) {
+      return nativeTypes[index].runtimeRequirements
+    }
+  }
+
+  return []
+}
+
+export function compilerLibraryNativeRuntimeRequirementsForId(
+  libraries: CCompilerLibrarySet,
+  typeId: string
+): string[] {
+  return compilerLibraryNativeTypeForId(
+    cCompilerLibrarySetValue(libraries),
+    typeId
+  )?.runtimeRequirements ?? []
+}
+
+export function compilerLibraryNativeIterationForId(
+  libraries: CCompilerLibrarySet,
+  typeId: string
+): LibraryNativeIterationDescriptor | null {
+  return compilerLibraryNativeTypeForId(cCompilerLibrarySetValue(libraries), typeId)?.cIteration ?? null
+}
+
+export function compilerLibraryNativeRuntimeValueExpressionForId(
+  libraries: CCompilerLibrarySet,
+  typeId: string
+): string | null {
+  return compilerLibraryNativeTypeForId(
+    cCompilerLibrarySetValue(libraries),
+    typeId
+  )?.cRuntimeValueExpression ?? null
+}
+
+export function applyCompilerLibraryIntrinsicNativeValueAdapter(
+  value: string,
+  cppType: string | null | undefined,
+  libraries: CCompilerLibrarySet,
+  role: IntrinsicRole
+): string {
+  if (
+    cppType !== null &&
+    typeof cppType !== 'undefined' &&
+    cppType !== 'inox::Value' &&
+    cppType !== 'inox_value'
+  ) {
+    return value
+  }
+
+  const adapter = compilerLibraryNativeTypeForIntrinsic(
+    cCompilerLibrarySetValue(libraries),
+    role,
+    'construct'
+  )?.cValueAdapter ?? null
+
+  return applyLibraryNativeValueAdapter(value, adapter)
 }
 
 export function emitCReturnType(valueType: CValueTypeInput, nullable: boolean, shape?: CLibraryNativeShape | null): string {

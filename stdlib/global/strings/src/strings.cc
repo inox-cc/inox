@@ -673,7 +673,7 @@ String String::fromValue(const Value& input) {
   }
 
   if (value.tag == INOX_TAG_ARRAY) {
-    return ArrayClass(value).join(",");
+    return Array(value).join(",");
   }
 
   if (value.tag == INOX_TAG_OBJECT) {
@@ -1034,15 +1034,15 @@ String String::slice(double start, double end) const {
   return String(bytes() + start_byte, end_byte - start_byte);
 }
 
-ArrayClass String::split(StringView separator) const {
+Array String::split(StringView separator) const {
   if (!valid()) {
-    return ArrayClass();
+    return Array();
   }
 
-  ArrayClass out = ArrayClass::create(0);
+  Array out = Array::create(0);
 
   if (inox::thrown() || !out.valid()) {
-    return ArrayClass();
+    return Array();
   }
 
   if (separator.len == 0) {
@@ -1056,13 +1056,13 @@ ArrayClass String::split(StringView separator) const {
       String item(bytes() + index, step);
 
       if (!item.valid()) {
-        return ArrayClass();
+        return Array();
       }
 
       out.push(item.raw());
 
       if (inox::thrown()) {
-        return ArrayClass();
+        return Array();
       }
 
       index += step;
@@ -1083,13 +1083,13 @@ ArrayClass String::split(StringView separator) const {
     String item(bytes() + start, index - start);
 
     if (!item.valid()) {
-      return ArrayClass();
+      return Array();
     }
 
     out.push(item.raw());
 
     if (inox::thrown()) {
-      return ArrayClass();
+      return Array();
     }
 
     index += separator.len;
@@ -1099,13 +1099,13 @@ ArrayClass String::split(StringView separator) const {
   String item(bytes() + start, length() - start);
 
   if (!item.valid()) {
-    return ArrayClass();
+    return Array();
   }
 
   out.push(item.raw());
 
   if (inox::thrown()) {
-    return ArrayClass();
+    return Array();
   }
 
   return out;

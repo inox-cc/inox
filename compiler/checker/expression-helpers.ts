@@ -45,10 +45,9 @@ export function dynamicShapeField(shape: ObjectShapeInfo, name: string): AnyNode
       weakTypeValidated: field.weakTypeValidated,
       loc: field.loc,
       declaredType: field.declaredType,
+      typeRef: field.typeRef,
       valueType: field.valueType,
       nullable: field.nullable,
-      arrayElementType: field.arrayElementType,
-      arrayElementDeclaredType: field.arrayElementDeclaredType,
       promiseValueType: field.promiseValueType,
       functionType: field.functionType,
       shape: field.shape,
@@ -88,8 +87,6 @@ export function createArrowFunctionTypeMetadata(
     returnTypeRef: expression.returnTypeRef ?? null,
     declaredReturnType: expression.declaredReturnType,
     returnNullable: expression.returnNullable === true,
-    returnArrayElementType: expression.returnArrayElementType ?? null,
-    returnArrayElementDeclaredType: expression.returnArrayElementDeclaredType ?? null,
     returnPromiseValueType: expression.returnPromiseValueType ?? null,
     returnShape
   }

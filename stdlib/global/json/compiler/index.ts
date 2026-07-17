@@ -651,7 +651,13 @@ function commonJsonObjectField(name: string, elements: JsonParseLiteralTypeInfo[
 
     if (field !== null) {
       fields.push(field)
-      valueTypes.push(field.valueType)
+      const fieldValueType = field.valueType
+
+      if (fieldValueType === null || typeof fieldValueType === 'undefined') {
+        valueTypes.push('unknown')
+      } else {
+        valueTypes.push(fieldValueType)
+      }
     }
   }
 

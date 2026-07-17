@@ -3,7 +3,7 @@ import { test } from 'node:test'
 
 import { compileSource, compileSourceToIr } from '../../compiler/core.ts'
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
-import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
+import type { CompilerLibraryDescriptor, TypeRef } from '../../compiler/extensions/types.ts'
 
 test('package globals lower through generic member, index, optional argument and assignment operations', () => {
   const result = compileSource(
@@ -34,7 +34,7 @@ test('package globals lower through generic member, index, optional argument and
   assert.match(result.code, /\(inox::host\.argv\[0(?:\.0)?\] = 7(?:\.0)?\)/)
 })
 
-test('package global result metadata preserves nested shapes and array element types', () => {
+test('package global result metadata preserves nested shapes and iterable TypeRef', () => {
   const result = compileSourceToIr(
     'const release = host.versions.node\nconst args = host.argv\n',
     { libraries: createCompilerLibrarySet([hostLibrary()]) }
@@ -44,7 +44,7 @@ test('package global result metadata preserves nested shapes and array element t
 
   assert.equal(release.valueType, 'string')
   assert.equal(args.valueType, 'array')
-  assert.equal(args.arrayElementType, 'string')
+  assert.deepEqual(args.typeRef, hostArgvTypeRef())
 })
 
 test('local bindings shadow package-provided globals', () => {
@@ -61,6 +61,18 @@ function hostLibrary(): CompilerLibraryDescriptor {
     id: 'host',
     dependencies: [],
     declarations: [],
+    nativeTypes: [
+      {
+        libraryId: 'host',
+        typeId: 'host:argv',
+        declarationNames: ['HostArgv'],
+        valueType: 'array',
+        cppType: 'inox::HostArgv&',
+        baseTypeIds: [],
+        runtimeRequirements: [],
+        traits: [{ traitId: 'iterable', args: [primitiveTypeRef('string')] }]
+      }
+    ],
     operations: [
       {
         libraryId: 'host',
@@ -118,10 +130,7 @@ function hostLibrary(): CompilerLibraryDescriptor {
         kind: 'member-read',
         runtimeRequirements: [],
         cExpression: 'inox::host.argv',
-        resultTypeId: 'host:argv',
-        resultArrayElementType: 'string',
-        cppType: 'inox::HostArgv&',
-        valueType: 'array'
+        resultTypeRef: hostArgvTypeRef()
       },
       {
         libraryId: 'host',
@@ -183,4 +192,21 @@ function hostLibrary(): CompilerLibraryDescriptor {
     intrinsicBindings: [],
     runtimeRequirements: []
   }
+}
+
+function hostArgvTypeRef(): TypeRef {
+  const elementType = primitiveTypeRef('string')
+
+  return {
+    kind: 'nominal',
+    typeId: 'host:argv',
+    args: [],
+    nullable: false,
+    ownership: 'value',
+    traits: [{ traitId: 'iterable', args: [elementType] }]
+  }
+}
+
+function primitiveTypeRef(name: 'string'): TypeRef {
+  return { kind: 'primitive', name, nullable: false, ownership: 'value', traits: [] }
 }

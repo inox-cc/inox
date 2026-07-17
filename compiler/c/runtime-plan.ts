@@ -4,6 +4,8 @@ import type {
   RuntimeEntrypointAdapterDescriptor,
   RuntimeRequirementDescriptor
 } from '../extensions/types.ts'
+import { cOptionalCompilerLibrarySetValue } from './types.ts'
+import type { CCompilerLibrarySet } from './types.ts'
 
 export type CRuntimePreludeRequirements = {
   needsRuntime: boolean
@@ -25,7 +27,7 @@ export type CRuntimePreludeRequirementInput = {
   globalUsages: IrGlobalUsage[]
   hasRuntimeCallbackWrapper: boolean
   irPrograms: IrProgram[]
-  libraries?: CompilerLibrarySet
+  libraries?: CCompilerLibrarySet
   runtimeRequirements: Set<IrRuntimeRequirement>
   signatureRuntimeTypes?: Set<string>
   throwingFunctionCount: number
@@ -34,7 +36,10 @@ export type CRuntimePreludeRequirementInput = {
 export function resolveCRuntimePreludeRequirements(
   input: CRuntimePreludeRequirementInput
 ): CRuntimePreludeRequirements {
-  const libraryRuntime = resolveLibraryRuntimeRequirements(input.runtimeRequirements, input.libraries)
+  const libraryRuntime = resolveLibraryRuntimeRequirements(
+    input.runtimeRequirements,
+    cOptionalCompilerLibrarySetValue(input.libraries)
+  )
   const runtimeRequirements = libraryRuntime.requirements
   const signatureRuntimeTypes: Set<string> = input.signatureRuntimeTypes ?? new Set()
   const needsCallbackRuntime =
@@ -43,10 +48,7 @@ export function resolveCRuntimePreludeRequirements(
     signatureRuntimeTypes.has('function')
   const needsAsyncRuntime = runtimeRequirements.has('async-runtime') || signatureRuntimeTypes.has('promise')
   const needsCollectionRuntime =
-    runtimeRequirements.has('collections') ||
-    irProgramsUseArrayIsArray(input.irPrograms) ||
-    irProgramsUseArrayIncludes(input.irPrograms) ||
-    signatureRuntimeTypes.has('array')
+    runtimeRequirements.has('collections') || signatureRuntimeTypes.has('array')
   const needsClassRuntime = input.classDescriptorCount > 0
   const needsClassDescriptorRuntime = needsClassRuntime
   const needsCppValueRuntime =
@@ -154,9 +156,9 @@ function resolveLibraryRuntimeRequirements(
 
 export function resolveLibraryRuntimeCPreludeIncludes(
   selected: Set<IrRuntimeRequirement>,
-  libraries: CompilerLibrarySet | null | undefined
+  libraries: CCompilerLibrarySet | null | undefined
 ): string[] {
-  return resolveLibraryRuntimeRequirements(selected, libraries).includes
+  return resolveLibraryRuntimeRequirements(selected, cOptionalCompilerLibrarySetValue(libraries)).includes
 }
 
 function findRuntimeRequirementDescriptor(
@@ -200,121 +202,4 @@ function insertOrderedRuntimeRequirementId(values: string[], value: string): voi
   }
 
   values[index] = value
-}
-
-function irProgramsUseArrayIncludes(programs: IrProgram[]): boolean {
-  return irProgramsUseNode(programs, 'array-includes', '')
-}
-
-function irProgramsUseArrayIsArray(programs: IrProgram[]): boolean {
-  return irProgramsUseNode(programs, 'array-is-array', '')
-}
-
-function nodeIsArrayIncludesCall(node: AnyNode): boolean {
-  if (node.type !== 'CallExpression') {
-    return false
-  }
-
-  const callee = node.callee
-
-  if (callee === null || typeof callee === 'undefined' || callee.type !== 'MemberExpression') {
-    return false
-  }
-
-  if (callee.property !== 'includes') {
-    return false
-  }
-
-  const object = callee.object
-
-  if (object === null || typeof object === 'undefined') {
-    return false
-  }
-
-  return (
-    object.valueType === 'array' || (object.arrayElementType !== null && typeof object.arrayElementType !== 'undefined')
-  )
-}
-
-function irProgramsUseNode(programs: IrProgram[], kind: string, collectionKind: string): boolean {
-  for (let index = 0; index < programs.length; index = index + 1) {
-    const program = programs[index] as IrProgram
-
-    if (nodeTreeUses(program.body, kind, collectionKind)) {
-      return true
-    }
-  }
-
-  return false
-}
-
-function nodeTreeUses(value: any, kind: string, collectionKind: string): boolean {
-  if (value === null || typeof value === 'undefined') {
-    return false
-  }
-
-  if (Array.isArray(value)) {
-    for (let index = 0; index < value.length; index = index + 1) {
-      if (nodeTreeUses(value[index], kind, collectionKind)) {
-        return true
-      }
-    }
-
-    return false
-  }
-
-  if (typeof value !== 'object') {
-    return false
-  }
-
-  const node = value as AnyNode
-
-  return nodeMatchesRuntimePlanKind(node, kind, collectionKind) || nodeChildrenUse(node, kind, collectionKind)
-}
-
-function nodeChildrenUse(node: AnyNode, kind: string, collectionKind: string): boolean {
-  return (
-    nodeTreeUses(node.body, kind, collectionKind) ||
-    nodeTreeUses(node.params, kind, collectionKind) ||
-    nodeTreeUses(node.fields, kind, collectionKind) ||
-    nodeTreeUses(node.methods, kind, collectionKind) ||
-    nodeTreeUses(node.init, kind, collectionKind) ||
-    nodeTreeUses(node.condition, kind, collectionKind) ||
-    nodeTreeUses(node.consequent, kind, collectionKind) ||
-    nodeTreeUses(node.alternate, kind, collectionKind) ||
-    nodeTreeUses(node.test, kind, collectionKind) ||
-    nodeTreeUses(node.update, kind, collectionKind) ||
-    nodeTreeUses(node.iterable, kind, collectionKind) ||
-    nodeTreeUses(node.discriminant, kind, collectionKind) ||
-    nodeTreeUses(node.cases, kind, collectionKind) ||
-    nodeTreeUses(node.block, kind, collectionKind) ||
-    nodeTreeUses(node.handler, kind, collectionKind) ||
-    nodeTreeUses(node.finalizer, kind, collectionKind) ||
-    nodeTreeUses(node.argument, kind, collectionKind) ||
-    nodeTreeUses(node.args, kind, collectionKind) ||
-    nodeTreeUses(node.callee, kind, collectionKind) ||
-    nodeTreeUses(node.object, kind, collectionKind) ||
-    nodeTreeUses(node.index, kind, collectionKind) ||
-    nodeTreeUses(node.target, kind, collectionKind) ||
-    nodeTreeUses(node.value, kind, collectionKind) ||
-    nodeTreeUses(node.functionType, kind, collectionKind) ||
-    nodeTreeUses(node.returnShape, kind, collectionKind) ||
-    nodeTreeUses(node.left, kind, collectionKind) ||
-    nodeTreeUses(node.right, kind, collectionKind) ||
-    nodeTreeUses(node.elements, kind, collectionKind) ||
-    nodeTreeUses(node.properties, kind, collectionKind) ||
-    nodeTreeUses(node.expression, kind, collectionKind)
-  )
-}
-
-function nodeMatchesRuntimePlanKind(node: AnyNode, kind: string, collectionKind: string): boolean {
-  if (kind === 'array-includes') {
-    return nodeIsArrayIncludesCall(node)
-  }
-
-  if (kind === 'array-is-array') {
-    return node.arrayIsArrayCall === true
-  }
-
-  return false
 }

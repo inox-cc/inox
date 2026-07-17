@@ -1,24 +1,35 @@
 import { diagnostic } from '../diagnostics.ts'
 import { memberExpressionPath } from '../member-paths.ts'
-import type { TypeRef } from '../extensions/types.ts'
+import { compilerLibraryNativeTypeForIntrinsic } from '../extensions/library-set.ts'
+import { typeRefTraitArgument } from '../extensions/type-ref-compatibility.ts'
+import { instantiateNativeTypeRef } from '../extensions/type-ref-substitution.ts'
+import type { CompilerLibrarySet, TypeRef } from '../extensions/types.ts'
 import type { AnyNode, Diagnostic, ObjectShapeInfo, SourceLocation, ValueType } from '../types.ts'
 import { isAssignableType } from './assignability.ts'
+import type { DeclaredTypeResolverContext } from './declared-types.ts'
+import { applyTypeRefMetadataToExpression } from './expression-metadata.ts'
 import { objectValuesElementTypeFromShape } from './expression-helpers.ts'
 
 export type GlobalCallCheckerContext = {
+  declaredTypes: DeclaredTypeResolverContext
   diagnostics: Diagnostic[]
+  libraries: CompilerLibrarySet
 }
 
 export type CheckedCallArgInfo = {
   valueType: ValueType
   nullable: boolean
   loc: SourceLocation
-  arrayElementType: ValueType | null
   shape: ObjectShapeInfo | null
   typeRef: TypeRef
 }
 
-function report(context: GlobalCallCheckerContext, code: string, message: string, loc: SourceLocation): void {
+function report(
+  context: GlobalCallCheckerContext,
+  code: string,
+  message: string,
+  loc: SourceLocation | null | undefined
+): void {
   context.diagnostics.push(diagnostic(code, message, loc))
 }
 
@@ -52,39 +63,6 @@ function checkAssignableType(
   report(context, 'INOX_TYPE_MISMATCH', `cannot assign ${actualLabel} to ${expected}`, loc)
 }
 
-export function checkArrayIsArrayCall(
-  context: GlobalCallCheckerContext,
-  expression: AnyNode,
-  arrayShadowed: boolean
-): ValueType | null {
-  const path = memberExpressionPath(expression.callee)
-
-  if (
-    path === null ||
-    typeof path === 'undefined' ||
-    path.length !== 2 ||
-    path[0] !== 'Array' ||
-    path[1] !== 'isArray' ||
-    arrayShadowed
-  ) {
-    return null
-  }
-
-  expression.arrayIsArrayCall = true
-  expression.valueType = 'boolean'
-
-  if (expression.args.length !== 1) {
-    report(
-      context,
-      'INOX_ARG_COUNT',
-      `function Array.isArray expects 1 argument(s), got ${expression.args.length}`,
-      expression.loc
-    )
-  }
-
-  return 'boolean'
-}
-
 export function isObjectStaticCall(expression: AnyNode, objectShadowed: boolean): boolean {
   const path = memberExpressionPath(expression.callee)
 
@@ -108,14 +86,12 @@ export function checkObjectStaticCall(
 
   expression.objectRuntimeMethod = method
   expression.valueType = 'array'
-  expression.arrayElementType = 'unknown'
-  expression.arrayElementDeclaredType = null
+  let elementTypeRef = unknownTypeRef()
 
   if (method === 'entries') {
-    expression.arrayElementType = 'array'
+    elementTypeRef = arrayTypeRef(context, unknownTypeRef()) ?? unknownTypeRef()
   } else if (method === 'keys') {
-    expression.arrayElementType = 'string'
-    expression.arrayElementDeclaredType = 'string'
+    elementTypeRef = typeRefForValueType(context, 'string')
   }
 
   if (expression.args.length !== 1) {
@@ -136,12 +112,84 @@ export function checkObjectStaticCall(
 
     if (method === 'values') {
       if (firstArg.valueType === 'array') {
-        expression.arrayElementType = firstArg.arrayElementType ?? 'unknown'
+        elementTypeRef = typeRefTraitArgument(firstArg.typeRef, 'iterable', 0, context.libraries) ?? unknownTypeRef()
       } else {
-        expression.arrayElementType = objectValuesElementTypeFromShape(firstArg.shape)
+        elementTypeRef = typeRefForValueType(context, objectValuesElementTypeFromShape(firstArg.shape))
       }
     }
   }
 
+  applyArrayResultType(context, expression, elementTypeRef)
+
   return 'array'
+}
+
+function applyArrayResultType(
+  context: GlobalCallCheckerContext,
+  expression: AnyNode,
+  elementTypeRef: TypeRef
+): void {
+  const providerType = compilerLibraryNativeTypeForIntrinsic(context.libraries, 'array-literal', 'construct')
+  const resultTypeRef = arrayTypeRef(context, elementTypeRef)
+
+  if (providerType === null || resultTypeRef === null) {
+    return
+  }
+
+  applyTypeRefMetadataToExpression(context.declaredTypes, expression, resultTypeRef)
+  expression.libraryRuntimeRequirements = providerType.runtimeRequirements
+}
+
+function arrayTypeRef(context: GlobalCallCheckerContext, elementTypeRef: TypeRef): TypeRef | null {
+  const providerType = compilerLibraryNativeTypeForIntrinsic(context.libraries, 'array-literal', 'construct')
+
+  if (providerType === null || (providerType.typeParameters ?? []).length !== 1) {
+    return null
+  }
+
+  return instantiateNativeTypeRef(providerType, [elementTypeRef])
+}
+
+function typeRefForValueType(context: GlobalCallCheckerContext, valueType: ValueType): TypeRef {
+  const primitiveTypeRef = primitiveTypeRefForValueType(valueType)
+
+  if (primitiveTypeRef !== null) {
+    return primitiveTypeRef
+  }
+
+  if (valueType === 'array') {
+    return arrayTypeRef(context, unknownTypeRef()) ?? unknownTypeRef()
+  }
+
+  return unknownTypeRef()
+}
+
+function primitiveTypeRefForValueType(valueType: ValueType): TypeRef | null {
+  if (
+    valueType !== 'boolean' &&
+    valueType !== 'bytes' &&
+    valueType !== 'null' &&
+    valueType !== 'number' &&
+    valueType !== 'string' &&
+    valueType !== 'void'
+  ) {
+    return null
+  }
+
+  return {
+    kind: 'primitive',
+    name: valueType,
+    nullable: false,
+    ownership: 'value',
+    traits: []
+  }
+}
+
+function unknownTypeRef(): TypeRef {
+  return {
+    kind: 'unknown',
+    nullable: false,
+    ownership: 'value',
+    traits: []
+  }
 }

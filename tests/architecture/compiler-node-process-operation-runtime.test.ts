@@ -21,7 +21,7 @@ test('node:process проходит через generic global, receiver и resul
   assert.equal(first.libraryOperationId, 'node:process#ProcessArgv#index-read')
   assert.equal(path.libraryOperationId, 'node:process#ProcessEnv#member-read')
   assert.equal(start.libraryOperationId, 'node:process#hrtime')
-  assert.equal(start.arrayElementType, 'number')
+  assert.equal(start.typeRef.args[0].name, 'number')
   assert.equal(delta.libraryOperationId, 'node:process#hrtime')
   assert.equal(usage.libraryOperationId, 'node:process#memoryUsage')
   assert.equal(usage.shape.libraryTypeId, 'node:process#ProcessMemoryUsage')

@@ -17,6 +17,7 @@ import {
   compilerAnyNodeArrayFields,
   compilerAnyNodeBooleanFields,
   compilerAnyNodeObjectFields,
+  compilerAnyNodeStringArrayFields,
   compilerAnyNodeStringFields
 } from './any-node-fields.ts'
 import {
@@ -31,7 +32,6 @@ import {
 export type CExpressionTypeDependencies = {
   cPromiseRuntimeCallName: (callee: AnyNode) => string | null
   isArrayIncludesCall: (expression: AnyNode) => boolean
-  isArrayIsArrayCall: (expression: AnyNode) => boolean
   isArrayJoinCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isArrayLengthExpression: (expression: AnyNode, context: CFunctionContext) => boolean
   isClassConstructorExpression: (expression: AnyNode, context: CFunctionContext) => boolean
@@ -273,7 +273,11 @@ function narrowedNullableScalarMetadataType(
 
     const contextShapeValueType = contextObjectShapeFieldValueType(expression.object, expression.property, context)
 
-    if (contextShapeValueType !== null && typeof contextShapeValueType !== 'undefined') {
+    if (
+      contextShapeValueType !== null &&
+      typeof contextShapeValueType !== 'undefined' &&
+      contextShapeValueType !== 'unknown'
+    ) {
       return contextShapeValueType
     }
 
@@ -531,10 +535,6 @@ export function inferExpressionType(
     }
   }
 
-  if (deps.isArrayIsArrayCall(expression)) {
-    return 'boolean'
-  }
-
   if (deps.isArrayIncludesCall(expression)) {
     return 'boolean'
   }
@@ -624,6 +624,14 @@ export function inferExpressionType(
 
     const consequentType = inferExpressionType(expression.consequent, context, deps)
     const alternateType = inferExpressionType(expression.alternate, context, deps)
+
+    if (isUndefinedReferenceExpression(expression.consequent)) {
+      return alternateType
+    }
+
+    if (isUndefinedReferenceExpression(expression.alternate)) {
+      return consequentType
+    }
 
     return inferConditionalExpressionType(consequentType, alternateType)
   }
@@ -722,7 +730,11 @@ export function inferExpressionType(
 
     const member = deps.resolveKnownObjectMember(expression, context)
 
-    if (member !== null && typeof member !== 'undefined') {
+    if (
+      member !== null &&
+      typeof member !== 'undefined' &&
+      member.valueType !== 'unknown'
+    ) {
       return member.valueType
     }
 
@@ -734,18 +746,34 @@ export function inferExpressionType(
 
     const shapeField = deps.resolveObjectExpressionMember(expression)
 
-    if (shapeField !== null && typeof shapeField !== 'undefined') {
+    if (
+      shapeField !== null &&
+      typeof shapeField !== 'undefined' &&
+      shapeField.valueType !== 'unknown'
+    ) {
       return shapeField.valueType
-    }
-
-    if (expression.type === 'OptionalMemberExpression') {
-      return 'optional'
     }
 
     const anyNodeValueType = anyNodeLikeObjectAccessValueType(expression, context)
 
     if (anyNodeValueType !== null && typeof anyNodeValueType !== 'undefined') {
       return anyNodeValueType
+    }
+
+    if (member !== null && typeof member !== 'undefined') {
+      return member.valueType
+    }
+
+    if (contextShapeValueType !== null && typeof contextShapeValueType !== 'undefined') {
+      return contextShapeValueType
+    }
+
+    if (shapeField !== null && typeof shapeField !== 'undefined') {
+      return shapeField.valueType
+    }
+
+    if (expression.type === 'OptionalMemberExpression') {
+      return 'optional'
     }
 
     if (expression.templatePlaceholder === true && expression.valueType === 'unknown') {
@@ -770,21 +798,35 @@ export function inferExpressionType(
       return element.valueType
     }
 
-    if (field !== null && typeof field !== 'undefined') {
+    if (
+      field !== null &&
+      typeof field !== 'undefined' &&
+      field.valueType !== 'unknown'
+    ) {
       return field.valueType
     }
 
-    if (expression.index.type === 'StringLiteral') {
-      const contextShapeValueType = contextObjectShapeFieldValueType(expression.object, expression.index.value, context)
+    let contextShapeValueType: string | null = null
 
-      if (contextShapeValueType !== null && typeof contextShapeValueType !== 'undefined') {
+    if (expression.index.type === 'StringLiteral') {
+      contextShapeValueType = contextObjectShapeFieldValueType(expression.object, expression.index.value, context)
+
+      if (
+        contextShapeValueType !== null &&
+        typeof contextShapeValueType !== 'undefined' &&
+        contextShapeValueType !== 'unknown'
+      ) {
         return contextShapeValueType
       }
     }
 
     const shapeField = deps.resolveObjectExpressionIndex(expression)
 
-    if (shapeField !== null && typeof shapeField !== 'undefined') {
+    if (
+      shapeField !== null &&
+      typeof shapeField !== 'undefined' &&
+      shapeField.valueType !== 'unknown'
+    ) {
       return shapeField.valueType
     }
 
@@ -792,14 +834,30 @@ export function inferExpressionType(
       return runtimeElement.valueType
     }
 
-    if (expression.type === 'OptionalIndexExpression') {
-      return 'optional'
-    }
-
     const anyNodeValueType = anyNodeLikeObjectAccessValueType(expression, context)
 
     if (anyNodeValueType !== null && typeof anyNodeValueType !== 'undefined') {
       return anyNodeValueType
+    }
+
+    if (field !== null && typeof field !== 'undefined') {
+      return field.valueType
+    }
+
+    if (
+      expression.index.type === 'StringLiteral' &&
+      contextShapeValueType !== null &&
+      typeof contextShapeValueType !== 'undefined'
+    ) {
+      return contextShapeValueType
+    }
+
+    if (shapeField !== null && typeof shapeField !== 'undefined') {
+      return shapeField.valueType
+    }
+
+    if (expression.type === 'OptionalIndexExpression') {
+      return 'optional'
     }
 
     if (expression.templatePlaceholder === true && expression.valueType === 'unknown') {
@@ -849,6 +907,16 @@ export function inferExpressionType(
   }
 
   return 'number'
+}
+
+function isUndefinedReferenceExpression(expression: AnyNode): boolean {
+  return (
+    expression.type === 'Reference' &&
+    expression.path.length === 1 &&
+    expression.path[0] === 'undefined' &&
+    expression.valueType === 'unknown' &&
+    expression.nullable === true
+  )
 }
 
 function inferConditionalExpressionType(consequentType: string, alternateType: string): string {
@@ -935,14 +1003,25 @@ function anyNodeLikeObjectAccessValueType(expression: AnyNode, context: CFunctio
     return null
   }
 
-  if (!isAnyNodeLikeDeclaredType(declaredType)) {
-    return null
-  }
-
   const fieldName = objectAccessFieldName(expression)
 
   if (fieldName === null || typeof fieldName === 'undefined') {
     return 'unknown'
+  }
+
+  return anyNodeLikeDeclaredObjectFieldValueType(declaredType, fieldName)
+}
+
+export function anyNodeLikeDeclaredObjectFieldValueType(
+  declaredType: string | null | undefined,
+  fieldName: string
+): string | null {
+  if (
+    declaredType === null ||
+    typeof declaredType === 'undefined' ||
+    !isAnyNodeLikeDeclaredType(declaredType)
+  ) {
+    return null
   }
 
   return anyNodeLikeFieldValueType(fieldName)
@@ -1021,6 +1100,18 @@ function anyNodeLikeFieldValueType(fieldName: string): string {
 
 export function isAnyNodeLikeArrayFieldName(fieldName: string): boolean {
   return compilerAnyNodeArrayFields.includes(fieldName)
+}
+
+export function anyNodeLikeArrayFieldElementValueType(fieldName: string): string | null {
+  if (!isAnyNodeLikeArrayFieldName(fieldName)) {
+    return null
+  }
+
+  if (compilerAnyNodeStringArrayFields.includes(fieldName)) {
+    return 'string'
+  }
+
+  return 'object'
 }
 
 export function anyNodeLikeObjectFieldDeclaredType(fieldName: string): string | null {

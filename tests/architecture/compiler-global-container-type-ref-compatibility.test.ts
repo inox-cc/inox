@@ -2,7 +2,11 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
-import { typeRefCompatibilityMetadata } from '../../compiler/extensions/type-ref-compatibility.ts'
+import {
+  typeRefCompatibilityMetadata,
+  typeRefIterableElementDeclaredName,
+  typeRefIterableElementValueType
+} from '../../compiler/extensions/type-ref-compatibility.ts'
 import type {
   CompilerLibraryDescriptor,
   CompilerLibraryPackageDescriptor,
@@ -37,7 +41,10 @@ test('Promise<Array<T>> generic traits сохраняют fingerprint и legacy 
   assert.equal(metadata.shape?.libraryTypeId, arrayNativeTypeId)
   assert.equal(metadata.promiseValueType, 'array')
   assert.equal(metadata.promiseRejectionValueType, 'number')
-  assert.equal(metadata.arrayElementType, 'string')
+  assert.equal('arrayElementType' in metadata, false)
+  assert.equal('arrayElementDeclaredType' in metadata, false)
+  assert.equal(typeRefIterableElementDeclaredName(resultTypeRef, libraries), 'string')
+  assert.equal(typeRefIterableElementValueType(resultTypeRef, libraries), 'string')
   assert.notEqual(
     libraries.fingerprint,
     createCompilerLibrarySet([

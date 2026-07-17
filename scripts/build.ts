@@ -14,6 +14,7 @@ import { isRuntimeBuiltinImportSource } from '../compiler/runtime-builtins.ts'
 import type { AnyNode, IrFunctionEffect, IrProgram, ModuleDeclarationImport, ProgramNode } from '../compiler/types.ts'
 import { quietCMakeConfigureArgs } from './lib/cmake-args.ts'
 import { generateCompilerLibraryRegistry } from './lib/compiler-library-registry.ts'
+import { compactDeclarationEffectModule } from './lib/declaration-effect-compaction.ts'
 import { rootDir } from './lib/repo-root.ts'
 import { runCommand } from './lib/run-command.ts'
 import type { CompilerLibrarySet } from '../compiler/extensions/types.ts'
@@ -34,6 +35,7 @@ type DeclarationContract = {
   functionEffectsPath: string
   source: string
   functionEffects: IrFunctionEffect[]
+  resolvedProgram: ProgramNode | null
 }
 
 type GeneratedFile = {
@@ -204,18 +206,16 @@ async function refineCompilerDeclarationContracts(
 
   for (const file of compilerFiles) {
     console.log(`refining compiler declaration ${file.path.slice('/project/'.length)}`)
-    const modules = await compileCompilerModuleIr(file, refined, stdlibDeclarationFiles, bootstrapLibraries)
-    const module = compiledDeclarationModule(modules.graph.modules, file.path)
-    const declarationProgram = module.declarationProgram
+    const result = await refineCompilerDeclarationContract(
+      file,
+      refined,
+      stdlibDeclarationFiles,
+      bootstrapLibraries
+    )
 
-    if (declarationProgram === null || typeof declarationProgram === 'undefined') {
-      throw new Error(`missing refined declaration program ${file.path}`)
-    }
-
-    const source = emitModuleDeclarationContract(declarationProgram)
-
-    replaceDeclarationContractSource(refined, file.path, source)
-    compiledModules.push(module)
+    replaceDeclarationContractSource(refined, file.path, result.source, result.resolvedProgram)
+    compiledModules.push(result.module)
+    releaseDeclarationRefinementMemory()
   }
 
   const functionEffects: FunctionEffectMap = new Map()
@@ -224,6 +224,37 @@ async function refineCompilerDeclarationContracts(
   replaceDeclarationContractFunctionEffects(refined, functionEffects)
 
   return refined
+}
+
+function releaseDeclarationRefinementMemory(): void {
+  const collectGarbage = (globalThis as { gc?: () => void }).gc
+
+  if (typeof collectGarbage !== 'function') {
+    throw new Error('self-hosted build must run Node with --expose-gc')
+  }
+
+  collectGarbage()
+}
+
+async function refineCompilerDeclarationContract(
+  file: SourceFile,
+  contracts: DeclarationContract[],
+  stdlibDeclarationFiles: SourceFile[],
+  bootstrapLibraries: CompilerLibrarySet
+): Promise<{ module: DeclarationEffectModule; resolvedProgram: ProgramNode; source: string }> {
+  const modules = await compileCompilerModuleIr(file, contracts, stdlibDeclarationFiles, bootstrapLibraries)
+  const module = compiledDeclarationModule(modules.graph.modules, file.path)
+  const declarationProgram = module.declarationProgram
+
+  if (declarationProgram === null || typeof declarationProgram === 'undefined') {
+    throw new Error(`missing refined declaration program ${file.path}`)
+  }
+
+  const source = emitModuleDeclarationContract(declarationProgram)
+
+  compactDeclarationEffectModule(module)
+
+  return { module, resolvedProgram: declarationProgram, source }
 }
 
 async function emitCompilerModules(
@@ -304,7 +335,8 @@ function seedCompilerDeclarationContracts(modules: CompilerSourceModule[]): Decl
       declarationPath: declarationPathForSourcePath(module.file.path),
       functionEffectsPath: functionEffectsPathForSourcePath(module.file.path),
       source: emitModuleDeclarationContract(program),
-      functionEffects: []
+      functionEffects: [],
+      resolvedProgram: null
     })
   }
 
@@ -462,17 +494,24 @@ function copyDeclarationContracts(contracts: DeclarationContract[]): Declaration
       declarationPath: contract.declarationPath,
       functionEffectsPath: contract.functionEffectsPath,
       source: contract.source,
-      functionEffects: copyFunctionEffects(contract.functionEffects)
+      functionEffects: copyFunctionEffects(contract.functionEffects),
+      resolvedProgram: contract.resolvedProgram
     })
   }
 
   return copied
 }
 
-function replaceDeclarationContractSource(contracts: DeclarationContract[], sourcePath: string, source: string): void {
+function replaceDeclarationContractSource(
+  contracts: DeclarationContract[],
+  sourcePath: string,
+  source: string,
+  resolvedProgram: ProgramNode
+): void {
   for (const contract of contracts) {
     if (contract.sourcePath === sourcePath) {
       contract.source = source
+      contract.resolvedProgram = resolvedProgram
       return
     }
   }
@@ -778,7 +817,8 @@ function declarationImportOptions(
     imports.push({
       sourcePath: contract.sourcePath,
       declarationPath: contract.declarationPath,
-      functionEffectsPath: contract.functionEffectsPath
+      functionEffectsPath: contract.functionEffectsPath,
+      resolvedProgram: contract.resolvedProgram ?? undefined
     })
   }
 

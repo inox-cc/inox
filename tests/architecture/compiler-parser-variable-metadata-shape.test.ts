@@ -12,9 +12,6 @@ test('parser заранее объявляет изменяемые checker meta
       inferredDeclaredType: declaration.inferredDeclaredType,
       valueType: declaration.valueType,
       nullable: declaration.nullable,
-      arrayElementType: declaration.arrayElementType,
-      arrayElementDeclaredType: declaration.arrayElementDeclaredType,
-      arrayElementFunctionType: declaration.arrayElementFunctionType,
       promiseValueType: declaration.promiseValueType,
       promiseRejectionIntrinsicRole: declaration.promiseRejectionIntrinsicRole,
       functionType: declaration.functionType,
@@ -27,9 +24,6 @@ test('parser заранее объявляет изменяемые checker meta
       inferredDeclaredType: null,
       valueType: 'unknown',
       nullable: false,
-      arrayElementType: null,
-      arrayElementDeclaredType: null,
-      arrayElementFunctionType: null,
       promiseValueType: null,
       promiseRejectionIntrinsicRole: null,
       functionType: null,
@@ -39,4 +33,5 @@ test('parser заранее объявляет изменяемые checker meta
       typeRef: null
     }
   )
+  assert.equal('arrayElementType' in declaration, false)
 })

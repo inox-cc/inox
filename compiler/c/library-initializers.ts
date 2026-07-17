@@ -5,17 +5,19 @@ import {
 } from '../extensions/library-options.ts'
 import type {
   CompilerLibraryOptionValue,
-  CompilerLibrarySet,
   LibraryCValueMappingDescriptor,
   LibraryOptionScalar,
   LibraryRuntimeInitializerArgumentDescriptor
 } from '../extensions/types.ts'
+import { cCompilerLibrarySetValue } from './types.ts'
+import type { CCompilerLibrarySet } from './types.ts'
 
 export function emitCompilerLibraryRuntimeInitializerDefinitions(
-  libraries: CompilerLibrarySet,
+  libraryStorage: CCompilerLibrarySet,
   runtimeRequirements: string[],
   selections: CompilerLibraryOptionValue[] | null | undefined
 ): string[] {
+  const libraries = cCompilerLibrarySetValue(libraryStorage)
   const initializers = libraries.runtimeInitializers ?? []
   const resolved = resolveCompilerLibraryOptions(libraries, selections)
   const lines: string[] = []

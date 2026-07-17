@@ -1,6 +1,9 @@
 import { diagnostic } from '../diagnostics.ts'
+import type { CompilerLibrarySet, TypeRef } from '../extensions/types.ts'
 import type { AnyNode, Diagnostic, ObjectShapeInfo, SourceLocation, SymbolInfo, ValueType } from '../types.ts'
 import { isAssignableType } from './assignability.ts'
+import type { DeclaredTypeResolverContext } from './declared-types.ts'
+import { applyTypeRefMetadataToExpression } from './expression-metadata.ts'
 import {
   acceptsArgumentCount,
   argumentCountMessage,
@@ -10,7 +13,9 @@ import {
 import { callExpressionArgumentLabel } from './expression-helpers.ts'
 
 export type CallableSymbolCheckerContext = {
+  declaredTypes: DeclaredTypeResolverContext
   diagnostics: Diagnostic[]
+  libraries: CompilerLibrarySet
 }
 
 export type CallableCallArgInfo = {
@@ -19,7 +24,12 @@ export type CallableCallArgInfo = {
   loc: SourceLocation
 }
 
-function report(context: CallableSymbolCheckerContext, code: string, message: string, loc: SourceLocation): void {
+function report(
+  context: CallableSymbolCheckerContext,
+  code: string,
+  message: string,
+  loc: SourceLocation | null | undefined
+): void {
   context.diagnostics.push(diagnostic(code, message, loc))
 }
 
@@ -59,26 +69,12 @@ export function applyCallableSymbolCall(
   symbol: SymbolInfo,
   argInfos: CallableCallArgInfo[]
 ): ValueType {
-  symbol = selectCallableOverload(symbol, argInfos, expression.args.length)
+  symbol = selectCallableOverload(context, symbol, argInfos, expression.args.length)
   let returnType: ValueType = 'unknown'
   const symbolReturnType = symbol.returnType ?? null
 
   if (symbolReturnType !== null && typeof symbolReturnType !== 'undefined') {
     returnType = symbolReturnType
-  }
-
-  let returnArrayElementType: ValueType | null = null
-  const symbolReturnArrayElementType = symbol.returnArrayElementType ?? null
-
-  if (symbolReturnArrayElementType !== null && typeof symbolReturnArrayElementType !== 'undefined') {
-    returnArrayElementType = symbolReturnArrayElementType
-  }
-
-  let returnArrayElementDeclaredType: string | null = null
-  const symbolReturnArrayElementDeclaredType = symbol.returnArrayElementDeclaredType ?? null
-
-  if (symbolReturnArrayElementDeclaredType !== null && typeof symbolReturnArrayElementDeclaredType !== 'undefined') {
-    returnArrayElementDeclaredType = symbolReturnArrayElementDeclaredType
   }
 
   let returnPromiseValueType: ValueType | null = null
@@ -98,13 +94,15 @@ export function applyCallableSymbolCall(
   expression.valueType = returnType
   expression.typeRef = symbol.returnTypeRef ?? null
   expression.nullable = symbol.returnNullable === true
-  expression.arrayElementType = returnArrayElementType
-  expression.arrayElementDeclaredType = returnArrayElementDeclaredType
   expression.promiseValueType = returnPromiseValueType
   if (returnShape !== null) {
     expression.shape = returnShape
   } else if (expression.shape === null || typeof expression.shape === 'undefined') {
     expression.shape = null
+  }
+
+  if (expression.typeRef !== null) {
+    applyTypeRefMetadataToExpression(context.declaredTypes, expression, expression.typeRef)
   }
 
   const params = symbol.params ?? null
@@ -135,9 +133,9 @@ export function applyCallableSymbolCall(
       checkAssignableType(
         context,
         argInfo.valueType,
-        argumentParamValueType(param),
+        argumentParamValueType(param, context.libraries),
         argInfo.loc,
-        param.nullable === true,
+        param.nullable === true || param.optional === true,
         argInfo.nullable
       )
     }
@@ -147,6 +145,7 @@ export function applyCallableSymbolCall(
 }
 
 function selectCallableOverload(
+  context: CallableSymbolCheckerContext,
   symbol: SymbolInfo,
   argInfos: CallableCallArgInfo[],
   argumentCount: number
@@ -171,8 +170,8 @@ function selectCallableOverload(
         typeof param === 'undefined' ||
         !isAssignableType(
           argInfo.valueType,
-          argumentParamValueType(param),
-          param.nullable === true,
+          argumentParamValueType(param, context.libraries),
+          param.nullable === true || param.optional === true,
           argInfo.nullable
         )
       ) {
