@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readdir, readFile } from 'node:fs/promises'
+import { access, readdir, readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { test } from 'node:test'
 
@@ -32,14 +32,13 @@ test('portable compiler не содержит inox.__debug semantic tails', asyn
     }
   }
 
-  const central = await Promise.all([
-    readFile('stdlib/global/compiler/descriptor.ts', 'utf8'),
-    readFile('stdlib/global/compiler/feature.ts', 'utf8')
-  ])
+  const centralDescriptor = await readFile('stdlib/global/compiler/descriptor.ts', 'utf8')
+
+  await assert.rejects(access('stdlib/global/compiler/feature.ts'))
 
   assert.deepEqual(
     {
-      centralDebugImports: central.filter((source) => source.includes('../debug/compiler')).length,
+      centralDebugImports: centralDescriptor.includes('../debug/compiler') ? 1 : 0,
       packageCompilerFiles: (await readdir('stdlib/global/debug/compiler')).sort(),
       tails
     },

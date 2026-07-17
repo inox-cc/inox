@@ -43,7 +43,6 @@ export type ProgramNode = AnyNode & {
 }
 
 export type IrFeature =
-  | 'array-pop-null'
   | 'async-runtime'
   | 'callback-values'
   | 'collections'

@@ -1,6 +1,5 @@
 import { diagnostic } from '../../diagnostics.ts'
 import { irClassMethodEffectName } from '../../ir.ts'
-import { nodeStringListIncludes } from '../../stdlib/node/string-list.ts'
 import type { AnyNode, Diagnostic, IrProgram, SourceLocation } from '../../types.ts'
 import {
   emitFunctionPointerParams,
@@ -3741,7 +3740,7 @@ export function emitNativeClassFieldAssignment(expression: AnyNode, context: Cla
     if (
       valueClassName !== null &&
       typeof valueClassName !== 'undefined' &&
-      nodeStringListIncludes([className], valueClassName)
+      className === valueClassName
     ) {
       lines.push(`${access.reference} = ${value.expression};`)
       return lines

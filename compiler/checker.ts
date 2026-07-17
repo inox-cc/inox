@@ -6,10 +6,8 @@ import {
   isMatchingSwitchCaseType,
   isSwitchableType
 } from './checker/assignability.ts'
-import { libuvOnlyRuntimeImportFeature } from './checker/builtins.ts'
 import { applyCallableSymbolCall as applyCallableSymbolCallInContext } from './checker/callable-symbols.ts'
 import type { CallableSymbolCheckerContext } from './checker/callable-symbols.ts'
-import { runtimeImportValueType } from './stdlib/node/runtime-imports.ts'
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
 import { parseTemplateLiteralParts, parseTemplatePlaceholderExpression } from './template-literals.ts'
 import {
@@ -340,15 +338,15 @@ export function checkProgram(
   }
 }
 
-function importSpecifierValueType(specifier: AnyNode, source: string): ValueType {
+function importSpecifierValueType(specifier: AnyNode, _source: string): ValueType {
   const valueType = specifier.valueType
 
   if (typeof valueType !== 'string') {
-    return runtimeImportValueType(source, specifier.imported)
+    return 'unknown'
   }
 
   if (valueType === '') {
-    return runtimeImportValueType(source, specifier.imported)
+    return 'unknown'
   }
 
   return valueType.slice(0)
@@ -5097,11 +5095,6 @@ class Checker {
       return
     }
 
-    const feature = libuvOnlyRuntimeImportFeature(statement.source)
-
-    if (feature !== null && typeof feature !== 'undefined') {
-      this.requireLibuvBackend(feature, nodeSourceLocation(statement))
-    }
   }
 
   requireLibuvBackend(feature: string, loc: SourceLocation): boolean {

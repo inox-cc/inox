@@ -1,21 +1,9 @@
 import type { AnyNode, IrFeature, IrProgram, IrRuntimeRequirement } from '../types.ts'
 import { collectCoreRuntimeIrFeatures, coreRuntimeFeatures } from './core-runtime/index.ts'
-import {
-  collectNodeStdlibIrFeatures,
-  nodeStdlibFeatureChildNodes,
-  nodeStdlibFeatures
-} from '../stdlib/node/feature.ts'
-import {
-  collectGlobalStdlibIrFeatures,
-  emitGlobalStdlibCPreludeHelpers,
-  globalStdlibFeatures
-} from '../../stdlib/global/compiler/feature.ts'
 import type { CompilerFeatureDescriptor } from './types.ts'
 
 const compilerFeatureDescriptorRows: CompilerFeatureDescriptor[][] = [
-  coreRuntimeFeatures,
-  globalStdlibFeatures,
-  nodeStdlibFeatures
+  coreRuntimeFeatures
 ]
 
 const compilerFeatureDescriptors = createCompilerFeatureDescriptors()
@@ -32,8 +20,6 @@ export function collectCompilerFeatureIrFeatures(node: unknown, features: Set<Ir
   const featureNode = node as AnyNode
 
   collectCoreRuntimeIrFeatures(featureNode, features)
-  collectNodeStdlibIrFeatures(featureNode, features)
-  collectGlobalStdlibIrFeatures(featureNode, features)
 }
 
 export function compilerFeatureChildNodes(node: unknown): AnyNode[] | null {
@@ -41,9 +27,7 @@ export function compilerFeatureChildNodes(node: unknown): AnyNode[] | null {
     return null
   }
 
-  const featureNode = node as AnyNode
-
-  return nodeStdlibFeatureChildNodes(featureNode)
+  return null
 }
 
 export function compilerFeatureRuntimeRequirements(featureName: IrFeature): IrRuntimeRequirement[] | null {
@@ -84,20 +68,8 @@ export function emitCompilerFeatureCPreludeIncludes(featureName: IrFeature): str
   return copyStrings(descriptor.cPreludeIncludes)
 }
 
-export function emitCompilerFeatureCPreludeHelpers(featureName: IrFeature): string[] {
-  const descriptor = findCompilerFeatureDescriptor(featureName)
-
-  if (descriptor === null || typeof descriptor === 'undefined') {
-    return []
-  }
-
-  const lines: string[] = []
-
-  if (descriptor.hasCPreludeHelpers) {
-    pushAll(lines, emitGlobalStdlibCPreludeHelpers(featureName))
-  }
-
-  return lines
+export function emitCompilerFeatureCPreludeHelpers(_featureName: IrFeature): string[] {
+  return []
 }
 
 export function sortCompilerFeatures(features: Set<IrFeature>): IrFeature[] {

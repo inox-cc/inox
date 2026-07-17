@@ -1,11 +1,5 @@
-compiler/c/runtime-imports.ts -> ../stdlib/node/modules.ts
-compiler/c/values/classes.ts -> ../../stdlib/node/string-list.ts
 compiler/checker.ts -> ./stdlib/node/builtins.ts
 compiler/checker.ts -> ./stdlib/node/modules.ts
-compiler/checker.ts -> ./stdlib/node/runtime-imports.ts
-compiler/checker/builtins.ts -> ../stdlib/node/modules.ts
-compiler/features/index.ts -> ../../stdlib/global/compiler/feature.ts
-compiler/features/index.ts -> ../stdlib/node/feature.ts
 compiler/modules/graph.ts -> ../stdlib/declarations.ts
 compiler/modules/graph.ts -> ../stdlib/node/modules.ts
 compiler/runtime-builtins.ts -> ./stdlib/node/modules.ts
