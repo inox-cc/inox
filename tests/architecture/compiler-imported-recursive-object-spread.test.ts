@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { compileMemoryPackageToIrModules } from '../../compiler/core.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 test('object spread сохраняет shape imported recursive object types', async () => {
   const result = await compileMemoryPackageToIrModules(
@@ -76,6 +77,7 @@ test('object spread сохраняет shape imported recursive object types', a
           declarationPath: '/project/types.d.ts'
         }
       ],
+      libraries: defaultCompilerLibrarySet,
       target: 'cc'
     }
   )

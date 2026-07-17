@@ -21,6 +21,7 @@ type GlobalUsageIndexNode = {
 }
 
 type GlobalUsageReferenceNode = {
+  globalUsage?: boolean | null
   path?: string[] | null
 }
 
@@ -123,9 +124,7 @@ function visitGlobalUsage(node: AnyNode | NodeList | null | undefined, usages: I
       return
     }
 
-    const root = firstString(path)
-
-    if (root !== null && typeof root !== 'undefined' && isJsStdGlobalRootName(root)) {
+    if (referenceItem.globalUsage === true) {
       pushGlobalUsage(usages, path, item)
       return
     }
@@ -241,9 +240,7 @@ function globalUsagePath(expression: GlobalUsageNode | null | undefined): string
       return null
     }
 
-    const root = firstString(path)
-
-    if (root !== null && typeof root !== 'undefined' && isJsStdGlobalRootName(root)) {
+    if (expression.globalUsage === true) {
       return path
     }
   }
@@ -302,16 +299,6 @@ function appendString(values: string[], value: string): string[] {
   return result
 }
 
-function isJsStdGlobalRootName(name: string): boolean {
-  return (
-    name === 'Int8Array' ||
-    name === 'Int16Array' ||
-    name === 'Int32Array' ||
-    name === 'Uint16Array' ||
-    name === 'Uint32Array'
-  )
-}
-
 function copyStrings(values: string[]): string[] {
   const result: string[] = []
 
@@ -337,17 +324,10 @@ function createStringSet(values: string[]): StringSet {
 function sortedStringSet(values: StringSet): string[] {
   const result: string[] = []
 
-  pushStringIfPresent(values, result, 'Int16Array')
-  pushStringIfPresent(values, result, 'Int32Array')
-  pushStringIfPresent(values, result, 'Int8Array')
-  pushStringIfPresent(values, result, 'Map')
-  pushStringIfPresent(values, result, 'Uint16Array')
-  pushStringIfPresent(values, result, 'Uint32Array')
-  return result
-}
-
-function pushStringIfPresent(values: StringSet, result: string[], value: string): void {
-  if (values.has(value)) {
+  for (const value of values) {
     result.push(value)
   }
+
+  result.sort()
+  return result
 }

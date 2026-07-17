@@ -20,7 +20,12 @@ test('global:conversions владеет Boolean, String и Number declarations, 
       'global:conversions#number',
       'global:conversions#string',
       'global:conversions#boolean',
-      'global:conversions#boolean-value'
+      'global:conversions#boolean-value',
+      'global:conversions#i32',
+      'global:conversions#u32',
+      'global:conversions#u64',
+      'global:conversions#f32',
+      'global:conversions#f64'
     ]
   )
 

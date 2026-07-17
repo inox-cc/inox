@@ -234,12 +234,6 @@ export function normalizeTypeName(name: string): string {
     return `array<${normalizeTypeName(normalizedArrayInner)}>`
   }
 
-  const arrayInner = genericTypeInner(name, 'Array')
-
-  if (arrayInner !== null && typeof arrayInner !== 'undefined') {
-    return `array<${normalizeTypeName(arrayInner)}>`
-  }
-
   const normalizedRecordInner = genericTypeInner(name, 'record')
 
   if (normalizedRecordInner !== null && typeof normalizedRecordInner !== 'undefined') {

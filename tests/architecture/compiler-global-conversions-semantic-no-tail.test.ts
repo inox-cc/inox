@@ -12,6 +12,12 @@ const forbiddenPatterns = [
   /\bisNumberConversionCall\b/,
   /['"]String['"]/,
   /['"]Number['"]/,
+  /['"]i32['"]/,
+  /['"]u32['"]/,
+  /['"]u64['"]/,
+  /['"]f32['"]/,
+  /['"]f64['"]/,
+  /\bnumericCast\b/,
   /\bnumber-from-string-null\b/
 ]
 
@@ -35,7 +41,7 @@ test('portable compiler не содержит target String и Number semantic t
       tails
     },
     {
-      packageCompilerFiles: ['descriptor.ts', 'feature.ts', 'index.ts'],
+      packageCompilerFiles: ['index.ts'],
       tails: []
     }
   )

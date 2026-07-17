@@ -6,7 +6,7 @@ import {
   isMatchingSwitchCaseType,
   isSwitchableType
 } from './checker/assignability.ts'
-import { builtinGlobalSymbol, libuvOnlyRuntimeImportFeature } from './checker/builtins.ts'
+import { libuvOnlyRuntimeImportFeature } from './checker/builtins.ts'
 import { applyCallableSymbolCall as applyCallableSymbolCallInContext } from './checker/callable-symbols.ts'
 import type { CallableSymbolCheckerContext } from './checker/callable-symbols.ts'
 import { runtimeImportValueType } from './stdlib/node/runtime-imports.ts'
@@ -110,11 +110,6 @@ import {
   resolveExpressionPromiseValueType as resolveExpressionPromiseValueTypeInContext,
   resolveRejectedExpressionValueType as resolveRejectedExpressionValueTypeInContext
 } from './checker/expression-metadata.ts'
-import {
-  checkNumericCastCall as checkNumericCastCallInContext,
-  numericCastName
-} from './checker/primitive-calls.ts'
-import type { PrimitiveCallCheckerContext } from './checker/primitive-calls.ts'
 import {
   acceptsArgumentCount,
   argumentCountMessage,
@@ -1035,6 +1030,18 @@ class Checker {
 
     if (item.type === 'FunctionDeclaration') {
       this.inferFunctionDeclarationReturn(item)
+
+      if (
+        item.async === true &&
+        compilerLibraryOperationForIntrinsic(
+          resolveCompilerLibrarySet(this.options.libraries),
+          'async-result',
+          'construct'
+        ) === null
+      ) {
+        this.reportMissingCompilerLibraryIntrinsicProvider(item, 'async-result')
+      }
+
       const scopeState = this.pushScope()
       const typeParameterState = this.pushFunctionTypeParameters(item)
 
@@ -2112,7 +2119,9 @@ class Checker {
 
       const arrayTypeRef = this.compilerLibraryArrayTypeRef(expression)
 
-      if (arrayTypeRef !== null) {
+      if (arrayTypeRef === null) {
+        this.reportMissingCompilerLibraryIntrinsicProvider(expression, 'array-literal')
+      } else {
         const arrayNativeType =
           arrayTypeRef.kind === 'nominal'
             ? compilerLibraryNativeTypeForId(resolveCompilerLibrarySet(this.options.libraries), arrayTypeRef.typeId)
@@ -3484,12 +3493,6 @@ class Checker {
 
     if (libraryDiagnosticType !== null) {
       return libraryDiagnosticType
-    }
-
-    const numericCastType = this.checkNumericCastCall(expression)
-
-    if (numericCastType !== null && typeof numericCastType !== 'undefined') {
-      return numericCastType
     }
 
     const classMethodType = this.checkClassMethodCall(expression)
@@ -5057,12 +5060,6 @@ class Checker {
       return symbol
     }
 
-    const builtin = builtinGlobalSymbol(root)
-
-    if (builtin !== null) {
-      return builtin
-    }
-
     return this.compilerLibraryGlobalSymbol(root)
   }
 
@@ -5590,11 +5587,7 @@ class Checker {
     const operation = compilerLibraryOperationForIntrinsic(libraries, role, kind)
 
     if (operation === null) {
-      this.report(
-        'INOX_MISSING_INTRINSIC_PROVIDER',
-        `missing compiler library intrinsic provider ${role}`,
-        expression.loc
-      )
+      this.reportMissingCompilerLibraryIntrinsicProvider(expression, role)
       expression.valueType = 'unknown'
       return 'unknown'
     }
@@ -5612,18 +5605,11 @@ class Checker {
     return typeof expression.valueType === 'string' ? (expression.valueType as ValueType) : 'unknown'
   }
 
-  checkNumericCastCall(expression: AnyNode): ValueType | null {
-    const castName = numericCastName(expression)
-
-    if (castName === null || typeof castName === 'undefined') {
-      return null
-    }
-
-    return checkNumericCastCallInContext(
-      this.primitiveCallContext(),
-      expression,
-      castName,
-      this.checkCallArgumentTypes(expression)
+  reportMissingCompilerLibraryIntrinsicProvider(expression: AnyNode, role: IntrinsicRole): void {
+    this.report(
+      'INOX_MISSING_INTRINSIC_PROVIDER',
+      `missing compiler library intrinsic provider ${role}`,
+      expression.loc
     )
   }
 
@@ -5652,15 +5638,7 @@ class Checker {
 
     const constructorName = firstPathSegment(expression.callee.path)
 
-    let symbol = this.scope.resolve(constructorName)
-
-    if (symbol === null || typeof symbol === 'undefined') {
-      const globalSymbol = builtinGlobalSymbol(constructorName)
-
-      if (globalSymbol !== null && typeof globalSymbol !== 'undefined') {
-        symbol = globalSymbol
-      }
-    }
+    const symbol = this.scope.resolve(constructorName)
 
     if (
       symbol === null ||
@@ -6685,15 +6663,7 @@ class Checker {
     }
 
     const calleeName = firstPathSegment(callee.path)
-    let symbol = this.scope.resolve(calleeName)
-
-    if (symbol === null || typeof symbol === 'undefined') {
-      const globalSymbol = builtinGlobalSymbol(calleeName)
-
-      if (globalSymbol !== null && typeof globalSymbol !== 'undefined') {
-        symbol = globalSymbol
-      }
-    }
+    const symbol = this.scope.resolve(calleeName)
 
     if (symbol !== null && typeof symbol !== 'undefined' && symbol.kind === 'function') {
       return symbol
@@ -7722,14 +7692,6 @@ class Checker {
     let symbol = this.scope.resolve(root)
 
     if (symbol === null || typeof symbol === 'undefined') {
-      const globalSymbol = builtinGlobalSymbol(root)
-
-      if (globalSymbol !== null && typeof globalSymbol !== 'undefined') {
-        symbol = globalSymbol
-      }
-    }
-
-    if (symbol === null || typeof symbol === 'undefined') {
       symbol = this.compilerLibraryGlobalSymbol(root, reference.loc)
     }
 
@@ -7831,12 +7793,6 @@ class Checker {
     return {
       declaredTypes: this.declaredTypeContext(),
       scopeBindings
-    }
-  }
-
-  primitiveCallContext(): PrimitiveCallCheckerContext {
-    return {
-      diagnostics: this.diagnostics
     }
   }
 

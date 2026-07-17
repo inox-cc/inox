@@ -12,7 +12,17 @@ const runtimeRequirement = libraryId
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
   dependencies: ['global:strings'],
-  operations: [numberOperation(), stringOperation(), booleanOperation(), booleanValueOperation()],
+  operations: [
+    numberOperation(),
+    stringOperation(),
+    booleanOperation(),
+    booleanValueOperation(),
+    numericCastOperation('i32', true),
+    numericCastOperation('u32', true),
+    numericCastOperation('u64', true),
+    numericCastOperation('f32', false),
+    numericCastOperation('f64', false)
+  ],
   intrinsicBindings: [],
   runtimeRequirements: [
     {
@@ -22,6 +32,24 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       capabilities: []
     }
   ]
+}
+
+function numericCastOperation(name: string, canThrow: boolean): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: `global:${name}`,
+    operationId: `${libraryId}#${name}`,
+    kind: 'call',
+    runtimeRequirements: [runtimeRequirement],
+    cExpression: name,
+    cArgumentKinds: ['number'],
+    cCallStyle: 'function',
+    cFailureMode: canThrow ? 'thrown' : null,
+    minArgs: 1,
+    maxArgs: 1,
+    argumentChecks: [{ valueTypes: ['number'] }],
+    resultTypeRef: primitiveTypeRef('number', false)
+  }
 }
 
 function booleanOperation(): LibraryOperationDescriptor {

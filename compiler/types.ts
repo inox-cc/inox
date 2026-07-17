@@ -47,7 +47,6 @@ export type IrFeature =
   | 'async-runtime'
   | 'callback-values'
   | 'collections'
-  | 'numeric-casts'
   | 'objects'
   | 'runtime-values'
   | 'string-bytes'

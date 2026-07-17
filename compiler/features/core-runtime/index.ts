@@ -33,7 +33,6 @@ type CoreRuntimeNode = AnyNode & {
   kind?: string | null
   left?: CoreRuntimeChildNode | null
   nullable?: boolean
-  numericCast?: string | null
   object?: CoreRuntimeChildNode | null
   operator?: string | null
   ownership?: string | null
@@ -293,10 +292,6 @@ function plainFunctionCallHasStringArgument(expression: CoreRuntimeNode): boolea
     return false
   }
 
-  if (isNumericCastCall(expression)) {
-    return false
-  }
-
   const args = expression.args
 
   if (args === null || typeof args === 'undefined') {
@@ -358,10 +353,6 @@ function isArrayIndexExpression(expression: CoreRuntimeNode | null | undefined):
   const object = expression.object
 
   return object !== null && typeof object !== 'undefined' && object.valueType === 'array'
-}
-
-function isNumericCastCall(expression: CoreRuntimeNode): boolean {
-  return expression.numericCast !== null && typeof expression.numericCast !== 'undefined'
 }
 
 function mayBeStringBytesOperand(expression: CoreRuntimeNode | null | undefined): boolean {

@@ -11,9 +11,18 @@ import { compilerLibraryPackage as consoleCompilerLibraryPackage } from '../../.
 export function createCompilerLibrarySetWithConsole(
   libraries: CompilerLibraryDescriptor[]
 ): CompilerLibrarySet {
+  return createCompilerLibrarySetWithCollections([
+    { ...consoleCompilerLibraryPackage, declarations: [] },
+    ...libraries
+  ])
+}
+
+/** Adds the explicitly selected collections package to a synthetic library set. */
+export function createCompilerLibrarySetWithCollections(
+  libraries: CompilerLibraryDescriptor[]
+): CompilerLibrarySet {
   const selected: CompilerLibraryDescriptor[] = [
-    { ...collectionsCompilerLibraryPackage, declarations: [] },
-    { ...consoleCompilerLibraryPackage, declarations: [] }
+    { ...collectionsCompilerLibraryPackage, declarations: [] }
   ]
 
   for (let index = 0; index < libraries.length; index = index + 1) {

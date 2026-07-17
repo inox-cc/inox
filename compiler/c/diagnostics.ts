@@ -1,5 +1,4 @@
 import { diagnostic } from '../diagnostics.ts'
-import { isCollectionConstructorGlobalUsagePath } from '../../stdlib/global/compiler/descriptor.ts'
 import type { Diagnostic, IrGlobalUsage, IrSyntaxFeatureUsage, SourceLocation } from '../types.ts'
 
 export function reportUnsupportedCSyntaxFeatures(
@@ -11,34 +10,8 @@ export function reportUnsupportedCGlobalUsages(globalUsages: IrGlobalUsage[], di
   for (let index = 0; index < globalUsages.length; index = index + 1) {
     const usage = globalUsages[index] as IrGlobalUsage
 
-    if (!isSupportedCGlobalUsage(usage)) {
-      reportCJsGlobalDiagnostic(diagnostics, usage.loc)
-    }
+    reportCJsGlobalDiagnostic(diagnostics, usage.loc)
   }
-}
-
-function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
-  const path = joinStrings(usage.path, '.')
-
-  return (
-    path === 'Array.from' ||
-    path === 'Array.isArray' ||
-    isCollectionConstructorGlobalUsagePath(usage.path)
-  )
-}
-
-function joinStrings(values: string[], separator: string): string {
-  let result = ''
-
-  for (let index = 0; index < values.length; index = index + 1) {
-    if (index > 0) {
-      result = result + separator
-    }
-
-    result = result + values[index]
-  }
-
-  return result
 }
 
 export function reportCJsGlobalDiagnostic(diagnostics: Diagnostic[], loc: SourceLocation | null | undefined): void {

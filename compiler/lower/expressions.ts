@@ -437,11 +437,6 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
   copyStringMetadataArray(target, source, 'narrowingTrueNames')
   copyStringMetadataArray(target, source, 'narrowingFalseNames')
 
-  const numericCast = nullableString(source.numericCast)
-  if (numericCast !== null && typeof numericCast !== 'undefined') {
-    target.numericCast = numericCast
-  }
-
   const returnType = nullableString(source.returnType)
   if (returnType !== null && typeof returnType !== 'undefined') {
     target.returnType = returnType

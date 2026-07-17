@@ -21,6 +21,11 @@ const forbiddenPatterns = [
   /\bisBinaryRuntimeCall\b/,
   /\bBuffer\b/,
   /\bUint8Array\b/,
+  /\bInt8Array\b/,
+  /\bInt16Array\b/,
+  /\bInt32Array\b/,
+  /\bUint16Array\b/,
+  /\bUint32Array\b/,
   /inox\/binary\.h/
 ]
 

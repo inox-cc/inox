@@ -1,5 +1,4 @@
 import { diagnostic } from '../../diagnostics.ts'
-import { isNumericCastName } from '../../../stdlib/global/compiler/descriptor.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import {
   emitFunctionPointerParams,
@@ -204,13 +203,6 @@ type PreparedTypeofOperand = {
 type CFunctionCallReturnInfo = {
   returnType: string
   returnNullable: boolean
-}
-
-type NumericIntegerCastLimits = {
-  preMin: string
-  preMax: string
-  min: string
-  max: string
 }
 
 function appendLines(out: string[], lines: string[]): void {
@@ -3010,12 +3002,6 @@ export function emitPreparedNumberExpression(
   }
 
   if (expression.type === 'CallExpression') {
-    const numericCast = emitPreparedNumericCastExpression(expression, context, deps)
-
-    if (numericCast !== null && typeof numericCast !== 'undefined') {
-      return numericCast
-    }
-
     const arrayIncludesCall = deps.emitPreparedArrayIncludesCallExpression(expression, context)
 
     if (arrayIncludesCall !== null && typeof arrayIncludesCall !== 'undefined') {
@@ -4787,114 +4773,6 @@ function dynamicRuntimeObjectFieldAccess(expression: CValueNode): CDynamicObject
     return {
       object: expression.object,
       key: expression.index.value
-    }
-  }
-
-  return null
-}
-
-function emitPreparedNumericCastExpression(
-  expression: CValueNode,
-  context: CFunctionContext,
-  deps: CScalarExpressionDependencies
-): PreparedExpression | null {
-  if (!isNumericCastCall(expression, context, deps)) {
-    return null
-  }
-
-  const cast = stringValueAt(expression.callee.path, 0)
-  const value = emitPreparedNumberExpression(expression.args[0], context, deps)
-
-  if (cast === 'f64') {
-    return value
-  }
-
-  if (cast === 'f32') {
-    const result = nextCName(context, 'inox_f32')
-    const lines: string[] = []
-
-    appendLines(lines, value.lines)
-    lines.push(`double ${result} = (double)((float)${value.expression});`)
-
-    return {
-      lines,
-      expression: result
-    }
-  }
-
-  const limits = numericIntegerCastLimits(cast)
-
-  if (limits === null || typeof limits === 'undefined') {
-    return null
-  }
-
-  const raw = nextCName(context, `inox_${cast}_value`)
-  const truncated = nextCName(context, `inox_${cast}_truncated`)
-  const result = nextCName(context, `inox_${cast}`)
-  const lines: string[] = []
-
-  appendLines(lines, value.lines)
-  lines.push(`double ${raw} = ${value.expression};`)
-  lines.push(emitRuntimeTypeCheck(`${raw} != ${raw} || (${raw} - ${raw}) != 0`, context))
-  lines.push(emitRuntimeTypeCheck(`${raw} <= ${limits.preMin} || ${raw} >= ${limits.preMax}`, context))
-  lines.push(`long long ${truncated} = (long long)${raw};`)
-  lines.push(emitRuntimeTypeCheck(`${truncated} < ${limits.min}LL || ${truncated} > ${limits.max}LL`, context))
-  lines.push(`double ${result} = (double)${truncated};`)
-
-  return {
-    lines,
-    expression: result
-  }
-}
-
-function isNumericCastCall(
-  expression: CValueNode,
-  context: CFunctionContext,
-  deps: CScalarExpressionDependencies
-): boolean {
-  if (
-    expression.type !== 'CallExpression' ||
-    expression.callee.type !== 'Reference' ||
-    expression.callee.path.length !== 1 ||
-    expression.args.length !== 1
-  ) {
-    return false
-  }
-
-  const cast = stringValueAt(expression.callee.path, 0)
-
-  if (!isNumericCastName(cast)) {
-    return false
-  }
-
-  return deps.inferExpressionType(expression.args[0], context) === 'number'
-}
-
-function numericIntegerCastLimits(cast: string): NumericIntegerCastLimits | null {
-  if (cast === 'i32') {
-    return {
-      preMin: '-2147483649.0',
-      preMax: '2147483648.0',
-      min: '-2147483648',
-      max: '2147483647'
-    }
-  }
-
-  if (cast === 'u32') {
-    return {
-      preMin: '-1.0',
-      preMax: '4294967296.0',
-      min: '0',
-      max: '4294967295'
-    }
-  }
-
-  if (cast === 'u64') {
-    return {
-      preMin: '-1.0',
-      preMax: '9007199254740992.0',
-      min: '0',
-      max: '9007199254740991'
     }
   }
 

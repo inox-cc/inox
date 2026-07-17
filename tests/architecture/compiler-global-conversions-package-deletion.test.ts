@@ -24,7 +24,7 @@ test('удаление global:conversions убирает Boolean, String и Numb
   assert.ok(before.declarations.some((item) => item.libraryId === 'global:conversions'))
   assert.ok(before.operations.some((item) => item.libraryId === 'global:conversions'))
   assert.match(beforeRegistry, /stdlib\/global\/conversions\/compiler\/index\.ts/)
-  assert.doesNotThrow(() => compileSource("Boolean(1)\nString(7)\nNumber('7')\n", { libraries: before }))
+  assert.doesNotThrow(() => compileSource("Boolean(1)\nString(7)\nNumber('7')\ni32(7.8)\n", { libraries: before }))
 
   await rm(resolve(fixture, 'stdlib/global/conversions'), { recursive: true, force: true })
   await generateCompilerLibraryRegistry(fixture, output)
@@ -46,6 +46,7 @@ test('удаление global:conversions убирает Boolean, String и Numb
   assertUnknownGlobal(after, 'String(7)\n')
   assertUnknownGlobal(after, "Number('7')\n")
   assertUnknownGlobal(after, 'Boolean(1)\n')
+  assertUnknownGlobal(after, 'i32(7.8)\n')
 })
 
 function assertUnknownGlobal(

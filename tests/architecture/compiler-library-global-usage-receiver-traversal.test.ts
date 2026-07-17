@@ -15,7 +15,7 @@ test('global usage traversal пропускает package bindings и обход
   const paths = collectGlobalUsages(program).map((usage) => usage.path.join('.'))
 
   paths.sort()
-  assert.deepEqual(paths, ['Int8Array.from'])
+  assert.deepEqual(paths, ['HostGlobal.from'])
 })
 
 function libraryGlobalCall(): object {
@@ -32,7 +32,7 @@ function libraryReceiverCall(): object {
     type: 'CallExpression',
     libraryOperationId: 'fixture#receiver-run',
     libraryReceiverTypeId: 'fixture#Receiver',
-    callee: member(call(member(reference('Int8Array'), 'from')), 'run'),
+    callee: member(call(member(globalReference('HostGlobal'), 'from')), 'run'),
     args: []
   }
 }
@@ -57,5 +57,12 @@ function reference(name: string): object {
   return {
     type: 'Reference',
     path: [name]
+  }
+}
+
+function globalReference(name: string): object {
+  return {
+    ...reference(name),
+    globalUsage: true
   }
 }

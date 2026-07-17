@@ -51,7 +51,11 @@ test('удаление global:time убирает Date, performance и native pl
   assert.doesNotMatch(afterPlan, /stdlib\/global\/time/)
   assert.match(afterPlan, /stdlib\/global\/math\/src\/math\.cc/)
   assert.doesNotThrow(() => compileSource('Math.min(1, 2)\n', { libraries: after }))
-  assert.doesNotThrow(() => compileSource('async function read() {}\nread()\n', { libraries: after }))
+  assert.throws(
+    () => compileSource('async function read() {}\nread()\n', { libraries: after }),
+    (error: unknown) =>
+      error instanceof CompileError && error.diagnostics[0].code === 'INOX_MISSING_INTRINSIC_PROVIDER'
+  )
   assert.throws(
     () => compileSource('Date.now()\n', { libraries: after }),
     (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_UNKNOWN_NAME'

@@ -2,13 +2,13 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { compileSourceToIr } from '../../compiler/core.ts'
-import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
+import { createCompilerLibrarySetWithCollections } from './helpers/compiler-library-fixtures.ts'
 
 test('library operation variants выбирают result metadata по arg count и literal', () => {
   const result = compileSourceToIr(
     "const bytes = codec.digest()\nconst hex = codec.digest('hex')\nconst sized = codec.convert(2)\nconst listed = codec.convert([1, 2])\nconst packet = new Packet([1, 2])\n",
-    { libraries: createCompilerLibrarySet([codecLibrary()]) }
+    { libraries: createCompilerLibrarySetWithCollections([codecLibrary()]) }
   )
   const bytes = result.ir.body[0].init
   const hex = result.ir.body[1].init
