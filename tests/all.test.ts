@@ -455,8 +455,8 @@ async function runIntegrationTests(): Promise<void> {
       assertNetUsesCppObjectFacade()
     })
 
-    await t.test('http-cpp-object-lowering', () => {
-      assertHttpServerUsesCppObjectFacade()
+    await t.test('http-cpp-object-lowering', async () => {
+      await assertHttpServerUsesCppObjectFacade()
     })
 
     await t.test('regexp-cpp-object-lowering', () => {

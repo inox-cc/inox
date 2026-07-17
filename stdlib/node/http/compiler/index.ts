@@ -54,7 +54,8 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       valueType: 'object',
       cppType: 'HttpRequest',
       baseTypeIds: [],
-      runtimeRequirements
+      runtimeRequirements,
+      cValueAdapter: 'HttpRequest(inox::Value($value))'
     },
     {
       libraryId,
@@ -63,7 +64,8 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       valueType: 'object',
       cppType: 'HttpResponse',
       baseTypeIds: [],
-      runtimeRequirements
+      runtimeRequirements,
+      cValueAdapter: 'HttpResponse(inox::Value($value))'
     }
   ],
   operations,

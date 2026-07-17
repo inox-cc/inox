@@ -8,6 +8,8 @@ const projectRoot = resolve('.')
 const forbiddenPatterns = [
   /stdlib\/node\/http\/compiler\/(?:c|descriptor)/,
   /\bCHttpHandler(?:Map)?\b/,
+  /\bHttp(?:Request|Response|Server)\b/,
+  /\b(?:IncomingMessage|ServerResponse)\b/,
   /\b(?:Package)?HttpLoweringDependencies\b/,
   /\bHttpFunctionContext\b/,
   /\bhttp(?:CreateServerNames|Handlers|ImportNames|LoweringDependencies)\b/,

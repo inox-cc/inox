@@ -24,7 +24,7 @@ function main(): void {
 
       try {
         const file = readFileSync(filePath)
-        response.writeHead(200, { 'Content-Type': 'application/octet-stream' })
+        response.writeHead(200, { 'Content-Type': contentTypeForPath(requestPath) })
         response.end(file)
         return
       } catch {
@@ -41,6 +41,18 @@ function main(): void {
     console.log('http://127.0.0.1:8080/')
     console.log('files are served from dist/http-server/out/static; parent paths return 404')
   })
+}
+
+function contentTypeForPath(path: string): string {
+  if (path.endsWith('.html')) {
+    return 'text/html; charset=utf-8'
+  }
+
+  if (path.endsWith('.txt')) {
+    return 'text/plain; charset=utf-8'
+  }
+
+  return 'application/octet-stream'
 }
 
 main()
