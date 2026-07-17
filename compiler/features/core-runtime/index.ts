@@ -35,7 +35,6 @@ type CoreRuntimeNode = AnyNode & {
   nullable?: boolean
   numericCast?: string | null
   object?: CoreRuntimeChildNode | null
-  objectRuntimeMethod?: string | null
   operator?: string | null
   ownership?: string | null
   params?: CoreRuntimeRawNode[]
@@ -124,12 +123,6 @@ export function collectCoreRuntimeIrFeatures(node: AnyNode, features: CoreRuntim
 
   if (item.type === 'FunctionDeclaration' || item.type === 'MethodDefinition') {
     recordCallableSignatureFeatures(item, features)
-  }
-
-  if (item.objectRuntimeMethod !== null && typeof item.objectRuntimeMethod !== 'undefined') {
-    features.add('collections')
-    features.add('objects')
-    features.add('runtime-values')
   }
 
   if (item.type === 'VariableDeclaration' && item.valueType === 'function') {

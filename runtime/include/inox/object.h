@@ -96,18 +96,6 @@ Value get(inox_value object, StringView name);
 Value get(inox_value object, const char* name);
 
 } // namespace inox
-
-class Object {
-public:
-  inox::Value keys(inox_value value) const;
-  inox::Value keys(const inox_class_descriptor& descriptor, const void* instance) const;
-  inox::Value values(inox_value value) const;
-  inox::Value values(const inox_class_descriptor& descriptor, const void* instance) const;
-  inox::Value entries(inox_value value) const;
-  inox::Value entries(const inox_class_descriptor& descriptor, const void* instance) const;
-};
-
-extern Object Object;
 #endif
 
 #endif

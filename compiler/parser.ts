@@ -1239,7 +1239,7 @@ class Parser {
   }
 
   parseUnsupportedForInStatement(): AnyNode {
-    this.report('INOX_NO_FOR_IN', 'for-in is not supported; use Object.keys/map helpers later', null)
+    this.report('INOX_NO_FOR_IN', 'for-in is not supported', null)
 
     while (!this.isValue(')') && !this.is('eof')) {
       this.advance()

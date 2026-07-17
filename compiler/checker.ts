@@ -97,11 +97,7 @@ import {
   resolveExpressionPromiseRejectionIntrinsicRole,
   resolveExpressionPromiseRejectionValueType,
 } from './checker/expression-helpers.ts'
-import {
-  checkObjectStaticCall as checkObjectStaticCallInContext,
-  isObjectStaticCall as isObjectStaticCallInContext
-} from './checker/global-calls.ts'
-import type { CheckedCallArgInfo, GlobalCallCheckerContext } from './checker/global-calls.ts'
+import type { CheckedCallArgInfo } from './checker/global-calls.ts'
 import {
   applyTypeRefMetadataToExpression,
   findShapeField as findShapeFieldInContext,
@@ -3517,12 +3513,6 @@ class Checker {
       return classMethodType
     }
 
-    const objectValuesType = this.checkObjectStaticCall(expression)
-
-    if (objectValuesType !== null && typeof objectValuesType !== 'undefined') {
-      return objectValuesType
-    }
-
     this.inferCalledFunctionReturn(expression.callee)
     this.checkExpression(expression.callee)
     const argInfos = this.checkedCallArgInfos(expression)
@@ -5047,14 +5037,6 @@ class Checker {
     expression.shape = returnInfo.shape
 
     return returnInfo.valueType
-  }
-
-  checkObjectStaticCall(expression: AnyNode): ValueType | null {
-    if (!isObjectStaticCallInContext(expression, this.runtimeGlobalIsShadowed('Object'))) {
-      return null
-    }
-
-    return checkObjectStaticCallInContext(this.globalCallContext(), expression, this.checkedCallArgInfos(expression))
   }
 
   resolveMemberPathRootSymbol(path: readonly string[] | null | undefined): SymbolInfo | null {
@@ -8497,14 +8479,6 @@ class Checker {
   primitiveCallContext(): PrimitiveCallCheckerContext {
     return {
       diagnostics: this.diagnostics
-    }
-  }
-
-  globalCallContext(): GlobalCallCheckerContext {
-    return {
-      declaredTypes: this.declaredTypeContext(),
-      diagnostics: this.diagnostics,
-      libraries: resolveCompilerLibrarySet(this.options.libraries)
     }
   }
 

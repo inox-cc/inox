@@ -65,11 +65,7 @@ import {
   libraryNativeValueAdapter
 } from '../value-types.ts'
 import type { ArrayLoweringDependencies, PreparedArrayExpression } from './arrays.ts'
-import {
-  emitPreparedArrayLengthExpression,
-  emitPreparedObjectRuntimeArrayIndexValueExpression,
-  resolveRuntimeArrayElementType
-} from './arrays.ts'
+import { emitPreparedArrayLengthExpression, resolveRuntimeArrayElementType } from './arrays.ts'
 import {
   cClassNameFromValueType,
   cClassValueTypeName,
@@ -249,10 +245,6 @@ export type StatementLoweringDependencies = {
     options?: PreparedCallOptions
   ): PreparedExpression | null
   emitPreparedNumberExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression
-  emitPreparedInlineObjectRuntimeCallExpression(
-    expression: StatementNode,
-    context: CFunctionContext
-  ): PreparedExpression | null
   emitPreparedRuntimeTruthinessExpression(
     expression: StatementNode,
     context: CFunctionContext
@@ -300,7 +292,6 @@ export type StatementLoweringDependencies = {
   isBoxedRuntimeValueAssignment(expression: StatementNode, context: CFunctionContext): boolean
   isClassConstructorExpression(expression: StatementNode, context: CFunctionContext): boolean
   isExceptionValueExpression(expression: StatementNode, context: CFunctionContext): boolean
-  isObjectRuntimeCallExpression(expression: StatementNode): boolean
   isIndexAccessExpression(expression: StatementNode): boolean
   isDynamicRuntimeValueExpression(expression: StatementNode, context: CFunctionContext): boolean
   isMemberAccessExpression(expression: StatementNode): boolean
@@ -1561,66 +1552,6 @@ function registerCppValueType(
   }
 
   context.cppValueTypes.delete(name)
-}
-
-function emitObjectRuntimeCallValueVariableDeclaration(
-  statement: StatementNode,
-  context: CFunctionContext
-): string[] | null {
-  if (statement.init === null || typeof statement.init === 'undefined') {
-    return null
-  }
-
-  const value = statementDeps(context).emitPreparedInlineObjectRuntimeCallExpression(statement.init, context)
-
-  if (value === null || typeof value === 'undefined') {
-    return null
-  }
-
-  registerRuntimeValueMetadata(statement.name, 'array', statement, statement.init, context)
-  registerCppValueType(statement.name, value.cppType, value.valueType ?? 'array', context)
-
-  const lines: string[] = []
-  pushAllLines(lines, value.lines)
-  lines.push(`auto ${emitCIdentifier(statement.name)} = ${value.expression};`)
-  const failureStatement = statementDeps(context).emitFailureStatement(context)
-  lines.push(`if (inox::thrown()) ${failureStatement}`)
-
-  return lines
-}
-
-function emitObjectRuntimeArrayIndexValueVariableDeclaration(
-  statement: StatementNode,
-  context: CFunctionContext
-): string[] | null {
-  const value = emitPreparedObjectRuntimeArrayIndexValueExpression(
-    statement.init,
-    context,
-    emitCIdentifier(statement.name)
-  )
-
-  if (value === null || typeof value === 'undefined') {
-    return null
-  }
-
-  const valueType = value.valueType ?? statementDeps(context).inferExpressionType(statement.init, context)
-
-  registerRuntimeValueMetadata(statement.name, valueType, statement, statement.init, context)
-
-  const lines: string[] = []
-  pushAllLines(lines, value.lines)
-
-  if (shouldSkipRuntimeValueDeclarationCheck(statement, value, valueType)) {
-    return lines
-  }
-
-  const valueCheck = emitRuntimeValueCheck(emitCIdentifier(statement.name), cRuntimeValueTag(valueType), context)
-
-  if (valueCheck !== '') {
-    lines.push(valueCheck)
-  }
-
-  return lines
 }
 
 function shouldSkipRuntimeValueDeclarationCheck(
@@ -3616,28 +3547,8 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
       typeof runtimeElement !== 'undefined' &&
       isRuntimeValueDeclarationValueType(runtimeElement.valueType)
     ) {
-      const objectRuntimeIndexDeclaration = emitObjectRuntimeArrayIndexValueVariableDeclaration(statement, context)
-
-      if (objectRuntimeIndexDeclaration !== null && typeof objectRuntimeIndexDeclaration !== 'undefined') {
-        return objectRuntimeIndexDeclaration
-      }
-
       return emitRuntimeValueVariableDeclaration(statement, statement.init, context, runtimeElement.valueType)
     }
-  }
-
-  if (
-    statement.init.type === 'CallExpression' &&
-    ((statement.init.objectRuntimeMethod !== null && typeof statement.init.objectRuntimeMethod !== 'undefined') ||
-      deps.isObjectRuntimeCallExpression(statement.init))
-  ) {
-    const objectRuntimeCallDeclaration = emitObjectRuntimeCallValueVariableDeclaration(statement, context)
-
-    if (objectRuntimeCallDeclaration !== null && typeof objectRuntimeCallDeclaration !== 'undefined') {
-      return objectRuntimeCallDeclaration
-    }
-
-    return emitRuntimeValueVariableDeclaration(statement, statement.init, context, 'array')
   }
 
   if (statement.init.type === 'AwaitExpression') {

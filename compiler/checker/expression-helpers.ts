@@ -1,4 +1,3 @@
-import { commonValueType } from './assignability.ts'
 import type { FunctionTypeMetadata, FunctionTypeParamMetadata } from './resolved-types.ts'
 import type { IntrinsicRole } from '../extensions/types.ts'
 import type { AnyNode, ObjectShapeInfo, SourceLocation, ValueType } from '../types.ts'
@@ -118,26 +117,6 @@ export function knownCheckedExpressionType(expression: AnyNode): ValueType | nul
   }
 
   return null
-}
-
-export function objectValuesElementTypeFromShape(shape: ObjectShapeInfo | null | undefined): ValueType {
-  if (shape === null || typeof shape === 'undefined' || shape.fields.length === 0) {
-    return 'unknown'
-  }
-
-  const types: ValueType[] = []
-
-  for (const field of shape.fields) {
-    let valueType: ValueType = 'unknown'
-
-    if (field.valueType !== null && typeof field.valueType !== 'undefined') {
-      valueType = field.valueType
-    }
-
-    types.push(valueType)
-  }
-
-  return commonValueType(types)
 }
 
 export function resolveExpressionPromiseRejectionValueType(expression: AnyNode | null | undefined): ValueType | null {

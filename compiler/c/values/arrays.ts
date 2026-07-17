@@ -1,4 +1,3 @@
-import { memberExpressionPath } from '../../member-paths.ts'
 import {
   arrayElementTypeNameFromTypeName,
   isArrayTypeName,
@@ -553,19 +552,6 @@ export function resolveRuntimeArrayElementType(
 
   if (expression.type === 'CallExpression') {
     const functionReturn = resolveFunctionReturnNameFromCall(expression)
-    const objectRuntimeCall = objectRuntimeArrayCallName(expression)
-
-    if (objectRuntimeCall !== null && typeof objectRuntimeCall !== 'undefined') {
-      if (objectRuntimeCall === 'entries') {
-        return 'array'
-      }
-
-      if (objectRuntimeCall === 'keys') {
-        return 'string'
-      }
-
-      return 'unknown'
-    }
 
     if (expression.valueType !== 'array') {
       if (functionReturn !== null && typeof functionReturn !== 'undefined') {
@@ -670,14 +656,6 @@ export function resolveRuntimeArrayElementType(
     return null
   }
 
-  if (expression.type === 'IndexExpression' && expression.object.type === 'CallExpression') {
-    const objectRuntimeCall = objectRuntimeArrayCallName(expression.object)
-
-    if (objectRuntimeCall === 'entries') {
-      return 'unknown'
-    }
-  }
-
   if (expression.valueType === 'array') {
     return 'unknown'
   }
@@ -707,71 +685,6 @@ function declaredArrayElementValueType(declaredType: string | null | undefined):
   }
 
   return 'object'
-}
-
-function objectRuntimeArrayCallName(expression: ArrayMaybeNode): string | null {
-  if (
-    expression === null ||
-    typeof expression === 'undefined' ||
-    expression.type !== 'CallExpression' ||
-    expression.args.length !== 1
-  ) {
-    return null
-  }
-
-  if (
-    expression.objectRuntimeMethod === 'values' ||
-    expression.objectRuntimeMethod === 'entries' ||
-    expression.objectRuntimeMethod === 'keys'
-  ) {
-    return expression.objectRuntimeMethod
-  }
-
-  const path = memberExpressionPath(expression.callee)
-
-  if (
-    path !== null &&
-    typeof path !== 'undefined' &&
-    path.length === 2 &&
-    path[0] === 'Object' &&
-    (path[1] === 'values' || path[1] === 'entries' || path[1] === 'keys')
-  ) {
-    return path[1]
-  }
-
-  return null
-}
-
-function isNativeClassObjectRuntimeArgument(expression: ArrayMaybeNode, context: ArrayFunctionContext): boolean {
-  if (expression === null || typeof expression === 'undefined') {
-    return false
-  }
-
-  if (
-    expression.valueType !== null &&
-    typeof expression.valueType !== 'undefined' &&
-    expression.valueType.startsWith('class:')
-  ) {
-    return true
-  }
-
-  if (expression.type !== 'Reference' || expression.path.length !== 1) {
-    return false
-  }
-
-  const path: string[] = expression.path
-  const name = path[0]
-  const variableType = context.variables.get(name)
-
-  if (
-    variableType !== null &&
-    typeof variableType !== 'undefined' &&
-    variableType.startsWith('class:')
-  ) {
-    return true
-  }
-
-  return context.classInstanceTypes.has(name)
 }
 
 function resolveFunctionReturnNameFromCall(expression: ArrayMaybeNode): string | null {
@@ -856,24 +769,6 @@ function emitRuntimeArrayGetAllowMissing(
   ]
 }
 
-function emitObjectRuntimeArrayIndexGetAllowMissing(
-  method: string,
-  objectExpression: string,
-  indexExpression: string,
-  out: string,
-  context: ArrayFunctionContext
-): string[] {
-  const call =
-    method === 'values'
-      ? `inox::object_value_at(${objectExpression}, ${indexExpression})`
-      : `inox::object_entry_at(${objectExpression}, ${indexExpression})`
-
-  return [
-    `auto ${out} = ${call};`,
-    `if (inox::thrown()) ${emitFailureStatement(context)}`
-  ]
-}
-
 function emitPreparedRuntimeArrayIndexExpression(
   element: CRuntimeArrayElement,
   context: ArrayFunctionContext
@@ -935,61 +830,6 @@ export function emitPreparedKnownArrayIndexValueExpression(
   }
 
   return null
-}
-
-export function emitPreparedObjectRuntimeArrayIndexValueExpression(
-  expression: AnyNode,
-  context: ArrayFunctionContext,
-  targetName?: string
-): PreparedExpression | null {
-  if (expression.type !== 'IndexExpression' || expression.object.type !== 'CallExpression') {
-    return null
-  }
-
-  const method = objectRuntimeArrayCallName(expression.object)
-
-  if (method !== 'values' && method !== 'entries') {
-    return null
-  }
-
-  const runtimeElement = resolveRuntimeArrayIndex(expression, context)
-
-  if (runtimeElement === null || typeof runtimeElement === 'undefined') {
-    return null
-  }
-
-  const source = expression.object.args[0]
-
-  if (isNativeClassObjectRuntimeArgument(source, context)) {
-    return null
-  }
-
-  const object = arrayDeps(context).emitCValueExpression(source, context)
-  const index = emitPreparedRuntimeArrayIndexExpression(runtimeElement, context)
-  const value = targetName ?? nextCName(context, method === 'values' ? 'inox_object_value' : 'inox_object_entry')
-  const lines: string[] = []
-
-  appendLines(lines, object.lines)
-  appendLines(lines, index.lines)
-  appendLines(
-    lines,
-    emitObjectRuntimeArrayIndexGetAllowMissing(method, object.expression, index.expression, value, context)
-  )
-
-  const tag = cRuntimeValueTag(runtimeElement.valueType) ?? ''
-
-  if (method !== 'entries' && tag !== '') {
-    appendLines(lines, emitRuntimeArrayIndexValueCheck(value, tag, expression, context))
-  }
-
-  return {
-    lines,
-    expression: value,
-    cppType: 'inox::Value',
-    owned: false,
-    runtimeTypeChecked: method === 'entries' || tag !== '',
-    valueType: runtimeElement.valueType
-  }
 }
 
 export function emitPreparedRuntimeArrayIndexValueExpression(

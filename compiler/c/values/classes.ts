@@ -1456,8 +1456,6 @@ function scanClassDescriptorCallLikeExpression(
 ): void {
   if (isClassDescriptorVariadicFormatCall(expression)) {
     addClassDescriptorExpressionNames(expression.args, classInfos, scope, names)
-  } else if (isClassDescriptorObjectRuntimeCall(expression)) {
-    addClassDescriptorExpressionName(firstClassDescriptorArgument(expression), classInfos, scope, names)
   } else if (hasClassDescriptorRuntimeValueArguments(expression)) {
     addClassDescriptorExpressionNames(expression.args, classInfos, scope, names)
   } else if (isClassDescriptorPromiseValueCall(expression)) {
@@ -1476,30 +1474,6 @@ function isClassDescriptorVariadicFormatCall(expression: AnyNode): boolean {
     typeof argumentKinds !== 'undefined' &&
     argumentKinds.length === 1 &&
     argumentKinds[0] === 'variadic-format-values'
-  )
-}
-
-function isClassDescriptorObjectRuntimeCall(expression: AnyNode): boolean {
-  const callee = expression.callee
-
-  if (
-    expression.type !== 'CallExpression' ||
-    callee === null ||
-    typeof callee === 'undefined' ||
-    callee.type !== 'MemberExpression'
-  ) {
-    return false
-  }
-
-  const object = callee.object
-
-  return (
-    object !== null &&
-    typeof object !== 'undefined' &&
-    object.type === 'Reference' &&
-    object.path.length === 1 &&
-    object.path[0] === 'Object' &&
-    (callee.property === 'keys' || callee.property === 'values' || callee.property === 'entries')
   )
 }
 

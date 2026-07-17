@@ -575,14 +575,6 @@ export function inferExpressionType(
     return 'boolean'
   }
 
-  if (
-    expression.type === 'CallExpression' &&
-    expression.objectRuntimeMethod !== null &&
-    typeof expression.objectRuntimeMethod !== 'undefined'
-  ) {
-    return cValueTypeOrUnknown(expression)
-  }
-
   if (expression.type === 'CallExpression' && usesCJsGlobal(expression.callee, context)) {
     return 'js-global'
   }

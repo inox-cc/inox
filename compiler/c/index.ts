@@ -190,7 +190,6 @@ import {
   emitPreparedArraySliceCallExpression,
   emitPreparedArrayUnshiftCallExpression,
   emitPreparedKnownArrayIndexValueExpression,
-  emitPreparedObjectRuntimeArrayIndexValueExpression,
   emitPreparedRuntimeArrayIndexValue,
   emitPreparedRuntimeArrayIndexValueExpression,
   isArrayIncludesCall,
@@ -484,7 +483,6 @@ const statementLoweringDependencies = {
   emitPreparedCallExpression,
   emitPreparedClassMethodCallExpression,
   emitPreparedNumberExpression,
-  emitPreparedInlineObjectRuntimeCallExpression,
   emitPreparedCompilerLibraryCallExpression,
   emitPreparedRuntimeTruthinessExpression: emitPreparedStatementRuntimeTruthinessExpression,
   emitPreparedPromiseConstructorExpression: (
@@ -523,7 +521,6 @@ const statementLoweringDependencies = {
   isBoxedRuntimeValueAssignment,
   isClassConstructorExpression,
   isExceptionValueExpression,
-  isObjectRuntimeCallExpression,
   isIndexAccessExpression,
   isDynamicRuntimeValueExpression: isStatementDynamicRuntimeValueExpression,
   isMemberAccessExpression,
@@ -981,7 +978,6 @@ const cScalarExpressionDependencies = {
     emitPreparedObjectExpressionScalarIndexValueExpression(expression, context, objectExpressionFieldDependencies),
   emitPreparedObjectExpressionScalarMemberValueExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedObjectExpressionScalarMemberValueExpression(expression, context, objectExpressionFieldDependencies),
-  emitPreparedObjectRuntimeArrayIndexValueExpression,
   emitPreparedNumberExpression,
   emitPreparedCompilerLibraryCallExpression,
   emitPreparedCompilerLibraryExpression,
@@ -1051,8 +1047,6 @@ const cValueExpressionDependencies = {
   emitPreparedKnownObjectIndexValueExpression,
   emitPreparedKnownObjectMemberValueExpression,
   emitPreparedNullableScalarRuntimeValueExpression,
-  emitPreparedObjectValuesCallExpression,
-  emitPreparedObjectRuntimeArrayIndexValueExpression,
   emitPreparedNumberExpression,
   emitPreparedDynamicObjectIndexValueExpression: (expression: CDynamicObjectFieldNode, context: CFunctionContext) =>
     emitPreparedDynamicObjectIndexValueExpression(expression, context, objectExpressionFieldDependencies),
@@ -5506,15 +5500,6 @@ function emitDirectRuntimeValueFormattedLibraryCallStatement(
       return [`${target}(${objectExpression});`]
     }
 
-    const objectRuntimeCall = emitPreparedInlineObjectRuntimeCallExpression(args[0], context)
-
-    if (objectRuntimeCall !== null && typeof objectRuntimeCall !== 'undefined') {
-      pushAll(lines, objectRuntimeCall.lines)
-      lines.push(`${target}(${objectRuntimeCall.expression});`)
-      pushAll(lines, emitThrownCheckLines(context))
-      return lines
-    }
-
     const value = emitCValueExpression(args[0], context)
 
     pushAll(lines, value.lines)
@@ -5528,15 +5513,6 @@ function emitDirectRuntimeValueFormattedLibraryCallStatement(
 
     if (objectExpression !== null && typeof objectExpression !== 'undefined') {
       return [`${target}(${cStringLiteral(args[0].value)}, ${objectExpression});`]
-    }
-
-    const objectRuntimeCall = emitPreparedInlineObjectRuntimeCallExpression(args[1], context)
-
-    if (objectRuntimeCall !== null && typeof objectRuntimeCall !== 'undefined') {
-      pushAll(lines, objectRuntimeCall.lines)
-      lines.push(`${target}(${cStringLiteral(args[0].value)}, ${objectRuntimeCall.expression});`)
-      pushAll(lines, emitThrownCheckLines(context))
-      return lines
     }
 
     const value = emitCValueExpression(args[1], context)
@@ -8379,161 +8355,6 @@ function resolveFunctionParams(callee: CAccessorNode, context: FunctionParamCont
 
 function inferExpressionType(expression: AnyNode, context: CFunctionContext): string {
   return inferExpressionTypeWithDependencies(expression, context, expressionTypeDependencies)
-}
-
-function cObjectRuntimeCallName(expression: AnyNode): string | null {
-  if (
-    expression === null ||
-    typeof expression === 'undefined' ||
-    expression.type !== 'CallExpression' ||
-    expression.args.length !== 1
-  ) {
-    return null
-  }
-
-  if (expression.objectRuntimeMethod === 'values') {
-    return 'values'
-  }
-
-  if (expression.objectRuntimeMethod === 'entries') {
-    return 'entries'
-  }
-
-  if (expression.objectRuntimeMethod === 'keys') {
-    return 'keys'
-  }
-
-  const path = memberExpressionPath(expression.callee)
-
-  if (
-    path !== null &&
-    typeof path !== 'undefined' &&
-    path.length === 2 &&
-    path[0] === 'Object' &&
-    (path[1] === 'values' || path[1] === 'entries' || path[1] === 'keys')
-  ) {
-    return path[1]
-  }
-
-  return null
-}
-
-function isObjectRuntimeCallExpression(expression: AnyNode): boolean {
-  return cObjectRuntimeCallName(expression) !== null
-}
-
-function emitPreparedInlineObjectRuntimeCallExpression(
-  expression: AnyNode,
-  context: CFunctionContext
-): PreparedExpression | null {
-  const method = cObjectRuntimeCallName(expression)
-
-  if (method === null || typeof method === 'undefined') {
-    return null
-  }
-
-  const classInstance = emitPreparedNativeClassInstanceExpression(expression.args[0], context)
-
-  if (classInstance !== null && typeof classInstance !== 'undefined') {
-    return {
-      lines: classInstance.lines,
-      expression: `Object.${method}(${emitCClassInfoDescriptorName(classInstance.info)}, ${classInstance.expression})`,
-      cppType: 'inox::Value',
-      runtimeTypeChecked: true,
-      valueType: 'array'
-    }
-  }
-
-  const object =
-    emitPreparedObjectRuntimeCallArgumentExpression(expression.args[0], context) ??
-    emitCValueExpression(expression.args[0], context)
-
-  return {
-    lines: object.lines,
-    expression: `Object.${method}(${object.expression})`,
-    cppType: 'inox::Value',
-    runtimeTypeChecked: true,
-    valueType: 'array'
-  }
-}
-
-function emitPreparedObjectValuesCallExpression(
-  expression: AnyNode,
-  context: CFunctionContext
-): PreparedExpression | null {
-  const method = cObjectRuntimeCallName(expression)
-
-  if (method === null || typeof method === 'undefined') {
-    return null
-  }
-
-  const lines: string[] = []
-  const classInstance = emitPreparedNativeClassInstanceExpression(expression.args[0], context)
-  const temp = nextCName(context, `inox_${method}`)
-
-  if (classInstance !== null && typeof classInstance !== 'undefined') {
-    pushAll(lines, classInstance.lines)
-    lines.push(
-      `auto ${temp} = Object.${method}(${emitCClassInfoDescriptorName(classInstance.info)}, ${classInstance.expression});`
-    )
-    pushAll(lines, emitThrownCheckLines(context))
-
-    return {
-      lines,
-      expression: temp,
-      cppType: 'inox::Value',
-      runtimeTypeChecked: true,
-      valueType: 'array'
-    }
-  }
-
-  const object =
-    emitPreparedObjectRuntimeCallArgumentExpression(expression.args[0], context) ??
-    emitCValueExpression(expression.args[0], context)
-
-  pushAll(lines, object.lines)
-  lines.push(`auto ${temp} = Object.${method}(${object.expression});`)
-  pushAll(lines, emitThrownCheckLines(context))
-
-  return {
-    lines,
-    expression: temp,
-    cppType: 'inox::Value',
-    runtimeTypeChecked: true,
-    valueType: 'array'
-  }
-}
-
-function emitPreparedObjectRuntimeCallArgumentExpression(
-  expression: AnyNode,
-  context: CFunctionContext
-): PreparedExpression | null {
-  if (
-    expression === null ||
-    typeof expression === 'undefined' ||
-    expression.type !== 'MemberExpression' ||
-    typeof expression.property !== 'string'
-  ) {
-    return null
-  }
-
-  const objectType = inferExpressionType(expression.object, context)
-
-  if (objectType !== 'object') {
-    return null
-  }
-
-  const object =
-    emitPreparedObjectRuntimeCallArgumentExpression(expression.object, context) ??
-    emitCValueExpression(expression.object, context)
-
-  return {
-    lines: object.lines,
-    expression: `inox::get(${object.expression}, ${cStringLiteral(expression.property)})`,
-    cppType: 'inox::Value',
-    runtimeTypeChecked: true,
-    valueType: expression.valueType ?? 'unknown'
-  }
 }
 
 function isExceptionValueExpression(expression: AnyNode, context: CFunctionContext): boolean {

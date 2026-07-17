@@ -41,16 +41,16 @@ for (const a of foo.v) {
   ) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /auto inox_values_\d+ = Object\.values\(a\);/)
-  assert.match(source, /Array\(inox_values_\d+\)\.get\(0\)/)
-  assert.match(source, /auto inox_entries_\d+ = Object\.entries\(a\);/)
-  assert.match(source, /Array\(inox_entries_\d+\)\.get\(0\)/)
+  assert.match(source, /auto inox_library_result_\d+ = Object\.values\(inox::Value\(a\)\);/)
+  assert.match(source, /auto inox_library_result_\d+ = Object\.entries\(inox::Value\(a\)\);/)
+  assert.equal(source.match(/auto inox_library_result_\d+ = inox_library_result_\d+\.get\(0\);/g)?.length, 2)
   assert.match(source, /auto inox_library_iterator_\d+ = \(Array\(inox_value_\d+\)\)\.values\(\);/)
   assert.match(source, /while \(true\) \{/)
   assert.match(source, /auto inox_library_step_\d+ = inox_library_iterator_\d+\.next\(\);/)
   assert.match(source, /if \(inox_library_step_\d+\.done\) break;/)
   assert.doesNotMatch(source, /ArrayStorage|->items|Array\.raw/)
   assert.doesNotMatch(source, /inox::object_(?:value|entry)_at/)
+  assert.doesNotMatch(source, /Array\(inox_(?:values|entries)_\d+\)\.get\(0\)/)
   assert.match(source, /if \(\(inox_library_value_\d+\.tag != INOX_TAG_OBJECT && inox_library_value_\d+\.tag != INOX_TAG_CLASS_INSTANCE\)/)
   assert.doesNotMatch(source, /inox_object_values\(&inox_default_allocator, a, &inox_object_values_\d+\)/)
   assert.doesNotMatch(source, /inox_object_entries\(&inox_default_allocator, a, &inox_object_entries_\d+\)/)

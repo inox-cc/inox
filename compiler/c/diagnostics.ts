@@ -26,9 +26,6 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
     path === 'Promise.reject' ||
     path === 'Array.from' ||
     path === 'Array.isArray' ||
-    path === 'Object.entries' ||
-    path === 'Object.keys' ||
-    path === 'Object.values' ||
     isCollectionConstructorGlobalUsagePath(usage.path)
   )
 }

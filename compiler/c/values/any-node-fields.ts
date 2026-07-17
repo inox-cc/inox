@@ -39,7 +39,6 @@ export const compilerAnyNodeStringFields: readonly string[] = [
   'libraryCppType',
   'libraryConstantValue',
   'libraryCallbackLifetime',
-  'objectRuntimeMethod',
   'stringRuntimeMethod',
   'numericCast',
   'returnType',

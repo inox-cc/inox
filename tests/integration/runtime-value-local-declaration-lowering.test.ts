@@ -60,19 +60,19 @@ for (const a of foo.v) {
   assert.doesNotMatch(source, /ArrayStorage|->items|inox_for_array_/)
   assert.match(
     source,
-    /\n    auto b = Object\.values\(a\);\n    if \(inox::thrown\(\)\) return;/
+    /\n    auto inox_library_result_\d+ = Object\.values\(inox::Value\(a\)\);\n    if \(inox::thrown\(\)\) return;\n    auto b = inox_library_result_\d+;/
   )
   assert.doesNotMatch(source, /auto inox_values_\d+ = Object\.values\(a\);\n    if \(inox::thrown\(\)\) return;\n    inox::Value b = inox_values_\d+;/)
-  assert.match(source, /Array\(inox_values_\d+\)\.get\(0\)/)
+  assert.match(source, /auto inox_library_result_\d+ = inox_library_result_\d+\.get\(0\);/)
   assert.match(source, /auto c = inox_library_result_\d+;/)
   assert.doesNotMatch(source, /\n    inox::Value c = inox_object_value_\d+;/)
   assert.doesNotMatch(source, /inox::Value c = inox::adopt\(inox_object_value_\d+\.release\(\)\);/)
   assert.match(
     source,
-    /\n    auto d = Object\.entries\(a\);\n    if \(inox::thrown\(\)\) return;/
+    /\n    auto inox_library_result_\d+ = Object\.entries\(inox::Value\(a\)\);\n    if \(inox::thrown\(\)\) return;\n    auto d = inox_library_result_\d+;/
   )
   assert.doesNotMatch(source, /auto inox_entries_\d+ = Object\.entries\(a\);\n    if \(inox::thrown\(\)\) return;\n    inox::Value d = inox_entries_\d+;/)
-  assert.match(source, /Array\(inox_entries_\d+\)\.get\(0\)/)
+  assert.equal(source.match(/auto inox_library_result_\d+ = inox_library_result_\d+\.get\(0\);/g)?.length, 2)
   assert.match(source, /auto e = inox_library_result_\d+;/)
   assert.doesNotMatch(source, /if \(e\.tag != INOX_TAG_UNDEFINED && \(e\.tag != INOX_TAG_ARRAY \|\| e\.as\.ref == 0\)\) return;/)
   assert.doesNotMatch(source, /\n    inox::Value e = inox_object_entry_\d+;/)
