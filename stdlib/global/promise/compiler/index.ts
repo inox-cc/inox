@@ -171,6 +171,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       declarationNames: ['Promise'],
       valueType: 'promise',
       cppType: 'inox::Promise',
+      cValueAdapter: 'inox::Promise($value)',
       baseTypeIds: [],
       runtimeRequirements: [promiseRuntimeRequirement],
       cAwaitExpression: '$value.awaitValue()',

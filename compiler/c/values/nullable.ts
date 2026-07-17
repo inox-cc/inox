@@ -745,11 +745,16 @@ export function emitNullableRuntimeValueVariableDeclaration(
   statement: AnyNode,
   context: NullableFunctionContext
 ): string[] {
+  const deps = nullableDeps(context)
   let valueType: string = 'unknown'
   const statementValueType = statement.valueType
 
   if (statementValueType !== null && typeof statementValueType !== 'undefined') {
     valueType = statementValueType
+  }
+
+  if (!isRuntimeNullableType(valueType) && statement.init !== null && typeof statement.init !== 'undefined') {
+    valueType = deps.inferExpressionType(statement.init, context)
   }
 
   const expectedTag =
@@ -782,7 +787,6 @@ export function emitNullableRuntimeValueVariableDeclaration(
     return lines
   }
 
-  const deps = nullableDeps(context)
   const value = emitNullableRuntimeValueInitializer(statement, valueType, context, deps)
 
   const lines: string[] = []

@@ -200,6 +200,18 @@ export function typeRefIterableElementValueType(
 }
 
 export function typeRefValueType(typeRef: TypeRef, libraries: CompilerLibrarySet): ValueType {
+  const valueType = typeRefValueTypeOrNull(typeRef, libraries)
+
+  if (valueType === null) {
+    const typeId = typeRef.kind === 'nominal' ? typeRef.typeId : 'unknown'
+
+    throw new Error(`Missing compiler library native type ${typeId}`)
+  }
+
+  return valueType
+}
+
+export function typeRefValueTypeOrNull(typeRef: TypeRef, libraries: CompilerLibrarySet): ValueType | null {
   if (typeRef.kind === 'parameter' || typeRef.kind === 'unknown') {
     return 'unknown'
   }
@@ -219,7 +231,7 @@ export function typeRefValueType(typeRef: TypeRef, libraries: CompilerLibrarySet
   const nativeType = compilerLibraryNativeTypeForId(libraries, typeRef.typeId)
 
   if (nativeType === null) {
-    throw new Error(`Missing compiler library native type ${typeRef.typeId}`)
+    return null
   }
 
   return nativeType.valueType as ValueType

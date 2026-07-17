@@ -1,10 +1,13 @@
 import type { AnyNode, Diagnostic, IrProgram, SourceLocation } from '../../types.ts'
 import type { LibraryAsyncResultOperationKind } from '../../extensions/types.ts'
+import { typeRefTraitArgument, typeRefValueTypeOrNull } from '../../extensions/type-ref-compatibility.ts'
 import { collectArrowCaptures, functionUsesExternalEventLoop } from './callbacks.ts'
+import { cCompilerLibrarySetValue, cTypeRefMapValue } from '../types.ts'
 import type {
   CCallbackContextWrapper,
   CCallbackWrapper,
   CClassInfo,
+  CCompilerLibrarySet,
   CFunctionParam,
   CFunctionType,
   CObjectShape,
@@ -12,6 +15,7 @@ import type {
   CPromiseChainWrapper,
   CPromiseConstructorHandler,
   CRuntimeArrowCapture,
+  CTypeRefMap,
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression
 } from '../types.ts'
@@ -47,8 +51,10 @@ type PromiseEmitContext = {
   functionNames: PromiseStringMap
   functionParams: PromiseFunctionParamMap
   functionReturnPromiseValueTypes: PromiseStringNullableMap
+  functionReturnTypeRefs: CTypeRefMap
   functionReturnTypes: PromiseStringMap
   jsGlobalRoots: PromiseStringSet
+  libraries: CCompilerLibrarySet
   promiseChainArrowWrappers: PromiseAnyNodeWrapperMap
   runtimeFunctionParams: PromiseFunctionTypeMap
 }
@@ -326,6 +332,19 @@ export function resolveCAsyncFunctionAwaitValueType(
 
   if (!promiseBooleanValueIsTrue(context.functionAsyncFlags.get(name))) {
     return null
+  }
+
+  const libraries = cCompilerLibrarySetValue(context.libraries)
+  const returnTypeRef = cTypeRefMapValue(context.functionReturnTypeRefs, name)
+
+  try {
+    const fulfilledTypeRef = typeRefTraitArgument(returnTypeRef, 'awaitable', 0, libraries)
+
+    if (fulfilledTypeRef !== null) {
+      return typeRefValueTypeOrNull(fulfilledTypeRef, libraries)
+    }
+  } catch {
+    // Invalid descriptor templates are diagnosed by library-set validation.
   }
 
   const valueType = context.functionReturnPromiseValueTypes.get(name)

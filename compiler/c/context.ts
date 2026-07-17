@@ -296,6 +296,7 @@ export type CFunctionContextWithDependencies<
   promiseRejectionValueTypes: CStringMap
   promiseValueTypes: CStringMap
   returnNullable: boolean
+  returnLibraryNative: boolean
   returnFlowUsed: boolean
   returnShape?: CObjectShape | null
   returnTargets: string[]
@@ -458,6 +459,7 @@ export function createFunctionContext<
     promiseConstructorHandlers: new Map(),
     promiseValueTypes: new Map(),
     returnFlowUsed: false,
+    returnLibraryNative: false,
     returnTargets: [],
     runtimeCallbacks: new Set(),
     runtimeArrayElementTypes: new Map(),
@@ -588,6 +590,7 @@ function emitOwnedValueReference(name: string, storage: COwnedValueWriteStorage)
 
 type CReturnValueDeclarationContext = {
   cleanupEnabled?: boolean | null
+  returnLibraryNative?: boolean | null
   returnFlowUsed?: boolean | null
   returnNullable?: boolean | null
   returnShape?: CObjectShape | null
@@ -659,11 +662,15 @@ export function emitReturnValueDeclarations(context: CReturnValueDeclarationCont
     returnType = context.returnType
   }
 
+  const libraryCppType = libraryNativeCppType(context.returnShape)
+
+  if (context.returnLibraryNative === true && context.returnNullable !== true && libraryCppType !== null) {
+    return [`${emitCReturnType(returnType, false, context.returnShape)} inox_return{};`]
+  }
+
   if (returnType === 'promise') {
     return ['inox_promise* inox_return = 0;']
   }
-
-  const libraryCppType = libraryNativeCppType(context.returnShape)
 
   if (context.returnNullable !== true && libraryCppType !== null) {
     return [`${emitCReturnType(returnType, false, context.returnShape)} inox_return{};`]

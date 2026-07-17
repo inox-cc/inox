@@ -1,6 +1,7 @@
 import type {
   CompilerLibrarySet,
   IntrinsicRole,
+  LibraryAsyncResultOperationKind,
   LibraryNativeTypeDescriptor,
   LibraryOperationDescriptor,
   LibraryOperationKind
@@ -201,6 +202,37 @@ export function compilerLibraryOperationForIntrinsic(
   }
 
   return null
+}
+
+/** Resolves an operation supplied by the library selected for an intrinsic async-result role. */
+export function compilerLibraryAsyncResultOperationForIntrinsic(
+  libraries: CompilerLibrarySet,
+  role: IntrinsicRole,
+  asyncResultOperation: LibraryAsyncResultOperationKind
+): LibraryOperationDescriptor | null {
+  const provider = compilerLibraryOperationForIntrinsic(libraries, role, 'construct')
+
+  if (provider === null) {
+    return null
+  }
+
+  let result: LibraryOperationDescriptor | null = null
+
+  for (let index = 0; index < libraries.operations.length; index = index + 1) {
+    const operation = libraries.operations[index]
+
+    if (operation.libraryId !== provider.libraryId || operation.asyncResultOperation !== asyncResultOperation) {
+      continue
+    }
+
+    if (result !== null) {
+      return null
+    }
+
+    result = operation
+  }
+
+  return result
 }
 
 export function compilerLibraryNativeTypeForIntrinsic(

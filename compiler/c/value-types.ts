@@ -1,4 +1,5 @@
 import {
+  compilerLibraryAsyncResultOperationForIntrinsic,
   compilerLibraryNativeTypeForId,
   compilerLibraryNativeTypeForIntrinsic,
   resolveCompilerLibrarySet
@@ -14,6 +15,7 @@ import {
 import type {
   CompilerLibrarySet,
   IntrinsicRole,
+  LibraryAsyncResultOperationKind,
   LibraryNativeIterationDescriptor,
   TypeRef
 } from '../extensions/types.ts'
@@ -24,7 +26,7 @@ import {
   cOptionalCompilerLibrarySetValue,
   cTypeRefValue
 } from './types.ts'
-import type { CCompilerLibrarySet, CFunctionParam, CFunctionType, CTypeRef } from './types.ts'
+import type { CCompilerLibrarySet, CFunctionParam, CFunctionType, CObjectShape, CTypeRef } from './types.ts'
 
 type CLibraryNativeShape = {
   libraryCValueAdapter?: string | null
@@ -78,6 +80,36 @@ export function cIterableElementValueType(
   libraries: CCompilerLibrarySet
 ): string | null {
   return typeRefIterableElementValueType(cTypeRefValue(typeRef), cCompilerLibrarySetValue(libraries))
+}
+
+export function cTypeRefNativeShape(
+  typeRef: CTypeRef | null | undefined,
+  libraries: CCompilerLibrarySet
+): CObjectShape | null {
+  const resolvedTypeRef = cTypeRefValue(typeRef)
+
+  if (resolvedTypeRef === null || resolvedTypeRef.kind !== 'nominal') {
+    return null
+  }
+
+  const typeId = resolvedTypeRef.typeId
+
+  if (typeId === null || typeof typeId === 'undefined' || typeId === '') {
+    return null
+  }
+
+  const nativeType = compilerLibraryNativeTypeForId(cCompilerLibrarySetValue(libraries), typeId)
+
+  if (nativeType === null) {
+    return null
+  }
+
+  return {
+    fields: [],
+    libraryCValueAdapter: nativeType.cValueAdapter ?? null,
+    libraryCppType: nativeType.cppType,
+    libraryTypeId: nativeType.typeId
+  }
 }
 
 export function cIterableElementFunctionType(
@@ -295,6 +327,19 @@ export function compilerLibraryIntrinsicNativeCppType(
   role: IntrinsicRole
 ): string | null {
   return compilerLibraryNativeTypeForIntrinsic(cCompilerLibrarySetValue(libraries), role, 'construct')?.cppType ?? null
+}
+
+export function compilerLibraryIntrinsicAsyncResultCExpression(
+  libraries: CCompilerLibrarySet,
+  operation: LibraryAsyncResultOperationKind
+): string | null {
+  return (
+    compilerLibraryAsyncResultOperationForIntrinsic(
+      cCompilerLibrarySetValue(libraries),
+      'async-result',
+      operation
+    )?.cExpression ?? null
+  )
 }
 
 export function compilerLibraryIntrinsicNativeCAwaitExpression(

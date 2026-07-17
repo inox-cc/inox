@@ -61,6 +61,7 @@ import type {
 import {
   cIterableElementValueType,
   cRuntimeValueTag,
+  cTypeRefNativeShape,
   emitCObjectParamName,
   emitCReturnType,
   emitCScalarParamName,
@@ -297,13 +298,8 @@ export function emitFunctionDeclaration(
   const returnNullable = returnInfo.returnNullable
   const params = resolveFunctionDeclarationParams(statement.name, statement.params, baseContext)
   const context: CDeclarationFunctionContext = createFunctionContext(baseContext, returnType, returnNullable)
-  const returnShape = context.functionReturnShapes.get(statement.name)
-
-  if (returnShape !== null && typeof returnShape !== 'undefined') {
-    context.returnShape = returnShape
-  } else {
-    context.returnShape = null
-  }
+  context.returnShape = physicalReturnShape(statement, context.functionReturnShapes.get(statement.name), context)
+  context.returnLibraryNative = hasPhysicalNativeReturn(statement, context)
 
   context.throwingFunction = isThrowingFunctionName(statement.name, context)
   context.externalEventLoop = functionTakesEventLoopParam(statement.name, context)
@@ -482,7 +478,7 @@ export function emitFunctionHead(statement: CNode, context: CEmitContext): strin
   const returnType = returnInfo.returnType
   const returnNullable = returnInfo.returnNullable
   const functionParams = resolveFunctionDeclarationParams(statement.name, statement.params, context)
-  const returnShape: CObjectShape | null | undefined = context.functionReturnShapes.get(statement.name)
+  const returnShape = physicalReturnShape(statement, context.functionReturnShapes.get(statement.name), context)
   const params: string[] = []
 
   for (let index = 0; index < functionParams.length; index = index + 1) {
@@ -747,7 +743,8 @@ export function emitClassMethodDeclaration(
   const params = method.params
   const methodEffectName = irClassMethodEffectName(info.name, method.name)
 
-  context.returnShape = method.returnShape ?? null
+  context.returnShape = physicalReturnShape(method, method.returnShape, context)
+  context.returnLibraryNative = hasPhysicalNativeReturn(method, context)
   context.throwingFunction = isThrowingClassMethod(info, method, baseContext)
   context.externalEventLoop = functionTakesEventLoopParam(methodEffectName, baseContext)
   context.functionReturnOut = 'inox_out'
@@ -1095,7 +1092,7 @@ export function emitClassMethodPrototype(info: CClassInfo, method: CNode, contex
     return `inox_status ${emitCIdentifier(method.name)}(${joinDeclarationParams(params)});`
   }
 
-  return `${emitCReturnType(method.returnType, method.returnNullable, method.returnShape)} ${emitCIdentifier(method.name)}(${joinDeclarationParams(
+  return `${emitCReturnType(method.returnType, method.returnNullable, physicalReturnShape(method, method.returnShape, context))} ${emitCIdentifier(method.name)}(${joinDeclarationParams(
     params
   )});`
 }
@@ -1112,7 +1109,7 @@ export function emitClassMethodHead(info: CClassInfo, method: CNode, context: CE
     return `inox_status ${name}(${joinDeclarationParams(params)})`
   }
 
-  return `${emitCReturnType(method.returnType, method.returnNullable, method.returnShape)} ${name}(${joinDeclarationParams(params)})`
+  return `${emitCReturnType(method.returnType, method.returnNullable, physicalReturnShape(method, method.returnShape, context))} ${name}(${joinDeclarationParams(params)})`
 }
 
 function emitRuntimeClassMethodHead(info: CClassInfo, method: CNode, context: CEmitContext): string {
@@ -1123,7 +1120,7 @@ function emitRuntimeClassMethodHead(info: CClassInfo, method: CNode, context: CE
     return `static inox_status ${name}(${joinDeclarationParams(params)})`
   }
 
-  return `static ${emitCReturnType(method.returnType, method.returnNullable, method.returnShape)} ${name}(${joinDeclarationParams(params)})`
+  return `static ${emitCReturnType(method.returnType, method.returnNullable, physicalReturnShape(method, method.returnShape, context))} ${name}(${joinDeclarationParams(params)})`
 }
 
 function emitRuntimeClassMethodParams(info: CClassInfo, method: CNode, context: CEmitContext): string[] {
@@ -1144,7 +1141,7 @@ function emitRuntimeClassMethodParams(info: CClassInfo, method: CNode, context: 
   if (isThrowingClassMethod(info, method, context)) {
     if (method.returnType !== 'void') {
       params.push(
-        `${emitThrowingFunctionOutType(method.returnType, method.returnNullable === true, method.returnShape)}* inox_out`
+        `${emitThrowingFunctionOutType(method.returnType, method.returnNullable === true, physicalReturnShape(method, method.returnShape, context))}* inox_out`
       )
     }
 
@@ -1170,7 +1167,7 @@ function emitClassMethodParams(info: CClassInfo, method: CNode, context: CEmitCo
   if (isThrowingClassMethod(info, method, context)) {
     if (method.returnType !== 'void') {
       params.push(
-        `${emitThrowingFunctionOutType(method.returnType, method.returnNullable === true, method.returnShape)}* inox_out`
+        `${emitThrowingFunctionOutType(method.returnType, method.returnNullable === true, physicalReturnShape(method, method.returnShape, context))}* inox_out`
       )
     }
 
@@ -1225,6 +1222,26 @@ function emitClassMethodParam(param: CFunctionParam, index: number, method: CNod
   }
 
   return `${emitCType(param.valueType)} ${emitCLocalName(param.name)}`
+}
+
+function physicalReturnShape(
+  declaration: CNode,
+  fallback: CObjectShape | null | undefined,
+  context: CEmitContext
+): CObjectShape | null {
+  if (!cBooleanValueIsTrue(declaration.async)) {
+    const nativeShape = cTypeRefNativeShape(declaration.returnTypeRef, context.libraries)
+
+    if (nativeShape !== null) {
+      return nativeShape
+    }
+  }
+
+  return fallback ?? null
+}
+
+function hasPhysicalNativeReturn(declaration: CNode, context: CEmitContext): boolean {
+  return !cBooleanValueIsTrue(declaration.async) && cTypeRefNativeShape(declaration.returnTypeRef, context.libraries) !== null
 }
 
 function resolveCFunctionReturnInfo(statement: CNode, context: CEmitContext): CFunctionReturnInfo {

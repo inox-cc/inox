@@ -171,6 +171,7 @@ import {
   cIterableElementValueType,
   cRuntimeValueTag,
   cTypeRefDeclaredName,
+  compilerLibraryIntrinsicAsyncResultCExpression,
   compilerLibraryIntrinsicNativeCAwaitExpression,
   compilerLibraryIntrinsicNativeCppType,
   isManagedRuntimeReturnType,
@@ -2500,11 +2501,24 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
     return emitUninitializedScalarVariableDeclaration(statement, context)
   }
 
-  if (statement.nullable === true && isRuntimeNullableType(statement.valueType)) {
+  const inferred = inferScalarDeclarationValueType(statement, context)
+  const optionalChain =
+    statement.init.type === 'OptionalMemberExpression' ||
+    statement.init.type === 'OptionalIndexExpression' ||
+    statement.init.type === 'OptionalCallExpression'
+  const nullableValueType = isRuntimeNullableType(statement.valueType)
+    ? statement.valueType
+    : optionalChain
+      ? inferred
+      : 'unknown'
+
+  if (
+    (statement.nullable === true || statement.init.nullable === true || optionalChain) &&
+    isRuntimeNullableType(nullableValueType)
+  ) {
     return emitNullableRuntimeValueVariableDeclaration(statement, context)
   }
 
-  const inferred = inferScalarDeclarationValueType(statement, context)
   const declared = knownValueType(statement.valueType)
   const variableType = inferred === 'function' ? 'function' : (declared ?? inferred)
   context.variables.set(statement.name, variableType)
@@ -6915,6 +6929,26 @@ function emitPreparedAsyncFunctionPromiseCallExpression(
     registerOwnedPromise(context, out, valueType, 'unknown')
   }
 
+  const resolveExpression = compilerLibraryIntrinsicAsyncResultCExpression(context.libraries, 'resolve')
+
+  if (resolveExpression === null) {
+    pushDiagnostic(
+      context,
+      diagnostic(
+        'INOX_C_ASYNC',
+        'the configured async-result provider does not define C++ resolve lowering',
+        expression.loc
+      )
+    )
+
+    return {
+      lines: call.lines,
+      expression: out,
+      valueType,
+      rejectionValueType: 'unknown'
+    }
+  }
+
   pushAll(lines, call.lines)
 
   if (managedValue !== null && typeof managedValue !== 'undefined') {
@@ -6925,10 +6959,12 @@ function emitPreparedAsyncFunctionPromiseCallExpression(
       lines.push(valueCheck)
     }
 
-    lines.push(emitStatusCheck(`inox_promise_resolved(${emitEventLoopReference(context)}, ${value}, &${out})`, context))
+    lines.push(`${out} = ${resolveExpression}(${value});`)
+    lines.push(emitRuntimeTypeCheck(`!${out}.valid()`, context))
     pushAll(lines, emitPrepareOwnedValueWrite(managedValue))
   } else {
-    lines.push(emitStatusCheck(`inox_promise_resolved(${emitEventLoopReference(context)}, ${value}, &${out})`, context))
+    lines.push(`${out} = ${resolveExpression}(${value});`)
+    lines.push(emitRuntimeTypeCheck(`!${out}.valid()`, context))
   }
 
   return {
@@ -7107,8 +7143,27 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(
     }
   }
 
-  const rejectedCall = `inox_promise_rejected(${emitEventLoopReference(context)}, inox_error, &${out})`
-  const resolvedCall = `inox_promise_resolved(${emitEventLoopReference(context)}, ${fulfilledValue}, &${out})`
+  const rejectExpression = compilerLibraryIntrinsicAsyncResultCExpression(context.libraries, 'reject')
+  const resolveExpression = compilerLibraryIntrinsicAsyncResultCExpression(context.libraries, 'resolve')
+
+  if (rejectExpression === null || resolveExpression === null) {
+    pushDiagnostic(
+      context,
+      diagnostic(
+        'INOX_C_ASYNC',
+        'the configured async-result provider does not define C++ settlement lowering',
+        expression.loc
+      )
+    )
+
+    return {
+      lines: prepared.lines,
+      expression: out,
+      valueType,
+      rejectionValueType
+    }
+  }
+
   const lines: string[] = []
 
   pushAll(lines, prepared.lines)
@@ -7116,7 +7171,8 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(
   pushAll(lines, resultPreparationLines)
   lines.push(`inox_status ${status} = ${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')});`)
   lines.push(`if (${status} == INOX_ERR_THROW) {`)
-  lines.push(`  ${emitStatusCheck(rejectedCall, context)}`)
+  lines.push(`  ${out} = ${rejectExpression}(inox_error);`)
+  lines.push(`  ${emitRuntimeTypeCheck(`!${out}.valid()`, context)}`)
   pushIndented(lines, emitPrepareOwnedValueWrite('inox_error'), '  ')
   lines.push('} else {')
   lines.push(`  if (${status} != INOX_OK) ${emitFailureStatement(context)}`)
@@ -7125,7 +7181,8 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(
     lines.push(`  ${valueCheck}`)
   }
 
-  lines.push(`  ${emitStatusCheck(resolvedCall, context)}`)
+  lines.push(`  ${out} = ${resolveExpression}(${fulfilledValue});`)
+  lines.push(`  ${emitRuntimeTypeCheck(`!${out}.valid()`, context)}`)
   pushAll(lines, managedResultResetLines)
   lines.push('}')
 

@@ -90,6 +90,7 @@ test('Array, Set и Promise принадлежат discoverable global packages 
       declarationNames: ['Promise'],
       valueType: 'promise',
       cppType: 'inox::Promise',
+      cValueAdapter: 'inox::Promise($value)',
       baseTypeIds: [],
       runtimeRequirements: ['global:promise#promise'],
       cAwaitExpression: '$value.awaitValue()',

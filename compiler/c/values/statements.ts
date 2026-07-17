@@ -2128,15 +2128,28 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
   }
 
   const statementValueType = statement.valueType
+  const optionalChain =
+    statement.init.type === 'OptionalMemberExpression' ||
+    statement.init.type === 'OptionalIndexExpression' ||
+    statement.init.type === 'OptionalCallExpression'
+  let nullableValueType = 'unknown'
 
   if (
-    statement.nullable === true &&
     statementValueType !== null &&
     typeof statementValueType !== 'undefined' &&
     isRuntimeNullableType(statementValueType)
   ) {
+    nullableValueType = statementValueType
+  } else if (optionalChain) {
+    nullableValueType = deps.inferExpressionType(statement.init, context)
+  }
+
+  if (
+    (statement.nullable === true || statement.init.nullable === true || optionalChain) &&
+    isRuntimeNullableType(nullableValueType)
+  ) {
     const lines = emitNullableRuntimeValueVariableDeclaration(statement, context)
-    registerRuntimeValueMetadata(statement.name, statementValueType, statement, statement.init, context)
+    registerRuntimeValueMetadata(statement.name, nullableValueType, statement, statement.init, context)
 
     return {
       lines,
@@ -3469,16 +3482,29 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
   }
 
   const statementValueType = statement.valueType
+  const optionalChain =
+    statement.init.type === 'OptionalMemberExpression' ||
+    statement.init.type === 'OptionalIndexExpression' ||
+    statement.init.type === 'OptionalCallExpression'
+  let nullableValueType = 'unknown'
 
   if (
-    statement.nullable === true &&
     statementValueType !== null &&
     typeof statementValueType !== 'undefined' &&
     isRuntimeNullableType(statementValueType)
   ) {
+    nullableValueType = statementValueType
+  } else if (optionalChain) {
+    nullableValueType = deps.inferExpressionType(statement.init, context)
+  }
+
+  if (
+    (statement.nullable === true || statement.init.nullable === true || optionalChain) &&
+    isRuntimeNullableType(nullableValueType)
+  ) {
     const lines = emitNullableRuntimeValueVariableDeclaration(statement, context)
 
-    registerRuntimeValueMetadata(statement.name, statementValueType, statement, statement.init, context)
+    registerRuntimeValueMetadata(statement.name, nullableValueType, statement, statement.init, context)
 
     return lines
   }

@@ -2909,8 +2909,8 @@ function addRuntimeArrowCaptureReference(reference: AnyNode, state: RuntimeArrow
   }
 
   const name = reference.path[0]
-  const context: AnyNode = state.context
-  const functionNames: CallbackStringMap = context.functionNames
+  const context = state.context
+  const functionNames = context.functionNames
 
   const local = lookupCallbackBinding(name, state.localScopes)
   if (local) {
