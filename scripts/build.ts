@@ -1,6 +1,7 @@
 import { chmod, copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, posix, relative, resolve } from 'node:path'
 import { compileMemoryPackageToCModules, compileMemoryPackageToIrModules } from '../compiler/compiler.ts'
+import { compilerLibraryHasModuleDeclaration } from '../compiler/extensions/library-set.ts'
 import {
   collectIrFunctionEffectsWithExternalEffects,
   collectIrStoredFunctionEffects,
@@ -10,7 +11,6 @@ import { tokenize } from '../compiler/lexer.ts'
 import { createModuleDeclarationProgram, emitModuleDeclarationContract } from '../compiler/modules/declarations.ts'
 import { emitModuleFunctionEffectsContract } from '../compiler/modules/function-effects.ts'
 import { parse } from '../compiler/parser.ts'
-import { isRuntimeBuiltinImportSource } from '../compiler/runtime-builtins.ts'
 import type { AnyNode, IrFunctionEffect, IrProgram, ModuleDeclarationImport, ProgramNode } from '../compiler/types.ts'
 import { quietCMakeConfigureArgs } from './lib/cmake-args.ts'
 import { generateCompilerLibraryRegistry } from './lib/compiler-library-registry.ts'
@@ -183,7 +183,7 @@ async function emitCompilerDeclarationContracts(
   stdlibDeclarationFiles: SourceFile[],
   bootstrapLibraries: CompilerLibrarySet
 ): Promise<DeclarationContract[]> {
-  const modules = compilerSourceModules(compilerFiles)
+  const modules = compilerSourceModules(compilerFiles, bootstrapLibraries)
   const contracts = seedCompilerDeclarationContracts(modules)
   const orderedFiles = orderCompilerFilesByDependencies(driverPath, modules)
 
@@ -220,7 +220,7 @@ async function refineCompilerDeclarationContracts(
 
   const functionEffects: FunctionEffectMap = new Map()
 
-  addDeclarationFunctionEffects(functionEffects, compiledModules)
+  addDeclarationFunctionEffects(functionEffects, compiledModules, bootstrapLibraries)
   replaceDeclarationContractFunctionEffects(refined, functionEffects)
 
   return refined
@@ -347,7 +347,10 @@ function seedCompilerDeclarationProgram(ast: ProgramNode): ProgramNode {
   return createModuleDeclarationProgram(ast)
 }
 
-function compilerSourceModules(compilerFiles: SourceFile[]): CompilerSourceModule[] {
+function compilerSourceModules(
+  compilerFiles: SourceFile[],
+  libraries: CompilerLibrarySet
+): CompilerSourceModule[] {
   const sourcePaths = new Set<string>()
 
   for (const file of compilerFiles) {
@@ -366,14 +369,19 @@ function compilerSourceModules(compilerFiles: SourceFile[]): CompilerSourceModul
     modules.push({
       file,
       ast,
-      dependencies: compilerSourceModuleDependencies(file.path, ast, sourcePaths)
+      dependencies: compilerSourceModuleDependencies(file.path, ast, sourcePaths, libraries)
     })
   }
 
   return modules
 }
 
-function compilerSourceModuleDependencies(path: string, ast: ProgramNode, sourcePaths: Set<string>): string[] {
+function compilerSourceModuleDependencies(
+  path: string,
+  ast: ProgramNode,
+  sourcePaths: Set<string>,
+  libraries: CompilerLibrarySet
+): string[] {
   const dependencies: Set<string> = new Set()
 
   for (const item of ast.body) {
@@ -381,7 +389,7 @@ function compilerSourceModuleDependencies(path: string, ast: ProgramNode, source
       continue
     }
 
-    if (isRuntimeBuiltinImportSource(item.source)) {
+    if (compilerLibraryHasModuleDeclaration(libraries, item.source)) {
       continue
     }
 
@@ -519,7 +527,11 @@ function replaceDeclarationContractSource(
   throw new Error(`missing declaration contract for ${sourcePath}`)
 }
 
-function addDeclarationFunctionEffects(functionEffects: FunctionEffectMap, modules: DeclarationEffectModule[]): void {
+function addDeclarationFunctionEffects(
+  functionEffects: FunctionEffectMap,
+  modules: DeclarationEffectModule[],
+  libraries: CompilerLibrarySet
+): void {
   const modulesByPath = declarationModulesByPath(modules)
   const modulePaths = new Set(modulesByPath.keys())
   const visiting: Set<string> = new Set()
@@ -538,7 +550,8 @@ function addDeclarationFunctionEffects(functionEffects: FunctionEffectMap, modul
       modulesByPath,
       modulePaths,
       visiting,
-      cache
+      cache,
+      libraries
     )
     const effectiveFunctionEffectsByName = declarationFunctionEffectsByName(effectiveFunctionEffects)
     const effects: IrFunctionEffect[] = []
@@ -598,7 +611,8 @@ function collectDeclarationModuleFunctionEffects(
   modulesByPath: Map<string, DeclarationEffectModule>,
   modulePaths: Set<string>,
   visiting: Set<string>,
-  cache: FunctionEffectMap
+  cache: FunctionEffectMap,
+  libraries: CompilerLibrarySet
 ): IrFunctionEffect[] {
   const cached = cache.get(module.path)
 
@@ -624,7 +638,14 @@ function collectDeclarationModuleFunctionEffects(
 
   visiting.add(module.path)
 
-  const importedEffects = collectDeclarationImportedFunctionEffects(module, modulesByPath, modulePaths, visiting, cache)
+  const importedEffects = collectDeclarationImportedFunctionEffects(
+    module,
+    modulesByPath,
+    modulePaths,
+    visiting,
+    cache,
+    libraries
+  )
   const programs = [ir]
   const inferredFunctionEffects = collectIrFunctionEffectsWithExternalEffects(programs, importedEffects, true)
   const storedFunctionEffects = collectIrStoredFunctionEffects(programs)
@@ -645,13 +666,17 @@ function collectDeclarationImportedFunctionEffects(
   modulesByPath: Map<string, DeclarationEffectModule>,
   modulePaths: Set<string>,
   visiting: Set<string>,
-  cache: FunctionEffectMap
+  cache: FunctionEffectMap,
+  libraries: CompilerLibrarySet
 ): IrFunctionEffect[] {
   const effects: IrFunctionEffect[] = []
   const declarations = declarationImportDeclarations(module)
 
   for (const declaration of declarations) {
-    if (declaration.typeOnly || isRuntimeBuiltinImportSource(declaration.source)) {
+    if (
+      declaration.typeOnly ||
+      compilerLibraryHasModuleDeclaration(libraries, declaration.source)
+    ) {
       continue
     }
 
@@ -672,7 +697,8 @@ function collectDeclarationImportedFunctionEffects(
       modulesByPath,
       modulePaths,
       visiting,
-      cache
+      cache,
+      libraries
     )
     const specifiers = declaration.specifiers
 

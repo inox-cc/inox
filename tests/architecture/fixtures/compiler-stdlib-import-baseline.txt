@@ -1,5 +1,0 @@
-compiler/modules/graph.ts -> ../stdlib/declarations.ts
-compiler/modules/graph.ts -> ../stdlib/node/modules.ts
-compiler/runtime-builtins.ts -> ./stdlib/node/modules.ts
-compiler/stdlib/declarations.ts -> ./node/modules.ts
-compiler/stdlib/node/modules.ts -> ./descriptor.ts

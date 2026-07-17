@@ -2,6 +2,7 @@ import type {
   CompilerLibrarySet,
   IntrinsicRole,
   LibraryAsyncResultOperationKind,
+  LibraryDeclarationDescriptor,
   LibraryNativeTypeDescriptor,
   LibraryOperationDescriptor,
   LibraryOperationKind
@@ -360,15 +361,22 @@ export function compilerLibraryPrimitiveReceiverTypeId(name: string): string {
 }
 
 export function compilerLibraryHasModuleDeclaration(libraries: CompilerLibrarySet, source: string): boolean {
+  return compilerLibraryModuleDeclarationForSource(libraries, source) !== null
+}
+
+export function compilerLibraryModuleDeclarationForSource(
+  libraries: CompilerLibrarySet,
+  source: string
+): LibraryDeclarationDescriptor | null {
   for (let index = 0; index < libraries.declarations.length; index = index + 1) {
     const declaration = libraries.declarations[index]
 
     if (declaration.kind === 'module' && declaration.source === source && declaration.compilerImplemented === true) {
-      return true
+      return declaration
     }
   }
 
-  return false
+  return null
 }
 
 function compilerLibraryIdForImportSource(libraries: CompilerLibrarySet, source: string): string | null {

@@ -1,10 +1,12 @@
 import { diagnostic, throwDiagnostics } from '../diagnostics.ts'
-import { resolveCompilerLibrarySet } from '../extensions/library-set.ts'
+import {
+  compilerLibraryHasModuleDeclaration,
+  resolveCompilerLibrarySet
+} from '../extensions/library-set.ts'
 import { compilerLibraryOptionsFingerprint } from '../extensions/library-options.ts'
 import type { CompilerHost } from '../host.ts'
 import { collectIrTopLevelNodes, lowerHirToIr } from '../ir.ts'
 import { emitModuleDeclarationContractResult } from '../modules/declarations.ts'
-import { isRuntimeBuiltinImportSource } from '../runtime-builtins.ts'
 import type { AnyNode, Diagnostic, IrProgram, ModuleGraph, ModuleRecord } from '../types.ts'
 import { formatGeneratedC } from './format.ts'
 import { emitCFunctionName, emitCIdentifier } from './identifiers.ts'
@@ -59,6 +61,7 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
   const modulePaths: CModulePathSet = new Set()
   const modulePathList: string[] = []
   const host = options.host
+  const libraries = resolveCompilerLibrarySet(cOptionalCompilerLibrarySetValue(options.libraries))
   const configuredSourceRoot = options.sourceRoot
   let sourceRootInput = ''
   const plans: CModulePlan[] = []
@@ -137,7 +140,7 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
       if (
         declaration.typeOnly ||
         !hasRuntimeImportSpecifier(declaration) ||
-        isRuntimeBuiltinImportSource(declaration.source)
+        compilerLibraryHasModuleDeclaration(libraries, declaration.source)
       ) {
         continue
       }

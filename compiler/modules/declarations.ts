@@ -57,6 +57,69 @@ type DeclarationValueMetadata = {
   declaredType: string | null
 }
 
+export function findModuleDeclarationExport(program: ProgramNode, name: string): AnyNode | null {
+  for (const item of program.body) {
+    if (item.exported === true && item.name === name) {
+      return item
+    }
+  }
+
+  return null
+}
+
+export function moduleDeclarationExportValueType(program: ProgramNode, name: string): ValueType | null {
+  const declaration = findModuleDeclarationExport(program, name)
+
+  if (declaration === null || typeof declaration === 'undefined') {
+    return null
+  }
+
+  return moduleDeclarationNodeValueType(declaration)
+}
+
+export function moduleDeclarationNodeValueType(declaration: AnyNode): ValueType | null {
+  if (declaration.type === 'FunctionDeclaration' || declaration.type === 'ClassDeclaration') {
+    return 'function'
+  }
+
+  if (declaration.type !== 'VariableDeclaration') {
+    return null
+  }
+
+  const valueType = declaration.valueType
+
+  if (typeof valueType === 'string' && valueType !== '' && valueType !== 'unknown') {
+    return valueType.slice(0)
+  }
+
+  const declaredType = declaration.declaredType
+
+  if (typeof declaredType !== 'string' || declaredType === '') {
+    return typeof valueType === 'string' && valueType !== '' ? valueType.slice(0) : 'unknown'
+  }
+
+  return moduleDeclarationTypeNameValueType(declaredType.slice(0))
+}
+
+function moduleDeclarationTypeNameValueType(typeName: string): ValueType {
+  if (
+    typeName === 'boolean' ||
+    typeName === 'function' ||
+    typeName === 'number' ||
+    typeName === 'string' ||
+    typeName === 'unknown' ||
+    typeName === 'void'
+  ) {
+    return typeName
+  }
+
+  if (typeName.startsWith('array<') || typeName.endsWith('[]')) {
+    return 'array'
+  }
+
+  return 'object'
+}
+
 export function createModuleDeclarationProgram(program: ProgramNode): ProgramNode {
   const body: AnyNode[] = []
   const promotedTypeImportNames = collectPromotedTypeImportNames(program)

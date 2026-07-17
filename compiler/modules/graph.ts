@@ -1,21 +1,27 @@
 import { checkProgram } from '../checker.ts'
 import { diagnostic, throwDiagnostics } from '../diagnostics.ts'
 import { compilerLibraryGlobalTypeNames } from '../extensions/global-declarations.ts'
-import { resolveCompilerLibrarySet } from '../extensions/library-set.ts'
+import {
+  compilerLibraryHasModuleDeclaration,
+  compilerLibraryModuleDeclarationForSource,
+  resolveCompilerLibrarySet
+} from '../extensions/library-set.ts'
 import { compilerLibraryOptionsFingerprint } from '../extensions/library-options.ts'
-import type { CompilerLibraryLiteralTypeInference } from '../extensions/types.ts'
+import type {
+  CompilerLibraryLiteralTypeInference,
+  CompilerLibrarySet
+} from '../extensions/types.ts'
 import type { CompilerHost } from '../host.ts'
 import { lowerHirToIr } from '../ir.ts'
 import { tokenize } from '../lexer.ts'
 import { lowerProgram } from '../lower.ts'
 import { parse } from '../parser.ts'
-import { isRuntimeBuiltinImportSource } from '../runtime-builtins.ts'
 import {
-  findStdlibDeclarationExport,
-  isStdlibDeclarationRuntimeImportTypingSource,
-  stdlibDeclarationNodeValueType
-} from '../stdlib/declarations.ts'
-import { stdlibModuleDeclarationPath } from '../stdlib/node/modules.ts'
+  createModuleDeclarationProgram,
+  findModuleDeclarationExport,
+  moduleDeclarationNodeValueType,
+  parseModuleDeclarationContractResult
+} from './declarations.ts'
 import type {
   AnyNode,
   CompileOptions,
@@ -27,7 +33,6 @@ import type {
   ProgramNode,
   SourceLocation
 } from '../types.ts'
-import { createModuleDeclarationProgram, parseModuleDeclarationContractResult } from './declarations.ts'
 import { collectExports } from './exports.ts'
 import { parseModuleFunctionEffectsContractResult } from './function-effects.ts'
 import { isRelativeSpecifier, resolveExistingSource, resolveImport as resolveImportSpecifier } from './resolve.ts'
@@ -42,12 +47,12 @@ import {
 type ModuleGraphContext = {
   entry: string
   host: CompilerHost
+  libraries: CompilerLibrarySet
   options: CompileOptions
   declarationImports: Map<string, ModuleGraphDeclarationImport>
   modules: Map<string, ModuleRecord>
   order: ModuleRecord[]
-  missingStdlibDeclarationPrograms: Set<string>
-  stdlibDeclarationPrograms: Map<string, ProgramNode>
+  libraryDeclarationPrograms: Map<string, ProgramNode>
   visiting: Set<string>
   diagnostics: Diagnostic[]
   libraryGlobalTypeNames: Set<string>
@@ -90,9 +95,11 @@ export function buildModuleGraphWithHostSync(
   libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
 ): ModuleGraph {
   const entryPath = resolveExistingSource(entry, host)
+  const libraries = resolveCompilerLibrarySet(options.libraries)
   const context: ModuleGraphContext = {
     entry: entryPath,
     host,
+    libraries,
     options: {
       target: options.target,
       callMain: options.callMain,
@@ -100,7 +107,7 @@ export function buildModuleGraphWithHostSync(
       capabilities: options.capabilities,
       declarationImports: options.declarationImports,
       host,
-      libraries: options.libraries,
+      libraries,
       libraryOptions: options.libraryOptions,
       loopBackend: options.loopBackend,
       profile: options.profile,
@@ -109,11 +116,10 @@ export function buildModuleGraphWithHostSync(
     declarationImports: prepareModuleGraphDeclarationImports(options.declarationImports, host),
     modules: new Map(),
     order: [],
-    missingStdlibDeclarationPrograms: new Set(),
-    stdlibDeclarationPrograms: new Map(),
+    libraryDeclarationPrograms: new Map(),
     visiting: new Set(),
     diagnostics: [],
-    libraryGlobalTypeNames: compilerLibraryGlobalTypeNames(resolveCompilerLibrarySet(options.libraries).declarations)
+    libraryGlobalTypeNames: compilerLibraryGlobalTypeNames(libraries.declarations)
   }
 
   visitModuleGraphFile(context, entryPath, libraryLiteralTypeInference)
@@ -209,8 +215,8 @@ function visitModuleGraphFile(
     const declarationIndex = importIndex
     importIndex = importIndex + 1
 
-    if (isRuntimeBuiltinImportSource(item.source)) {
-      prepareStdlibRuntimeImportDeclarations(context, item, declarationIndex, importTypeDeclarations)
+    if (compilerLibraryHasModuleDeclaration(context.libraries, item.source)) {
+      prepareLibraryRuntimeImportDeclarations(context, item, declarationIndex, importTypeDeclarations)
       continue
     }
 
@@ -698,7 +704,7 @@ function prepareModuleTypeImportDeclarations(
       continue
     }
 
-    if (isRuntimeBuiltinImportSource(item.source)) {
+    if (compilerLibraryHasModuleDeclaration(context.libraries, item.source)) {
       continue
     }
 
@@ -784,7 +790,7 @@ function hasTypeOnlyImportSpecifier(item: AnyNode): boolean {
   return false
 }
 
-function prepareStdlibRuntimeImportDeclarations(
+function prepareLibraryRuntimeImportDeclarations(
   context: ModuleGraphContext,
   item: AnyNode,
   declarationIndex: number,
@@ -794,7 +800,7 @@ function prepareStdlibRuntimeImportDeclarations(
     return
   }
 
-  const importedProgram = stdlibRuntimeImportDeclarationProgram(context, item.source)
+  const importedProgram = libraryRuntimeImportDeclarationProgram(context, item.source)
 
   if (importedProgram === null || typeof importedProgram === 'undefined') {
     return
@@ -810,7 +816,7 @@ function prepareStdlibRuntimeImportDeclarations(
       continue
     }
 
-    const exported = findStdlibDeclarationExport(importedProgram, specifier.imported)
+    const exported = findModuleDeclarationExport(importedProgram, specifier.imported)
 
     if (exported === null || typeof exported === 'undefined') {
       continue
@@ -839,93 +845,32 @@ function prepareStdlibRuntimeImportDeclarations(
   }
 }
 
-function stdlibRuntimeImportDeclarationProgram(context: ModuleGraphContext, source: string): ProgramNode | null {
-  if (!isStdlibDeclarationRuntimeImportTypingSource(source)) {
+function libraryRuntimeImportDeclarationProgram(context: ModuleGraphContext, source: string): ProgramNode | null {
+  if (context.libraryDeclarationPrograms.has(source)) {
+    return context.libraryDeclarationPrograms.get(source) ?? null
+  }
+
+  const declaration = compilerLibraryModuleDeclarationForSource(context.libraries, source)
+
+  if (declaration === null) {
     return null
   }
 
-  if (context.stdlibDeclarationPrograms.has(source)) {
-    return context.stdlibDeclarationPrograms.get(source) ?? null
-  }
-
-  if (context.missingStdlibDeclarationPrograms.has(source)) {
-    return null
-  }
-
-  const declarationPath = stdlibRuntimeImportDeclarationPath(context, source)
-
-  if (declarationPath === null || typeof declarationPath === 'undefined') {
-    context.missingStdlibDeclarationPrograms.add(source)
-    return null
-  }
-
-  const declarationSource = context.host.readFileSync(declarationPath)
-
-  if (declarationSource === null || typeof declarationSource === 'undefined') {
-    context.missingStdlibDeclarationPrograms.add(source)
-    return null
-  }
-
-  const result = parseModuleDeclarationContractResult(declarationSource, declarationPath)
+  const result = parseModuleDeclarationContractResult(
+    declaration.declarationSource,
+    declaration.source
+  )
 
   for (const item of result.diagnostics) {
     context.diagnostics.push(item)
   }
 
   if (result.diagnostics.length > 0) {
-    context.missingStdlibDeclarationPrograms.add(source)
     return null
   }
 
-  context.stdlibDeclarationPrograms.set(source, result.program)
+  context.libraryDeclarationPrograms.set(source, result.program)
   return result.program
-}
-
-function stdlibRuntimeImportDeclarationPath(context: ModuleGraphContext, source: string): string | null {
-  const relativePath = stdlibModuleDeclarationPath(source)
-
-  if (relativePath === null || typeof relativePath === 'undefined') {
-    return null
-  }
-
-  const candidates = stdlibRuntimeImportDeclarationPathCandidates(context, relativePath)
-
-  for (let index = 0; index < candidates.length; index = index + 1) {
-    const candidate = candidates[index]
-
-    if (context.host.readFileSync(candidate) !== null) {
-      return candidate
-    }
-  }
-
-  return null
-}
-
-function stdlibRuntimeImportDeclarationPathCandidates(context: ModuleGraphContext, relativePath: string): string[] {
-  const candidates: string[] = [context.host.resolvePath(relativePath)]
-  const projectRoot = stdlibRuntimeImportProjectRoot(context.entry)
-
-  if (projectRoot !== null && typeof projectRoot !== 'undefined') {
-    candidates.push(context.host.joinPath(projectRoot, relativePath))
-  }
-
-  return candidates
-}
-
-function stdlibRuntimeImportProjectRoot(entry: string): string | null {
-  const compilerIndex = entry.indexOf('/compiler/')
-
-  if (compilerIndex >= 0) {
-    return entry.slice(0, compilerIndex)
-  }
-
-  const stdlibIndex = entry.indexOf('/stdlib/')
-
-  if (stdlibIndex >= 0) {
-    return entry.slice(0, stdlibIndex)
-  }
-
-  return null
 }
 
 function appendSyntheticDeclarations(program: ProgramNode, declarations: AnyNode[]): ProgramNode {
@@ -989,7 +934,7 @@ function applyImportedDeclarationMetadata(specifier: AnyNode, declaration: AnyNo
     return
   }
 
-  specifier.valueType = stdlibDeclarationNodeValueType(declaration)
+  specifier.valueType = moduleDeclarationNodeValueType(declaration)
   specifier.typeRef = declaration.typeRef ?? null
   specifier.promiseValueType = declaration.promiseValueType ?? null
   specifier.shape = declaration.shape ?? null
