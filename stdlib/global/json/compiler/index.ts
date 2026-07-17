@@ -2,13 +2,15 @@ import type {
   CompilerLibraryPackageDescriptor,
   LibraryCResultMappingDescriptor,
   LibraryOperationDescriptor,
+  NominalTypeRef,
   ObjectTypeRef,
   TypeRef
 } from '../../../../compiler/extensions/types.ts'
 import type { AnyNode, ObjectShapeInfo, ValueType } from '../../../../compiler/types.ts'
-import { arrayTypeRef } from '../../collections/compiler/index.ts'
 
 const libraryId = 'global:json'
+const collectionsLibraryId = 'global:collections'
+const arrayTypeId = `${collectionsLibraryId}#Array`
 const runtimeRequirement = libraryId
 const runtimeRequirements = [runtimeRequirement]
 const valueCResultMapping: LibraryCResultMappingDescriptor = {
@@ -22,7 +24,7 @@ const stringCResultMapping: LibraryCResultMappingDescriptor = {
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:collections'],
+  dependencies: [collectionsLibraryId],
   operations: [parseOperation(), stringifyOperation()],
   intrinsicBindings: [],
   runtimeRequirements: [
@@ -33,6 +35,17 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       capabilities: []
     }
   ]
+}
+
+function arrayTypeRef(elementType: TypeRef): NominalTypeRef {
+  return {
+    kind: 'nominal',
+    typeId: arrayTypeId,
+    args: [elementType],
+    nullable: false,
+    ownership: 'value',
+    traits: [{ traitId: 'iterable', args: [elementType] }]
+  }
 }
 
 function parseOperation(): LibraryOperationDescriptor {

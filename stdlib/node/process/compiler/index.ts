@@ -12,9 +12,10 @@ import type {
   PrimitiveTypeRef,
   TypeRef
 } from '../../../../compiler/extensions/types.ts'
-import { arrayTypeRef } from '../../../global/collections/compiler/index.ts'
 
 const libraryId = 'node:process'
+const collectionsLibraryId = 'global:collections'
+const arrayTypeId = `${collectionsLibraryId}#Array`
 const runtimeRequirement = 'node:process'
 const processTypeId = `${libraryId}#Process`
 const argvTypeId = `${libraryId}#ProcessArgv`
@@ -150,7 +151,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:collections'],
+  dependencies: [collectionsLibraryId],
   nativeTypes: [
     nativeType(processTypeId, ['ProcessModule'], 'inox::Value', processFields),
     nativeType(argvTypeId, ['ProcessArgv'], 'process_argv', argvFields),
@@ -224,6 +225,17 @@ function propertyRead(
     cExpression,
     resultTypeRef,
     cResultMapping
+  }
+}
+
+function arrayTypeRef(elementType: TypeRef): NominalTypeRef {
+  return {
+    kind: 'nominal',
+    typeId: arrayTypeId,
+    args: [elementType],
+    nullable: false,
+    ownership: 'value',
+    traits: [{ traitId: 'iterable', args: [elementType] }]
   }
 }
 

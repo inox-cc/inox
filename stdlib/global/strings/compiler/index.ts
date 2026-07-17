@@ -3,12 +3,14 @@ import type {
   LibraryArgumentCheckDescriptor,
   LibraryCArgumentKind,
   LibraryOperationDescriptor,
+  NominalTypeRef,
   PrimitiveTypeRef,
   TypeRef
 } from '../../../../compiler/extensions/types.ts'
-import { arrayTypeRef } from '../../collections/compiler/index.ts'
 
 const libraryId = 'global:strings'
+const collectionsLibraryId = 'global:collections'
+const arrayTypeId = `${collectionsLibraryId}#Array`
 const runtimeRequirement = `${libraryId}#strings`
 const receiverTypeId = 'core:primitive:string'
 const booleanTypeRef = primitiveTypeRef('boolean')
@@ -18,7 +20,7 @@ const stringResultMapping = { cppType: 'inox::String', fields: [] }
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:collections'],
+  dependencies: [collectionsLibraryId],
   operations: [
     numberToString(),
     memberRead('length', 'codeUnitLength', numberTypeRef, 'static_cast<double>($value)'),
@@ -80,6 +82,17 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       capabilities: []
     }
   ]
+}
+
+function arrayTypeRef(elementType: TypeRef): NominalTypeRef {
+  return {
+    kind: 'nominal',
+    typeId: arrayTypeId,
+    args: [elementType],
+    nullable: false,
+    ownership: 'value',
+    traits: [{ traitId: 'iterable', args: [elementType] }]
+  }
 }
 
 function numberToString(): LibraryOperationDescriptor {

@@ -10,11 +10,12 @@ import type {
   PrimitiveTypeRef,
   TypeRef
 } from '../../../../compiler/extensions/types.ts'
-import { arrayTypeRef } from '../../../global/collections/compiler/index.ts'
 import { errorTypeRef } from '../../../global/error/compiler/index.ts'
 import { promiseTypeRef } from '../../../global/promise/compiler/index.ts'
 
 const libraryId = 'node:fs'
+const collectionsLibraryId = 'global:collections'
+const arrayTypeId = `${collectionsLibraryId}#Array`
 const promisesLibraryId = 'node:fs/promises'
 const runtimeRequirement = libraryId
 const statsTypeId = `${libraryId}#Stats`
@@ -61,7 +62,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:collections', 'node:buffer'],
+  dependencies: [collectionsLibraryId, 'node:buffer'],
   nativeTypes: [
     {
       libraryId,
@@ -98,6 +99,17 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       capabilities: ['fs']
     }
   ]
+}
+
+function arrayTypeRef(elementType: TypeRef): NominalTypeRef {
+  return {
+    kind: 'nominal',
+    typeId: arrayTypeId,
+    args: [elementType],
+    nullable: false,
+    ownership: 'value',
+    traits: [{ traitId: 'iterable', args: [elementType] }]
+  }
 }
 
 export function createFsPromiseOperations(): LibraryOperationDescriptor[] {

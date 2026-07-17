@@ -1,11 +1,13 @@
 import type {
   CompilerLibraryPackageDescriptor,
   LibraryOperationDescriptor,
+  NominalTypeRef,
   TypeRef
 } from '../../../../compiler/extensions/types.ts'
-import { arrayTypeRef } from '../../collections/compiler/index.ts'
 
 const libraryId = 'global:object'
+const collectionsLibraryId = 'global:collections'
+const arrayTypeId = `${collectionsLibraryId}#Array`
 const runtimeRequirement = `${libraryId}#object`
 const stringTypeRef = primitiveTypeRef('string')
 const unknownTypeRef: TypeRef = {
@@ -17,7 +19,7 @@ const unknownTypeRef: TypeRef = {
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:collections'],
+  dependencies: [collectionsLibraryId],
   operations: [
     objectOperation('keys', arrayTypeRef(stringTypeRef)),
     objectOperation('values', arrayTypeRef(unknownTypeRef)),
@@ -32,6 +34,17 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       capabilities: []
     }
   ]
+}
+
+function arrayTypeRef(elementType: TypeRef): NominalTypeRef {
+  return {
+    kind: 'nominal',
+    typeId: arrayTypeId,
+    args: [elementType],
+    nullable: false,
+    ownership: 'value',
+    traits: [{ traitId: 'iterable', args: [elementType] }]
+  }
 }
 
 function objectOperation(name: string, resultTypeRef: TypeRef): LibraryOperationDescriptor {

@@ -12,9 +12,10 @@ import type {
   TypeOwnership,
   TypeRef
 } from '../../../../compiler/extensions/types.ts'
-import { arrayTypeRef } from '../../../global/collections/compiler/index.ts'
 
 const libraryId = 'node:crypto'
+const collectionsLibraryId = 'global:collections'
+const arrayTypeId = `${collectionsLibraryId}#Array`
 const runtimeRequirement = 'node:crypto'
 const hashRuntimeRequirement = 'node:crypto:hash'
 const hashTypeId = `${libraryId}#Hash`
@@ -97,7 +98,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:crypto', 'global:binary', 'global:collections', 'node:buffer'],
+  dependencies: ['global:crypto', 'global:binary', collectionsLibraryId, 'node:buffer'],
   nativeTypes: [nativeType(hashTypeId, 'Hash'), nativeType(hmacTypeId, 'Hmac')],
   operations,
   intrinsicBindings: [],
@@ -139,6 +140,17 @@ type ModuleCallOptions = {
   resultTypeRef: TypeRef
   cResultMapping?: LibraryCResultMappingDescriptor | null
   cResultMode?: LibraryCResultMode | null
+}
+
+function arrayTypeRef(elementType: TypeRef): NominalTypeRef {
+  return {
+    kind: 'nominal',
+    typeId: arrayTypeId,
+    args: [elementType],
+    nullable: false,
+    ownership: 'value',
+    traits: [{ traitId: 'iterable', args: [elementType] }]
+  }
 }
 
 function moduleCall(
