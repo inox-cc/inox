@@ -34,10 +34,11 @@ await Promise.resolve('done')
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /auto value = inox::await_value<inox::String>\(inox_promise_\d+\);/)
+  assert.match(source, /auto inox_await_\d+ = \(inox_promise_\d+\)\.awaitValue\(\);/)
   assert.match(source, /if \(inox::thrown\(\)\) return;/)
-  assert.match(source, /inox::await_value<inox::String>\(inox_promise_\d+\);/)
-  assert.doesNotMatch(source, /auto inox_await_value_\d+ = inox::await_value<inox::String>\(inox_promise_\d+\);/)
+  assert.match(source, /auto value = inox::String\(inox_await_\d+\);/)
+  assert.match(source, /\(inox_promise_\d+\)\.awaitValue\(\);/)
+  assert.doesNotMatch(source, /inox::await_value</)
   assert.doesNotMatch(source, /inox_promise_await/)
   assert.doesNotMatch(source, /inox_promise_state/)
   assert.doesNotMatch(source, /INOX_PROMISE_FULFILLED/)
@@ -71,13 +72,13 @@ try {
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /auto value = inox::await_value<inox::Value>\(inox_promise_\d+\);/)
+  assert.match(source, /auto inox_await_value_\d+ = \(inox_promise_\d+\)\.awaitValue\(\);/)
   assert.match(
     source,
     /if \(inox::thrown\(\)\) goto catch_\d+;/
   )
-  assert.match(source, /auto error = inox::take_exception\(\);/)
-  assert.match(source, /inox_promise_rejected\(inox::loop\(\), inox::String\("bad", 3\), &inox_promise_\d+\)/)
+  assert.match(source, /auto (?:error|inox_error) = inox::take_exception\(\);/)
+  assert.match(source, /inox_promise_\d+ = inox::Promise::reject\(inox::String\("bad", 3\)\);/)
   assert.doesNotMatch(source, /String::fromLiteral\(&inox_default_allocator/)
   assert.doesNotMatch(source, /inox_error = inox_undefined_value\(\);\n\s+inox_error = inox_res_\d+\.error_value\(\);/)
   assert.doesNotMatch(source, /inox_await_result_\d+/)

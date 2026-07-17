@@ -7,6 +7,7 @@
 #include "inox/fs.h"
 #include "inox/loop.h"
 #include "inox/object.h"
+#include "inox/promise_runtime.h"
 #include "inox/string.h"
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
@@ -818,7 +819,7 @@ inox::Promise fs_promises::readFile(inox::StringView path, inox::StringView enco
     status = inox_fs_queue_request(inox::loop(), INOX_FS_REQUEST_READ_FILE, path.bytes, path.len, 0, 0, 0, 0, 0, false, false, &promise);
 #endif
 
-  return status == INOX_OK ? inox::adopt(promise) : inox::Promise();
+  return status == INOX_OK ? inox::Promise::adopt(promise) : inox::Promise();
 }
 
 inox::Promise fs_promises::readFile(inox::StringView path) {
@@ -835,7 +836,7 @@ inox::Promise fs_promises::readFile(inox::StringView path) {
     );
 #endif
 
-  return status == INOX_OK ? inox::adopt(promise) : inox::Promise();
+  return status == INOX_OK ? inox::Promise::adopt(promise) : inox::Promise();
 }
 
 inox::Promise fs_promises::readdir(inox::StringView path) {
@@ -850,7 +851,7 @@ inox::Promise fs_promises::readdir(inox::StringView path) {
     status = inox_fs_queue_request(inox::loop(), INOX_FS_REQUEST_READ_DIR, path.bytes, path.len, 0, 0, 0, 0, 0, false, false, &promise);
 #endif
 
-  return status == INOX_OK ? inox::adopt(promise) : inox::Promise();
+  return status == INOX_OK ? inox::Promise::adopt(promise) : inox::Promise();
 }
 
 inox::Promise fs_promises::readdir(inox::StringView path, inox::StringView encoding) {
@@ -866,7 +867,7 @@ inox::Promise fs_promises::readdir(inox::StringView path, inox::StringView encod
     status = inox_fs_queue_request(inox::loop(), INOX_FS_REQUEST_READ_DIR, path.bytes, path.len, 0, 0, 0, 0, 0, false, false, &promise);
 #endif
 
-  return status == INOX_OK ? inox::adopt(promise) : inox::Promise();
+  return status == INOX_OK ? inox::Promise::adopt(promise) : inox::Promise();
 }
 
 inox::Promise fs_promises::readdir(inox::StringView path, FsReadDirOptions options) {
@@ -884,7 +885,7 @@ inox::Promise fs_promises::readdir(inox::StringView path, FsReadDirOptions optio
     );
 #endif
 
-  return status == INOX_OK ? inox::adopt(promise) : inox::Promise();
+  return status == INOX_OK ? inox::Promise::adopt(promise) : inox::Promise();
 }
 
 inox::Promise fs_promises::stat(inox::StringView path) {
@@ -897,7 +898,7 @@ inox::Promise fs_promises::stat(inox::StringView path) {
     status = inox_fs_queue_request(inox::loop(), INOX_FS_REQUEST_STAT, path.bytes, path.len, 0, 0, 0, 0, 0, false, false, &promise);
 #endif
 
-  return status == INOX_OK ? inox::adopt(promise) : inox::Promise();
+  return status == INOX_OK ? inox::Promise::adopt(promise) : inox::Promise();
 }
 
 inox::Promise fs_promises::lstat(inox::StringView path) {
@@ -910,7 +911,7 @@ inox::Promise fs_promises::lstat(inox::StringView path) {
     status = inox_fs_queue_request(inox::loop(), INOX_FS_REQUEST_LSTAT, path.bytes, path.len, 0, 0, 0, 0, 0, false, false, &promise);
 #endif
 
-  return status == INOX_OK ? inox::adopt(promise) : inox::Promise();
+  return status == INOX_OK ? inox::Promise::adopt(promise) : inox::Promise();
 }
 
 inox::Promise fs_promises::realpath(inox::StringView path) {
@@ -925,7 +926,7 @@ inox::Promise fs_promises::realpath(inox::StringView path) {
     status = inox_fs_queue_request(inox::loop(), INOX_FS_REQUEST_REALPATH, path.bytes, path.len, 0, 0, 0, 0, 0, false, false, &promise);
 #endif
 
-  return status == INOX_OK ? inox::adopt(promise) : inox::Promise();
+  return status == INOX_OK ? inox::Promise::adopt(promise) : inox::Promise();
 }
 
 inox::Promise fs_promises::readlink(inox::StringView path) {
@@ -940,7 +941,7 @@ inox::Promise fs_promises::readlink(inox::StringView path) {
     status = inox_fs_queue_request(inox::loop(), INOX_FS_REQUEST_READLINK, path.bytes, path.len, 0, 0, 0, 0, 0, false, false, &promise);
 #endif
 
-  return status == INOX_OK ? inox::adopt(promise) : inox::Promise();
+  return status == INOX_OK ? inox::Promise::adopt(promise) : inox::Promise();
 }
 
 inox::Promise fs_promises::access(inox::StringView path) {
@@ -959,7 +960,7 @@ inox::Promise fs_promises::access(inox::StringView path, int mode) {
     status = inox_fs_queue_request(inox::loop(), INOX_FS_REQUEST_ACCESS, path.bytes, path.len, 0, 0, 0, 0, mode, false, false, &promise);
 #endif
 
-  return status == INOX_OK ? inox::adopt(promise) : inox::Promise();
+  return status == INOX_OK ? inox::Promise::adopt(promise) : inox::Promise();
 }
 
 inox::Promise fs_promises::mkdir(inox::StringView path, bool recursive) {
@@ -974,7 +975,7 @@ inox::Promise fs_promises::mkdir(inox::StringView path, bool recursive) {
     status = inox_fs_queue_request(inox::loop(), INOX_FS_REQUEST_MKDIR, path.bytes, path.len, 0, 0, 0, 0, 0, recursive, false, &promise);
 #endif
 
-  return status == INOX_OK ? inox::adopt(promise) : inox::Promise();
+  return status == INOX_OK ? inox::Promise::adopt(promise) : inox::Promise();
 }
 
 inox::Promise fs_promises::rm(inox::StringView path, bool recursive, bool force) {
@@ -987,7 +988,7 @@ inox::Promise fs_promises::rm(inox::StringView path, bool recursive, bool force)
     status = inox_fs_queue_request(inox::loop(), INOX_FS_REQUEST_RM, path.bytes, path.len, 0, 0, 0, 0, 0, recursive, force, &promise);
 #endif
 
-  return status == INOX_OK ? inox::adopt(promise) : inox::Promise();
+  return status == INOX_OK ? inox::Promise::adopt(promise) : inox::Promise();
 }
 
 inox::Promise fs_promises::writeFile(inox::StringView path, inox::StringView bytes) {
@@ -1004,7 +1005,7 @@ inox::Promise fs_promises::writeFile(inox::StringView path, inox::StringView byt
     );
 #endif
 
-  return status == INOX_OK ? inox::adopt(promise) : inox::Promise();
+  return status == INOX_OK ? inox::Promise::adopt(promise) : inox::Promise();
 }
 
 inox::Promise fs_promises::writeFile(inox::StringView path, Uint8Array bytes) {
@@ -1029,7 +1030,7 @@ inox::Promise fs_promises::writeFile(inox::StringView path, Uint8Array bytes) {
     );
 #endif
 
-  return status == INOX_OK ? inox::adopt(promise) : inox::Promise();
+  return status == INOX_OK ? inox::Promise::adopt(promise) : inox::Promise();
 }
 
 inox::Promise fs_promises::appendFile(inox::StringView path, inox::StringView bytes) {
@@ -1046,7 +1047,7 @@ inox::Promise fs_promises::appendFile(inox::StringView path, inox::StringView by
     );
 #endif
 
-  return status == INOX_OK ? inox::adopt(promise) : inox::Promise();
+  return status == INOX_OK ? inox::Promise::adopt(promise) : inox::Promise();
 }
 
 inox::Promise fs_promises::appendFile(inox::StringView path, Uint8Array bytes) {
@@ -1071,7 +1072,7 @@ inox::Promise fs_promises::appendFile(inox::StringView path, Uint8Array bytes) {
     );
 #endif
 
-  return status == INOX_OK ? inox::adopt(promise) : inox::Promise();
+  return status == INOX_OK ? inox::Promise::adopt(promise) : inox::Promise();
 }
 
 inox::Promise fs_promises::copyFile(inox::StringView src_path, inox::StringView dest_path) {
@@ -1088,7 +1089,7 @@ inox::Promise fs_promises::copyFile(inox::StringView src_path, inox::StringView 
     );
 #endif
 
-  return status == INOX_OK ? inox::adopt(promise) : inox::Promise();
+  return status == INOX_OK ? inox::Promise::adopt(promise) : inox::Promise();
 }
 
 inox::Promise fs_promises::symlink(inox::StringView target, inox::StringView path) {
@@ -1105,7 +1106,7 @@ inox::Promise fs_promises::symlink(inox::StringView target, inox::StringView pat
     );
 #endif
 
-  return status == INOX_OK ? inox::adopt(promise) : inox::Promise();
+  return status == INOX_OK ? inox::Promise::adopt(promise) : inox::Promise();
 }
 
 inox::Promise fs_promises::rename(inox::StringView old_path, inox::StringView new_path) {
@@ -1122,7 +1123,7 @@ inox::Promise fs_promises::rename(inox::StringView old_path, inox::StringView ne
     );
 #endif
 
-  return status == INOX_OK ? inox::adopt(promise) : inox::Promise();
+  return status == INOX_OK ? inox::Promise::adopt(promise) : inox::Promise();
 }
 
 inox::Promise fs_promises::unlink(inox::StringView path) {
@@ -1135,7 +1136,7 @@ inox::Promise fs_promises::unlink(inox::StringView path) {
     status = inox_fs_queue_request(inox::loop(), INOX_FS_REQUEST_UNLINK, path.bytes, path.len, 0, 0, 0, 0, 0, false, false, &promise);
 #endif
 
-  return status == INOX_OK ? inox::adopt(promise) : inox::Promise();
+  return status == INOX_OK ? inox::Promise::adopt(promise) : inox::Promise();
 }
 
 static inox_status inox_fs_copy_bytes(inox_allocator* allocator, const char* bytes, size_t len, char** out) {

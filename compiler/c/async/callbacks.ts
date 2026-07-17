@@ -17,6 +17,7 @@ import type {
   CObjectShapeField,
   CPlainArrowCallbackWrapper,
   CPromiseChainWrapper,
+  CPromiseConstructorHandler,
   CRuntimeArrowCallbackWrapper,
   CRuntimeArrowCapture,
   CRuntimeCallbackWrapper,
@@ -36,7 +37,7 @@ import {
   libraryNativeValueAdapter,
   resolveCCompilerLibrarySet
 } from '../value-types.ts'
-import { isPromiseConstructorExpression } from './promises.ts'
+import { isAsyncResultChainExpression, isAsyncResultConstructorExpression } from './promises.ts'
 
 type CallbackNode = AnyNode
 type CallbackArrowWrapperMap = Map<AnyNode, CCallbackWrapper>
@@ -45,13 +46,7 @@ type CallbackFunctionParamMap = Map<string, CFunctionParam[]>
 type CallbackFunctionTypeMap = Map<string, CFunctionType>
 type CallbackMutableDeclarationSet = Set<AnyNode | null | undefined>
 type CallbackObjectShapeMap = Map<string, CObjectShapeField[]>
-type CallbackPromiseConstructorHandlerMap = Map<
-  string,
-  {
-    kind: 'reject' | 'resolve'
-    promise: string
-  }
->
+type CallbackPromiseConstructorHandlerMap = Map<string, CPromiseConstructorHandler>
 type CallbackStringMap = Map<string, string>
 type CallbackStringSet = Set<string>
 type CallbackWrapperMap = Map<string, CCallbackWrapper>
@@ -270,6 +265,8 @@ export type CallbackScopeBinding = {
   mutable?: boolean
   name: string
   nullable?: boolean
+  promiseSettlementCExpression?: string | null
+  promiseSettlementCppType?: string | null
   promiseSettlementKind?: 'reject' | 'resolve' | null
   runtimeCallback?: boolean
   runtimeManaged?: boolean
@@ -2441,7 +2438,7 @@ function visitCallbackExpression(
     return
   }
 
-  if (expression.type === 'NewExpression' && isPromiseConstructorExpression(expression)) {
+  if (expression.type === 'NewExpression' && isAsyncResultConstructorExpression(expression)) {
     visitPromiseConstructorCallbackExpression(expression, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
     return
   }
@@ -2582,7 +2579,7 @@ function visitCallbackCallExpression(
 ): void {
   const runtimeCallback = deps.runtimeCallbackArgumentInfoForCall(expression)
 
-  if (runtimeCallback !== null) {
+  if (runtimeCallback !== null && !isAsyncResultChainExpression(expression)) {
     registerRuntimeCallbackExpression(
       expression.args[runtimeCallback.index],
       runtimeCallback.functionType,
@@ -2781,6 +2778,9 @@ function visitPromiseConstructorCallbackExpression(
     declareCallbackBinding(scope, param.name, {
       name: param.name,
       valueType: 'promise-settlement',
+      promiseSettlementCExpression:
+        index === 0 ? expression.libraryCAsyncFulfillExpression : expression.libraryCAsyncRejectExpression,
+      promiseSettlementCppType: expression.libraryCppType,
       promiseSettlementKind: promiseSettlementKindForParamIndex(index),
       loc: param.loc,
       mutable: false
@@ -2939,6 +2939,8 @@ function runtimeArrowCaptureFromBinding(name: string, binding: CallbackScopeBind
     functionType: binding.functionType,
     loc: binding.loc,
     mutable: binding.mutable,
+    promiseSettlementCExpression: binding.promiseSettlementCExpression,
+    promiseSettlementCppType: binding.promiseSettlementCppType,
     promiseSettlementKind: binding.promiseSettlementKind,
     runtimeManaged: binding.runtimeManaged,
     shape: binding.shape,
@@ -3901,9 +3903,11 @@ export function emitRuntimeArrowCallbackContextFinalizerDeclaration(wrapper: CCa
     const capture = callbackRuntimeArrowCaptureAt(captures, index)
     if (isPromiseSettlementRuntimeArrowCapture(capture)) {
       const field = emitRuntimeArrowCaptureField(capture)
-      lines.push('  if (captured->' + field + ' != 0) {')
-      lines.push('    inox_promise_release(captured->' + field + ');')
-      lines.push('  }')
+      const destructor = callbackCppDestructorName(capture.promiseSettlementCppType)
+
+      if (destructor !== null) {
+        lines.push('  captured->' + field + '.~' + destructor + '();')
+      }
     }
   }
 
@@ -4050,7 +4054,6 @@ export function emitRuntimeArrowCallbackContextLocals(
     context.cppValueTypes.delete(capture.name)
 
     if (capture.valueType === 'promise-settlement') {
-      const promise = capture.name
       let kind: 'reject' | 'resolve' = 'resolve'
 
       if (capture.promiseSettlementKind !== null && typeof capture.promiseSettlementKind !== 'undefined') {
@@ -4058,10 +4061,10 @@ export function emitRuntimeArrowCallbackContextLocals(
       }
 
       context.promiseConstructorHandlers.set(capture.name, {
+        cExpression: capture.promiseSettlementCExpression ?? '',
         kind: kind,
-        promise
+        promise: 'captured->' + emitRuntimeArrowCaptureField(capture)
       })
-      lines.push('inox_promise* ' + promise + ' = captured->' + emitRuntimeArrowCaptureField(capture) + ';')
       continue
     }
 
@@ -4220,7 +4223,7 @@ export function emitRuntimeArrowCaptureCType(capture: CRuntimeArrowCapture): str
   }
 
   if (capture.valueType === 'promise-settlement') {
-    return 'inox_promise*'
+    return capture.promiseSettlementCppType ?? 'inox::Value'
   }
 
   if (capture.valueType === 'string') {
@@ -4242,6 +4245,15 @@ export function isRetainedRuntimeArrowCapture(capture: CRuntimeArrowCapture): bo
 
 export function isPromiseSettlementRuntimeArrowCapture(capture: CRuntimeArrowCapture): boolean {
   return capture.valueType === 'promise-settlement'
+}
+
+function callbackCppDestructorName(cppType: string | null | undefined): string | null {
+  if (cppType === null || typeof cppType === 'undefined' || cppType.length === 0) {
+    return null
+  }
+
+  const separator = cppType.lastIndexOf('::')
+  return separator < 0 ? cppType : cppType.slice(separator + 2)
 }
 
 export function isSupportedMutableRuntimeArrowCapture(

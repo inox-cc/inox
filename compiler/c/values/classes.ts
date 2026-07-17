@@ -1458,7 +1458,7 @@ function scanClassDescriptorCallLikeExpression(
     addClassDescriptorExpressionNames(expression.args, classInfos, scope, names)
   } else if (hasClassDescriptorRuntimeValueArguments(expression)) {
     addClassDescriptorExpressionNames(expression.args, classInfos, scope, names)
-  } else if (isClassDescriptorPromiseValueCall(expression)) {
+  } else if (isClassDescriptorAsyncResultValueCall(expression)) {
     addClassDescriptorExpressionName(firstClassDescriptorArgument(expression), classInfos, scope, names)
   }
 
@@ -1487,28 +1487,9 @@ function hasClassDescriptorRuntimeValueArguments(expression: AnyNode): boolean {
   return argumentKinds.includes('runtime-value')
 }
 
-function isClassDescriptorPromiseValueCall(expression: AnyNode): boolean {
-  const callee = expression.callee
-
-  if (
-    expression.type !== 'CallExpression' ||
-    callee === null ||
-    typeof callee === 'undefined' ||
-    callee.type !== 'MemberExpression'
-  ) {
-    return false
-  }
-
-  const object = callee.object
-
-  return (
-    object !== null &&
-    typeof object !== 'undefined' &&
-    object.type === 'Reference' &&
-    object.path.length === 1 &&
-    object.path[0] === 'Promise' &&
-    (callee.property === 'resolve' || callee.property === 'reject')
-  )
+function isClassDescriptorAsyncResultValueCall(expression: AnyNode): boolean {
+  const operation = expression.libraryAsyncResultOperation
+  return expression.type === 'CallExpression' && (operation === 'resolve' || operation === 'reject')
 }
 
 function addClassDescriptorRuntimeParameterNames(

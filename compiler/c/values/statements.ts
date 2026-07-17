@@ -254,7 +254,7 @@ export type StatementLoweringDependencies = {
     context: CFunctionContext,
     options?: PreparedCallOptions
   ): PreparedExpression | null
-  emitPreparedPromiseConstructorExpression(
+  emitPreparedAsyncResultConstructorExpression(
     expression: StatementNode,
     context: CFunctionContext,
     options?: PreparedCallOptions
@@ -264,7 +264,7 @@ export type StatementLoweringDependencies = {
     context: CFunctionContext,
     options?: PreparedCallOptions
   ): PreparedExpression | null
-  emitPreparedPromiseMethodExpression(
+  emitPreparedAsyncResultChainExpression(
     expression: StatementNode,
     context: CFunctionContext,
     options?: PreparedCallOptions
@@ -274,7 +274,7 @@ export type StatementLoweringDependencies = {
     context: CFunctionContext,
     options?: PreparedCallOptions
   ): PreparedExpression | null
-  emitPreparedPromiseStaticExpression(
+  emitPreparedAsyncResultStaticExpression(
     expression: StatementNode,
     context: CFunctionContext,
     options?: PreparedCallOptions
@@ -2064,7 +2064,7 @@ function emitPreparedForInitializer(
 
 function emitPreparedForVariableDeclaration(statement: StatementNode, context: CFunctionContext): PreparedExpression {
   const deps = statementDeps(context)
-  const promiseConstructor = deps.emitPreparedPromiseConstructorExpression(
+  const promiseConstructor = deps.emitPreparedAsyncResultConstructorExpression(
     statement.init,
     context,
     preparedCallOut(statement.name)
@@ -2078,7 +2078,7 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
     }
   }
 
-  const promise = deps.emitPreparedPromiseStaticExpression(statement.init, context, preparedCallOut(statement.name))
+  const promise = deps.emitPreparedAsyncResultStaticExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (promise !== null && typeof promise !== 'undefined') {
     registerPromiseVariableMetadata(statement, promise, context)
@@ -3409,7 +3409,7 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return asyncPromiseCall.lines
   }
 
-  const promiseMethod = deps.emitPreparedPromiseMethodExpression(
+  const promiseMethod = deps.emitPreparedAsyncResultChainExpression(
     statement.init,
     context,
     preparedCallOut(statement.name)
@@ -3420,7 +3420,7 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return promiseMethod.lines
   }
 
-  const promiseConstructor = deps.emitPreparedPromiseConstructorExpression(
+  const promiseConstructor = deps.emitPreparedAsyncResultConstructorExpression(
     statement.init,
     context,
     preparedCallOut(statement.name)
@@ -3431,7 +3431,7 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return promiseConstructor.lines
   }
 
-  const promise = deps.emitPreparedPromiseStaticExpression(statement.init, context, preparedCallOut(statement.name))
+  const promise = deps.emitPreparedAsyncResultStaticExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (promise !== null && typeof promise !== 'undefined') {
     registerPromiseVariableMetadata(statement, promise, context)
@@ -3894,7 +3894,7 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
       return lines
     }
 
-    const promise = deps.emitPreparedPromiseStaticExpression(expression, context)
+    const promise = deps.emitPreparedAsyncResultStaticExpression(expression, context)
 
     if (promise !== null && typeof promise !== 'undefined') {
       return promise.lines
@@ -4035,11 +4035,25 @@ function emitDiscardedAwaitValueLines(value: PreparedExpression): string[] {
   }
 
   const assignment = `auto ${declaredName} = `
-  const prefix = `${assignment}inox::await_value<`
   const lines: string[] = []
+  let referencedLater = false
+
+  for (let index = 0; index < value.lines.length; index = index + 1) {
+    const line = value.lines[index]
+
+    if (line.startsWith(assignment)) {
+      for (let laterIndex = index + 1; laterIndex < value.lines.length; laterIndex = laterIndex + 1) {
+        if (value.lines[laterIndex].includes(declaredName)) {
+          referencedLater = true
+          break
+        }
+      }
+      break
+    }
+  }
 
   for (const line of value.lines) {
-    if (line.startsWith(prefix)) {
+    if (!referencedLater && line.startsWith(assignment)) {
       lines.push(line.slice(assignment.length))
     } else {
       lines.push(line)

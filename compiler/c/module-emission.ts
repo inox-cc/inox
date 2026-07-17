@@ -106,6 +106,7 @@ import type {
   CRuntimeArrowCallbackWrapper
 } from './types.ts'
 import {
+  compilerLibraryIntrinsicNativeCppType,
   compilerLibraryIntrinsicResultCShape,
   compilerLibraryNativeRuntimeRequirementsForCppType,
   compilerLibraryNativeRuntimeRequirementsForId,
@@ -720,7 +721,6 @@ export function emitCModuleHeader(
   lines.push('')
   lines.push('#include "inox/value.h"')
   lines.push('#include "inox/loop.h"')
-  lines.push('#include "inox/promise.h"')
 
   for (let includeIndex = 0; includeIndex < libraryIncludes.length; includeIndex = includeIndex + 1) {
     lines.push(libraryIncludes[includeIndex])
@@ -2182,10 +2182,6 @@ function collectCModuleValueDeclarations(plan: CModulePlan, context?: CEmitConte
 }
 
 function cModuleValueLibraryCppType(node: AnyNode): string | null {
-  if (node.valueType === 'promise' || node.init?.valueType === 'promise') {
-    return null
-  }
-
   const valueType = node.valueType ?? node.init?.valueType
 
   if (valueType === 'number' || valueType === 'boolean') {
@@ -2770,7 +2766,7 @@ function cModuleValueCType(valueType: string, context: CEmitContext): string {
   }
 
   if (valueType === 'promise') {
-    return 'inox::Promise'
+    return compilerLibraryIntrinsicNativeCppType(context.libraries, 'async-result') ?? emitCType(valueType)
   }
 
   return emitCType(valueType)

@@ -7,6 +7,7 @@
 
 #include "inox/binary.h"
 #include "inox/loop.h"
+#include "inox/promise_runtime.h"
 
 struct FetchNativeResponse {
   int status;
@@ -1967,7 +1968,7 @@ Promise FetchResponse::text() const {
     return Promise();
   }
 
-  return adopt(promise);
+  return Promise::adopt(promise);
 }
 
 FetchHeaders::FetchHeaders() : Value() {}
@@ -2164,7 +2165,7 @@ Promise fetch(StringView url) {
     return Promise();
   }
 
-  return adopt(promise);
+  return Promise::adopt(promise);
 }
 
 Promise fetch(StringView url, const Value& init) {
@@ -2182,7 +2183,7 @@ Promise fetch(StringView url, const Value& init) {
     return Promise();
   }
 
-  return adopt(promise);
+  return Promise::adopt(promise);
 }
 
 } // namespace inox

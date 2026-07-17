@@ -193,12 +193,13 @@ export function emitCPrelude(
     pushCPreludeInclude(systemIncludes, localIncludes, '#include <string.h>')
   }
 
+  if (needsCallbackRuntime) {
+    pushCPreludeInclude(systemIncludes, localIncludes, '#include <new>')
+  }
+
   if (needsRuntime) {
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/allocator.h"')
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/loop.h"')
-    if (needsAsyncRuntime) {
-      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/promise.h"')
-    }
     if (needsCallbackRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/callback.h"')
     }

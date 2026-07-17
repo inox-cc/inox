@@ -7,15 +7,6 @@ export function libuvOnlyRuntimeImportFeature(source: string): string | null {
 
 export const globals: Map<string, SymbolInfo> = new Map([
   [
-    'Promise',
-    {
-      kind: 'global',
-      mutable: false,
-      valueType: 'object',
-      constructable: true
-    }
-  ],
-  [
     'Int8Array',
     {
       kind: 'global',
@@ -64,7 +55,6 @@ export const globals: Map<string, SymbolInfo> = new Map([
 
 export function builtinGlobalSymbol(name: string): SymbolInfo | null {
   if (
-    name === 'Promise' ||
     name === 'Int8Array' ||
     name === 'Uint16Array' ||
     name === 'Int16Array' ||

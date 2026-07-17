@@ -155,6 +155,7 @@ export type LibraryNativeTypeDescriptor = {
   runtimeRequirements: RuntimeRequirementId[]
   cValueAdapter?: string | null
   cRuntimeValueExpression?: string | null
+  cAwaitExpression?: string | null
   typeParameters?: string[]
   traits?: TypeTraitRef[]
   fields?: LibraryResultShapeFieldDescriptor[]
@@ -162,6 +163,7 @@ export type LibraryNativeTypeDescriptor = {
 }
 
 export type LibraryOperationKind = 'call' | 'construct' | 'member-read' | 'member-write' | 'index-read' | 'index-write'
+export type LibraryAsyncResultOperationKind = 'construct' | 'resolve' | 'reject' | 'then' | 'catch'
 
 export type LibraryCArgumentKind =
   | 'receiver'
@@ -297,6 +299,11 @@ export type LibraryOperationTypeParameterSourceDescriptor =
       traitId: TypeTraitId
       traitArgumentIndex: number
     }
+  | {
+      source: 'receiver-trait'
+      traitId: TypeTraitId
+      traitArgumentIndex: number
+    }
 
 export type LibraryOperationTypeParameterDescriptor = {
   name: string
@@ -381,6 +388,9 @@ export type LibraryOperationDescriptor = {
   acceptsUnknownReceiver?: boolean
   operationId: LibraryOperationId
   kind: LibraryOperationKind
+  asyncResultOperation?: LibraryAsyncResultOperationKind | null
+  cAsyncFulfillExpression?: string | null
+  cAsyncRejectExpression?: string | null
   runtimeRequirements: RuntimeRequirementId[]
   typeParameters?: LibraryOperationTypeParameterDescriptor[]
   cExpression?: string | null

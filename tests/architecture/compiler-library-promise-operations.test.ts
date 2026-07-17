@@ -50,8 +50,11 @@ test('data-only library Promise operations preserve fulfilled metadata and lower
   assert.match(result.code, /static inox::Promise pending;/)
   assert.match(result.code, /static FixtureItem item;/)
   assert.match(result.code, /pending = fixture\.load\(\);/)
-  assert.match(result.code, /inox::await_value<FixtureItem>\(pending\)/)
-  assert.match(result.code, /inox::await_value<Array>\(inox_library_promise_\d+\)/)
+  assert.match(result.code, /auto inox_await_\d+ = \(pending\)\.awaitValue\(\);/)
+  assert.match(result.code, /auto inox_await_converted_\d+ = FixtureItem\(inox_await_\d+\);/)
+  assert.match(result.code, /auto inox_await_\d+ = \(inox_library_promise_\d+\)\.awaitValue\(\);/)
+  assert.match(result.code, /auto inox_await_converted_\d+ = Array\(inox_await_\d+\);/)
+  assert.doesNotMatch(result.code, /inox::await_value</)
   assert.doesNotMatch(result.code, /item = [^;]+\.release\(\);/)
   assert.doesNotMatch(result.code, /\bfs(?:Runtime|Lowering|Feature)|emitPreparedFs|inox\/fs\.h/)
 
@@ -65,7 +68,8 @@ test('data-only library Promise operations preserve fulfilled metadata and lower
   )
 
   assert.match(asyncResult.code, /inox_library_promise_\d+ = fixture\.load\(\);/)
-  assert.match(asyncResult.code, /inox::await_value<FixtureItem>\(inox_library_promise_\d+\)/)
+  assert.match(asyncResult.code, /\(inox_library_promise_\d+\)\.awaitValue\(\)/)
+  assert.match(asyncResult.code, /FixtureItem\(inox_await_\d+\)/)
 
   const changed = promiseLibrary()
   changed.operations[0].resultTypeRef = promiseTypeRef(fixtureItemTypeRef(), primitiveTypeRef('string'))

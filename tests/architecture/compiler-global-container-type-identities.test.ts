@@ -91,7 +91,18 @@ test('Array, Set и Promise принадлежат discoverable global packages 
       valueType: 'promise',
       cppType: 'inox::Promise',
       baseTypeIds: [],
-      runtimeRequirements: ['async-runtime', 'managed-values']
+      runtimeRequirements: ['global:promise#promise'],
+      cAwaitExpression: '$value.awaitValue()',
+      typeParameters: ['T'],
+      traits: [
+        {
+          traitId: 'awaitable',
+          args: [
+            { kind: 'parameter', name: 'T' },
+            { kind: 'unknown', nullable: false, ownership: 'value', traits: [] }
+          ]
+        }
+      ]
     }
   ])
 

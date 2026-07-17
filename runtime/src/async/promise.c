@@ -1,7 +1,7 @@
 #ifdef INOX_DEBUG_MEMORY
 #include "inox/debug_bridge.h"
 #endif
-#include "inox/promise.h"
+#include "inox/promise_runtime.h"
 
 #include <stdio.h>
 

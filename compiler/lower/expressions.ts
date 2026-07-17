@@ -368,6 +368,26 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.libraryCExpression = libraryCExpression
   }
 
+  const libraryAsyncResultOperation = nullableString(source.libraryAsyncResultOperation)
+  if (libraryAsyncResultOperation !== null && typeof libraryAsyncResultOperation !== 'undefined') {
+    target.libraryAsyncResultOperation = libraryAsyncResultOperation
+  }
+
+  const libraryCAwaitExpression = nullableString(source.libraryCAwaitExpression)
+  if (libraryCAwaitExpression !== null && typeof libraryCAwaitExpression !== 'undefined') {
+    target.libraryCAwaitExpression = libraryCAwaitExpression
+  }
+
+  const libraryCAsyncFulfillExpression = nullableString(source.libraryCAsyncFulfillExpression)
+  if (libraryCAsyncFulfillExpression !== null && typeof libraryCAsyncFulfillExpression !== 'undefined') {
+    target.libraryCAsyncFulfillExpression = libraryCAsyncFulfillExpression
+  }
+
+  const libraryCAsyncRejectExpression = nullableString(source.libraryCAsyncRejectExpression)
+  if (libraryCAsyncRejectExpression !== null && typeof libraryCAsyncRejectExpression !== 'undefined') {
+    target.libraryCAsyncRejectExpression = libraryCAsyncRejectExpression
+  }
+
   const libraryCLowering = nullableString(source.libraryCLowering)
   if (libraryCLowering !== null && typeof libraryCLowering !== 'undefined') {
     target.libraryCLowering = libraryCLowering

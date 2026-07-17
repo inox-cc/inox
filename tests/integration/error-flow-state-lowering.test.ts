@@ -39,8 +39,9 @@ try {
 
   assert.match(
     source,
-    /inox::await_value<inox::Value>\(inox_promise_\d+\);/
+    /\(inox_promise_\d+\)\.awaitValue\(\);/
   )
+  assert.doesNotMatch(source, /inox::await_value</)
   assert.match(
     source,
     /if \(inox::thrown\(\)\) goto catch_\d+;/

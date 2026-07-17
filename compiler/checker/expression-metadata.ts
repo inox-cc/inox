@@ -38,6 +38,7 @@ export function applyTypeRefMetadataToExpression(
   expression.functionType = functionTypeMetadataFromTypeRef(context, typeRef, loc)
   expression.shape = metadata.shape
   expression.libraryCppType = metadata.libraryCppType
+  expression.libraryCAwaitExpression = metadata.libraryCAwaitExpression
   expression.arrayElementTypeId = metadata.arrayElementTypeId
   expression.promiseValueType = metadata.promiseValueType
   expression.promiseRejectionValueType = metadata.promiseRejectionValueType

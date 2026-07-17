@@ -297,6 +297,16 @@ export function compilerLibraryIntrinsicNativeCppType(
   return compilerLibraryNativeTypeForIntrinsic(cCompilerLibrarySetValue(libraries), role, 'construct')?.cppType ?? null
 }
 
+export function compilerLibraryIntrinsicNativeCAwaitExpression(
+  libraries: CCompilerLibrarySet,
+  role: IntrinsicRole
+): string | null {
+  return (
+    compilerLibraryNativeTypeForIntrinsic(cCompilerLibrarySetValue(libraries), role, 'construct')
+      ?.cAwaitExpression ?? null
+  )
+}
+
 export function resolveCCompilerLibrarySet(
   libraries: CCompilerLibrarySet | null | undefined
 ): CCompilerLibrarySet {

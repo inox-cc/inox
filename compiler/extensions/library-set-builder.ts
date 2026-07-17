@@ -640,6 +640,7 @@ function validateNativeTypes(nativeTypes: LibraryNativeTypeDescriptor[]): void {
     validateTypeTraits(`native type ${nativeType.typeId}`, nativeType.traits ?? [], nativeTypes, typeParameters)
     validateNativeTypeValueAdapter(nativeType)
     validateNativeTypeRuntimeValueExpression(nativeType)
+    validateNativeTypeAwaitExpression(nativeType)
     validateNativeTypeIteration(nativeType)
 
     for (let baseIndex = 0; baseIndex < nativeType.baseTypeIds.length; baseIndex = baseIndex + 1) {
@@ -665,6 +666,14 @@ function validateNativeTypeRuntimeValueExpression(nativeType: LibraryNativeTypeD
 
   if (expression !== null && typeof expression !== 'undefined' && !expression.includes('$value')) {
     throw new Error(`native type ${nativeType.typeId} C++ runtime value expression requires $value`)
+  }
+}
+
+function validateNativeTypeAwaitExpression(nativeType: LibraryNativeTypeDescriptor): void {
+  const expression = nativeType.cAwaitExpression
+
+  if (typeof expression === 'string' && !expression.includes('$value')) {
+    throw new Error(`native type ${nativeType.typeId} C++ await expression requires $value`)
   }
 }
 
@@ -878,6 +887,11 @@ function validateOperationTypeParameterSource(
   parameterName: string,
   source: NonNullable<LibraryOperationDescriptor['typeParameters']>[number]['sources'][number]
 ): void {
+  if (source.source === 'receiver-trait') {
+    validateOperationTraitArgumentIndex(operationId, parameterName, source.traitArgumentIndex)
+    return
+  }
+
   const argumentIndex = source.argumentIndex
 
   if (
@@ -907,8 +921,14 @@ function validateOperationTypeParameterSource(
     return
   }
 
-  const traitArgumentIndex = source.traitArgumentIndex
+  validateOperationTraitArgumentIndex(operationId, parameterName, source.traitArgumentIndex)
+}
 
+function validateOperationTraitArgumentIndex(
+  operationId: string,
+  parameterName: string,
+  traitArgumentIndex: number | null
+): void {
   if (
     typeof traitArgumentIndex !== 'number' ||
     traitArgumentIndex < 0 ||
@@ -1498,6 +1518,12 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           ':' +
           item.kind +
           ':' +
+          (item.asyncResultOperation ?? '') +
+          ':' +
+          (item.cAsyncFulfillExpression ?? '') +
+          ':' +
+          (item.cAsyncRejectExpression ?? '') +
+          ':' +
           sortedStrings(item.bindingAliases ?? []).join(',') +
           ':' +
           (item.acceptsUnknownReceiver === true ? 'unknown-receiver' : 'typed-receiver') +
@@ -1670,6 +1696,8 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           (item.cValueAdapter ?? '') +
           ':runtime-value-expression=' +
           (item.cRuntimeValueExpression ?? '') +
+          ':await-expression=' +
+          (item.cAwaitExpression ?? '') +
           ':parameters=' +
           (item.typeParameters ?? []).map(fingerprintAtom).join(',') +
           ':traits=' +
@@ -1814,9 +1842,13 @@ function operationTypeParametersFingerprint(operation: LibraryOperationDescripto
 
     for (let sourceIndex = 0; sourceIndex < parameter.sources.length; sourceIndex = sourceIndex + 1) {
       const source = parameter.sources[sourceIndex]
-      let row = source.source + ':' + source.argumentIndex
+      let row = source.source
 
-      if (source.source === 'argument-trait') {
+      if (source.source !== 'receiver-trait') {
+        row = row + ':' + source.argumentIndex
+      }
+
+      if (source.source === 'argument-trait' || source.source === 'receiver-trait') {
         row = row + ':' + source.traitId + ':' + source.traitArgumentIndex
       } else if (source.source === 'argument-array-literal-column') {
         row = row + ':' + (source.elementIndex ?? '')

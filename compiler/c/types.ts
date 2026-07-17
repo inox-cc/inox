@@ -250,6 +250,8 @@ export type CRuntimeArrowCapture = {
   loc?: AnyNode['loc']
   mutable?: boolean
   name: string
+  promiseSettlementCExpression?: string | null
+  promiseSettlementCppType?: string | null
   promiseSettlementKind?: 'reject' | 'resolve' | null
   runtimeManaged?: boolean
   shape?: CObjectShape | null
@@ -399,6 +401,7 @@ export type CAsyncTaskWrapper = {
 }
 
 export type CPromiseConstructorHandler = {
+  cExpression: string
   kind: 'reject' | 'resolve'
   promise: string
 }

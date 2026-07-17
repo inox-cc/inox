@@ -276,18 +276,6 @@ export function normalizeTypeName(name: string): string {
     return 'promise'
   }
 
-  const promiseInner = genericTypeInner(name, 'Promise')
-
-  if (promiseInner !== null && typeof promiseInner !== 'undefined') {
-    const args = splitGenericArgs(promiseInner)
-
-    if (args.length === 1) {
-      return `promise<${normalizeTypeName(args[0])}>`
-    }
-
-    return 'promise'
-  }
-
   if (isSimpleTypeName(name)) {
     return name
   }
@@ -296,7 +284,7 @@ export function normalizeTypeName(name: string): string {
     return 'array'
   }
 
-  if (name === 'Promise' || name === 'promise') {
+  if (name === 'promise') {
     return 'promise'
   }
 
@@ -444,6 +432,10 @@ export function isBuiltinValueType(name: string): boolean {
     return true
   }
 
+  if (name === 'unknown') {
+    return true
+  }
+
   if (name === 'void') {
     return true
   }
@@ -456,7 +448,7 @@ export function isBuiltinTypeDependencyName(name: string): boolean {
     return true
   }
 
-  if (name === 'Function' || name === 'Promise' || name === 'Record') {
+  if (name === 'Function' || name === 'Record') {
     return true
   }
 

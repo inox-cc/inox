@@ -46,7 +46,7 @@ import type { NullableLoweringDependencies } from '../values/nullable.ts'
 import type { StatementLoweringDependencies } from '../values/statements.ts'
 import type { StringLoweringDependencies } from '../values/strings.ts'
 import {
-  cPromiseRuntimeCallName,
+  cAsyncResultOperationKind,
   isAsyncFunctionCallee,
   isPromiseReturningFunctionCallee,
   resolveCAsyncFunctionAwaitValueType
@@ -2104,7 +2104,7 @@ function isSupportedAsyncTaskAwaitedPromiseExpression(
     return true
   }
 
-  if (cPromiseRuntimeCallName(expression.callee) === 'resolve') {
+  if (cAsyncResultOperationKind(expression) === 'resolve') {
     return true
   }
 
@@ -2124,7 +2124,7 @@ function isSupportedAsyncTaskAwaitedPromiseExpression(
     return false
   }
 
-  if (cPromiseRuntimeCallName(receiver.callee) !== 'resolve') {
+  if (cAsyncResultOperationKind(receiver) !== 'resolve') {
     return false
   }
 
@@ -2143,7 +2143,7 @@ function isSupportedAsyncTaskDirectAwaitPromiseExpression(
     return false
   }
 
-  if (cPromiseRuntimeCallName(expression.callee) === 'reject') {
+  if (cAsyncResultOperationKind(expression) === 'reject') {
     return true
   }
 
@@ -2198,7 +2198,7 @@ function resolveAsyncTaskReturnValueExpression(
     expression !== null &&
     typeof expression !== 'undefined' &&
     expression.type === 'CallExpression' &&
-    cPromiseRuntimeCallName(expression.callee) === 'resolve'
+    cAsyncResultOperationKind(expression) === 'resolve'
   ) {
     if (expression.args[0] === null || typeof expression.args[0] === 'undefined') {
       return null
@@ -2843,14 +2843,14 @@ function emitPreparedAsyncTaskAwaitedPromiseExpression(
 
   if (
     awaitedPromiseExpression.type !== 'CallExpression' ||
-    cPromiseRuntimeCallName(awaitedPromiseExpression.callee) !== 'resolve'
+    cAsyncResultOperationKind(awaitedPromiseExpression) !== 'resolve'
   ) {
     const loc: SourceLocation | null = awaitedPromiseExpression.loc
 
     context.diagnostics.push(
       diagnostic(
         'INOX_C_ASYNC',
-        'async task state-machine slice currently supports local Promise.resolve call variables only',
+        'async task state-machine slice currently supports local fulfilled async-result call variables only',
         loc
       )
     )
@@ -2946,7 +2946,7 @@ function emitPreparedAsyncTaskRejectedPromiseSourceExpression(
   context: AsyncTaskFunctionContext,
   options: AsyncTaskScheduleOptions
 ): PreparedAsyncTaskPromise | null {
-  if (cPromiseRuntimeCallName(expression.callee) !== 'reject') {
+  if (cAsyncResultOperationKind(expression) !== 'reject') {
     return null
   }
 
@@ -2978,7 +2978,7 @@ function emitPreparedAsyncTaskRejectedPromiseSourceExpression(
     context.diagnostics.push(
       diagnostic(
         'INOX_C_ASYNC',
-        'async task Promise.reject currently supports string, number and boolean rejection values in C',
+        'async task rejected async-result operations currently support string, number and boolean values in C',
         expression.loc
       )
     )
@@ -3187,7 +3187,7 @@ function emitPreparedAsyncTaskAwaitedPromiseChainExpression(
 
   chainWrapper = context.promiseChainArrowWrappers.get(callback)
 
-  if (receiver.type === 'CallExpression' && cPromiseRuntimeCallName(receiver.callee) === 'resolve') {
+  if (receiver.type === 'CallExpression' && cAsyncResultOperationKind(receiver) === 'resolve') {
     if (chainWrapper !== null && typeof chainWrapper !== 'undefined') {
       return emitPreparedAsyncTaskAwaitedPromiseChainForWrapper(
         wrapper,
@@ -3204,7 +3204,7 @@ function emitPreparedAsyncTaskAwaitedPromiseChainExpression(
   context.diagnostics.push(
     diagnostic(
       'INOX_C_ASYNC',
-      'async task state-machine slice currently supports local Promise.resolve then-chain variables only',
+      'async task state-machine slice currently supports local fulfilled async-result chain variables only',
       asyncTaskLocationOrNull(expression)
     )
   )
@@ -3292,7 +3292,7 @@ function emitAsyncTaskPromiseChainCallbackContextForWrapper(
       context.diagnostics.push(
         diagnostic(
           'INOX_C_ASYNC',
-          'mutable Promise callback captures are outside the current C backend MVP; use const captures or move mutation outside the Promise callback',
+          'mutable async-result callback captures are outside the current C backend MVP; use const captures or move mutation outside the callback',
           chainWrapper.expression.loc
         )
       )
@@ -3302,7 +3302,7 @@ function emitAsyncTaskPromiseChainCallbackContextForWrapper(
       context.diagnostics.push(
         diagnostic(
           'INOX_C_ASYNC',
-          'capturing async Promise callbacks currently support only const number/boolean/string/object bindings',
+          'capturing async-result callbacks currently support only const number/boolean/string/object bindings',
           chainWrapper.expression.loc
         )
       )
@@ -3348,7 +3348,7 @@ function emitPreparedAsyncTaskAwaitedValueExpression(
     context.diagnostics.push(
       diagnostic(
         'INOX_C_ASYNC',
-        'async task state-machine slice currently supports await Promise.resolve calls only',
+        'async task state-machine slice currently supports await fulfilled async-result calls only',
         null
       )
     )
@@ -3359,7 +3359,7 @@ function emitPreparedAsyncTaskAwaitedValueExpression(
     }
   }
 
-  if (awaitedExpression.type !== 'CallExpression' || cPromiseRuntimeCallName(awaitedExpression.callee) !== 'resolve') {
+  if (awaitedExpression.type !== 'CallExpression' || cAsyncResultOperationKind(awaitedExpression) !== 'resolve') {
     let loc: SourceLocation | null = null
 
     loc = awaitedExpression.loc
@@ -3367,7 +3367,7 @@ function emitPreparedAsyncTaskAwaitedValueExpression(
     context.diagnostics.push(
       diagnostic(
         'INOX_C_ASYNC',
-        'async task state-machine slice currently supports await Promise.resolve calls only',
+        'async task state-machine slice currently supports await fulfilled async-result calls only',
         loc
       )
     )

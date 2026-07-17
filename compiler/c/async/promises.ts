@@ -1,4 +1,5 @@
 import type { AnyNode, Diagnostic, IrProgram, SourceLocation } from '../../types.ts'
+import type { LibraryAsyncResultOperationKind } from '../../extensions/types.ts'
 import { collectArrowCaptures, functionUsesExternalEventLoop } from './callbacks.ts'
 import type {
   CCallbackContextWrapper,
@@ -104,52 +105,29 @@ function promiseNodeValueType(node: PromiseNode): string {
   return 'unknown'
 }
 
-export function cPromiseRuntimeCallName(callee: AnyNode | null | undefined): string | null {
-  if (callee === null || typeof callee === 'undefined') {
+export function cAsyncResultOperationKind(
+  expression: AnyNode | null | undefined
+): LibraryAsyncResultOperationKind | null {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
-  if (callee.type !== 'MemberExpression') {
-    return null
-  }
+  const kind = expression.libraryAsyncResultOperation
 
-  if (promiseMemberObjectReferenceName(callee) !== 'Promise') {
-    return null
-  }
-
-  if (callee.property === 'resolve') {
-    return 'resolve'
-  }
-
-  if (callee.property === 'reject') {
-    return 'reject'
+  if (kind === 'construct' || kind === 'resolve' || kind === 'reject' || kind === 'then' || kind === 'catch') {
+    return kind
   }
 
   return null
 }
 
-export function isPromiseConstructorExpression(expression: AnyNode | null | undefined): boolean {
-  if (expression === null || typeof expression === 'undefined' || expression.type !== 'NewExpression') {
-    return false
-  }
-
-  return promiseReferenceName(expression.callee) === 'Promise'
+export function isAsyncResultConstructorExpression(expression: AnyNode | null | undefined): boolean {
+  return expression?.type === 'NewExpression' && cAsyncResultOperationKind(expression) === 'construct'
 }
 
-export function isPromiseMethodAst(expression: AnyNode | null | undefined): boolean {
-  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
-    return false
-  }
-
-  if (
-    expression.callee === null ||
-    typeof expression.callee === 'undefined' ||
-    expression.callee.type !== 'MemberExpression'
-  ) {
-    return false
-  }
-
-  return expression.callee.property === 'catch' || expression.callee.property === 'then'
+export function isAsyncResultChainExpression(expression: AnyNode | null | undefined): boolean {
+  const kind = cAsyncResultOperationKind(expression)
+  return expression?.type === 'CallExpression' && (kind === 'catch' || kind === 'then')
 }
 
 type PromiseEventLoopFunctionContext = {
@@ -490,15 +468,7 @@ function promiseReferenceName(expression: PromiseNode | null | undefined): strin
   return expression.path[0] ?? null
 }
 
-function promiseMemberObjectReferenceName(expression: PromiseNode | null | undefined): string | null {
-  if (expression === null || typeof expression === 'undefined' || expression.type !== 'MemberExpression') {
-    return null
-  }
-
-  return promiseReferenceName(expression.object)
-}
-
-export function emitPreparedPromiseStaticExpression(
+export function emitPreparedAsyncResultStaticExpression(
   expression: AnyNode | null | undefined,
   context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies,
@@ -508,9 +478,9 @@ export function emitPreparedPromiseStaticExpression(
     return null
   }
 
-  const method = cPromiseRuntimeCallName(expression.callee)
+  const method = cAsyncResultOperationKind(expression)
 
-  if (method === null || typeof method === 'undefined') {
+  if ((method !== 'resolve' && method !== 'reject') || typeof expression.libraryCExpression !== 'string') {
     return null
   }
 
@@ -526,13 +496,19 @@ export function emitPreparedPromiseStaticExpression(
   if (options.owned !== false) {
     registerOwnedPromise(context, out, expressionPromiseValueType(expression), rejectionValueType)
   }
-  const runtimeCall = promiseStaticRuntimeCall(method)
-  const value = emitPreparedPromiseArgumentValue(expression.args[0], context, dependencies)
+  const target = expression.libraryCExpression
+  const argument = expression.args[0]
+  const value = emitPreparedPromiseArgumentValue(argument, context, dependencies)
   const lines: string[] = []
-  appendLines(lines, value.lines)
-  lines.push(
-    emitStatusCheck(`${runtimeCall}(${emitEventLoopReference(context)}, ${value.expression}, &${out})`, context)
-  )
+
+  if (argument !== null && typeof argument !== 'undefined') {
+    appendLines(lines, value.lines)
+    lines.push(`${out} = ${target}(${value.expression});`)
+  } else {
+    lines.push(`${out} = ${target}();`)
+  }
+
+  lines.push(emitRuntimeTypeCheck(`!${out}.valid()`, context))
 
   return {
     lines,
@@ -541,13 +517,13 @@ export function emitPreparedPromiseStaticExpression(
   }
 }
 
-export function emitPreparedPromiseConstructorExpression(
+export function emitPreparedAsyncResultConstructorExpression(
   expression: AnyNode | null | undefined,
   context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
-  if (expression === null || typeof expression === 'undefined' || !isPromiseConstructorExpression(expression)) {
+  if (expression === null || typeof expression === 'undefined' || !isAsyncResultConstructorExpression(expression)) {
     return null
   }
 
@@ -566,13 +542,19 @@ export function emitPreparedPromiseConstructorExpression(
     registerOwnedPromise(context, out, valueType, rejectionValueType)
   }
 
-  const lines = [emitStatusCheck(`inox_promise_new(${emitEventLoopReference(context)}, &${out})`, context)]
+  const target = expression.libraryCExpression
+
+  if (typeof target !== 'string') {
+    return null
+  }
+
+  const lines = [`${out} = ${target}();`, emitRuntimeTypeCheck(`!${out}.valid()`, context)]
 
   if (executor === null || typeof executor === 'undefined' || executor.type !== 'ArrowFunctionExpression') {
     context.diagnostics.push(
       diagnostic(
         'INOX_C_ASYNC',
-        'Promise constructor currently supports only arrow-function executors in C',
+        'async-result constructor currently supports only arrow-function executors in C',
         expression.loc
       )
     )
@@ -589,7 +571,21 @@ export function emitPreparedPromiseConstructorExpression(
   const rejectName = promiseExecutorParamName(executor, 1)
   const statements = promiseExecutorStatements(executor)
 
-  const handlerSnapshots = pushPromiseConstructorHandlers(context, resolveName, rejectName, out)
+  const fulfillExpression = expression.libraryCAsyncFulfillExpression
+  const rejectExpression = expression.libraryCAsyncRejectExpression
+
+  if (typeof fulfillExpression !== 'string' || typeof rejectExpression !== 'string') {
+    return null
+  }
+
+  const handlerSnapshots = pushPromiseConstructorHandlers(
+    context,
+    resolveName,
+    rejectName,
+    out,
+    fulfillExpression,
+    rejectExpression
+  )
 
   try {
     appendLines(lines, dependencies.emitStatementList(statements, context))
@@ -630,24 +626,21 @@ export function emitPromiseConstructorSettlementCall(
     context.diagnostics.push(
       diagnostic(
         'INOX_C_ASYNC',
-        'Promise constructor resolve/reject handlers currently support at most one argument in C',
+        'async-result constructor settlement handlers currently support at most one argument in C',
         expression.loc
       )
     )
   }
 
   const value = emitPreparedPromiseArgumentValue(expression.args[0], context, dependencies)
-  const runtimeCall = promiseConstructorHandlerRuntimeCall(handler)
   const lines: string[] = []
   appendLines(lines, value.lines)
-  lines.push(
-    emitStatusCheck(`${runtimeCall}(${promiseConstructorHandlerPromise(handler)}, ${value.expression})`, context)
-  )
+  lines.push(`${promiseConstructorHandlerPromise(handler)}.${handler.cExpression}(${value.expression});`)
 
   return lines
 }
 
-export function emitPreparedPromiseMethodExpression(
+export function emitPreparedAsyncResultChainExpression(
   expression: AnyNode | null | undefined,
   context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies,
@@ -661,7 +654,11 @@ export function emitPreparedPromiseMethodExpression(
     return null
   }
 
-  const method = expression.callee.property
+  const method = cAsyncResultOperationKind(expression)
+
+  if ((method !== 'then' && method !== 'catch') || typeof expression.libraryCExpression !== 'string') {
+    return null
+  }
   const callback = expression.args[0]
   let wrapper: CPromiseChainWrapper | null = null
 
@@ -677,7 +674,7 @@ export function emitPreparedPromiseMethodExpression(
     context.diagnostics.push(
       diagnostic(
         'INOX_C_ASYNC',
-        'Promise.then/catch currently supports only non-capturing expression-body, single-return block-body, straight-line block-body or simple control-flow block-body arrow callbacks in C',
+        'async-result chaining currently supports only non-capturing expression-body, single-return block-body, straight-line block-body or simple control-flow block-body arrow callbacks in C',
         expression.loc
       )
     )
@@ -696,7 +693,7 @@ export function emitPreparedPromiseMethodExpression(
     context.diagnostics.push(
       diagnostic(
         'INOX_C_ASYNC',
-        'this Promise chain receiver is not supported by the current C backend slice',
+        'this async-result chain receiver is not supported by the current C backend slice',
         expression.loc
       )
     )
@@ -713,8 +710,14 @@ export function emitPreparedPromiseMethodExpression(
   const valueType = expressionPromiseValueType(expression)
   const rejectionValueType = promiseMethodRejectionValueType(method, receiver)
   const callbackContext = emitPromiseChainCallbackContext(wrapper, context, dependencies)
-  const runtimeCall = promiseMethodRuntimeCall(method, receiver, wrapper, callbackContext, out)
-  const runtimeCallLines = promiseMethodRuntimeCallLines(runtimeCall, callbackContext, wrapper, context)
+  const runtimeCall = promiseMethodRuntimeCall(
+    expression.libraryCExpression,
+    receiver,
+    wrapper,
+    callbackContext,
+    out
+  )
+  const runtimeCallLines = promiseMethodRuntimeCallLines(runtimeCall, out, callbackContext, wrapper, context)
 
   if (options.owned !== false) {
     registerOwnedPromise(context, out, valueType, rejectionValueType)
@@ -752,7 +755,7 @@ export function emitPreparedPromiseExpression(
     )
   }
 
-  const promiseConstructor = emitPreparedPromiseConstructorExpression(expression, context, dependencies, options)
+  const promiseConstructor = emitPreparedAsyncResultConstructorExpression(expression, context, dependencies, options)
 
   if (promiseConstructor !== null && typeof promiseConstructor !== 'undefined') {
     return preparedPromiseWithValueType(
@@ -761,13 +764,13 @@ export function emitPreparedPromiseExpression(
     )
   }
 
-  const promiseResolve = emitPreparedPromiseStaticExpression(expression, context, dependencies, options)
+  const promiseResolve = emitPreparedAsyncResultStaticExpression(expression, context, dependencies, options)
 
   if (promiseResolve !== null && typeof promiseResolve !== 'undefined') {
     return preparedPromiseWithValueType(promiseResolve, resolvedPromiseExpressionValueType(expression, context, null))
   }
 
-  const promiseMethod = emitPreparedPromiseMethodExpression(expression, context, dependencies, options)
+  const promiseMethod = emitPreparedAsyncResultChainExpression(expression, context, dependencies, options)
 
   if (promiseMethod !== null && typeof promiseMethod !== 'undefined') {
     return preparedPromiseWithValueType(promiseMethod, resolvedPromiseExpressionValueType(expression, context, null))
@@ -879,14 +882,6 @@ function promiseStaticRejectionValueType(
   return 'unknown'
 }
 
-function promiseStaticRuntimeCall(method: string | null): string {
-  if (method === 'resolve') {
-    return 'inox_promise_resolved'
-  }
-
-  return 'inox_promise_rejected'
-}
-
 function emitPreparedPromiseArgumentValue(
   argument: AnyNode | null | undefined,
   context: PromiseFunctionContext,
@@ -979,22 +974,6 @@ function promiseExecutorStatements(executor: AnyNode): AnyNode[] {
   return []
 }
 
-function promiseConstructorRuntimeCall(kind: string): string {
-  if (kind === 'resolve') {
-    return 'inox_promise_resolve'
-  }
-
-  return 'inox_promise_reject'
-}
-
-function promiseConstructorHandlerRuntimeCall(handler: CPromiseConstructorHandler | null | undefined): string {
-  if (handler === null || typeof handler === 'undefined') {
-    return 'inox_promise_resolve'
-  }
-
-  return promiseConstructorRuntimeCall(handler.kind)
-}
-
 function promiseConstructorHandlerPromise(handler: CPromiseConstructorHandler | null | undefined): string {
   if (handler === null || typeof handler === 'undefined') {
     return '0'
@@ -1065,25 +1044,23 @@ function promiseMethodRuntimeCall(
   const receiverExpression = preparedPromiseExpression(receiver)
   const wrapperName = promiseChainWrapperName(wrapper)
 
-  if (method === 'then') {
-    return `inox_promise_chain(${receiverExpression}, ${wrapperName}, 0, ${callbackContext.expression}, ${callbackContext.finalizer}, &${out})`
-  }
-
-  return `inox_promise_catch(${receiverExpression}, ${wrapperName}, ${callbackContext.expression}, ${callbackContext.finalizer}, &${out})`
+  return `${out} = ${receiverExpression}.${method}(${wrapperName}, ${callbackContext.expression}, ${callbackContext.finalizer});`
 }
 
 function promiseMethodRuntimeCallLines(
   runtimeCall: string,
+  out: string,
   callbackContext: PromiseCallbackContext,
   wrapper: CPromiseChainWrapper | null | undefined,
   context: PromiseFunctionContext
 ): string[] {
   if (callbackContext.expression === '0') {
-    return [emitStatusCheck(runtimeCall, context)]
+    return [runtimeCall, emitRuntimeTypeCheck(`!${out}.valid()`, context)]
   }
 
   return [
-    `if (${runtimeCall} != INOX_OK) {`,
+    runtimeCall,
+    `if (!${out}.valid()) {`,
     `  ${promiseChainWrapperFinalizerName(wrapper)}(${callbackContext.expression});`,
     `  ${emitFailureStatement(context)}`,
     '}'
@@ -1475,7 +1452,9 @@ function pushPromiseConstructorHandlers(
   context: PromiseFunctionContext,
   resolveName: string | null,
   rejectName: string | null,
-  promise: string
+  promise: string,
+  fulfillExpression: string,
+  rejectExpression: string
 ): PromiseConstructorHandlerSnapshot[] {
   const snapshots: PromiseConstructorHandlerSnapshot[] = []
 
@@ -1485,6 +1464,7 @@ function pushPromiseConstructorHandlers(
       previous: promiseConstructorHandlerOrNull(context.promiseConstructorHandlers.get(resolveName))
     })
     context.promiseConstructorHandlers.set(resolveName, {
+      cExpression: fulfillExpression,
       kind: 'resolve',
       promise: promise
     })
@@ -1496,6 +1476,7 @@ function pushPromiseConstructorHandlers(
       previous: promiseConstructorHandlerOrNull(context.promiseConstructorHandlers.get(rejectName))
     })
     context.promiseConstructorHandlers.set(rejectName, {
+      cExpression: rejectExpression,
       kind: 'reject',
       promise: promise
     })
@@ -1750,7 +1731,7 @@ function emitPromiseChainCallbackContext(
       context.diagnostics.push(
         diagnostic(
           'INOX_C_ASYNC',
-          'mutable Promise callback captures are outside the current C backend MVP; use const captures or move mutation outside the Promise callback',
+          'mutable async-result callback captures are outside the current C backend MVP; use const captures or move mutation outside the callback',
           wrapper.expression.loc
         )
       )
@@ -1760,7 +1741,7 @@ function emitPromiseChainCallbackContext(
       context.diagnostics.push(
         diagnostic(
           'INOX_C_ASYNC',
-          'capturing Promise callbacks currently support only const number/boolean/string/object bindings',
+          'capturing async-result callbacks currently support only const number/boolean/string/object bindings',
           wrapper.expression.loc
         )
       )
@@ -1799,15 +1780,7 @@ function isPromiseMethodCallExpression(
     return false
   }
 
-  if (
-    expression.callee === null ||
-    typeof expression.callee === 'undefined' ||
-    expression.callee.type !== 'MemberExpression'
-  ) {
-    return false
-  }
-
-  if (expression.callee.property !== 'catch' && expression.callee.property !== 'then') {
+  if (!isAsyncResultChainExpression(expression)) {
     return false
   }
 
@@ -1961,7 +1934,7 @@ function registerPromiseChainExpression(
   context: PromiseEmitContext,
   deps: PromiseChainLoweringDependencies
 ): void {
-  if (!isPromiseMethodAst(expression)) {
+  if (!isAsyncResultChainExpression(expression)) {
     return
   }
 

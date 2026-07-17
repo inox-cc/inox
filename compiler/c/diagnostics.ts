@@ -21,9 +21,6 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
   const path = joinStrings(usage.path, '.')
 
   return (
-    path === 'Promise' ||
-    path === 'Promise.resolve' ||
-    path === 'Promise.reject' ||
     path === 'Array.from' ||
     path === 'Array.isArray' ||
     isCollectionConstructorGlobalUsagePath(usage.path)

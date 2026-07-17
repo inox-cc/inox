@@ -2,7 +2,7 @@
 
 #include "inox/allocator.h"
 #include "inox/loop.h"
-#include "inox/promise.h"
+#include "inox/promise_runtime.h"
 
 int inox::run_app(AppMain app_main) {
   RuntimeContext runtime(&inox_default_allocator);
@@ -29,5 +29,6 @@ int inox::run_app(AppMain app_main) {
 }
 
 int inox::main(AppMain app_main) {
-  return return_code(run_app(app_main));
+  const int result = run_app(app_main);
+  return !inox_promise_has_unhandled_rejection() ? result : 1;
 }

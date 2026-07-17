@@ -16,6 +16,7 @@
 #include "inox/main.h"
 #include "inox/object.h"
 #include "inox/promise.h"
+#include "inox/promise_runtime.h"
 #include "inox/string.h"
 
 #ifndef INOX_PACKAGE_VERSION
@@ -467,8 +468,8 @@ inox::Value process::memoryUsage() const {
 
 class process process;
 
-static int process_return_code() {
-  return !inox_promise_has_unhandled_rejection() ? process_exit_code : 1;
+static int process_return_code(int success_code) {
+  return !inox_promise_has_unhandled_rejection() ? success_code : 1;
 }
 
 int inox::process_main(int argc, char** argv, void (*app_main)(void)) {
@@ -477,10 +478,10 @@ int inox::process_main(int argc, char** argv, void (*app_main)(void)) {
   const int code = run_app(app_main);
 
   if (code != 0) {
-    return return_code(code);
+    return process_return_code(code);
   }
 
-  return process_return_code();
+  return process_return_code(process_exit_code);
 }
 
 int inox::process_main(int argc, char** argv, inox::StringView entry_path, void (*app_main)(void)) {
@@ -489,8 +490,8 @@ int inox::process_main(int argc, char** argv, inox::StringView entry_path, void 
   const int code = run_app(app_main);
 
   if (code != 0) {
-    return return_code(code);
+    return process_return_code(code);
   }
 
-  return process_return_code();
+  return process_return_code(process_exit_code);
 }

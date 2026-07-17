@@ -40,6 +40,7 @@ type CompilerLibraryCArgumentSource = {
 }
 
 type CompilerLibraryExpressionNode = AnyNode & {
+  libraryAsyncResultOperation?: string | null
   libraryCExpression?: string | null
   libraryCLowering?: string | null
   libraryCArgumentAdapters?: string[] | null
@@ -257,6 +258,11 @@ export function emitPreparedCompilerLibraryCallExpression(
   options?: PreparedCallOptions | null
 ): PreparedExpression | null {
   const item = expression as CompilerLibraryExpressionNode
+
+  if (typeof item.libraryAsyncResultOperation === 'string') {
+    return null
+  }
+
   const lowered = emitPreparedCompilerLibraryIntrinsicExpression(expression, item, context, dependencies)
 
   if (lowered !== null) {
@@ -755,7 +761,7 @@ export function emitPreparedCompilerLibraryCallExpression(
     callExpression = `((${optionalReceiverCondition}) ? ${callExpression} : ${undefinedExpression})`
   }
 
-  if (item.valueType === 'promise' && cppType === 'inox::Promise') {
+  if (item.valueType === 'promise') {
     const promiseValueType = item.promiseValueType ?? 'unknown'
     const rejectionValueType = item.promiseRejectionValueType ?? 'unknown'
     const optionOwned = options?.owned

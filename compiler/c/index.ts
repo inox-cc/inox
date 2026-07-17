@@ -45,16 +45,16 @@ import {
 } from './async/callbacks.ts'
 import type { PromiseChainLoweringDependencies, PromiseLoweringDependencies } from './async/promises.ts'
 import {
-  cPromiseRuntimeCallName,
-  emitPreparedPromiseConstructorExpression,
+  cAsyncResultOperationKind,
+  emitPreparedAsyncResultConstructorExpression,
   emitPreparedPromiseExpression,
-  emitPreparedPromiseMethodExpression,
+  emitPreparedAsyncResultChainExpression,
   emitPreparedPromiseReturningCallExpression,
-  emitPreparedPromiseStaticExpression,
+  emitPreparedAsyncResultStaticExpression,
   emitPromiseConstructorSettlementCall,
   isAsyncFunctionCallee,
   isExternalEventLoopFunctionCallee,
-  isPromiseConstructorExpression,
+  isAsyncResultConstructorExpression,
   isPromiseReturningFunctionCallee,
   knownValueType,
   resolveCAsyncFunctionAwaitValueType,
@@ -171,6 +171,7 @@ import {
   cIterableElementValueType,
   cRuntimeValueTag,
   cTypeRefDeclaredName,
+  compilerLibraryIntrinsicNativeCAwaitExpression,
   compilerLibraryIntrinsicNativeCppType,
   isManagedRuntimeReturnType,
   isNullableScalarType,
@@ -467,28 +468,28 @@ const statementLoweringDependencies = {
   emitPreparedNumberExpression,
   emitPreparedCompilerLibraryCallExpression,
   emitPreparedRuntimeTruthinessExpression: emitPreparedStatementRuntimeTruthinessExpression,
-  emitPreparedPromiseConstructorExpression: (
+  emitPreparedAsyncResultConstructorExpression: (
     expression: AnyNode,
     context: CFunctionContext,
     options?: PreparedCallOptions
-  ) => emitPreparedPromiseConstructorExpression(expression, context, promiseLoweringDependencies, options),
+  ) => emitPreparedAsyncResultConstructorExpression(expression, context, promiseLoweringDependencies, options),
   emitPreparedPromiseExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedPromiseExpression(expression, context, promiseLoweringDependencies, options),
-  emitPreparedPromiseMethodExpression: (
+  emitPreparedAsyncResultChainExpression: (
     expression: AnyNode,
     context: CFunctionContext,
     options?: PreparedCallOptions
-  ) => emitPreparedPromiseMethodExpression(expression, context, promiseLoweringDependencies, options),
+  ) => emitPreparedAsyncResultChainExpression(expression, context, promiseLoweringDependencies, options),
   emitPreparedPromiseReturningCallExpression: (
     expression: AnyNode,
     context: CFunctionContext,
     options?: PreparedCallOptions
   ) => emitPreparedPromiseReturningCallExpression(expression, context, promiseLoweringDependencies, options),
-  emitPreparedPromiseStaticExpression: (
+  emitPreparedAsyncResultStaticExpression: (
     expression: AnyNode,
     context: CFunctionContext,
     options?: PreparedCallOptions
-  ) => emitPreparedPromiseStaticExpression(expression, context, promiseLoweringDependencies, options),
+  ) => emitPreparedAsyncResultStaticExpression(expression, context, promiseLoweringDependencies, options),
   emitPreparedUpdateExpression,
   emitPromiseConstructorSettlementCall: (expression: AnyNode, context: CFunctionContext) =>
     emitPromiseConstructorSettlementCall(expression, context, promiseLoweringDependencies),
@@ -651,7 +652,7 @@ compilerLibraryLoweringDependencies = {
 }
 
 const rejectionValueTypeDependencies: RejectionValueTypeDependencies = {
-  cPromiseRuntimeCallName,
+  cAsyncResultOperationKind,
   inferExpressionType,
   isKnownExceptionValueExpression
 }
@@ -869,14 +870,14 @@ const declarationEmissionDependencies = {
 }
 
 const expressionTypeDependencies = {
-  cPromiseRuntimeCallName,
+  cAsyncResultOperationKind,
   isArrayIncludesCall,
   isArrayJoinCall,
   isArrayLengthExpression,
   isClassConstructorExpression,
   isIndexAccessExpression,
   isMemberAccessExpression,
-  isPromiseConstructorExpression,
+  isAsyncResultConstructorExpression,
   isPromiseReturningFunctionCallee,
   knownValueType,
   resolveKnownArrayIndex,
@@ -915,10 +916,10 @@ const cCallExpressionDependencies = {
   emitPreparedArraySliceCallExpression,
   emitPreparedClassMethodCallExpression,
   emitPreparedNumberExpression,
-  emitPreparedPromiseMethodExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedPromiseMethodExpression(expression, context, promiseLoweringDependencies),
-  emitPreparedPromiseStaticExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedPromiseStaticExpression(expression, context, promiseLoweringDependencies),
+  emitPreparedAsyncResultChainExpression: (expression: AnyNode, context: CFunctionContext) =>
+    emitPreparedAsyncResultChainExpression(expression, context, promiseLoweringDependencies),
+  emitPreparedAsyncResultStaticExpression: (expression: AnyNode, context: CFunctionContext) =>
+    emitPreparedAsyncResultStaticExpression(expression, context, promiseLoweringDependencies),
   emitPreparedRuntimeArrayIndexValue,
   emitRuntimeCallbackCall,
   emitRuntimeCallbackValue,
@@ -7233,16 +7234,36 @@ function emitAwaitValueVariableDeclaration(statement: AnyNode, context: CFunctio
   const name = emitCIdentifier(statement.name)
   const valueTag = cRuntimeValueTag(valueType)
   const valueCheckNeeded = emitRuntimeValueCheck('inox_await_value', valueTag, context) !== ''
-  const valueInfo = resolveAwaitResultCppValueInfo(expression, name, valueType, valueTag, valueCheckNeeded, context)
+  const rawValue = nextCName(context, 'inox_await_value')
+  const valueInfo = resolveAwaitResultCppValueInfo(
+    expression,
+    rawValue,
+    valueType,
+    valueTag,
+    valueCheckNeeded,
+    context
+  )
+  const awaitExpression = emitAsyncResultAwaitExpression(
+    expression.argument,
+    preparedPromise.expression,
+    context
+  )
+
+  if (awaitExpression === null) {
+    return null
+  }
+
   const lines: string[] = []
 
   pushAll(lines, preparedPromise.lines)
-  lines.push(`auto ${name} = inox::await_value<${valueInfo.cppType}>(${preparedPromise.expression});`)
+  lines.push(`auto ${rawValue} = ${awaitExpression};`)
   pushAll(lines, emitThrownCheckLines(context))
 
   if (valueInfo.valueCheck !== '') {
     lines.push(valueInfo.valueCheck)
   }
+
+  lines.push(`auto ${name} = ${valueInfo.valueExpression};`)
 
   lines.push('')
 
@@ -7297,20 +7318,20 @@ function emitPreparedAwaitedPromiseValueExpression(
   promise: PreparedExpression,
   context: CFunctionContext
 ): PreparedExpression {
-  const preparedPromise = preparedExpressionOrEmpty(promise)
+  const preparedAsyncResult = preparedExpressionOrEmpty(promise)
 
   registerEventLoop(context)
 
   const valueType = firstKnownValueTypeOrUnknown(
     expression.valueType,
-    preparedPromise.valueType,
+    preparedAsyncResult.valueType,
     resolvePromiseExpressionValueType(expression.argument, context)
   )
 
   const valueTag = cRuntimeValueTag(valueType)
   const valueCheckNeeded = emitRuntimeValueCheck('inox_await_value', valueTag, context) !== ''
   let rejectionValueType = 'unknown'
-  const promiseRejectionValueType = preparedPromise.rejectionValueType ?? ''
+  const promiseRejectionValueType = preparedAsyncResult.rejectionValueType ?? ''
 
   if (promiseRejectionValueType !== '') {
     rejectionValueType = promiseRejectionValueType
@@ -7318,7 +7339,7 @@ function emitPreparedAwaitedPromiseValueExpression(
 
   return emitPreparedAwaitResultExpression(
     expression,
-    preparedPromise,
+    preparedAsyncResult,
     valueType,
     valueTag,
     valueCheckNeeded,
@@ -7346,20 +7367,53 @@ function emitPreparedAwaitResultExpression(
     valueCheckNeeded,
     context
   )
+  const awaitExpression = emitAsyncResultAwaitExpression(
+    expression.argument,
+    preparedPromise.expression,
+    context
+  )
   const lines: string[] = []
 
   pushAll(lines, preparedPromise.lines)
-  lines.push(`auto ${result} = inox::await_value<${valueInfo.cppType}>(${preparedPromise.expression});`)
+
+  if (awaitExpression === null) {
+    pushDiagnostic(
+      context,
+      diagnostic(
+        'INOX_C_ASYNC',
+        'the configured async-result provider does not define C++ await lowering',
+        expression.loc
+      )
+    )
+
+    return {
+      lines,
+      expression: 'inox_undefined_value()',
+      valueType: 'unknown'
+    }
+  }
+
+  lines.push(`auto ${result} = ${awaitExpression};`)
   pushAll(lines, emitAwaitResultRejectedPromiseLines(result, rejectionValueType, context))
 
   if (valueInfo.valueCheck !== '') {
     lines.push(valueInfo.valueCheck)
   }
 
+  let resolvedExpression = valueInfo.valueExpression
+  let cppDeclaredName = result
+
+  if (valueInfo.cppType !== 'inox::Value') {
+    const converted = nextCName(context, 'inox_await_converted')
+    lines.push(`auto ${converted} = ${valueInfo.valueExpression};`)
+    resolvedExpression = converted
+    cppDeclaredName = converted
+  }
+
   const preparedExpression: PreparedExpression = {
     lines,
-    expression: valueExpression,
-    cppDeclaredName: valueExpression,
+    expression: resolvedExpression,
+    cppDeclaredName,
     owned: false,
     runtimeTypeChecked: valueInfo.runtimeTypeChecked,
     valueType
@@ -7376,6 +7430,7 @@ type AwaitResultCppValueInfo = {
   cppType: string
   runtimeTypeChecked: boolean
   valueCheck: string
+  valueExpression: string
 }
 
 function resolveAwaitResultCppValueInfo(
@@ -7390,18 +7445,25 @@ function resolveAwaitResultCppValueInfo(
     return {
       cppType: 'inox::String',
       runtimeTypeChecked: true,
-      valueCheck: ''
+      valueCheck: emitRuntimeValueCheck(valueExpression, 'INOX_TAG_STRING', context),
+      valueExpression: `inox::String(${valueExpression})`
     }
   }
 
   const shape = expression.shape ?? expression.argument?.shape
   const libraryCppType = shape?.libraryCppType
+  const asyncResultCppType = compilerLibraryIntrinsicNativeCppType(context.libraries, 'async-result')
 
-  if (libraryCppType !== null && typeof libraryCppType !== 'undefined' && libraryCppType !== 'inox::Promise') {
+  if (
+    libraryCppType !== null &&
+    typeof libraryCppType !== 'undefined' &&
+    libraryCppType !== asyncResultCppType
+  ) {
     return {
       cppType: libraryCppType,
       runtimeTypeChecked: true,
-      valueCheck: ''
+      valueCheck: emitRuntimeValueCheck(valueExpression, valueTag, context),
+      valueExpression: `${libraryCppType}(${valueExpression})`
     }
   }
 
@@ -7411,7 +7473,8 @@ function resolveAwaitResultCppValueInfo(
     return {
       cppType: cppType ?? 'inox::Value',
       runtimeTypeChecked: cppType !== null,
-      valueCheck: ''
+      valueCheck: emitRuntimeValueCheck(valueExpression, valueTag, context),
+      valueExpression: cppType === null ? valueExpression : `${cppType}(${valueExpression})`
     }
   }
 
@@ -7419,15 +7482,35 @@ function resolveAwaitResultCppValueInfo(
     return {
       cppType: 'inox::Value',
       runtimeTypeChecked: false,
-      valueCheck: ''
+      valueCheck: '',
+      valueExpression
     }
   }
 
   return {
     cppType: 'inox::Value',
     runtimeTypeChecked: true,
-    valueCheck: emitRuntimeValueCheck(valueExpression, valueTag, context)
+    valueCheck: emitRuntimeValueCheck(valueExpression, valueTag, context),
+    valueExpression
   }
+}
+
+function emitAsyncResultAwaitExpression(
+  expression: AnyNode | null | undefined,
+  value: string,
+  context: CFunctionContext
+): string | null {
+  const configuredExpression = expression?.libraryCAwaitExpression
+  const template =
+    typeof configuredExpression === 'string'
+      ? configuredExpression
+      : compilerLibraryIntrinsicNativeCAwaitExpression(context.libraries, 'async-result')
+
+  if (template === null || !template.includes('$value')) {
+    return null
+  }
+
+  return template.split('$value').join(`(${value})`)
 }
 
 function emitAwaitResultRejectedPromiseLines(
@@ -7855,7 +7938,7 @@ function emitRuntimeArrowCallbackValueInto(
         context,
         diagnostic(
           'INOX_C_FUNCTION_VALUE',
-          'capturing C callbacks currently support only const scalar/runtime-value bindings and Promise resolve/reject handlers',
+          'capturing C callbacks currently support only const scalar/runtime-value bindings and async-result settlement handlers',
           wrapper.expression.loc
         )
       )
@@ -7936,17 +8019,21 @@ function emitRuntimeArrowCaptureStoreLines(
         context,
         diagnostic(
           'INOX_C_FUNCTION_VALUE',
-          'Promise resolve/reject handlers can only be captured inside Promise constructor executors',
+          'async-result settlement handlers can only be captured inside async-result constructor executors',
           capture.loc
         )
       )
 
-      lines.push(`${field} = 0;`)
       return lines
     }
 
-    lines.push(`${field} = ${handler.promise};`)
-    lines.push(`if (${field} != 0) inox_promise_retain(${field});`)
+    const cppType = capture.promiseSettlementCppType
+
+    if (typeof cppType !== 'string' || cppType.length === 0) {
+      return lines
+    }
+
+    lines.push(`new (&${field}) ${cppType}(${handler.promise});`)
     return lines
   }
 

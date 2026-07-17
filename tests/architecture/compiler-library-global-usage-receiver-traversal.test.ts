@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { collectGlobalUsages } from '../../compiler/ir/globals.ts'
 import type { ProgramNode } from '../../compiler/types.ts'
 
-test('global usage traversal пропускает package binding, но обходит receiver library operation', () => {
+test('global usage traversal пропускает package bindings и обходит receiver library operation', () => {
   const program = {
     type: 'Program',
     body: [
@@ -15,7 +15,7 @@ test('global usage traversal пропускает package binding, но обхо
   const paths = collectGlobalUsages(program).map((usage) => usage.path.join('.'))
 
   paths.sort()
-  assert.deepEqual(paths, ['Int8Array.from', 'Promise.resolve'])
+  assert.deepEqual(paths, ['Int8Array.from'])
 })
 
 function libraryGlobalCall(): object {

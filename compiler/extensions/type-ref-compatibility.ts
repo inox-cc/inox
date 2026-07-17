@@ -19,6 +19,7 @@ export type TypeRefCompatibilityMetadata = {
   nullable: boolean
   owned: boolean
   libraryCppType: string | null
+  libraryCAwaitExpression: string | null
   libraryResultTypeId: string | null
   shape: ObjectShapeInfo | null
   arrayElementTypeId: string | null
@@ -360,6 +361,7 @@ function baseTypeRefCompatibilityMetadata(
     }
 
     metadata.libraryCppType = nativeType.cppType
+    metadata.libraryCAwaitExpression = nativeType.cAwaitExpression ?? null
     metadata.libraryResultTypeId = nativeType.typeId
     metadata.intrinsicRole = compilerLibraryIntrinsicRoleForTypeId(libraries, nativeType.typeId)
     metadata.shape = {
@@ -440,6 +442,7 @@ function emptyCompatibilityMetadata(
     nullable,
     owned,
     libraryCppType: null,
+    libraryCAwaitExpression: null,
     libraryResultTypeId: null,
     shape: null,
     arrayElementTypeId: null,

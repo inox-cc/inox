@@ -20,7 +20,7 @@ type RejectionNameSet = Set<string>
 type RejectionStringMap = Map<string, string>
 
 export type RejectionValueTypeDependencies = {
-  cPromiseRuntimeCallName(callee: AnyNode): string | null
+  cAsyncResultOperationKind(expression: AnyNode): string | null
   inferExpressionType(expression: AnyNode, context: CFunctionContext): string
   isKnownExceptionValueExpression(expression: AnyNode, exceptionValueNames: Set<string>): boolean
 }
@@ -213,7 +213,7 @@ function inferPromiseRejectionValueType(
     return expression.promiseRejectionValueType
   }
 
-  if (expression.type === 'CallExpression' && deps.cPromiseRuntimeCallName(expression.callee) === 'reject') {
+  if (expression.type === 'CallExpression' && deps.cAsyncResultOperationKind(expression) === 'reject') {
     return inferRejectedValueTypeWithExceptions(expression.args[0], context, localExceptionValueNames, deps)
   }
 

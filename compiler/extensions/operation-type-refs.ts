@@ -4,6 +4,7 @@ import type {
   CompilerLibrarySet,
   LibraryOperationDescriptor,
   LibraryOperationTypeParameterSourceDescriptor,
+  TypeTraitId,
   TypeRef
 } from './types.ts'
 
@@ -59,47 +60,111 @@ function resolveOperationTypeParameterSource(
   libraries: CompilerLibrarySet
 ): TypeRef | null {
   if (source.source === 'explicit-type-argument') {
-    return typeRefAt(context.explicitTypeArguments, source.argumentIndex)
+    const argumentIndex = source.argumentIndex
+
+    if (typeof argumentIndex !== 'number') {
+      return null
+    }
+
+    return typeRefAt(context.explicitTypeArguments, argumentIndex)
   }
 
   if (source.source === 'receiver-type-argument') {
-    return nominalTypeArgument(context.receiverTypeRef, source.argumentIndex)
+    const argumentIndex = source.argumentIndex
+
+    if (typeof argumentIndex !== 'number') {
+      return null
+    }
+
+    return nominalTypeArgument(context.receiverTypeRef, argumentIndex)
   }
 
   if (source.source === 'contextual-type-argument') {
-    return nominalTypeArgument(context.contextualTypeRef, source.argumentIndex)
+    const argumentIndex = source.argumentIndex
+
+    if (typeof argumentIndex !== 'number') {
+      return null
+    }
+
+    return nominalTypeArgument(context.contextualTypeRef, argumentIndex)
   }
 
   if (source.source === 'argument-function-return') {
-    return typeRefAt(context.argumentFunctionReturnTypeRefs, source.argumentIndex)
+    const argumentIndex = source.argumentIndex
+
+    if (typeof argumentIndex !== 'number') {
+      return null
+    }
+
+    return typeRefAt(context.argumentFunctionReturnTypeRefs, argumentIndex)
   }
 
   if (source.source === 'argument-type') {
-    return typeRefAt(context.argumentTypeRefs, source.argumentIndex)
+    const argumentIndex = source.argumentIndex
+
+    if (typeof argumentIndex !== 'number') {
+      return null
+    }
+
+    return typeRefAt(context.argumentTypeRefs, argumentIndex)
   }
 
   if (source.source === 'argument-array-literal-column') {
-    const columns = typeRefListAt(context.argumentArrayLiteralColumns, source.argumentIndex)
+    const argumentIndex = source.argumentIndex
     const elementIndex = source.elementIndex
 
-    if (columns === null || typeof elementIndex !== 'number') {
+    if (typeof argumentIndex !== 'number' || typeof elementIndex !== 'number') {
+      return null
+    }
+
+    const columns = typeRefListAt(context.argumentArrayLiteralColumns, argumentIndex)
+
+    if (columns === null) {
       return null
     }
 
     return typeRefAt(columns, elementIndex)
   }
 
+  if (source.source === 'receiver-trait') {
+    const traitId = source.traitId
+    const traitArgumentIndex = source.traitArgumentIndex
+
+    if (typeof traitId !== 'string' || typeof traitArgumentIndex !== 'number') {
+      return null
+    }
+
+    return traitArgument(context.receiverTypeRef, traitId, traitArgumentIndex, libraries)
+  }
+
   if (source.source !== 'argument-trait') {
     return null
   }
 
+  const argumentIndex = source.argumentIndex
+  const traitId = source.traitId
   const traitArgumentIndex = source.traitArgumentIndex
 
-  if (typeof traitArgumentIndex !== 'number') {
+  if (
+    typeof argumentIndex !== 'number' ||
+    typeof traitId !== 'string' ||
+    typeof traitArgumentIndex !== 'number'
+  ) {
     return null
   }
 
-  const argumentTypeRef = typeRefAt(context.argumentTypeRefs, source.argumentIndex)
+  const argumentTypeRef = typeRefAt(context.argumentTypeRefs, argumentIndex)
+
+  return traitArgument(argumentTypeRef, traitId, traitArgumentIndex, libraries)
+}
+
+function traitArgument(
+  typeRef: TypeRef | null,
+  traitId: TypeTraitId,
+  traitArgumentIndex: number,
+  libraries: CompilerLibrarySet
+): TypeRef | null {
+  const argumentTypeRef = typeRef
 
   if (argumentTypeRef === null || argumentTypeRef.kind === 'parameter') {
     return null
@@ -110,7 +175,7 @@ function resolveOperationTypeParameterSource(
   for (let index = 0; index < traits.length; index = index + 1) {
     const trait = traits[index]
 
-    if (trait.traitId === source.traitId) {
+    if (trait.traitId === traitId) {
       return typeRefAt(trait.args, traitArgumentIndex)
     }
   }

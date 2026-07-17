@@ -1954,8 +1954,8 @@ export type CCallExpressionDependencies = {
     options?: PreparedCallOptions
   ): PreparedExpression | null
   emitPreparedNumberExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitPreparedPromiseMethodExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedPromiseStaticExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedAsyncResultChainExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedAsyncResultStaticExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedRuntimeArrayIndexValue(
     expression: CValueNode,
     element: CRuntimeArrayElement,
@@ -2039,13 +2039,13 @@ export function emitPreparedCallExpression(
     return arraySliceCall
   }
 
-  const promise = deps.emitPreparedPromiseStaticExpression(expression, context)
+  const promise = deps.emitPreparedAsyncResultStaticExpression(expression, context)
 
   if (promise !== null && typeof promise !== 'undefined') {
     return promise
   }
 
-  const promiseMethod = deps.emitPreparedPromiseMethodExpression(expression, context)
+  const promiseMethod = deps.emitPreparedAsyncResultChainExpression(expression, context)
 
   if (promiseMethod !== null && typeof promiseMethod !== 'undefined') {
     return promiseMethod

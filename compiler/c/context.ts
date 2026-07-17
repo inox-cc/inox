@@ -23,7 +23,8 @@ import {
   isManagedRuntimeReturnType,
   isNullableScalarType,
   isOpaqueRuntimeValueType,
-  libraryNativeCppType
+  libraryNativeCppType,
+  compilerLibraryIntrinsicNativeCppType
 } from './value-types.ts'
 
 export type CLoopFlowTarget = {
@@ -616,6 +617,7 @@ type COwnedValueDeclarationContext = {
 
 type COwnedPromiseDeclarationContext = {
   cleanupEnabled?: boolean | null
+  libraries: CCompilerLibrarySet
   ownedPromises?: string[] | null
 }
 
@@ -738,13 +740,18 @@ export function emitOwnedValueDeclarations(context: COwnedValueDeclarationContex
 export function emitOwnedPromiseDeclarations(context: COwnedPromiseDeclarationContext): string[] {
   const lines: string[] = []
   let ownedPromises: string[] = []
+  const cppType = compilerLibraryIntrinsicNativeCppType(context.libraries, 'async-result')
+
+  if (cppType === null) {
+    return lines
+  }
 
   if (context.ownedPromises !== null && typeof context.ownedPromises !== 'undefined') {
     ownedPromises = context.ownedPromises
   }
 
   for (const name of ownedPromises) {
-    lines.push(`inox::Promise ${emitCLocalName(name)};`)
+    lines.push(`${cppType} ${emitCLocalName(name)};`)
   }
 
   return lines

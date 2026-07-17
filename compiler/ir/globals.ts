@@ -6,6 +6,7 @@ type GlobalUsageNode = AnyNode & {
   args?: AnyNode[] | null
   index?: AnyNode | null
   loc?: SourceLocation
+  libraryBindingId?: string | null
   libraryOperationId?: string | null
   libraryReceiverTypeId?: string | null
   object?: AnyNode | null
@@ -80,7 +81,10 @@ function visitGlobalUsage(node: AnyNode | NodeList | null | undefined, usages: I
   const item: GlobalUsageNode = node
   const itemType = item.type
 
-  if (item.libraryOperationId !== null && typeof item.libraryOperationId !== 'undefined') {
+  if (
+    (item.libraryBindingId !== null && typeof item.libraryBindingId !== 'undefined') ||
+    (item.libraryOperationId !== null && typeof item.libraryOperationId !== 'undefined')
+  ) {
     visitCompilerLibraryOperationChildren(item, usages)
     return
   }
@@ -303,7 +307,6 @@ function isJsStdGlobalRootName(name: string): boolean {
     name === 'Int8Array' ||
     name === 'Int16Array' ||
     name === 'Int32Array' ||
-    name === 'Promise' ||
     name === 'Uint16Array' ||
     name === 'Uint32Array'
   )
@@ -338,7 +341,6 @@ function sortedStringSet(values: StringSet): string[] {
   pushStringIfPresent(values, result, 'Int32Array')
   pushStringIfPresent(values, result, 'Int8Array')
   pushStringIfPresent(values, result, 'Map')
-  pushStringIfPresent(values, result, 'Promise')
   pushStringIfPresent(values, result, 'Uint16Array')
   pushStringIfPresent(values, result, 'Uint32Array')
   return result

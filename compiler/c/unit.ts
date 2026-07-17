@@ -315,7 +315,7 @@ function registerCUnitValueDeclarations(context: CEmitContext, values: CUnitValu
     context.moduleValueNames.set(item.name, item.symbolName)
     context.moduleValueTypes.set(item.name, item.valueType)
 
-    if (cUnitValueDeclarationCType(item) === 'inox_value') {
+    if (cUnitValueDeclarationCType(item, context) === 'inox_value') {
       context.moduleRuntimeValueNames.add(item.name)
     }
 
@@ -326,10 +326,6 @@ function registerCUnitValueDeclarations(context: CEmitContext, values: CUnitValu
 }
 
 function cUnitValueLibraryCppType(node: AnyNode): string | null {
-  if (node.valueType === 'promise' || node.init?.valueType === 'promise') {
-    return null
-  }
-
   const valueType = node.valueType ?? node.init?.valueType
 
   if (valueType === 'number' || valueType === 'boolean') {
@@ -385,7 +381,11 @@ function registerCUnitSyntheticImportNames(context: CEmitContext, programs: IrPr
   }
 }
 
-function emitCUnitValueDefinitions(lines: string[], values: CUnitValueDeclaration[]): void {
+function emitCUnitValueDefinitions(
+  lines: string[],
+  values: CUnitValueDeclaration[],
+  context: CEmitContext
+): void {
   if (values.length === 0) {
     return
   }
@@ -399,7 +399,7 @@ function emitCUnitValueDefinitions(lines: string[], values: CUnitValueDeclaratio
       continue
     }
 
-    const cType = cUnitValueDeclarationCType(item)
+    const cType = cUnitValueDeclarationCType(item, context)
     const initializer = cUnitValueDeclarationGlobalInitializer(item)
 
     if (initializer === '') {
@@ -699,7 +699,7 @@ function isUnionValueTypeName(valueType: string): boolean {
   return valueType.startsWith('union<')
 }
 
-function cUnitValueCType(valueType: string): string {
+function cUnitValueCType(valueType: string, context: CEmitContext): string {
   const className = cClassNameFromValueType(valueType)
 
   if (className !== null && typeof className !== 'undefined') {
@@ -715,18 +715,18 @@ function cUnitValueCType(valueType: string): string {
   }
 
   if (valueType === 'promise') {
-    return 'inox::Promise'
+    return compilerLibraryIntrinsicNativeCppType(context.libraries, 'async-result') ?? emitCType(valueType)
   }
 
   return emitCType(valueType)
 }
 
-function cUnitValueDeclarationCType(item: CUnitValueDeclaration): string {
+function cUnitValueDeclarationCType(item: CUnitValueDeclaration, context: CEmitContext): string {
   if (item.cppType !== null && typeof item.cppType !== 'undefined') {
     return item.cppType
   }
 
-  return cUnitValueCType(item.valueType)
+  return cUnitValueCType(item.valueType, context)
 }
 
 function cUnitValueGlobalInitializer(valueType: string): string {
@@ -1617,7 +1617,7 @@ export function emitCUnit(
   pushUnitLines(lines, emitCClassDescriptorDeclarationsForNames(baseContext, classDescriptorNames))
   emitCUnitValueFunctionFieldDefinitions(lines, valueDeclarations, baseContext)
   emitCUnitUnhandledRejectionFlagDefinition(lines, baseContext)
-  emitCUnitValueDefinitions(lines, valueDeclarations)
+  emitCUnitValueDefinitions(lines, valueDeclarations, baseContext)
 
   if (asyncTaskWrappers.size > 0) {
     for (const wrapper of asyncTaskWrappers.values()) {

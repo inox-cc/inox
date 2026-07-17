@@ -30,14 +30,12 @@ import {
 } from './objects.ts'
 
 export type CExpressionTypeDependencies = {
-  cPromiseRuntimeCallName: (callee: AnyNode) => string | null
   isArrayIncludesCall: (expression: AnyNode) => boolean
   isArrayJoinCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isArrayLengthExpression: (expression: AnyNode, context: CFunctionContext) => boolean
   isClassConstructorExpression: (expression: AnyNode, context: CFunctionContext) => boolean
   isIndexAccessExpression: (expression: AnyNode) => boolean
   isMemberAccessExpression: (expression: AnyNode) => boolean
-  isPromiseConstructorExpression: (expression: AnyNode) => boolean
   isPromiseReturningFunctionCallee: (callee: AnyNode, context: CFunctionContext) => boolean
   knownValueType: (valueType: string | null | undefined) => string | null
   resolveKnownArrayIndex: (expression: AnyNode, context: CFunctionContext) => CKnownArrayElement | null
@@ -494,18 +492,6 @@ export function inferExpressionType(
 ): string {
   if (expression.libraryOperationId !== null && typeof expression.libraryOperationId !== 'undefined') {
     return cValueTypeOrUnknown(expression)
-  }
-
-  if (
-    expression.type === 'CallExpression' &&
-    deps.cPromiseRuntimeCallName(expression.callee) &&
-    expression.valueType === 'promise'
-  ) {
-    return 'promise'
-  }
-
-  if (deps.isPromiseConstructorExpression(expression)) {
-    return 'promise'
   }
 
   if (expression.type === 'CallExpression' && deps.isPromiseReturningFunctionCallee(expression.callee, context)) {

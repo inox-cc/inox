@@ -90,6 +90,33 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
       return resolved
     }
 
+    const genericNativeType = compilerLibraryNativeTypeForName(context.libraries, genericApplication.name)
+    const nativeTypeParameters = genericNativeType?.typeParameters
+
+    if (
+      genericNativeType !== null &&
+      nativeTypeParameters !== null &&
+      typeof nativeTypeParameters !== 'undefined' &&
+      nativeTypeParameters.length === genericApplication.args.length
+    ) {
+      const typeArguments: TypeRef[] = []
+
+      for (let index = 0; index < genericApplication.args.length; index = index + 1) {
+        const argumentName = genericApplication.args[index]
+        typeArguments.push(typeRefForResolvedType(resolveDeclaredType(argumentName, context), argumentName))
+      }
+
+      const typeRef = instantiateNativeTypeRef(genericNativeType, typeArguments)
+      const metadata = typeRefCompatibilityMetadata(typeRef, context.libraries, { line: 1, column: 1 })
+      const resolved = namedResolvedType(metadata.valueType)
+
+      resolved.typeRef = typeRef
+      resolved.shape = metadata.shape
+      resolved.promiseValueType = metadata.promiseValueType
+      resolved.libraryRuntimeRequirements = genericNativeType.runtimeRequirements
+      return resolved
+    }
+
     const definition = context.types.get(genericApplication.name)
 
     if (definition !== null && typeof definition !== 'undefined' && (definition.typeParameters ?? []).length > 0) {

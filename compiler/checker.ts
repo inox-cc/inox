@@ -1,5 +1,4 @@
 import {
-  commonValueType,
   inferBinaryExpressionType,
   isAssignableType,
   isEqualityComparableType,
@@ -96,7 +95,6 @@ import {
   createArrowFunctionTypeMetadata,
   knownCheckedExpressionType,
   resolveExpressionPromiseRejectionIntrinsicRole,
-  resolveExpressionPromiseRejectionValueType,
 } from './checker/expression-helpers.ts'
 import type { CheckedCallArgInfo } from './checker/global-calls.ts'
 import {
@@ -110,7 +108,6 @@ import {
   resolveExpressionArrayElementType as resolveExpressionArrayElementTypeInContext,
   resolveExpressionShape as resolveExpressionShapeInContext,
   resolveExpressionPromiseValueType as resolveExpressionPromiseValueTypeInContext,
-  resolveRejectedExpressionIntrinsicRole as resolveRejectedExpressionIntrinsicRoleInContext,
   resolveRejectedExpressionValueType as resolveRejectedExpressionValueTypeInContext
 } from './checker/expression-metadata.ts'
 import {
@@ -126,13 +123,10 @@ import {
   intersectNames,
   isConditionValueType,
   isNonNullNarrowingLiteral,
-  isPromiseMethod,
   isRelativeImportSource,
   isRuntimeNullableType,
   isStatementExpressionNode,
   paramForArgument,
-  promiseExecutorFunctionType,
-  promiseStaticMethodName,
   resolveSingleReturnExpression,
   resolveTerminalReturnExpression,
   statementAlwaysExits,
@@ -198,7 +192,6 @@ import type {
   NullableNode,
   ObjectShapeBases,
   OptionalParamInfo,
-  PromiseCallbackParamMetadata,
   ResolvedTypeInfo,
   RuntimeCallInfo,
   TypeAliasDeclarationNode
@@ -852,17 +845,23 @@ class Checker {
   }
 
   importedFunctionDeclarationSymbol(declaration: AnyNode, loc: SourceLocation): SymbolInfo {
-    return {
-      kind: 'function',
-      valueType: 'function',
-      params: this.resolveImportedParams(declaration.params ?? []),
-      returnType: declaration.returnType ?? declaration.declaredReturnType ?? 'unknown',
-      returnTypeRef: declaration.returnTypeRef ?? null,
-      returnNullable: declaration.returnNullable === true,
-      returnPromiseValueType: declaration.returnPromiseValueType ?? null,
-      returnShape: declaration.returnShape ?? null,
-      async: declaration.async === true,
-      loc
+    const typeParameterState = this.pushFunctionTypeParameters(declaration)
+
+    try {
+      return {
+        kind: 'function',
+        valueType: 'function',
+        params: this.resolveImportedParams(declaration.params ?? []),
+        returnType: declaration.returnType ?? declaration.declaredReturnType ?? 'unknown',
+        returnTypeRef: declaration.returnTypeRef ?? null,
+        returnNullable: declaration.returnNullable === true,
+        returnPromiseValueType: declaration.returnPromiseValueType ?? null,
+        returnShape: declaration.returnShape ?? null,
+        async: declaration.async === true,
+        loc
+      }
+    } finally {
+      this.restoreFunctionTypeParameters(typeParameterState)
     }
   }
 
@@ -3493,18 +3492,6 @@ class Checker {
       return numericCastType
     }
 
-    const promiseMethodType = this.checkPromiseMethodCall(expression)
-
-    if (promiseMethodType !== null && typeof promiseMethodType !== 'undefined') {
-      return promiseMethodType
-    }
-
-    const promiseStaticType = this.checkPromiseStaticCall(expression)
-
-    if (promiseStaticType !== null && typeof promiseStaticType !== 'undefined') {
-      return promiseStaticType
-    }
-
     const classMethodType = this.checkClassMethodCall(expression)
 
     if (classMethodType !== null && typeof classMethodType !== 'undefined') {
@@ -4664,6 +4651,8 @@ class Checker {
 
       if (typeRef.kind === 'primitive') {
         receiverTypeId = compilerLibraryPrimitiveReceiverTypeId(typeRef.name)
+      } else if (typeRef.kind === 'nominal') {
+        receiverTypeId = typeRef.typeId
       }
     }
 
@@ -4745,6 +4734,9 @@ class Checker {
 
     expression.libraryBindingId = operation.bindingId
     expression.libraryOperationId = operation.operationId
+    expression.libraryAsyncResultOperation = operation.asyncResultOperation ?? null
+    expression.libraryCAsyncFulfillExpression = operation.cAsyncFulfillExpression ?? null
+    expression.libraryCAsyncRejectExpression = operation.cAsyncRejectExpression ?? null
     expression.libraryArgumentNarrowing = operation.argumentNarrowing ?? null
     expression.libraryIntrinsicRole = compilerLibraryIntrinsicRoleForBinding(libraries, operation.bindingId)
     expression.libraryRuntimeRequirements = runtimeRequirements
@@ -5176,318 +5168,6 @@ class Checker {
     return null
   }
 
-  checkPromiseStaticCall(expression: AnyNode): ValueType | null {
-    const method = promiseStaticMethodName(expression.callee)
-
-    if (method === null || typeof method === 'undefined') {
-      return null
-    }
-
-    if (this.scope.resolve('Promise')) {
-      return null
-    }
-
-    if (expression.args.length > 1) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function Promise.${method} expects at most 1 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    const argTypes: ValueType[] = []
-
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      argTypes.push(this.checkExpression(arg))
-    }
-
-    expression.valueType = 'promise'
-    expression.promiseValueType = 'unknown'
-    expression.promiseRejectionValueType = 'unknown'
-    expression.promiseRejectionIntrinsicRole = null
-    expression.shape = null
-
-    if (method === 'resolve') {
-      expression.promiseValueType = 'void'
-
-      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-        expression.promiseValueType = argTypes[0]
-        expression.shape = this.resolveExpressionShape(expression.args[0])
-      }
-    } else {
-      expression.promiseRejectionValueType = this.resolveRejectedExpressionValueType(expression.args[0])
-      expression.promiseRejectionIntrinsicRole = resolveRejectedExpressionIntrinsicRoleInContext(expression.args[0])
-    }
-
-    return 'promise'
-  }
-
-  checkPromiseMethodCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'MemberExpression' || !isPromiseMethod(expression.callee.property)) {
-      return null
-    }
-
-    const objectType = this.checkExpression(expression.callee.object)
-
-    if (objectType !== 'promise') {
-      return null
-    }
-
-    const property = expression.callee.property
-    let promiseValueType: ValueType = 'unknown'
-    const resolvedPromiseValueType = this.resolveExpressionPromiseValueType(expression.callee.object)
-    const promiseShape = this.resolveExpressionShape(expression.callee.object)
-
-    if (resolvedPromiseValueType !== null && typeof resolvedPromiseValueType !== 'undefined') {
-      promiseValueType = resolvedPromiseValueType
-    }
-
-    if (expression.args.length !== 1) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `promise.${property} expects 1 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    const callback = expression.args[0]
-
-    if (property === 'then') {
-      let mappedType: ValueType = 'unknown'
-
-      if (callback !== null && typeof callback !== 'undefined') {
-        mappedType = this.checkPromiseCallback(callback, [promiseValueType], null, 'promise.then callback', [
-          {
-            shape: promiseShape
-          }
-        ])
-      }
-
-      for (let index = 1; index < expression.args.length; index++) {
-        this.checkExpression(expression.args[index])
-      }
-
-      expression.valueType = 'promise'
-      expression.promiseValueType = mappedType
-      expression.shape = this.resolveExpressionShape(callback)
-
-      return 'promise'
-    }
-
-    if (callback !== null && typeof callback !== 'undefined') {
-      let catchReturnType: ValueType | null = promiseValueType
-
-      if (promiseValueType === 'unknown') {
-        catchReturnType = null
-      }
-
-      const catchParamTypes: ValueType[] = ['unknown']
-      const catchParamMetadata: PromiseCallbackParamMetadata[] = [
-        {
-          shape: null
-        }
-      ]
-      const rejectionValueType = resolveExpressionPromiseRejectionValueType(expression.callee.object)
-      const rejectionIntrinsicRole = resolveExpressionPromiseRejectionIntrinsicRole(expression.callee.object)
-
-      if (rejectionIntrinsicRole === 'exception-value' || rejectionValueType === 'error') {
-        const metadata = compilerLibraryIntrinsicResultMetadata(
-          resolveCompilerLibrarySet(this.options.libraries),
-          'exception-value',
-          'construct',
-          nodeSourceLocation(expression)
-        )
-
-        catchParamTypes[0] = 'object'
-        catchParamMetadata[0].shape = metadata?.shape ?? null
-      }
-
-      this.checkPromiseCallback(
-        callback,
-        catchParamTypes,
-        catchReturnType,
-        'promise.catch callback',
-        catchParamMetadata
-      )
-    }
-
-    for (let index = 1; index < expression.args.length; index++) {
-      this.checkExpression(expression.args[index])
-    }
-
-    expression.valueType = 'promise'
-    expression.promiseValueType = promiseValueType
-    expression.shape = promiseShape
-
-    return 'promise'
-  }
-
-  checkPromiseCallback(
-    expression: AnyNode,
-    params: ValueType[],
-    returnType: ValueType | null,
-    label: string,
-    paramMetadata: PromiseCallbackParamMetadata[] = []
-  ): ValueType {
-    if (expression.type !== 'ArrowFunctionExpression') {
-      const callbackType = this.checkExpression(expression)
-
-      this.checkAssignableType(callbackType, 'function', expression.loc, false, false)
-
-      return 'unknown'
-    }
-
-    if (expression.async === true) {
-      this.report(
-        'INOX_ASYNC_CALLBACK',
-        'async Promise callbacks are not supported in the current compiler slice; use a named async helper and await it explicitly',
-        expression.loc
-      )
-      return 'unknown'
-    }
-
-    if (expression.params.length > params.length) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `${label} expects at most ${params.length} parameter(s), got ${expression.params.length}`,
-        expression.loc
-      )
-    }
-
-    let actualReturnType: ValueType = 'unknown'
-    let returnLoc = expression.loc
-    let returnNullable = false
-    let returnPromiseValueType: ValueType | null = null
-
-    const scopeState = this.pushScope()
-
-    try {
-      for (let index = 0; index < expression.params.length; index++) {
-        const param = expression.params[index]
-        let expected: ValueType = 'unknown'
-
-        if (index < params.length) {
-          expected = params[index]
-        }
-
-        let shape: ObjectShapeInfo | null = null
-        let metadata: PromiseCallbackParamMetadata | null = null
-
-        if (index < paramMetadata.length) {
-          metadata = paramMetadata[index]
-        }
-
-        if (metadata !== null && typeof metadata !== 'undefined') {
-          shape = metadata.shape
-        }
-
-        let actual = param.valueType
-
-        if (param.valueType === 'unknown') {
-          actual = expected
-        }
-
-        if (param.valueType !== 'unknown') {
-          this.checkAssignableType(expected, param.valueType, param.loc, false, false)
-        }
-
-        param.declaredType = param.valueType
-
-        if (param.valueType === 'unknown') {
-          param.declaredType = actual
-        }
-
-        param.valueType = actual
-        param.nullable = false
-
-        if (shape !== null && typeof shape !== 'undefined') {
-          param.shape = shape
-        }
-
-        this.declare(
-          param.name,
-          {
-            kind: 'param',
-            mutable: true,
-            valueType: actual,
-            shape,
-            loc: param.loc
-          },
-          param.loc
-        )
-        this.declareArrowArrayBindingElements(param)
-      }
-
-      if (expression.expressionBody) {
-        actualReturnType = this.checkExpression(expression.body)
-        returnLoc = expression.loc
-
-        if (expression.body.loc !== null && typeof expression.body.loc !== 'undefined') {
-          returnLoc = expression.body.loc
-        }
-
-        returnNullable = this.expressionCanBeNull(expression.body)
-        returnPromiseValueType = this.resolveExpressionPromiseValueType(expression.body)
-      } else {
-        const returnExpression = resolveSingleReturnExpression(expression.body)
-
-        if (returnExpression === null || typeof returnExpression === 'undefined') {
-          const terminalReturnExpression = resolveTerminalReturnExpression(expression.body)
-          let expectedReturnType: ValueType = 'unknown'
-
-          if (returnType !== null && typeof returnType !== 'undefined') {
-            expectedReturnType = returnType
-          }
-
-          const returnContextState = this.pushReturnContext(expectedReturnType, false, null)
-
-          try {
-            this.checkStatements(expression.body)
-          } finally {
-            this.restoreReturnContext(returnContextState)
-          }
-
-          if (terminalReturnExpression !== null && typeof terminalReturnExpression !== 'undefined') {
-            actualReturnType = this.checkExpression(terminalReturnExpression)
-            returnLoc = expression.loc
-
-            if (terminalReturnExpression.loc !== null && typeof terminalReturnExpression.loc !== 'undefined') {
-              returnLoc = terminalReturnExpression.loc
-            }
-
-            returnNullable = this.expressionCanBeNull(terminalReturnExpression)
-            returnPromiseValueType = this.resolveExpressionPromiseValueType(terminalReturnExpression)
-          }
-        } else {
-          actualReturnType = this.checkExpression(returnExpression)
-          returnLoc = expression.loc
-
-          if (returnExpression.loc !== null && typeof returnExpression.loc !== 'undefined') {
-            returnLoc = returnExpression.loc
-          }
-
-          returnNullable = this.expressionCanBeNull(returnExpression)
-          returnPromiseValueType = this.resolveExpressionPromiseValueType(returnExpression)
-        }
-      }
-    } finally {
-      this.restoreScope(scopeState)
-    }
-
-    if (returnType !== null && typeof returnType !== 'undefined') {
-      this.checkAssignableType(actualReturnType, returnType, returnLoc, false, returnNullable)
-    }
-
-    expression.returnType = returnType ?? actualReturnType
-    expression.declaredReturnType = expression.returnType
-    expression.returnNullable = returnNullable
-    expression.returnPromiseValueType = returnPromiseValueType
-
-    return actualReturnType
-  }
-
   declareArrowArrayBindingElements(param: AnyNode): void {
     const bindingElements: ArrayBindingElement[] = param.bindingElements ?? []
 
@@ -5621,13 +5301,26 @@ class Checker {
   }
 
   compilerLibraryFunctionReturnTypeRef(expression: AnyNode): TypeRef {
-    const returnTypeRef = expression.returnTypeRef ?? expression.functionType?.returnTypeRef
+    const directReturnTypeRef = expression.returnTypeRef
+
+    if (directReturnTypeRef !== null && typeof directReturnTypeRef !== 'undefined') {
+      return directReturnTypeRef
+    }
+
+    const directReturnType = expression.returnType
+
+    if (directReturnType !== null && typeof directReturnType !== 'undefined') {
+      return this.compilerLibraryPrimitiveTypeRef(directReturnType, expression.returnNullable === true) ??
+        this.compilerLibraryUnknownTypeRef()
+    }
+
+    const returnTypeRef = expression.functionType?.returnTypeRef
 
     if (returnTypeRef !== null && typeof returnTypeRef !== 'undefined') {
       return returnTypeRef
     }
 
-    const returnType = expression.returnType ?? expression.functionType?.returnType
+    const returnType = expression.functionType?.returnType
 
     if (returnType !== null && typeof returnType !== 'undefined') {
       return this.compilerLibraryPrimitiveTypeRef(
@@ -5952,12 +5645,6 @@ class Checker {
       return libraryConstructorType
     }
 
-    const promiseType = this.checkPromiseConstructorExpression(expression)
-
-    if (promiseType !== null && typeof promiseType !== 'undefined') {
-      return promiseType
-    }
-
     if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
       this.checkExpression(expression.callee)
       return 'object'
@@ -6103,227 +5790,6 @@ class Checker {
         `class constructor expects ${minimum} to ${params.length} argument(s), got ${expression.args.length}`,
         expression.loc
       )
-    }
-  }
-
-  checkPromiseConstructorExpression(expression: AnyNode): ValueType | null {
-    if (
-      expression.callee.type !== 'Reference' ||
-      expression.callee.path.length !== 1 ||
-      firstPathSegment(expression.callee.path) !== 'Promise' ||
-      this.scope.resolve('Promise')
-    ) {
-      return null
-    }
-
-    if (expression.args.length !== 1) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `Promise constructor expects 1 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    const executor = expression.args[0]
-    let promiseValueType: ValueType = 'unknown'
-
-    if (executor === null || typeof executor === 'undefined') {
-      expression.valueType = 'promise'
-      expression.promiseValueType = promiseValueType
-      return 'promise'
-    }
-
-    if (executor.type !== 'ArrowFunctionExpression') {
-      this.checkAssignableType(this.checkExpression(executor), 'function', executor.loc, false, false)
-      expression.valueType = 'promise'
-      expression.promiseValueType = promiseValueType
-      return 'promise'
-    }
-
-    this.checkArrowFunctionExpression(executor, promiseExecutorFunctionType())
-
-    let resolveName: string | null = null
-
-    if (executor.params.length > 0) {
-      resolveName = checkerNodeAt(executor.params, 0).name
-    }
-
-    if (resolveName !== null && typeof resolveName !== 'undefined') {
-      promiseValueType = this.resolvePromiseExecutorValueType(executor, resolveName)
-    }
-
-    expression.valueType = 'promise'
-    expression.promiseValueType = promiseValueType
-
-    return 'promise'
-  }
-
-  resolvePromiseExecutorValueType(executor: AnyNode, resolveName: string): ValueType {
-    const types: ValueType[] = []
-
-    if (executor.expressionBody === true) {
-      this.collectPromiseExecutorValueTypesFromNode(executor.body, resolveName, types)
-    } else {
-      this.collectPromiseExecutorValueTypesFromList(executor.body, resolveName, types)
-    }
-
-    return commonValueType(types)
-  }
-
-  collectPromiseExecutorValueTypesFromList(nodes: AnyNode[], resolveName: string, types: ValueType[]): void {
-    for (const node of nodes) {
-      this.collectPromiseExecutorValueTypesFromNode(node, resolveName, types)
-    }
-  }
-
-  collectPromiseExecutorValueTypesFromNode(
-    node: AnyNode | null | undefined,
-    resolveName: string,
-    types: ValueType[]
-  ): void {
-    if (node === null || typeof node === 'undefined') {
-      return
-    }
-
-    if (
-      node.type === 'CallExpression' &&
-      node.callee !== null &&
-      typeof node.callee !== 'undefined' &&
-      node.callee.type === 'Reference' &&
-      node.callee.path.length === 1 &&
-      firstPathSegment(node.callee.path) === resolveName
-    ) {
-      let resolvedType: ValueType = 'void'
-
-      if (node.args[0] !== null && typeof node.args[0] !== 'undefined') {
-        resolvedType = this.inferCheckedExpressionType(node.args[0])
-      }
-
-      types.push(resolvedType)
-    }
-
-    if (node.type === 'BlockStatement') {
-      this.collectPromiseExecutorValueTypesFromList(node.body, resolveName, types)
-      return
-    }
-
-    if (node.type === 'ExpressionStatement') {
-      this.collectPromiseExecutorValueTypesFromNode(node.expression, resolveName, types)
-      return
-    }
-
-    if (node.type === 'VariableDeclaration') {
-      this.collectPromiseExecutorValueTypesFromNode(node.init, resolveName, types)
-      return
-    }
-
-    if (node.type === 'ReturnStatement' || node.type === 'ThrowStatement' || node.type === 'AwaitExpression') {
-      this.collectPromiseExecutorValueTypesFromNode(node.argument, resolveName, types)
-      return
-    }
-
-    if (node.type === 'AssignmentExpression') {
-      this.collectPromiseExecutorValueTypesFromNode(node.target, resolveName, types)
-      this.collectPromiseExecutorValueTypesFromNode(node.value, resolveName, types)
-      return
-    }
-
-    if (node.type === 'BinaryExpression') {
-      this.collectPromiseExecutorValueTypesFromNode(node.left, resolveName, types)
-      this.collectPromiseExecutorValueTypesFromNode(node.right, resolveName, types)
-      return
-    }
-
-    if (node.type === 'UnaryExpression' || node.type === 'UpdateExpression') {
-      this.collectPromiseExecutorValueTypesFromNode(node.argument, resolveName, types)
-      return
-    }
-
-    if (node.type === 'CallExpression' || node.type === 'OptionalCallExpression' || node.type === 'NewExpression') {
-      this.collectPromiseExecutorValueTypesFromList(node.args, resolveName, types)
-      return
-    }
-
-    if (node.type === 'MemberExpression' || node.type === 'OptionalMemberExpression') {
-      this.collectPromiseExecutorValueTypesFromNode(node.object, resolveName, types)
-      return
-    }
-
-    if (node.type === 'IndexExpression' || node.type === 'OptionalIndexExpression') {
-      this.collectPromiseExecutorValueTypesFromNode(node.object, resolveName, types)
-      this.collectPromiseExecutorValueTypesFromNode(node.index, resolveName, types)
-      return
-    }
-
-    if (node.type === 'ArrayLiteral') {
-      this.collectPromiseExecutorValueTypesFromList(node.elements, resolveName, types)
-      return
-    }
-
-    if (node.type === 'ObjectLiteral') {
-      for (const property of node.properties) {
-        this.collectPromiseExecutorValueTypesFromNode(property.value, resolveName, types)
-      }
-
-      return
-    }
-
-    if (node.type === 'IfStatement') {
-      this.collectPromiseExecutorValueTypesFromNode(node.condition, resolveName, types)
-      this.collectPromiseExecutorValueTypesFromNode(node.consequent, resolveName, types)
-      this.collectPromiseExecutorValueTypesFromNode(node.alternate, resolveName, types)
-      return
-    }
-
-    if (node.type === 'WhileStatement') {
-      this.collectPromiseExecutorValueTypesFromNode(node.condition, resolveName, types)
-      this.collectPromiseExecutorValueTypesFromNode(node.body, resolveName, types)
-      return
-    }
-
-    if (node.type === 'ForStatement') {
-      this.collectPromiseExecutorValueTypesFromNode(node.init, resolveName, types)
-      this.collectPromiseExecutorValueTypesFromNode(node.test, resolveName, types)
-      this.collectPromiseExecutorValueTypesFromNode(node.update, resolveName, types)
-      this.collectPromiseExecutorValueTypesFromNode(node.body, resolveName, types)
-      return
-    }
-
-    if (node.type === 'ForOfStatement') {
-      this.collectPromiseExecutorValueTypesFromNode(node.iterable, resolveName, types)
-      this.collectPromiseExecutorValueTypesFromNode(node.body, resolveName, types)
-      return
-    }
-
-    if (node.type === 'SwitchStatement') {
-      this.collectPromiseExecutorValueTypesFromNode(node.discriminant, resolveName, types)
-
-      for (const item of node.cases) {
-        this.collectPromiseExecutorValueTypesFromNode(item.test, resolveName, types)
-        this.collectPromiseExecutorValueTypesFromList(item.consequent, resolveName, types)
-      }
-
-      return
-    }
-
-    if (node.type === 'TryStatement') {
-      this.collectPromiseExecutorValueTypesFromNode(node.block, resolveName, types)
-      this.collectPromiseExecutorValueTypesFromNode(node.handler, resolveName, types)
-      this.collectPromiseExecutorValueTypesFromNode(node.finalizer, resolveName, types)
-      return
-    }
-
-    if (node.type === 'CatchClause') {
-      this.collectPromiseExecutorValueTypesFromNode(node.body, resolveName, types)
-      return
-    }
-
-    if (node.type === 'ArrowFunctionExpression') {
-      if (node.expressionBody === true) {
-        this.collectPromiseExecutorValueTypesFromNode(node.body, resolveName, types)
-      } else {
-        this.collectPromiseExecutorValueTypesFromList(node.body, resolveName, types)
-      }
     }
   }
 

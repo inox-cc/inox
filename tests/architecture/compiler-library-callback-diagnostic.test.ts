@@ -1,23 +1,25 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
 import { CompileError } from '../../compiler/diagnostics.ts'
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
+import { compilerLibraryPackage as promisePackage } from '../../stdlib/global/promise/compiler/index.ts'
 
 const diagnosticCode = 'BRIDGE_SYNC_CALLBACK'
 const diagnosticMessage = 'bridge.schedule callback must be synchronous'
 
 test('library callback argument metadata владеет synchronous callback diagnostic', () => {
-  const libraries = createCompilerLibrarySet([bridgeLibrary()])
+  const libraries = createCompilerLibrarySet([bridgeLibrary(), promiseLibrary()])
   const passingSources = [
     'bridge.schedule(() => {})\n',
     'function work(): void {}\nbridge.schedule(work)\n'
   ]
   const failingSources = [
-    'bridge.schedule(async () => { await Promise.resolve() })\n',
-    'async function work(): Promise<void> { await Promise.resolve() }\nbridge.schedule(work)\n'
+    'bridge.schedule(async () => { await Promise.resolve(0) })\n',
+    'async function work(): Promise<void> { await Promise.resolve(0) }\nbridge.schedule(work)\n'
   ]
 
   for (const source of passingSources) {
@@ -35,6 +37,24 @@ test('library callback argument metadata владеет synchronous callback dia
     [{ code: diagnosticCode, message: diagnosticMessage }]
   ])
 })
+
+function promiseLibrary(): CompilerLibraryDescriptor {
+  return {
+    ...promisePackage,
+    declarations: [
+      {
+        libraryId: promisePackage.id,
+        kind: 'global',
+        source: 'stdlib/global/promise/index.d.ts',
+        declarationSource: readFileSync(
+          new URL('../../stdlib/global/promise/index.d.ts', import.meta.url),
+          'utf8'
+        ),
+        compilerImplemented: true
+      }
+    ]
+  }
+}
 
 function bridgeLibrary(): CompilerLibraryDescriptor {
   return {
