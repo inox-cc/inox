@@ -4,6 +4,7 @@ import test from 'node:test'
 import { compileSource } from '../../compiler/core.ts'
 import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
+import { compilerLibraryPackage as stringsCompilerLibraryPackage } from '../../stdlib/global/strings/compiler/index.ts'
 
 test('library variants задают callback contract по literal discriminator', () => {
   const result = compileSource(
@@ -12,7 +13,13 @@ const channel = bridge.open()
 channel.on('data', (chunk) => console.log(chunk.length))
 channel.on('close', (hadError) => console.log(hadError))
 `,
-    { libraries: createCompilerLibrarySetWithConsole([bridgeLibrary()]), target: 'cc' }
+    {
+      libraries: createCompilerLibrarySetWithConsole([
+        { ...stringsCompilerLibraryPackage, declarations: [], nativeTypes: [] },
+        bridgeLibrary()
+      ]),
+      target: 'cc'
+    }
   )
 
   assert.match(result.code, /args\[0\]\.tag != INOX_TAG_STRING/)

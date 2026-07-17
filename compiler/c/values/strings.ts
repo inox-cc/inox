@@ -3,12 +3,6 @@ import { tokenize } from '../../lexer.ts'
 import { memberExpressionPath } from '../../member-paths.ts'
 import { parse } from '../../parser.ts'
 import { nullableTypeNameFromTypeName } from '../../type-names.ts'
-import {
-  isStringIndexMethod,
-  isStringPredicateMethod,
-  isStringRuntimeMethod,
-  stringRuntimeReturnType
-} from '../../../stdlib/global/compiler/descriptor.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import {
   emitFailureStatement,
@@ -36,6 +30,7 @@ type StringDiagnosticContext = {
 type StringCContext = {
   cleanupEnabled: boolean
   cppStringValues?: Set<string>
+  cppValueTypes?: Map<string, string>
   diagnostics?: Diagnostic[]
   errorChannelUsed?: boolean
   errorTargetActiveFlags?: boolean[]
@@ -46,6 +41,7 @@ type StringCContext = {
   jsGlobalRoots?: Set<string>
   localValueNames?: Set<string>
   moduleValueNames?: Map<string, string>
+  moduleValueCppTypes?: Map<string, string>
   moduleValueTypes?: Map<string, string>
   nullableVariables?: Set<string>
   narrowedNullableScalars?: Set<string>
@@ -71,10 +67,6 @@ type TemplateLiteralPart = {
 
 type TokenizeLocationOptions = {
   file?: string
-}
-
-type PreparedStringSplitExpression = PreparedExpression & {
-  elementType: string
 }
 
 export type PreparedStringFormat = {
@@ -126,21 +118,6 @@ type StringMethodNode = {
   property?: string
   type?: string
   valueType?: string | null
-}
-
-type StringIndexNode = StringMethodNode & {
-  object?: StringMethodNode
-  index?: StringMethodNode
-}
-
-type StringCallNode = StringMethodNode & {
-  args?: StringMethodNode[]
-  callee?: StringMethodNode
-}
-
-type StringMethodCallParts = {
-  args: StringMethodNode[]
-  object: StringMethodNode
 }
 
 function stringNodeAt(values: StringMethodNode[], index: number): StringMethodNode {
@@ -468,66 +445,6 @@ function runtimeStringConstantValue(expression: AnyNode | null | undefined, cont
   return stringDeps(context).nodeRuntimeStringConstantValue(expression)
 }
 
-export function emitPreparedStringLengthExpression(
-  expression: AnyNode | null | undefined,
-  context: StringCContext
-): PreparedExpression | null {
-  const object = stringLengthObjectExpression(expression)
-
-  if (object === null || typeof object === 'undefined' || !isStringLengthObject(object, context)) {
-    return null
-  }
-
-  if (
-    isDynamicRuntimeStringFieldExpression(object, context) &&
-    !stringDeps(context).isNodeRuntimeProducedStringExpression(object) &&
-    !isNarrowedNullableScalarPath(object, context)
-  ) {
-    return null
-  }
-
-  const lines: string[] = []
-  const cppValue = emitPreparedCppStringExpression(object, context)
-
-  if (cppValue !== null && typeof cppValue !== 'undefined') {
-    pushAllLines(lines, cppValue.lines)
-
-    return {
-      lines,
-      expression: `((double)${cppValue.expression}.codeUnitLength())`
-    }
-  }
-
-  const operand = emitPreparedStringBytesOperand(object, context, 'inox_length_string')
-
-  pushAllLines(lines, operand.lines)
-
-  return {
-    lines,
-    expression: `((double)inox::String(${operand.bytes}, ${operand.length}).codeUnitLength())`
-  }
-}
-
-function stringLengthObjectExpression(expression: AnyNode | null | undefined): AnyNode | null {
-  if (expression === null || typeof expression === 'undefined') {
-    return null
-  }
-
-  if (expression.type === 'MemberExpression' && expression.property === 'length') {
-    return expression.object
-  }
-
-  if (expression.type === 'Reference' && expression.path.length > 1) {
-    const last = stringPathAt(expression.path, expression.path.length - 1)
-
-    if (last === 'length') {
-      return referencePathObjectExpression(expression)
-    }
-  }
-
-  return null
-}
-
 export function emitPreparedStringCompareExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
   const runtimeLiteralCompare = emitPreparedRuntimeStringLiteralCompareExpression(expression, context)
 
@@ -708,343 +625,7 @@ export function canEmitStringBytesOperand(expression: AnyNode | null | undefined
     return true
   }
 
-  if (isStringIndexExpression(expression, context)) {
-    return true
-  }
-
-  if (isStringValueCallExpression(expression, context)) {
-    return true
-  }
-
   return stringDeps(context).inferExpressionType(expression, context) === 'string'
-}
-
-export function emitPreparedStringPredicateCall(expression: AnyNode, context: StringCContext): PreparedExpression {
-  const cppValue = emitPreparedCppStringExpression(expression.callee.object, context)
-
-  if (cppValue !== null && typeof cppValue !== 'undefined') {
-    const search = emitPreparedCppStringArgument(expression.args[0], context, 'inox_string_method_search')
-    const lines: string[] = []
-
-    pushAllLines(lines, cppValue.lines)
-
-    if (search !== null && typeof search !== 'undefined') {
-      pushAllLines(lines, search.lines)
-
-      if (expression.callee.property === 'includes' && expression.args.length > 1) {
-        const position = stringDeps(context).emitPreparedNumberExpression(expression.args[1], context)
-
-        pushAllLines(lines, position.lines)
-
-        return {
-          lines,
-          expression: `${cppValue.expression}.includes(${search.expression}, ${position.expression})`,
-          valueType: 'boolean'
-        }
-      }
-
-      return {
-        lines,
-        expression: `${cppValue.expression}.${expression.callee.property}(${search.expression})`,
-        valueType: 'boolean'
-      }
-    }
-  }
-
-  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'inox_string_method_value')
-  const search = emitPreparedCppStringArgument(expression.args[0], context, 'inox_string_method_search')
-  const lines: string[] = []
-
-  pushAllLines(lines, value.lines)
-
-  if (search === null || typeof search === 'undefined') {
-    return {
-      lines,
-      expression: 'false',
-      valueType: 'boolean'
-    }
-  }
-
-  pushAllLines(lines, search.lines)
-
-  let methodCall = `inox::String(${value.bytes}, ${value.length}).${expression.callee.property}(${search.expression})`
-
-  if (expression.callee.property === 'includes' && expression.args.length > 1) {
-    const positionArgument = expression.args[1]
-    const position = stringDeps(context).emitPreparedNumberExpression(positionArgument, context)
-
-    pushAllLines(lines, position.lines)
-    methodCall = `inox::String(${value.bytes}, ${value.length}).includes(${search.expression}, ${position.expression})`
-  }
-
-  return {
-    lines,
-    expression: methodCall,
-    valueType: 'boolean'
-  }
-}
-
-export function emitPreparedStringCharCodeAtExpression(
-  expression: any,
-  context: StringCContext
-): PreparedExpression | null {
-  if (!isNodeCandidate(expression) || expression.type !== 'CallExpression') {
-    return null
-  }
-
-  const call = resolveStringMethodCallParts(expression, 'charCodeAt')
-
-  if (call === null || typeof call === 'undefined') {
-    return null
-  }
-
-  const object = call.object
-  const args = call.args
-
-  if (!isNodeCandidate(object) || args.length !== 1 || !isNodeCandidate(args[0])) {
-    return null
-  }
-
-  const indexArgument = args[0]
-
-  if (stringDeps(context).inferExpressionType(indexArgument, context) !== 'number') {
-    return null
-  }
-
-  const index = stringDeps(context).emitPreparedNumberExpression(indexArgument, context)
-  const cppValue = emitPreparedCppStringExpression(object, context)
-  const lines: string[] = []
-
-  if (cppValue !== null && typeof cppValue !== 'undefined') {
-    pushAllLines(lines, cppValue.lines)
-    pushAllLines(lines, index.lines)
-
-    return {
-      lines,
-      expression: `${cppValue.expression}.charCodeAt(${index.expression})`
-    }
-  }
-
-  const value = emitPreparedStringBytesOperand(object, context, 'inox_string_char_code_value')
-
-  pushAllLines(lines, value.lines)
-  pushAllLines(lines, index.lines)
-
-  return {
-    lines,
-    expression: `inox::String(${value.bytes}, ${value.length}).charCodeAt(${index.expression})`
-  }
-}
-
-export function emitPreparedStringIndexCallExpression(
-  expression: any,
-  context: StringCContext
-): PreparedExpression | null {
-  if (!isNodeCandidate(expression) || expression.type !== 'CallExpression') {
-    return null
-  }
-
-  const method = stringIndexMethodName(expression)
-
-  if (method === null || typeof method === 'undefined') {
-    return null
-  }
-
-  const call = resolveStringMethodCallParts(expression, method)
-
-  if (call === null || typeof call === 'undefined') {
-    return null
-  }
-
-  const object = call.object
-  const args = call.args
-
-  const searchArgument = stringNodeAt(args, 0)
-
-  if (!isNodeCandidate(object) || args.length < 1 || args.length > 2 || !isNodeCandidate(searchArgument)) {
-    return null
-  }
-
-  if (stringDeps(context).inferExpressionType(searchArgument, context) !== 'string') {
-    return null
-  }
-
-  const cppValue = emitPreparedCppStringExpression(object, context)
-
-  if (cppValue !== null && typeof cppValue !== 'undefined') {
-    const search = emitPreparedCppStringArgument(searchArgument, context, 'inox_string_index_search')
-    const lines: string[] = []
-
-    pushAllLines(lines, cppValue.lines)
-
-    if (search !== null && typeof search !== 'undefined') {
-      pushAllLines(lines, search.lines)
-
-      if (args.length > 1) {
-        const startArgument = args[1]
-
-        if (stringDeps(context).inferExpressionType(startArgument, context) !== 'number') {
-          return null
-        }
-
-        const start = stringDeps(context).emitPreparedNumberExpression(startArgument, context)
-
-        pushAllLines(lines, start.lines)
-
-        return {
-          lines,
-          expression: `${cppValue.expression}.${method}(${search.expression}, ${start.expression})`,
-          scalarType: 'double',
-          valueType: 'number'
-        }
-      }
-
-      return {
-        lines,
-        expression: `${cppValue.expression}.${method}(${search.expression})`,
-        scalarType: 'double',
-        valueType: 'number'
-      }
-    }
-  }
-
-  const value = emitPreparedStringBytesOperand(object, context, 'inox_string_index_value')
-  const search = emitPreparedCppStringArgument(searchArgument, context, 'inox_string_index_search')
-  const lines: string[] = []
-
-  pushAllLines(lines, value.lines)
-
-  if (search === null || typeof search === 'undefined') {
-    return null
-  }
-
-  pushAllLines(lines, search.lines)
-
-  let methodArgs = search.expression
-
-  if (args.length > 1) {
-    const startArgument = args[1]
-
-    if (stringDeps(context).inferExpressionType(startArgument, context) !== 'number') {
-      return null
-    }
-
-    const start = stringDeps(context).emitPreparedNumberExpression(startArgument, context)
-
-    pushAllLines(lines, start.lines)
-    methodArgs = `${search.expression}, ${start.expression}`
-  }
-
-  return {
-    lines,
-    expression: `inox::String(${value.bytes}, ${value.length}).${method}(${methodArgs})`,
-    scalarType: 'double',
-    valueType: 'number'
-  }
-}
-
-export function emitCStringIndexValueExpression(
-  expression: StringIndexNode,
-  context: StringCContext
-): PreparedExpression | null {
-  if (!isStringIndexExpression(expression, context)) {
-    return null
-  }
-
-  const object = expression.object
-  const indexExpression = expression.index
-
-  if (
-    object === null ||
-    typeof object === 'undefined' ||
-    indexExpression === null ||
-    typeof indexExpression === 'undefined'
-  ) {
-    return null
-  }
-
-  const value = emitPreparedStringBytesOperand(object, context, 'inox_string_index_value')
-  const index = stringDeps(context).emitPreparedNumberExpression(indexExpression, context)
-  const offset = nextCName(context, 'inox_string_index')
-  const lines: string[] = []
-
-  pushAllLines(lines, value.lines)
-  pushAllLines(lines, index.lines)
-  lines.push(`double ${offset} = ${index.expression};`)
-
-  return {
-    lines,
-    expression: `inox::String(${value.bytes}, ${value.length}).slice(${offset}, ${offset} + 1)`,
-    cppType: 'inox::String',
-    runtimeTypeChecked: true,
-    valueType: 'string'
-  }
-}
-
-function isStringIndexExpression(expression: StringIndexNode | null | undefined, context: StringCContext): boolean {
-  if (expression === null || typeof expression === 'undefined' || expression.type !== 'IndexExpression') {
-    return false
-  }
-
-  const object = expression.object
-  const index = expression.index
-
-  if (object === null || typeof object === 'undefined' || index === null || typeof index === 'undefined') {
-    return false
-  }
-
-  if (stringDeps(context).inferExpressionType(object, context) !== 'string') {
-    return false
-  }
-
-  return stringDeps(context).inferExpressionType(index, context) === 'number'
-}
-
-function resolveStringMethodCallParts(expression: StringCallNode, method: string): StringMethodCallParts | null {
-  const callee = expression.callee
-  const args = expression.args
-
-  if (callee === null || typeof callee === 'undefined' || args === null || typeof args === 'undefined') {
-    return null
-  }
-
-  if (
-    callee.type === 'MemberExpression' &&
-    callee.property === method &&
-    callee.object !== null &&
-    typeof callee.object !== 'undefined'
-  ) {
-    return {
-      args,
-      object: callee.object
-    }
-  }
-
-  const path = callee.path
-
-  if (
-    callee.type === 'Reference' &&
-    path !== null &&
-    typeof path !== 'undefined' &&
-    path.length >= 2 &&
-    path[path.length - 1] === method
-  ) {
-    return {
-      args,
-      object: {
-        loc: callee.loc,
-        path: path.slice(0, path.length - 1),
-        type: 'Reference',
-        valueType: callee.valueType
-      }
-    }
-  }
-
-  return null
-}
-
-function isNodeCandidate(value: any): boolean {
-  return value !== null && typeof value !== 'undefined'
 }
 
 function nodeValueType(value: AnyNode | null | undefined): string | null {
@@ -1137,6 +718,23 @@ export function emitPreparedStringBytesOperand(
     expression.path.length === 1
   ) {
     const name = expression.path[0]
+    const cppValueTypes = context.cppValueTypes
+    const moduleValueCppTypes = context.moduleValueCppTypes
+    const directCppType =
+      cppValueTypes?.get(name) ?? moduleValueCppTypes?.get(name)
+
+    if (directCppType === 'inox::String') {
+      const reference = stringDeps(context).emitReference(expression, context)
+
+      return {
+        lines: [],
+        bytes: `${reference}.bytes()`,
+        length: `${reference}.length()`,
+        cppExpression: reference,
+        cppType: directCppType
+      }
+    }
+
     const moduleRuntimeString = emitPreparedModuleRuntimeStringBytesOperand(expression, context, tempPrefix)
 
     if (moduleRuntimeString !== null && typeof moduleRuntimeString !== 'undefined') {
@@ -1180,6 +778,7 @@ export function emitPreparedStringBytesOperand(
     if (valueType === 'string') {
       const reference = stringDeps(context).emitReference(expression, context)
       const cppStringValues = context.cppStringValues
+      const cppValueTypes = context.cppValueTypes
       const runtimeValueStorageNames = context.runtimeValueStorageNames
       const usesRuntimeValueStorage =
         runtimeValueStorageNames !== null &&
@@ -1199,12 +798,18 @@ export function emitPreparedStringBytesOperand(
         }
       }
 
-      if (cppStringValues !== null && typeof cppStringValues !== 'undefined' && cppStringValues.has(name)) {
+      if (
+        (cppStringValues !== null && typeof cppStringValues !== 'undefined' && cppStringValues.has(name)) ||
+        (cppValueTypes !== null &&
+          typeof cppValueTypes !== 'undefined' &&
+          cppValueTypes.get(name) === 'inox::String')
+      ) {
         return {
           lines: [],
           bytes: `${reference}.bytes()`,
           length: `${reference}.length()`,
-          cppExpression: reference
+          cppExpression: reference,
+          cppType: 'inox::String'
         }
       }
 
@@ -1300,12 +905,6 @@ export function emitPreparedStringBytesOperand(
     return dynamicRuntimeString
   }
 
-  const stringValueCall = emitPreparedStringValueCallBytesOperand(expression, context, tempPrefix)
-
-  if (stringValueCall !== null && typeof stringValueCall !== 'undefined') {
-    return stringValueCall
-  }
-
   const runtimeObjectFieldString = emitPreparedRuntimeObjectStringFieldBytesOperand(expression, context, tempPrefix)
 
   if (runtimeObjectFieldString !== null && typeof runtimeObjectFieldString !== 'undefined') {
@@ -1330,12 +929,6 @@ export function emitPreparedStringBytesOperand(
 
   if (runtimeArrayString !== null && typeof runtimeArrayString !== 'undefined') {
     return runtimeArrayString
-  }
-
-  const stringIndex = emitCStringIndexValueExpression(expression as StringIndexNode, context)
-
-  if (stringIndex !== null && typeof stringIndex !== 'undefined') {
-    return emitPreparedRuntimeStringValueBytesOperand(stringIndex, context, tempPrefix)
   }
 
   pushStringDiagnostic(
@@ -1365,60 +958,6 @@ function emitPreparedTypedStringValueBytesOperand(
 
   const value = stringDeps(context).emitCValueExpression(expression, context)
   return emitPreparedRuntimeStringValueBytesOperand(value, context, tempPrefix)
-}
-
-function emitPreparedStringValueCallBytesOperand(
-  expression: AnyNode,
-  context: StringCContext,
-  tempPrefix: string
-): PreparedStringBytesOperand | null {
-  if (!isStringValueCallExpression(expression, context)) {
-    return null
-  }
-
-  const value =
-    emitRuntimeStringValueCallExpression(expression, context) ??
-    stringDeps(context).emitCValueExpression(expression, context)
-  return emitPreparedRuntimeStringValueBytesOperand(value, context, tempPrefix)
-}
-
-function isStringValueCallExpression(expression: AnyNode, context: StringCContext): boolean {
-  return (
-    isStringSliceCall(expression, context) ||
-    isStringTrimCall(expression, context) ||
-    isStringCaseCall(expression, context) ||
-    isRuntimeStringValueCallExpression(expression, context)
-  )
-}
-
-function emitRuntimeStringValueCallExpression(expression: AnyNode, context: StringCContext): PreparedExpression | null {
-  const method = runtimeStringValueCallMethod(expression)
-
-  if (method === null || typeof method === 'undefined') {
-    return null
-  }
-
-  if (!canEmitRuntimeStringValueCallExpression(expression, method, context)) {
-    return null
-  }
-
-  if (method === 'slice') {
-    return emitCStringSliceValueExpression(expression, context)
-  }
-
-  if (method === 'toUpperCase') {
-    return emitCStringCaseValueExpression(expression, context)
-  }
-
-  if (method === 'padStart') {
-    return emitCStringPadStartValueExpression(expression, context)
-  }
-
-  if (isStringTrimMethod(method)) {
-    return emitCStringTrimValueExpression(expression, context)
-  }
-
-  return null
 }
 
 function emitPreparedCppStringExpression(
@@ -1479,8 +1018,14 @@ function emitPreparedCppStringExpression(
     const name = expression.path[0]
     const reference = stringDeps(context).emitReference(expression, context)
     const cppStringValues = context.cppStringValues
+    const cppValueTypes = context.cppValueTypes
 
-    if (cppStringValues !== null && typeof cppStringValues !== 'undefined' && cppStringValues.has(name)) {
+    if (
+      (cppStringValues !== null && typeof cppStringValues !== 'undefined' && cppStringValues.has(name)) ||
+      (cppValueTypes !== null &&
+        typeof cppValueTypes !== 'undefined' &&
+        cppValueTypes.get(name) === 'inox::String')
+    ) {
       return {
         lines: [],
         expression: reference,
@@ -1561,14 +1106,6 @@ function emitPreparedCppStringExpression(
     return nativeClassString
   }
 
-  if (isRuntimeStringValueCallExpression(expression, context)) {
-    const value = emitRuntimeStringValueCallExpression(expression, context)
-
-    if (value !== null && typeof value !== 'undefined' && value.cppType === 'inox::String') {
-      return value
-    }
-  }
-
   return null
 }
 
@@ -1619,78 +1156,6 @@ export function emitPreparedCppStringArgument(
     lines: bytes.lines,
     expression: `inox::StringView(${bytes.bytes}, ${bytes.length})`
   }
-}
-
-function isRuntimeStringValueCallExpression(expression: AnyNode, context: StringCContext): boolean {
-  const method = runtimeStringValueCallMethod(expression)
-
-  if (method === null || typeof method === 'undefined') {
-    return false
-  }
-
-  return canEmitRuntimeStringValueCallExpression(expression, method, context)
-}
-
-function runtimeStringValueCallMethod(expression: AnyNode): string | null {
-  if (
-    expression.type !== 'CallExpression' ||
-    expression.callee.type !== 'MemberExpression' ||
-    stringRuntimeReturnType(expression.callee.property) !== 'string'
-  ) {
-    return null
-  }
-
-  return expression.callee.property
-}
-
-function canEmitRuntimeStringValueCallExpression(
-  expression: AnyNode,
-  method: string,
-  context: StringCContext
-): boolean {
-  if (
-    expression.type !== 'CallExpression' ||
-    expression.callee.type !== 'MemberExpression' ||
-    !canEmitStringBytesOperand(expression.callee.object, context)
-  ) {
-    return false
-  }
-
-  if (method === 'slice') {
-    if (expression.args.length < 1 || expression.args.length > 2) {
-      return false
-    }
-
-    for (const arg of expression.args) {
-      if (stringDeps(context).inferExpressionType(arg, context) !== 'number') {
-        return false
-      }
-    }
-
-    return true
-  }
-
-  if (method === 'toUpperCase' || isStringTrimMethod(method)) {
-    return expression.args.length === 0
-  }
-
-  if (method === 'padStart') {
-    if (expression.args.length < 1 || expression.args.length > 2) {
-      return false
-    }
-
-    if (stringDeps(context).inferExpressionType(expression.args[0], context) !== 'number') {
-      return false
-    }
-
-    if (expression.args.length > 1) {
-      return canEmitStringBytesOperand(expression.args[1], context)
-    }
-
-    return true
-  }
-
-  return false
 }
 
 function isNullableRuntimeStringReference(name: string, context: StringCContext): boolean {
@@ -2659,7 +2124,8 @@ function emitPreparedRuntimeStringValueBytesOperand(
       lines,
       bytes: `${string}.bytes()`,
       length: `${string}.length()`,
-      cppExpression: string
+      cppExpression: string,
+      cppType: 'inox::String'
     }
   }
 
@@ -2831,35 +2297,6 @@ export function emitPreparedStringConversionExpression(arg: AnyNode, context: St
   }
 }
 
-export function emitCNumberToStringValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
-  const value = stringDeps(context).emitPreparedNumberExpression(expression.callee.object, context)
-  const lines: string[] = []
-
-  pushAllLines(lines, value.lines)
-
-  if (expression.args.length === 0) {
-    return {
-      lines,
-      expression: `inox::String::fromNumber(${value.expression})`,
-      cppType: 'inox::String',
-      runtimeTypeChecked: true,
-      valueType: 'string'
-    }
-  }
-
-  const radix = stringDeps(context).emitPreparedNumberExpression(stringNodeAt(expression.args, 0), context)
-
-  pushAllLines(lines, radix.lines)
-
-  return {
-    lines,
-    expression: `inox::String::fromNumberRadix(${value.expression}, (int)(${radix.expression}))`,
-    cppType: 'inox::String',
-    runtimeTypeChecked: true,
-    valueType: 'string'
-  }
-}
-
 export function emitPreparedNumberFromStringExpression(argument: AnyNode, context: StringCContext): PreparedExpression {
   const value = emitPreparedStringBytesOperand(argument, context, 'inox_number_conversion')
   const temp = nextCName(context, 'inox_value')
@@ -2877,223 +2314,6 @@ export function emitPreparedNumberFromStringExpression(argument: AnyNode, contex
     nullable: true,
     runtimeTypeChecked: true,
     valueType: 'number'
-  }
-}
-
-export function emitCStringTrimValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
-  const cppValue = emitPreparedCppStringExpression(expression.callee.object, context)
-
-  if (cppValue !== null && typeof cppValue !== 'undefined') {
-    return {
-      lines: cppValue.lines,
-      expression: `${cppValue.expression}.${expression.callee.property}()`,
-      cppType: 'inox::String',
-      runtimeTypeChecked: true,
-      valueType: 'string'
-    }
-  }
-
-  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'inox_trim_string')
-  const lines: string[] = []
-
-  pushAllLines(lines, value.lines)
-
-  return {
-    lines,
-    expression: `inox::String(${value.bytes}, ${value.length}).${expression.callee.property}()`,
-    cppType: 'inox::String',
-    runtimeTypeChecked: true,
-    valueType: 'string'
-  }
-}
-
-export function emitCStringCaseValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
-  const cppValue = emitPreparedCppStringExpression(expression.callee.object, context)
-
-  if (cppValue !== null && typeof cppValue !== 'undefined') {
-    return {
-      lines: cppValue.lines,
-      expression: `${cppValue.expression}.toUpperCase()`,
-      cppType: 'inox::String',
-      runtimeTypeChecked: true,
-      valueType: 'string'
-    }
-  }
-
-  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'inox_case_string')
-  const lines: string[] = []
-
-  pushAllLines(lines, value.lines)
-
-  return {
-    lines,
-    expression: `inox::String(${value.bytes}, ${value.length}).toUpperCase()`,
-    cppType: 'inox::String',
-    runtimeTypeChecked: true,
-    valueType: 'string'
-  }
-}
-
-export function emitCStringPadStartValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
-  const cppValue = emitPreparedCppStringExpression(expression.callee.object, context)
-  const targetLength = stringDeps(context).emitPreparedNumberExpression(expression.args[0], context)
-
-  if (cppValue !== null && typeof cppValue !== 'undefined') {
-    const lines: string[] = []
-    let padExpression = ''
-
-    pushAllLines(lines, cppValue.lines)
-    pushAllLines(lines, targetLength.lines)
-
-    if (expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
-      const pad = emitPreparedCppStringArgument(expression.args[1], context, 'inox_pad_fill')
-
-      if (pad !== null && typeof pad !== 'undefined') {
-        pushAllLines(lines, pad.lines)
-        padExpression = `, ${pad.expression}`
-      }
-    }
-
-    return {
-      lines,
-      expression: `${cppValue.expression}.padStart(${targetLength.expression}${padExpression})`,
-      cppType: 'inox::String',
-      runtimeTypeChecked: true,
-      valueType: 'string'
-    }
-  }
-
-  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'inox_pad_string')
-  let pad: PreparedExpression = {
-    lines: [],
-    expression: cStringLiteral(' ')
-  }
-
-  if (expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
-    const preparedPad = emitPreparedCppStringArgument(expression.args[1], context, 'inox_pad_fill')
-
-    if (preparedPad !== null && typeof preparedPad !== 'undefined') {
-      pad = preparedPad
-    }
-  }
-
-  const lines: string[] = []
-
-  pushAllLines(lines, value.lines)
-  pushAllLines(lines, targetLength.lines)
-  pushAllLines(lines, pad.lines)
-
-  return {
-    lines,
-    expression: `inox::String(${value.bytes}, ${value.length}).padStart(${targetLength.expression}, ${pad.expression})`,
-    cppType: 'inox::String',
-    runtimeTypeChecked: true,
-    valueType: 'string'
-  }
-}
-
-export function emitCStringSliceValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
-  const cppValue = emitPreparedCppStringExpression(expression.callee.object, context)
-  const start = stringDeps(context).emitPreparedNumberExpression(expression.args[0], context)
-
-  if (cppValue !== null && typeof cppValue !== 'undefined') {
-    const lines: string[] = []
-    let endExpression = ''
-
-    pushAllLines(lines, cppValue.lines)
-    pushAllLines(lines, start.lines)
-
-    if (expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
-      const end = stringDeps(context).emitPreparedNumberExpression(expression.args[1], context)
-
-      pushAllLines(lines, end.lines)
-      endExpression = `, ${end.expression}`
-    }
-
-    return {
-      lines,
-      expression: `${cppValue.expression}.slice(${start.expression}${endExpression})`,
-      cppType: 'inox::String',
-      runtimeTypeChecked: true,
-      valueType: 'string'
-    }
-  }
-
-  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'inox_slice_string')
-  let endExpression = ''
-  const lines: string[] = []
-
-  pushAllLines(lines, value.lines)
-  pushAllLines(lines, start.lines)
-
-  if (expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
-    const end = stringDeps(context).emitPreparedNumberExpression(expression.args[1], context)
-
-    pushAllLines(lines, end.lines)
-    endExpression = `, ${end.expression}`
-  }
-
-  return {
-    lines,
-    expression: `inox::String(${value.bytes}, ${value.length}).slice(${start.expression}${endExpression})`,
-    cppType: 'inox::String',
-    runtimeTypeChecked: true,
-    valueType: 'string'
-  }
-}
-
-export function emitCStringSplitValueExpression(
-  expression: AnyNode,
-  context: StringCContext
-): PreparedStringSplitExpression {
-  const cppValue = emitPreparedCppStringExpression(expression.callee.object, context)
-
-  if (cppValue !== null && typeof cppValue !== 'undefined') {
-    const separator = emitPreparedCppStringArgument(expression.args[0], context, 'inox_split_separator')
-    const lines: string[] = []
-
-    pushAllLines(lines, cppValue.lines)
-
-    if (separator !== null && typeof separator !== 'undefined') {
-      pushAllLines(lines, separator.lines)
-
-      return {
-        lines,
-        expression: `${cppValue.expression}.split(${separator.expression})`,
-        cppType: 'Array',
-        elementType: 'string',
-        runtimeTypeChecked: true,
-        valueType: 'array'
-      }
-    }
-  }
-
-  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'inox_split_string')
-  const separator = emitPreparedCppStringArgument(expression.args[0], context, 'inox_split_separator')
-  const lines: string[] = []
-
-  pushAllLines(lines, value.lines)
-
-  if (separator === null || typeof separator === 'undefined') {
-    return {
-      lines,
-      expression: 'Array()',
-      elementType: 'string',
-      cppType: 'Array',
-      runtimeTypeChecked: true,
-      valueType: 'array'
-    }
-  }
-
-  pushAllLines(lines, separator.lines)
-
-  return {
-    lines,
-    expression: `inox::String(${value.bytes}, ${value.length}).split(${separator.expression})`,
-    elementType: 'string',
-    cppType: 'Array',
-    runtimeTypeChecked: true,
-    valueType: 'array'
   }
 }
 
@@ -3149,10 +2369,6 @@ export function isRuntimeProducedStringExpression(
     return true
   }
 
-  if (isStringIndexExpression(expression, context)) {
-    return true
-  }
-
   if (expression.type === 'TemplateLiteral' && expression.raw.includes('${')) {
     return true
   }
@@ -3184,275 +2400,6 @@ export function isRawStringLiteralExpression(expression: AnyNode | null | undefi
   }
 
   return expression.type === 'TemplateLiteral' && !expression.raw.includes('${')
-}
-
-export function isNumberToStringCall(expression: AnyNode | null | undefined, context: StringCContext): boolean {
-  if (
-    expression === null ||
-    typeof expression === 'undefined' ||
-    expression.type !== 'CallExpression' ||
-    expression.callee.type !== 'MemberExpression' ||
-    expression.callee.property !== 'toString' ||
-    expression.args.length > 1
-  ) {
-    return false
-  }
-
-  if (stringDeps(context).inferExpressionType(expression.callee.object, context) !== 'number') {
-    return false
-  }
-
-  if (expression.args.length === 0) {
-    return true
-  }
-
-  return stringDeps(context).inferExpressionType(stringNodeAt(expression.args, 0), context) === 'number'
-}
-
-export function isStringTrimCall(expression: AnyNode | null | undefined, context: StringCContext): boolean {
-  if (
-    expression === null ||
-    typeof expression === 'undefined' ||
-    expression.type !== 'CallExpression' ||
-    expression.callee.type !== 'MemberExpression' ||
-    !isStringTrimMethod(expression.callee.property) ||
-    expression.args.length !== 0
-  ) {
-    return false
-  }
-
-  return isStringLengthObject(expression.callee.object, context)
-}
-
-export function isStringCaseCall(expression: AnyNode | null | undefined, context: StringCContext): boolean {
-  if (
-    expression === null ||
-    typeof expression === 'undefined' ||
-    expression.type !== 'CallExpression' ||
-    expression.callee.type !== 'MemberExpression' ||
-    expression.callee.property !== 'toUpperCase' ||
-    expression.args.length !== 0
-  ) {
-    return false
-  }
-
-  return isStringLengthObject(expression.callee.object, context)
-}
-
-export function isStringPadStartCall(expression: AnyNode | null | undefined, context: StringCContext): boolean {
-  if (
-    expression === null ||
-    typeof expression === 'undefined' ||
-    expression.type !== 'CallExpression' ||
-    expression.callee.type !== 'MemberExpression' ||
-    expression.callee.property !== 'padStart' ||
-    expression.args.length < 1 ||
-    expression.args.length > 2
-  ) {
-    return false
-  }
-
-  if (!isStringLengthObject(expression.callee.object, context)) {
-    return false
-  }
-
-  if (stringDeps(context).inferExpressionType(expression.args[0], context) !== 'number') {
-    return false
-  }
-
-  if (expression.args.length > 1) {
-    return stringDeps(context).inferExpressionType(expression.args[1], context) === 'string'
-  }
-
-  return true
-}
-
-export function isStringIndexCall(expression: AnyNode | null | undefined, context: StringCContext): boolean {
-  if (
-    expression === null ||
-    typeof expression === 'undefined' ||
-    expression.type !== 'CallExpression' ||
-    expression.callee.type !== 'MemberExpression' ||
-    !isStringIndexMethod(expression.callee.property) ||
-    expression.args.length < 1 ||
-    expression.args.length > 2
-  ) {
-    return false
-  }
-
-  if (!isStringLengthObject(expression.callee.object, context)) {
-    return false
-  }
-
-  if (stringDeps(context).inferExpressionType(expression.args[0], context) !== 'string') {
-    return false
-  }
-
-  if (expression.args.length > 1) {
-    return stringDeps(context).inferExpressionType(expression.args[1], context) === 'number'
-  }
-
-  return true
-}
-
-export function isStringSliceCall(expression: AnyNode | null | undefined, context: StringCContext): boolean {
-  if (
-    expression === null ||
-    typeof expression === 'undefined' ||
-    expression.type !== 'CallExpression' ||
-    expression.callee.type !== 'MemberExpression' ||
-    expression.callee.property !== 'slice' ||
-    expression.args.length < 1 ||
-    expression.args.length > 2
-  ) {
-    return false
-  }
-
-  if (!isStringLengthObject(expression.callee.object, context)) {
-    return false
-  }
-
-  for (const arg of expression.args) {
-    if (stringDeps(context).inferExpressionType(arg, context) !== 'number') {
-      return false
-    }
-  }
-
-  return true
-}
-
-export function isStringSplitCall(expression: AnyNode | null | undefined, context: StringCContext): boolean {
-  if (
-    expression === null ||
-    typeof expression === 'undefined' ||
-    expression.type !== 'CallExpression' ||
-    expression.callee.type !== 'MemberExpression' ||
-    expression.callee.property !== 'split' ||
-    expression.args.length !== 1
-  ) {
-    return false
-  }
-
-  return (
-    isStringLengthObject(expression.callee.object, context) &&
-    stringDeps(context).inferExpressionType(expression.args[0], context) === 'string'
-  )
-}
-
-export function isStringPredicateCall(expression: AnyNode | null | undefined, context: StringCContext): boolean {
-  if (
-    expression === null ||
-    typeof expression === 'undefined' ||
-    expression.type !== 'CallExpression' ||
-    expression.callee.type !== 'MemberExpression' ||
-    !isStringPredicateMethod(expression.callee.property)
-  ) {
-    return false
-  }
-
-  const method = expression.callee.property
-  let maxArgs = 1
-
-  if (method === 'includes') {
-    maxArgs = 2
-  }
-
-  if (expression.args.length < 1 || expression.args.length > maxArgs) {
-    return false
-  }
-
-  if (!isStringLengthObject(expression.callee.object, context)) {
-    return false
-  }
-
-  if (stringDeps(context).inferExpressionType(expression.args[0], context) !== 'string') {
-    return false
-  }
-
-  if (expression.args.length > 1) {
-    return stringDeps(context).inferExpressionType(expression.args[1], context) === 'number'
-  }
-
-  return true
-}
-
-function isStringTrimMethod(method: string): boolean {
-  return (
-    method === 'trim' ||
-    method === 'trimEnd' ||
-    method === 'trimLeft' ||
-    method === 'trimRight' ||
-    method === 'trimStart'
-  )
-}
-
-function stringIndexMethodName(expression: any): string | null {
-  if (expression.stringRuntimeMethod === 'indexOf') {
-    return 'indexOf'
-  }
-
-  if (expression.stringRuntimeMethod === 'lastIndexOf') {
-    return 'lastIndexOf'
-  }
-
-  if (
-    expression.type !== 'CallExpression' ||
-    expression.callee === null ||
-    typeof expression.callee === 'undefined' ||
-    expression.callee.type !== 'MemberExpression'
-  ) {
-    return null
-  }
-
-  if (expression.callee.property === 'indexOf') {
-    return 'indexOf'
-  }
-
-  if (expression.callee.property === 'lastIndexOf') {
-    return 'lastIndexOf'
-  }
-
-  return null
-}
-
-function isStringLengthObject(expression: AnyNode | null | undefined, context: StringCContext): boolean {
-  if (expression === null || typeof expression === 'undefined') {
-    return false
-  }
-
-  if (expression.type === 'StringLiteral') {
-    return true
-  }
-
-  if (expression.type === 'TemplateLiteral') {
-    return true
-  }
-
-  if (nodeValueType(expression) === 'string') {
-    return true
-  }
-
-  if (stringDeps(context).isNodeRuntimeProducedStringExpression(expression)) {
-    return true
-  }
-
-  if (expression.type === 'Reference' && expression.path.length === 1) {
-    const name = expression.path[0]
-    const variables = context.variables
-    const runtimeStrings = context.runtimeStrings
-
-    return (
-      (variables !== null && typeof variables !== 'undefined' && variables.get(name) === 'string') ||
-      (runtimeStrings !== null && typeof runtimeStrings !== 'undefined' && runtimeStrings.has(name)) ||
-      stringDeps(context).inferExpressionType(expression, context) === 'string'
-    )
-  }
-
-  if (isDynamicRuntimeStringFieldExpression(expression, context)) {
-    return true
-  }
-
-  return stringDeps(context).inferExpressionType(expression, context) === 'string'
 }
 
 function parseTemplateLiteralParts(
@@ -4151,8 +3098,4 @@ function shiftTemplatePlaceholderChildLocations(node: AnyNode, loc: SourceLocati
   ) {
     shiftTemplatePlaceholderExpressionLocations(node.value, loc, prefixLength)
   }
-}
-
-export function isCStringRuntimeMethodName(name: string): boolean {
-  return isStringRuntimeMethod(name)
 }

@@ -24,6 +24,7 @@ import {
   compilerLibraryOperationForGlobal,
   compilerLibraryOperationForImport,
   compilerLibraryOperationForReceiver,
+  compilerLibraryPrimitiveReceiverTypeId,
   resolveCompilerLibrarySet
 } from './extensions/library-set.ts'
 import { compilerLibraryIntrinsicResultMetadata } from './extensions/intrinsic-metadata.ts'
@@ -113,26 +114,8 @@ import {
   resolveRejectedExpressionValueType as resolveRejectedExpressionValueTypeInContext
 } from './checker/expression-metadata.ts'
 import {
-  checkNumberToStringCall as checkNumberToStringCallInContext,
   checkNumericCastCall as checkNumericCastCallInContext,
-  checkStringCaseCall as checkStringCaseCallInContext,
-  checkStringCharCodeAtCall as checkStringCharCodeAtCallInContext,
-  checkStringIndexCall as checkStringIndexCallInContext,
-  checkStringPadStartCall as checkStringPadStartCallInContext,
-  checkStringPredicateCall as checkStringPredicateCallInContext,
-  checkStringSliceCall as checkStringSliceCallInContext,
-  checkStringSplitCall as checkStringSplitCallInContext,
-  checkStringTrimCall as checkStringTrimCallInContext,
-  isNumberToStringCall,
-  isStringCaseCall,
-  isStringCharCodeAtCall,
-  isStringPadStartCall,
-  isStringPredicateCall,
-  numericCastName,
-  stringIndexMethodName,
-  stringSliceMethodName,
-  stringSplitMethodName,
-  stringTrimMethodName
+  numericCastName
 } from './checker/primitive-calls.ts'
 import type { PrimitiveCallCheckerContext } from './checker/primitive-calls.ts'
 import {
@@ -183,6 +166,7 @@ import type {
 
 import {
   anyNodeLocObjectShape,
+  anyNodeObjectShape,
   checkerNodeAt,
   cloneObjectShapeField,
   cloneStringSet,
@@ -783,6 +767,26 @@ class Checker {
 
     if (typeof declaredType === 'string' && declaredType !== '') {
       this.applyResolvedTypeInfoToSymbol(symbol, this.resolveDeclaredType(declaredType, specifier.loc))
+      return
+    }
+
+    const typeRef: TypeRef | null | undefined = specifier.typeRef
+
+    if (typeRef !== null && typeof typeRef !== 'undefined') {
+      const metadata = typeRefCompatibilityMetadata(
+        typeRef,
+        resolveCompilerLibrarySet(this.options.libraries),
+        nodeSourceLocation(specifier)
+      )
+
+      this.applyResolvedTypeInfoToSymbol(symbol, {
+        valueType: metadata.valueType,
+        nullable: metadata.nullable,
+        typeRef,
+        functionType: specifier.functionType ?? null,
+        shape: metadata.shape,
+        promiseValueType: metadata.promiseValueType
+      })
       return
     }
 
@@ -2507,12 +2511,6 @@ class Checker {
       return 'number'
     }
 
-    if (objectType === 'string' && expression.property === 'length') {
-      expression.valueType = 'number'
-      expression.stringRuntimeMethod = 'length'
-      return 'number'
-    }
-
     if (objectType === 'array' && expression.property === 'length') {
       expression.valueType = 'number'
       return 'number'
@@ -2532,6 +2530,9 @@ class Checker {
     }
 
     if (shape === null || typeof shape === 'undefined') {
+      if (this.shouldReportUnknownPrimitiveAccess(expression.object, objectType)) {
+        this.report('INOX_UNKNOWN_FIELD', `unknown field ${expression.property}`, expression.loc)
+      }
       return 'unknown'
     }
 
@@ -2634,6 +2635,32 @@ class Checker {
       return 'object'
     }
 
+    if (childAnyNode) {
+      const field = this.findShapeField(anyNodeObjectShape(nodeSourceLocation(expression)), expression.property)
+
+      if (field !== null) {
+        const fieldType = this.resolveFieldDeclaredType(field)
+        const valueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
+
+        expression.valueType = valueType
+        expression.declaredType = field.declaredType ?? null
+        expression.typeRef = field.typeRef ?? fieldType.typeRef
+        expression.nullable = resolvedFieldNullableMetadata(field, fieldType)
+        const narrowedKey = nullableNarrowingKey(expression)
+
+        if (narrowedKey !== null && this.narrowedNullableNames.has(narrowedKey)) {
+          expression.nullable = false
+        }
+
+        expression.promiseValueType = resolvedValueTypeMetadata(field.promiseValueType, fieldType.promiseValueType)
+        expression.shape = resolvedObjectShapeMetadata(field.shape, fieldType.shape)
+        expression.functionType = resolvedFunctionTypeMetadata(field.functionType, fieldType.functionType)
+        expression.functionOverloads = field.functionOverloads ?? []
+        expression.className = field.className ?? null
+        return valueType
+      }
+    }
+
     return null
   }
 
@@ -2655,7 +2682,28 @@ class Checker {
     return this.isAnyNodeChildExpression(expression.object)
   }
 
+  shouldReportUnknownPrimitiveAccess(expression: AnyNode, valueType: ValueType): boolean {
+    if (valueType === 'function' || valueType === 'object' || valueType === 'unknown') {
+      return false
+    }
+
+    if (expression.type !== 'MemberExpression' && expression.type !== 'OptionalMemberExpression') {
+      return true
+    }
+
+    const parentShape = this.resolveExpressionShape(expression.object)
+    return parentShape?.builtin !== 'compiler.AnyNode'
+  }
+
   checkOptionalMemberExpression(expression: AnyNode): ValueType {
+    const libraryMemberType = this.applyCompilerLibraryMemberOperation(expression)
+
+    if (libraryMemberType !== null) {
+      expression.nullable = true
+      expression.optionalChainProtected = true
+      return libraryMemberType
+    }
+
     const objectType = this.checkExpression(expression.object)
 
     if (this.reportUnsupportedClassPrototypeAccess(expression, true)) {
@@ -2663,15 +2711,11 @@ class Checker {
     }
 
     if (
-      (objectType === 'array' || objectType === 'bytes' || objectType === 'string') &&
+      (objectType === 'array' || objectType === 'bytes') &&
       expression.property === 'length'
     ) {
       expression.nullable = true
       expression.valueType = 'number'
-
-      if (objectType === 'string') {
-        expression.stringRuntimeMethod = 'length'
-      }
 
       return 'number'
     }
@@ -2679,6 +2723,9 @@ class Checker {
     const shape = this.resolveExpressionShape(expression.object)
 
     if (shape === null || typeof shape === 'undefined') {
+      if (this.shouldReportUnknownPrimitiveAccess(expression.object, objectType)) {
+        this.report('INOX_UNKNOWN_FIELD', `unknown field ${expression.property}`, expression.loc)
+      }
       expression.nullable = true
       expression.valueType = 'unknown'
       return 'unknown'
@@ -2884,14 +2931,6 @@ class Checker {
     }
 
     if (expression.index.type !== 'StringLiteral') {
-      if (objectType === 'string') {
-        this.checkAssignableType(indexType, 'number', expression.index.loc, false, false)
-        expression.nullable = optionalChainReceiver
-        expression.optionalChainProtected = optionalChainReceiver
-        expression.valueType = 'string'
-        return 'string'
-      }
-
       if (objectType === 'bytes') {
         this.checkAssignableType(indexType, 'number', expression.index.loc, false, false)
         expression.nullable = optionalChainReceiver
@@ -2986,12 +3025,18 @@ class Checker {
         }
       }
 
+      if (this.shouldReportUnknownPrimitiveAccess(expression.object, objectType)) {
+        this.report('INOX_UNKNOWN_FIELD', 'unknown index operation', expression.loc)
+      }
       return 'unknown'
     }
 
     const shape = this.resolveExpressionShape(expression.object)
 
     if (shape === null || typeof shape === 'undefined') {
+      if (this.shouldReportUnknownPrimitiveAccess(expression.object, objectType)) {
+        this.report('INOX_UNKNOWN_FIELD', 'unknown index operation', expression.loc)
+      }
       return 'unknown'
     }
 
@@ -3087,6 +3132,10 @@ class Checker {
       expression.nullable = true
       expression.valueType = 'unknown'
 
+      if (this.shouldReportUnknownPrimitiveAccess(expression.object, objectType)) {
+        this.report('INOX_UNKNOWN_FIELD', 'unknown index operation', expression.loc)
+      }
+
       return 'unknown'
     }
 
@@ -3095,6 +3144,9 @@ class Checker {
     if (shape === null || typeof shape === 'undefined') {
       expression.nullable = true
       expression.valueType = 'unknown'
+      if (this.shouldReportUnknownPrimitiveAccess(expression.object, objectType)) {
+        this.report('INOX_UNKNOWN_FIELD', 'unknown index operation', expression.loc)
+      }
       return 'unknown'
     }
 
@@ -3441,60 +3493,6 @@ class Checker {
       return numericCastType
     }
 
-    const numberToStringType = this.checkNumberToStringCall(expression)
-
-    if (numberToStringType !== null && typeof numberToStringType !== 'undefined') {
-      return numberToStringType
-    }
-
-    const stringCharCodeAtType = this.checkStringCharCodeAtCall(expression)
-
-    if (stringCharCodeAtType !== null && typeof stringCharCodeAtType !== 'undefined') {
-      return stringCharCodeAtType
-    }
-
-    const stringIndexType = this.checkStringIndexCall(expression)
-
-    if (stringIndexType !== null && typeof stringIndexType !== 'undefined') {
-      return stringIndexType
-    }
-
-    const stringTrimType = this.checkStringTrimCall(expression)
-
-    if (stringTrimType !== null && typeof stringTrimType !== 'undefined') {
-      return stringTrimType
-    }
-
-    const stringCaseType = this.checkStringCaseCall(expression)
-
-    if (stringCaseType !== null && typeof stringCaseType !== 'undefined') {
-      return stringCaseType
-    }
-
-    const stringPadStartType = this.checkStringPadStartCall(expression)
-
-    if (stringPadStartType !== null && typeof stringPadStartType !== 'undefined') {
-      return stringPadStartType
-    }
-
-    const stringSliceType = this.checkStringSliceCall(expression)
-
-    if (stringSliceType !== null && typeof stringSliceType !== 'undefined') {
-      return stringSliceType
-    }
-
-    const stringSplitType = this.checkStringSplitCall(expression)
-
-    if (stringSplitType !== null && typeof stringSplitType !== 'undefined') {
-      return stringSplitType
-    }
-
-    const stringMethodType = this.checkStringPredicateCall(expression)
-
-    if (stringMethodType !== null && typeof stringMethodType !== 'undefined') {
-      return stringMethodType
-    }
-
     const promiseMethodType = this.checkPromiseMethodCall(expression)
 
     if (promiseMethodType !== null && typeof promiseMethodType !== 'undefined') {
@@ -3532,7 +3530,10 @@ class Checker {
   ): ValueType | null {
     let operation = this.compilerLibraryOperationForExpression(expression.callee, 'call')
 
-    if (operation === null && expression.callee.type === 'MemberExpression') {
+    if (
+      operation === null &&
+      (expression.callee.type === 'MemberExpression' || expression.callee.type === 'OptionalMemberExpression')
+    ) {
       this.checkExpression(expression.callee.object)
       operation = this.compilerLibraryReceiverOperation(expression.callee.object, expression.callee.property, 'call')
     }
@@ -3565,6 +3566,11 @@ class Checker {
     }
 
     this.applyCompilerLibraryOperation(expression, operation, variant, contextualResult, argInfos)
+
+    if (expression.callee.type === 'OptionalMemberExpression') {
+      expression.nullable = true
+      expression.optionalChainProtected = true
+    }
 
     this.checkCompilerLibraryBackendConstraints(expression, operation)
     this.applyCompilerLibraryResultInference(expression, operation, variant, contextualResult)
@@ -4620,7 +4626,10 @@ class Checker {
   applyCompilerLibraryMemberOperation(expression: AnyNode): ValueType | null {
     let operation = this.compilerLibraryOperationForExpression(expression, 'member-read')
 
-    if (operation === null && expression.type === 'MemberExpression') {
+    if (
+      operation === null &&
+      (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression')
+    ) {
       this.checkExpression(expression.object)
       operation = this.compilerLibraryReceiverOperation(expression.object, expression.property, 'member-read')
     }
@@ -4648,14 +4657,19 @@ class Checker {
     kind: LibraryOperationKind
   ): LibraryOperationDescriptor | null {
     const shape = this.resolveExpressionShape(receiver)
+    let receiverTypeId = shape?.libraryTypeId ?? null
 
-    if (shape === null || typeof shape === 'undefined') {
-      return null
+    if (receiverTypeId === null) {
+      const typeRef = this.compilerLibraryExpressionTypeRef(receiver)
+
+      if (typeRef.kind === 'primitive') {
+        receiverTypeId = compilerLibraryPrimitiveReceiverTypeId(typeRef.name)
+      }
     }
 
     return compilerLibraryOperationForReceiver(
       resolveCompilerLibrarySet(this.options.libraries),
-      shape.libraryTypeId,
+      receiverTypeId,
       memberName,
       kind
     )
@@ -5669,7 +5683,7 @@ class Checker {
   compilerLibraryOperationReceiverExpression(expression: AnyNode): AnyNode | null {
     if (
       (expression.type === 'CallExpression' || expression.type === 'OptionalCallExpression') &&
-      expression.callee.type === 'MemberExpression'
+      (expression.callee.type === 'MemberExpression' || expression.callee.type === 'OptionalMemberExpression')
     ) {
       return expression.callee.object
     }
@@ -5918,128 +5932,6 @@ class Checker {
       castName,
       this.checkCallArgumentTypes(expression)
     )
-  }
-
-  checkNumberToStringCall(expression: AnyNode): ValueType | null {
-    if (!isNumberToStringCall(expression)) {
-      return null
-    }
-
-    const objectType = this.checkExpression(expression.callee.object)
-    const argTypes = this.checkCallArgumentTypes(expression)
-
-    return checkNumberToStringCallInContext(this.primitiveCallContext(), expression, objectType, argTypes)
-  }
-
-  checkStringCharCodeAtCall(expression: CheckerNode): ValueType | null {
-    if (!isStringCharCodeAtCall(expression)) {
-      return null
-    }
-
-    const objectType = this.checkExpression(expression.callee.object)
-    const argTypes = this.checkCallArgumentTypes(expression)
-
-    return checkStringCharCodeAtCallInContext(this.primitiveCallContext(), expression, objectType, argTypes)
-  }
-
-  checkStringTrimCall(expression: AnyNode): ValueType | null {
-    const method = stringTrimMethodName(expression)
-
-    if (method === null || typeof method === 'undefined') {
-      return null
-    }
-
-    const objectType = this.checkExpression(expression.callee.object)
-    this.checkCallArgumentTypes(expression)
-
-    return checkStringTrimCallInContext(this.primitiveCallContext(), expression, objectType, method)
-  }
-
-  checkStringCaseCall(expression: AnyNode): ValueType | null {
-    if (!isStringCaseCall(expression)) {
-      return null
-    }
-
-    const objectType = this.checkExpression(expression.callee.object)
-    this.checkCallArgumentTypes(expression)
-
-    return checkStringCaseCallInContext(this.primitiveCallContext(), expression, objectType)
-  }
-
-  checkStringPadStartCall(expression: AnyNode): ValueType | null {
-    if (!isStringPadStartCall(expression)) {
-      return null
-    }
-
-    const objectType = this.checkExpression(expression.callee.object)
-    const argTypes = this.checkCallArgumentTypes(expression)
-
-    return checkStringPadStartCallInContext(this.primitiveCallContext(), expression, objectType, argTypes)
-  }
-
-  checkStringIndexCall(expression: AnyNode): ValueType | null {
-    const method = stringIndexMethodName(expression)
-
-    if (method === null || typeof method === 'undefined') {
-      return null
-    }
-
-    const objectType = this.checkExpression(expression.callee.object)
-    const argTypes = this.checkCallArgumentTypes(expression)
-
-    return checkStringIndexCallInContext(this.primitiveCallContext(), expression, objectType, method, argTypes)
-  }
-
-  checkStringSliceCall(expression: AnyNode): ValueType | null {
-    const method = stringSliceMethodName(expression)
-
-    if (method === null || typeof method === 'undefined') {
-      return null
-    }
-
-    const objectType = this.checkExpression(expression.callee.object)
-    const argTypes = this.checkCallArgumentTypes(expression)
-
-    return checkStringSliceCallInContext(this.primitiveCallContext(), expression, objectType, method, argTypes)
-  }
-
-  checkStringSplitCall(expression: AnyNode): ValueType | null {
-    const method = stringSplitMethodName(expression)
-
-    if (method === null || typeof method === 'undefined') {
-      return null
-    }
-
-    const objectType = this.checkExpression(expression.callee.object)
-    const argTypes = this.checkCallArgumentTypes(expression)
-    const valueType = checkStringSplitCallInContext(
-      this.primitiveCallContext(),
-      expression,
-      objectType,
-      method,
-      argTypes
-    )
-
-    if (valueType === 'array') {
-      const stringTypeRef = this.compilerLibraryPrimitiveTypeRef('string', false)
-
-      if (stringTypeRef !== null) {
-        this.applyCompilerLibraryArrayResultType(expression, stringTypeRef)
-      }
-    }
-
-    return valueType
-  }
-
-  checkStringPredicateCall(expression: AnyNode): ValueType | null {
-    if (!isStringPredicateCall(expression)) {
-      return null
-    }
-
-    const objectType = this.checkExpression(expression.callee.object)
-    const argTypes = this.checkCallArgumentTypes(expression)
-
-    return checkStringPredicateCallInContext(this.primitiveCallContext(), expression, objectType, argTypes)
   }
 
   checkNewExpression(expression: AnyNode, contextualResult: ResolvedTypeInfo | null = null): ValueType {

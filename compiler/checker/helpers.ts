@@ -292,24 +292,6 @@ export function intersectNames(left: string[], right: string[]): string[] {
   return uniqueNames(names)
 }
 
-export function isStringTrimMethod(method: string | null): boolean {
-  return (
-    method === 'trim' ||
-    method === 'trimEnd' ||
-    method === 'trimLeft' ||
-    method === 'trimRight' ||
-    method === 'trimStart'
-  )
-}
-
-export function stringPredicateArgCountMessage(method: string, actual: number): string {
-  if (method === 'includes') {
-    return `string.includes expects 1 or 2 argument(s), got ${actual}`
-  }
-
-  return `string.${method} expects 1 argument(s), got ${actual}`
-}
-
 export function isRelativeImportSource(source: string): boolean {
   return source.startsWith('./') || source.startsWith('../')
 }

@@ -1,5 +1,5 @@
 import { diagnostic } from '../../diagnostics.ts'
-import { isNumericCastName, stringRuntimeReturnType } from '../../../stdlib/global/compiler/descriptor.ts'
+import { isNumericCastName } from '../../../stdlib/global/compiler/descriptor.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import {
   emitFunctionPointerParams,
@@ -331,20 +331,6 @@ function canEmitStringCompareOperands(
   context: CFunctionContext,
   deps: CScalarExpressionDependencies
 ): boolean {
-  if (isStringValueRuntimeMethodCall(expression.right)) {
-    return (
-      deps.canEmitStringBytesOperand(expression.right, context) &&
-      deps.canEmitStringBytesOperand(expression.left, context)
-    )
-  }
-
-  if (isStringValueRuntimeMethodCall(expression.left)) {
-    return (
-      deps.canEmitStringBytesOperand(expression.left, context) &&
-      deps.canEmitStringBytesOperand(expression.right, context)
-    )
-  }
-
   if (leftType !== 'string' && rightType === 'string') {
     return (
       deps.canEmitStringBytesOperand(expression.right, context) &&
@@ -355,14 +341,6 @@ function canEmitStringCompareOperands(
   return (
     deps.canEmitStringBytesOperand(expression.left, context) &&
     deps.canEmitStringBytesOperand(expression.right, context)
-  )
-}
-
-function isStringValueRuntimeMethodCall(expression: CValueNode): boolean {
-  return (
-    expression.type === 'CallExpression' &&
-    expression.callee.type === 'MemberExpression' &&
-    stringRuntimeReturnType(expression.callee.property) === 'string'
   )
 }
 
@@ -1911,10 +1889,6 @@ export type CScalarExpressionDependencies = {
     context: CFunctionContext,
     tempPrefix: string
   ): PreparedStringBytesOperand
-  emitPreparedStringCharCodeAtExpression(expression: any, context: CFunctionContext): PreparedExpression | null
-  emitPreparedStringIndexCallExpression(expression: any, context: CFunctionContext): PreparedExpression | null
-  emitPreparedStringLengthExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedStringPredicateCall(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitReference(expression: CValueNode, context: CFunctionContext): string
   emitStringExpression(expression: CValueNode, context: CFunctionContext): string
   inferExpressionType(expression: CValueNode, context: CFunctionContext): string
@@ -1922,7 +1896,6 @@ export type CScalarExpressionDependencies = {
   isMemberAccessExpression(expression: CValueNode): boolean
   isNullableRuntimeExpression(expression: CValueNode, context: CFunctionContext): boolean
   isNullableScalarRuntimeExpression(expression: CValueNode, context: CFunctionContext): boolean
-  isStringPredicateCall(expression: CValueNode, context: CFunctionContext): boolean
   reportCJsGlobalDiagnostic(diagnostics: Diagnostic[], loc: SourceLocation | undefined): void
   resolveKnownArrayIndex(expression: CValueNode, context: CFunctionContext): CKnownArrayElement | null
   resolveKnownObjectIndex(expression: CValueNode, context: CFunctionContext): CKnownObjectIndexField | null
@@ -2799,12 +2772,6 @@ export function emitPreparedNumberExpression(
     }
   }
 
-  const referencePathStringLength = deps.emitPreparedStringLengthExpression(expression, context)
-
-  if (referencePathStringLength !== null && typeof referencePathStringLength !== 'undefined') {
-    return referencePathStringLength
-  }
-
   if (expression.type === 'Reference') {
     const valueType = deps.inferExpressionType(expression, context)
 
@@ -3049,10 +3016,6 @@ export function emitPreparedNumberExpression(
       return numericCast
     }
 
-    if (deps.isStringPredicateCall(expression, context)) {
-      return deps.emitPreparedStringPredicateCall(expression, context)
-    }
-
     const arrayIncludesCall = deps.emitPreparedArrayIncludesCallExpression(expression, context)
 
     if (arrayIncludesCall !== null && typeof arrayIncludesCall !== 'undefined') {
@@ -3065,18 +3028,6 @@ export function emitPreparedNumberExpression(
       return arrayUnshiftCall
     }
 
-    const stringCharCodeAt = deps.emitPreparedStringCharCodeAtExpression(expression, context)
-
-    if (stringCharCodeAt !== null && typeof stringCharCodeAt !== 'undefined') {
-      return stringCharCodeAt
-    }
-
-    const stringIndexCall = deps.emitPreparedStringIndexCallExpression(expression, context)
-
-    if (stringIndexCall !== null && typeof stringIndexCall !== 'undefined') {
-      return stringIndexCall
-    }
-
     return deps.emitPreparedCallExpression(expression, context)
   }
 
@@ -3086,12 +3037,6 @@ export function emitPreparedNumberExpression(
     if (optionalPlainCall !== null && typeof optionalPlainCall !== 'undefined') {
       return optionalPlainCall
     }
-  }
-
-  const stringLength = deps.emitPreparedStringLengthExpression(expression, context)
-
-  if (stringLength !== null && typeof stringLength !== 'undefined') {
-    return stringLength
   }
 
   if (deps.isMemberAccessExpression(expression)) {
@@ -5015,13 +4960,6 @@ export type CValueExpressionDependencies = {
   emitCOptionalIndexValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCOptionalMemberValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCStringConcatValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitCNumberToStringValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitCStringCaseValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitCStringIndexValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitCStringPadStartValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitCStringSliceValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitCStringSplitValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitCStringTrimValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCTemplateLiteralValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitOptionalRuntimeCallbackCallValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedArrayLengthExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
@@ -5096,12 +5034,6 @@ export type CValueExpressionDependencies = {
   isNullableRuntimeExpression(expression: CValueNode, context: CFunctionContext): boolean
   isNullableScalarRuntimeExpression(expression: CValueNode, context: CFunctionContext): boolean
   isStringConcatExpression(expression: CValueNode, context: CFunctionContext): boolean
-  isNumberToStringCall(expression: CValueNode, context: CFunctionContext): boolean
-  isStringCaseCall(expression: CValueNode, context: CFunctionContext): boolean
-  isStringPadStartCall(expression: CValueNode, context: CFunctionContext): boolean
-  isStringSliceCall(expression: CValueNode, context: CFunctionContext): boolean
-  isStringSplitCall(expression: CValueNode, context: CFunctionContext): boolean
-  isStringTrimCall(expression: CValueNode, context: CFunctionContext): boolean
   resolveRuntimeArrayIndex(expression: CValueNode, context: CFunctionContext): CRuntimeArrayElement | null
 }
 
@@ -5176,38 +5108,8 @@ export function emitCValueExpression(
     return deps.emitPreparedNullableScalarRuntimeValueExpression(expression, context)
   }
 
-  if (deps.isNumberToStringCall(expression, context)) {
-    return deps.emitCNumberToStringValueExpression(expression, context)
-  }
-
-  if (deps.isStringCaseCall(expression, context)) {
-    return deps.emitCStringCaseValueExpression(expression, context)
-  }
-
-  if (deps.isStringPadStartCall(expression, context)) {
-    return deps.emitCStringPadStartValueExpression(expression, context)
-  }
-
-  if (deps.isStringTrimCall(expression, context)) {
-    return deps.emitCStringTrimValueExpression(expression, context)
-  }
-
-  if (deps.isStringSliceCall(expression, context)) {
-    return deps.emitCStringSliceValueExpression(expression, context)
-  }
-
-  if (deps.isStringSplitCall(expression, context)) {
-    return deps.emitCStringSplitValueExpression(expression, context)
-  }
-
   if (deps.isStringConcatExpression(expression, context)) {
     return deps.emitCStringConcatValueExpression(expression, context)
-  }
-
-  const stringIndex = deps.emitCStringIndexValueExpression(expression, context)
-
-  if (stringIndex !== null && typeof stringIndex !== 'undefined') {
-    return stringIndex
   }
 
   if (expression.type === 'TemplateLiteral') {

@@ -64,43 +64,49 @@ console.log(strNum, strBool, strNull, strTpl, numText, hexText)
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /auto trimmed = inox::String\("  Inox stdlib  "\)\.trim\(\);/)
+  assert.match(source, /auto trimmed = inox::String\("  Inox stdlib  ", 15\)\.trim\(\);/)
   assert.doesNotMatch(source, /trimmed\.valid\(\)/)
   assert.match(source, /trimmed\.toUpperCase\(\)/)
   assert.match(source, /trimmed\.slice\(0, 4\)/)
   assert.match(
     source,
-    /auto inox_return_value_\d+ = \(inox_string_value_\d+ == nullptr \? inox::String\(\) : inox::String\(inox_string_value_\d+->bytes, inox_string_value_\d+->len\)\)\.slice\(0, 4\);/
+    /auto inox_library_result_\d+ = inox::String\(inox_library_receiver_\d+->bytes, inox_library_receiver_\d+->len\)\.slice\(0, 4\);/
   )
+  assert.match(source, /auto inox_return_value_\d+ = inox_library_result_\d+;/)
   assert.match(source, /inox_return = inox_return_value_\d+;/)
   assert.doesNotMatch(source, /inox_return = inox::String\([^\n]+\)\.slice\([^\n]*\);/)
   assert.match(source, /static Array words\(inox_value inox_param_value\)/)
   assert.match(
     source,
-    /inox_return = \(inox_string_value_\d+ == nullptr \? inox::String\(\) : inox::String\(inox_string_value_\d+->bytes, inox_string_value_\d+->len\)\)\.split\(","\);/
+    /auto inox_library_result_\d+ = inox::String\(inox_library_receiver_\d+->bytes, inox_library_receiver_\d+->len\)\.split\(","\);/
   )
+  assert.match(source, /inox_return = inox_library_result_\d+;/)
   assert.doesNotMatch(source, /static inox_value words\(/)
   assert.doesNotMatch(source, /inox::String\([^\n]+\)\.slice\([^\n]*\)\.(tag|as\.ref)/)
   assert.match(source, /auto value_default_\d+ = inox::String\("fallback", 8\);/)
   assert.match(source, /inox_retain\(inox_param_value\);/)
-  assert.match(source, /inox_string_value_\d+ == nullptr \? inox::String\(\) : inox::String\(inox_string_value_\d+->bytes, inox_string_value_\d+->len\)/)
+  assert.match(source, /inox::String\(inox_library_receiver_\d+->bytes, inox_library_receiver_\d+->len\)/)
   assert.doesNotMatch(source, /inox::String\(statement\)\.endsWith/)
   assert.match(source, /trimmed\.includes\("std"\)/)
   assert.match(source, /trimmed\.startsWith\("In"\)/)
   assert.match(source, /trimmed\.endsWith\("lib"\)/)
   assert.match(
     source,
-    /console\.log\("%d %d %d", trimmed\.includes\("std"\), trimmed\.startsWith\("In"\), trimmed\.endsWith\("lib"\)\);/
+    /console\.log\("%d %d %d", inox_library_result_\d+, inox_library_result_\d+, inox_library_result_\d+\);/
   )
   assert.doesNotMatch(source, /trimmed\.includes\("std"\) \? 1 : 0/)
   assert.doesNotMatch(source, /\(\(double\)\(trimmed\.includes/)
   assert.match(source, /trimmed\.indexOf\("o"\)/)
   assert.match(source, /trimmed\.lastIndexOf\("i"\)/)
-  assert.match(source, /console\.log\("%.17g %.17g", trimmed\.indexOf\("o"\), trimmed\.lastIndexOf\("i"\)\);/)
+  assert.match(
+    source,
+    /console\.log\("%.17g %.17g", \(\(double\)inox_library_result_\d+\), \(\(double\)inox_library_result_\d+\)\);/
+  )
   assert.doesNotMatch(source, /\(\(double\)trimmed\.indexOf/)
-  assert.match(source, /auto parts = inox::String\("alpha,beta"\)\.split\(","\);/)
+  assert.match(source, /auto inox_library_result_\d+ = inox::String\("alpha,beta", 10\)\.split\(","\);/)
+  assert.match(source, /auto parts = inox_library_result_\d+;/)
   assert.match(source, /parts\.join\("\|"\)/)
-  assert.match(source, /inox::String\("alpha,beta"\)\.split\(","\)/)
+  assert.match(source, /inox::String\("alpha,beta", 10\)\.split\(","\)/)
   assert.match(source, /auto strNum = inox::String::fromNumber\(12\);/)
   assert.match(source, /auto strNull = inox::String\("null"\);/)
   assert.match(source, /auto strTpl = inox::String::fromFormat\("value %.17g", \(\(double\)12\)\);/)

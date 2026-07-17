@@ -417,11 +417,6 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
   copyStringMetadataArray(target, source, 'narrowingTrueNames')
   copyStringMetadataArray(target, source, 'narrowingFalseNames')
 
-  const stringRuntimeMethod = nullableString(source.stringRuntimeMethod)
-  if (stringRuntimeMethod !== null && typeof stringRuntimeMethod !== 'undefined') {
-    target.stringRuntimeMethod = stringRuntimeMethod
-  }
-
   const numericCast = nullableString(source.numericCast)
   if (numericCast !== null && typeof numericCast !== 'undefined') {
     target.numericCast = numericCast

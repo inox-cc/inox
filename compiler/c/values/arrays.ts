@@ -60,7 +60,6 @@ type ArrayFunctionContext = CFunctionContextWithDependencies<
 
 export type ArrayLoweringDependencies = {
   emitCArrayLiteralValueExpression(expression: AnyNode, context: ArrayFunctionContext): PreparedExpression
-  emitCStringSplitValueExpression(expression: AnyNode, context: ArrayFunctionContext): PreparedArrayExpression | null
   emitCValueExpression(expression: AnyNode, context: ArrayFunctionContext): PreparedExpression
   emitPreparedCppStringArgument(
     expression: AnyNode,
@@ -74,7 +73,6 @@ export type ArrayLoweringDependencies = {
   ): PreparedStringBytesOperand
   emitPreparedNumberExpression(expression: AnyNode, context: ArrayFunctionContext): PreparedExpression
   inferExpressionType(expression: AnyNode, context: ArrayFunctionContext): string
-  isStringSplitCall(expression: AnyNode, context: ArrayFunctionContext): boolean
   resolveKnownObjectIndex(expression: AnyNode, context: ArrayFunctionContext): CObjectFieldInfo | null
   resolveKnownObjectMember(expression: AnyNode, context: ArrayFunctionContext): CObjectFieldInfo | null
 }
@@ -1993,14 +1991,7 @@ function emitPreparedArrayReceiver(
       return null
     }
 
-    let call = emitPreparedArraySliceCallExpression(expression, context)
-
-    if (
-      (call === null || typeof call === 'undefined') &&
-      arrayDeps(context).isStringSplitCall(expression, context)
-    ) {
-      call = arrayDeps(context).emitCStringSplitValueExpression(expression, context)
-    }
+    const call = emitPreparedArraySliceCallExpression(expression, context)
 
     if (call !== null && typeof call !== 'undefined') {
       return {

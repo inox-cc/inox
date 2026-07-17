@@ -797,7 +797,7 @@ function narrowRuntimeObjects(context: CFunctionContext, names: string[]): void 
 
 function preparedCallOut(name: string): PreparedCallOptions {
   return {
-    out: name
+    out: emitCIdentifier(name)
   }
 }
 
@@ -3368,7 +3368,11 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return lines
   }
 
-  if (libraryObject !== null && libraryObject.cppType === 'inox::Value') {
+  if (
+    libraryObject !== null &&
+    libraryObject.cppType === 'inox::Value' &&
+    (libraryObject.scalarType === null || typeof libraryObject.scalarType === 'undefined')
+  ) {
     const lines: string[] = []
     let valueType = 'unknown'
 

@@ -305,7 +305,9 @@ function visitModuleGraphFile(
 
       const importedProgram = moduleProgramForImports(importedModule)
 
-      applyImportedFunctionMetadata(specifier, importedProgram)
+      if (importedProgram !== null) {
+        applyImportedDeclarationMetadata(specifier, exported, importedProgram)
+      }
 
       if (importedProgram !== null) {
         const declarations = createValueImportTypeDeclarations(
@@ -968,20 +970,6 @@ function appendSyntheticDeclarations(program: ProgramNode, declarations: AnyNode
   }
 }
 
-function applyImportedFunctionMetadata(specifier: AnyNode, importedProgram: ProgramNode | null): void {
-  if (importedProgram === null || typeof importedProgram === 'undefined') {
-    return
-  }
-
-  const declaration = findExportedFunctionDeclaration(importedProgram, specifier.imported)
-
-  if (declaration === null || typeof declaration === 'undefined') {
-    return
-  }
-
-  applyImportedFunctionDeclarationMetadata(specifier, declaration)
-}
-
 function applyImportedDeclarationMetadata(specifier: AnyNode, declaration: AnyNode, program: ProgramNode): void {
   if (declaration.type === 'FunctionDeclaration') {
     applyImportedFunctionDeclarationMetadata(specifier, declaration)
@@ -1035,16 +1023,6 @@ function applyImportedFunctionDeclarationMetadata(specifier: AnyNode, declaratio
   specifier.returnNullable = declaration.returnNullable === true
   specifier.returnPromiseValueType = declaration.returnPromiseValueType ?? null
   specifier.returnShape = declaration.returnShape ?? null
-}
-
-function findExportedFunctionDeclaration(program: ProgramNode, name: string): AnyNode | null {
-  for (const item of program.body) {
-    if (item.type === 'FunctionDeclaration' && item.exported === true && item.name === name) {
-      return item
-    }
-  }
-
-  return null
 }
 
 function findExportedFunctionDeclarations(program: ProgramNode, name: string): AnyNode[] {

@@ -388,6 +388,9 @@ function registerFunctionParamsInContext(
     const param = params[index]
 
     context.localValueNames.add(param.name)
+    context.cppValueTypes.delete(param.name)
+    context.objectShapes.delete(param.name)
+    context.runtimeValueStorageNames.delete(param.name)
 
     if (isNullableScalarParam(param)) {
       context.nullableVariables.add(param.name)

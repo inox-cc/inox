@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { compileMemoryPackageToIrModules } from '../../compiler/core.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 test('for-of сохраняет imported intersection element shape после optional array field', async () => {
   const result = await compileMemoryPackageToIrModules(
@@ -56,6 +57,7 @@ test('for-of сохраняет imported intersection element shape после o
           declarationPath: '/project/types.d.ts'
         }
       ],
+      libraries: defaultCompilerLibrarySet,
       target: 'cc'
     }
   )

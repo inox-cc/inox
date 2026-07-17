@@ -1500,6 +1500,8 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           ':' +
           sortedStrings(item.bindingAliases ?? []).join(',') +
           ':' +
+          (item.acceptsUnknownReceiver === true ? 'unknown-receiver' : 'typed-receiver') +
+          ':' +
           sortedStrings(item.runtimeRequirements).join(',') +
           ':' +
           operationTypeParametersFingerprint(item) +

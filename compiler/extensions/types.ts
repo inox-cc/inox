@@ -165,6 +165,7 @@ export type LibraryOperationKind = 'call' | 'construct' | 'member-read' | 'membe
 
 export type LibraryCArgumentKind =
   | 'receiver'
+  | 'receiver-number'
   | 'member-name-string-view'
   | 'string-view'
   | 'optional-string-view'
@@ -377,6 +378,7 @@ export type LibraryOperationDescriptor = {
   libraryId: LibraryId
   bindingId: LibraryBindingId
   bindingAliases?: LibraryBindingId[]
+  acceptsUnknownReceiver?: boolean
   operationId: LibraryOperationId
   kind: LibraryOperationKind
   runtimeRequirements: RuntimeRequirementId[]

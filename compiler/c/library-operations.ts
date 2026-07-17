@@ -23,6 +23,7 @@ import type { ClassLoweringDependencies } from './values/classes.ts'
 import type { NullableLoweringDependencies } from './values/nullable.ts'
 import type { StatementLoweringDependencies } from './values/statements.ts'
 import type { StringLoweringDependencies } from './values/strings.ts'
+import { compilerLibraryNativeRuntimeValueExpressionForId } from './value-types.ts'
 
 type CFunctionContext = CFunctionContextWithDependencies<
   ArrayLoweringDependencies,
@@ -292,6 +293,7 @@ export function emitPreparedCompilerLibraryCallExpression(
   let optionalArgumentPresent = false
   let receiverExpression = ''
   let receiverCppType: string | null | undefined = null
+  let optionalReceiverCondition: string | null = null
   let stringViewArrayCount = 0
   const sourceArguments = compilerLibrarySourceArguments(expression)
 
@@ -303,17 +305,50 @@ export function emitPreparedCompilerLibraryCallExpression(
       argumentSource = argumentSources[kindIndex]
     }
 
-    if (kind === 'receiver') {
+    if (kind === 'receiver' || kind === 'receiver-number') {
       const receiver = compilerLibraryReceiver(expression)
 
       if (receiver === null) {
         return null
       }
 
-      const prepared = dependencies.emitCValueExpression(receiver, context)
+      const receiverAdapter = item.libraryCReceiverAdapter
+
+      if (
+        typeof receiverAdapter === 'string' &&
+        receiverAdapter.includes('$bytes') &&
+        receiverAdapter.includes('$length')
+      ) {
+        const prepared = dependencies.emitPreparedStringBytesOperand(receiver, context, 'inox_library_receiver')
+        pushLines(lines, prepared.lines)
+        receiverExpression =
+          prepared.cppType === 'inox::String' && typeof prepared.cppExpression === 'string'
+            ? prepared.cppExpression
+            : applyCompilerLibraryStringBytesAdapter(receiverAdapter, prepared.bytes, prepared.length)
+        receiverCppType = 'inox::String'
+        continue
+      }
+
+      const prepared =
+        kind === 'receiver-number'
+          ? dependencies.emitPreparedNumberExpression(receiver, context)
+          : dependencies.emitCValueExpression(receiver, context)
       pushLines(lines, prepared.lines)
       receiverExpression = prepared.expression
-      receiverCppType = prepared.cppType
+      receiverCppType = prepared.cppType ?? prepared.scalarType
+
+      if (compilerLibraryHasOptionalReceiver(expression)) {
+        optionalReceiverCondition = compilerLibraryOptionalReceiverCondition(
+          receiver,
+          prepared.expression,
+          prepared.cppType,
+          context
+        )
+
+        if (optionalReceiverCondition === null) {
+          return null
+        }
+      }
       continue
     }
 
@@ -551,10 +586,16 @@ export function emitPreparedCompilerLibraryCallExpression(
     }
 
     if (kind === 'number') {
-      const sourceArgument = sourceArguments[sourceArgumentIndex]
-      sourceArgumentIndex = sourceArgumentIndex + 1
+      let sourceArgument: AnyNode | null = null
 
-      if (sourceArgument === null || typeof sourceArgument === 'undefined') {
+      if (argumentSource !== null) {
+        sourceArgument = sourceArguments[argumentSource.argumentIndex] ?? null
+      } else {
+        sourceArgument = sourceArguments[sourceArgumentIndex] ?? null
+        sourceArgumentIndex = sourceArgumentIndex + 1
+      }
+
+      if (sourceArgument === null) {
         return null
       }
 
@@ -678,6 +719,10 @@ export function emitPreparedCompilerLibraryCallExpression(
     callTarget = `${receiverExpression}.${target}`
   }
 
+  if (item.libraryCCallStyle === 'function' && receiverExpression !== '') {
+    argumentsList.unshift(receiverExpression)
+  }
+
   let callExpression = `${callTarget}(${joinStrings(argumentsList, ', ')})`
 
   if (item.libraryCCallStyle === 'index') {
@@ -698,6 +743,16 @@ export function emitPreparedCompilerLibraryCallExpression(
     }
 
     callExpression = `(${receiverExpression}.${target} = ${argumentsList[0]})`
+  }
+
+  if (optionalReceiverCondition !== null) {
+    if (cppType !== 'inox::Value' && cppType !== 'inox_value') {
+      return null
+    }
+
+    const undefinedExpression =
+      cppType === 'inox::Value' ? 'inox::Value(inox_undefined_value())' : 'inox_undefined_value()'
+    callExpression = `((${optionalReceiverCondition}) ? ${callExpression} : ${undefinedExpression})`
   }
 
   if (item.valueType === 'promise' && cppType === 'inox::Promise') {
@@ -1000,6 +1055,10 @@ function applyCompilerLibraryValueAdapter(value: string, adapter: string | null 
   return adapter.split('$value').join(value)
 }
 
+function applyCompilerLibraryStringBytesAdapter(adapter: string, bytes: string, length: string): string {
+  return adapter.split('$bytes').join(bytes).split('$length').join(length)
+}
+
 function emitPreparedCompilerLibraryObjectCall(
   expression: AnyNode,
   context: CFunctionContext,
@@ -1186,8 +1245,44 @@ function compilerLibraryReceiver(expression: AnyNode): AnyNode | null {
     return expression.object
   }
 
-  if (expression.type === 'CallExpression' && expression.callee.type === 'MemberExpression') {
+  if (
+    expression.type === 'CallExpression' &&
+    (expression.callee.type === 'MemberExpression' || expression.callee.type === 'OptionalMemberExpression')
+  ) {
     return expression.callee.object
+  }
+
+  return null
+}
+
+function compilerLibraryHasOptionalReceiver(expression: AnyNode): boolean {
+  return expression.type === 'CallExpression' && expression.callee.type === 'OptionalMemberExpression'
+}
+
+function compilerLibraryOptionalReceiverCondition(
+  receiver: AnyNode,
+  expression: string,
+  cppType: string | null | undefined,
+  context: CFunctionContext
+): string | null {
+  if (
+    cppType === null ||
+    typeof cppType === 'undefined' ||
+    cppType === 'inox::Value' ||
+    cppType === 'inox_value'
+  ) {
+    return `${expression}.tag != INOX_TAG_NULL && ${expression}.tag != INOX_TAG_UNDEFINED`
+  }
+
+  const receiverTypeId = receiver.shape?.libraryTypeId
+
+  if (typeof receiverTypeId === 'string') {
+    const runtimeExpression = compilerLibraryNativeRuntimeValueExpressionForId(context.libraries, receiverTypeId)
+
+    if (runtimeExpression !== null) {
+      const value = applyCompilerLibraryValueAdapter(expression, runtimeExpression)
+      return `${value}.tag != INOX_TAG_NULL && ${value}.tag != INOX_TAG_UNDEFINED`
+    }
   }
 
   return null

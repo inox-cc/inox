@@ -2186,6 +2186,18 @@ function cModuleValueLibraryCppType(node: AnyNode): string | null {
     return null
   }
 
+  const valueType = node.valueType ?? node.init?.valueType
+
+  if (valueType === 'number' || valueType === 'boolean') {
+    return null
+  }
+
+  const initCppType = node.libraryCppType ?? node.init?.libraryCppType
+
+  if (typeof initCppType === 'string') {
+    return initCppType
+  }
+
   const shape = node.shape ?? node.init?.shape
   const nullable = node.nullable === true || node.init?.nullable === true
 

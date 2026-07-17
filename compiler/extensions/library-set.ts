@@ -275,7 +275,7 @@ export function compilerLibraryOperationForReceiver(
   kind: LibraryOperationKind
 ): LibraryOperationDescriptor | null {
   if (receiverTypeId === null || typeof receiverTypeId === 'undefined') {
-    return null
+    return compilerLibraryOperationForUnknownReceiver(libraries, memberName, kind)
   }
 
   const exact = compilerLibraryOperationForReceiverBinding(
@@ -290,6 +290,41 @@ export function compilerLibraryOperationForReceiver(
   }
 
   return compilerLibraryOperationForReceiverBinding(libraries, receiverTypeId, `${receiverTypeId}.*`, kind)
+}
+
+function compilerLibraryOperationForUnknownReceiver(
+  libraries: CompilerLibrarySet,
+  memberName: string,
+  kind: LibraryOperationKind
+): LibraryOperationDescriptor | null {
+  let matched: LibraryOperationDescriptor | null = null
+
+  for (let index = 0; index < libraries.operations.length; index = index + 1) {
+    const operation = libraries.operations[index]
+    const receiverTypeId = operation.receiverTypeId
+
+    if (
+      operation.acceptsUnknownReceiver !== true ||
+      operation.kind !== kind ||
+      receiverTypeId === null ||
+      typeof receiverTypeId === 'undefined' ||
+      !operationHasBinding(operation, `${receiverTypeId}.${memberName}`)
+    ) {
+      continue
+    }
+
+    if (matched !== null) {
+      return null
+    }
+
+    matched = operation
+  }
+
+  return matched
+}
+
+export function compilerLibraryPrimitiveReceiverTypeId(name: string): string {
+  return `core:primitive:${name}`
 }
 
 export function compilerLibraryHasModuleDeclaration(libraries: CompilerLibrarySet, source: string): boolean {

@@ -306,35 +306,17 @@ import {
   canEmitStringBytesOperand,
   collectTemplatePlaceholderExpressions,
   cookTemplateLiteralText,
-  emitCNumberToStringValueExpression,
-  emitCStringCaseValueExpression,
   emitCStringConcatValueExpression,
-  emitCStringIndexValueExpression,
-  emitCStringPadStartValueExpression,
-  emitCStringSliceValueExpression,
-  emitCStringSplitValueExpression,
-  emitCStringTrimValueExpression,
   emitCTemplateLiteralFormatExpression,
   emitCTemplateLiteralValueExpression,
   emitPreparedCppStringArgument,
   emitPreparedNumberFromStringExpression,
   emitPreparedStringConversionExpression,
   emitPreparedStringBytesOperand,
-  emitPreparedStringCharCodeAtExpression,
   emitPreparedStringCompareExpression,
-  emitPreparedStringIndexCallExpression,
-  emitPreparedStringLengthExpression,
-  emitPreparedStringPredicateCall,
   emitStringExpression,
-  isNumberToStringCall,
   isRuntimeProducedStringExpression,
-  isStringCaseCall,
   isStringConcatExpression,
-  isStringPadStartCall,
-  isStringPredicateCall,
-  isStringSliceCall,
-  isStringSplitCall,
-  isStringTrimCall,
   resolveRuntimeStringReference
 } from './values/strings.ts'
 import {
@@ -689,13 +671,11 @@ promiseLoweringDependencies = {
 
 const arrayLoweringDependencies = {
   emitCArrayLiteralValueExpression,
-  emitCStringSplitValueExpression,
   emitCValueExpression,
   emitPreparedCppStringArgument,
   emitPreparedStringBytesOperand,
   emitPreparedNumberExpression,
   inferExpressionType,
-  isStringSplitCall,
   resolveKnownObjectIndex,
   resolveKnownObjectMember
 } as ArrayLoweringDependencies
@@ -896,15 +876,8 @@ const expressionTypeDependencies = {
   isClassConstructorExpression,
   isIndexAccessExpression,
   isMemberAccessExpression,
-  isNumberToStringCall,
   isPromiseConstructorExpression,
   isPromiseReturningFunctionCallee,
-  isStringCaseCall,
-  isStringPadStartCall,
-  isStringPredicateCall,
-  isStringSliceCall,
-  isStringSplitCall,
-  isStringTrimCall,
   knownValueType,
   resolveKnownArrayIndex,
   resolveKnownArrayLength,
@@ -983,12 +956,8 @@ const cScalarExpressionDependencies = {
   emitPreparedCompilerLibraryExpression,
   emitPreparedRuntimeArrayIndexValue,
   emitPreparedCppStringArgument,
-  emitPreparedStringCharCodeAtExpression,
   emitPreparedStringBytesOperand,
   emitPreparedStringCompareExpression,
-  emitPreparedStringIndexCallExpression,
-  emitPreparedStringLengthExpression,
-  emitPreparedStringPredicateCall,
   emitReference,
   emitStringExpression,
   inferExpressionType,
@@ -996,7 +965,6 @@ const cScalarExpressionDependencies = {
   isMemberAccessExpression,
   isNullableRuntimeExpression,
   isNullableScalarRuntimeExpression,
-  isStringPredicateCall,
   reportCJsGlobalDiagnostic,
   resolveKnownArrayIndex,
   resolveKnownObjectIndex,
@@ -1023,17 +991,10 @@ const cValueExpressionDependencies = {
   emitCAwaitValueExpression,
   emitCClassObjectValueExpression,
   emitCNullishCoalescingValueExpression,
-  emitCNumberToStringValueExpression,
   emitCObjectLiteralValueExpression,
   emitCOptionalIndexValueExpression,
   emitCOptionalMemberValueExpression,
-  emitCStringCaseValueExpression,
   emitCStringConcatValueExpression,
-  emitCStringIndexValueExpression,
-  emitCStringPadStartValueExpression,
-  emitCStringSliceValueExpression,
-  emitCStringSplitValueExpression,
-  emitCStringTrimValueExpression,
   emitCTemplateLiteralValueExpression,
   emitCValueExpression,
   emitOptionalRuntimeCallbackCallValueExpression,
@@ -1068,13 +1029,7 @@ const cValueExpressionDependencies = {
   isMemberAccessExpression,
   isNullableRuntimeExpression,
   isNullableScalarRuntimeExpression,
-  isStringCaseCall,
   isStringConcatExpression,
-  isNumberToStringCall,
-  isStringPadStartCall,
-  isStringSliceCall,
-  isStringSplitCall,
-  isStringTrimCall,
   resolveRuntimeArrayIndex
 }
 
@@ -4243,7 +4198,7 @@ function emitKnownArrayIndexVariableDeclaration(
   }
 
   if (element.valueType === 'string') {
-    return emitKnownArrayStringIndexVariableDeclaration(statement, element, context)
+    return emitKnownArrayTextElementVariableDeclaration(statement, element, context)
   }
 
   if (isManagedRuntimeReturnType(element.valueType)) {
@@ -4350,7 +4305,7 @@ function emitKnownArrayRuntimeIndexVariableDeclaration(
   return lines
 }
 
-function emitKnownArrayStringIndexVariableDeclaration(
+function emitKnownArrayTextElementVariableDeclaration(
   statement: CKnownArrayIndexDeclaration,
   element: CKnownArrayElement,
   context: CFunctionContext
@@ -6333,16 +6288,6 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): For
         lines: libraryNativeField.lines,
         format: formattedOutputNumberFormat,
         values: [`((double)${libraryNativeField.expression})`]
-      }
-    }
-
-    const stringLength = emitPreparedStringLengthExpression(expression, context)
-
-    if (stringLength !== null && typeof stringLength !== 'undefined') {
-      return {
-        lines: stringLength.lines,
-        format: formattedOutputNumberFormat,
-        values: [`((double)${stringLength.expression})`]
       }
     }
 

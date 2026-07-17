@@ -37,15 +37,8 @@ export type CExpressionTypeDependencies = {
   isClassConstructorExpression: (expression: AnyNode, context: CFunctionContext) => boolean
   isIndexAccessExpression: (expression: AnyNode) => boolean
   isMemberAccessExpression: (expression: AnyNode) => boolean
-  isNumberToStringCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isPromiseConstructorExpression: (expression: AnyNode) => boolean
   isPromiseReturningFunctionCallee: (callee: AnyNode, context: CFunctionContext) => boolean
-  isStringCaseCall: (expression: AnyNode, context: CFunctionContext) => boolean
-  isStringPadStartCall: (expression: AnyNode, context: CFunctionContext) => boolean
-  isStringPredicateCall: (expression: AnyNode, context: CFunctionContext) => boolean
-  isStringSliceCall: (expression: AnyNode, context: CFunctionContext) => boolean
-  isStringSplitCall: (expression: AnyNode, context: CFunctionContext) => boolean
-  isStringTrimCall: (expression: AnyNode, context: CFunctionContext) => boolean
   knownValueType: (valueType: string | null | undefined) => string | null
   resolveKnownArrayIndex: (expression: AnyNode, context: CFunctionContext) => CKnownArrayElement | null
   resolveKnownArrayLength: (expression: AnyNode, context: CFunctionContext) => string | null
@@ -543,36 +536,8 @@ export function inferExpressionType(
     return 'string'
   }
 
-  if (deps.isNumberToStringCall(expression, context)) {
-    return 'string'
-  }
-
   if (deps.isClassConstructorExpression(expression, context)) {
     return 'object'
-  }
-
-  if (deps.isStringCaseCall(expression, context)) {
-    return 'string'
-  }
-
-  if (deps.isStringPadStartCall(expression, context)) {
-    return 'string'
-  }
-
-  if (deps.isStringTrimCall(expression, context)) {
-    return 'string'
-  }
-
-  if (deps.isStringSliceCall(expression, context)) {
-    return 'string'
-  }
-
-  if (deps.isStringSplitCall(expression, context)) {
-    return 'array'
-  }
-
-  if (deps.isStringPredicateCall(expression, context)) {
-    return 'boolean'
   }
 
   if (expression.type === 'CallExpression' && usesCJsGlobal(expression.callee, context)) {

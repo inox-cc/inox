@@ -45,7 +45,6 @@ type CoreRuntimeNode = AnyNode & {
   returnType?: string | null
   right?: CoreRuntimeChildNode | null
   shape?: CoreRuntimeShape | null
-  stringRuntimeMethod?: string | null
   target?: CoreRuntimeChildNode | null
   type?: string
   valueType?: string | null
@@ -181,11 +180,6 @@ export function collectCoreRuntimeIrFeatures(node: AnyNode, features: CoreRuntim
     features.add('collections')
   }
 
-  if (isStringIndexExpression(item)) {
-    features.add('runtime-values')
-    features.add('string-bytes')
-  }
-
   if (item.type === 'AssignmentExpression' && isObjectFieldExpression(item.target)) {
     features.add('objects')
     features.add('runtime-values')
@@ -218,9 +212,6 @@ export function collectCoreRuntimeIrFeatures(node: AnyNode, features: CoreRuntim
     }
   }
 
-  if (item.type === 'MemberExpression' && item.property === 'length' && mayBeStringBytesOperand(item.object)) {
-    features.add('string-bytes')
-  }
 }
 
 function arrayLiteralHasFunctionElement(node: CoreRuntimeNode): boolean {
@@ -293,16 +284,6 @@ function recordCallFeatures(expression: CoreRuntimeNode, features: CoreRuntimeFe
     features.add('string-bytes')
   }
 
-  const stringMethod = stringRuntimeMethodName(expression)
-
-  if (stringMethod !== null && typeof stringMethod !== 'undefined') {
-    features.add('runtime-values')
-    features.add('string-bytes')
-
-    if (stringMethod === 'split') {
-      features.add('collections')
-    }
-  }
 }
 
 function plainFunctionCallHasStringArgument(expression: CoreRuntimeNode): boolean {
@@ -365,24 +346,6 @@ function isObjectFieldExpression(expression: CoreRuntimeNode | null | undefined)
   return shape !== null && typeof shape !== 'undefined' && shape.kind === 'object'
 }
 
-function isStringIndexExpression(expression: CoreRuntimeNode | null | undefined): boolean {
-  if (expression === null || typeof expression === 'undefined' || expression.type !== 'IndexExpression') {
-    return false
-  }
-
-  const object = expression.object
-  const index = expression.index
-
-  return (
-    object !== null &&
-    typeof object !== 'undefined' &&
-    index !== null &&
-    typeof index !== 'undefined' &&
-    object.valueType === 'string' &&
-    index.valueType === 'number'
-  )
-}
-
 function isArrayIndexExpression(expression: CoreRuntimeNode | null | undefined): boolean {
   if (
     expression === null ||
@@ -399,14 +362,6 @@ function isArrayIndexExpression(expression: CoreRuntimeNode | null | undefined):
 
 function isNumericCastCall(expression: CoreRuntimeNode): boolean {
   return expression.numericCast !== null && typeof expression.numericCast !== 'undefined'
-}
-
-function stringRuntimeMethodName(expression: CoreRuntimeNode): string | null {
-  if (expression.stringRuntimeMethod !== null && typeof expression.stringRuntimeMethod !== 'undefined') {
-    return expression.stringRuntimeMethod
-  }
-
-  return null
 }
 
 function mayBeStringBytesOperand(expression: CoreRuntimeNode | null | undefined): boolean {

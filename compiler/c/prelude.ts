@@ -126,7 +126,12 @@ function cPreludeBodyUsesAllocatorHeader(body: string): boolean {
 }
 
 function cPreludeBodyUsesRuntimeStringHeader(body: string): boolean {
-  return body.includes('inox_string') || body.includes('INOX_REF_STRING')
+  return (
+    body.includes('inox_string') ||
+    body.includes('INOX_REF_STRING') ||
+    body.includes('inox::String') ||
+    body.includes('inox::StringView')
+  )
 }
 
 function cPreludeBodyUsesCStringHeader(body: string): boolean {
