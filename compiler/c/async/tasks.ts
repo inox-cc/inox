@@ -2112,7 +2112,7 @@ function isSupportedAsyncTaskAwaitedPromiseExpression(
     expression.callee === null ||
     typeof expression.callee === 'undefined' ||
     expression.callee.type !== 'MemberExpression' ||
-    expression.callee.property !== 'then'
+    cAsyncResultOperationKind(expression) !== 'then'
   ) {
     return false
   }
@@ -3176,7 +3176,7 @@ function emitPreparedAsyncTaskAwaitedPromiseChainExpression(
     expression.callee === null ||
     typeof expression.callee === 'undefined' ||
     expression.callee.type !== 'MemberExpression' ||
-    expression.callee.property !== 'then'
+    cAsyncResultOperationKind(expression) !== 'then'
   ) {
     return null
   }

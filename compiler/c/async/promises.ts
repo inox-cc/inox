@@ -2023,7 +2023,7 @@ function promiseChainCallbackInputRejectionValueType(expression: AnyNode): strin
   if (
     expression.callee === null ||
     typeof expression.callee === 'undefined' ||
-    expression.callee.property !== 'catch' ||
+    cAsyncResultOperationKind(expression) !== 'catch' ||
     expression.callee.object === null ||
     typeof expression.callee.object === 'undefined' ||
     expression.callee.object.promiseRejectionValueType === null ||

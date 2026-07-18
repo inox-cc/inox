@@ -5,6 +5,10 @@ import { test } from 'node:test'
 
 const compilerRoot = resolve('compiler')
 const projectRoot = resolve('.')
+const forbiddenSourcePatterns = [
+  /(?:[A-Za-z_$][A-Za-z0-9_$]*\.)*\bcallee\.property\s*(?:===|!==)\s*['"](?:then|catch|resolve|reject)['"]/,
+  /['"](?:then|catch|resolve|reject)['"]\s*(?:===|!==)\s*(?:[A-Za-z_$][A-Za-z0-9_$]*\.)*\bcallee\.property\b/
+]
 const forbiddenPatterns = [
   /(?:===|!==)\s*['"]Promise['"]/,
   /['"]Promise['"]\s*(?:===|!==)/,
@@ -16,16 +20,25 @@ const forbiddenPatterns = [
   /inox\/promise\.h/,
   /Promise\.(?:resolve|reject|then|catch)/,
   /['"]Promise['"]/,
-  /callee\.property === ['"](?:catch|then)['"]/,
   /Promise (?:constructor|resolve|reject|chain|callback)/
 ]
 
 test('portable compiler не содержит global Promise API semantic tails', async () => {
   const tails: string[] = []
 
+  assert.equal(sourceHasForbiddenMemberComparison("expression.callee.property\n  !== 'then'"), true)
+  assert.equal(sourceHasForbiddenMemberComparison("'catch'\n  === expression.callee.property"), true)
+
   for (const file of await typescriptFiles(compilerRoot)) {
     const relative = file.slice(projectRoot.length + 1)
-    const lines = (await readFile(file, 'utf8')).split('\n')
+    const source = await readFile(file, 'utf8')
+    const lines = source.split('\n')
+
+    for (const pattern of forbiddenSourcePatterns) {
+      if (pattern.test(source)) {
+        tails.push(`${relative}: ${pattern.source}`)
+      }
+    }
 
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex = lineIndex + 1) {
       const line = lines[lineIndex]
@@ -44,6 +57,16 @@ test('portable compiler не содержит global Promise API semantic tails'
 
   assert.equal(tails.length, 0, tails.join('\n'))
 })
+
+function sourceHasForbiddenMemberComparison(source: string): boolean {
+  for (const pattern of forbiddenSourcePatterns) {
+    if (pattern.test(source)) {
+      return true
+    }
+  }
+
+  return false
+}
 
 function isHostPromiseImplementation(relative: string, line: string): boolean {
   return (
