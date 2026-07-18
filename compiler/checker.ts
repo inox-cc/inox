@@ -2020,14 +2020,6 @@ class Checker {
       if (fulfilledTypeRef !== null) {
         this.applyCompilerLibraryTypeRef(expression, fulfilledTypeRef, null)
         valueType = nodeValueTypeOrUnknown(expression)
-      } else if (argumentType === 'promise') {
-        valueType = 'unknown'
-
-        const promiseValueType = this.resolveExpressionPromiseValueType(expression.argument)
-
-        if (promiseValueType !== null && typeof promiseValueType !== 'undefined') {
-          valueType = promiseValueType
-        }
       }
 
       expression.valueType = valueType
