@@ -95,6 +95,7 @@ import {
   isOpaqueRuntimeValueType,
   isRuntimeNullableType,
   libraryCppValueStorageType,
+  requireCompilerLibraryIntrinsicNativeCppType,
   resolveCCompilerLibrarySet
 } from './value-types.ts'
 import type { ArrayLoweringDependencies } from './values/arrays.ts'
@@ -715,7 +716,7 @@ function cUnitValueCType(valueType: string, context: CEmitContext): string {
   }
 
   if (valueType === 'promise') {
-    return compilerLibraryIntrinsicNativeCppType(context.libraries, 'async-result') ?? emitCType(valueType)
+    return requireCompilerLibraryIntrinsicNativeCppType(context.libraries, 'async-result')
   }
 
   return emitCType(valueType)

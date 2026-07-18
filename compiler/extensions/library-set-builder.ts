@@ -184,6 +184,7 @@ function validateCompilerLibrarySet(
   validateUniqueOperationIds(operations)
   validateUniqueIntrinsicRoles(intrinsicBindings)
   validateIntrinsicOperationBindings(intrinsicBindings, operations)
+  validateAsyncResultIntrinsicNativeType(intrinsicBindings, operations, nativeTypes)
 }
 
 function validateCompilerLibraryDescriptorOwnership(library: CompilerLibraryDescriptor): void {
@@ -1457,6 +1458,50 @@ function validateIntrinsicOperationBindings(
     if (!found) {
       throw new Error(
         `Compiler library intrinsic provider ${binding.role} references missing operation ${binding.bindingId}`
+      )
+    }
+  }
+}
+
+function validateAsyncResultIntrinsicNativeType(
+  bindings: IntrinsicRoleBinding[],
+  operations: LibraryOperationDescriptor[],
+  nativeTypes: LibraryNativeTypeDescriptor[]
+): void {
+  for (let bindingIndex = 0; bindingIndex < bindings.length; bindingIndex = bindingIndex + 1) {
+    const binding = bindings[bindingIndex]
+
+    if (binding.role !== 'async-result') {
+      continue
+    }
+
+    let constructOperation: LibraryOperationDescriptor | null = null
+
+    for (let operationIndex = 0; operationIndex < operations.length; operationIndex = operationIndex + 1) {
+      const operation = operations[operationIndex]
+
+      if (
+        operation.kind === 'construct' &&
+        (operation.bindingId === binding.bindingId || (operation.bindingAliases ?? []).includes(binding.bindingId))
+      ) {
+        constructOperation = operation
+        break
+      }
+    }
+
+    if (constructOperation === null) {
+      throw new Error(
+        `Compiler library intrinsic provider async-result references missing construct operation ${binding.bindingId}`
+      )
+    }
+
+    const resultTypeRef = constructOperation.resultTypeRef
+    const nativeType =
+      resultTypeRef?.kind === 'nominal' ? nativeTypeForValidation(nativeTypes, resultTypeRef.typeId) : null
+
+    if (nativeType === null || nativeType.cppType.length === 0) {
+      throw new Error(
+        `Compiler library intrinsic provider async-result construct operation ${constructOperation.operationId} requires a resolvable native C++ result type`
       )
     }
   }

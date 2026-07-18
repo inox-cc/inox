@@ -329,6 +329,19 @@ export function compilerLibraryIntrinsicNativeCppType(
   return compilerLibraryNativeTypeForIntrinsic(cCompilerLibrarySetValue(libraries), role, 'construct')?.cppType ?? null
 }
 
+export function requireCompilerLibraryIntrinsicNativeCppType(
+  libraries: CCompilerLibrarySet,
+  role: IntrinsicRole
+): string {
+  const cppType = compilerLibraryIntrinsicNativeCppType(libraries, role)
+
+  if (cppType === null || cppType.length === 0) {
+    throw new Error(`Compiler library intrinsic provider ${role} requires a resolvable native C++ result type`)
+  }
+
+  return cppType
+}
+
 export function compilerLibraryIntrinsicAsyncResultCExpression(
   libraries: CCompilerLibrarySet,
   operation: LibraryAsyncResultOperationKind

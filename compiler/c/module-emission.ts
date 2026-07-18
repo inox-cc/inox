@@ -106,7 +106,6 @@ import type {
   CRuntimeArrowCallbackWrapper
 } from './types.ts'
 import {
-  compilerLibraryIntrinsicNativeCppType,
   compilerLibraryIntrinsicResultCShape,
   compilerLibraryNativeRuntimeRequirementsForCppType,
   compilerLibraryNativeRuntimeRequirementsForId,
@@ -115,6 +114,7 @@ import {
   isOpaqueRuntimeValueType,
   isRuntimeNullableType,
   libraryCppValueStorageType,
+  requireCompilerLibraryIntrinsicNativeCppType,
   resolveCCompilerLibrarySet
 } from './value-types.ts'
 import type { ArrayLoweringDependencies } from './values/arrays.ts'
@@ -2766,7 +2766,7 @@ function cModuleValueCType(valueType: string, context: CEmitContext): string {
   }
 
   if (valueType === 'promise') {
-    return compilerLibraryIntrinsicNativeCppType(context.libraries, 'async-result') ?? emitCType(valueType)
+    return requireCompilerLibraryIntrinsicNativeCppType(context.libraries, 'async-result')
   }
 
   return emitCType(valueType)
