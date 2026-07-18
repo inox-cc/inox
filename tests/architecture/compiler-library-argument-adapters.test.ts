@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
-import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
+import { createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet } from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('library C arguments поддерживают templates и string-view-or-value lowering', () => {
@@ -22,7 +22,44 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
   return {
     id: 'bridge',
     dependencies: [],
-    declarations: [],
+    declarations: [
+      {
+        libraryId: 'bridge',
+        kind: 'global',
+        source: 'tests/architecture/fixtures/bridge-argument-adapters.d.ts',
+        declarationSource: `
+          export {}
+          declare global {
+            interface BridgeBox {
+              touch(): void;
+              accept(value: unknown): void;
+            }
+            interface Bridge {
+              take(value: unknown): void;
+              accept(value: unknown): void;
+              readonly box: BridgeBox;
+            }
+            const bridge: Bridge;
+          }
+        `,
+        compilerImplemented: true
+      }
+    ],
+    nativeTypes: [
+      {
+        libraryId: 'bridge',
+        typeId: 'bridge#Box',
+        declarationNames: ['BridgeBox'],
+        valueType: 'object',
+        cppType: 'BridgeBox',
+        baseTypeIds: [],
+        runtimeRequirements: [],
+        fields: [
+          { name: 'touch', valueType: 'function', readonly: true },
+          { name: 'accept', valueType: 'function', readonly: true }
+        ]
+      }
+    ],
     operations: [
       {
         libraryId: 'bridge',
@@ -37,6 +74,10 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
             valueType: 'object',
             readonly: true,
             resultTypeId: 'bridge#Box',
+            resultShapeFields: [
+              { name: 'touch', valueType: 'function', readonly: true },
+              { name: 'accept', valueType: 'function', readonly: true }
+            ],
             cppType: 'BridgeBox'
           }
         ],

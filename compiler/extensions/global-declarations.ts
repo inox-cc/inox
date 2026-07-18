@@ -1,5 +1,8 @@
 import { diagnostic } from '../diagnostics.ts'
-import { parseGlobalDeclarationContractResult } from '../modules/declarations.ts'
+import {
+  parseGlobalDeclarationContractResult,
+  parseModuleGlobalDeclarationContractResult
+} from '../modules/declarations.ts'
 import type { AnyNode, Diagnostic, ProgramNode } from '../types.ts'
 import type { LibraryDeclarationDescriptor } from './types.ts'
 
@@ -31,20 +34,20 @@ export function parseCompilerLibraryGlobalDeclarations(
   for (let index = 0; index < descriptors.length; index = index + 1) {
     const descriptor = descriptors[index]
 
-    if (descriptor.kind !== 'global') {
-      continue
-    }
-
-    const parsed = parseGlobalDeclarationContractResult(
-      descriptor.declarationSource,
-      descriptor.source
-    )
+    const parsed =
+      descriptor.kind === 'global'
+        ? parseGlobalDeclarationContractResult(descriptor.declarationSource, descriptor.source)
+        : parseModuleGlobalDeclarationContractResult(descriptor.declarationSource, descriptor.source)
 
     for (let diagnosticIndex = 0; diagnosticIndex < parsed.diagnostics.length; diagnosticIndex = diagnosticIndex + 1) {
       diagnostics.push(parsed.diagnostics[diagnosticIndex])
     }
 
     if (parsed.diagnostics.length > 0) {
+      continue
+    }
+
+    if (parsed.program.body.length === 0) {
       continue
     }
 
@@ -100,11 +103,7 @@ export function compilerLibraryGlobalTypeNames(descriptors: LibraryDeclarationDe
 }
 
 function ambientDeclarationHasValue(item: AnyNode): boolean {
-  return (
-    item.type === 'FunctionDeclaration' ||
-    item.type === 'VariableDeclaration' ||
-    item.type === 'ClassDeclaration'
-  )
+  return item.type === 'FunctionDeclaration' || item.type === 'VariableDeclaration' || item.type === 'ClassDeclaration'
 }
 
 function ambientDeclarationHasType(item: AnyNode): boolean {

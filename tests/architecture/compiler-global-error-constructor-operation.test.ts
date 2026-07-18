@@ -2,11 +2,16 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { compileSource, compileSourceToIr } from '../../compiler/core.ts'
-import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-fixtures.ts'
+import {
+  compilerLibraryPackageWithGlobalDeclaration,
+  createCompilerLibrarySetWithConsole
+} from './helpers/compiler-library-fixtures.ts'
 import { compilerLibraryPackage, errorTypeRef } from '../../stdlib/global/error/compiler/index.ts'
 
 test('global:error владеет Error constructor и его C++ facade lowering', () => {
-  const libraries = createCompilerLibrarySetWithConsole([{ ...compilerLibraryPackage, declarations: [] }])
+  const libraries = createCompilerLibrarySetWithConsole([
+    compilerLibraryPackageWithGlobalDeclaration(compilerLibraryPackage, 'stdlib/global/error/index.d.ts')
+  ])
   const source = "const error = new Error('boom')\nconsole.log(error.message)\n"
   const result = compileSourceToIr(source, { libraries })
   const declaration = result.ir.body[0]

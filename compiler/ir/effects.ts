@@ -24,6 +24,7 @@ type EffectPropertyNode = EffectChildNode & {
 
 type EffectHandlerNode = EffectChildNode & {
   body?: EffectChildNode | null
+  param?: string | null
 }
 
 type EffectNode = EffectChildNode & {
@@ -637,13 +638,19 @@ function collectEscapingThrowValueTypesFromStatement(
     const handler = statement.handler
 
     if (handler !== null && typeof handler !== 'undefined') {
+      const handlerExceptionValueNames = cloneStringSet(exceptionValueNames)
+
+      if (handler.param !== null && typeof handler.param !== 'undefined') {
+        handlerExceptionValueNames.add(handler.param)
+      }
+
       pushThrowValueTypes(
         types,
         collectEscapingThrowValueTypesFromStatement(
           handler.body,
           functionThrowValueTypes,
           functionNames,
-          cloneStringSet(exceptionValueNames),
+          handlerExceptionValueNames,
           cloneStringMap(classInstanceTypes),
           includeClassMethods,
           hasErrorTarget
@@ -853,6 +860,47 @@ function collectEscapingThrowValueTypesFromExpression(
       types,
       collectEscapingThrowValueTypesFromExpression(
         expression.right,
+        functionThrowValueTypes,
+        functionNames,
+        exceptionValueNames,
+        classInstanceTypes,
+        includeClassMethods,
+        hasErrorTarget
+      )
+    )
+
+    return types
+  }
+
+  if (expression.type === 'ConditionalExpression') {
+    pushThrowValueTypes(
+      types,
+      collectEscapingThrowValueTypesFromExpression(
+        expression.test,
+        functionThrowValueTypes,
+        functionNames,
+        exceptionValueNames,
+        classInstanceTypes,
+        includeClassMethods,
+        hasErrorTarget
+      )
+    )
+    pushThrowValueTypes(
+      types,
+      collectEscapingThrowValueTypesFromExpression(
+        expression.consequent,
+        functionThrowValueTypes,
+        functionNames,
+        exceptionValueNames,
+        classInstanceTypes,
+        includeClassMethods,
+        hasErrorTarget
+      )
+    )
+    pushThrowValueTypes(
+      types,
+      collectEscapingThrowValueTypesFromExpression(
+        expression.alternate,
         functionThrowValueTypes,
         functionNames,
         exceptionValueNames,

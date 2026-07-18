@@ -31,7 +31,7 @@ function fixtureLibraries(): CompilerLibrarySet {
         libraryId: 'fixture:table',
         kind: 'global',
         source: 'stdlib/fixture-table/index.d.ts',
-        declarationSource: 'export {}; declare global { interface NativeTable<K, V> {} }',
+        declarationSource: 'export {}; declare global { interface NativeTable<K, V> {} const NativeTable: unknown; }',
         compilerImplemented: true
       }
     ],

@@ -18,6 +18,8 @@ test('global:crypto владеет getRandomValues operation, runtime requiremen
   assert.ok(nodeCrypto)
   assert.ok(globalCrypto.compilerPackage)
   assert.equal(globalCrypto.compilerEntrypoint, 'stdlib/global/crypto/compiler/index.ts')
+  assert.equal(globalCrypto.declarationPath, 'stdlib/global/crypto/index.d.ts')
+  assert.match(globalCrypto.declarationSource ?? '', /const crypto: Crypto/)
   assert.deepEqual(globalCrypto.nativeSources, ['stdlib/global/crypto/src/crypto.cc'])
   assert.deepEqual(globalCrypto.nativeIncludeDirs, ['stdlib/global/crypto/include'])
   assert.deepEqual(nodeCrypto?.nativeSources, [])
@@ -46,15 +48,12 @@ test('global:crypto владеет getRandomValues operation, runtime requiremen
   ])
 
   const libraries = createCompilerLibrarySetFromDiscovered(discovered)
-  const result = compileSource(
-    'const bytes = new Uint8Array(4)\nconst same = crypto.getRandomValues(bytes)\n',
-    {
-      capabilities: { entropy: true },
-      libraries,
-      profile: 'embedded',
-      target: 'cc'
-    }
-  )
+  const result = compileSource('const bytes = new Uint8Array(4)\nconst same = crypto.getRandomValues(bytes)\n', {
+    capabilities: { entropy: true },
+    libraries,
+    profile: 'embedded',
+    target: 'cc'
+  })
   const call = result.ir.body[1].init
 
   assert.equal(call.libraryOperationId, 'global:crypto#getRandomValues')
@@ -68,21 +67,23 @@ test('global:crypto владеет getRandomValues operation, runtime requiremen
   assert.match(result.code, /crypto\.getRandomValues\(Uint8Array\(bytes\)\)/)
 
   assert.throws(
-    () => compileSource('crypto.getRandomValues(new Uint8Array(4))\n', {
-      libraries,
-      profile: 'embedded',
-      target: 'cc'
-    }),
+    () =>
+      compileSource('crypto.getRandomValues(new Uint8Array(4))\n', {
+        libraries,
+        profile: 'embedded',
+        target: 'cc'
+      }),
     (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_CAPABILITY'
   )
 })
 
 test('пустой library set не знает global crypto', () => {
   assert.throws(
-    () => compileSource('crypto.getRandomValues(new Uint8Array(4))\n', {
-      libraries: emptyCompilerLibrarySet,
-      target: 'cc'
-    }),
+    () =>
+      compileSource('crypto.getRandomValues(new Uint8Array(4))\n', {
+        libraries: emptyCompilerLibrarySet,
+        target: 'cc'
+      }),
     (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_UNKNOWN_NAME'
   )
 })

@@ -331,6 +331,36 @@ export function parseGlobalDeclarationContractResult(
   }
 }
 
+export function parseModuleGlobalDeclarationContractResult(
+  source: string,
+  file: string | null = null
+): ModuleDeclarationContractParseResult {
+  try {
+    const diagnostics: Diagnostic[] = []
+    const globalSource = extractModuleGlobalDeclarationContractSource(source, file, diagnostics)
+
+    if (diagnostics.length > 0 || globalSource === null) {
+      return {
+        program: emptyProgram(),
+        diagnostics
+      }
+    }
+
+    return parseGlobalDeclarationContractResult(globalSource, file)
+  } catch (error) {
+    const diagnostics = diagnosticsFromCompileError(error)
+
+    if (diagnostics !== null) {
+      return {
+        program: emptyProgram(),
+        diagnostics
+      }
+    }
+
+    throw error
+  }
+}
+
 function appendModuleDeclarationContractNode(lines: string[], item: AnyNode, diagnostics: Diagnostic[]): void {
   if (item.type === 'ImportDeclaration') {
     appendModuleDeclarationImport(lines, item, diagnostics)
@@ -623,6 +653,31 @@ function normalizeModuleDeclarationContractSource(
   let position = 0
 
   while (!tokenIs(tokens, position, 'eof', '<eof>')) {
+    if (isDeclareGlobalStart(tokens, position)) {
+      const close = findBalancedClose(tokens, position + 2, '{', '}')
+
+      if (tokenValue(tokens, close) !== '}') {
+        diagnostics.push(
+          diagnostic(
+            'INOX_DECLARATION_GLOBAL_BLOCK',
+            'module declaration contract has an unclosed declare global block',
+            tokenAt(tokens, position)
+          )
+        )
+        return {
+          source: '',
+          defaultExports
+        }
+      }
+
+      position = close + 1
+
+      if (tokenValue(tokens, position) === ';') {
+        position = position + 1
+      }
+      continue
+    }
+
     if (isUnsupportedExportStar(tokens, position)) {
       diagnostics.push(
         diagnostic(
@@ -657,6 +712,11 @@ function normalizeModuleDeclarationContractSource(
       }
     }
 
+    if (isVariableSignatureStart(tokens, position)) {
+      position = appendNormalizedVariableSignature(parts, tokens, position)
+      continue
+    }
+
     if (isDefaultExportDeclarationStart(tokens, position)) {
       position = appendNormalizedDefaultExport(parts, defaultExports, declareConstTypes, tokens, position)
       continue
@@ -685,6 +745,63 @@ function normalizeModuleDeclarationContractSource(
     source: joinParts(parts),
     defaultExports
   }
+}
+
+function extractModuleGlobalDeclarationContractSource(
+  source: string,
+  file: string | null,
+  diagnostics: Diagnostic[]
+): string | null {
+  const tokens = tokenize(source, {
+    file: declarationContractFileName(file)
+  })
+  const bodyParts: string[] = []
+  let foundGlobalBlock = false
+  let position = 0
+
+  while (!tokenIs(tokens, position, 'eof', '<eof>')) {
+    if (!isDeclareGlobalStart(tokens, position)) {
+      position = position + 1
+      continue
+    }
+
+    const open = position + 2
+    const close = findBalancedClose(tokens, open, '{', '}')
+
+    if (tokenValue(tokens, close) !== '}') {
+      diagnostics.push(
+        diagnostic(
+          'INOX_DECLARATION_GLOBAL_BLOCK',
+          'module declaration contract has an unclosed declare global block',
+          tokenAt(tokens, position)
+        )
+      )
+      return null
+    }
+
+    foundGlobalBlock = true
+    let previousLine = tokenAt(tokens, open).line
+
+    for (let index = open + 1; index < close; index = index + 1) {
+      const token = tokenAt(tokens, index)
+
+      if (token.line > previousLine) {
+        bodyParts.push('\n')
+      }
+
+      bodyParts.push(tokenSource(token))
+      previousLine = token.line
+    }
+
+    bodyParts.push('\n')
+    position = close + 1
+  }
+
+  if (!foundGlobalBlock) {
+    return null
+  }
+
+  return `export {}\ndeclare global {\n${joinParts(bodyParts)}\n}\n`
 }
 
 function normalizeGlobalDeclarationContractSource(
@@ -1305,6 +1422,93 @@ function appendNormalizedFunctionSignature(parts: string[], tokens: Token[], pos
   return boundary.position
 }
 
+function appendNormalizedVariableSignature(parts: string[], tokens: Token[], position: number): number {
+  const boundary = findVariableSignatureBoundary(tokens, position)
+
+  if (boundary === null) {
+    parts.push(tokenSource(tokenAt(tokens, position)))
+    return position + 1
+  }
+
+  let current = position
+
+  while (current < boundary.end) {
+    parts.push(tokenSource(tokenAt(tokens, current)))
+    current = current + 1
+  }
+
+  parts.push(';')
+
+  return boundary.position
+}
+
+function findVariableSignatureBoundary(tokens: Token[], position: number): FunctionSignatureBoundary | null {
+  let current = position
+
+  if (tokenValue(tokens, current) === 'export') {
+    current = current + 1
+  }
+
+  if (tokenValue(tokens, current) !== 'const' && tokenValue(tokens, current) !== 'let') {
+    return null
+  }
+
+  current = current + 1
+
+  if (!isDeclarationLocalNameToken(tokenAt(tokens, current)) || tokenValue(tokens, current + 1) !== ':') {
+    return null
+  }
+
+  current = current + 2
+  const typeStart = current
+  let braceDepth = 0
+  let bracketDepth = 0
+  let genericDepth = 0
+  let parenDepth = 0
+
+  while (!tokenIs(tokens, current, 'eof', '<eof>')) {
+    const token = tokenAt(tokens, current)
+
+    if (
+      current > typeStart &&
+      braceDepth === 0 &&
+      bracketDepth === 0 &&
+      genericDepth === 0 &&
+      parenDepth === 0 &&
+      token.line > tokenAt(tokens, current - 1).line &&
+      isDeclarationContractStatementStart(tokens, current)
+    ) {
+      return { end: current, position: current }
+    }
+
+    const value = token.value
+
+    if (value === '{') {
+      braceDepth = braceDepth + 1
+    } else if (value === '}' && braceDepth > 0) {
+      braceDepth = braceDepth - 1
+    } else if (value === '[') {
+      bracketDepth = bracketDepth + 1
+    } else if (value === ']' && bracketDepth > 0) {
+      bracketDepth = bracketDepth - 1
+    } else if (value === '<') {
+      genericDepth = genericDepth + 1
+    } else if (value === '>' && genericDepth > 0) {
+      genericDepth = genericDepth - 1
+    } else if (value === '(') {
+      parenDepth = parenDepth + 1
+    } else if (value === ')' && parenDepth > 0) {
+      parenDepth = parenDepth - 1
+    } else if (value === ';' && braceDepth === 0 && bracketDepth === 0 && genericDepth === 0 && parenDepth === 0) {
+      return { end: current, position: current + 1 }
+    }
+
+    current = current + 1
+  }
+
+  return { end: current, position: current }
+}
+
 function findFunctionSignatureBoundary(tokens: Token[], position: number): FunctionSignatureBoundary | null {
   let current = position
   let parenDepth = 0
@@ -1436,6 +1640,20 @@ function isDefaultExportDeclarationStart(tokens: Token[], position: number): boo
     tokenValue(tokens, position + 1) === 'default' &&
     isDeclarationLocalNameToken(tokenAt(tokens, position + 2))
   )
+}
+
+function isVariableSignatureStart(tokens: Token[], position: number): boolean {
+  let current = position
+
+  if (tokenValue(tokens, current) === 'export') {
+    current = current + 1
+  }
+
+  if (tokenValue(tokens, current) !== 'const' && tokenValue(tokens, current) !== 'let') {
+    return false
+  }
+
+  return isDeclarationLocalNameToken(tokenAt(tokens, current + 1)) && tokenValue(tokens, current + 2) === ':'
 }
 
 function isFunctionDeclarationNameToken(token: Token): boolean {

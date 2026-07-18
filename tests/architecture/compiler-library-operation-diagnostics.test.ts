@@ -3,7 +3,7 @@ import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
 import { CompileError } from '../../compiler/diagnostics.ts'
-import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
+import { createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet } from './helpers/compiler-library-fixtures.ts'
 import type {
   CompilerLibraryDescriptor,
   LibraryOperationDescriptor,
@@ -62,21 +62,14 @@ function diagnosticLibrary(): CompilerLibraryDescriptor {
   }
 }
 
-function receiverDiagnosticOperation(
-  kind: 'index-read' | 'index-write',
-  code: string
-): LibraryOperationDescriptor {
+function receiverDiagnosticOperation(kind: 'index-read' | 'index-write', code: string): LibraryOperationDescriptor {
   return {
     ...diagnosticOperation('test:diagnostics#UnsupportedObject.*', kind, code),
     receiverTypeId: 'test:diagnostics#UnsupportedObject'
   }
 }
 
-function diagnosticOperation(
-  bindingId: string,
-  kind: LibraryOperationKind,
-  code: string
-): LibraryOperationDescriptor {
+function diagnosticOperation(bindingId: string, kind: LibraryOperationKind, code: string): LibraryOperationDescriptor {
   return {
     libraryId: 'test:diagnostics',
     bindingId,

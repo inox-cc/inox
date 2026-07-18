@@ -4,7 +4,7 @@ import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
 import { CompileError } from '../../compiler/diagnostics.ts'
-import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
+import { createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet } from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 import { compilerLibraryPackage as promisePackage } from '../../stdlib/global/promise/compiler/index.ts'
 
@@ -13,10 +13,7 @@ const diagnosticMessage = 'bridge.schedule callback must be synchronous'
 
 test('library callback argument metadata владеет synchronous callback diagnostic', () => {
   const libraries = createCompilerLibrarySet([bridgeLibrary(), promiseLibrary()])
-  const passingSources = [
-    'bridge.schedule(() => {})\n',
-    'function work(): void {}\nbridge.schedule(work)\n'
-  ]
+  const passingSources = ['bridge.schedule(() => {})\n', 'function work(): void {}\nbridge.schedule(work)\n']
   const failingSources = [
     'bridge.schedule(async () => { await Promise.resolve(0) })\n',
     'async function work(): Promise<void> { await Promise.resolve(0) }\nbridge.schedule(work)\n'
@@ -46,10 +43,7 @@ function promiseLibrary(): CompilerLibraryDescriptor {
         libraryId: promisePackage.id,
         kind: 'global',
         source: 'stdlib/global/promise/index.d.ts',
-        declarationSource: readFileSync(
-          new URL('../../stdlib/global/promise/index.d.ts', import.meta.url),
-          'utf8'
-        ),
+        declarationSource: readFileSync(new URL('../../stdlib/global/promise/index.d.ts', import.meta.url), 'utf8'),
         compilerImplemented: true
       }
     ]

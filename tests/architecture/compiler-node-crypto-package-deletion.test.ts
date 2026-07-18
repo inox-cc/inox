@@ -35,9 +35,7 @@ test('удаление crypto packages убирает module/global API и nativ
   const globalOnly = createCompilerLibrarySetFromDiscovered(await discoverCompilerLibraries(fixtureRoot))
   assert.throws(
     () => compileSource("import { randomBytes } from 'node:crypto'\nrandomBytes(4)\n", { libraries: globalOnly }),
-    (error: unknown) =>
-      error instanceof CompileError &&
-      error.diagnostics[0].code === 'INOX_UNSUPPORTED_IMPORT_SOURCE'
+    (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_UNSUPPORTED_IMPORT_SOURCE'
   )
 
   await rm(resolve(fixtureRoot, 'stdlib/global/crypto'), { recursive: true, force: true })
@@ -59,13 +57,29 @@ async function createFixture(): Promise<void> {
   await mkdir(resolve(fixtureRoot, 'stdlib/global/crypto/compiler'), { recursive: true })
   await mkdir(resolve(fixtureRoot, 'stdlib/global/crypto/src'), { recursive: true })
   await mkdir(resolve(fixtureRoot, 'stdlib/global/crypto/include'), { recursive: true })
+  await mkdir(resolve(fixtureRoot, 'stdlib/global/binary/compiler'), { recursive: true })
   await mkdir(resolve(fixtureRoot, 'stdlib/node/crypto/compiler'), { recursive: true })
+  await writeFile(
+    resolve(fixtureRoot, 'stdlib/global/binary/index.d.ts'),
+    'export {}; declare global { class Uint8Array { constructor(length: number); } }\n'
+  )
+  await writeFile(
+    resolve(fixtureRoot, 'stdlib/global/binary/compiler/index.ts'),
+    "export const compilerLibraryPackage = { id: 'global:binary', dependencies: [], operations: [], intrinsicBindings: [], runtimeRequirements: [] }\n"
+  )
   await writeFile(resolve(fixtureRoot, 'stdlib/global/crypto/src/crypto.cc'), 'int crypto_fixture = 0;\n')
+  await writeFile(
+    resolve(fixtureRoot, 'stdlib/global/crypto/index.d.ts'),
+    'export {}; declare global { interface Crypto { getRandomValues(bytes: Uint8Array): Uint8Array; } const crypto: Crypto; }\n'
+  )
   await writeFile(
     resolve(fixtureRoot, 'stdlib/global/crypto/compiler/index.ts'),
     "export const compilerLibraryPackage = { id: 'global:crypto', dependencies: [], operations: [{ libraryId: 'global:crypto', bindingId: 'global:crypto.getRandomValues', operationId: 'global:crypto#getRandomValues', kind: 'call', runtimeRequirements: ['global:crypto'], cExpression: 'crypto.getRandomValues', cArgumentKinds: ['value'], cppType: 'Uint8Array', valueType: 'bytes' }], intrinsicBindings: [], runtimeRequirements: [{ id: 'global:crypto', dependencies: [], cPreludeIncludes: ['inox/crypto.h'], capabilities: ['entropy'] }] }\n"
   )
-  await writeFile(resolve(fixtureRoot, 'stdlib/node/crypto/index.d.ts'), 'export function randomBytes(size: number): Uint8Array;\n')
+  await writeFile(
+    resolve(fixtureRoot, 'stdlib/node/crypto/index.d.ts'),
+    'export function randomBytes(size: number): Uint8Array;\n'
+  )
   await writeFile(
     resolve(fixtureRoot, 'stdlib/node/crypto/compiler/index.ts'),
     "export const compilerLibraryPackage = { id: 'node:crypto', dependencies: ['global:crypto'], operations: [{ libraryId: 'node:crypto', bindingId: 'node:crypto#module:node:crypto:randomBytes', operationId: 'node:crypto#randomBytes', kind: 'call', runtimeRequirements: ['node:crypto'], cExpression: 'crypto.randomBytes', cArgumentKinds: ['number'], cppType: 'Buffer', valueType: 'bytes' }], intrinsicBindings: [], runtimeRequirements: [{ id: 'node:crypto', dependencies: [], cPreludeIncludes: ['inox/crypto.h'], capabilities: [] }] }\n"

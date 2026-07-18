@@ -3,7 +3,7 @@ import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
 import { CompileError } from '../../compiler/diagnostics.ts'
-import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
+import { createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet } from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('library argument checks владеют literal restrictions и diagnostics', () => {
@@ -14,9 +14,7 @@ test('library argument checks владеют literal restrictions и diagnostics
     (error: unknown) =>
       error instanceof CompileError &&
       error.diagnostics.some(
-        (item) =>
-          item.code === 'CODEC_ALGORITHM' &&
-          item.message === "codec.open only supports 'sha256'"
+        (item) => item.code === 'CODEC_ALGORITHM' && item.message === "codec.open only supports 'sha256'"
       )
   )
 })

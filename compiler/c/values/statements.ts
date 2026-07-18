@@ -22,6 +22,7 @@ import {
   emitRuntimeNullableValueCheck,
   emitRuntimeValueCheck,
   emitRuntimeValueCheckLines,
+  runtimeObjectLikeTagMismatchCondition,
   runtimeObjectLikeValueMismatchCondition
 } from '../runtime-values.ts'
 import { cUnsupportedExpressionCode, cUnsupportedVariableDeclarationCode, containsAwaitExpression } from '../syntax.ts'
@@ -323,10 +324,7 @@ function pushAllLines(target: string[], source: string[]): void {
   }
 }
 
-function objectMemberWithExpressionMetadata(
-  expression: StatementNode,
-  member: CKnownObjectField
-): CKnownObjectField {
+function objectMemberWithExpressionMetadata(expression: StatementNode, member: CKnownObjectField): CKnownObjectField {
   const valueType = expression.valueType
 
   if (
@@ -1470,9 +1468,7 @@ export function emitRuntimeValueVariableDeclaration(
   }
 
   const expectedTag =
-    valueType === 'object' && libraryNativeCppType(statement.shape) !== null
-      ? null
-      : cRuntimeValueTag(valueType)
+    valueType === 'object' && libraryNativeCppType(statement.shape) !== null ? null : cRuntimeValueTag(valueType)
   let objectLiteralExpression = false
 
   if (valueType === 'object') {
@@ -2540,10 +2536,7 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
   }
 }
 
-function emitCompilerLibraryForOfStatement(
-  statement: StatementNode,
-  context: CFunctionContext
-): string[] | null {
+function emitCompilerLibraryForOfStatement(statement: StatementNode, context: CFunctionContext): string[] | null {
   const iteration = resolveCompilerLibraryIteration(statement, context)
 
   if (iteration === null) {
@@ -2695,11 +2688,7 @@ function compilerLibraryIterableTypeId(iterable: StatementNode): string | null {
 
   const shape = iterable.shape
 
-  if (
-    shape !== null &&
-    typeof shape !== 'undefined' &&
-    typeof shape.libraryTypeId === 'string'
-  ) {
+  if (shape !== null && typeof shape !== 'undefined' && typeof shape.libraryTypeId === 'string') {
     return shape.libraryTypeId
   }
 
@@ -2909,6 +2898,7 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
           catchBody.push(`inox_string* ${catchParamName} = (inox_string*)inox_error.as.ref;`)
         } else {
           context.variables.set(statement.handler.param, 'unknown')
+          context.exceptionValueNames.add(statement.handler.param)
           catchExceptionName = catchParamName
         }
       }
@@ -3061,9 +3051,10 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
     return []
   }
 
-  const isExceptionObject = isThrowableObjectExpression(statement.argument, context)
+  const valueType = statementDeps(context).inferExpressionType(statement.argument, context)
+  const isExceptionValue = isThrowableExceptionValueExpression(statement.argument, context)
 
-  if (statementDeps(context).inferExpressionType(statement.argument, context) !== 'string' && !isExceptionObject) {
+  if (valueType !== 'string' && !isExceptionValue) {
     pushDiagnostic(
       context,
       diagnostic(
@@ -3094,11 +3085,7 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
     pushAllLines(lines, emitPrepareOwnedValueWrite(errorValue))
     lines.push(`${errorValue} = ${value.expression};`)
 
-    let typeCheck = `${errorValue}.tag != INOX_TAG_STRING || ${errorValue}.as.ref == 0`
-
-    if (isExceptionObject) {
-      typeCheck = runtimeObjectLikeValueMismatchCondition(errorValue)
-    }
+    const typeCheck = throwableValueMismatchCondition(errorValue, valueType, isExceptionValue)
 
     lines.push(emitRuntimeTypeCheck(typeCheck, context))
     pushPreparedRuntimeValueOwnershipLines(lines, errorValue, value)
@@ -3126,11 +3113,7 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
   pushAllLines(lines, emitPrepareOwnedValueWrite('inox_error'))
   lines.push(`inox_error = ${value.expression};`)
 
-  let typeCheck = 'inox_error.tag != INOX_TAG_STRING || inox_error.as.ref == 0'
-
-  if (isExceptionObject) {
-    typeCheck = runtimeObjectLikeValueMismatchCondition('inox_error')
-  }
+  const typeCheck = throwableValueMismatchCondition('inox_error', valueType, isExceptionValue)
 
   lines.push(emitRuntimeTypeCheck(typeCheck, context))
   pushPreparedRuntimeValueOwnershipLines(lines, 'inox_error', value)
@@ -3179,7 +3162,19 @@ function emitThrowableObjectValueExpression(value: PreparedExpression, context: 
   }
 }
 
-function isThrowableObjectExpression(expression: StatementNode, context: CFunctionContext): boolean {
+function throwableValueMismatchCondition(name: string, valueType: string, isExceptionValue: boolean): string {
+  if (!isExceptionValue || valueType === 'string') {
+    return `${name}.tag != INOX_TAG_STRING || ${name}.as.ref == 0`
+  }
+
+  if (valueType === 'object') {
+    return runtimeObjectLikeValueMismatchCondition(name)
+  }
+
+  return `(${name}.tag != INOX_TAG_STRING && ${runtimeObjectLikeTagMismatchCondition(name)}) || ${name}.as.ref == 0`
+}
+
+function isThrowableExceptionValueExpression(expression: StatementNode, context: CFunctionContext): boolean {
   const deps = statementDeps(context)
 
   if (deps.isExceptionValueExpression(expression, context)) {
@@ -3220,12 +3215,8 @@ export function emitReturnStatement(statement: StatementNode, context: CFunction
   }
 
   if (
-    libraryNativeBoundaryCppType(
-      context.returnType,
-      context.returnNullable === true,
-      false,
-      context.returnShape
-    ) !== null
+    libraryNativeBoundaryCppType(context.returnType, context.returnNullable === true, false, context.returnShape) !==
+    null
   ) {
     return emitLibraryNativeReturnStatement(returnStatement, context)
   }
@@ -3531,8 +3522,7 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     statement.init !== null &&
     typeof statement.init !== 'undefined' &&
     (statement.init.type === 'ArrayLiteral' ||
-      ((statement.valueType === 'array' ||
-        cIterableElementValueType(statement.typeRef, context.libraries) !== null) &&
+      ((statement.valueType === 'array' || cIterableElementValueType(statement.typeRef, context.libraries) !== null) &&
         statement.init.elements !== null &&
         typeof statement.init.elements !== 'undefined'))
   ) {

@@ -92,7 +92,7 @@ import {
   callExpressionArgumentLabel,
   createArrowFunctionTypeMetadata,
   knownCheckedExpressionType,
-  resolveExpressionPromiseRejectionIntrinsicRole,
+  resolveExpressionPromiseRejectionIntrinsicRole
 } from './checker/expression-helpers.ts'
 import type { CheckedCallArgInfo } from './checker/global-calls.ts'
 import {
@@ -674,9 +674,7 @@ class Checker {
               symbol.overloads = []
 
               for (const overload of functionOverloads) {
-                symbol.overloads.push(
-                  this.importedFunctionDeclarationSymbol(overload, nodeSourceLocation(specifier))
-                )
+                symbol.overloads.push(this.importedFunctionDeclarationSymbol(overload, nodeSourceLocation(specifier)))
               }
             }
           }
@@ -2711,10 +2709,7 @@ class Checker {
       return 'unknown'
     }
 
-    if (
-      (objectType === 'array' || objectType === 'bytes') &&
-      expression.property === 'length'
-    ) {
+    if ((objectType === 'array' || objectType === 'bytes') && expression.property === 'length') {
       expression.nullable = true
       expression.valueType = 'number'
 
@@ -2822,11 +2817,7 @@ class Checker {
       return valueType
     }
 
-    const field = this.resolveExpressionShapeField(
-      expression.target.object,
-      shape,
-      expression.target.property
-    )
+    const field = this.resolveExpressionShapeField(expression.target.object, shape, expression.target.property)
 
     if (field === null || typeof field === 'undefined') {
       this.report('INOX_UNKNOWN_FIELD', `unknown field ${expression.target.property}`, expression.target.loc)
@@ -3279,11 +3270,7 @@ class Checker {
       return valueType
     }
 
-    const field = this.resolveExpressionShapeField(
-      expression.target.object,
-      shape,
-      expression.target.index.value
-    )
+    const field = this.resolveExpressionShapeField(expression.target.object, shape, expression.target.index.value)
 
     if (field === null || typeof field === 'undefined') {
       this.report('INOX_UNKNOWN_FIELD', `unknown field ${expression.target.index.value}`, expression.target.index.loc)
@@ -3525,7 +3512,7 @@ class Checker {
       return null
     }
 
-    const declaredSymbol = this.compilerLibraryDeclarationCallableSymbol(expression.callee)
+    const declaredSymbol = this.compilerLibraryDeclarationCallableSymbol(expression.callee, operation)
     const variant = this.compilerLibraryOperationVariant(expression, operation)
 
     this.checkCompilerLibraryOperationTypeArgumentCount(expression, operation)
@@ -3631,7 +3618,7 @@ class Checker {
     markObjectShapeDynamic(expression.shape)
   }
 
-  compilerLibraryDeclarationCallableSymbol(callee: AnyNode): SymbolInfo | null {
+  compilerLibraryDeclarationCallableSymbol(callee: AnyNode, operation: LibraryOperationDescriptor): SymbolInfo | null {
     const path = memberExpressionPath(callee)
 
     if (path.length === 0) {
@@ -3651,12 +3638,74 @@ class Checker {
       return null
     }
 
+    if (root.libraryId !== operation.libraryId) {
+      return null
+    }
+
     if (root.kind === 'class' && path.length === 2) {
       return this.compilerLibraryDeclaredStaticMethodSymbol(root, path[1])
     }
 
-    this.checkExpression(callee)
-    return this.getCallableSymbol(callee)
+    if (path.length === 1) {
+      return this.getCallableSymbol(callee)
+    }
+
+    return this.compilerLibraryDeclaredMemberCallableSymbol(root, path, nodeSourceLocation(callee))
+  }
+
+  compilerLibraryDeclaredMemberCallableSymbol(
+    root: SymbolInfo,
+    path: string[],
+    loc: SourceLocation
+  ): SymbolInfo | null {
+    let shape = root.shape ?? null
+
+    if (shape === null && typeof root.declaredType === 'string') {
+      shape = this.resolveDeclaredType(root.declaredType, loc).shape
+    }
+
+    for (let index = 1; index < path.length; index = index + 1) {
+      if (shape === null) {
+        return null
+      }
+
+      const field = this.findShapeField(shape, path[index])
+
+      if (field === null) {
+        return null
+      }
+
+      const fieldType = this.resolveFieldDeclaredType(field)
+
+      if (index < path.length - 1) {
+        shape = resolvedObjectShapeMetadata(field.shape, fieldType.shape)
+        continue
+      }
+
+      const functionOverloads: FunctionTypeMetadata[] = field.functionOverloads ?? []
+
+      if (functionOverloads.length > 0) {
+        const overloads: SymbolInfo[] = []
+
+        for (const functionType of functionOverloads) {
+          overloads.push(this.callableSymbolFromFunctionType(functionType, field.loc))
+        }
+
+        const symbol = overloads[0]
+        symbol.overloads = overloads
+        return symbol
+      }
+
+      const functionType = resolvedFunctionTypeMetadata(field.functionType, fieldType.functionType)
+
+      if (functionType === null) {
+        return null
+      }
+
+      return this.callableSymbolFromFunctionType(functionType, field.loc)
+    }
+
+    return null
   }
 
   compilerLibraryDeclaredStaticMethodSymbol(root: SymbolInfo, name: string): SymbolInfo | null {
@@ -3736,11 +3785,7 @@ class Checker {
       return null
     }
 
-    const state = this.pushInstantiatedTypeParameters(
-      typeParameters,
-      typeArguments,
-      nodeSourceLocation(expression)
-    )
+    const state = this.pushInstantiatedTypeParameters(typeParameters, typeArguments, nodeSourceLocation(expression))
 
     try {
       const templates = symbol.constructorParamTemplates ?? []
@@ -4045,11 +4090,7 @@ class Checker {
 
       this.checkCompilerLibraryStringPrefixBackendConstraints(argument, check)
 
-      if (
-        check.arrayLiteralRequired === true &&
-        info.valueType === 'array' &&
-        argument.type !== 'ArrayLiteral'
-      ) {
+      if (check.arrayLiteralRequired === true && info.valueType === 'array' && argument.type !== 'ArrayLiteral') {
         this.report(
           'INOX_NOT_IMPLEMENTED',
           `library operation ${operation.operationId} currently requires an array literal argument`,
@@ -4673,7 +4714,7 @@ class Checker {
     const scopedSymbol = this.scope.resolve(path[0])
 
     if (scopedSymbol === null || typeof scopedSymbol === 'undefined') {
-      return compilerLibraryOperationForGlobal(resolveCompilerLibrarySet(this.options.libraries), path, kind)
+      return null
     }
 
     const symbol = scopedSymbol
@@ -5053,7 +5094,7 @@ class Checker {
       return symbol
     }
 
-    return this.compilerLibraryGlobalSymbol(root)
+    return null
   }
 
   checkRuntimeBuiltinImport(statement: AnyNode): void {
@@ -5149,10 +5190,7 @@ class Checker {
     }
 
     const elementDeclaredType =
-      typeRefIterableElementDeclaredName(
-        param.typeRef ?? null,
-        resolveCompilerLibrarySet(this.options.libraries)
-      ) ??
+      typeRefIterableElementDeclaredName(param.typeRef ?? null, resolveCompilerLibrarySet(this.options.libraries)) ??
       'unknown'
     const elementInfo = this.resolveDeclaredType(elementDeclaredType, param.loc)
 
@@ -5278,8 +5316,10 @@ class Checker {
     const directReturnType = expression.returnType
 
     if (directReturnType !== null && typeof directReturnType !== 'undefined') {
-      return this.compilerLibraryPrimitiveTypeRef(directReturnType, expression.returnNullable === true) ??
+      return (
+        this.compilerLibraryPrimitiveTypeRef(directReturnType, expression.returnNullable === true) ??
         this.compilerLibraryUnknownTypeRef()
+      )
     }
 
     const returnTypeRef = expression.functionType?.returnTypeRef
@@ -5291,10 +5331,12 @@ class Checker {
     const returnType = expression.functionType?.returnType
 
     if (returnType !== null && typeof returnType !== 'undefined') {
-      return this.compilerLibraryPrimitiveTypeRef(
-        returnType,
-        expression.returnNullable === true || expression.functionType?.returnNullable === true
-      ) ?? this.compilerLibraryUnknownTypeRef()
+      return (
+        this.compilerLibraryPrimitiveTypeRef(
+          returnType,
+          expression.returnNullable === true || expression.functionType?.returnNullable === true
+        ) ?? this.compilerLibraryUnknownTypeRef()
+      )
     }
 
     return this.compilerLibraryUnknownTypeRef()
@@ -5497,7 +5539,10 @@ class Checker {
     }
 
     if (valueType === 'array') {
-      return this.compilerLibraryArrayResultTypeRef(this.compilerLibraryUnknownTypeRef()) ?? this.compilerLibraryUnknownTypeRef()
+      return (
+        this.compilerLibraryArrayResultTypeRef(this.compilerLibraryUnknownTypeRef()) ??
+        this.compilerLibraryUnknownTypeRef()
+      )
     }
 
     return this.compilerLibraryUnknownTypeRef()
@@ -6566,11 +6611,7 @@ class Checker {
     expression.declaredType = declaredType
     const shape = expression.shape
 
-    if (
-      shape !== null &&
-        typeof shape !== 'undefined' &&
-        (shape.dynamic !== true || shape.fields.length > 0)
-    ) {
+    if (shape !== null && typeof shape !== 'undefined' && (shape.dynamic !== true || shape.fields.length > 0)) {
       return
     }
 
@@ -6600,11 +6641,7 @@ class Checker {
     return findShapeFieldInContext(shape, name)
   }
 
-  resolveExpressionShapeField(
-    expression: AnyNode,
-    shape: ObjectShapeInfo,
-    name: string
-  ): AnyNode | null {
+  resolveExpressionShapeField(expression: AnyNode, shape: ObjectShapeInfo, name: string): AnyNode | null {
     return resolveExpressionShapeFieldInContext(this.expressionMetadataContext(), expression, shape, name)
   }
 
@@ -7332,11 +7369,7 @@ class Checker {
 
     const argumentIndex = narrowing.argumentIndex
 
-    if (
-      typeof argumentIndex !== 'number' ||
-      argumentIndex < 0 ||
-      argumentIndex >= expression.args.length
-    ) {
+    if (typeof argumentIndex !== 'number' || argumentIndex < 0 || argumentIndex >= expression.args.length) {
       return empty
     }
 
@@ -7663,51 +7696,8 @@ class Checker {
     let symbol = this.scope.resolve(root)
 
     if (symbol === null || typeof symbol === 'undefined') {
-      symbol = this.compilerLibraryGlobalSymbol(root, reference.loc)
-    }
-
-    if (symbol === null || typeof symbol === 'undefined') {
       this.report('INOX_UNKNOWN_NAME', `unknown name ${root}`, reference.loc)
       return null
-    }
-
-    return symbol
-  }
-
-  compilerLibraryGlobalSymbol(name: string, loc?: SourceLocation): SymbolInfo | null {
-    const operation = compilerLibraryOperationForGlobal(
-      resolveCompilerLibrarySet(this.options.libraries),
-      [name],
-      'member-read'
-    )
-
-    if (operation === null) {
-      return null
-    }
-
-    const fields = operation.resultShapeFields ?? []
-    const shapeFields: AnyNode[] = []
-    const fieldLoc = loc ?? { line: 1, column: 1 }
-
-    for (let index = 0; index < fields.length; index = index + 1) {
-      shapeFields.push(this.compilerLibraryResultShapeField(fields[index], fieldLoc))
-    }
-
-    const symbol: SymbolInfo = {
-      kind: 'global',
-      mutable: false,
-      valueType: (operation.valueType ?? 'unknown') as ValueType,
-      nullable: operation.nullable === true,
-      typeRef: operation.resultTypeRef ?? null
-    }
-
-    if (fields.length > 0 || (operation.resultTypeId !== null && typeof operation.resultTypeId !== 'undefined')) {
-      symbol.shape = {
-        kind: 'object',
-        fields: shapeFields,
-        libraryTypeId: operation.resultTypeId ?? null,
-        libraryCppType: operation.cppType ?? null
-      }
     }
 
     return symbol
@@ -7787,10 +7777,7 @@ class Checker {
     this.localTypeNames.add(item.name)
   }
 
-  resolveDeclaredType(
-    name: string | null | undefined,
-    loc: SourceLocation | null | undefined
-  ): ResolvedTypeInfo {
+  resolveDeclaredType(name: string | null | undefined, loc: SourceLocation | null | undefined): ResolvedTypeInfo {
     const typeLoc = loc ?? { line: 1, column: 1 }
     return resolveDeclaredTypeInContext(this.declaredTypeContext(), name, typeLoc)
   }
@@ -8092,10 +8079,7 @@ class Checker {
 
     const actualTypeId = actualShape?.libraryTypeId
 
-    if (
-      actualValueType !== 'object' &&
-      (actualTypeId === null || typeof actualTypeId === 'undefined')
-    ) {
+    if (actualValueType !== 'object' && (actualTypeId === null || typeof actualTypeId === 'undefined')) {
       return
     }
 
@@ -8156,13 +8140,12 @@ function compilerLibraryTypeRefsEqual(left: TypeRef, right: TypeRef): boolean {
     return false
   }
 
-  return left.kind === 'unknown' && right.kind === 'unknown' && compilerLibraryConcreteTypeRefQualifiersEqual(left, right)
+  return (
+    left.kind === 'unknown' && right.kind === 'unknown' && compilerLibraryConcreteTypeRefQualifiersEqual(left, right)
+  )
 }
 
-function compilerLibraryConcreteTypeRefQualifiersEqual(
-  left: ConcreteTypeRef,
-  right: ConcreteTypeRef
-): boolean {
+function compilerLibraryConcreteTypeRefQualifiersEqual(left: ConcreteTypeRef, right: ConcreteTypeRef): boolean {
   return left.nullable === right.nullable && left.ownership === right.ownership
 }
 

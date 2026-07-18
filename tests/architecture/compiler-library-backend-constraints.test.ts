@@ -3,7 +3,7 @@ import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
 import { CompileError } from '../../compiler/diagnostics.ts'
-import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
+import { createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet } from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('library runtime requirements обобщённо проверяют backend options компилятора', () => {
@@ -24,10 +24,7 @@ function backendLibrary(): CompilerLibraryDescriptor {
     id: 'platform',
     dependencies: [],
     declarations: [],
-    operations: [
-      operation('random', 'platform:random'),
-      operation('secure', 'platform:secure')
-    ],
+    operations: [operation('random', 'platform:random'), operation('secure', 'platform:secure')],
     intrinsicBindings: [],
     runtimeRequirements: [
       {
@@ -78,6 +75,5 @@ function operation(name: string, requirement: string) {
 
 function hasDiagnostic(code: string, message: string): (error: unknown) => boolean {
   return (error: unknown) =>
-    error instanceof CompileError &&
-    error.diagnostics.some((item) => item.code === code && item.message === message)
+    error instanceof CompileError && error.diagnostics.some((item) => item.code === code && item.message === message)
 }
