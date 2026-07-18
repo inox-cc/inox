@@ -63,8 +63,12 @@ if (process.argv[2] === workerArg) {
 
   await runFeatureTests(files, parallelism, options.compiler)
 
-  if (shouldRunIntegrationTests(options)) {
-    await runIntegrationTests()
+  if (shouldRunHostedIntegrationTests(options)) {
+    await runHostedIntegrationTests()
+  }
+
+  if (shouldRunNativeCompilerIntegrationTests(options)) {
+    await runNativeCompilerIntegrationTests(options.compiler.path)
   }
 }
 
@@ -98,20 +102,23 @@ function configuredFeatureTestParallelism(): number | null {
   return value
 }
 
-function shouldRunIntegrationTests(options: RunnerOptions): boolean {
+function shouldRunHostedIntegrationTests(options: RunnerOptions): boolean {
   return options.compiler.kind === 'hosted' && options.paths.length === 0
 }
 
-async function runIntegrationTests(): Promise<void> {
-  const { assertArrayLowersToGlobalObject } =
-    await import('./integration/array-global-object-lowering.test.ts')
+function shouldRunNativeCompilerIntegrationTests(
+  options: RunnerOptions
+): options is RunnerOptions & { compiler: Extract<FeatureTestCompiler, { kind: 'binary' }> } {
+  return options.compiler.kind === 'binary' && options.paths.length === 0
+}
+
+async function runHostedIntegrationTests(): Promise<void> {
+  const { assertArrayLowersToGlobalObject } = await import('./integration/array-global-object-lowering.test.ts')
   const { assertBuildCMakeConfigureIsQuiet } = await import('./integration/build-cmake-log-level.test.ts')
   const { assertBufferLowersToCppObject, assertBufferNativeFacadeHidesAllocatorOverloads } =
     await import('./integration/buffer-cpp-object-lowering.test.ts')
   const { assertCPreludeIncludeOrder } = await import('./integration/c-prelude-include-order.test.ts')
-  const { assertCliEntryModuleMain } = await import('./integration/cli-entry-module-main.test.ts')
-  const { assertConsoleLowersToGlobalObject } =
-    await import('./integration/console-global-object-lowering.test.ts')
+  const { assertConsoleLowersToGlobalObject } = await import('./integration/console-global-object-lowering.test.ts')
   const { assertCompilerIndexNodeHelp } = await import('./integration/compiler-index-node-help.test.ts')
   const { assertDateLowersToGlobalObject } = await import('./integration/date-global-object-lowering.test.ts')
   const { assertPerformanceLowersToGlobalObject } =
@@ -120,12 +127,10 @@ async function runIntegrationTests(): Promise<void> {
     assertAwaitCatchOnlyDoesNotEmitErrorActiveState,
     assertCatchOnlyDoesNotEmitErrorActiveState,
     assertFinallyStillEmitsErrorActiveState
-  } =
-    await import('./integration/error-flow-state-lowering.test.ts')
+  } = await import('./integration/error-flow-state-lowering.test.ts')
   const { assertFetchAwaitUsesCppWrappers, assertFetchRuntimeFacadesUseCppObjects } =
     await import('./integration/fetch-await-cpp-lowering.test.ts')
-  const { assertGeneratedLabelsHaveLeadingBlankOnly } =
-    await import('./integration/generated-label-spacing.test.ts')
+  const { assertGeneratedLabelsHaveLeadingBlankOnly } = await import('./integration/generated-label-spacing.test.ts')
   const {
     assertAwaitFunctionUsesExternalLoopRuntime,
     assertGeneratedMainDoesNotCollideWithUserMain,
@@ -149,15 +154,10 @@ async function runIntegrationTests(): Promise<void> {
   const { assertModuleDeclarationImports } = await import('./integration/module-declaration-imports.test.ts')
   const { assertModuleDeclarationWeakTypeMarker } =
     await import('./integration/module-declaration-weak-type-marker.test.ts')
-  const { assertObjectLowersToGlobalObject } =
-    await import('./integration/object-global-object-lowering.test.ts')
+  const { assertObjectLowersToGlobalObject } = await import('./integration/object-global-object-lowering.test.ts')
   const { assertObjectRuntimeIndexUsesDirectHelpers } =
     await import('./integration/object-runtime-index-lowering.test.ts')
-  const {
-    assertJsonParseCatchUsesRaiiErrorReset,
-    assertJsonParseLiteralShapeUsesDirectVariableTarget,
-    assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariableTarget
-  } =
+  const { assertJsonParseCatchUsesRaiiErrorReset, assertJsonParseLiteralShapeUsesDirectVariableTarget } =
     await import('./integration/json-parse-shape-lowering.test.ts')
   const { assertJsonLowersToGlobalObject } = await import('./integration/json-global-object-lowering.test.ts')
   const { assertFsReadFileSyncLowersToCppObject } = await import('./integration/fs-cpp-object-lowering.test.ts')
@@ -170,18 +170,10 @@ async function runIntegrationTests(): Promise<void> {
     assertNativeClassExplicitUnknownReturnIsPreserved,
     assertNativeClassLoopReturnKeepsRuntimeReturn,
     assertNativeClassVoidStringFieldLogMethod
-  } =
-    await import('./integration/native-class-method-log-lowering.test.ts')
+  } = await import('./integration/native-class-method-log-lowering.test.ts')
   const { assertNativeClassModuleMethodCallUsesNativeReceiver } =
     await import('./integration/native-class-module-method-call.test.ts')
   const { assertTestsDoNotReferenceExamples } = await import('./integration/no-example-dependencies.test.ts')
-  const { assertNativeInoxDefaultOutput, assertNativeInoxHelp, assertNativeInoxRuntimeSmoke } =
-    await import('./integration/native-inox-help.test.ts')
-  const { assertNativeInoxModuleGraph } = await import('./integration/native-inox-module-graph.test.ts')
-  const { assertNativeInoxProcessRuntimeString } =
-    await import('./integration/native-inox-process-runtime-string.test.ts')
-  const { assertNativeInoxUnicodeStringLiteral } =
-    await import('./integration/native-inox-unicode-string-literal.test.ts')
   const { assertPromiseAwaitCatchReadsRejectedValue, assertPromiseAwaitUsesRuntimeHelper } =
     await import('./integration/promise-await-helper-lowering.test.ts')
   const { assertPromiseVariablesUseCppRaii } = await import('./integration/promise-raii-lowering.test.ts')
@@ -190,8 +182,7 @@ async function runIntegrationTests(): Promise<void> {
   const { assertHttpServerUsesCppObjectFacade } = await import('./integration/http-cpp-object-lowering.test.ts')
   const { assertReadableCStringLiterals } = await import('./integration/readable-c-string-literals.test.ts')
   const { assertRegExpLowersToCppObject } = await import('./integration/regexp-cpp-object-lowering.test.ts')
-  const { assertRuntimeAllocatorStaysInRuntime } =
-    await import('./integration/runtime-allocator-prelude.test.ts')
+  const { assertRuntimeAllocatorStaysInRuntime } = await import('./integration/runtime-allocator-prelude.test.ts')
   const { assertStringMethodsLowerToCppObject, assertStringRuntimeMethodsStayDirect } =
     await import('./integration/string-cpp-object-lowering.test.ts')
   const { assertRuntimeValueDeclarationsStayLocal } =
@@ -212,8 +203,7 @@ async function runIntegrationTests(): Promise<void> {
     assertNativeClassRuntimeValueFieldLowering,
     assertNativeClassStringLiteralConstructorUsesCppValue,
     assertNativeClassSetRuntimeFieldLowering
-  } =
-    await import('./integration/native-class-lowering.test.ts')
+  } = await import('./integration/native-class-lowering.test.ts')
   const { assertRuntimeValueCoreDoesNotReferenceFeatureDisposers } =
     await import('./integration/runtime-value-core-dependencies.test.ts')
   const { assertThrowingErrorTransferUsesValueRelease } =
@@ -238,10 +228,6 @@ async function runIntegrationTests(): Promise<void> {
       assertCPreludeIncludeOrder()
     })
 
-    await t.test('cli-entry-module-main', async () => {
-      await assertCliEntryModuleMain()
-    })
-
     await t.test('console-global-object-lowering', () => {
       assertConsoleLowersToGlobalObject()
     })
@@ -264,10 +250,10 @@ async function runIntegrationTests(): Promise<void> {
       assertFinallyStillEmitsErrorActiveState()
     })
 
-  await t.test('fetch-await-cpp-lowering', () => {
-    assertFetchAwaitUsesCppWrappers()
-    assertFetchRuntimeFacadesUseCppObjects()
-  })
+    await t.test('fetch-await-cpp-lowering', () => {
+      assertFetchAwaitUsesCppWrappers()
+      assertFetchRuntimeFacadesUseCppObjects()
+    })
 
     await t.test('generated-label-spacing', () => {
       assertGeneratedLabelsHaveLeadingBlankOnly()
@@ -334,36 +320,8 @@ async function runIntegrationTests(): Promise<void> {
       assertObjectRuntimeIndexUsesDirectHelpers()
     })
 
-    await t.test('native-json-parse-unicode-shape-lowering', async () => {
-      await assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariableTarget()
-    })
-
     await t.test('class-super-diagnostic-uses-inheritance-code', () => {
       assertClassSuperDiagnosticUsesInheritanceCode()
-    })
-
-    await t.test('native-inox-help', async () => {
-      await assertNativeInoxHelp()
-    })
-
-    await t.test('native-inox-default-output', async () => {
-      await assertNativeInoxDefaultOutput()
-    })
-
-    await t.test('native-inox-runtime-smoke', async () => {
-      await assertNativeInoxRuntimeSmoke()
-    })
-
-    await t.test('native-inox-module-graph', async () => {
-      await assertNativeInoxModuleGraph()
-    })
-
-    await t.test('native-inox-process-runtime-string', async () => {
-      await assertNativeInoxProcessRuntimeString()
-    })
-
-    await t.test('native-inox-unicode-string-literal', async () => {
-      await assertNativeInoxUnicodeStringLiteral()
     })
 
     await t.test('native-class-lowering', () => {
@@ -504,6 +462,53 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('runtime-value-core-dependencies', async () => {
       await assertRuntimeValueCoreDoesNotReferenceFeatureDisposers()
+    })
+  })
+}
+
+async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<void> {
+  const { assertCliEntryModuleMain } = await import('./integration/cli-entry-module-main.test.ts')
+  const { assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariableTarget } =
+    await import('./integration/json-parse-shape-lowering.test.ts')
+  const { assertNativeInoxDefaultOutput, assertNativeInoxHelp, assertNativeInoxRuntimeSmoke } =
+    await import('./integration/native-inox-help.test.ts')
+  const { assertNativeInoxModuleGraph } = await import('./integration/native-inox-module-graph.test.ts')
+  const { assertNativeInoxProcessRuntimeString } =
+    await import('./integration/native-inox-process-runtime-string.test.ts')
+  const { assertNativeInoxUnicodeStringLiteral } =
+    await import('./integration/native-inox-unicode-string-literal.test.ts')
+
+  await test('native compiler integration checks', async (t) => {
+    await t.test('cli-entry-module-main', async () => {
+      await assertCliEntryModuleMain(compilerPath)
+    })
+
+    await t.test('native-json-parse-unicode-shape-lowering', async () => {
+      await assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariableTarget(compilerPath)
+    })
+
+    await t.test('native-inox-help', async () => {
+      await assertNativeInoxHelp(compilerPath)
+    })
+
+    await t.test('native-inox-default-output', async () => {
+      await assertNativeInoxDefaultOutput(compilerPath)
+    })
+
+    await t.test('native-inox-runtime-smoke', async () => {
+      await assertNativeInoxRuntimeSmoke(compilerPath)
+    })
+
+    await t.test('native-inox-module-graph', async () => {
+      await assertNativeInoxModuleGraph(compilerPath)
+    })
+
+    await t.test('native-inox-process-runtime-string', async () => {
+      await assertNativeInoxProcessRuntimeString(compilerPath)
+    })
+
+    await t.test('native-inox-unicode-string-literal', async () => {
+      await assertNativeInoxUnicodeStringLiteral(compilerPath)
     })
   })
 }

@@ -6,7 +6,7 @@ import { rootDir } from '../../scripts/lib/repo-root.ts'
 import { runCommand } from '../../scripts/lib/run-command.ts'
 import { compileRuntimeProgram } from '../helpers/runtime-c.ts'
 
-export async function assertNativeInoxProcessRuntimeString(): Promise<void> {
+export async function assertNativeInoxProcessRuntimeString(compilerPath: string): Promise<void> {
   const workspace = join(rootDir, 'dist/test-tmp/native-inox-process-runtime-string')
   const input = join(workspace, 'index.ts')
   const outputCc = join(workspace, 'index.cc')
@@ -22,14 +22,10 @@ export async function assertNativeInoxProcessRuntimeString(): Promise<void> {
     })
     await writeFile(
       input,
-      [
-        'const snapshot = process',
-        'console.log(snapshot.versions.node === process.version.slice(1))',
-        ''
-      ].join('\n')
+      ['const snapshot = process', 'console.log(snapshot.versions.node === process.version.slice(1))', ''].join('\n')
     )
 
-    const emit = await runCommand(join(rootDir, 'dist/inox'), [input, outputCc])
+    const emit = await runCommand(compilerPath, [input, outputCc])
 
     assert.equal(
       emit.code,
@@ -48,7 +44,11 @@ export async function assertNativeInoxProcessRuntimeString(): Promise<void> {
 
     const run = await runCommand(output, [])
 
-    assert.equal(run.code, 0, `native process runtime string run failed\nstdout:\n${run.stdout}\nstderr:\n${run.stderr}`)
+    assert.equal(
+      run.code,
+      0,
+      `native process runtime string run failed\nstdout:\n${run.stdout}\nstderr:\n${run.stderr}`
+    )
     assert.equal(run.stderr, '')
     assert.equal(run.stdout, '1\n')
   } finally {

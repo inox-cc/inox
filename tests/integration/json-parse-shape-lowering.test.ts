@@ -92,7 +92,9 @@ try {
   assert.doesNotMatch(source, /inox_release\(inox_json_error_\d+\);/)
 }
 
-export async function assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariableTarget(): Promise<void> {
+export async function assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariableTarget(
+  compilerPath: string
+): Promise<void> {
   const workspace = join(rootDir, 'dist/test-tmp/native-json-parse-shape-lowering')
   const input = join(workspace, 'index.ts')
   const outputCc = join(workspace, 'index.cc')
@@ -117,7 +119,7 @@ export async function assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariable
       ].join('\n')
     )
 
-    const emit = await runCommand(join(rootDir, 'dist/inox'), [input, outputCc])
+    const emit = await runCommand(compilerPath, [input, outputCc])
 
     assert.equal(
       emit.code,
@@ -161,5 +163,5 @@ function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedT
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   assertJsonParseLiteralShapeUsesDirectVariableTarget()
   assertJsonParseCatchUsesRaiiErrorReset()
-  await assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariableTarget()
+  await assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariableTarget(join(rootDir, 'dist/inox'))
 }

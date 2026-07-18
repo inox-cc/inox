@@ -6,7 +6,7 @@ import { rootDir } from '../../scripts/lib/repo-root.ts'
 import { runCommand } from '../../scripts/lib/run-command.ts'
 import { compileRuntimeProgram } from '../helpers/runtime-c.ts'
 
-export async function assertNativeInoxModuleGraph(): Promise<void> {
+export async function assertNativeInoxModuleGraph(compilerPath: string): Promise<void> {
   const workspace = join(rootDir, 'dist/test-tmp/native-inox-module-graph')
   const moduleDir = join(workspace, 'modules')
   const input = join(workspace, 'index.ts')
@@ -25,13 +25,9 @@ export async function assertNativeInoxModuleGraph(): Promise<void> {
     await writeFile(imported, "export const name = 'Ada'\n")
     await writeFile(input, "import { name } from './modules/name.ts'\nconsole.log(name)\n")
 
-    const emit = await runCommand(join(rootDir, 'dist/inox'), [input, outputCc])
+    const emit = await runCommand(compilerPath, [input, outputCc])
 
-    assert.equal(
-      emit.code,
-      0,
-      `dist/inox module graph emit failed\nstdout:\n${emit.stdout}\nstderr:\n${emit.stderr}`
-    )
+    assert.equal(emit.code, 0, `dist/inox module graph emit failed\nstdout:\n${emit.stdout}\nstderr:\n${emit.stderr}`)
     assert.equal(emit.stderr, '')
 
     const compile = await compileRuntimeProgram(outputCc, output)

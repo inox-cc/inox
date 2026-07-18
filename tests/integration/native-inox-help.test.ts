@@ -7,14 +7,10 @@ import { rootDir } from '../../scripts/lib/repo-root.ts'
 import { runCommand } from '../../scripts/lib/run-command.ts'
 import { compileRuntimeProgram } from '../helpers/runtime-c.ts'
 
-export async function assertNativeInoxHelp(): Promise<void> {
-  const result = await runCommand('dist/inox', ['--help'])
+export async function assertNativeInoxHelp(compilerPath: string): Promise<void> {
+  const result = await runCommand(compilerPath, ['--help'])
 
-  assert.equal(
-    result.code,
-    0,
-    `dist/inox --help failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
-  )
+  assert.equal(result.code, 0, `dist/inox --help failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
   assert.equal(result.stderr, '')
   assert.match(result.stdout, /Usage:/)
   assert.match(result.stdout, /inox --help/)
@@ -24,7 +20,7 @@ export async function assertNativeInoxHelp(): Promise<void> {
   assert.doesNotMatch(result.stdout, /input\.ts\.cc/)
 }
 
-export async function assertNativeInoxDefaultOutput(): Promise<void> {
+export async function assertNativeInoxDefaultOutput(compilerPath: string): Promise<void> {
   const workspace = join(rootDir, 'dist/test-tmp/native-inox-default-output')
   const input = join(workspace, 'input.ts')
   const output = join(workspace, 'input.cc')
@@ -40,13 +36,9 @@ export async function assertNativeInoxDefaultOutput(): Promise<void> {
     })
     await writeFile(input, "console.log('ok')\n")
 
-    const result = await runCommand(join(rootDir, 'dist/inox'), [input], workspace)
+    const result = await runCommand(compilerPath, [input], workspace)
 
-    assert.equal(
-      result.code,
-      0,
-      `dist/inox input.ts failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
-    )
+    assert.equal(result.code, 0, `dist/inox input.ts failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
     assert.equal(result.stderr, '')
     assert.equal(result.stdout.trim(), output)
     assert.match(await readFile(output, 'utf8'), /ok/)
@@ -62,7 +54,7 @@ export async function assertNativeInoxDefaultOutput(): Promise<void> {
   }
 }
 
-export async function assertNativeInoxRuntimeSmoke(): Promise<void> {
+export async function assertNativeInoxRuntimeSmoke(compilerPath: string): Promise<void> {
   const workspace = join(rootDir, 'dist/test-tmp/native-inox-runtime-smoke')
   const input = join(workspace, 'index.ts')
   const outputCc = join(workspace, 'index.cc')
@@ -88,13 +80,9 @@ export async function assertNativeInoxRuntimeSmoke(): Promise<void> {
       ].join('\n')
     )
 
-    const emit = await runCommand(join(rootDir, 'dist/inox'), [input, outputCc])
+    const emit = await runCommand(compilerPath, [input, outputCc])
 
-    assert.equal(
-      emit.code,
-      0,
-      `dist/inox runtime smoke emit failed\nstdout:\n${emit.stdout}\nstderr:\n${emit.stderr}`
-    )
+    assert.equal(emit.code, 0, `dist/inox runtime smoke emit failed\nstdout:\n${emit.stdout}\nstderr:\n${emit.stderr}`)
     assert.equal(emit.stderr, '')
 
     const compile = await compileRuntimeProgram(outputCc, output)
@@ -119,7 +107,9 @@ export async function assertNativeInoxRuntimeSmoke(): Promise<void> {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  await assertNativeInoxHelp()
-  await assertNativeInoxDefaultOutput()
-  await assertNativeInoxRuntimeSmoke()
+  const compilerPath = join(rootDir, 'dist/inox')
+
+  await assertNativeInoxHelp(compilerPath)
+  await assertNativeInoxDefaultOutput(compilerPath)
+  await assertNativeInoxRuntimeSmoke(compilerPath)
 }

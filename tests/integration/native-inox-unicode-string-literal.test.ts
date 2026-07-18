@@ -7,7 +7,7 @@ import { rootDir } from '../../scripts/lib/repo-root.ts'
 import { runCommand } from '../../scripts/lib/run-command.ts'
 import { compileRuntimeProgram } from '../helpers/runtime-c.ts'
 
-export async function assertNativeInoxUnicodeStringLiteral(): Promise<void> {
+export async function assertNativeInoxUnicodeStringLiteral(compilerPath: string): Promise<void> {
   const workspace = join(rootDir, 'dist/test-tmp/native-inox-unicode-string-literal')
   const input = join(workspace, 'index.ts')
   const outputCc = join(workspace, 'index.cc')
@@ -23,7 +23,7 @@ export async function assertNativeInoxUnicodeStringLiteral(): Promise<void> {
     })
     await writeFile(input, "console.log('foo 1 ололо')\n")
 
-    const emit = await runCommand(join(rootDir, 'dist/inox'), [input, outputCc])
+    const emit = await runCommand(compilerPath, [input, outputCc])
 
     assert.equal(
       emit.code,
@@ -42,7 +42,11 @@ export async function assertNativeInoxUnicodeStringLiteral(): Promise<void> {
 
     const run = await runCommand(output, [])
 
-    assert.equal(run.code, 0, `native unicode string literal run failed\nstdout:\n${run.stdout}\nstderr:\n${run.stderr}`)
+    assert.equal(
+      run.code,
+      0,
+      `native unicode string literal run failed\nstdout:\n${run.stdout}\nstderr:\n${run.stderr}`
+    )
     assert.equal(run.stderr, '')
     assert.equal(run.stdout, 'foo 1 ололо\n')
   } finally {
@@ -54,5 +58,5 @@ export async function assertNativeInoxUnicodeStringLiteral(): Promise<void> {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  await assertNativeInoxUnicodeStringLiteral()
+  await assertNativeInoxUnicodeStringLiteral(join(rootDir, 'dist/inox'))
 }

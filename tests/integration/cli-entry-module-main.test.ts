@@ -12,7 +12,7 @@ type CommandResult = {
 
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))))
 
-export async function assertCliEntryModuleMain(): Promise<void> {
+export async function assertCliEntryModuleMain(compilerPath: string): Promise<void> {
   const tempRoot = join(repoRoot, 'dist/test-tmp')
 
   await mkdir(tempRoot, {
@@ -46,11 +46,7 @@ export async function assertCliEntryModuleMain(): Promise<void> {
       ].join('\n')
     )
 
-    const result = await runCommand(
-      join(repoRoot, 'dist/inox'),
-      [entry, '--emit', 'cc', '--out-dir', outDir, '--entry'],
-      workspace
-    )
+    const result = await runCommand(compilerPath, [entry, '--emit', 'cc', '--out-dir', outDir, '--entry'], workspace)
 
     assert.equal(result.code, 0, `driver module emit failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
 
@@ -109,5 +105,5 @@ async function runCommand(command: string, args: string[], cwd: string): Promise
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  await assertCliEntryModuleMain()
+  await assertCliEntryModuleMain(join(repoRoot, 'dist/inox'))
 }
