@@ -87,8 +87,8 @@ function assertLegacyResultMetadataIsAbsent(
   assert.equal(value.resultArrayElementTypeId, undefined)
   assert.equal(value.cppType, undefined)
   assert.equal(value.valueType, undefined)
-  assert.equal(value.promiseValueType, undefined)
-  assert.equal(value.promiseRejectionValueType, undefined)
+  assert.equal(Object.prototype.hasOwnProperty.call(value, 'promiseValueType'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(value, 'promiseRejectionValueType'), false)
   assert.equal(value.nullable, undefined)
   assert.equal(value.owned, undefined)
 }

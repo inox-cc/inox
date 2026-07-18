@@ -366,8 +366,6 @@ export type LibraryOperationVariantDescriptor = {
   resultTypeId?: LibraryObjectTypeId | null
   cppType?: string | null
   valueType?: string | null
-  promiseValueType?: string | null
-  promiseRejectionValueType?: string | null
   nullable?: boolean
   owned?: boolean
   callbackLifetime?: LibraryCallbackLifetime | null
@@ -419,8 +417,6 @@ export type LibraryOperationDescriptor = {
   variants?: LibraryOperationVariantDescriptor[]
   cppType?: string | null
   valueType?: string | null
-  promiseValueType?: string | null
-  promiseRejectionValueType?: string | null
   nullable?: boolean
   owned?: boolean
   constantValue?: string | null

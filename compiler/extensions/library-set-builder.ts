@@ -1216,12 +1216,6 @@ function legacyResultMetadataField(
   if (legacyMetadataIsPresent(variant?.valueType ?? operation.valueType)) {
     return 'valueType'
   }
-  if (legacyMetadataIsPresent(variant?.promiseValueType ?? operation.promiseValueType)) {
-    return 'promiseValueType'
-  }
-  if (legacyMetadataIsPresent(variant?.promiseRejectionValueType ?? operation.promiseRejectionValueType)) {
-    return 'promiseRejectionValueType'
-  }
   if (legacyMetadataIsPresent(variant?.nullable ?? operation.nullable)) {
     return 'nullable'
   }
@@ -1631,10 +1625,6 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           ':' +
           (item.valueType ?? '') +
           ':' +
-          (item.promiseValueType ?? '') +
-          ':' +
-          (item.promiseRejectionValueType ?? '') +
-          ':' +
           (item.nullable === true ? 'nullable' : 'required') +
           ':' +
           (item.owned === true ? 'owned' : 'borrowed') +
@@ -2008,10 +1998,6 @@ function operationVariantsFingerprint(operation: LibraryOperationDescriptor): st
         (variant.cppType ?? '') +
         ':' +
         (variant.valueType ?? '') +
-        ':' +
-        (variant.promiseValueType ?? '') +
-        ':' +
-        (variant.promiseRejectionValueType ?? '') +
         ':' +
         (variant.nullable === true ? 'nullable' : 'required') +
         ':' +

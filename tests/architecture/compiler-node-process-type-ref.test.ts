@@ -149,8 +149,8 @@ function assertNoLegacyResultMetadata(operation: LibraryOperationDescriptor): vo
   assert.equal(operation.resultTypeId, undefined)
   assert.equal(operation.cppType, undefined)
   assert.equal(operation.valueType, undefined)
-  assert.equal(operation.promiseValueType, undefined)
-  assert.equal(operation.promiseRejectionValueType, undefined)
+  assert.equal(Object.prototype.hasOwnProperty.call(operation, 'promiseValueType'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(operation, 'promiseRejectionValueType'), false)
   assert.equal(operation.nullable, undefined)
   assert.equal(operation.owned, undefined)
 }

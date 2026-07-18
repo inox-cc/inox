@@ -4866,10 +4866,6 @@ class Checker {
         expression.arrayElementTypeId = arrayElementTypeId
       }
 
-      expression.promiseValueType = variant?.promiseValueType ?? operation.promiseValueType ?? null
-      expression.promiseRejectionValueType =
-        variant?.promiseRejectionValueType ?? operation.promiseRejectionValueType ?? null
-
       expression.libraryOwned = (variant?.owned ?? operation.owned) === true
       expression.libraryResultTypeId = resultTypeId ?? null
       expression.nullable = (variant?.nullable ?? operation.nullable) === true

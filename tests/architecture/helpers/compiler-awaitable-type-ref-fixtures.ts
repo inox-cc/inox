@@ -8,7 +8,6 @@ import type {
 
 const libraryId = 'fixture:awaitable'
 const completionTypeId = `${libraryId}#Completion`
-const conflictedOperationId = `${libraryId}#read-conflicted`
 
 export function neutralAwaitableLibrarySet(): CompilerLibrarySet {
   const library: CompilerLibraryDescriptor = {
@@ -20,7 +19,7 @@ export function neutralAwaitableLibrarySet(): CompilerLibrarySet {
         kind: 'global',
         source: 'tests/architecture/fixtures/awaitable.d.ts',
         declarationSource:
-          'export {}; declare global { function readTypedCompletion(): unknown; function readConflictedCompletion(): unknown; function readLegacyCompletion(): unknown; }',
+          'export {}; declare global { function readTypedCompletion(): unknown; function readUnawaitableCompletion(): unknown; }',
         compilerImplemented: true
       }
     ],
@@ -46,16 +45,14 @@ export function neutralAwaitableLibrarySet(): CompilerLibrarySet {
         resultTypeRef: completionTypeRef()
       },
       awaitableOperation('global:readTypedCompletion', `${libraryId}#read-typed`),
-      awaitableOperation('global:readConflictedCompletion', conflictedOperationId),
       {
         libraryId,
-        bindingId: 'global:readLegacyCompletion',
-        operationId: `${libraryId}#read-legacy`,
+        bindingId: 'global:readUnawaitableCompletion',
+        operationId: `${libraryId}#read-unawaitable`,
         kind: 'call',
         runtimeRequirements: [],
-        cExpression: 'fixture_read_legacy_completion',
-        valueType: 'promise',
-        promiseValueType: 'number',
+        cExpression: 'fixture_read_unawaitable_completion',
+        resultTypeRef: unawaitableCompletionTypeRef(),
         minArgs: 0,
         maxArgs: 0,
         argumentChecks: []
@@ -64,15 +61,7 @@ export function neutralAwaitableLibrarySet(): CompilerLibrarySet {
     intrinsicBindings: [{ role: 'async-result', bindingId: 'intrinsic:completion' }],
     runtimeRequirements: []
   }
-  const libraries = createCompilerLibrarySet([library])
-  const conflicted = libraries.operations.find((operation) => operation.operationId === conflictedOperationId)
-
-  if (typeof conflicted === 'undefined') {
-    throw new Error(`Missing synthetic operation ${conflictedOperationId}`)
-  }
-
-  conflicted.promiseValueType = 'number'
-  return libraries
+  return createCompilerLibrarySet([library])
 }
 
 function awaitableOperation(bindingId: string, operationId: string): LibraryOperationDescriptor {
@@ -103,6 +92,17 @@ function completionTypeRef(): TypeRef {
         args: [primitiveTypeRef('string'), primitiveTypeRef('boolean')]
       }
     ]
+  }
+}
+
+function unawaitableCompletionTypeRef(): TypeRef {
+  return {
+    kind: 'nominal',
+    typeId: completionTypeId,
+    args: [],
+    nullable: false,
+    ownership: 'value',
+    traits: []
   }
 }
 
