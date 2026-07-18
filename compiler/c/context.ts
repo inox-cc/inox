@@ -24,7 +24,8 @@ import {
   isNullableScalarType,
   isOpaqueRuntimeValueType,
   libraryNativeCppType,
-  compilerLibraryIntrinsicNativeCppType
+  compilerLibraryIntrinsicNativeCppType,
+  requireCompilerLibraryAsyncResultCppType
 } from './value-types.ts'
 
 export type CLoopFlowTarget = {
@@ -590,6 +591,7 @@ function emitOwnedValueReference(name: string, storage: COwnedValueWriteStorage)
 
 type CReturnValueDeclarationContext = {
   cleanupEnabled?: boolean | null
+  libraries?: CCompilerLibrarySet | null
   returnLibraryNative?: boolean | null
   returnFlowUsed?: boolean | null
   returnNullable?: boolean | null
@@ -669,7 +671,11 @@ export function emitReturnValueDeclarations(context: CReturnValueDeclarationCont
   }
 
   if (returnType === 'promise') {
-    return ['inox_promise* inox_return = 0;']
+    if (context.libraries === null || typeof context.libraries === 'undefined') {
+      throw new Error('C async-result return storage requires compiler libraries')
+    }
+
+    return [`${requireCompilerLibraryAsyncResultCppType(context.libraries, null)} inox_return{};`]
   }
 
   if (context.returnNullable !== true && libraryCppType !== null) {

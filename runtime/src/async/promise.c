@@ -24,6 +24,7 @@ typedef struct inox_promise_reaction {
 
 struct inox_promise {
   inox_loop* loop;
+  inox_allocator* allocator;
   unsigned int ref_count;
   inox_promise_state state;
   bool handled;
@@ -66,6 +67,7 @@ inox_status inox_promise_new(inox_loop* loop, inox_promise** out) {
   }
 
   promise->loop = loop;
+  promise->allocator = loop->allocator;
   promise->ref_count = 1;
   promise->state = INOX_PROMISE_PENDING;
   promise->handled = false;
@@ -110,7 +112,7 @@ void inox_promise_release(inox_promise* promise) {
 #ifdef INOX_DEBUG_MEMORY
   inox_debug_memory_record_promise_destroyed();
 #endif
-  promise->loop->allocator->free(promise->loop->allocator->user, promise, sizeof(inox_promise), _Alignof(inox_promise));
+  promise->allocator->free(promise->allocator->user, promise, sizeof(inox_promise), _Alignof(inox_promise));
 }
 
 inox_promise_state inox_promise_get_state(const inox_promise* promise) {
@@ -183,8 +185,8 @@ inox_status inox_promise_then(
     return INOX_ERR_TYPE;
   }
 
-  inox_promise_reaction* reaction = promise->loop->allocator->alloc(
-    promise->loop->allocator->user, sizeof(inox_promise_reaction), _Alignof(inox_promise_reaction)
+  inox_promise_reaction* reaction = promise->allocator->alloc(
+    promise->allocator->user, sizeof(inox_promise_reaction), _Alignof(inox_promise_reaction)
   );
 
   if (reaction == 0) {
@@ -225,8 +227,8 @@ inox_status inox_promise_chain(
     return status;
   }
 
-  inox_promise_reaction* reaction = promise->loop->allocator->alloc(
-    promise->loop->allocator->user, sizeof(inox_promise_reaction), _Alignof(inox_promise_reaction)
+  inox_promise_reaction* reaction = promise->allocator->alloc(
+    promise->allocator->user, sizeof(inox_promise_reaction), _Alignof(inox_promise_reaction)
   );
 
   if (reaction == 0) {
@@ -389,8 +391,8 @@ static inox_status inox_promise_add_reaction(inox_promise* promise, inox_promise
 }
 
 static inox_status inox_promise_schedule_reaction(inox_promise* promise, inox_promise_reaction* reaction) {
-  inox_promise_reaction_task* task = promise->loop->allocator->alloc(
-    promise->loop->allocator->user, sizeof(inox_promise_reaction_task), _Alignof(inox_promise_reaction_task)
+  inox_promise_reaction_task* task = promise->allocator->alloc(
+    promise->allocator->user, sizeof(inox_promise_reaction_task), _Alignof(inox_promise_reaction_task)
   );
 
   if (task == 0) {
@@ -526,7 +528,7 @@ static void inox_promise_reaction_task_finalizer(void* context) {
   }
 
   inox_promise_free_reaction(task->promise, task->reaction);
-  inox_allocator* allocator = task->promise->loop->allocator;
+  inox_allocator* allocator = task->promise->allocator;
   inox_promise* promise = task->promise;
   allocator->free(allocator->user, task, sizeof(inox_promise_reaction_task), _Alignof(inox_promise_reaction_task));
   inox_promise_release(promise);
@@ -543,7 +545,7 @@ static void inox_promise_free_reaction(inox_promise* promise, inox_promise_react
 
   inox_promise_release(reaction->child);
 
-  promise->loop->allocator->free(
-    promise->loop->allocator->user, reaction, sizeof(inox_promise_reaction), _Alignof(inox_promise_reaction)
+  promise->allocator->free(
+    promise->allocator->user, reaction, sizeof(inox_promise_reaction), _Alignof(inox_promise_reaction)
   );
 }

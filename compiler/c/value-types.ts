@@ -256,7 +256,7 @@ export function emitCType(valueType: CValueTypeInput): string {
   }
 
   if (valueType === 'promise') {
-    return 'inox_promise*'
+    throw new Error('C async-result type requires package-native TypeRef metadata')
   }
 
   return 'double'
@@ -340,6 +340,19 @@ export function requireCompilerLibraryIntrinsicNativeCppType(
   }
 
   return cppType
+}
+
+export function requireCompilerLibraryAsyncResultCppType(
+  libraries: CCompilerLibrarySet,
+  typeRef: CTypeRef | null | undefined
+): string {
+  const cppType = libraryNativeCppType(cTypeRefNativeShape(typeRef, libraries))
+
+  if (cppType !== null) {
+    return cppType
+  }
+
+  return requireCompilerLibraryIntrinsicNativeCppType(libraries, 'async-result')
 }
 
 export function compilerLibraryIntrinsicAsyncResultCExpression(

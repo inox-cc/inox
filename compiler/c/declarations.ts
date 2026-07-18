@@ -74,7 +74,8 @@ import {
   isRuntimeNullableType,
   isThrowingFunctionRuntimeOut,
   libraryNativeBoundaryCppType,
-  libraryNativeCppType
+  libraryNativeCppType,
+  requireCompilerLibraryAsyncResultCppType
 } from './value-types.ts'
 import type { ArrayLoweringDependencies } from './values/arrays.ts'
 import type { ClassLoweringDependencies } from './values/classes.ts'
@@ -392,10 +393,13 @@ function registerFunctionParamsInContext(
       context.nullableVariables.add(param.name)
     }
 
-    const libraryCppType = libraryNativeParamCppType(param)
+    const libraryCppType = libraryNativeParamCppType(param, context)
     const nativeClassParam = nativeClassParamName(param, context)
 
-    if (libraryCppType !== null) {
+    if (libraryCppType !== null && param.valueType === 'promise') {
+      context.variables.set(param.name, 'promise')
+      context.promiseValueTypes.set(param.name, declarationTypeOrUnknown(param.promiseValueType))
+    } else if (libraryCppType !== null) {
       context.variables.set(param.name, 'object')
       context.cppValueTypes.set(param.name, libraryCppType)
       registerObjectShape(context, param.name, param.shape)
@@ -688,7 +692,7 @@ function emitObjectFunctionFieldParam(
 }
 
 function emitFunctionHeadParam(param: CFunctionParam, index: number, statement: CNode, context: CEmitContext): string {
-  const libraryCppType = libraryNativeParamCppType(param)
+  const libraryCppType = libraryNativeParamCppType(param, context)
 
   if (libraryCppType !== null) {
     return `${libraryCppType} ${emitCLocalName(param.name)}`
@@ -1183,7 +1187,7 @@ function isThrowingClassMethod(info: CClassInfo, method: CNode, context: CEmitCo
 }
 
 function emitClassMethodParam(param: CFunctionParam, index: number, method: CNode, context: CEmitContext): string {
-  const libraryCppType = libraryNativeParamCppType(param)
+  const libraryCppType = libraryNativeParamCppType(param, context)
 
   if (libraryCppType !== null) {
     return `${libraryCppType} ${emitCLocalName(param.name)}`
@@ -1391,7 +1395,7 @@ function emitRuntimeParamPreludeForParam(
   const lines: string[] = []
   const localName = emitCLocalName(param.name)
 
-  if (libraryNativeParamCppType(param) !== null || isNativeClassParam(param, context)) {
+  if (libraryNativeParamCppType(param, context) !== null || isNativeClassParam(param, context)) {
     return lines
   }
 
@@ -1497,8 +1501,19 @@ function emitRuntimeParamPreludeForParam(
   return lines
 }
 
-function libraryNativeParamCppType(param: CFunctionParam): string | null {
-  return libraryNativeBoundaryCppType(param.valueType, param.nullable === true, param.optional === true, param.shape)
+function libraryNativeParamCppType(param: CFunctionParam, context: CEmitContext): string | null {
+  const cppType = libraryNativeBoundaryCppType(
+    param.valueType,
+    param.nullable === true,
+    param.optional === true,
+    param.shape
+  )
+
+  if (cppType !== null || param.valueType !== 'promise') {
+    return cppType
+  }
+
+  return requireCompilerLibraryAsyncResultCppType(context.libraries, param.typeRef)
 }
 
 function isNativeClassParam(param: CFunctionParam, context: CFunctionContext): boolean {

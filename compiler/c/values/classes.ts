@@ -49,7 +49,8 @@ import {
   isNullableScalarType,
   isOpaqueRuntimeValueType,
   libraryNativeBoundaryCppType,
-  libraryNativeCppType
+  libraryNativeCppType,
+  requireCompilerLibraryAsyncResultCppType
 } from '../value-types.ts'
 import { emitObjectValueReference, resolveCObjectExpressionName } from './objects.ts'
 import { collectTemplatePlaceholderExpressions } from './strings.ts'
@@ -89,6 +90,9 @@ type ClassEmitContext = {
 }
 export type ClassInfoLookupContext = {
   classInfos: CClassInfoMap
+}
+type ClassPhysicalTypeContext = ClassInfoLookupContext & {
+  libraries: CEmitContext['libraries']
 }
 type ClassDescriptorScanScope = {
   className: string | null
@@ -609,7 +613,7 @@ function emitCClassFieldDefaultValue(field: CObjectShapeField, context: ClassInf
   return '0'
 }
 
-function emitCClassParamType(param: CFunctionParam, context: ClassInfoLookupContext): string {
+function emitCClassParamType(param: CFunctionParam, context: ClassPhysicalTypeContext): string {
   if (
     param.className !== null &&
     typeof param.className !== 'undefined' &&
@@ -619,7 +623,7 @@ function emitCClassParamType(param: CFunctionParam, context: ClassInfoLookupCont
     return 'const ' + emitCClassTypeNameForClassName(context, param.className) + '&'
   }
 
-  const libraryCppType = classParamLibraryNativeCppType(param)
+  const libraryCppType = classParamPhysicalCppType(param, context)
 
   if (libraryCppType !== null) {
     return libraryCppType
@@ -645,6 +649,19 @@ function classParamLibraryNativeCppType(param: CFunctionParam): string | null {
   )
 }
 
+function classParamPhysicalCppType(
+  param: CFunctionParam,
+  context: ClassPhysicalTypeContext
+): string | null {
+  const cppType = classParamLibraryNativeCppType(param)
+
+  if (cppType !== null || param.valueType !== 'promise') {
+    return cppType
+  }
+
+  return requireCompilerLibraryAsyncResultCppType(context.libraries, param.typeRef)
+}
+
 function emitCClassParamName(param: CFunctionParam): string {
   if (
     param.className !== null &&
@@ -666,11 +683,11 @@ function emitCClassParamName(param: CFunctionParam): string {
   return emitCIdentifier(param.name)
 }
 
-function emitCClassParamDeclaration(param: CFunctionParam, context: ClassInfoLookupContext): string {
+function emitCClassParamDeclaration(param: CFunctionParam, context: ClassPhysicalTypeContext): string {
   return `${emitCClassParamType(param, context)} ${emitCClassParamName(param)}`
 }
 
-function emitCClassParamDeclarations(params: CFunctionParam[], context: ClassInfoLookupContext): string {
+function emitCClassParamDeclarations(params: CFunctionParam[], context: ClassPhysicalTypeContext): string {
   const declarations: string[] = []
 
   for (const param of params) {
@@ -843,7 +860,7 @@ function emitCClassDefaultConstructor(info: CClassInfo, context: ClassInfoLookup
   return `${emitCClassInfoTypeName(info)}()${emitCClassConstructorInitializers(info, context)} {}`
 }
 
-export function emitCClassConstructorPrototype(info: CClassInfo, context: ClassInfoLookupContext): string | null {
+export function emitCClassConstructorPrototype(info: CClassInfo, context: ClassPhysicalTypeContext): string | null {
   const constructorMethod = info.constructor
 
   if (constructorMethod === null || typeof constructorMethod === 'undefined') {
@@ -857,7 +874,7 @@ export function emitCClassConstructorPrototype(info: CClassInfo, context: ClassI
 
 export function emitCClassConstructorHead(
   info: CClassInfo,
-  context: ClassInfoLookupContext,
+  context: ClassPhysicalTypeContext,
   fieldInitializers?: Map<string, string> | null
 ): string | null {
   const constructorMethod = info.constructor

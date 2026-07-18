@@ -174,6 +174,7 @@ import {
   compilerLibraryIntrinsicAsyncResultCExpression,
   compilerLibraryIntrinsicNativeCAwaitExpression,
   compilerLibraryIntrinsicNativeCppType,
+  requireCompilerLibraryAsyncResultCppType,
   isManagedRuntimeReturnType,
   isNullableScalarType,
   isOpaqueRuntimeValueType,
@@ -2623,7 +2624,8 @@ function emitUninitializedScalarVariableDeclaration(statement: AnyNode, context:
   }
 
   if (inferred === 'promise') {
-    return [`${prefix}inox_promise* ${emitCIdentifier(statement.name)} = 0;`]
+    const cppType = requireCompilerLibraryAsyncResultCppType(context.libraries, statement.typeRef)
+    return [`${prefix}${cppType} ${emitCIdentifier(statement.name)}{};`]
   }
 
   if (inferred === 'function') {
@@ -2656,7 +2658,7 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
   const libraryObject = emitPreparedCompilerLibraryCallExpression(
     statement.init,
     context,
-    statement.init.valueType === 'promise' ? { owned: false } : null
+    statement.init.valueType === 'promise' ? { out: name, owned: false } : null
   )
 
   if (libraryObject !== null && statement.init.valueType === 'promise') {
@@ -2754,22 +2756,23 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
 
   if (inferred === 'promise') {
     const promise = emitPreparedPromiseExpression(statement.init, context, promiseLoweringDependencies, {
-      out: name
+      out: name,
+      owned: false
     })
 
     if (promise !== null && typeof promise !== 'undefined') {
       registerModulePromiseAssignmentMetadata(statement, promise, context)
 
-      if (promise.expression === name) {
+      const expression =
+        statement.init.type === 'Reference' ? emitReference(statement.init, context) : promise.expression
+
+      if (expression === name) {
         return promise.lines
       }
 
       const lines: string[] = []
       pushAll(lines, promise.lines)
-      lines.push(`${name} = ${promise.expression};`)
-      if (promise.expression !== '0') {
-        lines.push(`inox_promise_retain(${name});`)
-      }
+      lines.push(`${name} = ${expression};`)
       return lines
     }
   }
