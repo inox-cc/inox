@@ -6,9 +6,7 @@ import {
   genericTypeApplicationFromTypeName,
   indexedAccessTypeNameFromTypeName,
   isNullableTypeName,
-  isPromiseTypeName,
   nullableTypeNameFromKnownTypeName,
-  promiseValueTypeNameFromKnownTypeName,
   recordTypeNamesFromTypeName,
   unionTypeNamesFromTypeName
 } from '../type-names.ts'
@@ -277,25 +275,6 @@ export function resolveDeclaredType(
       },
       fields: []
     }
-
-    return info
-  }
-
-  if (name === 'promise') {
-    const info = unresolvedTypeInfo()
-    info.valueType = 'promise'
-    info.promiseValueType = 'unknown'
-
-    return info
-  }
-
-  if (isPromiseTypeName(name)) {
-    const promiseValueTypeName = promiseValueTypeNameFromKnownTypeName(name)
-    const valueInfo = resolveDeclaredType(context, promiseValueTypeName, loc)
-    const info = unresolvedTypeInfo()
-    info.valueType = 'promise'
-    info.shape = valueInfo.shape
-    info.promiseValueType = valueInfo.valueType
 
     return info
   }

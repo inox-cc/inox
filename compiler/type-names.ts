@@ -76,30 +76,6 @@ export function recordTypeNamesFromTypeName(name: string): RecordTypeNames | nul
   }
 }
 
-export function promiseValueTypeNameFromTypeName(name: string): string | null {
-  const inner = genericTypeInner(name, 'promise')
-
-  if (inner !== null && typeof inner !== 'undefined') {
-    const args = splitGenericArgs(inner)
-
-    if (args.length === 1) {
-      return args[0]
-    }
-
-    return null
-  }
-
-  return null
-}
-
-export function isPromiseTypeName(name: string): boolean {
-  return hasGenericTypeInner(name, 'promise')
-}
-
-export function promiseValueTypeNameFromKnownTypeName(name: string): string {
-  return knownGenericTypeInner(name, 'promise')
-}
-
 export function splitGenericArgs(value: string): string[] {
   return splitDelimitedTypeArgs(value, ',')
 }
@@ -258,28 +234,12 @@ export function normalizeTypeName(name: string): string {
     return 'object'
   }
 
-  const normalizedPromiseInner = genericTypeInner(name, 'promise')
-
-  if (normalizedPromiseInner !== null && typeof normalizedPromiseInner !== 'undefined') {
-    const args = splitGenericArgs(normalizedPromiseInner)
-
-    if (args.length === 1) {
-      return `promise<${normalizeTypeName(args[0])}>`
-    }
-
-    return 'promise'
-  }
-
   if (isSimpleTypeName(name)) {
     return name
   }
 
   if (name === 'array') {
     return 'array'
-  }
-
-  if (name === 'promise') {
-    return 'promise'
   }
 
   if (name === 'Function' || name === 'function') {
@@ -415,10 +375,6 @@ export function isBuiltinValueType(name: string): boolean {
   }
 
   if (name === 'object') {
-    return true
-  }
-
-  if (name === 'promise') {
     return true
   }
 

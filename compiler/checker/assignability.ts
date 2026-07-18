@@ -1,7 +1,6 @@
 import {
   isArrayTypeName,
   isNullableTypeName,
-  isPromiseTypeName,
   nullableTypeNameFromKnownTypeName,
   unionTypeNamesFromTypeName
 } from '../type-names.ts'
@@ -140,10 +139,6 @@ function assignabilityBaseType(valueType: ValueType): ValueType {
 
   if (isArrayTypeName(valueType)) {
     return 'array'
-  }
-
-  if (isPromiseTypeName(valueType)) {
-    return 'promise'
   }
 
   return valueType

@@ -4,9 +4,7 @@ import {
   isArrayTypeName,
   isBuiltinValueType,
   isNullableTypeName,
-  isPromiseTypeName,
   nullableTypeNameFromKnownTypeName,
-  promiseValueTypeNameFromKnownTypeName,
   unionTypeNamesFromTypeName
 } from '../type-names.ts'
 import type { AnyNode, ProgramNode } from '../types.ts'
@@ -146,17 +144,6 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
     const elementType = resolveDeclaredType(arrayElementTypeName, context)
 
     return arrayResolvedType(typeRefForResolvedType(elementType, arrayElementTypeName), context)
-  }
-
-  if (name === 'promise') {
-    return promiseResolvedType(null)
-  }
-
-  if (isPromiseTypeName(name)) {
-    const promiseValueTypeName = promiseValueTypeNameFromKnownTypeName(name)
-    const valueType = resolveDeclaredType(promiseValueTypeName, context)
-
-    return promiseResolvedType(valueType)
   }
 
   const nativeType = compilerLibraryNativeTypeForName(context.libraries, name)
@@ -1208,16 +1195,6 @@ function unknownTypeRef(): TypeRef {
     ownership: 'value',
     traits: []
   }
-}
-
-function promiseResolvedType(valueType: LowerResolvedType | null): LowerResolvedType {
-  const resolved = namedResolvedType('promise')
-  resolved.promiseValueType = resolvedValueType(valueType, 'unknown')
-  if (valueType !== null && typeof valueType !== 'undefined') {
-    resolved.shape = nullableNode(valueType.shape)
-  }
-
-  return resolved
 }
 
 function cloneResolvedType(source: LowerResolvedType): LowerResolvedType {
