@@ -15,7 +15,6 @@
 #include "inox/loop.h"
 #include "inox/main.h"
 #include "inox/object.h"
-#include "inox/promise.h"
 #include "inox/promise_runtime.h"
 #include "inox/string.h"
 

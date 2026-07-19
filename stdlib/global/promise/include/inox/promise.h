@@ -3,9 +3,11 @@
 
 #include "inox/value.h"
 
-struct inox_promise;
-
 namespace inox {
+
+namespace detail {
+class PromiseRuntimeBridge;
+}
 
 using PromiseReactionCallback = inox_status (*)(void* context, inox_value value);
 using PromiseChainCallback = inox_status (*)(void* context, inox_value value, inox_value* out);
@@ -13,19 +15,18 @@ using PromiseCallbackFinalizer = void (*)(void* context);
 
 class Promise {
 private:
-  inox_promise* promise_;
+  friend class detail::PromiseRuntimeBridge;
+
+  void* promise_;
 
 public:
   Promise();
-  explicit Promise(inox_promise* promise);
   Promise(const Promise& other);
   Promise(Promise&& other) noexcept;
   Promise& operator=(const Promise& other);
   Promise& operator=(Promise&& other) noexcept;
-  Promise& operator=(inox_promise* promise);
   ~Promise();
 
-  static Promise adopt(inox_promise* promise);
   static Promise create();
   static Promise resolve();
   static Promise resolve(Value value);
@@ -52,15 +53,7 @@ public:
   inox_status fulfill(Value value) const;
   inox_status rejectWith(Value error) const;
 
-  inox_promise* raw() const;
   bool valid() const;
-  bool hasUnhandledRejection() const;
-  operator inox_promise*() const;
-  inox_promise** operator&();
-  const inox_promise* const* operator&() const;
-  inox_promise** out();
-  void reset();
-  inox_promise* release();
 };
 
 } // namespace inox

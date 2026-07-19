@@ -3,6 +3,10 @@ import type { LibraryAsyncResultOperationKind } from '../../extensions/types.ts'
 import { typeRefTraitArgument, typeRefValueTypeOrNull } from '../../extensions/type-ref-compatibility.ts'
 import { collectArrowCaptures, functionUsesExternalEventLoop } from './callbacks.ts'
 import { cCompilerLibrarySetValue, cTypeRefMapValue } from '../types.ts'
+import {
+  compilerLibraryIntrinsicNativeCAsyncTaskBridge,
+  renderCompilerLibraryCAsyncTaskBridgeExpression
+} from '../value-types.ts'
 import type {
   CCallbackContextWrapper,
   CCallbackWrapper,
@@ -848,7 +852,7 @@ export function emitPreparedPromiseReturningCallExpression(
   const lines: string[] = []
   appendLines(lines, call.lines)
   lines.push(`${out} = ${call.expression};`)
-  lines.push(`if (${out} == 0) ${emitFailureStatement(context)}`)
+  lines.push(`if (!(${asyncResultValidExpression(context.libraries, out)})) ${emitFailureStatement(context)}`)
 
   return {
     lines,
@@ -856,6 +860,16 @@ export function emitPreparedPromiseReturningCallExpression(
     valueType,
     rejectionValueType: 'unknown'
   }
+}
+
+function asyncResultValidExpression(libraries: CCompilerLibrarySet, source: string): string {
+  const bridge = compilerLibraryIntrinsicNativeCAsyncTaskBridge(libraries, 'async-result')
+
+  if (bridge === null) {
+    return 'false'
+  }
+
+  return renderCompilerLibraryCAsyncTaskBridgeExpression(bridge, { kind: 'valid', source })
 }
 
 function appendLines(target: string[], values: string[]): void {

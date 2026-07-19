@@ -1,21 +1,20 @@
 #include "inox/promise.h"
 
 #include <memory>
-#include <utility>
 
 #include "inox/loop.h"
 #include "inox/promise_runtime.h"
 
 namespace inox {
 
-Promise::Promise() : promise_(nullptr) {}
-
-Promise::Promise(inox_promise* promise) : promise_(promise) {
-  inox_promise_retain(promise_);
+static inox_promise* rawPromise(void* promise) {
+  return static_cast<inox_promise*>(promise);
 }
 
+Promise::Promise() : promise_(nullptr) {}
+
 Promise::Promise(const Promise& other) : promise_(other.promise_) {
-  inox_promise_retain(promise_);
+  inox_promise_retain(rawPromise(promise_));
 }
 
 Promise::Promise(Promise&& other) noexcept : promise_(other.promise_) {
@@ -24,8 +23,8 @@ Promise::Promise(Promise&& other) noexcept : promise_(other.promise_) {
 
 Promise& Promise::operator=(const Promise& other) {
   if (this != std::addressof(other)) {
-    inox_promise_retain(other.promise_);
-    inox_promise_release(promise_);
+    inox_promise_retain(rawPromise(other.promise_));
+    inox_promise_release(rawPromise(promise_));
     promise_ = other.promise_;
   }
 
@@ -34,7 +33,7 @@ Promise& Promise::operator=(const Promise& other) {
 
 Promise& Promise::operator=(Promise&& other) noexcept {
   if (this != std::addressof(other)) {
-    inox_promise_release(promise_);
+    inox_promise_release(rawPromise(promise_));
     promise_ = other.promise_;
     other.promise_ = nullptr;
   }
@@ -42,23 +41,19 @@ Promise& Promise::operator=(Promise&& other) noexcept {
   return *this;
 }
 
-Promise& Promise::operator=(inox_promise* promise) {
-  inox_promise_retain(promise);
-  inox_promise_release(promise_);
-  promise_ = promise;
-
-  return *this;
-}
-
 Promise::~Promise() {
-  inox_promise_release(promise_);
+  inox_promise_release(rawPromise(promise_));
 }
 
-Promise Promise::adopt(inox_promise* promise) {
+namespace detail {
+
+Promise PromiseRuntimeBridge::adopt(inox_promise* promise) {
   Promise result;
   result.promise_ = promise;
   return result;
 }
+
+} // namespace detail
 
 Promise Promise::create() {
   inox_promise* promise = nullptr;
@@ -68,7 +63,7 @@ Promise Promise::create() {
     return {};
   }
 
-  return adopt(promise);
+  return detail::PromiseRuntimeBridge::adopt(promise);
 }
 
 Promise Promise::resolve() {
@@ -83,7 +78,7 @@ Promise Promise::resolve(Value value) {
     return {};
   }
 
-  return adopt(promise);
+  return detail::PromiseRuntimeBridge::adopt(promise);
 }
 
 Promise Promise::reject() {
@@ -98,7 +93,7 @@ Promise Promise::reject(Value error) {
     return {};
   }
 
-  return adopt(promise);
+  return detail::PromiseRuntimeBridge::adopt(promise);
 }
 
 Promise Promise::then(
@@ -108,12 +103,12 @@ Promise Promise::then(
 ) const {
   inox_promise* child = nullptr;
 
-  if (inox_promise_chain(promise_, onFulfilled, nullptr, context, finalizer, &child) != INOX_OK) {
+  if (inox_promise_chain(rawPromise(promise_), onFulfilled, nullptr, context, finalizer, &child) != INOX_OK) {
     throw_value(Value());
     return {};
   }
 
-  return adopt(child);
+  return detail::PromiseRuntimeBridge::adopt(child);
 }
 
 Promise Promise::catchError(
@@ -123,12 +118,12 @@ Promise Promise::catchError(
 ) const {
   inox_promise* child = nullptr;
 
-  if (inox_promise_catch(promise_, onRejected, context, finalizer, &child) != INOX_OK) {
+  if (inox_promise_catch(rawPromise(promise_), onRejected, context, finalizer, &child) != INOX_OK) {
     throw_value(Value());
     return {};
   }
 
-  return adopt(child);
+  return detail::PromiseRuntimeBridge::adopt(child);
 }
 
 inox_status Promise::observe(
@@ -137,13 +132,13 @@ inox_status Promise::observe(
   void* context,
   PromiseCallbackFinalizer finalizer
 ) const {
-  return inox_promise_then(promise_, onFulfilled, onRejected, context, finalizer);
+  return inox_promise_then(rawPromise(promise_), onFulfilled, onRejected, context, finalizer);
 }
 
 Value Promise::awaitValue() const {
   Value value;
   inox_promise_state state = INOX_PROMISE_PENDING;
-  const inox_status status = inox_promise_await(loop(), promise_, true, value.out(), &state);
+  const inox_status status = inox_promise_await(loop(), rawPromise(promise_), true, value.out(), &state);
 
   if (status != INOX_OK) {
     throw_value(Value());
@@ -164,49 +159,15 @@ Value Promise::awaitValue() const {
 }
 
 inox_status Promise::fulfill(Value value) const {
-  return inox_promise_resolve(promise_, value.raw());
+  return inox_promise_resolve(rawPromise(promise_), value.raw());
 }
 
 inox_status Promise::rejectWith(Value error) const {
-  return inox_promise_reject(promise_, error.raw());
-}
-
-inox_promise* Promise::raw() const {
-  return promise_;
+  return inox_promise_reject(rawPromise(promise_), error.raw());
 }
 
 bool Promise::valid() const {
   return promise_ != nullptr;
-}
-
-bool Promise::hasUnhandledRejection() const {
-  return inox_promise_is_unhandled_rejection(promise_);
-}
-
-Promise::operator inox_promise*() const {
-  return promise_;
-}
-
-inox_promise** Promise::operator&() {
-  return out();
-}
-
-const inox_promise* const* Promise::operator&() const {
-  return &promise_;
-}
-
-inox_promise** Promise::out() {
-  reset();
-  return &promise_;
-}
-
-void Promise::reset() {
-  inox_promise_release(promise_);
-  promise_ = nullptr;
-}
-
-inox_promise* Promise::release() {
-  return std::exchange(promise_, nullptr);
 }
 
 } // namespace inox

@@ -67,6 +67,20 @@ inox_status inox_promise_reject(inox_promise* promise, inox_value error);
 
 #ifdef __cplusplus
 }
+
+namespace inox {
+
+class Promise;
+
+namespace detail {
+
+class PromiseRuntimeBridge {
+public:
+  static Promise adopt(inox_promise* promise);
+};
+
+} // namespace detail
+} // namespace inox
 #endif
 
 #endif

@@ -1968,7 +1968,7 @@ Promise FetchResponse::text() const {
     return Promise();
   }
 
-  return Promise::adopt(promise);
+  return detail::PromiseRuntimeBridge::adopt(promise);
 }
 
 FetchHeaders::FetchHeaders() : Value() {}
@@ -2165,7 +2165,7 @@ Promise fetch(StringView url) {
     return Promise();
   }
 
-  return Promise::adopt(promise);
+  return detail::PromiseRuntimeBridge::adopt(promise);
 }
 
 Promise fetch(StringView url, const Value& init) {
@@ -2183,7 +2183,7 @@ Promise fetch(StringView url, const Value& init) {
     return Promise();
   }
 
-  return Promise::adopt(promise);
+  return detail::PromiseRuntimeBridge::adopt(promise);
 }
 
 } // namespace inox
