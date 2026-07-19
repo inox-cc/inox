@@ -98,7 +98,7 @@ async function checkFs() {
 
 async function checkFetch() {
   try {
-    const res = await fetch('https://example.com/')
+    const res = await fetch('http://example.com/')
     console.log('Status', res.status)
     const txt = await res.text()
     console.log('Text', txt)
