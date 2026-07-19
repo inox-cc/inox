@@ -52,6 +52,7 @@ export type FeatureTestFile = {
   source: string
   targets: string[]
   expectation: FeatureExpectation
+  expectedExitCode: number
   expectedStdout: string
   expectedStderr: string
   nodeSkipReason?: string
@@ -256,6 +257,7 @@ function parseFeatureTestFile(path: string, raw: string): FeatureTestFile {
   const targets: string[] = []
   const stdout: string[] = []
   const stderr: string[] = []
+  let expectedExitCode = 0
   let nodeSkipReason: string | undefined
   let expectation: FeatureExpectation | undefined
   let sourceStart = lines.length
@@ -280,6 +282,8 @@ function parseFeatureTestFile(path: string, raw: string): FeatureTestFile {
       stdout.push(value)
     } else if (key === 'stderr') {
       stderr.push(value)
+    } else if (key === 'exit-code') {
+      expectedExitCode = parseExpectedExitCode(value)
     } else if (key === 'skip-node') {
       nodeSkipReason = value.length > 0 ? value : 'node: skipped by test directive'
     } else {
@@ -298,11 +302,23 @@ function parseFeatureTestFile(path: string, raw: string): FeatureTestFile {
     source,
     targets,
     expectation,
+    expectedExitCode,
     expectedStdout: expectedText(stdout),
     expectedStderr: expectedText(stderr),
     nodeSkipReason,
     usesModuleGraph: usesModuleImport(source)
   }
+}
+
+function parseExpectedExitCode(value: string): number {
+  const exitCode = Number(value)
+
+  assert.ok(
+    Number.isInteger(exitCode) && exitCode >= 0 && exitCode <= 255,
+    '@exit-code must be an integer from 0 to 255'
+  )
+
+  return exitCode
 }
 
 function isInoxFeaturePath(path: string): boolean {
@@ -375,11 +391,11 @@ async function assertCompilesAndRuns(featureFile: FeatureTestFile, compiler: Fea
     )
 
     const run = await runCommand(exePath, [])
-    keepArtifacts = run.code !== 0
+    keepArtifacts = run.code !== featureFile.expectedExitCode
 
     assert.equal(
       run.code,
-      0,
+      featureFile.expectedExitCode,
       `${featureFile.name}: emitted-binary-run failed\nemitted C++: ${emittedCPath}\nstdout: ${run.stdout}\nstderr: ${run.stderr}`
     )
     assert.equal(
@@ -409,7 +425,11 @@ async function assertRunsWithNode(featureFile: FeatureTestFile): Promise<void> {
 
   const run = await runCommand('node', [featureFile.path])
 
-  assert.equal(run.code, 0, `${featureFile.name}: node-run failed\nstdout: ${run.stdout}\nstderr: ${run.stderr}`)
+  assert.equal(
+    run.code,
+    featureFile.expectedExitCode,
+    `${featureFile.name}: node-run failed\nstdout: ${run.stdout}\nstderr: ${run.stderr}`
+  )
   assert.ok(
     nodeStdoutMatches(featureFile.expectedStdout, run.stdout),
     `${featureFile.name}: stdout mismatch\nactual: ${run.stdout}\nexpected: ${featureFile.expectedStdout}`

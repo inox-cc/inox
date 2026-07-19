@@ -1675,7 +1675,13 @@ function isClassMethodSignatureStart(tokens: Token[], position: number): boolean
     return false
   }
 
-  return tokenValue(tokens, current + 1) === '('
+  current = current + 1
+
+  if (tokenValue(tokens, current) === '<') {
+    current = findBalancedClose(tokens, current, '<', '>') + 1
+  }
+
+  return tokenValue(tokens, current) === '('
 }
 
 function isClassMemberNameToken(token: Token): boolean {

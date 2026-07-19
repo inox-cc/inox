@@ -579,6 +579,10 @@ function cUnitValueType(node: AnyNode, context: CEmitContext): string {
     return 'unknown'
   }
 
+  if (valueType === 'void' && node.init?.type === 'AwaitExpression') {
+    return 'unknown'
+  }
+
   return valueType
 }
 

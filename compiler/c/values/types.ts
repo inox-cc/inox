@@ -464,6 +464,10 @@ function shouldPreferReferenceMetadataType(
     return false
   }
 
+  if (variableType === 'unknown' && metadataType === 'void') {
+    return false
+  }
+
   if (variableType === 'unknown' && isConcreteContextValueType(metadataType)) {
     return true
   }

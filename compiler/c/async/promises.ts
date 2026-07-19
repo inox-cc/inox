@@ -909,7 +909,11 @@ function promiseStaticRejectionValueType(
   dependencies: PromiseLoweringDependencies
 ): string {
   if (method === 'reject') {
-    return dependencies.inferRejectedValueType(expression.args[0], context)
+    const reason = expression.args[0]
+
+    if (reason !== null && typeof reason !== 'undefined') {
+      return dependencies.inferRejectedValueType(reason, context)
+    }
   }
 
   return 'unknown'

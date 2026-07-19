@@ -24,7 +24,9 @@ declare global {
     constructor(executor: (resolve: (value: T) => void, reject: (reason: unknown) => void) => void);
 
     static succeed<T>(value: T): Future<T>;
+    static succeed(): Future<void>;
     static fail<E>(reason: E): Future<unknown>;
+    static fail(): Future<unknown>;
 
     map<U>(onFulfilled: (value: T) => U): Future<U>;
     recover(onRejected: (reason: unknown) => T): Future<T>;

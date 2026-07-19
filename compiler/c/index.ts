@@ -2570,6 +2570,10 @@ function inferModuleValueAssignmentType(statement: AnyNode, context: CFunctionCo
   const declared = knownValueType(statement.valueType)
 
   if (declared !== null && typeof declared !== 'undefined') {
+    if (declared === 'void' && statement.init?.type === 'AwaitExpression') {
+      return 'unknown'
+    }
+
     return declared
   }
 

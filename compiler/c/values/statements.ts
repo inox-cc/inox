@@ -3579,6 +3579,10 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     }
   }
 
+  if (statement.init.type === 'AwaitExpression' && deps.inferExpressionType(statement.init, context) === 'void') {
+    return emitRuntimeValueVariableDeclaration(statement, statement.init, context, 'unknown')
+  }
+
   if (statement.init.type === 'AwaitExpression' && deps.inferExpressionType(statement.init, context) === 'string') {
     return emitRuntimeStringVariableDeclaration(statement, statement.init, context)
   }
@@ -4070,7 +4074,11 @@ function emitDiscardedAwaitValueLines(value: PreparedExpression): string[] {
 
   for (const line of value.lines) {
     if (!referencedLater && line.startsWith(assignment)) {
-      lines.push(line.slice(assignment.length))
+      const initializer = line.endsWith(';')
+        ? line.slice(assignment.length, line.length - 1)
+        : line.slice(assignment.length)
+
+      lines.push(`(void)(${initializer});`)
     } else {
       lines.push(line)
     }
