@@ -12,9 +12,9 @@ import type {
   TypeRef
 } from '../../../../compiler/extensions/types.ts'
 import { errorTypeRef } from '../../error/compiler/index.ts'
-import { promiseTypeRef } from '../../promise/compiler/index.ts'
 
 const libraryId = 'global:fetch'
+const promiseTypeId = 'global:promise#Promise'
 const runtimeRequirement = libraryId
 const abortControllerTypeId = `${libraryId}#AbortController`
 const abortSignalTypeId = `${libraryId}#AbortSignal`
@@ -231,7 +231,7 @@ function receiverCall(
     cArgumentKinds,
     cReceiverAdapter: receiverAdapter,
     cCallStyle: 'member',
-    cFailureMode: resultTypeRef.kind === 'nominal' && resultTypeRef.typeId === 'global:promise#Promise' ? null : 'thrown',
+    cFailureMode: resultTypeRef.kind === 'nominal' && resultTypeRef.typeId === promiseTypeId ? null : 'thrown',
     minArgs: argumentChecks.length,
     maxArgs: argumentChecks.length,
     argumentChecks,
@@ -291,6 +291,17 @@ function nominalTypeRef(typeId: string): NominalTypeRef {
     nullable: false,
     ownership: 'value',
     traits: []
+  }
+}
+
+function promiseTypeRef(fulfilledType: TypeRef, rejectedType: TypeRef): NominalTypeRef {
+  return {
+    kind: 'nominal',
+    typeId: promiseTypeId,
+    args: [fulfilledType],
+    nullable: false,
+    ownership: 'value',
+    traits: [{ traitId: 'awaitable', args: [fulfilledType, rejectedType] }]
   }
 }
 

@@ -11,11 +11,11 @@ import type {
   TypeRef
 } from '../../../../compiler/extensions/types.ts'
 import { errorTypeRef } from '../../../global/error/compiler/index.ts'
-import { promiseTypeRef } from '../../../global/promise/compiler/index.ts'
 
 const libraryId = 'node:fs'
 const collectionsLibraryId = 'global:collections'
 const arrayTypeId = `${collectionsLibraryId}#Array`
+const promiseTypeId = 'global:promise#Promise'
 const promisesLibraryId = 'node:fs/promises'
 const runtimeRequirement = libraryId
 const statsTypeId = `${libraryId}#Stats`
@@ -448,6 +448,17 @@ function receiverBooleanOperation(
 
 function fsResultTypeRef(promise: boolean, fulfilledType: TypeRef): TypeRef {
   return promise ? promiseTypeRef(fulfilledType, errorTypeRef()) : fulfilledType
+}
+
+function promiseTypeRef(fulfilledType: TypeRef, rejectedType: TypeRef): NominalTypeRef {
+  return {
+    kind: 'nominal',
+    typeId: promiseTypeId,
+    args: [fulfilledType],
+    nullable: false,
+    ownership: 'value',
+    traits: [{ traitId: 'awaitable', args: [fulfilledType, rejectedType] }]
+  }
 }
 
 function syncStringResultMapping(promise: boolean): LibraryCResultMappingDescriptor | null {
