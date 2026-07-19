@@ -94,6 +94,12 @@ test('Array, Set и Promise принадлежат discoverable global packages 
       baseTypeIds: [],
       runtimeRequirements: ['global:promise#promise'],
       cAwaitExpression: '$value.awaitValue()',
+      cAsyncTaskBridge: {
+        cValidExpression: '$source.valid()',
+        cObserveExpression: '$source.observe($onFulfilled, $onRejected, $context, $finalizer)',
+        cFulfillExpression: '$target.fulfill($value)',
+        cRejectExpression: '$target.rejectWith($value)'
+      },
       typeParameters: ['T'],
       traits: [
         {

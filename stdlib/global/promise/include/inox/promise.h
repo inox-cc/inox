@@ -7,6 +7,7 @@ struct inox_promise;
 
 namespace inox {
 
+using PromiseReactionCallback = inox_status (*)(void* context, inox_value value);
 using PromiseChainCallback = inox_status (*)(void* context, inox_value value, inox_value* out);
 using PromiseCallbackFinalizer = void (*)(void* context);
 
@@ -41,9 +42,15 @@ public:
     void* context,
     PromiseCallbackFinalizer finalizer
   ) const;
+  inox_status observe(
+    PromiseReactionCallback onFulfilled,
+    PromiseReactionCallback onRejected,
+    void* context,
+    PromiseCallbackFinalizer finalizer
+  ) const;
   Value awaitValue() const;
-  void fulfill(Value value) const;
-  void rejectWith(Value error) const;
+  inox_status fulfill(Value value) const;
+  inox_status rejectWith(Value error) const;
 
   inox_promise* raw() const;
   bool valid() const;

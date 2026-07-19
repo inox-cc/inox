@@ -18,6 +18,7 @@ const forbiddenPatterns = [
   /\b(?:emitPreparedPromiseStaticExpression|emitPreparedPromiseConstructorExpression|emitPreparedPromiseMethodExpression)\b/,
   /\binox::Promise\b/,
   /inox\/promise\.h/,
+  /\binox_promise(?:_[A-Za-z0-9_]+)?\b/,
   /Promise\.(?:resolve|reject|then|catch)/,
   /['"]Promise['"]/,
   /Promise (?:constructor|resolve|reject|chain|callback)/

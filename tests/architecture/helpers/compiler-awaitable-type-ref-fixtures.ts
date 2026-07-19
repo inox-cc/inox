@@ -31,7 +31,13 @@ export function neutralAwaitableLibrarySet(): CompilerLibrarySet {
         valueType: 'promise',
         cppType: 'FixtureCompletion',
         baseTypeIds: [],
-        runtimeRequirements: []
+        runtimeRequirements: [],
+        cAsyncTaskBridge: {
+          cValidExpression: '$source.valid()',
+          cObserveExpression: '$source.observe($onFulfilled, $onRejected, $context, $finalizer)',
+          cFulfillExpression: '$target.fulfill($value)',
+          cRejectExpression: '$target.reject($value)'
+        }
       }
     ],
     operations: [
@@ -42,8 +48,12 @@ export function neutralAwaitableLibrarySet(): CompilerLibrarySet {
         kind: 'construct',
         asyncResultOperation: 'construct',
         runtimeRequirements: [],
+        cExpression: 'FixtureCompletion',
         resultTypeRef: completionTypeRef()
       },
+      asyncTaskOperation('resolve'),
+      asyncTaskOperation('reject'),
+      asyncTaskOperation('then'),
       awaitableOperation('global:readTypedCompletion', `${libraryId}#read-typed`),
       {
         libraryId,
@@ -62,6 +72,18 @@ export function neutralAwaitableLibrarySet(): CompilerLibrarySet {
     runtimeRequirements: []
   }
   return createCompilerLibrarySet([library])
+}
+
+function asyncTaskOperation(kind: 'resolve' | 'reject' | 'then'): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: `${libraryId}#${kind}`,
+    operationId: `${libraryId}#${kind}`,
+    kind: 'call',
+    asyncResultOperation: kind,
+    runtimeRequirements: [],
+    cExpression: `FixtureCompletion::${kind}`
+  }
 }
 
 function awaitableOperation(bindingId: string, operationId: string): LibraryOperationDescriptor {

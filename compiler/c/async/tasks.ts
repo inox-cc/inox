@@ -38,7 +38,16 @@ import type {
   CRuntimeArrowCapture,
   CPreparedExpression as PreparedExpression
 } from '../types.ts'
-import { cIterableElementValueType, cRuntimeValueTag, emitCType, isManagedRuntimeReturnType } from '../value-types.ts'
+import {
+  cIterableElementValueType,
+  compilerLibraryIntrinsicAsyncResultCExpression,
+  compilerLibraryIntrinsicNativeCAsyncTaskBridge,
+  compilerLibraryIntrinsicNativeCppType,
+  cRuntimeValueTag,
+  emitCType,
+  isManagedRuntimeReturnType,
+  renderCompilerLibraryCAsyncTaskBridgeExpression
+} from '../value-types.ts'
 import { isPromiseChainCallbackWrapperWithContext } from './callbacks.ts'
 import type { ArrayLoweringDependencies } from '../values/arrays.ts'
 import type { ClassLoweringDependencies } from '../values/classes.ts'
@@ -203,6 +212,85 @@ export type AsyncTaskLoweringDependencies = {
 
 function asyncTaskDeps(context: AsyncTaskEmitContext): AsyncTaskLoweringDependencies {
   return context.asyncTaskLoweringDependencies
+}
+
+function asyncTaskProviderCppType(libraries: CCompilerLibrarySet): string {
+  return compilerLibraryIntrinsicNativeCppType(libraries, 'async-result') ?? ''
+}
+
+function asyncTaskProviderOperationExpression(
+  libraries: CCompilerLibrarySet,
+  operation: 'construct' | 'resolve' | 'reject' | 'then'
+): string {
+  const expression = compilerLibraryIntrinsicAsyncResultCExpression(libraries, operation)
+
+  return expression ?? ''
+}
+
+function asyncTaskProviderConstructExpression(libraries: CCompilerLibrarySet): string {
+  return `${asyncTaskProviderOperationExpression(libraries, 'construct')}()`
+}
+
+function asyncTaskProviderValidExpression(libraries: CCompilerLibrarySet, source: string): string {
+  const bridge = compilerLibraryIntrinsicNativeCAsyncTaskBridge(libraries, 'async-result')
+
+  if (bridge === null) {
+    return ''
+  }
+
+  return renderCompilerLibraryCAsyncTaskBridgeExpression(bridge, { kind: 'valid', source })
+}
+
+function asyncTaskProviderResolvedExpression(libraries: CCompilerLibrarySet, valueExpression: string): string {
+  return `${asyncTaskProviderOperationExpression(libraries, 'resolve')}(${valueExpression})`
+}
+
+function asyncTaskProviderRejectedExpression(libraries: CCompilerLibrarySet, valueExpression: string): string {
+  return `${asyncTaskProviderOperationExpression(libraries, 'reject')}(${valueExpression})`
+}
+
+function asyncTaskProviderObserveExpression(
+  libraries: CCompilerLibrarySet,
+  source: string,
+  onFulfilled: string,
+  onRejected: string,
+  callbackContext: string,
+  finalizer: string
+): string {
+  const bridge = compilerLibraryIntrinsicNativeCAsyncTaskBridge(libraries, 'async-result')
+
+  if (bridge === null) {
+    return ''
+  }
+
+  return renderCompilerLibraryCAsyncTaskBridgeExpression(bridge, {
+    kind: 'observe',
+    source,
+    onFulfilled,
+    onRejected,
+    context: callbackContext,
+    finalizer
+  })
+}
+
+function asyncTaskProviderFulfillExpression(libraries: CCompilerLibrarySet, target: string, value: string): string {
+  const bridge = compilerLibraryIntrinsicNativeCAsyncTaskBridge(libraries, 'async-result')
+
+  if (bridge === null) {
+    return ''
+  }
+
+  return renderCompilerLibraryCAsyncTaskBridgeExpression(bridge, { kind: 'fulfill', target, value })
+}
+
+function asyncTaskProviderRejectExpression(libraries: CCompilerLibrarySet, target: string, value: string): string {
+  const bridge = compilerLibraryIntrinsicNativeCAsyncTaskBridge(libraries, 'async-result')
+
+  if (bridge === null) {
+    return ''
+  }
+
+  return renderCompilerLibraryCAsyncTaskBridgeExpression(bridge, { kind: 'reject', target, value })
 }
 
 type AsyncTaskTryRegionDraft = {
@@ -2230,13 +2318,14 @@ function resolveAsyncTaskReturnValueExpression(
   return null
 }
 
-export function emitAsyncTaskFrameType(wrapper: CAsyncTaskWrapper): string[] {
+export function emitAsyncTaskFrameType(wrapper: CAsyncTaskWrapper, libraries: CCompilerLibrarySet): string[] {
   const lines: string[] = []
+  const providerCppType = asyncTaskProviderCppType(libraries)
 
   lines.push(`typedef struct ${wrapper.frameTypeName} {`)
   lines.push('  inox_loop* inox_loop;')
-  lines.push('  inox_promise* promise;')
-  lines.push('  inox_promise* awaited;')
+  lines.push(`  ${providerCppType} promise;`)
+  lines.push(`  ${providerCppType} awaited;`)
   lines.push('  int state;')
 
   for (const param of wrapper.params) {
@@ -2268,9 +2357,9 @@ function emitAsyncTaskStorageInit(valueType: string): string {
   return '0'
 }
 
-export function emitAsyncTaskWrapperPrototypes(wrapper: CAsyncTaskWrapper): string[] {
+export function emitAsyncTaskWrapperPrototypes(wrapper: CAsyncTaskWrapper, libraries: CCompilerLibrarySet): string[] {
   return [
-    `static inox_status ${wrapper.startName}(${emitAsyncTaskStartParams(wrapper)});`,
+    `static inox_status ${wrapper.startName}(${emitAsyncTaskStartParams(wrapper, libraries)});`,
     `static inox_status ${wrapper.resumeName}(void* context, inox_value inox_value_input);`,
     `static inox_status ${wrapper.rejectName}(void* context, inox_value inox_error);`,
     `static void ${wrapper.finalizerName}(void* context);`
@@ -2328,41 +2417,40 @@ function emitAsyncTaskStartDeclaration(wrapper: CAsyncTaskWrapper, baseContext: 
 
   const lines: string[] = []
 
-  lines.push(`static inox_status ${wrapper.startName}(${emitAsyncTaskStartParams(wrapper)}) {`)
-  lines.push('  if (inox_loop == 0 || inox_loop->allocator == 0 || out == 0) return INOX_ERR_TYPE;')
-  lines.push('  *out = 0;')
+  lines.push(`static inox_status ${wrapper.startName}(${emitAsyncTaskStartParams(wrapper, baseContext.libraries)}) {`)
+  lines.push('  if (inox_loop == 0 || inox_loop->allocator == 0) return INOX_ERR_TYPE;')
+  lines.push('  out = {};')
   lines.push(
-    `  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)inox_loop->allocator->alloc(inox_loop->allocator->user, sizeof(${wrapper.frameTypeName}), _Alignof(${wrapper.frameTypeName}));`
+    `  void* frame_memory = inox_loop->allocator->alloc(inox_loop->allocator->user, sizeof(${wrapper.frameTypeName}), _Alignof(${wrapper.frameTypeName}));`
   )
-  lines.push('  if (frame == 0) return INOX_ERR_OOM;')
+  lines.push('  if (frame_memory == 0) return INOX_ERR_OOM;')
+  lines.push(`  ${wrapper.frameTypeName}* frame = new (frame_memory) ${wrapper.frameTypeName}();`)
   lines.push('  frame->inox_loop = inox_loop;')
-  lines.push('  frame->promise = 0;')
-  lines.push('  frame->awaited = 0;')
   lines.push('  frame->state = 0;')
 
   for (const param of wrapper.params) {
     lines.push(`  frame->${param.fieldName} = ${param.argName};`)
+
+    if (isManagedRuntimeReturnType(param.valueType)) {
+      lines.push(`  inox_retain(frame->${param.fieldName});`)
+    }
   }
 
   for (const local of wrapper.frameLocals) {
     lines.push(`  frame->${local.fieldName} = ${emitAsyncTaskStorageInit(local.type)};`)
   }
 
-  lines.push('  inox_status status = inox_promise_new(inox_loop, &frame->promise);')
+  lines.push(`  frame->promise = ${asyncTaskProviderConstructExpression(baseContext.libraries)};`)
+  lines.push(
+    `  inox_status status = ${asyncTaskProviderValidExpression(baseContext.libraries, 'frame->promise')} ? INOX_OK : INOX_ERR_TYPE;`
+  )
   appendIndentedAsyncTaskLines(lines, asyncTaskDeps(context).emitOwnedValueDeclarations(context), '  ')
   lines.push('  if (status != INOX_OK) {')
-  lines.push('    inox_loop->allocator->free(inox_loop->allocator->user, frame, sizeof(*frame), _Alignof(*frame));')
+  lines.push(`    ${wrapper.finalizerName}(frame);`)
   lines.push('    return status;')
   lines.push('  }')
 
-  for (const param of wrapper.params) {
-    if (isManagedRuntimeReturnType(param.valueType)) {
-      lines.push(`  inox_retain(frame->${param.fieldName});`)
-    }
-  }
-
-  lines.push('  inox_promise_retain(frame->promise);')
-  lines.push('  *out = frame->promise;')
+  lines.push('  out = frame->promise;')
   appendIndentedAsyncTaskLines(lines, emitAsyncTaskVisibleLocalReads(wrapper, 0, { includePrefixLocals: false }), '  ')
   lines.push('  {')
   appendIndentedAsyncTaskLines(lines, prefixAndScheduleLines, '    ')
@@ -2373,8 +2461,7 @@ function emitAsyncTaskStartDeclaration(wrapper: CAsyncTaskWrapper, baseContext: 
   if (context.failureStatementUsed) {
     lines.push('inox_start_error:')
     appendIndentedAsyncTaskLines(lines, asyncTaskDeps(context).emitOwnedValueCleanup(context), '  ')
-    lines.push('  inox_promise_release(*out);')
-    lines.push('  *out = 0;')
+    lines.push('  out = {};')
     lines.push(`  ${wrapper.finalizerName}(frame);`)
     lines.push('  return INOX_ERR_TYPE;')
   }
@@ -2384,14 +2471,14 @@ function emitAsyncTaskStartDeclaration(wrapper: CAsyncTaskWrapper, baseContext: 
   return lines
 }
 
-function emitAsyncTaskStartParams(wrapper: CAsyncTaskWrapper): string {
+function emitAsyncTaskStartParams(wrapper: CAsyncTaskWrapper, libraries: CCompilerLibrarySet): string {
   const params = ['inox_loop* inox_loop']
 
   for (const param of wrapper.params) {
     params.push(`${emitCType(param.valueType)} ${param.argName}`)
   }
 
-  params.push('inox_promise** out')
+  params.push(`${asyncTaskProviderCppType(libraries)}& out`)
 
   return joinStrings(params, ', ')
 }
@@ -2652,16 +2739,26 @@ function emitAsyncTaskScheduleAwaitLines(
   const lines: string[] = []
 
   if (awaitedPromise === null || typeof awaitedPromise === 'undefined') {
-    lines.push('status = inox_promise_new(inox_loop, &frame->awaited);')
-    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines))
+    lines.push(`frame->awaited = ${asyncTaskProviderConstructExpression(context.libraries)};`)
+    lines.push(
+      `status = ${asyncTaskProviderValidExpression(context.libraries, 'frame->awaited')} ? INOX_OK : INOX_ERR_TYPE;`
+    )
+    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, context.libraries, options, cleanupLines))
   } else {
     appendAsyncTaskLines(lines, awaitedPromise.lines)
   }
 
   lines.push(
-    `status = inox_promise_then(frame->awaited, ${wrapper.resumeName}, ${wrapper.rejectName}, frame, ${finalizer});`
+    `status = ${asyncTaskProviderObserveExpression(
+      context.libraries,
+      'frame->awaited',
+      wrapper.resumeName,
+      wrapper.rejectName,
+      'frame',
+      finalizer
+    )};`
   )
-  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines))
+  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, context.libraries, options, cleanupLines))
 
   if (awaitedPromise === null || typeof awaitedPromise === 'undefined') {
     let awaitedExpression = 'inox_undefined_value()'
@@ -2671,8 +2768,10 @@ function emitAsyncTaskScheduleAwaitLines(
       awaitedExpression = awaited.expression
     }
 
-    lines.push(`status = inox_promise_resolve(frame->awaited, ${awaitedExpression});`)
-    appendAsyncTaskLines(lines, emitAsyncTaskResolveStatusCheck(wrapper, options, cleanupLines))
+    lines.push(
+      `status = ${asyncTaskProviderFulfillExpression(context.libraries, 'frame->awaited', awaitedExpression)};`
+    )
+    appendAsyncTaskLines(lines, emitAsyncTaskResolveStatusCheck(wrapper, context.libraries, options, cleanupLines))
   }
 
   return lines
@@ -2680,6 +2779,7 @@ function emitAsyncTaskScheduleAwaitLines(
 
 function emitAsyncTaskScheduleStatusCheck(
   wrapper: CAsyncTaskWrapper,
+  libraries: CCompilerLibrarySet,
   options: AsyncTaskScheduleOptions,
   cleanupLines: string[] | null
 ): string[] {
@@ -2689,8 +2789,7 @@ function emitAsyncTaskScheduleStatusCheck(
   if (options.cleanup === 'start') {
     lines.push('if (status != INOX_OK) {')
     appendIndentedAsyncTaskLines(lines, activeCleanupLines, '  ')
-    lines.push('  inox_promise_release(*out);')
-    lines.push('  *out = 0;')
+    lines.push('  out = {};')
     lines.push(`  ${wrapper.finalizerName}(frame);`)
     lines.push('  return status;')
     lines.push('}')
@@ -2701,7 +2800,11 @@ function emitAsyncTaskScheduleStatusCheck(
   lines.push('if (status != INOX_OK) {')
   appendIndentedAsyncTaskLines(lines, activeCleanupLines, '  ')
   lines.push(
-    '  inox_status reject_status = inox_promise_reject(frame->promise, inox_number_value((inox_number)status));'
+    `  inox_status reject_status = ${asyncTaskProviderRejectExpression(
+      libraries,
+      'frame->promise',
+      'inox_number_value((inox_number)status)'
+    )};`
   )
   lines.push(`  ${wrapper.finalizerName}(frame);`)
   lines.push('  return reject_status == INOX_OK ? status : reject_status;')
@@ -2712,6 +2815,7 @@ function emitAsyncTaskScheduleStatusCheck(
 
 function emitAsyncTaskResolveStatusCheck(
   wrapper: CAsyncTaskWrapper,
+  libraries: CCompilerLibrarySet,
   options: AsyncTaskScheduleOptions,
   cleanupLines: string[] | null
 ): string[] {
@@ -2721,8 +2825,7 @@ function emitAsyncTaskResolveStatusCheck(
   if (options.cleanup === 'start') {
     lines.push('if (status != INOX_OK) {')
     appendIndentedAsyncTaskLines(lines, activeCleanupLines, '  ')
-    lines.push('  inox_promise_release(*out);')
-    lines.push('  *out = 0;')
+    lines.push('  out = {};')
 
     if (!options.final) {
       lines.push(`  ${wrapper.finalizerName}(frame);`)
@@ -2743,7 +2846,7 @@ function emitAsyncTaskResolveStatusCheck(
     return lines
   }
 
-  return emitAsyncTaskScheduleStatusCheck(wrapper, options, activeCleanupLines)
+  return emitAsyncTaskScheduleStatusCheck(wrapper, libraries, options, activeCleanupLines)
 }
 
 function asyncTaskLinesOrEmpty(lines: string[] | null): string[] {
@@ -2856,7 +2959,7 @@ function emitPreparedAsyncTaskAwaitedPromiseExpression(
     )
 
     return {
-      lines: emitAsyncTaskErrorStatusLines(wrapper, options)
+      lines: emitAsyncTaskErrorStatusLines(wrapper, context.libraries, options)
     }
   }
 
@@ -2870,18 +2973,25 @@ function emitPreparedAsyncTaskAwaitedPromiseExpression(
   const lines: string[] = []
 
   appendAsyncTaskLines(lines, value.lines)
-  lines.push(`status = inox_promise_resolved(inox_loop, ${value.expression}, &frame->awaited);`)
-  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
+  lines.push(`frame->awaited = ${asyncTaskProviderResolvedExpression(context.libraries, value.expression)};`)
+  lines.push(
+    `status = ${asyncTaskProviderValidExpression(context.libraries, 'frame->awaited')} ? INOX_OK : INOX_ERR_TYPE;`
+  )
+  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, context.libraries, options, null))
 
   return {
     lines: lines
   }
 }
 
-function emitAsyncTaskErrorStatusLines(wrapper: CAsyncTaskWrapper, options: AsyncTaskScheduleOptions): string[] {
+function emitAsyncTaskErrorStatusLines(
+  wrapper: CAsyncTaskWrapper,
+  libraries: CCompilerLibrarySet,
+  options: AsyncTaskScheduleOptions
+): string[] {
   const lines = ['status = INOX_ERR_TYPE;']
 
-  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
+  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, libraries, options, null))
 
   return lines
 }
@@ -2913,9 +3023,11 @@ function emitPreparedAsyncTaskPromiseSourceExpression(
   if (libraryCall !== null && asyncTaskDeps(context).isCompilerLibraryPromiseExpression(expression)) {
     const lines: string[] = []
     appendAsyncTaskLines(lines, libraryCall.lines)
-    lines.push(`frame->awaited = ${libraryCall.expression}.release();`)
-    lines.push('status = frame->awaited != nullptr ? INOX_OK : INOX_ERR_TYPE;')
-    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
+    lines.push(`frame->awaited = ${libraryCall.expression};`)
+    lines.push(
+      `status = ${asyncTaskProviderValidExpression(context.libraries, 'frame->awaited')} ? INOX_OK : INOX_ERR_TYPE;`
+    )
+    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, context.libraries, options, null))
     return { lines }
   }
 
@@ -2960,9 +3072,12 @@ function emitPreparedAsyncTaskRejectedPromiseSourceExpression(
 
     lines.push(`auto ${value} = inox::String(${bytes}, ${length});`)
     lines.push(`status = ${value}.valid() ? INOX_OK : INOX_ERR_TYPE;`)
-    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
-    lines.push(`status = inox_promise_rejected(inox_loop, ${value}, &frame->awaited);`)
-    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
+    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, context.libraries, options, null))
+    lines.push(`frame->awaited = ${asyncTaskProviderRejectedExpression(context.libraries, value)};`)
+    lines.push(
+      `status = ${asyncTaskProviderValidExpression(context.libraries, 'frame->awaited')} ? INOX_OK : INOX_ERR_TYPE;`
+    )
+    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, context.libraries, options, null))
 
     return {
       lines: lines
@@ -2984,7 +3099,7 @@ function emitPreparedAsyncTaskRejectedPromiseSourceExpression(
     )
 
     return {
-      lines: emitAsyncTaskErrorStatusLines(wrapper, options)
+      lines: emitAsyncTaskErrorStatusLines(wrapper, context.libraries, options)
     }
   }
 
@@ -3001,8 +3116,11 @@ function emitPreparedAsyncTaskRejectedPromiseSourceExpression(
   const lines: string[] = []
 
   appendAsyncTaskLines(lines, valueLines)
-  lines.push(`status = inox_promise_rejected(inox_loop, ${valueExpression}, &frame->awaited);`)
-  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
+  lines.push(`frame->awaited = ${asyncTaskProviderRejectedExpression(context.libraries, valueExpression)};`)
+  lines.push(
+    `status = ${asyncTaskProviderValidExpression(context.libraries, 'frame->awaited')} ? INOX_OK : INOX_ERR_TYPE;`
+  )
+  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, context.libraries, options, null))
 
   return {
     lines: lines
@@ -3032,10 +3150,10 @@ function emitPreparedAsyncTaskSourceCallExpression(
       args.push(arg)
     }
 
-    args.push('&frame->awaited')
+    args.push('frame->awaited')
     appendAsyncTaskLines(lines, prepared.lines)
     lines.push(`status = ${target.startName}(${joinStrings(args, ', ')});`)
-    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
+    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, context.libraries, options, null))
 
     return {
       lines: lines
@@ -3074,8 +3192,11 @@ function emitPreparedAsyncFunctionSourceCallExpression(
 
     appendAsyncTaskLines(lines, call.lines)
     lines.push(`${call.expression};`)
-    lines.push('status = inox_promise_resolved(inox_loop, inox_undefined_value(), &frame->awaited);')
-    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
+    lines.push(`frame->awaited = ${asyncTaskProviderResolvedExpression(context.libraries, 'inox_undefined_value()')};`)
+    lines.push(
+      `status = ${asyncTaskProviderValidExpression(context.libraries, 'frame->awaited')} ? INOX_OK : INOX_ERR_TYPE;`
+    )
+    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, context.libraries, options, null))
 
     return {
       lines: lines
@@ -3091,8 +3212,14 @@ function emitPreparedAsyncFunctionSourceCallExpression(
     appendAsyncTaskLines(lines, call.lines)
     lines.push(`inox_value ${value} = ${call.expression};`)
     lines.push(emitRuntimeValueCheck(value, tag, context))
-    lines.push(`status = inox_promise_resolved(inox_loop, ${value}, &frame->awaited);`)
-    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, [`inox_release(${value});`]))
+    lines.push(`frame->awaited = ${asyncTaskProviderResolvedExpression(context.libraries, value)};`)
+    lines.push(
+      `status = ${asyncTaskProviderValidExpression(context.libraries, 'frame->awaited')} ? INOX_OK : INOX_ERR_TYPE;`
+    )
+    appendAsyncTaskLines(
+      lines,
+      emitAsyncTaskScheduleStatusCheck(wrapper, context.libraries, options, [`inox_release(${value});`])
+    )
     lines.push(`inox_release(${value});`)
 
     return {
@@ -3109,8 +3236,11 @@ function emitPreparedAsyncFunctionSourceCallExpression(
   const lines: string[] = []
 
   appendAsyncTaskLines(lines, call.lines)
-  lines.push(`status = inox_promise_resolved(inox_loop, ${value}, &frame->awaited);`)
-  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
+  lines.push(`frame->awaited = ${asyncTaskProviderResolvedExpression(context.libraries, value)};`)
+  lines.push(
+    `status = ${asyncTaskProviderValidExpression(context.libraries, 'frame->awaited')} ? INOX_OK : INOX_ERR_TYPE;`
+  )
+  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, context.libraries, options, null))
 
   return {
     lines: lines
@@ -3145,8 +3275,10 @@ function emitPreparedPlainPromiseSourceCallExpression(
   appendAsyncTaskLines(lines, prepared.lines)
   const calleeName: string = asyncTaskDeps(context).emitCallee(expression.callee, context)
   lines.push(`frame->awaited = ${calleeName}(${joinStrings(args, ', ')});`)
-  lines.push('status = frame->awaited == 0 ? INOX_ERR_TYPE : INOX_OK;')
-  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
+  lines.push(
+    `status = ${asyncTaskProviderValidExpression(context.libraries, 'frame->awaited')} ? INOX_OK : INOX_ERR_TYPE;`
+  )
+  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, context.libraries, options, null))
 
   return {
     lines: lines
@@ -3210,7 +3342,7 @@ function emitPreparedAsyncTaskAwaitedPromiseChainExpression(
   )
 
   return {
-    lines: emitAsyncTaskErrorStatusLines(wrapper, options)
+    lines: emitAsyncTaskErrorStatusLines(wrapper, context.libraries, options)
   }
 }
 
@@ -3242,18 +3374,24 @@ function emitPreparedAsyncTaskAwaitedPromiseChainForWrapper(
   }
 
   const lines: string[] = []
+  const providerCppType = asyncTaskProviderCppType(context.libraries)
+  const chainExpression = asyncTaskProviderOperationExpression(context.libraries, 'then')
 
   appendAsyncTaskLines(lines, callbackContext.lines)
-  lines.push(`inox_promise* ${source} = 0;`)
+  lines.push(`${providerCppType} ${source};`)
   appendAsyncTaskLines(lines, value.lines)
-  lines.push(`status = inox_promise_resolved(inox_loop, ${value.expression}, &${source});`)
-  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines))
+  lines.push(`${source} = ${asyncTaskProviderResolvedExpression(context.libraries, value.expression)};`)
   lines.push(
-    `status = inox_promise_chain(${source}, ${chainWrapper.name}, 0, ${callbackContext.expression}, ${callbackContext.finalizer}, &frame->awaited);`
+    `status = ${asyncTaskProviderValidExpression(context.libraries, source)} ? INOX_OK : INOX_ERR_TYPE;`
   )
-  lines.push(`inox_promise_release(${source});`)
-  lines.push(`${source} = 0;`)
-  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines))
+  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, context.libraries, options, cleanupLines))
+  lines.push(
+    `frame->awaited = ${source}.${chainExpression}(${chainWrapper.name}, ${callbackContext.expression}, ${callbackContext.finalizer});`
+  )
+  lines.push(
+    `status = ${asyncTaskProviderValidExpression(context.libraries, 'frame->awaited')} ? INOX_OK : INOX_ERR_TYPE;`
+  )
+  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, context.libraries, options, cleanupLines))
 
   return {
     lines: lines
@@ -3309,14 +3447,18 @@ function emitAsyncTaskPromiseChainCallbackContextForWrapper(
     }
   }
 
-  const contextName = nextCName(context, 'inox_promise_callback_ctx')
+  const contextName = nextCName(context, 'inox_async_result_callback_ctx')
 
   lines.push(
     `${chainWrapper.contextTypeName}* ${contextName} = (${chainWrapper.contextTypeName}*)inox_default_alloc(0, sizeof(${chainWrapper.contextTypeName}), _Alignof(${chainWrapper.contextTypeName}));`
   )
   lines.push('if (' + contextName + ' == 0) {')
   lines.push('  status = INOX_ERR_OOM;')
-  appendIndentedAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(asyncWrapper, options, null), '  ')
+  appendIndentedAsyncTaskLines(
+    lines,
+    emitAsyncTaskScheduleStatusCheck(asyncWrapper, context.libraries, options, null),
+    '  '
+  )
   lines.push('}')
 
   if (chainWrapper.needsEventLoop === true) {
@@ -3470,12 +3612,20 @@ function emitAsyncTaskResumeDeclaration(wrapper: CAsyncTaskWrapper, baseContext:
 
   lines.push(`static inox_status ${wrapper.resumeName}(void* context, inox_value inox_value_input) {`)
   lines.push(`  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)context;`)
-  lines.push('  if (frame == 0 || frame->promise == 0) return INOX_ERR_TYPE;')
+  lines.push(
+    `  if (frame == 0 || !${asyncTaskProviderValidExpression(baseContext.libraries, 'frame->promise')}) return INOX_ERR_TYPE;`
+  )
   lines.push('  inox_status status = INOX_OK;')
   lines.push('  switch (frame->state) {')
   appendIndentedAsyncTaskLines(lines, cases, '  ')
   lines.push('  default:')
-  lines.push('    return inox_promise_reject(frame->promise, inox_number_value((inox_number)INOX_ERR_TYPE));')
+  lines.push(
+    `    return ${asyncTaskProviderRejectExpression(
+      baseContext.libraries,
+      'frame->promise',
+      'inox_number_value((inox_number)INOX_ERR_TYPE)'
+    )};`
+  )
   lines.push('  }')
   lines.push('}')
 
@@ -3495,16 +3645,13 @@ function emitAsyncTaskResumeCase(
     nextItem = wrapper.awaits[item.index + 1]
   }
 
-  const valueCheck = emitAsyncTaskFulfilledValueCheck(wrapper, item)
+  const valueCheck = emitAsyncTaskFulfilledValueCheck(wrapper, item, baseContext.libraries)
   const lines: string[] = []
 
   lines.push(`case ${item.index}: {`)
   appendIndentedAsyncTaskLines(lines, valueCheck, '  ')
   appendIndentedAsyncTaskLines(lines, emitAsyncTaskStoreFulfilledValueLines(item), '  ')
-  lines.push('  if (frame->awaited != 0) {')
-  lines.push('    inox_promise_release(frame->awaited);')
-  lines.push('    frame->awaited = 0;')
-  lines.push('  }')
+  lines.push('  frame->awaited = {};')
 
   if (nextItem === null || typeof nextItem === 'undefined') {
     appendIndentedAsyncTaskLines(lines, emitAsyncTaskVisibleLocalReads(wrapper, item.index + 1, null), '  ')
@@ -3530,7 +3677,13 @@ function emitAsyncTaskResumeCase(
         emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, item.index + 1),
         '  '
       )
-      lines.push(`  status = inox_promise_resolve(frame->promise, ${returnValue.expression});`)
+      lines.push(
+        `  status = ${asyncTaskProviderFulfillExpression(
+          baseContext.libraries,
+          'frame->promise',
+          returnValue.expression
+        )};`
+      )
 
       for (let index = returnValueOwnedValues.length - 1; index >= 0; index = index - 1) {
         lines.push(`  inox_release(${returnValueOwnedValues[index]});`)
@@ -3549,7 +3702,13 @@ function emitAsyncTaskResumeCase(
         emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, item.index + 1),
         '  '
       )
-      lines.push(`  return inox_promise_resolve(frame->promise, ${returnValue.expression});`)
+      lines.push(
+        `  return ${asyncTaskProviderFulfillExpression(
+          baseContext.libraries,
+          'frame->promise',
+          returnValue.expression
+        )};`
+      )
     }
     lines.push('}')
     return lines
@@ -3567,7 +3726,12 @@ function emitAsyncTaskResumeCase(
   lines.push('  if (inox_loop == 0) {')
   appendIndentedAsyncTaskLines(
     lines,
-    emitAsyncTaskRejectAndMaybeFinalizeLines(wrapper, item, 'inox_number_value((inox_number)INOX_ERR_TYPE)'),
+    emitAsyncTaskRejectAndMaybeFinalizeLines(
+      wrapper,
+      item,
+      baseContext.libraries,
+      'inox_number_value((inox_number)INOX_ERR_TYPE)'
+    ),
     '    '
   )
   lines.push('  }')
@@ -3631,7 +3795,11 @@ function collectAsyncTaskTryPhaseStatements(
   return statements
 }
 
-function emitAsyncTaskFulfilledValueCheck(wrapper: CAsyncTaskWrapper, item: CAsyncTaskAwaitStep): string[] {
+function emitAsyncTaskFulfilledValueCheck(
+  wrapper: CAsyncTaskWrapper,
+  item: CAsyncTaskAwaitStep,
+  libraries: CCompilerLibrarySet
+): string[] {
   const expectedTag = cRuntimeValueTag(item.type) ?? ''
 
   if (expectedTag === '') {
@@ -3649,7 +3817,7 @@ function emitAsyncTaskFulfilledValueCheck(wrapper: CAsyncTaskWrapper, item: CAsy
   lines.push(`if (inox_value_input.tag != ${expectedTag}${refCheck}) {`)
   appendIndentedAsyncTaskLines(
     lines,
-    emitAsyncTaskRejectAndMaybeFinalizeLines(wrapper, item, 'inox_number_value((inox_number)INOX_ERR_TYPE)'),
+    emitAsyncTaskRejectAndMaybeFinalizeLines(wrapper, item, libraries, 'inox_number_value((inox_number)INOX_ERR_TYPE)'),
     '  '
   )
   lines.push('}')
@@ -3680,11 +3848,14 @@ function emitAsyncTaskStoreFulfilledValueLines(item: CAsyncTaskAwaitStep): strin
 function emitAsyncTaskRejectAndMaybeFinalizeLines(
   wrapper: CAsyncTaskWrapper,
   item: CAsyncTaskAwaitStep,
+  libraries: CCompilerLibrarySet,
   errorExpression: string
 ): string[] {
   const lines: string[] = []
 
-  lines.push(`inox_status reject_status = inox_promise_reject(frame->promise, ${errorExpression});`)
+  lines.push(
+    `inox_status reject_status = ${asyncTaskProviderRejectExpression(libraries, 'frame->promise', errorExpression)};`
+  )
 
   if (item.index < wrapper.awaits.length - 1) {
     lines.push(`${wrapper.finalizerName}(frame);`)
@@ -3749,7 +3920,9 @@ function emitAsyncTaskTrySuccessPreludeAndReturnLines(
   appendAsyncTaskLines(lines, preludeLines)
   appendAsyncTaskLines(lines, returnValue.lines)
   appendAsyncTaskLines(lines, emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, visibleAwaitCount))
-  lines.push(`status = inox_promise_resolve(frame->promise, ${returnValue.expression});`)
+  lines.push(
+    `status = ${asyncTaskProviderFulfillExpression(baseContext.libraries, 'frame->promise', returnValue.expression)};`
+  )
   appendAsyncTaskLines(lines, asyncTaskDeps(context).emitOwnedValueCleanup(context))
   lines.push('return status;')
 
@@ -3862,8 +4035,16 @@ function emitAsyncTaskRejectDeclaration(wrapper: CAsyncTaskWrapper, baseContext:
 
   lines.push(`static inox_status ${wrapper.rejectName}(void* context, inox_value inox_error) {`)
   lines.push(`  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)context;`)
-  lines.push('  if (frame == 0 || frame->promise == 0) return INOX_ERR_TYPE;')
-  lines.push('  inox_status status = inox_promise_reject(frame->promise, inox_error);')
+  lines.push(
+    `  if (frame == 0 || !${asyncTaskProviderValidExpression(baseContext.libraries, 'frame->promise')}) return INOX_ERR_TYPE;`
+  )
+  lines.push(
+    `  inox_status status = ${asyncTaskProviderRejectExpression(
+      baseContext.libraries,
+      'frame->promise',
+      'inox_error'
+    )};`
+  )
 
   if (lastState > 0) {
     lines.push(`  if (frame->state < ${lastState}) {`)
@@ -3888,12 +4069,16 @@ function emitAsyncTaskTryRejectDeclaration(wrapper: CAsyncTaskWrapper, baseConte
 
   lines.push(`static inox_status ${wrapper.rejectName}(void* context, inox_value inox_error) {`)
   lines.push(`  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)context;`)
-  lines.push('  if (frame == 0 || frame->promise == 0) return INOX_ERR_TYPE;')
+  lines.push(
+    `  if (frame == 0 || !${asyncTaskProviderValidExpression(baseContext.libraries, 'frame->promise')}) return INOX_ERR_TYPE;`
+  )
   lines.push('  inox_status status = INOX_OK;')
   lines.push('  switch (frame->state) {')
   appendIndentedAsyncTaskLines(lines, cases, '  ')
   lines.push('  default:')
-  lines.push('    status = inox_promise_reject(frame->promise, inox_error);')
+  lines.push(
+    `    status = ${asyncTaskProviderRejectExpression(baseContext.libraries, 'frame->promise', 'inox_error')};`
+  )
   lines.push('    return status;')
   lines.push('  }')
   lines.push('}')
@@ -3918,7 +4103,11 @@ function emitAsyncTaskTryRejectCase(
   appendIndentedAsyncTaskLines(lines, emitAsyncTaskTryRejectFinallyLines(wrapper, baseContext, item.index), '  ')
   appendIndentedAsyncTaskLines(
     lines,
-    emitAsyncTaskSettleAndMaybeFinalizeLines(wrapper, item, 'inox_promise_reject(frame->promise, inox_error)'),
+    emitAsyncTaskSettleAndMaybeFinalizeLines(
+      wrapper,
+      item,
+      asyncTaskProviderRejectExpression(baseContext.libraries, 'frame->promise', 'inox_error')
+    ),
     '  '
   )
   lines.push('}')
@@ -3942,7 +4131,11 @@ function emitAsyncTaskTryRejectHandlerCase(
       emitAsyncTaskSettleAndMaybeFinalizeLines(
         wrapper,
         item,
-        'inox_promise_reject(frame->promise, inox_number_value((inox_number)INOX_ERR_TYPE))'
+        asyncTaskProviderRejectExpression(
+          baseContext.libraries,
+          'frame->promise',
+          'inox_number_value((inox_number)INOX_ERR_TYPE)'
+        )
       ),
       '    '
     )
@@ -3995,7 +4188,9 @@ function emitAsyncTaskTryHandlerBodyAndReturnLines(
   appendAsyncTaskLines(lines, handlerLines)
   appendAsyncTaskLines(lines, returnValue.lines)
   appendAsyncTaskLines(lines, emitAsyncTaskTryFinallyLines(wrapper, baseContext, visibleAwaitCount))
-  lines.push(`status = inox_promise_resolve(frame->promise, ${returnValue.expression});`)
+  lines.push(
+    `status = ${asyncTaskProviderFulfillExpression(baseContext.libraries, 'frame->promise', returnValue.expression)};`
+  )
   appendAsyncTaskLines(lines, asyncTaskDeps(context).emitOwnedValueCleanup(context))
 
   if (item.index < wrapper.awaits.length - 1) {
@@ -4013,7 +4208,7 @@ function emitAsyncTaskFinalizerDeclaration(wrapper: CAsyncTaskWrapper): string[]
   lines.push(`static void ${wrapper.finalizerName}(void* context) {`)
   lines.push(`  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)context;`)
   lines.push('  if (frame == 0) return;')
-  lines.push('  if (frame->awaited != 0) inox_promise_release(frame->awaited);')
+  lines.push('  inox_loop* frame_loop = frame->inox_loop;')
 
   for (const param of wrapper.params) {
     if (isManagedRuntimeReturnType(param.valueType)) {
@@ -4027,10 +4222,10 @@ function emitAsyncTaskFinalizerDeclaration(wrapper: CAsyncTaskWrapper): string[]
     }
   }
 
-  lines.push('  if (frame->promise != 0) inox_promise_release(frame->promise);')
-  lines.push('  if (frame->inox_loop != 0 && frame->inox_loop->allocator != 0) {')
+  lines.push(`  frame->~${wrapper.frameTypeName}();`)
+  lines.push('  if (frame_loop != 0 && frame_loop->allocator != 0) {')
   lines.push(
-    '    frame->inox_loop->allocator->free(frame->inox_loop->allocator->user, frame, sizeof(*frame), _Alignof(*frame));'
+    `    frame_loop->allocator->free(frame_loop->allocator->user, frame, sizeof(${wrapper.frameTypeName}), _Alignof(${wrapper.frameTypeName}));`
   )
   lines.push('  }')
   lines.push('}')

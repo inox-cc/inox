@@ -177,6 +177,8 @@ async function runHostedIntegrationTests(): Promise<void> {
   const { assertPromiseAwaitCatchReadsRejectedValue, assertPromiseAwaitUsesRuntimeHelper } =
     await import('./integration/promise-await-helper-lowering.test.ts')
   const { assertPromiseVariablesUseCppRaii } = await import('./integration/promise-raii-lowering.test.ts')
+  const { assertPromiseObserveFailureRetainsCallbackContext } =
+    await import('./integration/promise-observe-ownership.test.ts')
   const { assertPathLowersToCppObject } = await import('./integration/path-cpp-object-lowering.test.ts')
   const { assertNetUsesCppObjectFacade } = await import('./integration/net-cpp-object-lowering.test.ts')
   const { assertHttpServerUsesCppObjectFacade } = await import('./integration/http-cpp-object-lowering.test.ts')
@@ -433,6 +435,10 @@ async function runHostedIntegrationTests(): Promise<void> {
 
     await t.test('promise-raii-lowering', () => {
       assertPromiseVariablesUseCppRaii()
+    })
+
+    await t.test('Promise observe сохраняет ownership callback context при ошибке', async () => {
+      await assertPromiseObserveFailureRetainsCallbackContext()
     })
 
     await t.test('throwing-error-transfer-lowering', () => {

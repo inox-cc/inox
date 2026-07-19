@@ -1,6 +1,5 @@
 import type {
   CompilerLibraryDescriptor,
-  CompilerLibrarySet,
   NominalTypeRef
 } from '../../../compiler/extensions/types.ts'
 
@@ -68,19 +67,6 @@ export function emptyCppAsyncResultLibrary(): CompilerLibraryDescriptor {
   ]
   library.operations[0].resultTypeRef = taskTypeRef()
   return library
-}
-
-export function uncheckedIncompleteAsyncResultLibrarySet(): CompilerLibrarySet {
-  const library = incompleteAsyncResultLibrary()
-
-  return {
-    fingerprint: 'fixture:async-result:incomplete',
-    declarations: library.declarations,
-    nativeTypes: library.nativeTypes ?? [],
-    operations: library.operations,
-    intrinsicBindings: library.intrinsicBindings,
-    runtimeRequirements: library.runtimeRequirements
-  }
 }
 
 function taskTypeRef(): NominalTypeRef {

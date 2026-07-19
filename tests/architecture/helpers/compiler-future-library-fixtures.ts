@@ -7,7 +7,7 @@ import {
 } from '../../../stdlib/global/promise/compiler/index.ts'
 import { compilerLibraryPackageWithGlobalDeclaration } from './compiler-library-fixtures.ts'
 
-export function futureLibrarySet(cppType = 'inox::Promise') {
+export function futureLibrarySet(cppType = 'inox::Promise', withAsyncTaskBridge = true) {
   const library: CompilerLibraryDescriptor = {
     ...promiseCompilerLibraryPackage,
     declarations: [
@@ -37,7 +37,16 @@ declare global {
       ...item,
       declarationNames: ['Future'],
       cppType,
-      cValueAdapter: `${cppType}($value)`
+      cValueAdapter: `${cppType}($value)`,
+      cAsyncTaskBridge: withAsyncTaskBridge
+        ? {
+            cValidExpression: `${cppType}::taskValid(${cppType}($source))`,
+            cObserveExpression:
+              `${cppType}::taskObserve(${cppType}($source), ` + '$onFulfilled, $onRejected, $context, $finalizer)',
+            cFulfillExpression: `${cppType}::taskFulfill(${cppType}($target), $value)`,
+            cRejectExpression: `${cppType}::taskReject(${cppType}($target), $value)`
+          }
+        : null
     })),
     operations: promiseCompilerLibraryPackage.operations.map((operation) => ({
       ...operation,

@@ -6897,7 +6897,7 @@ function emitPreparedAsyncFunctionPromiseCallExpression(
 
   registerEventLoop(context)
 
-  let out = nextCName(context, 'inox_promise')
+  let out = nextCName(context, 'inox_async_result')
 
   if (options.out !== null && typeof options.out !== 'undefined') {
     out = options.out
@@ -7002,7 +7002,7 @@ function emitPreparedAsyncTaskPromiseCallExpression(
 
   registerEventLoop(context)
 
-  let out = nextCName(context, 'inox_promise')
+  let out = nextCName(context, 'inox_async_result')
 
   if (options.out !== null && typeof options.out !== 'undefined') {
     out = options.out
@@ -7014,7 +7014,7 @@ function emitPreparedAsyncTaskPromiseCallExpression(
   const lines: string[] = []
 
   pushAll(args, prepared.args)
-  args.push(`&${out}`)
+  args.push(out)
 
   if (options.owned !== false) {
     registerOwnedPromise(context, out, valueType, rejectionValueType)
@@ -7080,7 +7080,7 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(
   registerEventLoop(context)
   registerErrorChannel(context)
 
-  let out = nextCName(context, 'inox_promise')
+  let out = nextCName(context, 'inox_async_result')
 
   if (options.out !== null && typeof options.out !== 'undefined') {
     out = options.out

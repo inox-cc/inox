@@ -876,7 +876,7 @@ function emitCModuleDeclarations(
   }
 
   for (const wrapper of context.asyncTaskWrappers.values()) {
-    pushCModuleLines(lines, emitAsyncTaskFrameType(wrapper))
+    pushCModuleLines(lines, emitAsyncTaskFrameType(wrapper, context.libraries))
     lines.push('')
   }
 
@@ -917,7 +917,7 @@ function emitCModuleDeclarations(
   }
 
   for (const wrapper of context.asyncTaskWrappers.values()) {
-    pushCModuleLines(lines, emitAsyncTaskWrapperPrototypes(wrapper))
+    pushCModuleLines(lines, emitAsyncTaskWrapperPrototypes(wrapper, context.libraries))
   }
 
   for (const wrapper of context.callbackWrappers.values()) {

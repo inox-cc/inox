@@ -131,6 +131,15 @@ Promise Promise::catchError(
   return adopt(child);
 }
 
+inox_status Promise::observe(
+  PromiseReactionCallback onFulfilled,
+  PromiseReactionCallback onRejected,
+  void* context,
+  PromiseCallbackFinalizer finalizer
+) const {
+  return inox_promise_then(promise_, onFulfilled, onRejected, context, finalizer);
+}
+
 Value Promise::awaitValue() const {
   Value value;
   inox_promise_state state = INOX_PROMISE_PENDING;
@@ -154,16 +163,12 @@ Value Promise::awaitValue() const {
   return {};
 }
 
-void Promise::fulfill(Value value) const {
-  if (inox_promise_resolve(promise_, value.raw()) != INOX_OK) {
-    throw_value(Value());
-  }
+inox_status Promise::fulfill(Value value) const {
+  return inox_promise_resolve(promise_, value.raw());
 }
 
-void Promise::rejectWith(Value error) const {
-  if (inox_promise_reject(promise_, error.raw()) != INOX_OK) {
-    throw_value(Value());
-  }
+inox_status Promise::rejectWith(Value error) const {
+  return inox_promise_reject(promise_, error.raw());
 }
 
 inox_promise* Promise::raw() const {

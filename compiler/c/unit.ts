@@ -1531,7 +1531,7 @@ export function emitCUnit(
 
   if (asyncTaskWrappers.size > 0) {
     for (const wrapper of asyncTaskWrappers.values()) {
-      pushUnitLines(lines, emitAsyncTaskFrameType(wrapper))
+      pushUnitLines(lines, emitAsyncTaskFrameType(wrapper, baseContext.libraries))
       lines.push('')
     }
   }
@@ -1554,7 +1554,7 @@ export function emitCUnit(
 
   if (asyncTaskWrappers.size > 0) {
     for (const wrapper of asyncTaskWrappers.values()) {
-      pushUnitLines(lines, emitAsyncTaskWrapperPrototypes(wrapper))
+      pushUnitLines(lines, emitAsyncTaskWrapperPrototypes(wrapper, baseContext.libraries))
     }
   }
 

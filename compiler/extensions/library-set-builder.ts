@@ -3,6 +3,7 @@ import type {
   CompilerLibrarySet,
   ConcreteTypeRef,
   IntrinsicRoleBinding,
+  LibraryAsyncResultOperationKind,
   LibraryArgumentCheckDescriptor,
   LibraryCResultFieldMappingDescriptor,
   LibraryCResultMappingDescriptor,
@@ -642,6 +643,7 @@ function validateNativeTypes(nativeTypes: LibraryNativeTypeDescriptor[]): void {
     validateNativeTypeValueAdapter(nativeType)
     validateNativeTypeRuntimeValueExpression(nativeType)
     validateNativeTypeAwaitExpression(nativeType)
+    validateNativeTypeAsyncTaskBridge(nativeType)
     validateNativeTypeIteration(nativeType)
 
     for (let baseIndex = 0; baseIndex < nativeType.baseTypeIds.length; baseIndex = baseIndex + 1) {
@@ -676,6 +678,93 @@ function validateNativeTypeAwaitExpression(nativeType: LibraryNativeTypeDescript
   if (typeof expression === 'string' && !expression.includes('$value')) {
     throw new Error(`native type ${nativeType.typeId} C++ await expression requires $value`)
   }
+}
+
+function validateNativeTypeAsyncTaskBridge(nativeType: LibraryNativeTypeDescriptor): void {
+  const bridge = nativeType.cAsyncTaskBridge
+
+  if (bridge === null || typeof bridge === 'undefined') {
+    return
+  }
+
+  validateNativeTypeAsyncTaskBridgeExpression(nativeType, 'valid', bridge.cValidExpression, ['source'])
+  validateNativeTypeAsyncTaskBridgeExpression(nativeType, 'observe', bridge.cObserveExpression, [
+    'source',
+    'onFulfilled',
+    'onRejected',
+    'context',
+    'finalizer'
+  ])
+  validateNativeTypeAsyncTaskBridgeExpression(nativeType, 'fulfill', bridge.cFulfillExpression, ['target', 'value'])
+  validateNativeTypeAsyncTaskBridgeExpression(nativeType, 'reject', bridge.cRejectExpression, ['target', 'value'])
+}
+
+function validateNativeTypeAsyncTaskBridgeExpression(
+  nativeType: LibraryNativeTypeDescriptor,
+  kind: string,
+  expression: string | null | undefined,
+  requiredPlaceholders: string[]
+): void {
+  const label = `native type ${nativeType.typeId} async-task ${kind} expression`
+
+  if (typeof expression !== 'string' || expression.trim().length === 0) {
+    throw new Error(`${label} must not be empty`)
+  }
+
+  const placeholders = nativeTypeAsyncTaskBridgePlaceholders(expression)
+
+  for (let index = 0; index < requiredPlaceholders.length; index = index + 1) {
+    const placeholder = `$${requiredPlaceholders[index]}`
+
+    if (!placeholders.includes(placeholder)) {
+      throw new Error(`${label} requires ${placeholder}`)
+    }
+  }
+
+  for (let index = 0; index < placeholders.length; index = index + 1) {
+    const placeholder = placeholders[index]
+
+    if (!requiredPlaceholders.includes(placeholder.slice(1))) {
+      throw new Error(`${label} has unknown placeholder ${placeholder}`)
+    }
+  }
+}
+
+function nativeTypeAsyncTaskBridgePlaceholders(expression: string): string[] {
+  const result: string[] = []
+  let index = 0
+
+  while (index < expression.length) {
+    if (expression.charCodeAt(index) !== 36 || index + 1 >= expression.length) {
+      index = index + 1
+      continue
+    }
+
+    const start = index
+    index = index + 1
+
+    if (!nativeTypeAsyncTaskBridgePlaceholderStart(expression.charCodeAt(index))) {
+      continue
+    }
+
+    index = index + 1
+
+    while (index < expression.length && nativeTypeAsyncTaskBridgePlaceholderPart(expression.charCodeAt(index))) {
+      index = index + 1
+    }
+
+    result.push(expression.slice(start, index))
+  }
+
+  return result
+}
+
+function nativeTypeAsyncTaskBridgePlaceholderStart(code: number): boolean {
+  return (code >= 65 && code <= 90) || code === 95 || (code >= 97 && code <= 122)
+}
+
+function nativeTypeAsyncTaskBridgePlaceholderPart(code: number): boolean {
+  return nativeTypeAsyncTaskBridgePlaceholderStart(code) || (code >= 48 && code <= 57)
 }
 
 function validateNativeTypeIteration(nativeType: LibraryNativeTypeDescriptor): void {
@@ -1469,7 +1558,7 @@ function validateAsyncResultIntrinsicNativeType(
       continue
     }
 
-    let constructOperation: LibraryOperationDescriptor | null = null
+    const constructOperations: LibraryOperationDescriptor[] = []
 
     for (let operationIndex = 0; operationIndex < operations.length; operationIndex = operationIndex + 1) {
       const operation = operations[operationIndex]
@@ -1478,14 +1567,21 @@ function validateAsyncResultIntrinsicNativeType(
         operation.kind === 'construct' &&
         (operation.bindingId === binding.bindingId || (operation.bindingAliases ?? []).includes(binding.bindingId))
       ) {
-        constructOperation = operation
-        break
+        constructOperations.push(operation)
       }
     }
 
-    if (constructOperation === null) {
+    if (constructOperations.length !== 1) {
       throw new Error(
-        `Compiler library intrinsic provider async-result references missing construct operation ${binding.bindingId}`
+        `Compiler library intrinsic provider async-result requires exactly one construct operation for binding ${binding.bindingId}`
+      )
+    }
+
+    const constructOperation = constructOperations[0]
+
+    if (constructOperation.asyncResultOperation !== 'construct') {
+      throw new Error(
+        `Compiler library intrinsic provider async-result construct operation ${constructOperation.operationId} must declare async-result construct role`
       )
     }
 
@@ -1496,6 +1592,67 @@ function validateAsyncResultIntrinsicNativeType(
     if (nativeType === null || nativeType.cppType.length === 0) {
       throw new Error(
         `Compiler library intrinsic provider async-result construct operation ${constructOperation.operationId} requires a resolvable native C++ result type`
+      )
+    }
+
+    if (typeof constructOperation.cExpression !== 'string' || constructOperation.cExpression.trim().length === 0) {
+      throw new Error(
+        `Compiler library intrinsic provider async-result construct operation ${constructOperation.operationId} requires a C++ expression`
+      )
+    }
+
+    if (nativeType.cAsyncTaskBridge === null || typeof nativeType.cAsyncTaskBridge === 'undefined') {
+      throw new Error(
+        `Compiler library intrinsic provider async-result native type ${nativeType.typeId} requires an async-task bridge`
+      )
+    }
+
+    validateAsyncResultTaskOperations(constructOperation, operations)
+  }
+}
+
+function validateAsyncResultTaskOperations(
+  constructOperation: LibraryOperationDescriptor,
+  operations: LibraryOperationDescriptor[]
+): void {
+  const requiredKinds: LibraryAsyncResultOperationKind[] = ['construct', 'resolve', 'reject', 'then']
+
+  for (let kindIndex = 0; kindIndex < requiredKinds.length; kindIndex = kindIndex + 1) {
+    const kind = requiredKinds[kindIndex]
+    const matches: LibraryOperationDescriptor[] = []
+
+    for (let operationIndex = 0; operationIndex < operations.length; operationIndex = operationIndex + 1) {
+      const operation = operations[operationIndex]
+
+      if (operation.libraryId === constructOperation.libraryId && operation.asyncResultOperation === kind) {
+        matches.push(operation)
+      }
+    }
+
+    if (matches.length !== 1) {
+      throw new Error(
+        `Compiler library intrinsic provider async-result requires exactly one ${kind} C++ operation`
+      )
+    }
+
+    const operation = matches[0]
+    const expectedKind = kind === 'construct' ? 'construct' : 'call'
+
+    if (operation.kind !== expectedKind) {
+      throw new Error(
+        `Compiler library intrinsic provider async-result ${kind} operation ${operation.operationId} must use ${expectedKind} kind`
+      )
+    }
+
+    if (kind === 'construct' && operation !== constructOperation) {
+      throw new Error(
+        `Compiler library intrinsic provider async-result construct binding and async-result operation must match`
+      )
+    }
+
+    if (typeof operation.cExpression !== 'string' || operation.cExpression.trim().length === 0) {
+      throw new Error(
+        `Compiler library intrinsic provider async-result ${kind} operation ${operation.operationId} requires a C++ expression`
       )
     }
   }
@@ -1733,6 +1890,8 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           (item.cRuntimeValueExpression ?? '') +
           ':await-expression=' +
           (item.cAwaitExpression ?? '') +
+          ':async-task-bridge=' +
+          nativeAsyncTaskBridgeFingerprint(item) +
           ':parameters=' +
           (item.typeParameters ?? []).map(fingerprintAtom).join(',') +
           ':traits=' +
@@ -1791,6 +1950,25 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
   }
 
   return 'inox:library-set:v1:' + shortStableHash(rows.join(';'))
+}
+
+function nativeAsyncTaskBridgeFingerprint(nativeType: LibraryNativeTypeDescriptor): string {
+  const bridge = nativeType.cAsyncTaskBridge
+
+  if (bridge === null || typeof bridge === 'undefined') {
+    return ''
+  }
+
+  return (
+    'valid=' +
+    fingerprintAtom(bridge.cValidExpression) +
+    ':observe=' +
+    fingerprintAtom(bridge.cObserveExpression) +
+    ':fulfill=' +
+    fingerprintAtom(bridge.cFulfillExpression) +
+    ':reject=' +
+    fingerprintAtom(bridge.cRejectExpression)
+  )
 }
 
 function nativeIterationFingerprint(nativeType: LibraryNativeTypeDescriptor): string {

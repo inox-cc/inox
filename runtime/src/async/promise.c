@@ -41,7 +41,11 @@ typedef struct inox_promise_reaction_task {
 
 static inox_status inox_promise_settle(inox_promise* promise, inox_promise_state state, inox_value value);
 static inox_status inox_promise_add_reaction(inox_promise* promise, inox_promise_reaction* reaction);
-static inox_status inox_promise_schedule_reaction(inox_promise* promise, inox_promise_reaction* reaction);
+static inox_status inox_promise_schedule_reaction(
+  inox_promise* promise,
+  inox_promise_reaction* reaction,
+  bool finalize_reaction_on_failure
+);
 static inox_status inox_promise_schedule_unhandled_rejection_check(inox_promise* promise);
 static bool inox_promise_reaction_tracks_rejection(const inox_promise_reaction* reaction);
 static inox_status inox_promise_run_unhandled_rejection_check(void* context);
@@ -338,7 +342,7 @@ static inox_status inox_promise_settle(inox_promise* promise, inox_promise_state
   while (reaction != 0) {
     inox_promise_reaction* next = reaction->next;
     reaction->next = 0;
-    inox_status status = inox_promise_schedule_reaction(promise, reaction);
+    inox_status status = inox_promise_schedule_reaction(promise, reaction, true);
 
     if (first_error == INOX_OK && status != INOX_OK) {
       first_error = status;
@@ -366,7 +370,7 @@ static inox_status inox_promise_add_reaction(inox_promise* promise, inox_promise
   bool tracks_rejection = inox_promise_reaction_tracks_rejection(reaction);
 
   if (promise->state != INOX_PROMISE_PENDING) {
-    inox_status status = inox_promise_schedule_reaction(promise, reaction);
+    inox_status status = inox_promise_schedule_reaction(promise, reaction, false);
 
     if (status == INOX_OK && tracks_rejection) {
       promise->handled = true;
@@ -390,12 +394,20 @@ static inox_status inox_promise_add_reaction(inox_promise* promise, inox_promise
   return INOX_OK;
 }
 
-static inox_status inox_promise_schedule_reaction(inox_promise* promise, inox_promise_reaction* reaction) {
+static inox_status inox_promise_schedule_reaction(
+  inox_promise* promise,
+  inox_promise_reaction* reaction,
+  bool finalize_reaction_on_failure
+) {
   inox_promise_reaction_task* task = promise->allocator->alloc(
     promise->allocator->user, sizeof(inox_promise_reaction_task), _Alignof(inox_promise_reaction_task)
   );
 
   if (task == 0) {
+    if (!finalize_reaction_on_failure) {
+      reaction->finalizer = 0;
+    }
+
     inox_promise_free_reaction(promise, reaction);
     return INOX_ERR_OOM;
   }
@@ -408,6 +420,10 @@ static inox_status inox_promise_schedule_reaction(inox_promise* promise, inox_pr
     inox_loop_queue_microtask(promise->loop, inox_promise_run_reaction, task, inox_promise_reaction_task_finalizer);
 
   if (status != INOX_OK) {
+    if (!finalize_reaction_on_failure) {
+      task->reaction->finalizer = 0;
+    }
+
     inox_promise_reaction_task_finalizer(task);
   }
 

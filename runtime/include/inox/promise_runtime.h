@@ -37,6 +37,7 @@ inox_status inox_promise_await(
   inox_value* out,
   inox_promise_state* out_state
 );
+/* Callback context ownership transfers only when registration returns INOX_OK. On error, finalizer is not called. */
 inox_status inox_promise_then(
   inox_promise* promise,
   inox_promise_reaction_fn on_fulfilled,

@@ -16,6 +16,8 @@ import type {
   CompilerLibrarySet,
   IntrinsicRole,
   LibraryAsyncResultOperationKind,
+  LibraryCAsyncTaskBridgeDescriptor,
+  LibraryCAsyncTaskBridgeRenderRequest,
   LibraryNativeIterationDescriptor,
   TypeRef
 } from '../extensions/types.ts'
@@ -256,7 +258,7 @@ export function emitCType(valueType: CValueTypeInput): string {
   }
 
   if (valueType === 'promise') {
-    throw new Error('C async-result type requires package-native TypeRef metadata')
+    return ''
   }
 
   return 'double'
@@ -333,13 +335,7 @@ export function requireCompilerLibraryIntrinsicNativeCppType(
   libraries: CCompilerLibrarySet,
   role: IntrinsicRole
 ): string {
-  const cppType = compilerLibraryIntrinsicNativeCppType(libraries, role)
-
-  if (cppType === null || cppType.length === 0) {
-    throw new Error(`Compiler library intrinsic provider ${role} requires a resolvable native C++ result type`)
-  }
-
-  return cppType
+  return compilerLibraryIntrinsicNativeCppType(libraries, role) ?? ''
 }
 
 export function requireCompilerLibraryAsyncResultCppType(
@@ -376,6 +372,42 @@ export function compilerLibraryIntrinsicNativeCAwaitExpression(
     compilerLibraryNativeTypeForIntrinsic(cCompilerLibrarySetValue(libraries), role, 'construct')
       ?.cAwaitExpression ?? null
   )
+}
+
+export function compilerLibraryIntrinsicNativeCAsyncTaskBridge(
+  libraries: CCompilerLibrarySet,
+  role: IntrinsicRole
+): LibraryCAsyncTaskBridgeDescriptor | null {
+  return (
+    compilerLibraryNativeTypeForIntrinsic(cCompilerLibrarySetValue(libraries), role, 'construct')?.cAsyncTaskBridge ??
+    null
+  )
+}
+
+export function renderCompilerLibraryCAsyncTaskBridgeExpression(
+  bridge: LibraryCAsyncTaskBridgeDescriptor,
+  request: LibraryCAsyncTaskBridgeRenderRequest
+): string {
+  if (request.kind === 'valid') {
+    return bridge.cValidExpression.split('$source').join(request.source)
+  }
+
+  if (request.kind === 'observe') {
+    return bridge.cObserveExpression
+      .split('$source')
+      .join(request.source)
+      .split('$onFulfilled')
+      .join(request.onFulfilled)
+      .split('$onRejected')
+      .join(request.onRejected)
+      .split('$context')
+      .join(request.context)
+      .split('$finalizer')
+      .join(request.finalizer)
+  }
+
+  const expression = request.kind === 'fulfill' ? bridge.cFulfillExpression : bridge.cRejectExpression
+  return expression.split('$target').join(request.target).split('$value').join(request.value)
 }
 
 export function resolveCCompilerLibrarySet(

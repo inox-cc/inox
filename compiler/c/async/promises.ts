@@ -509,7 +509,7 @@ export function emitPreparedAsyncResultStaticExpression(
 
   registerEventLoop(context)
 
-  const out = preparedPromiseOut(options, context, 'inox_promise')
+  const out = preparedPromiseOut(options, context, 'inox_async_result')
   const rejectionValueType = promiseStaticRejectionValueType(method, expression, context, dependencies)
 
   if (options.owned !== false) {
@@ -552,7 +552,7 @@ export function emitPreparedAsyncResultConstructorExpression(
 
   registerEventLoop(context)
 
-  const out = preparedPromiseOut(options, context, 'inox_promise')
+  const out = preparedPromiseOut(options, context, 'inox_async_result')
   const executor = expression.args[0]
   const valueType = expressionPromiseValueType(expression)
   const rejectionValueType = promiseConstructorRejectionValueType(executor, context, dependencies)
@@ -725,7 +725,7 @@ export function emitPreparedAsyncResultChainExpression(
     }
   }
 
-  const out = preparedPromiseOut(options, context, 'inox_promise')
+  const out = preparedPromiseOut(options, context, 'inox_async_result')
   const valueType = expressionPromiseValueType(expression)
   const rejectionValueType = promiseMethodRejectionValueType(method, receiver)
   const callbackContext = emitPromiseChainCallbackContext(wrapper, context, dependencies)
@@ -837,7 +837,7 @@ export function emitPreparedPromiseReturningCallExpression(
     return null
   }
 
-  const out = preparedPromiseOut(options, context, 'inox_promise')
+  const out = preparedPromiseOut(options, context, 'inox_async_result')
   const valueType = resolvePromiseReturningFunctionValueType(expression.callee, context)
   const call = dependencies.emitPreparedCallExpression(expression, context)
 
@@ -1767,7 +1767,7 @@ function emitPromiseChainCallbackContext(
     }
   }
 
-  const contextName = nextCName(context, 'inox_promise_callback_ctx')
+  const contextName = nextCName(context, 'inox_async_result_callback_ctx')
 
   lines.push(
     `${wrapper.contextTypeName}* ${contextName} = (${wrapper.contextTypeName}*)inox_default_alloc(0, sizeof(${wrapper.contextTypeName}), _Alignof(${wrapper.contextTypeName}));`
@@ -2004,9 +2004,9 @@ function registerPromiseChainExpression(
   const wrapper: CPromiseChainWrapper = {
     kind: 'promise-chain-arrow',
     key: key,
-    name: `inox_promise_chain_arrow_${index}`,
-    contextTypeName: `inox_promise_chain_context_${index}`,
-    finalizerName: `inox_promise_chain_context_${index}_finalize`,
+    name: `inox_async_result_chain_arrow_${index}`,
+    contextTypeName: `inox_async_result_chain_context_${index}`,
+    finalizerName: `inox_async_result_chain_context_${index}_finalize`,
     expression: callback,
     inputRejectionValueType: inputRejectionValueType,
     returnType: returnType,
@@ -2259,7 +2259,7 @@ export function emitPromiseChainCallbackWrapperDeclaration(
   context.runtimeCallbackReturnType = wrapper.returnType
   context.runtimeCallbackReturnShape = wrapper.returnShape
   context.runtimeCallbackReturnOut = '(*out)'
-  context.runtimeCallbackCleanupLabel = 'inox_promise_callback_cleanup'
+  context.runtimeCallbackCleanupLabel = 'inox_async_result_callback_cleanup'
   const bodyLines: string[] = []
   appendLines(
     bodyLines,

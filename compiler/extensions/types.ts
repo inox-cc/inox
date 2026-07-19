@@ -145,6 +145,33 @@ export type LibraryNativeIterationDescriptor = {
   failureMode?: 'thrown' | null
 }
 
+export type LibraryCAsyncTaskBridgeDescriptor = {
+  cValidExpression: string
+  /** Transfers callback context ownership only when the rendered expression returns INOX_OK. */
+  cObserveExpression: string
+  cFulfillExpression: string
+  cRejectExpression: string
+}
+
+export type LibraryCAsyncTaskBridgeRenderRequest =
+  | {
+      kind: 'valid'
+      source: string
+    }
+  | {
+      kind: 'observe'
+      source: string
+      onFulfilled: string
+      onRejected: string
+      context: string
+      finalizer: string
+    }
+  | {
+      kind: 'fulfill' | 'reject'
+      target: string
+      value: string
+    }
+
 export type LibraryNativeTypeDescriptor = {
   libraryId: LibraryId
   typeId: LibraryNativeTypeId
@@ -156,6 +183,7 @@ export type LibraryNativeTypeDescriptor = {
   cValueAdapter?: string | null
   cRuntimeValueExpression?: string | null
   cAwaitExpression?: string | null
+  cAsyncTaskBridge?: LibraryCAsyncTaskBridgeDescriptor | null
   typeParameters?: string[]
   traits?: TypeTraitRef[]
   fields?: LibraryResultShapeFieldDescriptor[]

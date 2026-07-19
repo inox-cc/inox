@@ -193,7 +193,7 @@ export function emitCPrelude(
     pushCPreludeInclude(systemIncludes, localIncludes, '#include <string.h>')
   }
 
-  if (needsCallbackRuntime) {
+  if (needsCallbackRuntime || needsAsyncRuntime) {
     pushCPreludeInclude(systemIncludes, localIncludes, '#include <new>')
   }
 

@@ -3,21 +3,21 @@ import { test } from 'node:test'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
-import { uncheckedIncompleteAsyncResultLibrarySet } from './helpers/compiler-async-result-fixtures.ts'
+import { futureLibrarySet } from './helpers/compiler-future-library-fixtures.ts'
 
-test('module emission не выбирает raw type для incomplete async-result provider', () => {
-  const host = createMemoryCompilerHost([{ path: '/pkg/index.ts', source: 'export const task = makeTask()\n' }], {
-    root: '/'
-  })
-
-  assert.throws(
-    () =>
-      compileFileToCModuleTextsSync('/pkg/index.ts', {
-        callMain: false,
-        host,
-        libraries: uncheckedIncompleteAsyncResultLibrarySet(),
-        sourceRoot: '/pkg'
-      }),
-    /Compiler library intrinsic provider async-result requires a resolvable native C\+\+ result type/
+test('module emission использует только native type валидированного async-result provider', () => {
+  const host = createMemoryCompilerHost(
+    [{ path: '/pkg/index.ts', source: 'export const task = Future.succeed(1)\n' }],
+    { root: '/' }
   )
+  const files = compileFileToCModuleTextsSync('/pkg/index.ts', {
+    callMain: false,
+    host,
+    libraries: futureLibrarySet('FixtureFuture'),
+    sourceRoot: '/pkg'
+  })
+  const output = files.map((file) => file.code).join('\n')
+
+  assert.match(output, /FixtureFuture inox_mod_/)
+  assert.doesNotMatch(output, /\binox_promise/)
 })

@@ -2,15 +2,14 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
-import { uncheckedIncompleteAsyncResultLibrarySet } from './helpers/compiler-async-result-fixtures.ts'
+import { futureLibrarySet } from './helpers/compiler-future-library-fixtures.ts'
 
-test('unit emission не выбирает raw type для incomplete async-result provider', () => {
-  assert.throws(
-    () =>
-      compileSource('const task = makeTask()\n', {
-        libraries: uncheckedIncompleteAsyncResultLibrarySet(),
-        target: 'cc'
-      }),
-    /Compiler library intrinsic provider async-result requires a resolvable native C\+\+ result type/
-  )
+test('unit emission использует только native type валидированного async-result provider', () => {
+  const result = compileSource('const task = Future.succeed(1)\n', {
+    libraries: futureLibrarySet('FixtureFuture'),
+    target: 'cc'
+  })
+
+  assert.match(result.code, /FixtureFuture task/)
+  assert.doesNotMatch(result.code, /\binox_promise/)
 })

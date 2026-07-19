@@ -175,6 +175,12 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       baseTypeIds: [],
       runtimeRequirements: [promiseRuntimeRequirement],
       cAwaitExpression: '$value.awaitValue()',
+      cAsyncTaskBridge: {
+        cValidExpression: '$source.valid()',
+        cObserveExpression: '$source.observe($onFulfilled, $onRejected, $context, $finalizer)',
+        cFulfillExpression: '$target.fulfill($value)',
+        cRejectExpression: '$target.rejectWith($value)'
+      },
       typeParameters: ['T'],
       traits: [{ traitId: 'awaitable', args: [fulfilledParameterTypeRef, unknownTypeRef] }]
     }

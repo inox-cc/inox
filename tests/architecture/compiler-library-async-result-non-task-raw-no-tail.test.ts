@@ -3,11 +3,11 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-const targets = collectTypeScriptFiles('compiler/c').filter((file) => file !== 'compiler/c/async/tasks.ts')
+const targets = collectTypeScriptFiles('compiler/c')
 const rawRootPattern =
   /\binox_promise\s*\*|\binox_promise_(?:new|retain|release|then|resolve|resolved|reject|rejected|chain)\s*\(/g
 
-test('portable C backend не содержит raw async-result roots вне task state machine', () => {
+test('portable C backend не содержит raw async-result roots', () => {
   assert.equal(rawRootCount("'inox_' + 'promise_retain('"), 1)
   assert.equal(rawRootCount("const role = 'promise'"), 0)
 
