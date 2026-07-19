@@ -36,6 +36,9 @@ else()
   message(FATAL_ERROR "INOX_COMPILER_MODE must be node or native.")
 endif()
 
+include("${INOX_REPO_ROOT}/cmake/InoxCompilerLibraries.cmake")
+inox_prepare_compiler_library_native_plan()
+
 add_subdirectory("${INOX_REPO_ROOT}/runtime" "${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 
 file(GLOB_RECURSE INOX_TS_SOURCES CONFIGURE_DEPENDS

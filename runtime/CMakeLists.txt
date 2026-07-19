@@ -96,44 +96,15 @@ function(inox_third_party_build_dir OUT NAME)
 endfunction()
 
 set(INOX_THIRD_PARTY_TARGETS)
-set(INOX_STDLIB_GLOBAL_DIR "${INOX_REPO_ROOT}/stdlib/global")
-set(INOX_STDLIB_NODE_DIR "${INOX_REPO_ROOT}/stdlib/node")
-if(INOX_STDLIB_NATIVE_PLAN)
-  if(NOT EXISTS "${INOX_STDLIB_NATIVE_PLAN}")
-    message(FATAL_ERROR "INOX_STDLIB_NATIVE_PLAN does not exist: ${INOX_STDLIB_NATIVE_PLAN}")
-  endif()
-
-  include("${INOX_STDLIB_NATIVE_PLAN}")
-else()
-  file(GLOB INOX_STDLIB_GLOBAL_SOURCES
-    CONFIGURE_DEPENDS
-    "${INOX_STDLIB_GLOBAL_DIR}/*/src/*.c"
-    "${INOX_STDLIB_GLOBAL_DIR}/*/src/*.cc"
-    "${INOX_STDLIB_GLOBAL_DIR}/*/*/src/*.c"
-    "${INOX_STDLIB_GLOBAL_DIR}/*/*/src/*.cc"
-  )
-  file(GLOB INOX_STDLIB_NODE_SOURCES
-    CONFIGURE_DEPENDS
-    "${INOX_STDLIB_NODE_DIR}/*/src/*.c"
-    "${INOX_STDLIB_NODE_DIR}/*/src/*.cc"
-    "${INOX_STDLIB_NODE_DIR}/*/*/src/*.c"
-    "${INOX_STDLIB_NODE_DIR}/*/*/src/*.cc"
-  )
-  file(GLOB INOX_STDLIB_GLOBAL_INCLUDE_DIRS
-    LIST_DIRECTORIES true
-    CONFIGURE_DEPENDS
-    "${INOX_STDLIB_GLOBAL_DIR}/*/include"
-    "${INOX_STDLIB_GLOBAL_DIR}/*/*/include"
-  )
-  file(GLOB INOX_STDLIB_NODE_INCLUDE_DIRS
-    LIST_DIRECTORIES true
-    CONFIGURE_DEPENDS
-    "${INOX_STDLIB_NODE_DIR}/*/include"
-    "${INOX_STDLIB_NODE_DIR}/*/*/include"
-  )
-  set(INOX_STDLIB_SOURCES ${INOX_STDLIB_GLOBAL_SOURCES} ${INOX_STDLIB_NODE_SOURCES})
-  set(INOX_STDLIB_INCLUDE_DIRS ${INOX_STDLIB_GLOBAL_INCLUDE_DIRS} ${INOX_STDLIB_NODE_INCLUDE_DIRS})
+if(NOT INOX_STDLIB_NATIVE_PLAN)
+  message(FATAL_ERROR "INOX_STDLIB_NATIVE_PLAN is required when configuring inox_runtime.")
 endif()
+
+if(NOT EXISTS "${INOX_STDLIB_NATIVE_PLAN}")
+  message(FATAL_ERROR "INOX_STDLIB_NATIVE_PLAN does not exist: ${INOX_STDLIB_NATIVE_PLAN}")
+endif()
+
+include("${INOX_STDLIB_NATIVE_PLAN}")
 
 set(INOX_RUNTIME_SOURCES
   "${INOX_RUNTIME_DIR}/src/async/time_bridge.cc"

@@ -47,6 +47,9 @@ foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${config} "${INOX_OUTPUT_DIR}")
 endforeach()
 
+include("${INOX_REPO_ROOT}/cmake/InoxCompilerLibraries.cmake")
+inox_prepare_compiler_library_native_plan()
+
 add_subdirectory("${INOX_REPO_ROOT}/runtime" "${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 
 file(GLOB_RECURSE INOX_COMPILER_SOURCES CONFIGURE_DEPENDS
