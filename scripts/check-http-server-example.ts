@@ -5,7 +5,11 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
-const executable = join(repoRoot, 'dist/http-server/out/http-server')
+const compilerMode = process.argv[2] ?? 'node'
+
+assert.ok(compilerMode === 'node' || compilerMode === 'native', `Неизвестный режим compiler: ${compilerMode}`)
+
+const executable = join(repoRoot, 'dist/http-server', 'out', compilerMode, 'http-server')
 
 async function main(): Promise<void> {
   const server = spawn(executable, [], {
