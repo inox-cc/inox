@@ -107,8 +107,18 @@ console.log(strNum, strBool, strNull, strTpl, numText, hexText)
   assert.match(source, /auto parts = inox_library_result_\d+;/)
   assert.match(source, /parts\.join\("\|"\)/)
   assert.match(source, /inox::String\("alpha,beta", 10\)\.split\(","\)/)
-  assert.match(source, /auto strNum = inox::String::fromNumber\(12\);/)
-  assert.match(source, /auto strNull = inox::String\("null"\);/)
+  assert.match(
+    source,
+    /auto strNum = inox::String::fromValue\(inox::Value\(inox_number_value\(12\)\)\);/
+  )
+  assert.match(
+    source,
+    /auto strBool = inox::String::fromValue\(inox::Value\(inox_bool_value\(true\)\)\);/
+  )
+  assert.match(
+    source,
+    /auto strNull = inox::String::fromValue\(inox::Value\(inox_null_value\(\)\)\);/
+  )
   assert.match(source, /auto strTpl = inox::String::fromFormat\("value %.17g", \(\(double\)12\)\);/)
   assert.match(source, /auto numText = inox::String::fromNumber\(12\);/)
   assert.match(source, /auto hexText = inox::String::fromNumberRadix\(255, \(int\)\(16\)\);/)

@@ -28,6 +28,39 @@ test('global:conversions владеет Boolean, String и Number declarations, 
       'global:conversions#f64'
     ]
   )
+  const numberOperation = conversions.compilerPackage?.operations.find(
+    (operation) => operation.operationId === 'global:conversions#number'
+  )
+  const stringOperation = conversions.compilerPackage?.operations.find(
+    (operation) => operation.operationId === 'global:conversions#string'
+  )
+
+  assert.deepEqual(
+    {
+      argumentKinds: numberOperation?.cArgumentKinds,
+      callStyle: numberOperation?.cCallStyle,
+      expression: numberOperation?.cExpression
+    },
+    {
+      argumentKinds: ['string-view'],
+      callStyle: 'function',
+      expression: 'inox::String::toNumber'
+    }
+  )
+  assert.deepEqual(
+    {
+      argumentKinds: stringOperation?.cArgumentKinds,
+      argumentMethodNames: stringOperation?.cArgumentMethodNames,
+      callStyle: stringOperation?.cCallStyle,
+      expression: stringOperation?.cExpression
+    },
+    {
+      argumentKinds: ['runtime-value'],
+      argumentMethodNames: ['toString'],
+      callStyle: 'function',
+      expression: 'inox::String::fromValue'
+    }
+  )
 
   const libraries = createCompilerLibrarySetFromDiscovered(discovered)
   const result = compileSource("const text = String(12)\nconst value = Number('12')\nconst yes = Boolean(1)\n", { libraries })
@@ -46,8 +79,8 @@ test('global:conversions владеет Boolean, String и Number declarations, 
   assert.deepEqual(numberCall.libraryRuntimeRequirements, ['global:conversions'])
   assert.equal(booleanCall.libraryOperationId, 'global:conversions#boolean')
   assert.equal(booleanCall.typeRef?.name, 'boolean')
-  assert.match(result.code, /inox::String::fromNumber\(12\)/)
-  assert.match(result.code, /inox::String::toNumber\(inox::StringView\("12", 2\)\)/)
+  assert.match(result.code, /inox::String::fromValue\(inox::Value\(inox_number_value\(12\)\)\)/)
+  assert.match(result.code, /inox::String::toNumber\("12"\)/)
   assert.match(result.code, /Boolean\(inox::Value\(inox_number_value\(1\)\)\)/)
   assert.throws(
     () => compileSource('String()\n', { libraries }),

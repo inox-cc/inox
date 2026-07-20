@@ -4771,7 +4771,6 @@ class Checker {
     expression.libraryRuntimeRequirements = runtimeRequirements
     expression.libraryCapabilities = capabilities
     expression.libraryCExpression = variant?.cExpression ?? operation.cExpression ?? null
-    expression.libraryCLowering = variant?.cLowering ?? operation.cLowering ?? null
     expression.libraryCClassFormatExpression =
       variant?.cClassFormatExpression ?? operation.cClassFormatExpression ?? null
     const cArgumentKinds = variant?.cArgumentKinds ?? operation.cArgumentKinds

@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 
 test('hosted и self-hosted HTTP example используют разные executable paths', async () => {
-  const cmake = await readFile('examples/http-server/CMakeLists.txt', 'utf8')
+  const cmake = await readFile('cmake/InoxCompilerLibraries.cmake', 'utf8')
   const checker = await readFile('scripts/check-http-server-example.ts', 'utf8')
   const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
     scripts: Record<string, string>
@@ -13,7 +13,7 @@ test('hosted и self-hosted HTTP example используют разные execu
 
   assert.match(
     cmake,
-    /set\(CMAKE_RUNTIME_OUTPUT_DIRECTORY "\$\{INOX_OUTPUT_DIR\}\/\$\{INOX_COMPILER_MODE\}"\)/
+    /set\(CMAKE_RUNTIME_OUTPUT_DIRECTORY "\$\{output_dir\}\/\$\{INOX_COMPILER_MODE\}" PARENT_SCOPE\)/
   )
   assert.match(hosted, /dist\/http-server\/out\/node\/http-server/)
   assert.match(selfHosted, /dist\/http-server\/out\/native\/http-server/)

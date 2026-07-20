@@ -38,7 +38,6 @@ export const compilerAnyNodeStringFields: readonly string[] = [
   'libraryCAwaitExpression',
   'libraryCAsyncFulfillExpression',
   'libraryCAsyncRejectExpression',
-  'libraryCLowering',
   'libraryCClassFormatExpression',
   'libraryCppType',
   'libraryConstantValue',

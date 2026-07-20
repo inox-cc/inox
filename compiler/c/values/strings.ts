@@ -2297,26 +2297,6 @@ export function emitPreparedStringConversionExpression(arg: AnyNode, context: St
   }
 }
 
-export function emitPreparedNumberFromStringExpression(argument: AnyNode, context: StringCContext): PreparedExpression {
-  const value = emitPreparedStringBytesOperand(argument, context, 'inox_number_conversion')
-  const temp = nextCName(context, 'inox_value')
-  const lines: string[] = []
-  registerOwnedValue(context, temp)
-
-  pushAllLines(lines, value.lines)
-  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(`${temp} = inox::String::toNumber(inox::StringView(${value.bytes}, ${value.length}));`)
-
-  return {
-    lines,
-    expression: temp,
-    cppType: 'inox::Value',
-    nullable: true,
-    runtimeTypeChecked: true,
-    valueType: 'number'
-  }
-}
-
 export function isStringConcatExpression(expression: AnyNode | null | undefined, context: StringCContext): boolean {
   if (expression === null || typeof expression === 'undefined' || expression.type !== 'BinaryExpression') {
     return false

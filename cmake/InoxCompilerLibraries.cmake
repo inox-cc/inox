@@ -1,5 +1,17 @@
 include_guard(GLOBAL)
 
+function(inox_set_compiler_mode_runtime_output output_dir)
+  if(NOT INOX_COMPILER_MODE STREQUAL "node" AND NOT INOX_COMPILER_MODE STREQUAL "native")
+    message(FATAL_ERROR "INOX_COMPILER_MODE must be node or native.")
+  endif()
+
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${output_dir}/${INOX_COMPILER_MODE}" PARENT_SCOPE)
+
+  foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${config} "${output_dir}/${INOX_COMPILER_MODE}" PARENT_SCOPE)
+  endforeach()
+endfunction()
+
 function(inox_prepare_compiler_library_native_plan)
   if(INOX_STDLIB_NATIVE_PLAN)
     if(NOT EXISTS "${INOX_STDLIB_NATIVE_PLAN}")

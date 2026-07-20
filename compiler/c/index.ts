@@ -313,7 +313,6 @@ import {
   emitCTemplateLiteralFormatExpression,
   emitCTemplateLiteralValueExpression,
   emitPreparedCppStringArgument,
-  emitPreparedNumberFromStringExpression,
   emitPreparedStringConversionExpression,
   emitPreparedStringBytesOperand,
   emitPreparedStringCompareExpression,
@@ -642,9 +641,7 @@ compilerLibraryLoweringDependencies = {
   emitPreparedClassInstanceRefValueExpression,
   emitPreparedClassMethodCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedClassMethodCallExpression(expression, context, {}),
-  emitPreparedNumberFromStringExpression,
   emitPreparedNumberExpression,
-  emitPreparedStringConversionExpression,
   emitPreparedStringBytesOperand,
   emitRuntimeCallbackValue,
   emitThrownCheckLines,

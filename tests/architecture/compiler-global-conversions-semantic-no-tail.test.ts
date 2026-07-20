@@ -18,7 +18,11 @@ const forbiddenPatterns = [
   /['"]f32['"]/,
   /['"]f64['"]/,
   /\bnumericCast\b/,
-  /\bnumber-from-string-null\b/
+  /\bnumber-from-string\b/,
+  /\bstring-conversion\b/,
+  /\bLibraryCLoweringKind\b/,
+  /\blibraryCLowering\b/,
+  /\bcLowering\b/
 ]
 
 test('portable compiler не содержит target String и Number semantic tails', async () => {

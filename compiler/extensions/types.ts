@@ -220,8 +220,6 @@ export type LibraryCArgumentKind =
   | 'runtime-callback'
   | 'optional-runtime-callback'
 
-export type LibraryCLoweringKind = 'number-from-string' | 'string-conversion'
-
 export type LibraryCArgumentSourceDescriptor = {
   argumentIndex: number
   objectFieldName?: string
@@ -376,7 +374,6 @@ export type LibraryOperationVariantDescriptor = {
   objectFieldName?: string | null
   booleanLiterals?: boolean[]
   cExpression?: string | null
-  cLowering?: LibraryCLoweringKind | null
   cClassFormatExpression?: string | null
   cArgumentKinds?: LibraryCArgumentKind[]
   cArgumentAdapters?: string[]
@@ -420,7 +417,6 @@ export type LibraryOperationDescriptor = {
   runtimeRequirements: RuntimeRequirementId[]
   typeParameters?: LibraryOperationTypeParameterDescriptor[]
   cExpression?: string | null
-  cLowering?: LibraryCLoweringKind | null
   cClassFormatExpression?: string | null
   cArgumentKinds?: LibraryCArgumentKind[]
   cArgumentAdapters?: string[]

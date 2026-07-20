@@ -1730,8 +1730,6 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           ':' +
           (item.cExpression ?? '') +
           ':' +
-          (item.cLowering ?? '') +
-          ':' +
           (item.cClassFormatExpression ?? '') +
           ':' +
           (item.cArgumentKinds ?? []).join(',') +
@@ -2138,8 +2136,6 @@ function operationVariantsFingerprint(operation: LibraryOperationDescriptor): st
         sortedBooleans(variant.booleanLiterals ?? []).join(',') +
         ':' +
         (variant.cExpression ?? '') +
-        ':' +
-        (variant.cLowering ?? '') +
         ':' +
         (variant.cClassFormatExpression ?? '') +
         ':' +

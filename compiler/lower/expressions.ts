@@ -388,11 +388,6 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.libraryCAsyncRejectExpression = libraryCAsyncRejectExpression
   }
 
-  const libraryCLowering = nullableString(source.libraryCLowering)
-  if (libraryCLowering !== null && typeof libraryCLowering !== 'undefined') {
-    target.libraryCLowering = libraryCLowering
-  }
-
   const libraryCClassFormatExpression = nullableString(source.libraryCClassFormatExpression)
   if (libraryCClassFormatExpression !== null && typeof libraryCClassFormatExpression !== 'undefined') {
     target.libraryCClassFormatExpression = libraryCClassFormatExpression

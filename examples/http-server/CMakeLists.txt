@@ -21,7 +21,6 @@ set(INOX_GENERATED_CC "${INOX_GENERATED_DIR}/index.cc")
 set(INOX_OUTPUT_DIR "${INOX_REPO_ROOT}/dist/http-server/out")
 set(INOX_STATIC_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/public")
 set(INOX_STATIC_OUTPUT_DIR "${INOX_OUTPUT_DIR}/static")
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${INOX_OUTPUT_DIR}/${INOX_COMPILER_MODE}")
 
 if(INOX_COMPILER_MODE STREQUAL "native")
   if(NOT EXISTS "${INOX_NATIVE_COMPILER}")
@@ -43,11 +42,8 @@ else()
   message(FATAL_ERROR "INOX_COMPILER_MODE must be node or native.")
 endif()
 
-foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
-  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${config} "${INOX_OUTPUT_DIR}/${INOX_COMPILER_MODE}")
-endforeach()
-
 include("${INOX_REPO_ROOT}/cmake/InoxCompilerLibraries.cmake")
+inox_set_compiler_mode_runtime_output("${INOX_OUTPUT_DIR}")
 inox_prepare_compiler_library_native_plan()
 
 add_subdirectory("${INOX_REPO_ROOT}/runtime" "${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
