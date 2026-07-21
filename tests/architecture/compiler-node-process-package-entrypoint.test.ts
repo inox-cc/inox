@@ -73,7 +73,7 @@ test('entrypoint package node:process владеет global/import operations и
   assert.equal(exitCodeWrite?.cCallStyle, 'member-assignment')
   assert.deepEqual(processPackage.compilerPackage.runtimeRequirements[0], {
     id: 'node:process',
-    dependencies: ['collections', 'managed-values', 'objects', 'string-bytes'],
+    dependencies: ['global:collections#array', 'managed-values', 'objects', 'string-bytes'],
     cPreludeIncludes: ['inox/process.h'],
     capabilities: [],
     cEntrypointAdapter: {

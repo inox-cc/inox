@@ -21,7 +21,7 @@ test('native async-task bridge доступен через intrinsic provider и
       kind: 'valid',
       source: 'frame->promise'
     }),
-    'FixtureFuture::taskValid(FixtureFuture(frame->promise))'
+    'FixtureFuture::bridgeReady(frame->promise)'
   )
   assert.equal(
     renderCompilerLibraryCAsyncTaskBridgeExpression(bridge, {
@@ -29,6 +29,6 @@ test('native async-task bridge доступен через intrinsic provider и
       target: 'frame->promise',
       value: 'result'
     }),
-    'FixtureFuture::taskFulfill(FixtureFuture(frame->promise), result)'
+    'FixtureFuture::bridgeComplete(frame->promise, result)'
   )
 })

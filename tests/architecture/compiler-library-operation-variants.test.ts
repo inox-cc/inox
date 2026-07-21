@@ -79,7 +79,7 @@ function codecLibrary(): CompilerLibraryDescriptor {
         runtimeRequirements: [],
         minArgs: 1,
         maxArgs: 1,
-        argumentChecks: [{ valueTypes: ['number', 'array'] }],
+        argumentChecks: [{ valueTypes: ['number', 'object'] }],
         variants: [
           {
             minArgs: 1,
@@ -95,7 +95,7 @@ function codecLibrary(): CompilerLibraryDescriptor {
             minArgs: 1,
             maxArgs: 1,
             argumentIndex: 0,
-            argumentValueTypes: ['array'],
+            argumentValueTypes: ['object'],
             cExpression: 'codec.convert',
             cArgumentKinds: ['value'],
             cppType: 'Buffer',
@@ -111,7 +111,7 @@ function codecLibrary(): CompilerLibraryDescriptor {
         runtimeRequirements: [],
         minArgs: 1,
         maxArgs: 1,
-        argumentChecks: [{ valueTypes: ['number', 'array'] }],
+        argumentChecks: [{ valueTypes: ['number', 'object'] }],
         variants: [
           {
             minArgs: 1,
@@ -127,7 +127,7 @@ function codecLibrary(): CompilerLibraryDescriptor {
             minArgs: 1,
             maxArgs: 1,
             argumentIndex: 0,
-            argumentValueTypes: ['array'],
+            argumentValueTypes: ['object'],
             cExpression: 'Packet',
             cArgumentKinds: ['value'],
             cppType: 'Packet',

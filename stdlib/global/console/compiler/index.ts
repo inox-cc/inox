@@ -4,18 +4,20 @@ import type {
 } from '../../../../compiler/extensions/types.ts'
 
 const libraryId = 'global:console'
+const collectionsLibraryId = 'global:collections'
+const arrayRuntimeRequirement = `${collectionsLibraryId}#array`
 const runtimeRequirement = libraryId
 const methodNames = ['error', 'info', 'log', 'warn']
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:collections'],
+  dependencies: [collectionsLibraryId],
   operations: consoleOperations(),
   intrinsicBindings: [],
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: ['collections', 'managed-values', 'objects', 'string-bytes'],
+      dependencies: [arrayRuntimeRequirement, 'managed-values', 'objects', 'string-bytes'],
       cPreludeIncludes: ['inox/console.h'],
       capabilities: []
     }

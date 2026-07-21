@@ -30,6 +30,7 @@ import {
   emitFunctionPointerParams,
   emitFunctionPointerReturnType,
   emitFunctionPointerRuntimeAdapterDefinition,
+  emitFunctionPointerAdapterResultLines,
   emitPlainArrowCallbackWrapperDeclaration,
   emitPlainArrowCallbackWrapperHead,
   emitRuntimeArrowCallbackContextType,
@@ -38,18 +39,18 @@ import {
   isNullableFunctionType,
   isPlainObjectFunctionField,
   isPlainFunctionPointerType,
-  isPromiseChainCallbackWrapperWithContext,
+  isAsyncResultChainCallbackWrapperWithContext,
   isRuntimeArrowCallbackWrapperWithContext,
   isRuntimeCallbackWrapper,
   isRuntimeFunctionType,
   registerFunctionPointerRuntimeAdapter
 } from './async/callbacks.ts'
-import type { PromiseChainLoweringDependencies } from './async/promises.ts'
+import type { AsyncResultChainLoweringDependencies } from './async/async-results.ts'
 import {
-  collectPromiseChainWrappers,
-  emitPromiseChainCallbackWrapperDeclaration,
-  emitPromiseChainCallbackWrapperHead
-} from './async/promises.ts'
+  collectAsyncResultChainWrappers,
+  emitAsyncResultChainCallbackWrapperDeclaration,
+  emitAsyncResultChainCallbackWrapperHead
+} from './async/async-results.ts'
 import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
 import {
   collectAsyncTaskWrappers,
@@ -69,8 +70,8 @@ import {
   emitEventLoopInit,
   emitLoopFlowDeclarations,
   emitMainReturnValueDeclarations,
-  emitOwnedPromiseCleanup,
-  emitOwnedPromiseDeclarations,
+  emitOwnedAsyncResultCleanup,
+  emitOwnedAsyncResultDeclarations,
   emitOwnedValueCleanup,
   emitOwnedValueDeclarations,
   emitReturnFlowDeclarations,
@@ -102,7 +103,7 @@ import type {
   CModulePlan,
   CObjectShape,
   CObjectShapeField,
-  CPromiseChainWrapper,
+  CAsyncResultChainWrapper,
   CRuntimeArrowCallbackWrapper
 } from './types.ts'
 import {
@@ -117,7 +118,6 @@ import {
   requireCompilerLibraryIntrinsicNativeCppType,
   resolveCCompilerLibrarySet
 } from './value-types.ts'
-import type { ArrayLoweringDependencies } from './values/arrays.ts'
 import type { CClassMethodPrototypeMap, ClassLoweringDependencies } from './values/classes.ts'
 import {
   cClassNameFromValueType,
@@ -135,7 +135,6 @@ import type { StatementLoweringDependencies } from './values/statements.ts'
 import type { StringLoweringDependencies } from './values/strings.ts'
 
 type CEmitContext = CEmitContextWithDependencies<
-  ArrayLoweringDependencies,
   AsyncTaskLoweringDependencies,
   ClassLoweringDependencies,
   NullableLoweringDependencies,
@@ -143,7 +142,6 @@ type CEmitContext = CEmitContextWithDependencies<
   StringLoweringDependencies
 >
 type CFunctionContext = CFunctionContextWithDependencies<
-  ArrayLoweringDependencies,
   AsyncTaskLoweringDependencies,
   ClassLoweringDependencies,
   NullableLoweringDependencies,
@@ -245,7 +243,7 @@ function pushCModuleClassMethodFunctionDeclarations(target: IrFunctionDeclaratio
           returnType: methodReturnType,
           returnTypeRef: method.returnTypeRef ?? null,
           returnNullable: method.returnNullable === true,
-          returnPromiseValueType: method.returnPromiseValueType,
+          returnAsyncResultValueType: method.returnAsyncResultValueType,
           returnShape: method.returnShape,
           loc: method.loc
         }
@@ -296,7 +294,7 @@ function cModuleValueDeclarationAt(values: CModuleValueDeclaration[], index: num
   return values[index]
 }
 
-function cModulePromiseChainWrapperAt(values: CPromiseChainWrapper[], index: number): CPromiseChainWrapper {
+function cModuleAsyncResultChainWrapperAt(values: CAsyncResultChainWrapper[], index: number): CAsyncResultChainWrapper {
   return values[index]
 }
 
@@ -367,7 +365,6 @@ function collectCModuleClassMethodPrototypes(
 }
 
 export type CModuleEmissionDependencies = {
-  arrayLoweringDependencies: ArrayLoweringDependencies
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
   callbackLoweringDependencies: CallbackLoweringDependencies
   classLoweringDependencies: ClassLoweringDependencies
@@ -402,7 +399,7 @@ export type CModuleEmissionDependencies = {
   emitFunctionHead(statement: AnyNode, context: CEmitContext): string
   emitStatementList(body: AnyNode[], context: CFunctionContext): string[]
   nullableLoweringDependencies: NullableLoweringDependencies
-  promiseChainLoweringDependencies: PromiseChainLoweringDependencies
+  asyncResultChainLoweringDependencies: AsyncResultChainLoweringDependencies
   statementLoweringDependencies: StatementLoweringDependencies
   stringLoweringDependencies: StringLoweringDependencies
 }
@@ -506,7 +503,6 @@ export function emitCModuleSource(
       prelude.needsClassDescriptorRuntime,
       prelude.needsCppValueRuntime,
       prelude.needsStringHeader,
-      prelude.needsCollectionRuntime,
       prelude.needsObjectRuntime,
       prelude.libraryCPreludeIncludes
     )
@@ -563,10 +559,10 @@ export function emitCModuleSource(
     bodyLines.push('')
   }
 
-  for (const wrapper of context.promiseChainWrappers.values()) {
+  for (const wrapper of context.asyncResultChainWrappers.values()) {
     pushCModuleLines(
       bodyLines,
-      emitPromiseChainCallbackWrapperDeclaration(wrapper, context, deps.promiseChainLoweringDependencies)
+      emitAsyncResultChainCallbackWrapperDeclaration(wrapper, context, deps.asyncResultChainLoweringDependencies)
     )
     bodyLines.push('')
   }
@@ -604,7 +600,7 @@ function emitCModuleFunctionPointerRuntimeAdapterDefinitions(lines: string[], co
   registerCModuleFunctionPointerAdapterRuntimeBridges(context)
 
   for (const adapter of context.functionPointerRuntimeAdapters) {
-    pushCModuleLines(lines, emitFunctionPointerRuntimeAdapterDefinition(adapter))
+    pushCModuleLines(lines, emitFunctionPointerRuntimeAdapterDefinition(adapter, context.libraries))
     lines.push('')
   }
 }
@@ -861,7 +857,7 @@ function emitCModuleDeclarations(
   deps: CModuleEmissionDependencies
 ): void {
   const arrowCallbackWrappers: CRuntimeArrowCallbackWrapper[] = []
-  const promiseChainCallbackWrappers: CPromiseChainWrapper[] = []
+  const asyncResultChainCallbackWrappers: CAsyncResultChainWrapper[] = []
 
   for (const wrapper of context.callbackWrappers.values()) {
     if (wrapper.kind === 'arrow' && isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
@@ -869,9 +865,9 @@ function emitCModuleDeclarations(
     }
   }
 
-  for (const wrapper of context.promiseChainWrappers.values()) {
-    if (isPromiseChainCallbackWrapperWithContext(wrapper)) {
-      promiseChainCallbackWrappers.push(wrapper)
+  for (const wrapper of context.asyncResultChainWrappers.values()) {
+    if (isAsyncResultChainCallbackWrapperWithContext(wrapper)) {
+      asyncResultChainCallbackWrappers.push(wrapper)
     }
   }
 
@@ -887,8 +883,8 @@ function emitCModuleDeclarations(
     lines.push('')
   }
 
-  for (let wrapperIndex = 0; wrapperIndex < promiseChainCallbackWrappers.length; wrapperIndex = wrapperIndex + 1) {
-    const wrapper = cModulePromiseChainWrapperAt(promiseChainCallbackWrappers, wrapperIndex)
+  for (let wrapperIndex = 0; wrapperIndex < asyncResultChainCallbackWrappers.length; wrapperIndex = wrapperIndex + 1) {
+    const wrapper = cModuleAsyncResultChainWrapperAt(asyncResultChainCallbackWrappers, wrapperIndex)
 
     pushCModuleLines(lines, emitRuntimeArrowCallbackContextType(wrapper))
     lines.push('')
@@ -933,12 +929,12 @@ function emitCModuleDeclarations(
     lines.push(`${emitRuntimeCallbackWrapperHead(wrapper)};`)
   }
 
-  for (const wrapper of context.promiseChainWrappers.values()) {
-    if (isPromiseChainCallbackWrapperWithContext(wrapper)) {
+  for (const wrapper of context.asyncResultChainWrappers.values()) {
+    if (isAsyncResultChainCallbackWrapperWithContext(wrapper)) {
       lines.push(`static void ${wrapper.finalizerName}(void* context);`)
     }
 
-    lines.push(`${emitPromiseChainCallbackWrapperHead(wrapper)};`)
+    lines.push(`${emitAsyncResultChainCallbackWrapperHead(wrapper)};`)
   }
 
   if (
@@ -946,7 +942,7 @@ function emitCModuleDeclarations(
     emittedClassMethodPrototype ||
     context.asyncTaskWrappers.size > 0 ||
     context.callbackWrappers.size > 0 ||
-    context.promiseChainWrappers.size > 0
+    context.asyncResultChainWrappers.size > 0
   ) {
     lines.push('')
   }
@@ -981,7 +977,7 @@ function collectCModuleNeededFunctionPrototypeNames(
     collectCReferencedFunctionPrototypeNames(wrapper, functionNames, prototypeNames)
   }
 
-  for (const wrapper of context.promiseChainWrappers.values()) {
+  for (const wrapper of context.asyncResultChainWrappers.values()) {
     collectCReferencedFunctionPrototypeNames(wrapper, functionNames, prototypeNames)
   }
 
@@ -1035,7 +1031,7 @@ function collectCModuleFunctionIndexes(functions: AnyNode[]): Map<string, number
   return indexes
 }
 
-function emitCModuleUnhandledRejectionFlagDefinition(lines: string[], context: CEmitContext): void {
+function emitCModuleUnhandledRejectionFlagDefinition(_lines: string[], context: CEmitContext): void {
   if (context.unhandledRejectionFlag === null || typeof context.unhandledRejectionFlag === 'undefined') {
     return
   }
@@ -1185,17 +1181,17 @@ function emitCModuleFunctionPointerAdapterDefinition(
   }
 
   const call = `${adapter.target}(${joinStrings(targetArgs, ', ')})`
-
-  if (emitFunctionPointerReturnType(adapter.functionType) === 'void') {
-    lines.push(`  ${call};`)
-    pushCModuleLines(lines, cleanupLines)
-  } else if (cleanupLines.length > 0) {
-    lines.push(`  ${emitFunctionPointerReturnType(adapter.functionType)} inox_adapter_result = ${call};`)
-    pushCModuleLines(lines, cleanupLines)
-    lines.push('  return inox_adapter_result;')
-  } else {
-    lines.push(`  return ${call};`)
-  }
+  pushCModuleLines(
+    lines,
+    emitFunctionPointerAdapterResultLines(
+      adapter.functionType,
+      targetFunctionType,
+      context.libraries,
+      call,
+      cleanupLines,
+      context.diagnostics
+    )
+  )
 
   lines.push('}')
 
@@ -1367,11 +1363,13 @@ function functionPointerAdapterContextFunctionType(name: string, context: CEmitC
   }
 
   return {
+    declaredReturnType: context.functionReturnDeclaredTypes.get(name) ?? null,
     kind: 'function',
     params,
     returnTypeRef: cTypeRefMapValue(context.functionReturnTypeRefs, name),
+    returnRuntimeTypeAlternatives: context.functionReturnRuntimeTypeAlternatives.get(name) ?? null,
     returnNullable: context.functionReturnNullables.get(name) === true,
-    returnPromiseValueType: context.functionReturnPromiseValueTypes.get(name) ?? null,
+    returnAsyncResultValueType: context.functionReturnAsyncResultValueTypes.get(name) ?? null,
     returnShape: context.functionReturnShapes.get(name) ?? null,
     returnType
   }
@@ -1945,7 +1943,7 @@ function createCModuleBaseContext(
   context.functionNames = createCModuleFunctionNames(plan)
   context.externalEventLoopFunctions = collectCModuleExternalEventLoopFunctionNames(plan, deps, new Map(), new Set())
   context.callbackWrappers = collectCallbackWrappers(irPrograms, context, deps.callbackLoweringDependencies)
-  context.promiseChainWrappers = collectPromiseChainWrappers(irPrograms, context, deps.promiseChainLoweringDependencies)
+  context.asyncResultChainWrappers = collectAsyncResultChainWrappers(irPrograms, context, deps.asyncResultChainLoweringDependencies)
   context.asyncTaskWrappers = collectAsyncTaskWrappers(functionEntries, context, deps.asyncTaskLoweringDependencies)
 
   return context
@@ -1978,7 +1976,7 @@ function addCModuleRuntimeType(types: Set<string>, valueType: string): void {
     valueType === 'unknown' ||
     isManagedRuntimeReturnType(valueType) ||
     isOpaqueRuntimeValueType(valueType) ||
-    valueType === 'promise'
+    valueType === 'async-result'
   ) {
     types.add(valueType)
   }
@@ -2252,7 +2250,7 @@ function shouldEmitCModuleStaticValueDeclaration(
 }
 
 function isCModuleEntryLocalValueType(valueType: string): boolean {
-  return valueType !== 'function' && valueType !== 'promise'
+  return valueType !== 'function' && valueType !== 'async-result'
 }
 
 function cModuleObjectShapeHasFunctionFields(fields: CObjectShapeField[], seen: Set<CObjectShapeField[]>): boolean {
@@ -2769,7 +2767,7 @@ function cModuleValueCType(valueType: string, context: CEmitContext): string {
     return 'inox_value'
   }
 
-  if (valueType === 'promise') {
+  if (valueType === 'async-result') {
     return requireCompilerLibraryIntrinsicNativeCppType(context.libraries, 'async-result')
   }
 
@@ -2793,7 +2791,7 @@ function cModuleValueGlobalInitializer(valueType: string): string {
     return '""'
   }
 
-  if (valueType === 'promise') {
+  if (valueType === 'async-result') {
     return ''
   }
 
@@ -2837,7 +2835,7 @@ function emitCModuleInitFunction(
   pushIndentedCModuleLines(lines, emitReturnFlowDeclarations(context))
   pushIndentedCModuleLines(lines, emitEventLoopDeclarations(context))
   pushIndentedCModuleLines(lines, emitOwnedValueDeclarations(context))
-  pushIndentedCModuleLines(lines, emitOwnedPromiseDeclarations(context))
+  pushIndentedCModuleLines(lines, emitOwnedAsyncResultDeclarations(context))
   pushIndentedCModuleLines(lines, emitErrorChannelDeclarations(context))
   pushIndentedCModuleLines(lines, emitBoxedValueDeclarations(context))
   pushIndentedCModuleLines(lines, emitEventLoopInit(context))
@@ -2846,7 +2844,7 @@ function emitCModuleInitFunction(
   if (shouldEmitCleanupLabel(context)) {
     lines.push('cleanup:')
     pushIndentedCModuleLines(lines, emitOwnedValueCleanup(context))
-    pushIndentedCModuleLines(lines, emitOwnedPromiseCleanup(context))
+    pushIndentedCModuleLines(lines, emitOwnedAsyncResultCleanup(context))
     pushIndentedCModuleLines(lines, emitEventLoopCleanup(context))
     pushIndentedCModuleLines(lines, emitBoxedValueCleanup(context))
   }
@@ -2879,7 +2877,7 @@ function emitCModuleMainFunction(
   pushIndentedCModuleLines(lines, emitMainReturnValueDeclarations(context))
   pushIndentedCModuleLines(lines, emitReturnFlowDeclarations(context))
   pushIndentedCModuleLines(lines, emitOwnedValueDeclarations(context))
-  pushIndentedCModuleLines(lines, emitOwnedPromiseDeclarations(context))
+  pushIndentedCModuleLines(lines, emitOwnedAsyncResultDeclarations(context))
   pushIndentedCModuleLines(lines, emitErrorChannelDeclarations(context))
   pushIndentedCModuleLines(lines, emitBoxedValueDeclarations(context))
   pushCModuleLines(lines, bodyLines)
@@ -3283,9 +3281,10 @@ function cloneImportedCModuleFunctionDeclaration(
     params: declaration.params,
     returnType: declaration.returnType,
     returnTypeRef: declaration.returnTypeRef ?? null,
+    returnRuntimeTypeAlternatives: declaration.returnRuntimeTypeAlternatives ?? null,
     returnNullable: declaration.returnNullable,
     declaredReturnType: declaration.declaredReturnType,
-    returnPromiseValueType: declaration.returnPromiseValueType,
+    returnAsyncResultValueType: declaration.returnAsyncResultValueType,
     returnShape: declaration.returnShape,
     loc: declaration.loc
   }

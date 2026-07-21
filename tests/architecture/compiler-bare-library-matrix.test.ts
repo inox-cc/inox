@@ -53,12 +53,13 @@ test('bare compiler не материализует API и intrinsic-типы б
     )
   }
 
-  const languageArrayType = compileSourceToIr('let values: number[]\n', {
+  const unresolvedArraySyntax = compileSourceToIr('let values: number[]\n', {
     libraries: emptyCompilerLibrarySet
   })
-  const declaration = languageArrayType.ir.body[0]
+  const declaration = unresolvedArraySyntax.ir.body[0]
 
-  assert.equal(declaration.valueType, 'array')
+  assert.equal(declaration.valueType, 'unknown')
   assert.equal(declaration.typeRef, null)
-  assert.deepEqual(languageArrayType.ir.runtimeRequirements, [])
+  assert.deepEqual(unresolvedArraySyntax.ir.runtimeRequirements, [])
+
 })

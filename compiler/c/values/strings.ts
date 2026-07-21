@@ -18,8 +18,7 @@ import { cUnsupportedExpressionCode, isCoalesceExpression, isOptionalChainExpres
 import type {
   CObjectFieldInfo,
   CPreparedExpression as PreparedExpression,
-  CPreparedStringBytesOperand as PreparedStringBytesOperand,
-  CRuntimeArrayElement
+  CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
 import { isManagedRuntimeReturnType, isNullableScalarType, isOpaqueRuntimeValueType } from '../value-types.ts'
 
@@ -104,26 +103,6 @@ type TemplateReferenceValidationState = {
   valid: boolean
 }
 
-type StringMethodNode = {
-  args?: StringMethodNode[]
-  argsOwnership?: 'weak'
-  callee?: StringMethodNode
-  calleeOwnership?: 'weak'
-  index?: StringMethodNode
-  indexOwnership?: 'weak'
-  loc?: SourceLocation | null
-  object?: StringMethodNode
-  objectOwnership?: 'weak'
-  path?: string[]
-  property?: string
-  type?: string
-  valueType?: string | null
-}
-
-function stringNodeAt(values: StringMethodNode[], index: number): StringMethodNode {
-  return values[index]
-}
-
 function stringPathAt(values: string[], index: number): string {
   return values[index]
 }
@@ -144,12 +123,6 @@ export type StringLoweringDependencies = {
   emitPreparedNumberExpression(expression: AnyNode, context: StringCContext): PreparedExpression
   emitPreparedNativeClassStringFieldExpression(expression: AnyNode, context: StringCContext): PreparedExpression | null
   emitPreparedNodeRuntimeStringExpression(expression: AnyNode, context: StringCContext): PreparedExpression | null
-  emitPreparedRuntimeArrayIndexValue(
-    expression: AnyNode,
-    element: CRuntimeArrayElement,
-    context: StringCContext,
-    tempPrefix: string
-  ): PreparedExpression
   emitPreparedClassToStringExpression(expression: AnyNode, context: StringCContext): PreparedExpression | null
   emitReference(expression: AnyNode, context: StringCContext): string
   inferExpressionType(expression: AnyNode, context: StringCContext): string
@@ -162,7 +135,6 @@ export type StringLoweringDependencies = {
   nodeRuntimeStringConstantValue(expression: AnyNode | null | undefined): string | null
   resolveKnownObjectIndex(expression: AnyNode, context: StringCContext): CObjectFieldInfo | null
   resolveKnownObjectMember(expression: AnyNode, context: StringCContext): CObjectFieldInfo | null
-  resolveRuntimeArrayIndex(expression: AnyNode, context: StringCContext): CRuntimeArrayElement | null
 }
 
 const unconfiguredStringLoweringDependencies = {} as StringLoweringDependencies
@@ -743,14 +715,11 @@ export function emitPreparedStringBytesOperand(
 
     const variables = context.variables
     let valueType = nodeValueType(expression)
-    let storageValueType: string | null = null
 
     if (variables !== null && typeof variables !== 'undefined') {
       const variableType = variables.get(name)
 
       if (variableType !== null && typeof variableType !== 'undefined') {
-        storageValueType = variableType
-
         if (
           valueType === null ||
           valueType === 'unknown' ||
@@ -923,12 +892,6 @@ export function emitPreparedStringBytesOperand(
   ) {
     const value = stringDeps(context).emitCValueExpression(expression, context)
     return emitPreparedRuntimeStringValueBytesOperand(value, context, tempPrefix)
-  }
-
-  const runtimeArrayString = emitPreparedRuntimeArrayStringBytesOperand(expression, context, tempPrefix)
-
-  if (runtimeArrayString !== null && typeof runtimeArrayString !== 'undefined') {
-    return runtimeArrayString
   }
 
   pushStringDiagnostic(
@@ -1253,21 +1216,6 @@ function moduleRuntimeStringStorageName(expression: AnyNode, context: StringCCon
   return storage
 }
 
-function emitPreparedRuntimeArrayStringBytesOperand(
-  expression: AnyNode,
-  context: StringCContext,
-  tempPrefix: string
-): PreparedStringBytesOperand | null {
-  const runtimeElement = stringDeps(context).resolveRuntimeArrayIndex(expression, context)
-
-  if (runtimeElement === null || typeof runtimeElement === 'undefined' || runtimeElement.valueType !== 'string') {
-    return null
-  }
-
-  const value = stringDeps(context).emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, tempPrefix)
-  return emitPreparedRuntimeStringValueBytesOperand(value, context, tempPrefix)
-}
-
 function emitPreparedKnownObjectStringBytesOperand(
   expression: AnyNode,
   context: StringCContext,
@@ -1588,10 +1536,6 @@ function isDynamicRuntimeObjectExpression(expression: AnyNode, context: StringCC
     return true
   }
 
-  if (isRuntimeArrayObjectIndexExpression(expression, context)) {
-    return true
-  }
-
   const knownValueType = knownObjectFieldValueType(expression, context)
 
   if (knownValueType !== null && typeof knownValueType !== 'undefined') {
@@ -1755,16 +1699,6 @@ function isOwnedRuntimeValueName(name: string, context: StringCContext): boolean
   }
 
   return false
-}
-
-function isRuntimeArrayObjectIndexExpression(expression: AnyNode, context: StringCContext): boolean {
-  const element = stringDeps(context).resolveRuntimeArrayIndex(expression, context)
-
-  if (element === null || typeof element === 'undefined') {
-    return false
-  }
-
-  return element.valueType === 'object' || element.valueType === 'unknown'
 }
 
 function knownObjectFieldValueType(expression: AnyNode, context: StringCContext): string | null {

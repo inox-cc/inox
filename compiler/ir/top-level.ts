@@ -8,6 +8,7 @@ import type {
   ModuleRecord,
   ObjectShapeInfo,
   ProgramNode,
+  RuntimeTypeAlternative,
   SourceLocation,
   ValueType
 } from '../types.ts'
@@ -26,7 +27,8 @@ type IrTopLevelNode = AnyNode & {
   name?: string | null
   params?: AnyNode[]
   returnNullable?: boolean | null
-  returnPromiseValueType?: ValueType | null
+  returnRuntimeTypeAlternatives?: RuntimeTypeAlternative[] | null
+  returnAsyncResultValueType?: ValueType | null
   returnShape?: ObjectShapeInfo | null
   returnType?: string | null
   type?: string | null
@@ -356,8 +358,15 @@ function createFunctionDeclaration(item: IrTopLevelNode, name: string): IrFuncti
     declaration.returnTypeRef = item.returnTypeRef
   }
 
-  if (item.returnPromiseValueType !== null && typeof item.returnPromiseValueType !== 'undefined') {
-    declaration.returnPromiseValueType = item.returnPromiseValueType
+  if (
+    item.returnRuntimeTypeAlternatives !== null &&
+    typeof item.returnRuntimeTypeAlternatives !== 'undefined'
+  ) {
+    declaration.returnRuntimeTypeAlternatives = item.returnRuntimeTypeAlternatives
+  }
+
+  if (item.returnAsyncResultValueType !== null && typeof item.returnAsyncResultValueType !== 'undefined') {
+    declaration.returnAsyncResultValueType = item.returnAsyncResultValueType
   }
 
   if (item.returnShape !== null && typeof item.returnShape !== 'undefined') {

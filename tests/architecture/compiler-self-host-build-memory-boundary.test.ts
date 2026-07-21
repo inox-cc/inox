@@ -7,6 +7,11 @@ test('self-host build releases per-module compiler graphs at a bounded GC bounda
   const buildSource = await readFile('scripts/build.ts', 'utf8')
 
   assert.equal(packageJson.scripts.build, 'node --max-old-space-size=6144 --expose-gc scripts/build.ts')
-  assert.match(buildSource, /releaseDeclarationRefinementMemory\(\)/)
+  assert.match(buildSource, /compiledModules\.push\(result\.module\)\s+releaseSelfHostedCompilationMemory\(\)/)
+  assert.match(
+    buildSource,
+    /addGeneratedFiles\(generatedFiles, modules\.files\)\s+releaseSelfHostedCompilationMemory\(\)/
+  )
+  assert.doesNotMatch(buildSource, /contract\.resolvedProgram/)
   assert.match(buildSource, /self-hosted build must run Node with --expose-gc/)
 })

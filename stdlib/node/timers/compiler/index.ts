@@ -1,6 +1,7 @@
 import type {
   CompilerLibraryPackageDescriptor,
   LibraryArgumentCheckDescriptor,
+  LibraryNativeTypeDescriptor,
   LibraryOperationDescriptor,
   NominalTypeRef,
   PrimitiveTypeRef
@@ -43,15 +44,11 @@ for (const [handleName] of handleTypes) {
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
   dependencies: [],
-  nativeTypes: handleTypes.map(([handleName]) => ({
-    libraryId,
-    typeId: handleTypeId(handleName),
-    declarationNames: [handleName],
-    valueType: 'object',
-    cppType: handleName,
-    baseTypeIds: [],
-    runtimeRequirements
-  })),
+  nativeTypes: [
+    handleNativeType('ImmediateHandle'),
+    handleNativeType('IntervalHandle'),
+    handleNativeType('TimeoutHandle')
+  ],
   operations,
   intrinsicBindings: [],
   runtimeRequirements: [
@@ -62,6 +59,20 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       capabilities: ['timers']
     }
   ]
+}
+
+function handleNativeType(
+  handleName: 'ImmediateHandle' | 'IntervalHandle' | 'TimeoutHandle'
+): LibraryNativeTypeDescriptor {
+  return {
+    libraryId,
+    typeId: handleTypeId(handleName),
+    declarationNames: [handleName],
+    valueType: 'object',
+    cppType: handleName,
+    baseTypeIds: [],
+    runtimeRequirements
+  }
 }
 
 function startOperation(

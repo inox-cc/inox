@@ -5,7 +5,7 @@ import {
   emitRuntimeTypeCheck,
   nextCName,
   registerEventLoop,
-  registerOwnedPromise,
+  registerOwnedAsyncResult,
   registerOwnedValue
 } from './context.ts'
 import type { CFunctionContextWithDependencies } from './context.ts'
@@ -18,15 +18,16 @@ import type {
   CPreparedExpression as PreparedExpression,
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from './types.ts'
-import type { ArrayLoweringDependencies } from './values/arrays.ts'
 import type { ClassLoweringDependencies } from './values/classes.ts'
 import type { NullableLoweringDependencies } from './values/nullable.ts'
 import type { StatementLoweringDependencies } from './values/statements.ts'
 import type { StringLoweringDependencies } from './values/strings.ts'
-import { compilerLibraryNativeRuntimeValueExpressionForId } from './value-types.ts'
+import {
+  compilerLibraryIntrinsicAsyncResultCValidExpression,
+  compilerLibraryNativeRuntimeValueExpressionForId
+} from './value-types.ts'
 
 type CFunctionContext = CFunctionContextWithDependencies<
-  ArrayLoweringDependencies,
   AsyncTaskLoweringDependencies,
   ClassLoweringDependencies,
   NullableLoweringDependencies,
@@ -56,8 +57,8 @@ type CompilerLibraryExpressionNode = AnyNode & {
   libraryCallbackLifetime?: string | null
   libraryCppType?: string | null
   libraryOwned?: boolean | null
-  promiseRejectionValueType?: string | null
-  promiseValueType?: string | null
+  asyncResultRejectionValueType?: string | null
+  asyncResultValueType?: string | null
 }
 
 type CompilerLibraryNativeFieldContext = {
@@ -272,7 +273,9 @@ export function emitPreparedCompilerLibraryCallExpression(
       expression.type !== 'NewExpression' &&
       expression.type !== 'AssignmentExpression' &&
       expression.type !== 'MemberExpression' &&
+      expression.type !== 'OptionalMemberExpression' &&
       expression.type !== 'IndexExpression' &&
+      expression.type !== 'OptionalIndexExpression' &&
       expression.type !== 'RegExpLiteral') ||
     target === null ||
     typeof target === 'undefined' ||
@@ -743,6 +746,51 @@ export function emitPreparedCompilerLibraryCallExpression(
   }
 
   if (optionalReceiverCondition !== null) {
+    if (item.valueType === 'number' || item.valueType === 'boolean') {
+      const out = nextCName(context, 'inox_library_optional_result')
+      const resultAdapter = item.libraryCResultAdapter
+      const returnsRuntimeValue =
+        (cppType === 'inox::Value' || cppType === 'inox_value') &&
+        (resultAdapter === null || typeof resultAdapter === 'undefined' || resultAdapter === '')
+
+      if (returnsRuntimeValue) {
+        const undefinedExpression =
+          cppType === 'inox::Value' ? 'inox::Value(inox_undefined_value())' : 'inox_undefined_value()'
+
+        lines.push(`auto ${out} = ((${optionalReceiverCondition}) ? ${callExpression} : ${undefinedExpression});`)
+      } else {
+        const adaptedCall = applyCompilerLibraryValueAdapter(callExpression, resultAdapter)
+        const boxedCall =
+          item.valueType === 'boolean'
+            ? `inox_bool_value(${adaptedCall})`
+            : `inox_number_value(${adaptedCall})`
+
+        lines.push(`auto ${out} = ((${optionalReceiverCondition}) ? ${boxedCall} : inox_undefined_value());`)
+      }
+
+      pushCompilerLibraryFailureCheck(lines, item.libraryCFailureMode, out, context, dependencies)
+
+      if (returnsRuntimeValue) {
+        const expectedTag = item.valueType === 'boolean' ? 'INOX_TAG_BOOL' : 'INOX_TAG_NUMBER'
+
+        lines.push(
+          emitRuntimeTypeCheck(
+            `${out}.tag != INOX_TAG_UNDEFINED && ${out}.tag != INOX_TAG_NULL && ${out}.tag != ${expectedTag}`,
+            context
+          )
+        )
+      }
+
+      return {
+        lines,
+        expression: out,
+        cppType: 'inox::Value',
+        nullable: true,
+        runtimeTypeChecked: true,
+        valueType: item.valueType
+      }
+    }
+
     if (cppType !== 'inox::Value' && cppType !== 'inox_value') {
       return null
     }
@@ -752,9 +800,9 @@ export function emitPreparedCompilerLibraryCallExpression(
     callExpression = `((${optionalReceiverCondition}) ? ${callExpression} : ${undefinedExpression})`
   }
 
-  if (item.valueType === 'promise') {
-    const promiseValueType = item.promiseValueType ?? 'unknown'
-    const rejectionValueType = item.promiseRejectionValueType ?? 'unknown'
+  if (item.valueType === 'async-result') {
+    const asyncResultValueType = item.asyncResultValueType ?? 'unknown'
+    const rejectionValueType = item.asyncResultRejectionValueType ?? 'unknown'
     const optionOwned = options?.owned
     const optionOut = options?.out
 
@@ -763,22 +811,27 @@ export function emitPreparedCompilerLibraryCallExpression(
         lines,
         expression: callExpression,
         cppType,
-        valueType: promiseValueType,
+        valueType: asyncResultValueType,
         rejectionValueType
       }
     }
 
-    const out = optionOut ?? nextCName(context, 'inox_library_promise')
+    const out = optionOut ?? nextCName(context, 'inox_library_asyncResult')
     registerEventLoop(context)
-    registerOwnedPromise(context, out, promiseValueType, rejectionValueType)
+    registerOwnedAsyncResult(context, out, asyncResultValueType, rejectionValueType)
     lines.push(`${out} = ${callExpression};`)
-    lines.push(emitRuntimeTypeCheck(`!${out}.valid()`, context))
+    lines.push(
+      emitRuntimeTypeCheck(
+        `!(${compilerLibraryIntrinsicAsyncResultCValidExpression(context.libraries, out)})`,
+        context
+      )
+    )
 
     return {
       lines,
       expression: out,
       cppType,
-      valueType: promiseValueType,
+      valueType: asyncResultValueType,
       rejectionValueType
     }
   }
@@ -978,12 +1031,12 @@ function emitCompilerLibraryRuntimeValueArgument(value: PreparedExpression): str
   return `inox::Value(${value.expression})`
 }
 
-export function isCompilerLibraryPromiseExpression(expression: AnyNode | null | undefined): boolean {
+export function isCompilerLibraryAsyncResultExpression(expression: AnyNode | null | undefined): boolean {
   return (
     expression !== null &&
     typeof expression !== 'undefined' &&
     expression.type === 'CallExpression' &&
-    expression.valueType === 'promise' &&
+    expression.valueType === 'async-result' &&
     expression.libraryOperationId !== null &&
     typeof expression.libraryOperationId !== 'undefined'
   )
@@ -1191,11 +1244,11 @@ function compilerLibrarySourceArguments(expression: AnyNode): AnyNode[] {
     return [expression.value]
   }
 
-  if (expression.type === 'IndexExpression') {
+  if (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') {
     return [expression.index]
   }
 
-  if (expression.type === 'MemberExpression') {
+  if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
     return []
   }
 
@@ -1215,7 +1268,12 @@ function compilerLibraryReceiver(expression: AnyNode): AnyNode | null {
     return null
   }
 
-  if (expression.type === 'IndexExpression' || expression.type === 'MemberExpression') {
+  if (
+    expression.type === 'IndexExpression' ||
+    expression.type === 'OptionalIndexExpression' ||
+    expression.type === 'MemberExpression' ||
+    expression.type === 'OptionalMemberExpression'
+  ) {
     return expression.object
   }
 
@@ -1230,7 +1288,11 @@ function compilerLibraryReceiver(expression: AnyNode): AnyNode | null {
 }
 
 function compilerLibraryHasOptionalReceiver(expression: AnyNode): boolean {
-  return expression.type === 'CallExpression' && expression.callee.type === 'OptionalMemberExpression'
+  return (
+    expression.type === 'OptionalMemberExpression' ||
+    expression.type === 'OptionalIndexExpression' ||
+    (expression.type === 'CallExpression' && expression.callee.type === 'OptionalMemberExpression')
+  )
 }
 
 function compilerLibraryOptionalReceiverCondition(
@@ -1263,7 +1325,7 @@ function compilerLibraryOptionalReceiverCondition(
 }
 
 function compilerLibraryMemberName(expression: AnyNode): string | null {
-  if (expression.type === 'MemberExpression') {
+  if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
     return expression.property
   }
 
@@ -1271,7 +1333,10 @@ function compilerLibraryMemberName(expression: AnyNode): string | null {
     return expression.target.property
   }
 
-  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+  if (
+    (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') &&
+    expression.index.type === 'StringLiteral'
+  ) {
     return expression.index.value
   }
 
@@ -1279,7 +1344,7 @@ function compilerLibraryMemberName(expression: AnyNode): string | null {
 }
 
 function compilerLibraryDynamicMemberExpression(expression: AnyNode): AnyNode | null {
-  if (expression.type === 'IndexExpression') {
+  if (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') {
     return expression.index
   }
 

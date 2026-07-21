@@ -47,7 +47,7 @@ function fixtureLibrary(
         libraryId: 'fixture',
         typeId: 'fixture#Future',
         declarationNames: ['Future'],
-        valueType: 'promise',
+        valueType: 'async-result',
         cppType: 'FixtureFuture',
         baseTypeIds: [],
         runtimeRequirements: [],

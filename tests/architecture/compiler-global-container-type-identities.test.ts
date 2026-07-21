@@ -30,14 +30,30 @@ test('Array, Set и Promise принадлежат discoverable global packages 
       libraryId: 'global:collections',
       typeId: 'global:collections#Array',
       declarationNames: ['Array'],
-      valueType: 'array',
+      valueType: 'object',
       cppType: 'Array',
       baseTypeIds: [],
       runtimeRequirements: [arrayRuntimeRequirement],
       cValueAdapter: 'Array($value)',
       cRuntimeValueExpression: '$value.raw()',
+      cRuntimeValueValidExpression: 'Array(inox::Value($value)).valid()',
       typeParameters: ['T'],
-      traits: [{ traitId: 'iterable', args: [{ kind: 'parameter', name: 'T' }] }],
+      traits: [
+        {
+          traitId: 'indexable',
+          args: [
+            {
+              kind: 'primitive',
+              name: 'number',
+              nullable: false,
+              ownership: 'value',
+              traits: []
+            },
+            { kind: 'parameter', name: 'T' }
+          ]
+        },
+        { traitId: 'iterable', args: [{ kind: 'parameter', name: 'T' }] }
+      ],
       cIteration: {
         iteratorMethod: 'values',
         nextMethod: 'next',
@@ -59,6 +75,7 @@ test('Array, Set и Promise принадлежат discoverable global packages 
       cppType: 'Set',
       cValueAdapter: 'Set($value)',
       cRuntimeValueExpression: '$value.raw()',
+      cRuntimeValueValidExpression: 'Set(inox::Value($value)).valid()',
       baseTypeIds: [],
       runtimeRequirements: ['global:collections#set'],
       typeParameters: ['T'],
@@ -74,12 +91,17 @@ test('Array, Set и Promise принадлежат discoverable global packages 
       }
     }
   )
+  assert.equal(
+    (collectionsPackage.nativeTypes ?? []).find((item) => item.declarationNames.includes('Map'))
+      ?.cRuntimeValueValidExpression,
+    'Map(inox::Value($value)).valid()'
+  )
   assert.deepEqual(collectionsPackage.intrinsicBindings, [
     { role: 'array-literal', bindingId: 'global:collections#Array.intrinsic' }
   ])
   assert.deepEqual(collectionsPackage.runtimeRequirements[0], {
     id: arrayRuntimeRequirement,
-    dependencies: ['collections', 'managed-values'],
+    dependencies: ['managed-values'],
     cPreludeIncludes: ['inox/array.h'],
     capabilities: []
   })
@@ -88,7 +110,7 @@ test('Array, Set и Promise принадлежат discoverable global packages 
       libraryId: 'global:promise',
       typeId: 'global:promise#Promise',
       declarationNames: ['Promise'],
-      valueType: 'promise',
+      valueType: 'async-result',
       cppType: 'inox::Promise',
       cValueAdapter: 'inox::Promise($value)',
       baseTypeIds: [],
@@ -123,7 +145,10 @@ test('Array, Set и Promise принадлежат discoverable global packages 
     args: [fulfilled],
     nullable: false,
     ownership: 'value',
-    traits: [{ traitId: 'iterable', args: [fulfilled] }]
+    traits: [
+      { traitId: 'indexable', args: [primitiveTypeRef('number'), fulfilled] },
+      { traitId: 'iterable', args: [fulfilled] }
+    ]
   })
   assert.equal(setNativeTypeId, 'global:collections#Set')
   assert.deepEqual(setTypeRef(fulfilled), {

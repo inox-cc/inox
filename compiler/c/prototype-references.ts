@@ -78,7 +78,7 @@ function collectCReferencedFunctionPrototypeChildNames(
   collectCReferencedFunctionPrototypeNamesFromValue(item.expressions, functionNames, target)
   collectCReferencedFunctionPrototypeNamesFromValue(item.declaration, functionNames, target)
   collectCReferencedFunctionPrototypeNamesFromValue(item.awaitedExpression, functionNames, target)
-  collectCReferencedFunctionPrototypeNamesFromValue(item.awaitedPromiseExpression, functionNames, target)
+  collectCReferencedFunctionPrototypeNamesFromValue(item.awaitedAsyncResultExpression, functionNames, target)
   collectCReferencedFunctionPrototypeNamesFromValue(item.prefixStatements, functionNames, target)
   collectCReferencedFunctionPrototypeNamesFromValue(item.returnExpression, functionNames, target)
   collectCReferencedFunctionPrototypeNamesFromValue(item.successPhases, functionNames, target)

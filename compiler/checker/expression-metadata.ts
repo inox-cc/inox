@@ -6,7 +6,7 @@ import {
 import type { DeclaredTypeResolverContext } from './declared-types.ts'
 import { dynamicShapeField } from './expression-helpers.ts'
 import { firstPathSegment, nodeNameEquals } from './resolved-types.ts'
-import type { FunctionTypeMetadata, ResolvedTypeInfo } from './resolved-types.ts'
+import type { FunctionTypeMetadata } from './resolved-types.ts'
 import {
   typeRefCompatibilityMetadata,
   typeRefDeclaredName,
@@ -39,10 +39,9 @@ export function applyTypeRefMetadataToExpression(
   expression.shape = metadata.shape
   expression.libraryCppType = metadata.libraryCppType
   expression.libraryCAwaitExpression = metadata.libraryCAwaitExpression
-  expression.arrayElementTypeId = metadata.arrayElementTypeId
-  expression.promiseValueType = metadata.promiseValueType
-  expression.promiseRejectionValueType = metadata.promiseRejectionValueType
-  expression.promiseRejectionIntrinsicRole = metadata.promiseRejectionIntrinsicRole
+  expression.asyncResultValueType = metadata.asyncResultValueType
+  expression.asyncResultRejectionValueType = metadata.asyncResultRejectionValueType
+  expression.asyncResultRejectionIntrinsicRole = metadata.asyncResultRejectionIntrinsicRole
   expression.libraryIntrinsicRole = metadata.intrinsicRole ?? expression.libraryIntrinsicRole
   expression.libraryOwned = metadata.owned
   expression.libraryResultTypeId = metadata.libraryResultTypeId
@@ -104,6 +103,10 @@ export function resolveExpressionShape(
   const name = firstPathSegment(expression.path)
   const symbol = resolveSymbol(context.scopeBindings, name)
 
+  if (expression.shape !== null && typeof expression.shape !== 'undefined') {
+    return expression.shape
+  }
+
   if (
     symbol !== null &&
     typeof symbol !== 'undefined' &&
@@ -111,10 +114,6 @@ export function resolveExpressionShape(
     typeof symbol.shape !== 'undefined'
   ) {
     return symbol.shape
-  }
-
-  if (expression.shape !== null && typeof expression.shape !== 'undefined') {
-    return expression.shape
   }
 
   return resolveDeclaredExpressionShape(context, expression)
@@ -287,7 +286,7 @@ function resolveExpressionTypeRef(
 
     if (field !== null && typeof field !== 'undefined') {
       const fieldType = resolveFieldDeclaredTypeInContext(context.declaredTypes, field)
-      return field.typeRef ?? fieldType.typeRef
+      return fieldType.typeRef ?? field.typeRef
     }
 
     return null
@@ -306,7 +305,7 @@ function resolveExpressionTypeRef(
 
     if (field !== null && typeof field !== 'undefined') {
       const fieldType = resolveFieldDeclaredTypeInContext(context.declaredTypes, field)
-      return field.typeRef ?? fieldType.typeRef
+      return fieldType.typeRef ?? field.typeRef
     }
   }
 
@@ -413,7 +412,7 @@ function expressionSourceLocation(expression: AnyNode): SourceLocation {
   return loc
 }
 
-export function resolveExpressionPromiseValueType(
+export function resolveExpressionAsyncResultValueType(
   context: ExpressionMetadataResolverContext,
   expression: AnyNode | null | undefined
 ): ValueType | null {
@@ -423,11 +422,11 @@ export function resolveExpressionPromiseValueType(
 
   if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
     if (
-      expression.valueType === 'promise' &&
-      expression.promiseValueType !== null &&
-      typeof expression.promiseValueType !== 'undefined'
+      expression.valueType === 'async-result' &&
+      expression.asyncResultValueType !== null &&
+      typeof expression.asyncResultValueType !== 'undefined'
     ) {
-      return expression.promiseValueType
+      return expression.asyncResultValueType
     }
 
     return null
@@ -440,11 +439,11 @@ export function resolveExpressionPromiseValueType(
     if (
       symbol !== null &&
       typeof symbol !== 'undefined' &&
-      symbol.valueType === 'promise' &&
-      symbol.promiseValueType !== null &&
-      typeof symbol.promiseValueType !== 'undefined'
+      symbol.valueType === 'async-result' &&
+      symbol.asyncResultValueType !== null &&
+      typeof symbol.asyncResultValueType !== 'undefined'
     ) {
-      return symbol.promiseValueType
+      return symbol.asyncResultValueType
     }
 
     return null
@@ -461,11 +460,11 @@ export function resolveExpressionPromiseValueType(
     if (
       field !== null &&
       typeof field !== 'undefined' &&
-      field.valueType === 'promise' &&
-      field.promiseValueType !== null &&
-      typeof field.promiseValueType !== 'undefined'
+      field.valueType === 'async-result' &&
+      field.asyncResultValueType !== null &&
+      typeof field.asyncResultValueType !== 'undefined'
     ) {
-      return field.promiseValueType
+      return field.asyncResultValueType
     }
 
     return null
@@ -482,11 +481,11 @@ export function resolveExpressionPromiseValueType(
     if (
       field !== null &&
       typeof field !== 'undefined' &&
-      field.valueType === 'promise' &&
-      field.promiseValueType !== null &&
-      typeof field.promiseValueType !== 'undefined'
+      field.valueType === 'async-result' &&
+      field.asyncResultValueType !== null &&
+      typeof field.asyncResultValueType !== 'undefined'
     ) {
-      return field.promiseValueType
+      return field.asyncResultValueType
     }
 
     return null
@@ -503,12 +502,10 @@ export function resolveRejectedExpressionValueType(
     return 'unknown'
   }
 
-  if (expression.libraryIntrinsicRole === 'exception-value') {
-    return 'error'
-  }
+  const valueType = expression.valueType
 
-  if (expression.valueType === 'string') {
-    return 'string'
+  if (typeof valueType === 'string') {
+    return valueType
   }
 
   return 'unknown'

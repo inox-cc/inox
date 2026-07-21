@@ -15,7 +15,7 @@ export type ArrayBindingElement = {
   valueType?: ValueType
   typeRef?: TypeRef | null
   nullable?: boolean
-  promiseValueType?: ValueType | null
+  asyncResultValueType?: ValueType | null
   functionType?: AnyNode | null
   shape?: ObjectShapeInfo | null
   [key: string]: any
@@ -45,7 +45,6 @@ export type ProgramNode = AnyNode & {
 export type IrFeature =
   | 'async-runtime'
   | 'callback-values'
-  | 'collections'
   | 'objects'
   | 'runtime-values'
   | 'string-bytes'
@@ -53,12 +52,19 @@ export type IrFeature =
 
 export type IrRuntimeRequirement = string
 
-export type IrThrowValueType = 'error' | 'other' | 'string'
+export type IrThrowValueType = 'exception-object' | 'other' | 'string'
 
 export type IrFunctionEffect = {
   name: string
   throws: boolean
   throwValueTypes: IrThrowValueType[]
+}
+
+export type RuntimeTypeAlternative = {
+  nullable?: boolean
+  shape?: ObjectShapeInfo | null
+  typeRef?: TypeRef | null
+  valueType: string
 }
 
 export type IrFunctionDeclaration = {
@@ -68,9 +74,10 @@ export type IrFunctionDeclaration = {
   params: AnyNode[]
   declaredReturnType?: string | null
   returnType: string
+  returnRuntimeTypeAlternatives?: RuntimeTypeAlternative[] | null
   returnTypeRef?: TypeRef | null
   returnNullable: boolean
-  returnPromiseValueType?: ValueType | null
+  returnAsyncResultValueType?: ValueType | null
   returnShape?: any
   loc?: SourceLocation
 }
@@ -112,7 +119,6 @@ export type IrProgram = {
 }
 
 export type ValueType =
-  | 'array'
   | 'boolean'
   | 'bytes'
   | 'class'
@@ -120,7 +126,7 @@ export type ValueType =
   | 'null'
   | 'number'
   | 'object'
-  | 'promise'
+  | 'async-result'
   | 'string'
   | 'unknown'
   | 'void'
@@ -141,6 +147,7 @@ export type ObjectShapeInfo = {
   typeParameters?: AnyNode[]
   baseTypes?: string[]
   builtin?: string | null
+  compilerBuiltin?: string | null
   dynamic?: boolean
   dynamicField?: AnyNode | null
   fields: AnyNode[]
@@ -164,9 +171,10 @@ export type CallableOverloadInfo = {
   valueType: ValueType
   params?: AnyNode[]
   returnType?: ValueType
+  declaredReturnType?: string | null
   returnTypeRef?: TypeRef | null
   returnNullable?: boolean
-  returnPromiseValueType?: ValueType | null
+  returnAsyncResultValueType?: ValueType | null
   returnShape?: ObjectShapeInfo | null
   async?: boolean
   loc?: SourceLocation
@@ -186,13 +194,14 @@ export type SymbolInfo = {
   nullable?: boolean
   narrowingTrueNames?: string[]
   narrowingFalseNames?: string[]
-  promiseValueType?: ValueType | null
-  promiseRejectionIntrinsicRole?: IntrinsicRole | null
+  asyncResultValueType?: ValueType | null
+  asyncResultRejectionIntrinsicRole?: IntrinsicRole | null
   params?: AnyNode[]
   returnType?: ValueType
+  declaredReturnType?: string | null
   returnTypeRef?: TypeRef | null
   returnNullable?: boolean
-  returnPromiseValueType?: ValueType | null
+  returnAsyncResultValueType?: ValueType | null
   returnShape?: ObjectShapeInfo | null
   async?: boolean
   className?: string | null

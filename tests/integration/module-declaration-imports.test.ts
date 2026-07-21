@@ -330,12 +330,12 @@ function assertModuleDeclarationFunctionEffectsPath(): void {
       {
         path: '/pkg/src/lib.effects.json',
         source: `{
-  "version": 1,
+  "version": 2,
   "functions": [
     {
       "name": "fail",
       "throws": true,
-      "throwValueTypes": ["error"]
+      "throwValueTypes": ["exception-object"]
     }
   ]
 }
@@ -365,7 +365,7 @@ function assertModuleDeclarationFunctionEffectsPath(): void {
 
   assert.equal(effect?.name, 'fail')
   assert.equal(effect?.throws, true)
-  assert.deepEqual(effect?.throwValueTypes, ['error'])
+  assert.deepEqual(effect?.throwValueTypes, ['exception-object'])
 }
 
 function assertModuleDeclarationUnsupportedReexportDiagnostic(): void {

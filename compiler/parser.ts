@@ -1466,12 +1466,25 @@ class Parser {
     let optional = this.matchValue('?')
     let valueType = 'unknown'
     let functionType: AnyNode | null = null
+    let shape: AnyNode | null = null
     let defaultValue: AnyNode | null = null
 
     if (this.matchValue(':')) {
+      const typeStart = this.position
+
       if (this.isValue('(')) {
         functionType = this.parseFunctionType(false, [',', ')', '='])
         valueType = 'function'
+      } else if (this.isValue('{')) {
+        shape = this.parseObjectType(null)
+
+        if (this.isRuntimeParamTypeDelimiter()) {
+          valueType = 'object'
+        } else {
+          this.position = typeStart
+          shape = null
+          valueType = this.parseTypeAnnotation([',', ')', '='], null)
+        }
       } else {
         valueType = this.parseTypeAnnotation([',', ')', '='], null)
       }
@@ -1488,11 +1501,19 @@ class Parser {
       param.functionType = functionType
     }
 
+    if (shape !== null) {
+      param.shape = shape
+    }
+
     if (binding.bindingElements !== null) {
       param.bindingElements = binding.bindingElements
     }
 
     return param
+  }
+
+  isRuntimeParamTypeDelimiter(): boolean {
+    return this.isValue(',') || this.isValue(')') || this.isValue('=')
   }
 
   parseBindingName(message: string): ParsedBindingName {
@@ -1542,7 +1563,7 @@ class Parser {
           declaredType: null,
           valueType: 'unknown',
           nullable: false,
-          promiseValueType: null,
+          asyncResultValueType: null,
           functionType: null,
           shape: null
         })

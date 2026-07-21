@@ -340,9 +340,15 @@ function compilerLibraryOperationForUnknownReceiver(
       operation.acceptsUnknownReceiver !== true ||
       operation.kind !== kind ||
       receiverTypeId === null ||
-      typeof receiverTypeId === 'undefined' ||
-      !operationHasBinding(operation, `${receiverTypeId}.${memberName}`)
+      typeof receiverTypeId === 'undefined'
     ) {
+      continue
+    }
+
+    const receiverBinding =
+      memberName.length === 0 ? `${receiverTypeId}.*` : `${receiverTypeId}.${memberName}`
+
+    if (!operationHasBinding(operation, receiverBinding)) {
       continue
     }
 

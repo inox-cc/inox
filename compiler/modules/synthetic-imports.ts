@@ -17,6 +17,7 @@ type TypeAliasValueNode =
   | {
       kind: 'object'
       baseTypes: string[]
+      compilerBuiltin?: string | null
       fields: AnyNode[]
       dynamic?: boolean
       dynamicField?: AnyNode | null
@@ -384,26 +385,42 @@ function declarationTypeDependencyNames(declaration: SyntheticImportNode): strin
 }
 
 function collectFunctionDeclarationTypeDependencyNames(declaration: SyntheticImportNode, names: string[]): void {
+  const dependencyNames: string[] = []
   const params: AnyNode[] = declaration.params ?? []
   const typeParameters: AnyNode[] = declaration.typeParameters ?? []
+  const typeParameterNames: Set<string> = new Set()
 
   for (const typeParameter of typeParameters) {
-    collectTypeNameDependencyNames(typeParameter.constraint, names)
+    typeParameterNames.add(typeParameter.name)
+  }
+
+  for (const typeParameter of typeParameters) {
+    collectTypeNameDependencyNames(typeParameter.constraint, dependencyNames)
   }
 
   for (const param of params) {
-    collectValueDeclarationTypeDependencyNames(param, names)
+    collectValueDeclarationTypeDependencyNames(param, dependencyNames)
   }
 
-  collectTypeNameDependencyNames(declaration.declaredReturnType, names)
-  collectTypeNameDependencyNames(declaration.returnType, names)
-  collectTypeNameDependencyNames(declaration.returnPromiseValueType, names)
+  if (declaration.declaredReturnType !== null && typeof declaration.declaredReturnType !== 'undefined') {
+    collectTypeNameDependencyNames(declaration.declaredReturnType, dependencyNames)
+  } else {
+    collectTypeNameDependencyNames(declaration.returnType, dependencyNames)
+  }
+
+  for (const name of uniqueTypeNames(dependencyNames)) {
+    if (!typeParameterNames.has(name)) {
+      names.push(name)
+    }
+  }
 }
 
 function collectValueDeclarationTypeDependencyNames(declaration: SyntheticImportNode, names: string[]): void {
-  collectTypeNameDependencyNames(declaration.declaredType, names)
-  collectTypeNameDependencyNames(declaration.valueType, names)
-  collectTypeNameDependencyNames(declaration.promiseValueType, names)
+  if (declaration.declaredType !== null && typeof declaration.declaredType !== 'undefined') {
+    collectTypeNameDependencyNames(declaration.declaredType, names)
+  } else {
+    collectTypeNameDependencyNames(declaration.valueType, names)
+  }
 
   if (declaration.functionType !== null && typeof declaration.functionType !== 'undefined') {
     collectTypeAliasDependencyNames(declaration.functionType, names)
@@ -411,17 +428,30 @@ function collectValueDeclarationTypeDependencyNames(declaration: SyntheticImport
 }
 
 function collectClassDeclarationTypeDependencyNames(declaration: SyntheticImportNode, names: string[]): void {
+  const dependencyNames: string[] = []
   const fields: AnyNode[] = declaration.fields ?? []
   const methods: AnyNode[] = declaration.methods ?? []
+  const typeParameterNames: Set<string> = new Set()
 
-  collectTypeNameDependencyNames(declaration.extendsName, names)
+  for (const typeParameter of declaration.typeParameters ?? []) {
+    typeParameterNames.add(typeParameter.name)
+    collectTypeNameDependencyNames(typeParameter.constraint, dependencyNames)
+  }
+
+  collectTypeNameDependencyNames(declaration.extendsName, dependencyNames)
 
   for (const field of fields) {
-    collectValueDeclarationTypeDependencyNames(field, names)
+    collectValueDeclarationTypeDependencyNames(field, dependencyNames)
   }
 
   for (const method of methods) {
-    collectFunctionDeclarationTypeDependencyNames(method, names)
+    collectFunctionDeclarationTypeDependencyNames(method, dependencyNames)
+  }
+
+  for (const name of uniqueTypeNames(dependencyNames)) {
+    if (!typeParameterNames.has(name)) {
+      names.push(name)
+    }
   }
 }
 
@@ -458,6 +488,7 @@ function createUnknownTypeAliasDeclaration(name: string): AnyNode {
     name,
     loc: null,
     syntheticTypeImport: true,
+    syntheticTypeImportSourceTypeOnly: false,
     importedName: name,
     valueType: {
       kind: 'alias',
@@ -555,6 +586,7 @@ function cloneTypeAliasValue(valueType: TypeAliasValueNode): TypeAliasValueNode 
     return {
       kind: 'object',
       baseTypes: cloneStringArray(stringArray(valueType.baseTypes)),
+      compilerBuiltin: valueType.compilerBuiltin ?? null,
       dynamic: valueType.dynamic === true,
       dynamicField: cloneNullableTypeAliasField(valueType.dynamicField),
       fields: cloneTypeAliasFields(valueType.fields ?? [])
@@ -607,7 +639,7 @@ function createFunctionAliasDeclaration(
     valueType: target.returnType,
     typeRef: nullableNodeValue(target.returnTypeRef),
     nullable: target.returnNullable === true,
-    promiseValueType: nullableNodeValue(target.returnPromiseValueType),
+    asyncResultValueType: nullableNodeValue(target.returnAsyncResultValueType),
     shape: nullableNodeValue(target.returnShape)
   }
   const declaration: AnyNode = {
@@ -621,7 +653,7 @@ function createFunctionAliasDeclaration(
     returnType: target.returnType,
     returnTypeRef: nullableNodeValue(target.returnTypeRef),
     returnNullable: target.returnNullable === true,
-    returnPromiseValueType: nullableNodeValue(target.returnPromiseValueType),
+    returnAsyncResultValueType: nullableNodeValue(target.returnAsyncResultValueType),
     returnShape: nullableNodeValue(target.returnShape),
     body: createFunctionAliasBody(target, call, loc)
   }
@@ -694,7 +726,7 @@ function cloneTypeAliasField(field: AnyNode): AnyNode {
     declaredType: nullableNodeValue(field.declaredType),
     typeRef: nullableNodeValue(field.typeRef),
     nullable: field.nullable === true,
-    promiseValueType: nullableNodeValue(field.promiseValueType),
+    asyncResultValueType: nullableNodeValue(field.asyncResultValueType),
     shape: nullableNodeValue(field.shape),
     functionType: nullableNodeValue(field.functionType),
     functionOverloads: nullableNodeValue(field.functionOverloads),
@@ -730,7 +762,7 @@ function cloneParam(param: AnyNode): AnyNode {
     declaredType: nullableNodeValue(param.declaredType),
     typeRef: nullableNodeValue(param.typeRef),
     nullable: param.nullable === true,
-    promiseValueType: nullableNodeValue(param.promiseValueType),
+    asyncResultValueType: nullableNodeValue(param.asyncResultValueType),
     shape: nullableNodeValue(param.shape),
     functionType: nullableNodeValue(param.functionType),
     className: nullableNodeValue(param.className)

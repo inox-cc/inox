@@ -5,30 +5,31 @@ import {
   emitFunctionPointerParams,
   emitFunctionPointerReturnType,
   isPlainObjectFunctionField,
-  isPlainFunctionPointerType,
   isRuntimeObjectFunctionField,
   isRuntimeFunctionType
 } from '../async/callbacks.ts'
-import { functionTakesEventLoopParam } from '../async/promises.ts'
+import { functionTakesEventLoopParam } from '../async/async-results.ts'
 import type {
   CEmitContextWithDependencies,
   CEventLoopContext,
   CFailureContext,
   CNameContext,
-  COwnedPromiseContext,
+  COwnedAsyncResultContext,
   COwnedValueContext
 } from '../context.ts'
 import {
   emitFailureStatement,
   emitPrepareOwnedValueWrite,
+  emitRuntimeTypeCheck,
   emitStatusCheck,
   nextCName,
   registerEventLoop,
-  registerOwnedPromise,
+  registerOwnedAsyncResult,
   registerOwnedValue
 } from '../context.ts'
 import { cStringLiteral, emitCIdentifier, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
+import { runtimeTypeAlternativeValidExpressions } from '../runtime-type-alternatives.ts'
 import type {
   CClassInfo,
   CClassMethod,
@@ -55,7 +56,7 @@ import {
 import { emitObjectValueReference, resolveCObjectExpressionName } from './objects.ts'
 import { collectTemplatePlaceholderExpressions } from './strings.ts'
 
-type CEmitContext = CEmitContextWithDependencies<object, object, object, object, object, object>
+type CEmitContext = CEmitContextWithDependencies<object, object, object, object, object>
 
 export type ClassLoweringDependencies = {
   emitCFieldFlags(field: CObjectShapeField): string
@@ -105,7 +106,7 @@ type ClassFunctionContext = CFailureContext &
   CNameContext &
   CEventLoopContext &
   COwnedValueContext &
-  COwnedPromiseContext & {
+  COwnedAsyncResultContext & {
     classInfos: CClassInfoMap
     classInstanceTypes: Map<string, string>
     classLoweringDependencies: ClassLoweringDependencies
@@ -116,6 +117,7 @@ type ClassFunctionContext = CFailureContext &
     externalEventLoopFunctions: Set<string>
     functionAsyncFlags: Map<string, boolean>
     functionReturnTypes: Map<string, string>
+    libraries: CEmitContext['libraries']
     localValueNames: Set<string>
     moduleValueNames: Map<string, string>
     moduleValueTypes: Map<string, string>
@@ -281,6 +283,26 @@ function stringOrNull(value: string | null | undefined): string | null {
   }
 
   return null
+}
+
+function classNodeOrNull(
+  value: AnyNode | AnyNode[] | null | undefined
+): AnyNode | null {
+  if (value === null || typeof value === 'undefined' || Array.isArray(value)) {
+    return null
+  }
+
+  return value
+}
+
+function classNodeArray(
+  value: AnyNode | AnyNode[] | null | undefined
+): AnyNode[] {
+  if (Array.isArray(value)) {
+    return value
+  }
+
+  return []
 }
 
 function classFieldOwnership(field: CObjectShapeField): string {
@@ -559,10 +581,7 @@ function classFieldSupportsNativeLowering(field: CObjectShapeField): boolean {
     return true
   }
 
-  return (
-    field.valueType === 'object' ||
-    field.valueType === 'array'
-  )
+  return field.valueType === 'object'
 }
 
 function emitCClassFieldType(field: CObjectShapeField, context: ClassInfoLookupContext): string {
@@ -655,7 +674,7 @@ function classParamPhysicalCppType(
 ): string | null {
   const cppType = classParamLibraryNativeCppType(param)
 
-  if (cppType !== null || param.valueType !== 'promise') {
+  if (cppType !== null || param.valueType !== 'async-result') {
     return cppType
   }
 
@@ -1340,7 +1359,7 @@ function scanClassDescriptorClassDeclaration(
     const scope = createClassDescriptorScanScope(classNode.name, stringOrNull(method.returnType))
     scope.functions = new Map(parentScope.functions)
     registerClassDescriptorParams(method.params, scope)
-    scanClassDescriptorStatements(method.body, classInfos, scope, names)
+    scanClassDescriptorStatements(classNodeArray(method.body), classInfos, scope, names)
   }
 }
 
@@ -1354,7 +1373,7 @@ function scanClassDescriptorFunctionDeclaration(
 
   scope.functions = new Map(parentScope.functions)
   registerClassDescriptorParams(functionNode.params, scope)
-  scanClassDescriptorStatements(functionNode.body, classInfos, scope, names)
+  scanClassDescriptorStatements(classNodeArray(functionNode.body), classInfos, scope, names)
 }
 
 function registerClassDescriptorParams(params: AnyNode[] | null | undefined, scope: ClassDescriptorScanScope): void {
@@ -1505,7 +1524,7 @@ function hasClassDescriptorRuntimeValueArguments(expression: AnyNode): boolean {
 
 function isClassDescriptorAsyncResultValueCall(expression: AnyNode): boolean {
   const operation = expression.libraryAsyncResultOperation
-  return expression.type === 'CallExpression' && (operation === 'resolve' || operation === 'reject')
+  return expression.type === 'CallExpression' && (operation === 'fulfill' || operation === 'reject')
 }
 
 function addClassDescriptorRuntimeParameterNames(
@@ -1888,7 +1907,7 @@ function markClassFieldOwnersRuntimeBacked(infos: CClassInfoMap): void {
 }
 
 function findClassConstructorMethod(classNode: AnyNode): AnyNode | null {
-  const methods: ClassExpressionNode[] = classNode.methods
+  const methods = classNodeArray(classNode.methods)
 
   for (const method of methods) {
     if (method.name === 'constructor') {
@@ -1904,7 +1923,7 @@ export function collectClassMethods(context: ClassEmitContext): CClassMethod[] {
   const classInfos = context.classInfos
 
   for (const info of classInfos.values()) {
-    const methodList: ClassExpressionNode[] = info.node.methods
+    const methodList = classNodeArray(info.node.methods)
 
     for (const method of methodList) {
       if (method.name === 'constructor') {
@@ -1929,7 +1948,7 @@ function collectClassConstructorAssignments(
   const assignments: AnyNode[] = []
 
   if (constructorMethod !== null && typeof constructorMethod !== 'undefined') {
-    const statements: ClassExpressionNode[] = constructorMethod.body
+    const statements = classNodeArray(constructorMethod.body)
     const localNames = createClassConstructorLocalNameSet()
 
     for (const statement of statements) {
@@ -2068,22 +2087,25 @@ function isSupportedClassConstructorIfStatement(statement: AnyNode, localNames: 
     return false
   }
 
-  if (!isSupportedClassConstructorBranch(statement.consequent, localNames)) {
+  const consequent = classNodeOrNull(statement.consequent)
+  const alternate = classNodeOrNull(statement.alternate)
+
+  if (consequent === null || !isSupportedClassConstructorBranch(consequent, localNames)) {
     return false
   }
 
-  if (statement.alternate === null || typeof statement.alternate === 'undefined') {
+  if (alternate === null) {
     return true
   }
 
-  return isSupportedClassConstructorBranch(statement.alternate, localNames)
+  return isSupportedClassConstructorBranch(alternate, localNames)
 }
 
 function isSupportedClassConstructorBranch(statement: AnyNode, localNames: ClassConstructorLocalNameSet): boolean {
   const branchLocalNames = copyClassConstructorLocalNameSet(localNames)
 
   if (statement.type === 'BlockStatement') {
-    const body: AnyNode[] = statement.body
+    const body = classNodeArray(statement.body)
 
     for (const item of body) {
       if (!isSupportedClassConstructorStatement(item, branchLocalNames)) {
@@ -2132,7 +2154,8 @@ function isSupportedClassConstructorForStatement(
   }
 
   const loopLocalNames = copyClassConstructorLocalNameSet(localNames)
-  const init = statement.init
+  const init = classNodeOrNull(statement.init)
+  const body = classNodeOrNull(statement.body)
 
   if (
     init !== null &&
@@ -2143,7 +2166,7 @@ function isSupportedClassConstructorForStatement(
     return false
   }
 
-  return isSupportedClassConstructorBranch(statement.body, loopLocalNames)
+  return body !== null && isSupportedClassConstructorBranch(body, loopLocalNames)
 }
 
 function createClassConstructorAssignment(field: string, assignment: AnyNode): AnyNode {
@@ -2268,7 +2291,7 @@ function inferClassConstructorFieldType(expression: ClassMaybeNode, constructorM
   }
 
   if (expression.type === 'ArrayLiteral') {
-    return 'array'
+    return expression.valueType ?? 'unknown'
   }
 
   return 'unknown'
@@ -2323,17 +2346,18 @@ function nodeLocOrFallback(node: ClassMaybeNode, fallback: ClassMaybeNode): Sour
 }
 
 export function emitClassObjectVariableDeclaration(statement: AnyNode, context: ClassFunctionContext): string[] {
-  const info = resolveClassConstructorInfo(statement.init, context)
+  const init = classNodeOrNull(statement.init)
+  const info = resolveClassConstructorInfo(init, context)
 
-  if (info !== null && typeof info !== 'undefined') {
-    return emitSupportedClassObjectVariableDeclaration(statement, info, context)
+  if (info !== null && typeof info !== 'undefined' && init !== null) {
+    return emitSupportedClassObjectVariableDeclaration(statement, init, info, context)
   }
 
   context.diagnostics.push(
     diagnostic(
       'INOX_C_CLASS',
       'this class constructor is not supported by the current C backend slice',
-      nodeLocOrFallback(statement.init, statement)
+      nodeLocOrFallback(init, statement)
     )
   )
 
@@ -2342,6 +2366,7 @@ export function emitClassObjectVariableDeclaration(statement: AnyNode, context: 
 
 function emitSupportedClassObjectVariableDeclaration(
   statement: AnyNode,
+  init: AnyNode,
   info: CClassInfo,
   context: ClassFunctionContext
 ): string[] {
@@ -2351,12 +2376,12 @@ function emitSupportedClassObjectVariableDeclaration(
     registerClassInstanceType(context, statement.name, info.name)
     registerClassObjectShape(context, statement.name, info)
 
-    return emitCClassRuntimeObjectInitLines(statement.name, statement.init, info, context)
+    return emitCClassRuntimeObjectInitLines(statement.name, init, info, context)
   }
 
   context.variables.set(statement.name, classValueType(info))
   registerClassInstanceType(context, statement.name, info.name)
-  return emitCNativeClassVariableDeclaration(statement.name, statement.init, info, context)
+  return emitCNativeClassVariableDeclaration(statement.name, init, info, context)
 }
 
 function registerClassInstanceType(context: ClassFunctionContext, name: string, className: string): void {
@@ -2959,26 +2984,26 @@ function emitKnownPreparedClassMethodCallExpression(
     method.returnShape
   )
 
-  if (method.returnType === 'promise') {
+  if (method.returnType === 'async-result') {
     let out = callExpression
-    let promiseValueType = 'unknown'
-    const methodPromiseValueType = method.returnPromiseValueType
+    let asyncResultValueType = 'unknown'
+    const methodAsyncResultValueType = method.returnAsyncResultValueType
 
-    if (methodPromiseValueType !== null && typeof methodPromiseValueType !== 'undefined') {
-      promiseValueType = methodPromiseValueType
+    if (methodAsyncResultValueType !== null && typeof methodAsyncResultValueType !== 'undefined') {
+      asyncResultValueType = methodAsyncResultValueType
     }
 
     if (options.out !== null && typeof options.out !== 'undefined') {
       out = options.out
     }
 
-    registerOwnedPromise(context, out, promiseValueType, 'unknown')
+    registerOwnedAsyncResult(context, out, asyncResultValueType, 'unknown')
 
     if (out === callExpression) {
       return {
         lines: callLines,
         expression: out,
-        valueType: 'promise',
+        valueType: 'async-result',
         rejectionValueType: 'unknown'
       }
     }
@@ -2990,7 +3015,7 @@ function emitKnownPreparedClassMethodCallExpression(
     return {
       lines,
       expression: out,
-      valueType: 'promise',
+      valueType: 'async-result',
       rejectionValueType: 'unknown'
     }
   }
@@ -3004,7 +3029,7 @@ function emitKnownPreparedClassMethodCallExpression(
     }
   }
 
-  if (isManagedRuntimeReturnType(method.returnType)) {
+  if (isManagedRuntimeReturnType(method.returnType) || Array.isArray(method.returnRuntimeTypeAlternatives)) {
     const value = nextCName(context, 'inox_method_value')
     const tag = cRuntimeValueTag(method.returnType)
     registerOwnedValue(context, value)
@@ -3013,9 +3038,22 @@ function emitKnownPreparedClassMethodCallExpression(
     pushAllLines(lines, emitPrepareOwnedValueWrite(value))
     lines.push(`${value} = ${callExpression};`)
 
-    if (method.returnNullable === true) {
+    const alternativeValidExpressions = runtimeTypeAlternativeValidExpressions(
+      method.returnRuntimeTypeAlternatives,
+      value,
+      context.libraries
+    )
+
+    if (alternativeValidExpressions !== null && alternativeValidExpressions.length > 0) {
+      const valid = alternativeValidExpressions.join(' || ')
+      const mismatch = method.returnNullable === true
+        ? `${value}.tag != INOX_TAG_UNDEFINED && ${value}.tag != INOX_TAG_NULL && !(${valid})`
+        : `!(${valid})`
+
+      lines.push(emitRuntimeTypeCheck(mismatch, context))
+    } else if (alternativeValidExpressions === null && method.returnNullable === true) {
       pushAllLines(lines, emitRuntimeNullableValueCheck(value, tag, context))
-    } else {
+    } else if (alternativeValidExpressions === null) {
       lines.push(emitRuntimeValueCheck(value, tag, context))
     }
 

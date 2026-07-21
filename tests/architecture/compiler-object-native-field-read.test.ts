@@ -39,8 +39,9 @@ useResult()
   const source = files.find((file) => file.path === 'index.cc')
 
   assert.ok(source)
-  assert.match(source.code, /requirements = inox::get\(result, "requirements"\);/)
-  assert.match(source.code, /Set\(requirements\)\.has/)
+  assert.match(source.code, /auto inox_value_\d+ = inox::get\(result, "requirements"\);/)
+  assert.match(source.code, /auto requirements = Set\(inox_value_\d+\);/)
+  assert.match(source.code, /requirements\.has/)
   assert.doesNotMatch(source.code, /requirements\.tag != INOX_TAG_OBJECT/)
 
   const checked = compileSourceToIr(fixture, { libraries: defaultCompilerLibrarySet, target: 'cc' })
@@ -81,7 +82,8 @@ usesRuntimeType({})
   const source = files.find((file) => file.path === 'index.cc')
 
   assert.ok(source)
-  assert.match(source.code, /Set\(signatureRuntimeTypes\)\.has/)
+  assert.match(source.code, /auto signatureRuntimeTypes = Set\(inox_value_\d+\);/)
+  assert.match(source.code, /signatureRuntimeTypes\.has/)
   assert.doesNotMatch(source.code, /signatureRuntimeTypes\.tag != INOX_TAG_OBJECT/)
 })
 

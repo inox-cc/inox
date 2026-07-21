@@ -12,6 +12,8 @@ import type {
 } from '../../../../compiler/extensions/types.ts'
 
 const libraryId = 'global:binary'
+const collectionsLibraryId = 'global:collections'
+const arrayRuntimeRequirement = `${collectionsLibraryId}#array`
 const runtimeRequirement = libraryId
 const uint8ArrayTypeId = `${libraryId}#Uint8Array`
 const uint8ArrayTypeRef: NominalTypeRef = {
@@ -56,7 +58,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:collections'],
+  dependencies: [collectionsLibraryId],
   nativeTypes: [
     {
       libraryId,
@@ -73,7 +75,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: ['collections', 'managed-values', 'string-bytes'],
+      dependencies: [arrayRuntimeRequirement, 'managed-values', 'string-bytes'],
       cPreludeIncludes: ['inox/binary.h'],
       capabilities: []
     }
@@ -92,14 +94,14 @@ function uint8ArrayConstructor(): LibraryOperationDescriptor {
     maxArgs: 1,
     argumentChecks: [
       {
-        valueTypes: ['number', 'array'],
+        valueTypes: ['number', 'object'],
         arrayLiteralRequired: true,
         arrayElementValueTypes: ['number']
       }
     ],
     variants: [
       constructorVariant('number', ['number']),
-      constructorVariant('array', ['value'])
+      constructorVariant('object', ['value'])
     ],
     resultTypeRef: uint8ArrayTypeRef
   }

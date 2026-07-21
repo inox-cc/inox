@@ -68,7 +68,7 @@ export function cUnsupportedExpressionCode(valueType: string): string {
     return 'INOX_C_CLASS'
   }
 
-  if (valueType === 'async' || valueType === 'promise') {
+  if (valueType === 'async' || valueType === 'async-result') {
     return 'INOX_C_ASYNC'
   }
 

@@ -41,7 +41,7 @@ test('global:crypto владеет getRandomValues operation, runtime requiremen
   assert.deepEqual(globalCrypto.compilerPackage.runtimeRequirements, [
     {
       id: 'global:crypto',
-      dependencies: [],
+      dependencies: ['global:collections#array'],
       cPreludeIncludes: ['inox/crypto.h'],
       capabilities: ['entropy']
     }

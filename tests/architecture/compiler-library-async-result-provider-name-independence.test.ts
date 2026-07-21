@@ -2,8 +2,11 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
-import { promiseRuntimeRequirement } from '../../stdlib/global/promise/compiler/index.ts'
-import { futureLibrarySet } from './helpers/compiler-future-library-fixtures.ts'
+import {
+  futureLibrarySet,
+  futureRuntimeHeader,
+  futureRuntimeRequirement
+} from './helpers/compiler-future-library-fixtures.ts'
 
 test('async-result lowering не зависит от исходных имён методов provider-а', () => {
   const result = compileSource(
@@ -20,12 +23,12 @@ await work()
     { libraries: futureLibrarySet(), target: 'cc' }
   )
 
-  assert.ok(result.ir.runtimeRequirements.includes(promiseRuntimeRequirement))
-  assert.match(result.code, /#include "inox\/promise\.h"/)
-  assert.match(result.code, /inox::Promise::resolve\(/)
-  assert.match(result.code, /\.then\(/)
-  assert.match(result.code, /inox::Promise::reject\(/)
-  assert.match(result.code, /\.catchError\(/)
+  assert.ok(result.ir.runtimeRequirements.includes(futureRuntimeRequirement))
+  assert.match(result.code, new RegExp(`#include "${futureRuntimeHeader.replace('.', '\\.')}"`))
+  assert.match(result.code, /fixture::FutureTask::completed\(/)
+  assert.match(result.code, /\.transformValue\(/)
+  assert.match(result.code, /fixture::FutureTask::failed\(/)
+  assert.match(result.code, /\.recoverFailure\(/)
   assert.match(result.code, /auto inox_value_\d+ = inox::get\(reason, "message"\);/)
   assert.doesNotMatch(result.code, /\.succeed\(/)
   assert.doesNotMatch(result.code, /\.fail\(/)

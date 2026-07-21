@@ -15,6 +15,7 @@ import type {
 
 const libraryId = 'node:process'
 const collectionsLibraryId = 'global:collections'
+const arrayRuntimeRequirement = `${collectionsLibraryId}#array`
 const arrayTypeId = `${collectionsLibraryId}#Array`
 const runtimeRequirement = 'node:process'
 const processTypeId = `${libraryId}#Process`
@@ -164,7 +165,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: ['collections', 'managed-values', 'objects', 'string-bytes'],
+      dependencies: [arrayRuntimeRequirement, 'managed-values', 'objects', 'string-bytes'],
       cPreludeIncludes: ['inox/process.h'],
       capabilities: [],
       cEntrypointAdapter: {
@@ -345,7 +346,7 @@ function numberArgument(): LibraryArgumentCheckDescriptor {
 }
 
 function arrayArgument(): LibraryArgumentCheckDescriptor {
-  return { valueTypes: ['array'] }
+  return { valueTypes: ['object'] }
 }
 
 function moduleBinding(name: string): string {

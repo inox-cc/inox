@@ -78,7 +78,7 @@ export function resolveClassConstructorFieldType(expression: AnyNode, constructo
   }
 
   if (expression.type === 'ArrayLiteral') {
-    return 'array'
+    return nodeValueTypeOrUnknown(expression)
   }
 
   if (expression.type === 'ObjectLiteral') {

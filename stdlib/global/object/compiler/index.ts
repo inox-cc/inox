@@ -7,6 +7,7 @@ import type {
 
 const libraryId = 'global:object'
 const collectionsLibraryId = 'global:collections'
+const arrayRuntimeRequirement = `${collectionsLibraryId}#array`
 const arrayTypeId = `${collectionsLibraryId}#Array`
 const runtimeRequirement = `${libraryId}#object`
 const stringTypeRef = primitiveTypeRef('string')
@@ -29,7 +30,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: ['collections', 'managed-values', 'objects', 'string-bytes'],
+      dependencies: [arrayRuntimeRequirement, 'managed-values', 'objects', 'string-bytes'],
       cPreludeIncludes: ['inox/object_global.h'],
       capabilities: []
     }
@@ -61,7 +62,7 @@ function objectOperation(name: string, resultTypeRef: TypeRef): LibraryOperation
     resultTypeRef,
     minArgs: 1,
     maxArgs: 1,
-    argumentChecks: [{ valueTypes: ['array', 'object', 'unknown'] }]
+    argumentChecks: [{ valueTypes: ['object', 'unknown'] }]
   }
 }
 

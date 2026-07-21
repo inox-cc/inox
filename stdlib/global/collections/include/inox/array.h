@@ -50,6 +50,7 @@ public:
   bool includes(const inox::Value& value) const;
   Array map(inox::Callback callback) const;
   inox::Value pop() const;
+  void appendAll(const Array& values) const;
   size_t push(const inox::Value& value) const;
   inox::Value reduce(inox::Callback callback, const inox::Value& initial) const;
   inox::Value set(size_t index, const inox::Value& value) const;

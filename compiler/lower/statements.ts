@@ -11,6 +11,10 @@ type LowerVariableScopeState = {
   hadPrevious: boolean
   previous: LowerNode | null
 }
+type LowerBindingScopeState = {
+  name: string
+  state: LowerVariableScopeState
+}
 
 export function lowerStatement(statement: LowerNode, context: LowerContext): LowerNode {
   return lowerStatementBody(statement, context)
@@ -36,7 +40,7 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
     return [
       {
         type: 'BlockStatement',
-        body: lowerStatementList(statement.body, context)
+        body: lowerStatementList(lowerNodeArrayOrEmpty(statement.body), context)
       }
     ]
   }
@@ -46,7 +50,7 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
       {
         type: 'IfStatement',
         condition: lowerStatementExpression(statement.condition, context),
-        consequent: lowerStatementBody(statement.consequent, context),
+        consequent: lowerRequiredStatementBody(statement.consequent, context),
         alternate: lowerOptionalStatementBody(statement.alternate, context),
         loc: statement.loc
       }
@@ -58,7 +62,7 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
       {
         type: 'WhileStatement',
         condition: lowerStatementExpression(statement.condition, context),
-        body: lowerStatementBody(statement.body, context),
+        body: lowerRequiredStatementBody(statement.body, context),
         loc: statement.loc
       }
     ]
@@ -71,7 +75,7 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
         init: lowerOptionalForInitializer(statement.init, context),
         test: lowerOptionalStatementExpression(statement.test, context),
         update: lowerOptionalStatementExpression(statement.update, context),
-        body: lowerStatementBody(statement.body, context),
+        body: lowerRequiredStatementBody(statement.body, context),
         loc: statement.loc
       }
     ]
@@ -79,22 +83,23 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
 
   if (statement.type === 'ForOfStatement') {
     const variableState = pushLowerVariable(context, statement.name, forOfLowerVariable(statement))
-    const bindingStates: Array<{ name: string; state: LowerVariableScopeState }> = []
+    const bindingStates: LowerBindingScopeState[] = []
     const bindingDeclarations: LowerNode[] = []
-    let body = statement.body
+    let body: LowerNode = {
+      type: 'BlockStatement',
+      body: []
+    }
 
     try {
-      const bindingElements: ArrayBindingElement[] = statement.bindingElements ?? []
-
-      for (const binding of bindingElements) {
+      for (const binding of lowerArrayBindingElementsOrEmpty(statement.bindingElements)) {
         const bindingVariable = forOfBindingLowerVariable(binding)
         const state = pushLowerVariable(context, binding.name, bindingVariable)
 
         bindingStates.push({ name: binding.name, state })
-        bindingDeclarations.push(forOfBindingDeclaration(statement, binding, bindingVariable))
+        bindingDeclarations.push(forOfBindingDeclaration(statement, binding, bindingVariable, context))
       }
 
-      body = lowerStatementBody(statement.body, context)
+      body = lowerRequiredStatementBody(statement.body, context)
       body = prependForOfBindingDeclarations(body, bindingDeclarations)
     } finally {
       for (let index = bindingStates.length - 1; index >= 0; index = index - 1) {
@@ -114,7 +119,7 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
         inferredDeclaredType: statement.inferredDeclaredType,
         valueType: statement.valueType,
         nullable: statement.nullable === true,
-        promiseValueType: nullableString(statement.promiseValueType),
+        asyncResultValueType: nullableString(statement.asyncResultValueType),
         functionType: nullableNode(statement.functionType),
         shape: nullableNode(statement.shape),
         typeRef: nullableNode(statement.typeRef),
@@ -150,7 +155,7 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
     return [
       {
         type: 'TryStatement',
-        block: lowerStatementBody(statement.block, context),
+        block: lowerRequiredStatementBody(statement.block, context),
         handler: lowerCatchClause(statement.handler, context),
         finalizer: lowerOptionalStatementBody(statement.finalizer, context),
         loc: statement.loc
@@ -202,8 +207,29 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
   return [statement]
 }
 
-function lowerOptionalStatementBody(statement: LowerNode | null | undefined, context: LowerContext): LowerNode | null {
-  if (statement === null || typeof statement === 'undefined') {
+function lowerRequiredStatementBody(
+  value: LowerNode | LowerNode[] | null | undefined,
+  context: LowerContext
+): LowerNode {
+  const statement = lowerNodeOrNull(value)
+
+  if (statement === null) {
+    return {
+      type: 'BlockStatement',
+      body: []
+    }
+  }
+
+  return lowerStatementBody(statement, context)
+}
+
+function lowerOptionalStatementBody(
+  value: LowerNode | LowerNode[] | null | undefined,
+  context: LowerContext
+): LowerNode | null {
+  const statement = lowerNodeOrNull(value)
+
+  if (statement === null) {
     return null
   }
 
@@ -211,32 +237,39 @@ function lowerOptionalStatementBody(statement: LowerNode | null | undefined, con
 }
 
 function lowerOptionalStatementExpression(
-  expression: LowerNode | null | undefined,
+  value: LowerNode | LowerNode[] | null | undefined,
   context: LowerContext
 ): LowerNode | null {
-  if (expression === null || typeof expression === 'undefined') {
+  const expression = lowerNodeOrNull(value)
+
+  if (expression === null) {
     return null
   }
 
   return lowerStatementExpression(expression, context)
 }
 
-function lowerOptionalForInitializer(init: LowerNode | null | undefined, context: LowerContext): LowerNode | null {
-  if (init === null || typeof init === 'undefined') {
+function lowerOptionalForInitializer(
+  value: LowerNode | LowerNode[] | null | undefined,
+  context: LowerContext
+): LowerNode | null {
+  const init = lowerNodeOrNull(value)
+
+  if (init === null) {
     return null
   }
 
   return lowerForInitializer(init, context)
 }
 
-function lowerSwitchCases(cases: LowerNode[], context: LowerContext): LowerNode[] {
+function lowerSwitchCases(cases: unknown, context: LowerContext): LowerNode[] {
   const lowered: LowerNode[] = []
 
-  for (const item of cases) {
+  for (const item of lowerNodeArrayOrEmpty(cases)) {
     lowered.push({
       type: 'SwitchCase',
       test: lowerOptionalStatementExpression(item.test, context),
-      consequent: lowerStatementList(item.consequent, context),
+      consequent: lowerStatementList(lowerNodeArrayOrEmpty(item.consequent), context),
       loc: item.loc
     })
   }
@@ -268,6 +301,30 @@ function nullableNode(value: LowerNode | null | undefined): LowerNode | null {
   return null
 }
 
+function nullableNodeArray(value: unknown): LowerNode[] | null {
+  if (!Array.isArray(value)) {
+    return null
+  }
+
+  return value
+}
+
+function lowerNodeOrNull(value: LowerNode | LowerNode[] | null | undefined): LowerNode | null {
+  if (value === null || typeof value === 'undefined' || Array.isArray(value)) {
+    return null
+  }
+
+  return value
+}
+
+function lowerNodeArrayOrEmpty(value: unknown): LowerNode[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+}
+
 function copyStringArray(values: string[] | null | undefined): string[] {
   const result: string[] = []
 
@@ -287,7 +344,7 @@ export function lowerParam(param: LowerNode, context: LowerContext): LowerNode {
   }
 
   const declared = resolveDeclaredType(declaredType, context)
-  const promiseValueType = nullableString(declared.promiseValueType)
+  const asyncResultValueType = nullableString(declared.asyncResultValueType)
   const shape = lowerParamShape(param, declared)
   let functionType = declared.functionType
 
@@ -302,9 +359,10 @@ export function lowerParam(param: LowerNode, context: LowerContext): LowerNode {
     optional: param.optional === true,
     rest: param.rest === true,
     valueType: fallbackString(param.valueType, fallbackString(declared.valueType, 'unknown')),
-    typeRef: nullableNode(param.typeRef),
+    typeRef: nullableNode(param.typeRef) ?? declared.typeRef,
+    runtimeTypeAlternatives: declared.runtimeTypeAlternatives,
     nullable: param.nullable === true || declared.nullable,
-    promiseValueType,
+    asyncResultValueType,
     functionType,
     shape,
     defaultValue: null
@@ -324,12 +382,126 @@ export function lowerParam(param: LowerNode, context: LowerContext): LowerNode {
 
 function lowerParamShape(param: LowerNode, declared: LowerResolvedType): LowerNode | null {
   const paramShape = nullableNode(param.shape)
+  const declaredShape = nullableNode(declared.shape)
 
-  if (paramShape !== null && typeof paramShape !== 'undefined') {
+  if (paramShape === null) {
+    return declaredShape
+  }
+
+  if (declaredShape === null) {
     return paramShape
   }
 
-  return declared.shape
+  return mergeLowerParamObjectShape(paramShape, declaredShape)
+}
+
+function mergeLowerParamObjectShape(preferred: LowerNode, fallback: LowerNode): LowerNode {
+  const preferredFields = lowerNodeArrayOrEmpty(preferred.fields)
+  const fallbackFields = lowerNodeArrayOrEmpty(fallback.fields)
+  const fields: LowerNode[] = []
+
+  for (const field of preferredFields) {
+    fields.push(mergeLowerParamObjectField(field, lowerObjectFieldForName(fallbackFields, field.name)))
+  }
+
+  for (const field of fallbackFields) {
+    if (lowerObjectFieldForName(preferredFields, field.name) === null) {
+      fields.push(field)
+    }
+  }
+
+  return {
+    ...preferred,
+    builtin: nullableString(preferred.builtin) ?? nullableString(fallback.builtin),
+    compilerBuiltin: nullableString(preferred.compilerBuiltin) ?? nullableString(fallback.compilerBuiltin),
+    dynamic: preferred.dynamic === true || fallback.dynamic === true,
+    fields,
+    functionCompanions: preferred.functionCompanions === true || fallback.functionCompanions === true,
+    libraryCValueAdapter:
+      nullableString(preferred.libraryCValueAdapter) ?? nullableString(fallback.libraryCValueAdapter),
+    libraryTypeId: nullableString(preferred.libraryTypeId) ?? nullableString(fallback.libraryTypeId),
+    libraryCppType: nullableString(preferred.libraryCppType) ?? nullableString(fallback.libraryCppType)
+  }
+}
+
+function lowerObjectFieldForName(fields: LowerNode[], name: string): LowerNode | null {
+  for (const field of fields) {
+    if (field.name === name) {
+      return field
+    }
+  }
+
+  return null
+}
+
+function mergeLowerParamObjectField(preferred: LowerNode, fallback: LowerNode | null): LowerNode {
+  if (fallback === null) {
+    return preferred
+  }
+
+  return {
+    ...preferred,
+    shape: mergeLowerParamNullableShape(nullableNode(preferred.shape), nullableNode(fallback.shape)),
+    functionType: mergeLowerParamFunctionType(
+      nullableNode(preferred.functionType),
+      nullableNode(fallback.functionType)
+    )
+  }
+}
+
+function mergeLowerParamNullableShape(preferred: LowerNode | null, fallback: LowerNode | null): LowerNode | null {
+  if (preferred === null) {
+    return fallback
+  }
+
+  if (fallback === null) {
+    return preferred
+  }
+
+  return mergeLowerParamObjectShape(preferred, fallback)
+}
+
+function mergeLowerParamFunctionType(preferred: LowerNode | null, fallback: LowerNode | null): LowerNode | null {
+  if (preferred === null) {
+    return fallback
+  }
+
+  if (fallback === null) {
+    return preferred
+  }
+
+  const preferredParams = lowerNodeArrayOrEmpty(preferred.params)
+  const fallbackParams = lowerNodeArrayOrEmpty(fallback.params)
+  const params: LowerNode[] = []
+
+  for (let index = 0; index < preferredParams.length; index = index + 1) {
+    const preferredParam = preferredParams[index]
+    const fallbackParam = fallbackParams[index] ?? null
+
+    if (fallbackParam === null) {
+      params.push(preferredParam)
+      continue
+    }
+
+    params.push({
+      ...preferredParam,
+      shape: mergeLowerParamNullableShape(nullableNode(preferredParam.shape), nullableNode(fallbackParam.shape)),
+      functionType: mergeLowerParamFunctionType(
+        nullableNode(preferredParam.functionType),
+        nullableNode(fallbackParam.functionType)
+      )
+    })
+  }
+
+  for (let index = preferredParams.length; index < fallbackParams.length; index = index + 1) {
+    params.push(fallbackParams[index])
+  }
+
+  return {
+    ...preferred,
+    params,
+    returnShape: mergeLowerParamNullableShape(nullableNode(preferred.returnShape), nullableNode(fallback.returnShape))
+  }
 }
 
 function lowerForInitializer(init: LowerNode, context: LowerContext): LowerNode {
@@ -386,7 +558,7 @@ function lowerCatchClause(handler: LowerNode | null | undefined, context: LowerC
     })
   }
 
-  const body = lowerStatementBody(handler.body, context)
+  const body = lowerRequiredStatementBody(handler.body, context)
 
   if (handler.param !== null && typeof handler.param !== 'undefined') {
     if (hadPrevious && previous !== null && typeof previous !== 'undefined') {
@@ -430,7 +602,7 @@ function forOfLowerVariable(statement: LowerNode): LowerNode {
   return {
     valueType: fallbackString(statement.valueType, 'unknown'),
     nullable: statement.nullable === true,
-    promiseValueType: nullableString(statement.promiseValueType),
+    asyncResultValueType: nullableString(statement.asyncResultValueType),
     functionType: nullableNode(statement.functionType),
     shape: nullableNode(statement.shape),
     typeRef: nullableNode(statement.typeRef)
@@ -441,15 +613,39 @@ function forOfBindingLowerVariable(binding: ArrayBindingElement): LowerNode {
   return {
     valueType: fallbackString(binding.valueType, 'unknown'),
     nullable: binding.nullable === true,
-    promiseValueType: nullableString(binding.promiseValueType),
+    asyncResultValueType: nullableString(binding.asyncResultValueType),
     functionType: nullableNode(binding.functionType),
     shape: nullableNode(binding.shape),
     typeRef: nullableNode(binding.typeRef)
   }
 }
 
-function forOfBindingDeclaration(statement: LowerNode, binding: ArrayBindingElement, variable: LowerNode): LowerNode {
+function forOfBindingDeclaration(
+  statement: LowerNode,
+  binding: ArrayBindingElement,
+  variable: LowerNode,
+  context: LowerContext
+): LowerNode {
   const valueType = fallbackString(variable.valueType, 'unknown')
+  const initializer = binding.init ?? {
+    type: 'IndexExpression',
+    object: {
+      type: 'Reference',
+      path: [statement.name],
+      loc: statement.nameLoc,
+      valueType: fallbackString(statement.valueType, 'unknown'),
+      typeRef: nullableNode(statement.typeRef)
+    },
+    index: {
+      type: 'NumberLiteral',
+      value: `${binding.index}`,
+      loc: binding.loc,
+      valueType: 'number'
+    },
+    loc: binding.loc,
+    valueType,
+    typeRef: nullableNode(variable.typeRef)
+  }
 
   return {
     type: 'VariableDeclaration',
@@ -460,29 +656,11 @@ function forOfBindingDeclaration(statement: LowerNode, binding: ArrayBindingElem
     declaredType: null,
     valueType,
     nullable: variable.nullable === true,
-    promiseValueType: nullableString(variable.promiseValueType),
+    asyncResultValueType: nullableString(variable.asyncResultValueType),
     functionType: nullableNode(variable.functionType),
     shape: nullableNode(variable.shape),
     typeRef: nullableNode(variable.typeRef),
-    init: {
-      type: 'IndexExpression',
-      object: {
-        type: 'Reference',
-        path: [statement.name],
-        loc: statement.nameLoc,
-        valueType: 'array',
-        typeRef: nullableNode(statement.typeRef)
-      },
-      index: {
-        type: 'NumberLiteral',
-        value: `${binding.index}`,
-        loc: binding.loc,
-        valueType: 'number'
-      },
-      loc: binding.loc,
-      valueType,
-      typeRef: nullableNode(variable.typeRef)
-    }
+    init: lowerStatementExpression(initializer, context)
   }
 }
 
@@ -498,7 +676,7 @@ function prependForOfBindingDeclarations(body: LowerNode, declarations: LowerNod
   }
 
   if (body.type === 'BlockStatement') {
-    for (const statement of body.body) {
+    for (const statement of lowerNodeArrayOrEmpty(body.body)) {
       statements.push(statement)
     }
 
@@ -518,21 +696,21 @@ function prependForOfBindingDeclarations(body: LowerNode, declarations: LowerNod
   }
 }
 
-function lowerForOfBindingElements(elements: ArrayBindingElement[] | null | undefined): ArrayBindingElement[] | null {
-  if (elements === null || typeof elements === 'undefined') {
+function lowerForOfBindingElements(elements: unknown): ArrayBindingElement[] | null {
+  if (!Array.isArray(elements)) {
     return null
   }
 
   const lowered: ArrayBindingElement[] = []
 
-  for (const element of elements) {
+  for (const element of lowerArrayBindingElementsOrEmpty(elements)) {
     lowered.push({
       name: element.name,
       index: element.index,
       loc: element.loc,
       valueType: fallbackString(element.valueType, 'unknown'),
       nullable: element.nullable === true,
-      promiseValueType: nullableString(element.promiseValueType),
+      asyncResultValueType: nullableString(element.asyncResultValueType),
       functionType: nullableNode(element.functionType),
       shape: element.shape ?? null,
       typeRef: element.typeRef ?? null
@@ -540,6 +718,14 @@ function lowerForOfBindingElements(elements: ArrayBindingElement[] | null | unde
   }
 
   return lowered
+}
+
+function lowerArrayBindingElementsOrEmpty(value: unknown): ArrayBindingElement[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
 }
 
 function appendLoweredStatement(out: LowerNode[], statements: LoweredStatement): void {
@@ -559,16 +745,18 @@ function lowerVariableDeclaration(statement: LowerNode, context: LowerContext): 
   const nullable = variableDeclarationNullable(declared, init)
   const shape = variableDeclarationShape(declared, statement, init)
   const functionType = variableDeclarationFunctionType(declared, statement, init)
-  const promiseValueType = variableDeclarationPromiseValueType(declared, statement, init)
+  const asyncResultValueType = variableDeclarationAsyncResultValueType(declared, statement, init)
   const valueType = variableDeclarationValueType(declared, statement, init)
+  const runtimeTypeAlternatives = variableDeclarationRuntimeTypeAlternatives(declared, statement, init, context)
   const lowered = createLoweredVariableDeclaration(
     statement,
     init,
     nullable,
     shape,
     functionType,
-    promiseValueType,
-    valueType
+    asyncResultValueType,
+    valueType,
+    runtimeTypeAlternatives
   )
 
   declareLowerVariable(context, lowered)
@@ -609,8 +797,9 @@ function createLoweredVariableDeclaration(
   nullable: boolean,
   shape: LowerNode | null,
   functionType: LowerNode | null,
-  promiseValueType: string | null,
-  valueType: string
+  asyncResultValueType: string | null,
+  valueType: string,
+  runtimeTypeAlternatives: LowerNode[] | null
 ): LowerNode {
   const lowered: LowerNode = {
     type: 'VariableDeclaration',
@@ -623,8 +812,9 @@ function createLoweredVariableDeclaration(
     nullable,
     shape,
     functionType,
-    promiseValueType,
+    asyncResultValueType,
     valueType,
+    runtimeTypeAlternatives,
     typeRef: nullableNode(statement.typeRef),
     libraryCppType: nullableString(statement.libraryCppType),
     libraryRuntimeRequirements: copyStringArray(statement.libraryRuntimeRequirements),
@@ -632,6 +822,33 @@ function createLoweredVariableDeclaration(
   }
 
   return lowered
+}
+
+function variableDeclarationRuntimeTypeAlternatives(
+  declared: LowerResolvedType,
+  statement: LowerNode,
+  init: LowerNode | null,
+  context: LowerContext
+): LowerNode[] | null {
+  if (declared.runtimeTypeAlternatives !== null) {
+    return declared.runtimeTypeAlternatives
+  }
+
+  if (Array.isArray(statement.runtimeTypeAlternatives)) {
+    return statement.runtimeTypeAlternatives
+  }
+
+  if (init !== null && Array.isArray(init.runtimeTypeAlternatives)) {
+    return init.runtimeTypeAlternatives
+  }
+
+  const inferredDeclaredType = nullableString(statement.inferredDeclaredType) ?? nullableString(init?.declaredType)
+
+  if (inferredDeclaredType === null) {
+    return null
+  }
+
+  return resolveDeclaredType(inferredDeclaredType, context).runtimeTypeAlternatives
 }
 
 function variableDeclarationNullable(declared: LowerResolvedType, init: LowerNode | null): boolean {
@@ -651,19 +868,20 @@ function variableDeclarationShape(
   statement: LowerNode,
   init: LowerNode | null
 ): LowerNode | null {
-  if (declared.shape !== null && typeof declared.shape !== 'undefined') {
-    return declared.shape
+  const declaredShape = nullableNode(declared.shape)
+  const statementShape = nullableNode(statement.shape)
+
+  if (statementShape !== null) {
+    return mergeLowerParamNullableShape(statementShape, declaredShape)
   }
 
-  if (init !== null && typeof init !== 'undefined' && init.shape !== null && typeof init.shape !== 'undefined') {
-    return init.shape
+  const initShape = nullableNode(init?.shape)
+
+  if (initShape !== null) {
+    return mergeLowerParamNullableShape(initShape, declaredShape)
   }
 
-  if (statement.shape !== null && typeof statement.shape !== 'undefined') {
-    return statement.shape
-  }
-
-  return null
+  return declaredShape
 }
 
 function variableDeclarationFunctionType(
@@ -691,24 +909,24 @@ function variableDeclarationFunctionType(
   return null
 }
 
-function variableDeclarationPromiseValueType(
+function variableDeclarationAsyncResultValueType(
   declared: LowerResolvedType,
   statement: LowerNode,
   init: LowerNode | null
 ): string | null {
-  const declaredPromiseValueType = nullableString(declared.promiseValueType)
+  const declaredAsyncResultValueType = nullableString(declared.asyncResultValueType)
 
-  if (declaredPromiseValueType !== null && typeof declaredPromiseValueType !== 'undefined') {
-    return declaredPromiseValueType
+  if (declaredAsyncResultValueType !== null && typeof declaredAsyncResultValueType !== 'undefined') {
+    return declaredAsyncResultValueType
   }
 
-  const statementPromiseValueType = nullableString(statement.promiseValueType)
+  const statementAsyncResultValueType = nullableString(statement.asyncResultValueType)
 
-  if (statementPromiseValueType !== null && typeof statementPromiseValueType !== 'undefined') {
-    return statementPromiseValueType
+  if (statementAsyncResultValueType !== null && typeof statementAsyncResultValueType !== 'undefined') {
+    return statementAsyncResultValueType
   }
 
-  return inferPromiseValueType(init)
+  return inferAsyncResultValueType(init)
 }
 
 function variableDeclarationValueType(
@@ -726,12 +944,6 @@ function variableDeclarationValueType(
 
   if (statementValueType !== null && typeof statementValueType !== 'undefined' && statementValueType !== 'unknown') {
     return statementValueType
-  }
-
-  const statementDeclaredType = nullableString(statement.declaredType)
-
-  if (statementDeclaredType !== null && typeof statementDeclaredType !== 'undefined') {
-    return statementDeclaredType
   }
 
   if (init !== null && typeof init !== 'undefined') {
@@ -757,7 +969,8 @@ function declareLowerVariable(context: LowerContext, statement: LowerNode): void
   context.variables.set(statement.name, {
     valueType: fallbackString(statement.valueType, 'unknown'),
     nullable: statement.nullable === true,
-    promiseValueType: nullableString(statement.promiseValueType),
+    asyncResultValueType: nullableString(statement.asyncResultValueType),
+    runtimeTypeAlternatives: nullableNodeArray(statement.runtimeTypeAlternatives),
     functionType: nullableNode(statement.functionType),
     shape: nullableNode(statement.shape),
     className: nullableString(statement.className),
@@ -787,10 +1000,10 @@ function expressionContext(context: LowerContext): LowerExpressionContext {
   return result
 }
 
-function inferPromiseValueType(expression: LowerNode | null): string | null {
-  if (expression === null || typeof expression === 'undefined' || expression.valueType !== 'promise') {
+function inferAsyncResultValueType(expression: LowerNode | null): string | null {
+  if (expression === null || typeof expression === 'undefined' || expression.valueType !== 'async-result') {
     return null
   }
 
-  return nullableString(expression.promiseValueType)
+  return nullableString(expression.asyncResultValueType)
 }

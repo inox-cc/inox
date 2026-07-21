@@ -20,7 +20,7 @@ import {
 } from '../../stdlib/global/collections/compiler/index.ts'
 import { compilerLibraryPackage as promisePackage, promiseTypeRef } from '../../stdlib/global/promise/compiler/index.ts'
 
-test('Promise<Array<T>> generic traits сохраняют fingerprint и legacy compatibility без container names в core', () => {
+test('Promise<Array<T>> generic traits сохраняют fingerprint и compatibility без container names в core', () => {
   const stringType = primitiveTypeRef('string')
   const numberType = primitiveTypeRef('number')
   const resultTypeRef = promiseTypeRef(arrayTypeRef(stringType), numberType)
@@ -35,12 +35,12 @@ test('Promise<Array<T>> generic traits сохраняют fingerprint и legacy 
     column: 1
   })
 
-  assert.equal(metadata.valueType, 'promise')
+  assert.equal(metadata.valueType, 'async-result')
   assert.equal(metadata.libraryCppType, 'inox::Promise')
   assert.equal(metadata.libraryResultTypeId, arrayNativeTypeId)
   assert.equal(metadata.shape?.libraryTypeId, arrayNativeTypeId)
-  assert.equal(metadata.promiseValueType, 'array')
-  assert.equal(metadata.promiseRejectionValueType, 'number')
+  assert.equal(metadata.asyncResultValueType, 'object')
+  assert.equal(metadata.asyncResultRejectionValueType, 'number')
   assert.equal('arrayElementType' in metadata, false)
   assert.equal('arrayElementDeclaredType' in metadata, false)
   assert.equal(typeRefIterableElementDeclaredName(resultTypeRef, libraries), 'string')

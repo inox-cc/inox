@@ -14,7 +14,7 @@ import {
   resolveCompilerLibrarySet
 } from '../extensions/library-set.ts'
 import { instantiateNativeTypeRef } from '../extensions/type-ref-substitution.ts'
-import { typeRefCompatibilityMetadata } from '../extensions/type-ref-compatibility.ts'
+import { commonTypeRef, typeRefCompatibilityMetadata } from '../extensions/type-ref-compatibility.ts'
 import type { CompilerLibrarySet, CorePrimitiveType, TypeRef } from '../extensions/types.ts'
 
 type LowerTypeNode = AnyNode
@@ -34,20 +34,29 @@ export type LowerResolvedType = {
   valueType: string | null
   nullable: boolean
   libraryRuntimeRequirements?: string[]
-  promiseValueType?: string | null
+  runtimeTypeAlternatives: LowerRuntimeTypeAlternative[] | null
+  asyncResultValueType?: string | null
   returnShape?: LowerTypeNode | null
   shape: LowerTypeNode | null
   functionType: LowerTypeNode | null
   typeRef: TypeRef | null
 }
 
+export type LowerRuntimeTypeAlternative = {
+  nullable: boolean
+  shape: LowerTypeNode | null
+  typeRef: TypeRef | null
+  valueType: string
+}
+
 type LowerObjectShapeBases = {
   builtin: string | null
   dynamic: boolean
   fields: LowerTypeNode[]
+  functionCompanions: boolean
 }
 
-type LowerResolvedStringKey = 'promiseValueType'
+type LowerResolvedStringKey = 'asyncResultValueType'
 
 type LowerTypeNameResolver = (name: string, context: LowerContext) => LowerResolvedType
 
@@ -110,7 +119,7 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
 
       resolved.typeRef = typeRef
       resolved.shape = metadata.shape
-      resolved.promiseValueType = metadata.promiseValueType
+      resolved.asyncResultValueType = metadata.asyncResultValueType
       resolved.libraryRuntimeRequirements = genericNativeType.runtimeRequirements
       return resolved
     }
@@ -197,10 +206,11 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
   }
 
   if (context.resolvingTypes.has(name)) {
-    if (
-      (typeInfo !== null && typeof typeInfo !== 'undefined' && typeInfo.kind === 'object') ||
-      context.classNames.has(name)
-    ) {
+    if (typeInfo !== null && typeof typeInfo !== 'undefined' && typeInfo.kind === 'object') {
+      return shallowRecursiveObjectType(typeInfo)
+    }
+
+    if (context.classNames.has(name)) {
       return namedResolvedType('object')
     }
 
@@ -278,7 +288,7 @@ function resolveGenericDeclaredType(
 
   if (context.resolvingTypes.has(applicationName)) {
     if (definition.kind === 'object') {
-      return namedResolvedType('object')
+      return shallowRecursiveObjectType(definition)
     }
 
     if (definition.kind === 'function') {
@@ -320,6 +330,58 @@ function resolveGenericDeclaredType(
   }
 }
 
+function shallowRecursiveObjectType(typeInfo: LowerTypeNode): LowerResolvedType {
+  const resolved = namedResolvedType('object')
+
+  if (
+    typeInfo.functionCompanions === true ||
+    objectShapeFieldsRequireFunctionCompanions(typeInfo.fields, new Set<LowerTypeNode>())
+  ) {
+    resolved.shape = {
+      kind: 'object',
+      baseTypes: [],
+      dynamic: false,
+      fields: [],
+      functionCompanions: true
+    }
+  }
+
+  return resolved
+}
+
+function objectShapeFieldsRequireFunctionCompanions(
+  fields: LowerTypeNode[] | null | undefined,
+  seen: Set<LowerTypeNode>
+): boolean {
+  if (fields === null || typeof fields === 'undefined') {
+    return false
+  }
+
+  for (const field of fields) {
+    if (field.valueType === 'function' || field.functionType !== null && typeof field.functionType !== 'undefined') {
+      return true
+    }
+
+    const shape = nullableNode(field.shape)
+
+    if (shape === null || seen.has(shape)) {
+      continue
+    }
+
+    if (shape.functionCompanions === true) {
+      return true
+    }
+
+    seen.add(shape)
+
+    if (objectShapeFieldsRequireFunctionCompanions(shape.fields, seen)) {
+      return true
+    }
+  }
+
+  return false
+}
+
 function resolveFunctionType(typeInfo: LowerTypeNode, context: LowerContext): LowerResolvedType {
   let returnTypeName = 'unknown'
 
@@ -336,12 +398,14 @@ function resolveFunctionType(typeInfo: LowerTypeNode, context: LowerContext): Lo
   }
 
   resolved.functionType = {
+    declaredReturnType: nullableString(typeInfo.declaredReturnType),
     kind: 'function',
     params,
     returnType: resolvedValueType(returnType, returnTypeName),
     returnTypeRef: nullableNode(typeInfo.returnTypeRef) ?? returnType.typeRef,
+    returnRuntimeTypeAlternatives: returnType.runtimeTypeAlternatives,
     returnNullable: returnType.nullable,
-    returnPromiseValueType: nullableString(returnType.promiseValueType),
+    returnAsyncResultValueType: nullableString(returnType.asyncResultValueType),
     returnShape: returnType.shape ?? nullableNode(typeInfo.returnShape)
   }
 
@@ -358,11 +422,12 @@ function resolveFunctionParam(param: LowerTypeNode, context: LowerContext): Lowe
     rest: param.rest === true,
     declaredType,
     typeRef: nullableNode(param.typeRef) ?? declared.typeRef,
+    runtimeTypeAlternatives: declared.runtimeTypeAlternatives,
     valueType: resolvedValueType(declared, unresolvedFunctionParamValueType(param, declaredType)),
     nullable:
       declared.nullable ||
       (param.optional === true && (param.defaultValue === null || typeof param.defaultValue === 'undefined')),
-    promiseValueType: nullableString(declared.promiseValueType),
+    asyncResultValueType: nullableString(declared.asyncResultValueType),
     shape: declared.shape ?? nullableNode(param.shape),
     functionType: declared.functionType,
     loc: param.loc
@@ -392,6 +457,10 @@ export function resolveObjectShape(shape: LowerTypeNode, context: LowerContext):
     baseTypes: resolvedObjectShapeBaseTypes(shape),
     dynamic: shape.dynamic === true || bases.dynamic,
     fields: resolvedFields,
+    functionCompanions:
+      shape.functionCompanions === true ||
+      bases.functionCompanions ||
+      objectShapeFieldsRequireFunctionCompanions(resolvedFields, new Set<LowerTypeNode>()),
     libraryCValueAdapter: nullableString(shape.libraryCValueAdapter),
     libraryTypeId: nullableString(shape.libraryTypeId),
     libraryCppType: nullableString(shape.libraryCppType)
@@ -434,7 +503,7 @@ function resolveObjectShapeField(
       field.nullable === true ||
       weakField ||
       (optionalFieldsAreNullable && field.optional === true),
-    promiseValueType: nullableString(declared.promiseValueType),
+    asyncResultValueType: nullableString(declared.asyncResultValueType),
     shape: declared.shape ?? nullableNode(field.shape),
     functionType
   }
@@ -459,6 +528,7 @@ function resolveObjectShapeBases(shape: LowerTypeNode, context: LowerContext): L
   const fields: LowerTypeNode[] = []
   let builtin: string | null = null
   let dynamic = false
+  let functionCompanions = false
   const baseTypes = copyStringArray(shape.baseTypes)
 
   for (const name of baseTypes) {
@@ -473,6 +543,7 @@ function resolveObjectShapeBases(shape: LowerTypeNode, context: LowerContext): L
     }
 
     dynamic = dynamic || base.dynamic === true
+    functionCompanions = functionCompanions || base.functionCompanions === true
 
     if (base.builtin !== null && typeof base.builtin !== 'undefined') {
       builtin = base.builtin
@@ -482,7 +553,8 @@ function resolveObjectShapeBases(shape: LowerTypeNode, context: LowerContext): L
   return {
     builtin,
     dynamic,
-    fields
+    fields,
+    functionCompanions
   }
 }
 
@@ -554,7 +626,8 @@ function hydrateObjectShape(shape: LowerTypeNode, context: LowerContext): LowerT
     kind: 'object',
     baseTypes: copyStringArray(shape.baseTypes),
     dynamic: shape.dynamic === true,
-    fields
+    fields,
+    functionCompanions: shape.functionCompanions === true
   }
 }
 
@@ -591,7 +664,7 @@ function hydrateObjectShapeField(field: LowerTypeNode, context: LowerContext): L
         typeRef: nullableNode(field.typeRef),
         valueType: field.valueType,
         nullable: field.nullable,
-        promiseValueType: nullableString(field.promiseValueType),
+        asyncResultValueType: nullableString(field.asyncResultValueType),
         shape: declared.shape,
         functionType
       }
@@ -610,7 +683,7 @@ function hydrateObjectShapeField(field: LowerTypeNode, context: LowerContext): L
       typeRef: nullableNode(field.typeRef),
       valueType: field.valueType,
       nullable: field.nullable,
-      promiseValueType: nullableString(field.promiseValueType),
+      asyncResultValueType: nullableString(field.asyncResultValueType),
       shape: nullableNode(field.shape),
       functionType
     }
@@ -633,8 +706,9 @@ function hydrateFunctionType(functionType: LowerTypeNode, context: LowerContext)
     declaredReturnType: functionType.declaredReturnType,
     returnType: functionType.returnType,
     returnTypeRef: nullableNode(functionType.returnTypeRef),
+    returnRuntimeTypeAlternatives: nullableNodeArray(functionType.returnRuntimeTypeAlternatives),
     returnNullable: functionType.returnNullable,
-    returnPromiseValueType: nullableString(functionType.returnPromiseValueType),
+    returnAsyncResultValueType: nullableString(functionType.returnAsyncResultValueType),
     returnShape: nullableNode(functionType.returnShape),
     loc: functionType.loc
   }
@@ -663,9 +737,10 @@ function hydrateFunctionParam(param: LowerTypeNode, context: LowerContext): Lowe
     rest: param.rest === true,
     declaredType,
     typeRef: nullableNode(param.typeRef),
+    runtimeTypeAlternatives: nullableNodeArray(param.runtimeTypeAlternatives),
     valueType: unresolvedFunctionParamValueType(param, declaredType),
     nullable: param.nullable,
-    promiseValueType: nullableString(param.promiseValueType),
+    asyncResultValueType: nullableString(param.asyncResultValueType),
     shape,
     functionType: nullableNode(param.functionType),
     loc: param.loc
@@ -699,7 +774,7 @@ function resolveFieldDeclaredType(field: LowerTypeNode, context: LowerContext): 
     const resolved = namedResolvedType(lowerNodeValueTypeOrUnknown(field))
 
     resolved.nullable = field.nullable === true
-    resolved.promiseValueType = nullableString(field.promiseValueType)
+    resolved.asyncResultValueType = nullableString(field.asyncResultValueType)
     resolved.shape = nullableNode(field.shape)
     resolved.functionType = nullableNode(field.functionType)
     return resolved
@@ -713,7 +788,9 @@ function fieldHasResolvedTypeMetadata(field: LowerTypeNode): boolean {
   const valueType = field.valueType
 
   if (
-    valueType === 'array' &&
+    typeof declaredType === 'string' &&
+    typeof valueType === 'string' &&
+    valueType !== declaredType &&
     (field.typeRef === null || typeof field.typeRef === 'undefined')
   ) {
     return false
@@ -785,7 +862,8 @@ function resolveWeakTargetObjectShape(shape: LowerTypeNode, context: LowerContex
     builtin,
     baseTypes: resolvedObjectShapeBaseTypes(shape),
     dynamic: shape.dynamic === true || bases.dynamic,
-    fields: resolvedFields
+    fields: resolvedFields,
+    functionCompanions: shape.functionCompanions === true || bases.functionCompanions
   }
 }
 
@@ -821,7 +899,7 @@ function resolveWeakTargetObjectShapeField(
     typeRef: nullableNode(field.typeRef),
     valueType: resolvedValueType(declared, lowerNodeValueTypeOrUnknown(field)),
     nullable: declared.nullable || field.ownership === 'weak' || field.optional === true,
-    promiseValueType: nullableString(declared.promiseValueType),
+    asyncResultValueType: nullableString(declared.asyncResultValueType),
     shape: null,
     functionType: nullableNode(field.functionType)
   }
@@ -922,7 +1000,8 @@ function collectObjectType(valueType: LowerTypeNode): LowerTypeNode {
     kind: 'object',
     baseTypes: copyStringArray(valueType.baseTypes),
     dynamic: valueType.dynamic === true,
-    fields: collectObjectTypeFields(valueType.fields)
+    fields: collectObjectTypeFields(valueType.fields),
+    functionCompanions: valueType.functionCompanions === true
   }
 }
 
@@ -948,7 +1027,7 @@ function collectObjectTypeFields(fields: LowerTypeNode[] | null | undefined): Lo
       typeRef: nullableNode(field.typeRef),
       valueType: lowerNodeValueTypeOrUnknown(field),
       nullable: field.nullable === true,
-      promiseValueType: nullableString(field.promiseValueType),
+      asyncResultValueType: nullableString(field.asyncResultValueType),
       shape: nullableNode(field.shape),
       loc: field.loc
     })
@@ -982,9 +1061,10 @@ function collectFunctionParams(params: LowerTypeNode[] | null | undefined): Lowe
       rest: param.rest === true,
       declaredType,
       typeRef: nullableNode(param.typeRef),
+      runtimeTypeAlternatives: nullableNodeArray(param.runtimeTypeAlternatives),
       valueType: lowerNodeValueTypeOrUnknown(param),
       nullable: param.nullable,
-      promiseValueType: nullableString(param.promiseValueType),
+      asyncResultValueType: nullableString(param.asyncResultValueType),
       shape: nullableNode(param.shape),
       functionType: nullableNode(param.functionType),
       defaultValue: null,
@@ -1062,20 +1142,84 @@ function resolveUnionTypeNames(
     resolvedTypes.push(resolveTypeName(names[index], context))
   }
 
-  const valueType = commonResolvedValueType(resolvedTypes)
+  let valueType = commonResolvedValueType(resolvedTypes)
+  const typeRef = commonLowerResolvedTypeRef(resolvedTypes)
 
-  if (valueType === null || typeof valueType === 'undefined' || valueType === 'unknown') {
+  if (valueType === null || typeof valueType === 'undefined') {
     return unresolvedType()
+  }
+
+  if (valueType === 'unknown' || (valueType === 'object' && typeRef === null)) {
+    valueType = resolvedUnionValueTypeName(resolvedTypes)
   }
 
   const resolved = namedResolvedType(valueType)
   resolved.nullable = resolvedTypeListHasNullable(resolvedTypes)
+  resolved.typeRef = typeRef
+  resolved.runtimeTypeAlternatives = runtimeTypeAlternatives(resolvedTypes)
 
-  if (valueType === 'promise') {
-    resolved.promiseValueType = commonResolvedString(resolvedTypes, 'promiseValueType')
+  if (typeRef !== null) {
+    resolved.shape = typeRefCompatibilityMetadata(typeRef, context.libraries, { line: 1, column: 1 }).shape
+  }
+
+  if (valueType === 'async-result') {
+    resolved.asyncResultValueType = commonResolvedString(resolvedTypes, 'asyncResultValueType')
   }
 
   return resolved
+}
+
+function runtimeTypeAlternatives(values: LowerResolvedType[]): LowerRuntimeTypeAlternative[] {
+  const alternatives: LowerRuntimeTypeAlternative[] = []
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    const value = values[index]
+
+    alternatives.push({
+      nullable: value.nullable,
+      shape: value.shape,
+      typeRef: value.typeRef,
+      valueType: value.valueType ?? 'unknown'
+    })
+  }
+
+  return alternatives
+}
+
+function commonLowerResolvedTypeRef(values: LowerResolvedType[]): TypeRef | null {
+  if (values.length === 0 || values[0].typeRef === null) {
+    return null
+  }
+
+  let result: TypeRef | null = values[0].typeRef
+
+  for (let index = 1; index < values.length; index = index + 1) {
+    if (values[index].typeRef === null) {
+      return null
+    }
+
+    result = commonTypeRef(result, values[index].typeRef)
+
+    if (result === null) {
+      return null
+    }
+  }
+
+  return result
+}
+
+function resolvedUnionValueTypeName(values: LowerResolvedType[]): string {
+  let valueType = 'union<'
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (index > 0) {
+      valueType = valueType + ','
+    }
+
+    valueType = valueType + (values[index].valueType ?? 'unknown')
+  }
+
+  return valueType + '>'
 }
 
 function resolvedTypeListHasNullable(values: LowerResolvedType[]): boolean {
@@ -1101,7 +1245,7 @@ function commonResolvedValueType(values: LowerResolvedType[]): string | null {
 
   for (let index = 1; index < values.length; index = index + 1) {
     if (values[index].valueType !== first) {
-      return null
+      return 'unknown'
     }
   }
 
@@ -1131,9 +1275,9 @@ function commonResolvedString(values: LowerResolvedType[], key: LowerResolvedStr
 }
 
 function lowerResolvedStringValue(value: LowerResolvedType, key: LowerResolvedStringKey): string | null {
-  if (key === 'promiseValueType') {
-    if (value.promiseValueType !== null && typeof value.promiseValueType !== 'undefined') {
-      return value.promiseValueType
+  if (key === 'asyncResultValueType') {
+    if (value.asyncResultValueType !== null && typeof value.asyncResultValueType !== 'undefined') {
+      return value.asyncResultValueType
     }
 
     return null
@@ -1143,7 +1287,7 @@ function lowerResolvedStringValue(value: LowerResolvedType, key: LowerResolvedSt
 }
 
 function arrayResolvedType(elementTypeRef: TypeRef, context: LowerContext): LowerResolvedType {
-  const resolved = namedResolvedType('array')
+  const resolved = unresolvedType()
   const provider = compilerLibraryNativeTypeForIntrinsic(context.libraries, 'array-literal', 'construct')
 
   if (provider === null || (provider.typeParameters ?? []).length !== 1) {
@@ -1153,6 +1297,7 @@ function arrayResolvedType(elementTypeRef: TypeRef, context: LowerContext): Lowe
   const typeRef = instantiateNativeTypeRef(provider, [elementTypeRef])
   const metadata = typeRefCompatibilityMetadata(typeRef, context.libraries, { line: 1, column: 1 })
 
+  resolved.valueType = metadata.valueType
   resolved.typeRef = typeRef
   resolved.shape = metadata.shape
   resolved.libraryRuntimeRequirements = provider.runtimeRequirements
@@ -1202,7 +1347,8 @@ function cloneResolvedType(source: LowerResolvedType): LowerResolvedType {
     valueType: source.valueType,
     nullable: source.nullable,
     libraryRuntimeRequirements: copyStringArray(source.libraryRuntimeRequirements),
-    promiseValueType: nullableString(source.promiseValueType),
+    runtimeTypeAlternatives: cloneRuntimeTypeAlternatives(source.runtimeTypeAlternatives),
+    asyncResultValueType: nullableString(source.asyncResultValueType),
     shape: nullableNode(source.shape),
     functionType: nullableNode(source.functionType),
     typeRef: source.typeRef
@@ -1219,7 +1365,8 @@ function unresolvedType(): LowerResolvedType {
   return {
     valueType: null,
     nullable: false,
-    promiseValueType: null,
+    runtimeTypeAlternatives: null,
+    asyncResultValueType: null,
     shape: null,
     functionType: null,
     typeRef: null
@@ -1297,6 +1444,30 @@ function nullableNode(value: LowerTypeNode | null | undefined): LowerTypeNode | 
   }
 
   return null
+}
+
+function nullableNodeArray(value: LowerTypeNode[] | null | undefined): LowerTypeNode[] | null {
+  if (value === null || typeof value === 'undefined') {
+    return null
+  }
+
+  return value
+}
+
+function cloneRuntimeTypeAlternatives(
+  values: LowerRuntimeTypeAlternative[] | null
+): LowerRuntimeTypeAlternative[] | null {
+  if (values === null) {
+    return null
+  }
+
+  const copy: LowerRuntimeTypeAlternative[] = []
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    copy.push({ ...values[index] })
+  }
+
+  return copy
 }
 
 function copyStringArray(values: string[] | null | undefined): string[] {

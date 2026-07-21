@@ -11,7 +11,7 @@ test('async-result construct binding совпадает с operation role', () =
     'stdlib/global/promise/index.d.ts'
   )
   library.operations = library.operations.map((operation) => ({ ...operation }))
-  const construct = library.operations.find((operation) => operation.asyncResultOperation === 'construct')
+  const construct = library.operations.find((operation) => operation.asyncResultOperation === 'create')
 
   assert.notEqual(construct, undefined)
 
@@ -24,7 +24,7 @@ test('async-result construct binding совпадает с operation role', () =
     ...construct,
     bindingId: `${construct.bindingId}.detached`,
     operationId: `${construct.operationId}.detached`,
-    asyncResultOperation: 'construct'
+    asyncResultOperation: 'create'
   })
 
   assert.throws(

@@ -25,6 +25,7 @@ export type RenderedCompilerLibraryRegistry = {
   nativePlanSource: string
   nativePlanCMakeSource: string
   nativeEntrySource: string
+  nativeSemanticProbeEntrySource: string
 }
 
 export async function generateCompilerLibraryRegistry(
@@ -40,6 +41,7 @@ export async function generateCompilerLibraryRegistry(
   await writeAtomic(join(outputDirectory, 'native-plan.json'), rendered.nativePlanSource)
   await writeAtomic(join(outputDirectory, 'native-plan.cmake'), rendered.nativePlanCMakeSource)
   await writeAtomic(join(outputDirectory, 'native-entry.ts'), rendered.nativeEntrySource)
+  await writeAtomic(join(outputDirectory, 'native-semantic-probe-entry.ts'), rendered.nativeSemanticProbeEntrySource)
 
   return rendered
 }
@@ -107,6 +109,23 @@ export function renderCompilerLibraryRegistry(
     '  setExitCode: (code: number) => { process.exitCode = code },\n' +
     '  writeFileSync: (path: string, source: string) => fs.writeFileSync(path, source)\n' +
     '}, defaultCompilerLibraryLiteralTypeInference)\n'
+  const nativeSemanticProbeEntrySource =
+    "import process from 'node:process'\n" +
+    "import { runStage6SemanticContract } from '../../tests/contracts/stage6-semantic-contract.ts'\n\n" +
+    'try {\n' +
+    '  const result = runStage6SemanticContract()\n\n' +
+    '  for (const failure of result.failures) {\n' +
+    '    console.error(failure)\n' +
+    '  }\n\n' +
+    '  if (!result.ok) {\n' +
+    '    process.exitCode = 1\n' +
+    '  } else {\n' +
+    "    console.log('Stage 6 semantic contract passed')\n" +
+    '  }\n' +
+    '} catch {\n' +
+    "  console.error('Stage 6 semantic contract threw unexpectedly')\n" +
+    '  process.exitCode = 1\n' +
+    '}\n'
 
   return {
     librarySet,
@@ -114,7 +133,8 @@ export function renderCompilerLibraryRegistry(
     manifestSource,
     nativePlanSource,
     nativePlanCMakeSource,
-    nativeEntrySource
+    nativeEntrySource,
+    nativeSemanticProbeEntrySource
   }
 }
 

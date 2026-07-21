@@ -1,6 +1,5 @@
 import type { AnyNode } from '../../types.ts'
 import type { CFunctionContextWithDependencies } from '../context.ts'
-import type { ArrayLoweringDependencies } from '../values/arrays.ts'
 import type { ClassLoweringDependencies } from '../values/classes.ts'
 import type { NullableLoweringDependencies } from '../values/nullable.ts'
 import type { StatementLoweringDependencies } from '../values/statements.ts'
@@ -8,7 +7,6 @@ import type { StringLoweringDependencies } from '../values/strings.ts'
 import type { AsyncTaskLoweringDependencies } from './tasks.ts'
 
 type CFunctionContext = CFunctionContextWithDependencies<
-  ArrayLoweringDependencies,
   AsyncTaskLoweringDependencies,
   ClassLoweringDependencies,
   NullableLoweringDependencies,
@@ -43,7 +41,7 @@ function pushLocalAwaitRejectionChildValueTypes(
   target: string[],
   value: unknown,
   context: CFunctionContext,
-  localPromiseRejectionValueTypes: RejectionStringMap,
+  localAsyncResultRejectionValueTypes: RejectionStringMap,
   localExceptionValueNames: RejectionNameSet,
   deps: RejectionValueTypeDependencies
 ): void {
@@ -56,7 +54,7 @@ function pushLocalAwaitRejectionChildValueTypes(
     collectLocalAwaitRejectionValueTypesWithState(
       value,
       context,
-      localPromiseRejectionValueTypes,
+      localAsyncResultRejectionValueTypes,
       localExceptionValueNames,
       deps
     )
@@ -66,7 +64,7 @@ function pushLocalAwaitRejectionChildValueTypes(
 function collectLocalAwaitRejectionValueTypesWithState(
   node: unknown,
   context: CFunctionContext,
-  localPromiseRejectionValueTypes: RejectionStringMap,
+  localAsyncResultRejectionValueTypes: RejectionStringMap,
   localExceptionValueNames: RejectionNameSet,
   deps: RejectionValueTypeDependencies
 ): string[] {
@@ -88,7 +86,7 @@ function collectLocalAwaitRejectionValueTypesWithState(
         collectLocalAwaitRejectionValueTypesWithState(
           item,
           context,
-          localPromiseRejectionValueTypes,
+          localAsyncResultRejectionValueTypes,
           localExceptionValueNames,
           deps
         )
@@ -104,7 +102,7 @@ function collectLocalAwaitRejectionValueTypesWithState(
     return collectLocalAwaitRejectionValueTypesWithState(
       current.body,
       context,
-      copyRejectionStringMap(localPromiseRejectionValueTypes),
+      copyRejectionStringMap(localAsyncResultRejectionValueTypes),
       copyRejectionNameSet(localExceptionValueNames),
       deps
     )
@@ -114,7 +112,7 @@ function collectLocalAwaitRejectionValueTypesWithState(
     const types = collectLocalAwaitRejectionValueTypesWithState(
       current.init,
       context,
-      localPromiseRejectionValueTypes,
+      localAsyncResultRejectionValueTypes,
       localExceptionValueNames,
       deps
     )
@@ -123,17 +121,17 @@ function collectLocalAwaitRejectionValueTypesWithState(
       localExceptionValueNames.add(current.name)
     }
 
-    if (current.valueType === 'promise') {
-      const rejectionValueType = inferPromiseRejectionValueType(
+    if (current.valueType === 'async-result') {
+      const rejectionValueType = inferAsyncResultRejectionValueType(
         current.init,
         context,
-        localPromiseRejectionValueTypes,
+        localAsyncResultRejectionValueTypes,
         localExceptionValueNames,
         deps
       )
 
       if (rejectionValueType !== 'unknown') {
-        localPromiseRejectionValueTypes.set(current.name, rejectionValueType)
+        localAsyncResultRejectionValueTypes.set(current.name, rejectionValueType)
       }
     }
 
@@ -141,10 +139,10 @@ function collectLocalAwaitRejectionValueTypesWithState(
   }
 
   if (current.type === 'AwaitExpression') {
-    const rejectionValueType = inferPromiseRejectionValueType(
+    const rejectionValueType = inferAsyncResultRejectionValueType(
       current.argument,
       context,
-      localPromiseRejectionValueTypes,
+      localAsyncResultRejectionValueTypes,
       localExceptionValueNames,
       deps
     )
@@ -186,7 +184,7 @@ function collectLocalAwaitRejectionValueTypesWithState(
       types,
       child,
       context,
-      localPromiseRejectionValueTypes,
+      localAsyncResultRejectionValueTypes,
       localExceptionValueNames,
       deps
     )
@@ -195,22 +193,18 @@ function collectLocalAwaitRejectionValueTypesWithState(
   return types
 }
 
-function inferPromiseRejectionValueType(
+function inferAsyncResultRejectionValueType(
   expression: AnyNode,
   context: CFunctionContext,
-  localPromiseRejectionValueTypes: RejectionStringMap,
+  localAsyncResultRejectionValueTypes: RejectionStringMap,
   localExceptionValueNames: RejectionNameSet,
   deps: RejectionValueTypeDependencies
 ): string {
-  if (expression.promiseRejectionIntrinsicRole === 'exception-value') {
-    return 'error'
-  }
-
   if (
-    expression.promiseRejectionValueType !== null &&
-    typeof expression.promiseRejectionValueType !== 'undefined'
+    expression.asyncResultRejectionValueType !== null &&
+    typeof expression.asyncResultRejectionValueType !== 'undefined'
   ) {
-    return expression.promiseRejectionValueType
+    return expression.asyncResultRejectionValueType
   }
 
   if (expression.type === 'CallExpression' && deps.cAsyncResultOperationKind(expression) === 'reject') {
@@ -219,13 +213,13 @@ function inferPromiseRejectionValueType(
 
   if (expression.type === 'Reference' && expression.path.length === 1) {
     const name = expression.path[0]
-    const localValueType = localPromiseRejectionValueTypes.get(name)
+    const localValueType = localAsyncResultRejectionValueTypes.get(name)
 
     if (localValueType !== null && typeof localValueType !== 'undefined') {
       return localValueType
     }
 
-    const contextValueType = context.promiseRejectionValueTypes.get(name)
+    const contextValueType = context.asyncResultRejectionValueTypes.get(name)
 
     if (contextValueType !== null && typeof contextValueType !== 'undefined') {
       return contextValueType
@@ -252,7 +246,7 @@ function inferRejectedValueTypeWithExceptions(
   deps: RejectionValueTypeDependencies
 ): string {
   if (deps.isKnownExceptionValueExpression(expression, localExceptionValueNames)) {
-    return 'error'
+    return deps.inferExpressionType(expression, context)
   }
 
   if (

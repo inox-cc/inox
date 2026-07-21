@@ -8,6 +8,7 @@ import {
   isNullableTypeName,
   nullableTypeNameFromKnownTypeName,
   recordTypeNamesFromTypeName,
+  typeNameDependencyNames,
   unionTypeNamesFromTypeName
 } from '../type-names.ts'
 import type {
@@ -25,7 +26,7 @@ import { hasWeakOwnershipMarker } from './ownership.ts'
 import {
   anyNodeResolvedTypeInfo,
   commonResolvedObjectShape,
-  commonResolvedPromiseValueType,
+  commonResolvedAsyncResultValueType,
   isOptionalParam,
   nodeDeclaredTypeOrValueType,
   resolvedFunctionTypeMetadata as resolvedFunctionTypeMetadataValue,
@@ -39,12 +40,11 @@ import type {
   TypeAliasDeclarationNode
 } from './resolved-types.ts'
 import { mergeShapeFields } from './helpers.ts'
-import {
-  compilerLibraryNativeTypeForIntrinsic,
-  compilerLibraryNativeTypeForName
-} from '../extensions/library-set.ts'
+import { compilerLibraryNativeTypeForIntrinsic, compilerLibraryNativeTypeForName } from '../extensions/library-set.ts'
 import { instantiateNativeTypeRef } from '../extensions/type-ref-substitution.ts'
 import {
+  commonTypeRef,
+  refineTypeRefUnknowns,
   typeRefCompatibilityMetadata,
   typeRefTraitArgument
 } from '../extensions/type-ref-compatibility.ts'
@@ -73,6 +73,10 @@ export type DeclaredTypeResolverContext = {
 }
 
 export function declareTypeAlias(context: DeclaredTypeResolverContext, item: TypeAliasDeclarationNode): void {
+  if (item.name === 'AnyNode' && item.valueType.kind === 'object') {
+    item.valueType.compilerBuiltin = 'compiler.AnyNode'
+  }
+
   if (context.types.has(item.name)) {
     context.diagnostics.push(diagnostic('INOX_REDECLARED_NAME', `type ${item.name} is already declared`, item.loc))
     return
@@ -99,7 +103,7 @@ export function resolveDeclaredType(
   name: string | null | undefined,
   loc: SourceLocation
 ): ResolvedTypeInfo {
-  if (name === null || typeof name === 'undefined' || name === 'unknown') {
+  if (name === null || typeof name === 'undefined' || name === 'unknown' || name === 'any') {
     return unresolvedTypeInfo()
   }
 
@@ -122,6 +126,39 @@ export function resolveDeclaredType(
   if (name === 'ValueType') {
     const info = unresolvedTypeInfo()
     info.valueType = 'string'
+
+    return info
+  }
+
+  if (name === 'array') {
+    const info = unresolvedTypeInfo()
+    info.typeRef = compilerLibraryArrayTypeRef(context, unknownTypeRef(false))
+
+    if (info.typeRef !== null) {
+      const metadata = typeRefCompatibilityMetadata(info.typeRef, context.libraries, loc)
+      info.valueType = metadata.valueType
+      info.shape = metadata.shape
+    }
+
+    return info
+  }
+
+  if (isArrayTypeName(name)) {
+    const arrayElementTypeName = arrayElementTypeNameFromKnownTypeName(name)
+    const elementInfo = resolveDeclaredType(context, arrayElementTypeName, loc)
+    const info = unresolvedTypeInfo()
+    const providerType = compilerLibraryNativeTypeForIntrinsic(context.libraries, 'array-literal', 'construct')
+
+    if (providerType !== null && (providerType.typeParameters ?? []).length === 1) {
+      const typeRef = instantiateNativeTypeRef(providerType, [
+        typeRefFromResolvedType(elementInfo, arrayElementTypeName)
+      ])
+      const metadata = typeRefCompatibilityMetadata(typeRef, context.libraries, loc)
+
+      info.typeRef = typeRef
+      info.valueType = metadata.valueType
+      info.shape = metadata.shape
+    }
 
     return info
   }
@@ -211,7 +248,7 @@ export function resolveDeclaredType(
       typeRef: qualifiedTypeRef(inner.typeRef, true, null),
       functionType: inner.functionType,
       shape: inner.shape,
-      promiseValueType: inner.promiseValueType
+      asyncResultValueType: inner.asyncResultValueType
     }
   }
 
@@ -219,35 +256,6 @@ export function resolveDeclaredType(
 
   if (unionTypeNames !== null && typeof unionTypeNames !== 'undefined') {
     return resolveUnionDeclaredType(context, unionTypeNames, loc)
-  }
-
-  if (name === 'array') {
-    const info = unresolvedTypeInfo()
-    info.valueType = 'array'
-    info.typeRef = compilerLibraryArrayTypeRef(context, unknownTypeRef(false))
-
-    return info
-  }
-
-  if (isArrayTypeName(name)) {
-    const arrayElementTypeName = arrayElementTypeNameFromKnownTypeName(name)
-    const elementInfo = resolveDeclaredType(context, arrayElementTypeName, loc)
-    const info = unresolvedTypeInfo()
-    info.valueType = 'array'
-    const providerType = compilerLibraryNativeTypeForIntrinsic(context.libraries, 'array-literal', 'construct')
-
-    if (providerType !== null && (providerType.typeParameters ?? []).length === 1) {
-      const typeRef = instantiateNativeTypeRef(providerType, [
-        typeRefFromResolvedType(elementInfo, arrayElementTypeName)
-      ])
-      const metadata = typeRefCompatibilityMetadata(typeRef, context.libraries, loc)
-
-      info.typeRef = typeRef
-      info.shape = metadata.shape
-
-    }
-
-    return info
   }
 
   const recordTypeNames = recordTypeNamesFromTypeName(name)
@@ -268,7 +276,7 @@ export function resolveDeclaredType(
         valueType: valueInfo.valueType,
         nullable: valueInfo.nullable,
         typeRef: valueInfo.typeRef,
-        promiseValueType: valueInfo.promiseValueType,
+        asyncResultValueType: valueInfo.asyncResultValueType,
         functionType: valueInfo.functionType,
         shape: valueInfo.shape,
         loc
@@ -350,12 +358,7 @@ export function resolveDeclaredType(
     if (context.resolvingDeclaredTypes.has(name)) {
       markIncompleteDeclaredTypeResolutions(context, name)
       const recursiveInfo = unresolvedTypeInfo()
-
-      if (shape.kind === 'function') {
-        recursiveInfo.valueType = 'function'
-      } else if (shape.kind === 'object') {
-        recursiveInfo.valueType = 'object'
-      }
+      recursiveInfo.valueType = recursiveDeclaredValueType(context, shape, new Set<string>())
 
       return recursiveInfo
     }
@@ -411,6 +414,36 @@ export function resolveDeclaredType(
   context.diagnostics.push(diagnostic('INOX_UNKNOWN_TYPE', `unknown type ${name}`, loc))
 
   return unresolvedTypeInfo()
+}
+
+function recursiveDeclaredValueType(
+  context: DeclaredTypeResolverContext,
+  definition: TypeAliasInfo,
+  seen: Set<string>
+): ValueType {
+  if (definition.kind === 'function') {
+    return 'function'
+  }
+
+  if (definition.kind === 'object') {
+    return 'object'
+  }
+
+  const targetName = definition.valueType
+
+  if (seen.has(targetName)) {
+    return 'unknown'
+  }
+
+  seen.add(targetName)
+  const genericApplication = genericTypeApplicationFromTypeName(targetName)
+  const targetDefinition = context.types.get(genericApplication?.name ?? targetName)
+
+  if (targetDefinition === null || typeof targetDefinition === 'undefined') {
+    return 'unknown'
+  }
+
+  return recursiveDeclaredValueType(context, targetDefinition, seen)
 }
 
 function resolveGenericDeclaredType(
@@ -531,10 +564,7 @@ function resolveGenericDeclaredType(
   }
 }
 
-function markIncompleteDeclaredTypeResolutions(
-  context: DeclaredTypeResolverContext,
-  recursiveName: string
-): void {
+function markIncompleteDeclaredTypeResolutions(context: DeclaredTypeResolverContext, recursiveName: string): void {
   for (const name of context.resolvingDeclaredTypes) {
     context.incompleteDeclaredTypes.add(name)
     let dependencies = context.incompleteDeclaredTypeDependencies.get(name)
@@ -654,7 +684,7 @@ function refreshResolvedTypeInfo(target: ResolvedTypeInfo, source: ResolvedTypeI
   target.typeRef = source.typeRef
   target.functionType = refreshFunctionTypeMetadata(target.functionType, source.functionType)
   target.shape = refreshObjectShape(target.shape, source.shape)
-  target.promiseValueType = source.promiseValueType
+  target.asyncResultValueType = source.asyncResultValueType
 }
 
 function refreshObjectShape(target: ObjectShapeInfo | null, source: ObjectShapeInfo | null): ObjectShapeInfo | null {
@@ -727,7 +757,7 @@ function applyGenericNativeType(
 
   resolved.valueType = metadata.valueType
   resolved.typeRef = typeRef
-  resolved.promiseValueType = metadata.promiseValueType
+  resolved.asyncResultValueType = metadata.asyncResultValueType
 
   if (resolved.shape === null) {
     resolved.shape = metadata.shape
@@ -739,10 +769,7 @@ function applyGenericNativeType(
   }
 }
 
-export function typeRefFromResolvedType(
-  info: ResolvedTypeInfo,
-  declaredName: string | null = null
-): TypeRef {
+export function typeRefFromResolvedType(info: ResolvedTypeInfo, declaredName: string | null = null): TypeRef {
   return typeRefFromResolvedTypeInScope(info, new Set<ObjectShapeInfo>(), declaredName)
 }
 
@@ -788,11 +815,7 @@ function typeRefFromResolvedTypeInScope(
         const field = info.shape.fields[index]
         const fieldTypeRef =
           field.typeRef ??
-          typeRefFromResolvedTypeInScope(
-            resolvedTypeInfoFromField(field),
-            resolvingShapes,
-            field.declaredType ?? null
-          )
+          typeRefFromResolvedTypeInScope(resolvedTypeInfoFromField(field), resolvingShapes, field.declaredType ?? null)
 
         const typeRefField: ObjectTypeRefField = {
           name: field.name,
@@ -870,11 +893,7 @@ function typeRefFromFunctionTypeMetadata(
     const param = functionType.params[index]
     params.push(
       param.typeRef ??
-        typeRefFromResolvedTypeInScope(
-          resolvedTypeInfoFromField(param),
-          resolvingShapes,
-          param.declaredType ?? null
-        )
+        typeRefFromResolvedTypeInScope(resolvedTypeInfoFromField(param), resolvingShapes, param.declaredType ?? null)
     )
   }
 
@@ -883,7 +902,7 @@ function typeRefFromFunctionTypeMetadata(
   resultInfo.nullable = functionType.returnNullable === true
   resultInfo.typeRef = functionType.returnTypeRef ?? null
   resultInfo.shape = functionType.returnShape ?? null
-  resultInfo.promiseValueType = functionType.returnPromiseValueType ?? null
+  resultInfo.asyncResultValueType = functionType.returnAsyncResultValueType ?? null
 
   return {
     kind: 'function',
@@ -915,7 +934,7 @@ export function functionTypeMetadataFromTypeRef(
       valueType: info.valueType,
       typeRef: paramTypeRef,
       nullable: info.nullable,
-      promiseValueType: info.promiseValueType,
+      asyncResultValueType: info.asyncResultValueType,
       functionType: info.functionType,
       shape: info.shape
     }
@@ -932,7 +951,7 @@ export function functionTypeMetadataFromTypeRef(
     returnType: result.valueType,
     returnTypeRef: typeRef.result,
     returnNullable: result.nullable,
-    returnPromiseValueType: result.promiseValueType,
+    returnAsyncResultValueType: result.asyncResultValueType,
     returnShape: result.shape,
     loc
   }
@@ -956,7 +975,7 @@ function resolvedTypeInfoFromTypeRef(
   info.nullable = metadata.nullable
   info.functionType = functionTypeMetadataFromTypeRef(context, typeRef, loc)
   info.shape = metadata.shape
-  info.promiseValueType = metadata.promiseValueType
+  info.asyncResultValueType = metadata.asyncResultValueType
   return info
 }
 
@@ -967,7 +986,7 @@ function resolvedTypeInfoFromField(field: AnyNode): ResolvedTypeInfo {
     typeRef: field.typeRef ?? null,
     functionType: field.functionType ?? null,
     shape: field.shape ?? null,
-    promiseValueType: field.promiseValueType ?? null
+    asyncResultValueType: field.asyncResultValueType ?? null
   }
 }
 
@@ -1026,8 +1045,8 @@ function resolveDeclaredTypeIndex(
   indexName: string,
   loc: SourceLocation
 ): ResolvedTypeInfo {
-  if (indexName === 'number' && source.valueType === 'array') {
-    const elementTypeRef = typeRefTraitArgument(source.typeRef, 'iterable', 0, context.libraries)
+  if (indexName === 'number') {
+    const elementTypeRef = typeRefTraitArgument(source.typeRef, 'indexable', 1, context.libraries)
 
     if (elementTypeRef !== null) {
       return resolvedTypeInfoFromTypeRef(context, elementTypeRef, loc)
@@ -1167,10 +1186,10 @@ function resolveDeclaredFunctionAlias(
     const returnInfo = resolveDeclaredType(context, shape.returnType, loc)
     const params = resolveFunctionTypeParams(context, shape.params, loc)
     const resolved = unresolvedTypeInfo()
-    let returnPromiseValueType: ValueType | null = null
+    let returnAsyncResultValueType: ValueType | null = null
 
-    if (returnInfo.promiseValueType !== null && typeof returnInfo.promiseValueType !== 'undefined') {
-      returnPromiseValueType = returnInfo.promiseValueType
+    if (returnInfo.asyncResultValueType !== null && typeof returnInfo.asyncResultValueType !== 'undefined') {
+      returnAsyncResultValueType = returnInfo.asyncResultValueType
     }
 
     resolved.valueType = 'function'
@@ -1182,7 +1201,7 @@ function resolveDeclaredFunctionAlias(
       returnType: returnInfo.valueType,
       returnTypeRef: returnInfo.typeRef,
       returnNullable: returnInfo.nullable,
-      returnPromiseValueType,
+      returnAsyncResultValueType,
       returnShape: returnInfo.shape
     }
     cacheResolvedDeclaredType(context, name, resolved, staleCached)
@@ -1204,10 +1223,10 @@ function resolveFunctionTypeParams(
     const declaredType = nodeDeclaredTypeOrValueType(param)
     const paramLoc: SourceLocation = param.loc ?? loc
     const paramInfo = resolveDeclaredType(context, declaredType, paramLoc)
-    let paramPromiseValueType: ValueType | null = null
+    let paramAsyncResultValueType: ValueType | null = null
 
-    if (paramInfo.promiseValueType !== null && typeof paramInfo.promiseValueType !== 'undefined') {
-      paramPromiseValueType = paramInfo.promiseValueType
+    if (paramInfo.asyncResultValueType !== null && typeof paramInfo.asyncResultValueType !== 'undefined') {
+      paramAsyncResultValueType = paramInfo.asyncResultValueType
     }
 
     resolvedParams.push({
@@ -1220,8 +1239,8 @@ function resolveFunctionTypeParams(
       typeRef: paramInfo.typeRef,
       nullable:
         paramInfo.nullable ||
-      (param.optional === true && (param.defaultValue === null || typeof param.defaultValue === 'undefined')),
-      promiseValueType: paramPromiseValueType,
+        (param.optional === true && (param.defaultValue === null || typeof param.defaultValue === 'undefined')),
+      asyncResultValueType: paramAsyncResultValueType,
       functionType: paramInfo.functionType,
       shape: paramInfo.shape
     })
@@ -1245,6 +1264,7 @@ export function resolveUnionDeclaredType(
   }
 
   const valueType = commonValueType(valueTypes)
+  const typeRef = commonResolvedTypeRef(infos)
   const result = unresolvedTypeInfo()
 
   if (valueType === 'unknown') {
@@ -1253,33 +1273,44 @@ export function resolveUnionDeclaredType(
 
   result.valueType = valueType
   result.nullable = resolvedTypeListHasNullable(infos)
+  result.typeRef = typeRef
 
-  if (valueType === 'array') {
-    const elementValueTypes: ValueType[] = []
-
-    for (let index = 0; index < infos.length; index = index + 1) {
-      const elementTypeRef = typeRefTraitArgument(infos[index].typeRef, 'iterable', 0, context.libraries)
-      const elementInfo =
-        elementTypeRef === null ? unresolvedTypeInfo() : resolvedTypeInfoFromTypeRef(context, elementTypeRef, loc)
-      elementValueTypes.push(elementInfo.valueType)
-    }
-
-    const elementInfo = unresolvedTypeInfo()
-    elementInfo.valueType = commonValueType(elementValueTypes)
-    result.typeRef = compilerLibraryArrayTypeRef(context, typeRefFromResolvedType(elementInfo))
-  } else if (valueType === 'promise') {
-    result.promiseValueType = commonResolvedPromiseValueType(infos)
+  if (valueType === 'async-result') {
+    result.asyncResultValueType = commonResolvedAsyncResultValueType(infos)
   } else if (valueType === 'object') {
-    result.shape = commonResolvedObjectShape(infos)
+    if (result.typeRef !== null) {
+      result.shape = typeRefCompatibilityMetadata(result.typeRef, context.libraries, loc).shape
+    } else {
+      result.shape = commonResolvedObjectShape(infos)
+    }
   }
 
   return result
 }
 
-function resolveAnyNodeDeclaredType(
-  context: DeclaredTypeResolverContext,
-  loc: SourceLocation
-): ResolvedTypeInfo {
+function commonResolvedTypeRef(infos: ResolvedTypeInfo[]): TypeRef | null {
+  if (infos.length === 0 || infos[0].typeRef === null) {
+    return null
+  }
+
+  let result: TypeRef | null = infos[0].typeRef
+
+  for (let index = 1; index < infos.length; index = index + 1) {
+    if (infos[index].typeRef === null) {
+      return null
+    }
+
+    result = commonTypeRef(result, infos[index].typeRef)
+
+    if (result === null) {
+      return null
+    }
+  }
+
+  return result
+}
+
+function resolveAnyNodeDeclaredType(context: DeclaredTypeResolverContext, loc: SourceLocation): ResolvedTypeInfo {
   const info = anyNodeResolvedTypeInfo(loc)
   const resolvingName = 'compiler.AnyNode'
   const shape = info.shape
@@ -1289,15 +1320,7 @@ function resolveAnyNodeDeclaredType(
   }
 
   if (context.resolvingDeclaredTypes.has(resolvingName)) {
-    info.typeRef = {
-      kind: 'object',
-      declaredName: 'AnyNode',
-      fields: [],
-      dynamic: true,
-      nullable: false,
-      ownership: 'value',
-      traits: []
-    }
+    info.typeRef = compilerAnyNodeTypeRef()
     return info
   }
 
@@ -1305,9 +1328,22 @@ function resolveAnyNodeDeclaredType(
 
   try {
     info.shape = resolveObjectShape(context, shape, false)
+    info.typeRef = compilerAnyNodeTypeRef()
     return info
   } finally {
     context.resolvingDeclaredTypes.delete(resolvingName)
+  }
+}
+
+function compilerAnyNodeTypeRef(): TypeRef {
+  return {
+    kind: 'object',
+    declaredName: 'AnyNode',
+    fields: [],
+    dynamic: true,
+    nullable: false,
+    ownership: 'value',
+    traits: []
   }
 }
 
@@ -1366,7 +1402,7 @@ export function resolveObjectShapeField(
     fieldInfo = resolveWeakTargetShapeFieldType(context, field)
   }
 
-  let promiseValueType: ValueType | null = null
+  let asyncResultValueType: ValueType | null = null
   let functionType = fieldInfo.functionType
   const functionOverloads: FunctionTypeMetadata[] = []
 
@@ -1380,8 +1416,8 @@ export function resolveObjectShapeField(
     }
   }
 
-  if (fieldInfo.promiseValueType !== null && typeof fieldInfo.promiseValueType !== 'undefined') {
-    promiseValueType = fieldInfo.promiseValueType
+  if (fieldInfo.asyncResultValueType !== null && typeof fieldInfo.asyncResultValueType !== 'undefined') {
+    asyncResultValueType = fieldInfo.asyncResultValueType
   }
 
   const sourceFunctionOverloads: FunctionTypeMetadata[] = field.functionOverloads ?? []
@@ -1406,18 +1442,14 @@ export function resolveObjectShapeField(
     weakTypeValidated: weakField || field.weakTypeValidated === true,
     loc: field.loc,
     declaredType,
-    typeRef: qualifiedFieldTypeRef(
-      fieldInfo.typeRef,
-      weakField,
-      optionalFieldsAreNullable && field.optional === true
-    ),
+    typeRef: qualifiedFieldTypeRef(fieldInfo.typeRef, weakField, optionalFieldsAreNullable && field.optional === true),
     valueType: fieldInfo.valueType,
     nullable:
       fieldInfo.nullable ||
       field.nullable === true ||
       weakField ||
       (optionalFieldsAreNullable && field.optional === true),
-    promiseValueType,
+    asyncResultValueType,
     functionType,
     functionOverloads,
     shape: fieldInfo.shape ?? field.shape ?? null
@@ -1451,10 +1483,10 @@ export function resolveFunctionTypeMetadata(
   const typeLoc: SourceLocation = { line: typeLine, column: typeColumn }
   const returnInfo = resolveDeclaredType(context, functionType.returnType, typeLoc)
   const params = resolveFunctionTypeParams(context, functionType.params, typeLoc)
-  let returnPromiseValueType: ValueType | null = null
+  let returnAsyncResultValueType: ValueType | null = null
 
-  if (returnInfo.promiseValueType !== null && typeof returnInfo.promiseValueType !== 'undefined') {
-    returnPromiseValueType = returnInfo.promiseValueType
+  if (returnInfo.asyncResultValueType !== null && typeof returnInfo.asyncResultValueType !== 'undefined') {
+    returnAsyncResultValueType = returnInfo.asyncResultValueType
   }
 
   return {
@@ -1465,7 +1497,7 @@ export function resolveFunctionTypeMetadata(
     returnType: returnInfo.valueType,
     returnTypeRef: returnInfo.typeRef,
     returnNullable: returnInfo.nullable,
-    returnPromiseValueType,
+    returnAsyncResultValueType,
     returnShape: returnInfo.shape
   }
 }
@@ -1565,14 +1597,14 @@ export function resolveFieldDeclaredType(context: DeclaredTypeResolverContext, f
   }
 
   if (fieldHasResolvedTypeMetadata(field)) {
-    return resolvedSyntheticFieldType(field)
+    return resolvedSyntheticFieldType(context, field)
   }
 
   if (
     (field.declaredType === null || typeof field.declaredType === 'undefined') &&
     (field.loc === null || typeof field.loc === 'undefined')
   ) {
-    return resolvedSyntheticFieldType(field)
+    return resolvedSyntheticFieldType(context, field)
   }
 
   return resolveDeclaredType(context, declaredType, fieldSourceLocation(field))
@@ -1594,7 +1626,8 @@ function fieldHasResolvedTypeMetadata(field: AnyNode): boolean {
   const valueType = field.valueType
 
   if (
-    valueType === 'array' &&
+    typeof declaredType === 'string' &&
+    isArrayTypeName(declaredType) &&
     (field.typeRef === null || typeof field.typeRef === 'undefined')
   ) {
     return false
@@ -1608,20 +1641,132 @@ function fieldHasResolvedTypeMetadata(field: AnyNode): boolean {
   )
 }
 
-function resolvedSyntheticFieldType(field: AnyNode): ResolvedTypeInfo {
-  const info = unresolvedTypeInfo()
+function resolvedSyntheticFieldType(context: DeclaredTypeResolverContext, field: AnyNode): ResolvedTypeInfo {
+  let typeRef: TypeRef | null = field.typeRef ?? null
+  const declaredType = field.declaredType
+
+  if (
+    typeRef !== null &&
+    typeof declaredType === 'string' &&
+    typeRefContainsUnknown(typeRef, 0) &&
+    syntheticDeclaredTypeDependenciesAreAvailable(context, declaredType)
+  ) {
+    const declared = resolveDeclaredType(context, declaredType, fieldSourceLocation(field))
+
+    if (declared.typeRef !== null) {
+      typeRef = refineTypeRefUnknowns(typeRef, declared.typeRef)
+    }
+  }
+
+  const info =
+    typeRef !== null && typeRef.kind !== 'parameter' && typeRef.kind !== 'object'
+      ? resolvedTypeInfoFromTypeRef(context, typeRef, fieldSourceLocation(field))
+      : unresolvedTypeInfo()
 
   if (field.valueType !== null && typeof field.valueType !== 'undefined') {
     info.valueType = field.valueType
   }
 
-  info.nullable = field.nullable === true
-  info.typeRef = field.typeRef ?? null
-  info.functionType = field.functionType ?? null
-  info.shape = field.shape ?? null
-  info.promiseValueType = field.promiseValueType ?? null
+  info.nullable = info.nullable || field.nullable === true
+  info.typeRef = typeRef
+  info.functionType = field.functionType ?? info.functionType
+  info.shape = field.shape ?? info.shape
+  info.asyncResultValueType = field.asyncResultValueType ?? info.asyncResultValueType
 
   return info
+}
+
+function syntheticDeclaredTypeDependenciesAreAvailable(
+  context: DeclaredTypeResolverContext,
+  declaredType: string
+): boolean {
+  const dependencies = typeNameDependencyNames(declaredType)
+
+  for (const dependency of dependencies) {
+    if (
+      dependency === 'AnyNode' ||
+      dependency === 'NonNullable' ||
+      dependency === 'ValueType' ||
+      dependency === 'array'
+    ) {
+      continue
+    }
+
+    if (
+      context.typeSubstitutions.has(dependency) ||
+      context.types.has(dependency) ||
+      context.classNames.has(dependency) ||
+      compilerLibraryNativeTypeForName(context.libraries, dependency) !== null
+    ) {
+      continue
+    }
+
+    return false
+  }
+
+  return true
+}
+
+function typeRefContainsUnknown(typeRef: TypeRef, depth: number): boolean {
+  if (typeRef.kind === 'unknown') {
+    return true
+  }
+
+  if (typeRef.kind === 'parameter' || typeRef.kind === 'primitive' || depth >= 64) {
+    return false
+  }
+
+  if (typeRef.kind === 'nominal') {
+    return typeRefListContainsUnknown(typeRef.args, depth + 1) || typeRefTraitsContainUnknown(typeRef, depth + 1)
+  }
+
+  if (typeRef.kind === 'function') {
+    return (
+      typeRefListContainsUnknown(typeRef.params, depth + 1) ||
+      typeRefContainsUnknown(typeRef.result, depth + 1) ||
+      typeRefTraitsContainUnknown(typeRef, depth + 1)
+    )
+  }
+
+  for (const field of typeRef.fields) {
+    if (typeRefContainsUnknown(field.typeRef, depth + 1)) {
+      return true
+    }
+  }
+
+  if (
+    typeRef.dynamicField !== null &&
+    typeof typeRef.dynamicField !== 'undefined' &&
+    typeRefContainsUnknown(typeRef.dynamicField, depth + 1)
+  ) {
+    return true
+  }
+
+  return typeRefTraitsContainUnknown(typeRef, depth + 1)
+}
+
+function typeRefListContainsUnknown(typeRefs: TypeRef[], depth: number): boolean {
+  for (const typeRef of typeRefs) {
+    if (typeRefContainsUnknown(typeRef, depth)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function typeRefTraitsContainUnknown(typeRef: TypeRef, depth: number): boolean {
+  if (typeRef.kind === 'parameter') {
+    return false
+  }
+
+  for (const trait of typeRef.traits) {
+    if (typeRefListContainsUnknown(trait.args, depth)) {
+      return true
+    }
+  }
+
+  return false
 }
 
 export function resolveWeakFieldDeclaredType(context: DeclaredTypeResolverContext, field: AnyNode): ResolvedTypeInfo {
@@ -1729,15 +1874,15 @@ export function resolveWeakTargetObjectShape(
     const declared = resolveWeakTargetShapeFieldType(context, field)
     let declaredType = nodeDeclaredTypeOrValueType(field)
     const fieldDeclaredType = field.declaredType
-    let promiseValueType: ValueType | null = null
+    let asyncResultValueType: ValueType | null = null
     const functionType = resolvedFunctionTypeMetadataValue(declared.functionType, field.functionType)
 
     if (fieldDeclaredType !== null && typeof fieldDeclaredType !== 'undefined') {
       declaredType = fieldDeclaredType
     }
 
-    if (declared.promiseValueType !== null && typeof declared.promiseValueType !== 'undefined') {
-      promiseValueType = declared.promiseValueType
+    if (declared.asyncResultValueType !== null && typeof declared.asyncResultValueType !== 'undefined') {
+      asyncResultValueType = declared.asyncResultValueType
     }
 
     resolvedFields.push({
@@ -1755,7 +1900,7 @@ export function resolveWeakTargetObjectShape(
       typeRef: declared.typeRef,
       valueType: declared.valueType,
       nullable: declared.nullable || field.ownership === 'weak' || field.optional === true,
-      promiseValueType,
+      asyncResultValueType,
       functionType,
       shape: null
     })
@@ -1819,14 +1964,19 @@ export function resolveWeakTargetShapeTypeName(
       typeRef: qualifiedTypeRef(inner.typeRef, true, null),
       functionType: inner.functionType,
       shape: inner.shape,
-      promiseValueType: inner.promiseValueType
+      asyncResultValueType: inner.asyncResultValueType
     }
   }
 
   if (name === 'array') {
     const info = unresolvedTypeInfo()
-    info.valueType = 'array'
     info.typeRef = compilerLibraryArrayTypeRef(context, unknownTypeRef(false))
+
+    if (info.typeRef !== null) {
+      const metadata = typeRefCompatibilityMetadata(info.typeRef, context.libraries, loc)
+      info.valueType = metadata.valueType
+      info.shape = metadata.shape
+    }
 
     return info
   }
@@ -1835,14 +1985,18 @@ export function resolveWeakTargetShapeTypeName(
     const arrayElementTypeName = arrayElementTypeNameFromKnownTypeName(name)
     const elementInfo = resolveWeakTargetShapeTypeName(context, arrayElementTypeName, loc)
     const info = unresolvedTypeInfo()
-    info.valueType = 'array'
 
     const providerType = compilerLibraryNativeTypeForIntrinsic(context.libraries, 'array-literal', 'construct')
 
     if (providerType !== null && (providerType.typeParameters ?? []).length === 1) {
-      info.typeRef = instantiateNativeTypeRef(providerType, [
+      const typeRef = instantiateNativeTypeRef(providerType, [
         typeRefFromResolvedType(elementInfo, arrayElementTypeName)
       ])
+      const metadata = typeRefCompatibilityMetadata(typeRef, context.libraries, loc)
+
+      info.typeRef = typeRef
+      info.valueType = metadata.valueType
+      info.shape = metadata.shape
     }
 
     return info
@@ -1886,7 +2040,7 @@ export function cloneResolvedTypeInfo(info: ResolvedTypeInfo): ResolvedTypeInfo 
     typeRef: info.typeRef,
     functionType: info.functionType,
     shape: info.shape,
-    promiseValueType: info.promiseValueType
+    asyncResultValueType: info.asyncResultValueType
   }
 }
 
@@ -1994,10 +2148,7 @@ function shallowGenericShapeMetadata(
 
   const functionCompanions = objectShapeHasFunctionCompanions(shape, new Set<ObjectShapeInfo>())
 
-  if (
-    seenShapes.has(shape) ||
-    (declaredType !== null && seenTypes.has(declaredType))
-  ) {
+  if (seenShapes.has(shape) || (declaredType !== null && seenTypes.has(declaredType))) {
     return {
       ...shape,
       dynamicField: null,
@@ -2043,12 +2194,7 @@ function shallowGenericShapeMetadata(
     fields.push({
       ...field,
       functionType: null,
-      shape: shallowGenericShapeMetadata(
-        fieldShape,
-        seenShapes,
-        seenTypes,
-        field.declaredType ?? null
-      )
+      shape: shallowGenericShapeMetadata(fieldShape, seenShapes, seenTypes, field.declaredType ?? null)
     })
   }
 
@@ -2066,10 +2212,7 @@ function shallowGenericShapeMetadata(
   }
 }
 
-function objectShapeHasFunctionCompanions(
-  shape: ObjectShapeInfo,
-  seen: Set<ObjectShapeInfo>
-): boolean {
+function objectShapeHasFunctionCompanions(shape: ObjectShapeInfo, seen: Set<ObjectShapeInfo>): boolean {
   if (shape.functionCompanions === true) {
     return true
   }
@@ -2119,18 +2262,8 @@ function shallowGenericFunctionType(
   for (const param of functionType.params) {
     params.push({
       ...param,
-      functionType: shallowGenericFunctionType(
-        param.functionType ?? null,
-        seen,
-        seenShapes,
-        seenTypes
-      ),
-      shape: shallowGenericShapeMetadata(
-        param.shape ?? null,
-        seenShapes,
-        seenTypes,
-        param.declaredType ?? null
-      )
+      functionType: shallowGenericFunctionType(param.functionType ?? null, seen, seenShapes, seenTypes),
+      shape: shallowGenericShapeMetadata(param.shape ?? null, seenShapes, seenTypes, param.declaredType ?? null)
     })
   }
 
@@ -2154,7 +2287,7 @@ export function unresolvedTypeInfo(): ResolvedTypeInfo {
     typeRef: null,
     functionType: null,
     shape: null,
-    promiseValueType: null
+    asyncResultValueType: null
   }
 }
 

@@ -79,7 +79,7 @@ test('node:fs и node:fs/promises имеют отдельные compiler entrypo
   assert.deepEqual(runtime.cPreludeIncludes, ['inox/fs.h'])
   assert.deepEqual(
     runtime.dependencies,
-    ['async-runtime', 'collections', 'managed-values', 'node:buffer', 'string-bytes']
+    ['async-runtime', 'global:collections#array', 'managed-values', 'node:buffer', 'string-bytes']
   )
 })
 

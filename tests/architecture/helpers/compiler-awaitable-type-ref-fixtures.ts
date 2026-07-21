@@ -28,7 +28,7 @@ export function neutralAwaitableLibrarySet(): CompilerLibrarySet {
         libraryId,
         typeId: completionTypeId,
         declarationNames: [],
-        valueType: 'promise',
+        valueType: 'async-result',
         cppType: 'FixtureCompletion',
         baseTypeIds: [],
         runtimeRequirements: [],
@@ -46,14 +46,16 @@ export function neutralAwaitableLibrarySet(): CompilerLibrarySet {
         bindingId: 'intrinsic:completion',
         operationId: `${libraryId}#construct`,
         kind: 'construct',
-        asyncResultOperation: 'construct',
+        asyncResultOperation: 'create',
+        cAsyncFulfillExpression: 'fulfill',
+        cAsyncRejectExpression: 'reject',
         runtimeRequirements: [],
         cExpression: 'FixtureCompletion',
         resultTypeRef: completionTypeRef()
       },
-      asyncTaskOperation('resolve'),
+      asyncTaskOperation('fulfill', 'resolve'),
       asyncTaskOperation('reject'),
-      asyncTaskOperation('then'),
+      asyncTaskOperation('map-fulfilled', 'then'),
       awaitableOperation('global:readTypedCompletion', `${libraryId}#read-typed`),
       {
         libraryId,
@@ -74,7 +76,20 @@ export function neutralAwaitableLibrarySet(): CompilerLibrarySet {
   return createCompilerLibrarySet([library])
 }
 
-function asyncTaskOperation(kind: 'resolve' | 'reject' | 'then'): LibraryOperationDescriptor {
+function asyncTaskOperation(
+  kind: 'fulfill' | 'reject' | 'map-fulfilled',
+  configuredCName?: 'resolve' | 'reject' | 'then'
+): LibraryOperationDescriptor {
+  let cName: 'resolve' | 'reject' | 'then' = 'reject'
+
+  if (configuredCName !== null && typeof configuredCName !== 'undefined') {
+    cName = configuredCName
+  } else if (kind === 'fulfill') {
+    cName = 'resolve'
+  } else if (kind === 'map-fulfilled') {
+    cName = 'then'
+  }
+
   return {
     libraryId,
     bindingId: `${libraryId}#${kind}`,
@@ -82,7 +97,7 @@ function asyncTaskOperation(kind: 'resolve' | 'reject' | 'then'): LibraryOperati
     kind: 'call',
     asyncResultOperation: kind,
     runtimeRequirements: [],
-    cExpression: `FixtureCompletion::${kind}`
+    cExpression: `FixtureCompletion::${cName}`
   }
 }
 

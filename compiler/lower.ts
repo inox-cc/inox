@@ -90,11 +90,12 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
         params: lowerParamList(item.params, context),
         declaredReturnType: item.returnType,
         returnType: lowerReturnValueType(returnType.valueType, returnTypeName, item.returnTypeRef, context.libraries),
+        returnRuntimeTypeAlternatives: returnType.runtimeTypeAlternatives,
         returnTypeRef: nullableNode(item.returnTypeRef),
         returnNullable: returnType.nullable,
-        returnPromiseValueType: nullableString(returnType.promiseValueType),
+        returnAsyncResultValueType: nullableString(returnType.asyncResultValueType),
         returnShape: returnType.shape,
-        body: lowerStatementList(item.body, context)
+        body: lowerStatementList(lowerNodeArrayOrEmpty(item.body), context)
       }
       const libraryRuntimeRequirements = returnType.libraryRuntimeRequirements
 
@@ -230,7 +231,7 @@ function lowerClassField(field: AnyNode): AnyNode {
     valueType: resolvedValueType(field.valueType, 'unknown'),
     typeRef: nullableNode(field.typeRef),
     nullable: field.nullable === true,
-    promiseValueType: nullableString(field.promiseValueType),
+    asyncResultValueType: nullableString(field.asyncResultValueType),
     shape: nullableNode(field.shape),
     functionType: nullableNode(field.functionType),
     className: nullableString(field.className)
@@ -264,11 +265,12 @@ function lowerClassMethod(method: AnyNode, context: LowerContext): AnyNode {
     params: lowerParamList(method.params, context),
     declaredReturnType: nullableString(method.declaredReturnType),
     returnType: lowerReturnValueType(returnType.valueType, returnTypeName, method.returnTypeRef, context.libraries),
+    returnRuntimeTypeAlternatives: returnType.runtimeTypeAlternatives,
     returnTypeRef: nullableNode(method.returnTypeRef),
     returnNullable: returnType.nullable,
-    returnPromiseValueType: nullableString(returnType.promiseValueType),
+    returnAsyncResultValueType: nullableString(returnType.asyncResultValueType),
     returnShape: nullableNode(returnType.shape),
-    body: lowerStatementList(method.body, context)
+    body: lowerStatementList(lowerNodeArrayOrEmpty(method.body), context)
   }
 }
 
@@ -281,7 +283,7 @@ function lowerClassMethodReturnTypeName(method: AnyNode): string {
     return method.returnType
   }
 
-  if (!statementListHasValueReturn(method.body)) {
+  if (!statementListHasValueReturn(lowerNodeArrayOrEmpty(method.body))) {
     return 'void'
   }
 
@@ -304,54 +306,71 @@ function statementHasValueReturn(statement: AnyNode): boolean {
   }
 
   if (statement.type === 'BlockStatement') {
-    return statementListHasValueReturn(statement.body)
+    return statementListHasValueReturn(lowerNodeArrayOrEmpty(statement.body))
   }
 
   if (statement.type === 'IfStatement') {
-    if (statementHasValueReturn(statement.consequent)) {
+    const consequent = lowerNodeOrNull(statement.consequent)
+
+    if (consequent !== null && statementHasValueReturn(consequent)) {
       return true
     }
 
-    if (statement.alternate !== null && typeof statement.alternate !== 'undefined') {
-      return statementHasValueReturn(statement.alternate)
+    const alternate = lowerNodeOrNull(statement.alternate)
+
+    if (alternate !== null) {
+      return statementHasValueReturn(alternate)
     }
   }
 
   if (statement.type === 'WhileStatement') {
-    return statementHasValueReturn(statement.body)
+    const body = lowerNodeOrNull(statement.body)
+    return body !== null && statementHasValueReturn(body)
   }
 
   if (statement.type === 'ForStatement') {
-    return statementHasValueReturn(statement.body)
+    const body = lowerNodeOrNull(statement.body)
+    return body !== null && statementHasValueReturn(body)
   }
 
   if (statement.type === 'ForOfStatement') {
-    return statementHasValueReturn(statement.body)
+    const body = lowerNodeOrNull(statement.body)
+    return body !== null && statementHasValueReturn(body)
   }
 
   if (statement.type === 'SwitchStatement') {
-    for (let index = 0; index < statement.cases.length; index = index + 1) {
-      const item = statement.cases[index]
+    const cases = lowerNodeArrayOrEmpty(statement.cases)
 
-      if (statementListHasValueReturn(item.consequent)) {
+    for (let index = 0; index < cases.length; index = index + 1) {
+      const item = cases[index]
+
+      if (statementListHasValueReturn(lowerNodeArrayOrEmpty(item.consequent))) {
         return true
       }
     }
   }
 
   if (statement.type === 'TryStatement') {
-    if (statementHasValueReturn(statement.block)) {
+    const block = lowerNodeOrNull(statement.block)
+
+    if (block !== null && statementHasValueReturn(block)) {
       return true
     }
 
-    if (statement.handler !== null && typeof statement.handler !== 'undefined') {
-      if (statementHasValueReturn(statement.handler.body)) {
+    const handler = lowerNodeOrNull(statement.handler)
+
+    if (handler !== null) {
+      const handlerBody = lowerNodeOrNull(handler.body)
+
+      if (handlerBody !== null && statementHasValueReturn(handlerBody)) {
         return true
       }
     }
 
-    if (statement.finalizer !== null && typeof statement.finalizer !== 'undefined') {
-      return statementHasValueReturn(statement.finalizer)
+    const finalizer = lowerNodeOrNull(statement.finalizer)
+
+    if (finalizer !== null) {
+      return statementHasValueReturn(finalizer)
     }
   }
 
@@ -405,4 +424,20 @@ function nullableNode(value: AnyNode | null | undefined): AnyNode | null {
   }
 
   return null
+}
+
+function lowerNodeOrNull(value: AnyNode | AnyNode[] | null | undefined): AnyNode | null {
+  if (value === null || typeof value === 'undefined' || Array.isArray(value)) {
+    return null
+  }
+
+  return value
+}
+
+function lowerNodeArrayOrEmpty(value: AnyNode | AnyNode[] | null | undefined): AnyNode[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
 }

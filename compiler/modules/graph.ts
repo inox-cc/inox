@@ -936,7 +936,7 @@ function applyImportedDeclarationMetadata(specifier: AnyNode, declaration: AnyNo
 
   specifier.valueType = moduleDeclarationNodeValueType(declaration)
   specifier.typeRef = declaration.typeRef ?? null
-  specifier.promiseValueType = declaration.promiseValueType ?? null
+  specifier.asyncResultValueType = declaration.asyncResultValueType ?? null
   specifier.shape = declaration.shape ?? null
 }
 
@@ -966,7 +966,7 @@ function applyImportedFunctionDeclarationMetadata(specifier: AnyNode, declaratio
   specifier.returnType = declaration.returnType ?? declaration.declaredReturnType ?? 'unknown'
   specifier.returnTypeRef = declaration.returnTypeRef ?? null
   specifier.returnNullable = declaration.returnNullable === true
-  specifier.returnPromiseValueType = declaration.returnPromiseValueType ?? null
+  specifier.returnAsyncResultValueType = declaration.returnAsyncResultValueType ?? null
   specifier.returnShape = declaration.returnShape ?? null
 }
 
@@ -1057,6 +1057,10 @@ function moduleProgramForTypeImports(module: ModuleRecord): ProgramNode {
 
 function moduleProgramForImports(module: ModuleRecord): ProgramNode | null {
   if (module.declarationProgram !== null && typeof module.declarationProgram !== 'undefined') {
+    if (module.typeImportDeclarations.size > 0) {
+      return insertImportSyntheticDeclarations(module.declarationProgram, module.typeImportDeclarations)
+    }
+
     return module.declarationProgram
   }
 

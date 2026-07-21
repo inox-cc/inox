@@ -63,7 +63,7 @@ function lowerExpressionWithContext(
 
   if (expression.type === 'MemberExpression') {
     const object = lowerExpressionWithContext(expression.object, context)
-    const valueType = memberExpressionValueType(expression, object)
+    const valueType = memberExpressionValueType(expression)
     const member = cloneMemberExpression(expression, object, valueType)
 
     return member
@@ -162,9 +162,17 @@ function lowerExpressionWithContext(
   }
 
   if (expression.type === 'ConditionalExpression') {
-    const test = lowerExpressionWithContext(expression.test, context)
-    const consequent = lowerExpressionWithContext(expression.consequent, context)
-    const alternate = lowerExpressionWithContext(expression.alternate, context)
+    const testExpression = lowerExpressionNodeOrNull(expression.test)
+    const consequentExpression = lowerExpressionNodeOrNull(expression.consequent)
+    const alternateExpression = lowerExpressionNodeOrNull(expression.alternate)
+
+    if (testExpression === null || consequentExpression === null || alternateExpression === null) {
+      return cloneUnknownExpression(expression)
+    }
+
+    const test = lowerExpressionWithContext(testExpression, context)
+    const consequent = lowerExpressionWithContext(consequentExpression, context)
+    const alternate = lowerExpressionWithContext(alternateExpression, context)
     const valueType = inferConditionalExpressionType(consequent, alternate)
     const conditional = cloneConditionalExpression(expression, test, consequent, alternate, valueType)
 
@@ -192,7 +200,7 @@ function lowerExpressionWithContext(
     return {
       type: 'SpreadElement',
       argument,
-      valueType: 'array',
+      valueType: expression.valueType ?? argument.valueType ?? 'unknown',
       loc: expression.loc
     }
   }
@@ -225,7 +233,38 @@ function lowerTypeAssertionExpression(
 
   const declared = resolveDeclaredType(declaredType, context)
 
+  if (requiresRuntimeScalarTypeAssertion(lowered, declared)) {
+    return applyResolvedTypeAssertion(
+      {
+        type: 'TypeAssertionExpression',
+        expression: lowered,
+        valueType: lowered.valueType,
+        nullable: lowered.nullable === true,
+        asyncResultValueType: nullableString(lowered.asyncResultValueType),
+        functionType: nullableNode(lowered.functionType),
+        shape: nullableNode(lowered.shape),
+        className: nullableString(lowered.className),
+        loc: expression.loc
+      },
+      declaredType,
+      declared
+    )
+  }
+
   return applyResolvedTypeAssertion(lowered, declaredType, declared)
+}
+
+function requiresRuntimeScalarTypeAssertion(
+  expression: LowerExpressionNode,
+  declared: LowerResolvedType
+): boolean {
+  if (declared.valueType !== 'number' && declared.valueType !== 'boolean') {
+    return false
+  }
+
+  const valueType = fallbackString(expression.valueType, 'unknown')
+
+  return expression.nullable === true || valueType === 'unknown' || valueType.startsWith('union<')
 }
 
 function applyResolvedTypeAssertion(
@@ -233,15 +272,15 @@ function applyResolvedTypeAssertion(
   declaredType: string,
   declared: LowerResolvedType
 ): LowerExpressionNode {
-  let promiseValueType: string | null = expression.promiseValueType
+  let asyncResultValueType: string | null = expression.asyncResultValueType
   let shape: LowerExpressionNode | null = expression.shape
   let functionType: LowerExpressionNode | null = expression.functionType
   let valueType = expression.valueType
 
-  const declaredPromiseValueType = nullableString(declared.promiseValueType)
+  const declaredAsyncResultValueType = nullableString(declared.asyncResultValueType)
 
-  if (declaredPromiseValueType !== null && typeof declaredPromiseValueType !== 'undefined') {
-    promiseValueType = declaredPromiseValueType
+  if (declaredAsyncResultValueType !== null && typeof declaredAsyncResultValueType !== 'undefined') {
+    asyncResultValueType = declaredAsyncResultValueType
   }
 
   if (declared.shape !== null && typeof declared.shape !== 'undefined') {
@@ -260,7 +299,7 @@ function applyResolvedTypeAssertion(
 
   expression.declaredType = declaredType
   expression.nullable = declared.nullable
-  expression.promiseValueType = promiseValueType
+  expression.asyncResultValueType = asyncResultValueType
   expression.shape = shape
   expression.functionType = functionType
   expression.valueType = valueType
@@ -290,6 +329,16 @@ function nullableNode(value: LowerExpressionNode | null | undefined): LowerExpre
   }
 
   return null
+}
+
+function lowerExpressionNodeOrNull(
+  value: LowerExpressionNode | LowerExpressionNode[] | null | undefined
+): LowerExpressionNode | null {
+  if (value === null || typeof value === 'undefined' || Array.isArray(value)) {
+    return null
+  }
+
+  return value
 }
 
 function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressionNode): LowerExpressionNode {
@@ -404,11 +453,6 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
   copyStringMetadataArray(target, source, 'libraryCResultShapeFields')
   copyMetadataArray(target, source, 'libraryCArgumentSources')
 
-  const arrayElementTypeId = nullableString(source.arrayElementTypeId)
-  if (arrayElementTypeId !== null && typeof arrayElementTypeId !== 'undefined') {
-    target.arrayElementTypeId = arrayElementTypeId
-  }
-
   const libraryCppType = nullableString(source.libraryCppType)
   if (libraryCppType !== null && typeof libraryCppType !== 'undefined') {
     target.libraryCppType = libraryCppType
@@ -431,11 +475,14 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
   copyStringMetadataArray(target, source, 'libraryCapabilities')
   copyStringMetadataArray(target, source, 'narrowingTrueNames')
   copyStringMetadataArray(target, source, 'narrowingFalseNames')
+  copyMetadataArray(target, source, 'runtimeTypeAlternatives')
 
   const returnType = nullableString(source.returnType)
   if (returnType !== null && typeof returnType !== 'undefined') {
     target.returnType = returnType
   }
+
+  copyMetadataArray(target, source, 'returnRuntimeTypeAlternatives')
 
   const declaredReturnType = nullableString(source.declaredReturnType)
   if (declaredReturnType !== null && typeof declaredReturnType !== 'undefined') {
@@ -446,19 +493,19 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.returnNullable = true
   }
 
-  const returnPromiseValueType = nullableString(source.returnPromiseValueType)
-  if (returnPromiseValueType !== null && typeof returnPromiseValueType !== 'undefined') {
-    target.returnPromiseValueType = returnPromiseValueType
+  const returnAsyncResultValueType = nullableString(source.returnAsyncResultValueType)
+  if (returnAsyncResultValueType !== null && typeof returnAsyncResultValueType !== 'undefined') {
+    target.returnAsyncResultValueType = returnAsyncResultValueType
   }
 
-  const promiseRejectionValueType = nullableString(source.promiseRejectionValueType)
-  if (promiseRejectionValueType !== null && typeof promiseRejectionValueType !== 'undefined') {
-    target.promiseRejectionValueType = promiseRejectionValueType
+  const asyncResultRejectionValueType = nullableString(source.asyncResultRejectionValueType)
+  if (asyncResultRejectionValueType !== null && typeof asyncResultRejectionValueType !== 'undefined') {
+    target.asyncResultRejectionValueType = asyncResultRejectionValueType
   }
 
-  const promiseRejectionIntrinsicRole = nullableString(source.promiseRejectionIntrinsicRole)
-  if (promiseRejectionIntrinsicRole !== null && typeof promiseRejectionIntrinsicRole !== 'undefined') {
-    target.promiseRejectionIntrinsicRole = promiseRejectionIntrinsicRole
+  const asyncResultRejectionIntrinsicRole = nullableString(source.asyncResultRejectionIntrinsicRole)
+  if (asyncResultRejectionIntrinsicRole !== null && typeof asyncResultRejectionIntrinsicRole !== 'undefined') {
+    target.asyncResultRejectionIntrinsicRole = asyncResultRejectionIntrinsicRole
   }
 
   const returnShape = nullableNode(source.returnShape)
@@ -629,7 +676,7 @@ function cloneReferenceExpression(
   const path = cloneReferencePath(expression.path)
   const valueType = referenceValueType(expression, variable)
   const nullable = referenceNullable(expression, variable)
-  const promiseValueType = referencePromiseValueType(expression, variable)
+  const asyncResultValueType = referenceAsyncResultValueType(expression, variable)
   const functionType = referenceFunctionType(expression, variable)
   const shape = referenceShape(expression, variable)
   const className = referenceClassName(expression, variable)
@@ -640,7 +687,7 @@ function cloneReferenceExpression(
     functionStorage: nullableString(expression.functionStorage),
     valueType,
     nullable,
-    promiseValueType,
+    asyncResultValueType,
     functionType,
     shape,
     className,
@@ -701,21 +748,21 @@ function referenceVariableNullable(variable: LowerExpressionNode | null): boolea
   return variable !== null && typeof variable !== 'undefined' && variable.nullable === true
 }
 
-function referencePromiseValueType(
+function referenceAsyncResultValueType(
   expression: LowerExpressionNode,
   variable: LowerExpressionNode | null
 ): string | null {
-  const expressionPromiseValueType = nullableString(expression.promiseValueType)
+  const expressionAsyncResultValueType = nullableString(expression.asyncResultValueType)
 
-  if (expressionPromiseValueType !== null && typeof expressionPromiseValueType !== 'undefined') {
-    return expressionPromiseValueType
+  if (expressionAsyncResultValueType !== null && typeof expressionAsyncResultValueType !== 'undefined') {
+    return expressionAsyncResultValueType
   }
 
   if (variable !== null && typeof variable !== 'undefined') {
-    const variablePromiseValueType = nullableString(variable.promiseValueType)
+    const variableAsyncResultValueType = nullableString(variable.asyncResultValueType)
 
-    if (variablePromiseValueType !== null && typeof variablePromiseValueType !== 'undefined') {
-      return variablePromiseValueType
+    if (variableAsyncResultValueType !== null && typeof variableAsyncResultValueType !== 'undefined') {
+      return variableAsyncResultValueType
     }
   }
 
@@ -774,14 +821,14 @@ function referenceShape(
   return null
 }
 
-function memberExpressionValueType(expression: LowerExpressionNode, object: LowerExpressionNode): string {
+function memberExpressionValueType(expression: LowerExpressionNode): string {
   const known = knownValueType(expression.valueType)
 
   if (known !== null && typeof known !== 'undefined') {
     return known
   }
 
-  return inferMemberExpressionType(expression.property, object)
+  return 'unknown'
 }
 
 function indexExpressionValueType(
@@ -803,32 +850,16 @@ function cloneMemberExpression(
   object: LowerExpressionNode,
   valueType: string
 ): LowerExpressionNode {
-  const isLengthProperty = expression.property === 'length'
-  let promiseValueType: string | null = null
-  let functionType: LowerExpressionNode | null = null
-  let shape: LowerExpressionNode | null = null
-  let className: string | null = null
-  let collectionKind: string | null = null
-
-  if (!isLengthProperty) {
-    promiseValueType = nullableString(expression.promiseValueType)
-    functionType = nullableNode(expression.functionType)
-    shape = nullableNode(expression.shape)
-    className = nullableString(expression.className)
-    collectionKind = nullableString(expression.collectionKind)
-  }
-
   const target: LowerExpressionNode = {
     type: expression.type,
     object,
     property: expression.property,
     valueType,
     nullable: expression.nullable === true,
-    promiseValueType,
-    functionType,
-    shape,
-    className,
-    collectionKind,
+    asyncResultValueType: nullableString(expression.asyncResultValueType),
+    functionType: nullableNode(expression.functionType),
+    shape: nullableNode(expression.shape),
+    className: nullableString(expression.className),
     loc: expression.loc
   }
 
@@ -848,8 +879,7 @@ function cloneIndexExpression(
       index,
       valueType,
       nullable: expression.nullable === true,
-      collectionKind: nullableString(expression.collectionKind),
-      promiseValueType: nullableString(expression.promiseValueType),
+      asyncResultValueType: nullableString(expression.asyncResultValueType),
       functionType: nullableNode(expression.functionType),
       shape: nullableNode(expression.shape),
       className: nullableString(expression.className),
@@ -865,18 +895,17 @@ function cloneCallExpression(
   args: LowerExpressionNode[],
   valueType: string
 ): LowerExpressionNode {
-  const shape = callExpressionShape(expression, callee, valueType)
+  const shape = callExpressionShape(expression)
   const target: LowerExpressionNode = {
     type: expression.type,
     callee,
     args,
     valueType,
     nullable: expression.nullable === true,
-    promiseValueType: nullableString(expression.promiseValueType),
+    asyncResultValueType: nullableString(expression.asyncResultValueType),
     functionType: nullableNode(expression.functionType),
     shape,
     className: nullableString(expression.className),
-    collectionKind: nullableString(expression.collectionKind),
     loc: expression.loc
   }
   const result = copyRuntimeMetadata(target, expression)
@@ -884,11 +913,7 @@ function cloneCallExpression(
   return result
 }
 
-function callExpressionShape(
-  expression: LowerExpressionNode,
-  callee: LowerExpressionNode,
-  valueType: string
-): LowerExpressionNode | null {
+function callExpressionShape(expression: LowerExpressionNode): LowerExpressionNode | null {
   const expressionShape = nullableNode(expression.shape)
 
   if (expressionShape !== null && typeof expressionShape !== 'undefined') {
@@ -911,11 +936,10 @@ function cloneAwaitExpression(
       argument,
       valueType,
       nullable: expression.nullable === true,
-      promiseValueType: nullableString(expression.promiseValueType),
+      asyncResultValueType: nullableString(expression.asyncResultValueType),
       functionType: nullableNode(expression.functionType),
       shape,
       className: nullableString(expression.className),
-      collectionKind: nullableString(expression.collectionKind),
       loc: expression.loc
     },
     expression
@@ -951,7 +975,7 @@ function cloneArrowFunctionExpression(
     {
       type: 'ArrowFunctionExpression',
       async: expression.async === true,
-      params: expression.params,
+      params: lowerExpressionNodeArrayOrEmpty(expression.params),
       body,
       expressionBody: expression.expressionBody === true && !hasBindingDeclarations,
       valueType: 'function',
@@ -987,7 +1011,7 @@ function lowerArrowFunctionBody(
 
   const body: LowerExpressionNode[] = bindingDeclarations
 
-  for (const statement of expression.body) {
+  for (const statement of lowerExpressionNodeArrayOrEmpty(expression.body)) {
     body.push(lowerBlockBodyStatement(statement, context))
   }
 
@@ -997,10 +1021,8 @@ function lowerArrowFunctionBody(
 function arrowBindingDeclarations(expression: LowerExpressionNode): LowerExpressionNode[] {
   const declarations: LowerExpressionNode[] = []
 
-  for (const param of expression.params) {
-    const bindingElements: ArrayBindingElement[] = param.bindingElements ?? []
-
-    for (const binding of bindingElements) {
+  for (const param of lowerExpressionNodeArrayOrEmpty(expression.params)) {
+    for (const binding of lowerArrayBindingElementsOrEmpty(param.bindingElements)) {
       declarations.push({
         type: 'VariableDeclaration',
         kind: 'const',
@@ -1012,7 +1034,7 @@ function arrowBindingDeclarations(expression: LowerExpressionNode): LowerExpress
         valueType: fallbackString(binding.valueType, 'unknown'),
         typeRef: nullableNode(binding.typeRef),
         nullable: binding.nullable === true,
-        promiseValueType: nullableString(binding.promiseValueType),
+        asyncResultValueType: nullableString(binding.asyncResultValueType),
         functionType: nullableNode(binding.functionType),
         shape: nullableNode(binding.shape),
         init: {
@@ -1021,7 +1043,7 @@ function arrowBindingDeclarations(expression: LowerExpressionNode): LowerExpress
             type: 'Reference',
             path: [param.name],
             loc: param.loc,
-            valueType: fallbackString(param.valueType, 'array'),
+            valueType: fallbackString(param.valueType, 'object'),
             typeRef: nullableNode(param.typeRef)
           },
           index: {
@@ -1034,7 +1056,7 @@ function arrowBindingDeclarations(expression: LowerExpressionNode): LowerExpress
           valueType: fallbackString(binding.valueType, 'unknown'),
           typeRef: nullableNode(binding.typeRef),
           nullable: binding.nullable === true,
-          promiseValueType: nullableString(binding.promiseValueType),
+          asyncResultValueType: nullableString(binding.asyncResultValueType),
           functionType: nullableNode(binding.functionType),
           shape: nullableNode(binding.shape)
         }
@@ -1063,7 +1085,7 @@ function arrowFunctionType(
 
   const params: LowerExpressionNode[] = []
 
-  for (const param of expression.params) {
+  for (const param of lowerExpressionNodeArrayOrEmpty(expression.params)) {
     params.push(param)
   }
 
@@ -1072,10 +1094,26 @@ function arrowFunctionType(
     params,
     returnType,
     returnTypeRef: nullableNode(expression.returnTypeRef),
+    returnRuntimeTypeAlternatives: arrowFunctionReturnRuntimeTypeAlternatives(expression, body),
     returnNullable: arrowFunctionReturnNullable(expression, body),
-    returnPromiseValueType: arrowFunctionReturnStringMetadata(expression, body, 'promiseValueType'),
+    returnAsyncResultValueType: arrowFunctionReturnStringMetadata(expression, body, 'asyncResultValueType'),
     returnShape: arrowFunctionReturnShape(expression, body)
   }
+}
+
+function arrowFunctionReturnRuntimeTypeAlternatives(
+  expression: LowerExpressionNode,
+  body: LowerExpressionNode | LowerExpressionNode[]
+): LowerExpressionNode[] | null {
+  if (Array.isArray(expression.returnRuntimeTypeAlternatives)) {
+    return expression.returnRuntimeTypeAlternatives
+  }
+
+  if (!Array.isArray(body) && Array.isArray(body.runtimeTypeAlternatives)) {
+    return body.runtimeTypeAlternatives
+  }
+
+  return null
 }
 
 function arrowFunctionReturnType(
@@ -1153,7 +1191,7 @@ function cloneAssignmentExpression(
       value,
       valueType: fallbackString(value.valueType, 'unknown'),
       nullable: expression.nullable === true,
-      promiseValueType: nullableString(expression.promiseValueType),
+      asyncResultValueType: nullableString(expression.asyncResultValueType),
       functionType: nullableNode(expression.functionType),
       shape: nullableNode(expression.shape),
       className: nullableString(expression.className),
@@ -1192,7 +1230,7 @@ function cloneBinaryExpression(
       right,
       valueType,
       nullable: expression.nullable === true,
-      promiseValueType: nullableString(expression.promiseValueType),
+      asyncResultValueType: nullableString(expression.asyncResultValueType),
       functionType: nullableNode(expression.functionType),
       shape: nullableNode(expression.shape),
       className: nullableString(expression.className),
@@ -1217,7 +1255,7 @@ function cloneConditionalExpression(
       alternate,
       valueType,
       nullable: expression.nullable === true || consequent.nullable === true || alternate.nullable === true,
-      promiseValueType: commonNullableString(consequent.promiseValueType, alternate.promiseValueType),
+      asyncResultValueType: commonNullableString(consequent.asyncResultValueType, alternate.asyncResultValueType),
       functionType: nullableNode(expression.functionType),
       shape: nullableNode(expression.shape),
       className: commonNullableString(consequent.className, alternate.className),
@@ -1239,7 +1277,7 @@ function cloneUnaryExpression(
       argument,
       valueType,
       nullable: expression.nullable === true,
-      promiseValueType: nullableString(expression.promiseValueType),
+      asyncResultValueType: nullableString(expression.asyncResultValueType),
       functionType: nullableNode(expression.functionType),
       shape: nullableNode(expression.shape),
       className: nullableString(expression.className),
@@ -1261,14 +1299,12 @@ function unaryExpressionValueType(expression: LowerExpressionNode): string {
   return 'number'
 }
 
-function lowerExpressionList(
-  expressions: LowerExpressionNode[],
-  context: LowerExpressionContext
-): LowerExpressionNode[] {
+function lowerExpressionList(expressions: unknown, context: LowerExpressionContext): LowerExpressionNode[] {
   const lowered: LowerExpressionNode[] = []
+  const nodes = lowerExpressionNodeArrayOrEmpty(expressions)
 
-  for (let index = 0; index < expressions.length; index = index + 1) {
-    const expression = expressions[index]
+  for (let index = 0; index < nodes.length; index = index + 1) {
+    const expression = nodes[index]
     const loweredExpression = lowerExpressionWithContext(expression, context)
 
     lowered.push(loweredExpression)
@@ -1285,7 +1321,7 @@ function cloneArrayLiteralExpression(
     {
       type: 'ArrayLiteral',
       elements,
-      valueType: 'array',
+      valueType: expression.valueType ?? 'unknown',
       nullable: expression.nullable === true,
       loc: expression.loc
     },
@@ -1293,13 +1329,10 @@ function cloneArrayLiteralExpression(
   )
 }
 
-function lowerObjectProperties(
-  properties: LowerExpressionNode[],
-  context: LowerExpressionContext
-): LowerExpressionNode[] {
+function lowerObjectProperties(properties: unknown, context: LowerExpressionContext): LowerExpressionNode[] {
   const lowered: LowerExpressionNode[] = []
 
-  for (const property of properties) {
+  for (const property of lowerExpressionNodeArrayOrEmpty(properties)) {
     lowered.push(cloneObjectProperty(property, lowerExpressionWithContext(property.value, context)))
   }
 
@@ -1330,7 +1363,7 @@ function cloneObjectLiteralExpression(
       properties,
       valueType: 'object',
       nullable: expression.nullable === true,
-      promiseValueType: nullableString(expression.promiseValueType),
+      asyncResultValueType: nullableString(expression.asyncResultValueType),
       functionType: nullableNode(expression.functionType),
       shape: nullableNode(expression.shape),
       className: nullableString(expression.className),
@@ -1358,6 +1391,22 @@ function lowerBlockBodyStatement(statement: LowerExpressionNode, context: LowerE
   }
 
   return context.lowerStatement(statement, context)
+}
+
+function lowerExpressionNodeArrayOrEmpty(value: unknown): LowerExpressionNode[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+}
+
+function lowerArrayBindingElementsOrEmpty(value: unknown): ArrayBindingElement[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
 }
 
 function inferBinaryExpressionType(operator: string, left: LowerExpressionNode, right: LowerExpressionNode): string {
@@ -1467,22 +1516,14 @@ function commonNullableString(left: string | null | undefined, right: string | n
   return null
 }
 
-function inferMemberExpressionType(property: string, object: LowerExpressionNode): string {
-  if (property === 'length' && (object.valueType === 'array' || object.valueType === 'string')) {
-    return 'number'
-  }
-
-  return 'unknown'
-}
-
 function inferIndexExpressionType(object: LowerExpressionNode, context: LowerExpressionContext): string {
-  if (object.valueType === 'array') {
-    return (
-      typeRefIterableElementValueType(
-        object.typeRef as TypeRef | null | undefined,
-        context.libraries
-      ) ?? 'unknown'
-    )
+  const iterableElementValueType = typeRefIterableElementValueType(
+    object.typeRef as TypeRef | null | undefined,
+    context.libraries
+  )
+
+  if (iterableElementValueType !== null) {
+    return iterableElementValueType
   }
 
   if (object.valueType === 'string') {

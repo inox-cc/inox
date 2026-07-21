@@ -969,7 +969,7 @@ function collectEscapingThrowValueTypesFromExpression(
 
 function inferThrowValueTypeForAnalysis(expression: MaybeNode, exceptionValueNames: StringSet): IrThrowValueType {
   if (isExceptionValueExpressionForAnalysis(expression, exceptionValueNames)) {
-    return 'error'
+    return 'exception-object'
   }
 
   if (expression !== null && typeof expression !== 'undefined') {

@@ -30,7 +30,7 @@ export function incompleteAsyncResultLibrary(): CompilerLibraryDescriptor {
         bindingId,
         operationId,
         kind: 'construct',
-        asyncResultOperation: 'construct',
+        asyncResultOperation: 'create',
         runtimeRequirements: []
       },
       {
@@ -40,7 +40,7 @@ export function incompleteAsyncResultLibrary(): CompilerLibraryDescriptor {
         kind: 'call',
         runtimeRequirements: [],
         cExpression: 'fixture_make_task',
-        valueType: 'promise',
+        valueType: 'async-result',
         minArgs: 0,
         maxArgs: 0,
         argumentChecks: []
@@ -59,7 +59,7 @@ export function emptyCppAsyncResultLibrary(): CompilerLibraryDescriptor {
       libraryId,
       typeId,
       declarationNames: [],
-      valueType: 'promise',
+      valueType: 'async-result',
       cppType: '',
       baseTypeIds: [],
       runtimeRequirements: []

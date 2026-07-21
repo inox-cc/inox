@@ -52,8 +52,51 @@ test('global:collections владеет Array declarations, operations, iteratio
   assert.equal(result.ast.body[7].init.libraryOperationId, 'global:collections#Array.isArray')
   assert.deepEqual(result.ast.body[7].init.libraryArgumentNarrowing, {
     argumentIndex: 0,
-    trueValueType: 'array',
-    falseValueType: 'object',
+    trueTypeRef: {
+      kind: 'nominal',
+      typeId: 'global:collections#Array',
+      args: [
+        {
+          kind: 'unknown',
+          nullable: false,
+          ownership: 'value',
+          traits: []
+        }
+      ],
+      nullable: false,
+      ownership: 'value',
+      traits: [
+        {
+          traitId: 'indexable',
+          args: [
+            {
+              kind: 'primitive',
+              name: 'number',
+              nullable: false,
+              ownership: 'value',
+              traits: []
+            },
+            {
+              kind: 'unknown',
+              nullable: false,
+              ownership: 'value',
+              traits: []
+            }
+          ]
+        },
+        {
+          traitId: 'iterable',
+          args: [
+            {
+              kind: 'unknown',
+              nullable: false,
+              ownership: 'value',
+              traits: []
+            }
+          ]
+        }
+      ]
+    },
     trueNonNullable: true
   })
   assert.deepEqual(result.ir.body[7].init.libraryArgumentNarrowing, result.ast.body[7].init.libraryArgumentNarrowing)
@@ -66,7 +109,8 @@ test('global:collections владеет Array declarations, operations, iteratio
   assert.equal(result.ast.body[12].init.libraryOperationId, 'global:collections#Array.sort')
   assert.equal(result.ast.body[13].init.libraryOperationId, 'global:collections#Array.reduce')
   assert.equal(result.ast.body[13].init.args[0].params[0].valueType, 'number')
-  assert.match(result.code, /Array::create\(2\)/)
+  assert.match(result.code, /Array::create\(0\)/)
+  assert.equal((result.code.match(/inox_array_\d+\.push\(/g) ?? []).length, 2)
   assert.match(result.code, /values\.push\(/)
   assert.match(result.code, /static_cast<double>\(inox_library_result_\d+\)/)
   assert.match(result.code, /values\.some\(/)

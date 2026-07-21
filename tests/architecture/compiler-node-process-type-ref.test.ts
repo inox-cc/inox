@@ -144,8 +144,6 @@ function cResultMapping(cppType: string): LibraryCResultMappingDescriptor {
 
 function assertNoLegacyResultMetadata(operation: LibraryOperationDescriptor): void {
   assert.equal(operation.resultShapeFields, undefined)
-  assert.equal(operation.resultArrayElementType, undefined)
-  assert.equal(operation.resultArrayElementTypeId, undefined)
   assert.equal(operation.resultTypeId, undefined)
   assert.equal(operation.cppType, undefined)
   assert.equal(operation.valueType, undefined)

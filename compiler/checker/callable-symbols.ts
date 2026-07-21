@@ -1,5 +1,5 @@
 import { diagnostic } from '../diagnostics.ts'
-import type { CompilerLibrarySet, TypeRef } from '../extensions/types.ts'
+import type { CompilerLibrarySet } from '../extensions/types.ts'
 import type { AnyNode, Diagnostic, ObjectShapeInfo, SourceLocation, SymbolInfo, ValueType } from '../types.ts'
 import { isAssignableType } from './assignability.ts'
 import type { DeclaredTypeResolverContext } from './declared-types.ts'
@@ -77,11 +77,11 @@ export function applyCallableSymbolCall(
     returnType = symbolReturnType
   }
 
-  let returnPromiseValueType: ValueType | null = null
-  const symbolReturnPromiseValueType = symbol.returnPromiseValueType ?? null
+  let returnAsyncResultValueType: ValueType | null = null
+  const symbolReturnAsyncResultValueType = symbol.returnAsyncResultValueType ?? null
 
-  if (symbolReturnPromiseValueType !== null && typeof symbolReturnPromiseValueType !== 'undefined') {
-    returnPromiseValueType = symbolReturnPromiseValueType
+  if (symbolReturnAsyncResultValueType !== null && typeof symbolReturnAsyncResultValueType !== 'undefined') {
+    returnAsyncResultValueType = symbolReturnAsyncResultValueType
   }
 
   let returnShape: ObjectShapeInfo | null = null
@@ -94,7 +94,7 @@ export function applyCallableSymbolCall(
   expression.valueType = returnType
   expression.typeRef = symbol.returnTypeRef ?? null
   expression.nullable = symbol.returnNullable === true
-  expression.promiseValueType = returnPromiseValueType
+  expression.asyncResultValueType = returnAsyncResultValueType
   if (returnShape !== null) {
     expression.shape = returnShape
   } else if (expression.shape === null || typeof expression.shape === 'undefined') {

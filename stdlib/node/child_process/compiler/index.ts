@@ -132,7 +132,7 @@ function objectArgument(): LibraryArgumentCheckDescriptor {
 
 function stringArrayArgument(): LibraryArgumentCheckDescriptor {
   return {
-    valueTypes: ['array'],
+    valueTypes: ['object'],
     arrayLiteralRequired: true,
     arrayElementValueTypes: ['string']
   }
@@ -140,7 +140,7 @@ function stringArrayArgument(): LibraryArgumentCheckDescriptor {
 
 function stringArrayOrObjectArgument(): LibraryArgumentCheckDescriptor {
   return {
-    valueTypes: ['array', 'object'],
+    valueTypes: ['object'],
     arrayLiteralRequired: true,
     arrayElementValueTypes: ['string']
   }

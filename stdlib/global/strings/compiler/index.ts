@@ -10,6 +10,7 @@ import type {
 
 const libraryId = 'global:strings'
 const collectionsLibraryId = 'global:collections'
+const arrayRuntimeRequirement = `${collectionsLibraryId}#array`
 const arrayTypeId = `${collectionsLibraryId}#Array`
 const runtimeRequirement = `${libraryId}#strings`
 const receiverTypeId = 'core:primitive:string'
@@ -77,7 +78,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: ['collections', 'managed-values', 'string-bytes'],
+      dependencies: [arrayRuntimeRequirement, 'managed-values', 'string-bytes'],
       cPreludeIncludes: ['inox/string.h'],
       capabilities: []
     }

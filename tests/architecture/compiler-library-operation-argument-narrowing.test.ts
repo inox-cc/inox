@@ -11,9 +11,14 @@ test('argument narrowing валидируется и входит в fingerprint
   const baseline = createCompilerLibrarySet([fixtureLibrary({ argumentIndex: 0, trueValueType: 'array' })]).fingerprint
   const changed = fixtureLibrary({ argumentIndex: 0, trueValueType: 'object' })
   const nonNullable = fixtureLibrary({ argumentIndex: 0, trueValueType: 'array', trueNonNullable: true })
+  const typeRef = fixtureLibrary({
+    argumentIndex: 0,
+    trueTypeRef: { kind: 'primitive', name: 'string', nullable: false, ownership: 'value', traits: [] }
+  })
 
   assert.notEqual(createCompilerLibrarySet([changed]).fingerprint, baseline)
   assert.notEqual(createCompilerLibrarySet([nonNullable]).fingerprint, baseline)
+  assert.notEqual(createCompilerLibrarySet([typeRef]).fingerprint, baseline)
   assert.throws(
     () => createCompilerLibrarySet([fixtureLibrary({ argumentIndex: 2, trueValueType: 'array' })]),
     /narrows missing argument 2/

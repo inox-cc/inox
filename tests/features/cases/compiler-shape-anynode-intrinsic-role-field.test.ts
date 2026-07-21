@@ -5,7 +5,7 @@
 type IntrinsicRole = 'array-literal' | 'exception-value'
 
 function rejectionRole(expression: AnyNode): IntrinsicRole | null {
-  const role = expression.promiseRejectionIntrinsicRole
+  const role = expression.asyncResultRejectionIntrinsicRole
 
   if (role !== null && typeof role !== 'undefined') {
     return role
@@ -14,4 +14,4 @@ function rejectionRole(expression: AnyNode): IntrinsicRole | null {
   return null
 }
 
-console.log(rejectionRole({ promiseRejectionIntrinsicRole: 'exception-value' }))
+console.log(rejectionRole({ asyncResultRejectionIntrinsicRole: 'exception-value' }))

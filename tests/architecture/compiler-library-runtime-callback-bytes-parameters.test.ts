@@ -3,7 +3,7 @@ import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
 import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-fixtures.ts'
-import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
+import type { CompilerLibraryDescriptor, PrimitiveTypeRef } from '../../compiler/extensions/types.ts'
 
 test('runtime callback generic lowering материализует bytes и object параметры', () => {
   const libraries = createCompilerLibrarySetWithConsole([bridgeLibrary()])
@@ -40,6 +40,20 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
     operations: [
       {
         libraryId: 'bridge',
+        bindingId: 'bridge#Uint8Array.length',
+        operationId: 'bridge#Uint8Array.length',
+        kind: 'member-read',
+        runtimeRequirements: ['bridge'],
+        receiverTypeId: 'bridge#Uint8Array',
+        cExpression: 'length',
+        cArgumentKinds: ['receiver'],
+        cReceiverAdapter: 'Uint8Array($value)',
+        cCallStyle: 'member',
+        cFailureMode: 'thrown',
+        resultTypeRef: primitiveTypeRef('number')
+      },
+      {
+        libraryId: 'bridge',
         bindingId: 'global:bridge.listen',
         operationId: 'bridge#listen',
         kind: 'call',
@@ -65,4 +79,8 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
       }
     ]
   }
+}
+
+function primitiveTypeRef(name: 'number'): PrimitiveTypeRef {
+  return { kind: 'primitive', name, nullable: false, ownership: 'value', traits: [] }
 }

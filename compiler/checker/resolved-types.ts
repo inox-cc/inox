@@ -1,4 +1,5 @@
 import { commonValueType } from './assignability.ts'
+import { compilerAnyNodeSyntaxChildFields } from '../any-node-fields.ts'
 import { memberExpressionPath } from '../member-paths.ts'
 import type { TypeRef } from '../extensions/types.ts'
 import type { AnyNode, ObjectShapeInfo, ProgramNode, SourceLocation, TypeAliasInfo, ValueType } from '../types.ts'
@@ -9,12 +10,12 @@ export type ResolvedTypeInfo = {
   typeRef: TypeRef | null
   functionType: FunctionTypeMetadata | null
   shape: ObjectShapeInfo | null
-  promiseValueType: ValueType | null
+  asyncResultValueType: ValueType | null
 }
 
 export type ResolvedTypeInfoValueKind = number
 
-export const resolvedPromiseValueTypeKind: ResolvedTypeInfoValueKind = 0
+export const resolvedAsyncResultValueTypeKind: ResolvedTypeInfoValueKind = 0
 
 export type OwnershipGraphEdge = {
   from: string
@@ -29,7 +30,7 @@ export type OptionalParamInfo = {
   [key: string]: unknown
 }
 
-export type PromiseCallbackParamMetadata = {
+export type AsyncResultCallbackParamMetadata = {
   shape: ObjectShapeInfo | null
 }
 
@@ -56,7 +57,7 @@ export type FunctionTypeParamMetadata = {
   valueType: ValueType
   typeRef?: TypeRef | null
   nullable?: boolean
-  promiseValueType?: ValueType | null
+  asyncResultValueType?: ValueType | null
   functionType?: FunctionTypeMetadata | null
   functionTypeOwnership?: 'weak'
   shape?: ObjectShapeInfo | null
@@ -71,7 +72,7 @@ export type FunctionTypeMetadata = {
   returnTypeRef?: TypeRef | null
   declaredReturnType?: string
   returnNullable: boolean
-  returnPromiseValueType?: ValueType | null
+  returnAsyncResultValueType?: ValueType | null
   returnShape?: ObjectShapeInfo | null
   loc?: SourceLocation
   [key: string]: any
@@ -104,18 +105,7 @@ export type AnyNodeFieldOptions = {
 }
 
 export function isAnyNodeChildFieldName(name: string): boolean {
-  return (
-    name === 'argument' ||
-    name === 'callee' ||
-    name === 'expression' ||
-    name === 'handler' ||
-    name === 'index' ||
-    name === 'init' ||
-    name === 'left' ||
-    name === 'object' ||
-    name === 'right' ||
-    name === 'target'
-  )
+  return compilerAnyNodeSyntaxChildFields.includes(name)
 }
 
 export function isUnsupportedEqualityOperator(operator: string): boolean {
@@ -129,7 +119,7 @@ export function anyNodeResolvedTypeInfo(loc: SourceLocation): ResolvedTypeInfo {
     typeRef: null,
     functionType: null,
     shape: anyNodeObjectShape(loc),
-    promiseValueType: null
+    asyncResultValueType: null
   }
 }
 
@@ -148,18 +138,22 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('imported', 'string', null, false, loc),
       anyNodeField('local', 'string', null, false, loc),
       anyNodeField('source', 'string', null, false, loc),
-      anyNodeField('path', 'array', 'array<string>', false, loc),
-      anyNodeField('args', 'array', 'array<AnyNode>', false, loc),
-      anyNodeField('params', 'array', 'array<AnyNode>', false, loc),
-      anyNodeField('typeParameters', 'array', 'array<AnyNode>', false, loc),
-      anyNodeField('methods', 'array', 'array<AnyNode>', false, loc),
-      anyNodeField('fields', 'array', 'array<AnyNode>', false, loc),
-      anyNodeField('properties', 'array', 'array<AnyNode>', false, loc),
-      anyNodeField('elements', 'array', 'array<AnyNode>', false, loc),
-      anyNodeField('cases', 'array', 'array<AnyNode>', false, loc),
-      anyNodeField('narrowingFalseNames', 'array', 'array<string>', false, loc),
-      anyNodeField('narrowingTrueNames', 'array', 'array<string>', false, loc),
-      anyNodeField('specifiers', 'array', 'array<AnyNode>', false, loc),
+      anyNodeField('path', 'unknown', 'array<string>', false, loc),
+      anyNodeField('args', 'unknown', 'array<AnyNode>', false, loc),
+      anyNodeField('bindingElements', 'unknown', 'array<AnyNode>', false, loc),
+      anyNodeField('expressions', 'unknown', 'array<AnyNode>', false, loc),
+      anyNodeField('params', 'unknown', 'array<AnyNode>', false, loc),
+      anyNodeField('typeArguments', 'unknown', 'array<string>', false, loc),
+      anyNodeField('typeParameters', 'unknown', 'array<AnyNode>', false, loc),
+      anyNodeField('methods', 'unknown', 'array<AnyNode>', false, loc),
+      anyNodeField('fields', 'unknown', 'array<AnyNode>', false, loc),
+      anyNodeField('indexSignatures', 'unknown', 'array<AnyNode>', false, loc),
+      anyNodeField('properties', 'unknown', 'array<AnyNode>', false, loc),
+      anyNodeField('elements', 'unknown', 'array<AnyNode>', false, loc),
+      anyNodeField('cases', 'unknown', 'array<AnyNode>', false, loc),
+      anyNodeField('narrowingFalseNames', 'unknown', 'array<string>', false, loc),
+      anyNodeField('narrowingTrueNames', 'unknown', 'array<string>', false, loc),
+      anyNodeField('specifiers', 'unknown', 'array<AnyNode>', false, loc),
       anyNodeField('body', 'unknown', null, false, loc),
       anyNodeField('callee', 'unknown', null, false, loc),
       anyNodeField('expression', 'unknown', null, false, loc),
@@ -168,18 +162,22 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('value', 'unknown', null, false, loc),
       anyNodeField('left', 'unknown', null, false, loc),
       anyNodeField('right', 'unknown', null, false, loc),
+      anyNodeField('test', 'object', 'AnyNode', true, loc),
+      anyNodeField('consequent', 'unknown', null, false, loc),
+      anyNodeField('alternate', 'object', 'AnyNode', true, loc),
       anyNodeField('argument', 'unknown', null, false, loc),
       anyNodeField('block', 'unknown', null, false, loc),
       anyNodeField('object', 'unknown', null, false, loc),
       anyNodeField('index', 'unknown', null, false, loc),
       anyNodeField('handler', 'object', 'AnyNode', true, loc),
-      anyNodeField('finalizer', 'unknown', null, true, loc),
+      anyNodeField('finalizer', 'object', 'AnyNode', true, loc),
       anyNodeField('param', 'string', null, true, loc),
       anyNodeField('paramLoc', 'object', null, true, loc, { shape: anyNodeLocObjectShape(loc) }),
       anyNodeField('expressionBody', 'boolean', null, false, loc),
       anyNodeField('default', 'boolean', null, true, loc),
       anyNodeField('nullable', 'boolean', null, true, loc),
       anyNodeField('typeOnly', 'boolean', null, false, loc),
+      anyNodeField('templatePlaceholder', 'boolean', null, true, loc),
       anyNodeField('property', 'string', null, false, loc),
       anyNodeField('operator', 'string', null, false, loc),
       anyNodeField('raw', 'string', null, false, loc),
@@ -188,19 +186,22 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('declaredType', 'string', null, true, loc),
       anyNodeField('declaredName', 'string', null, true, loc),
       anyNodeField('typeRef', 'object', null, true, loc),
+      anyNodeField('runtimeTypeAlternatives', 'unknown', 'array<AnyNode>', true, loc),
       anyNodeField('valueType', 'string', null, true, loc),
       anyNodeField('constraint', 'string', null, true, loc),
-      anyNodeField('promiseValueType', 'string', null, true, loc),
-      anyNodeField('promiseRejectionValueType', 'string', null, true, loc),
-      anyNodeField('promiseRejectionIntrinsicRole', 'string', null, true, loc),
+      anyNodeField('asyncResultValueType', 'string', null, true, loc),
+      anyNodeField('asyncResultRejectionValueType', 'string', null, true, loc),
+      anyNodeField('asyncResultRejectionIntrinsicRole', 'string', null, true, loc),
       anyNodeField('propertyValueType', 'string', null, true, loc),
       anyNodeField('returnType', 'string', null, true, loc),
       anyNodeField('returnTypeRef', 'object', null, true, loc),
+      anyNodeField('returnRuntimeTypeAlternatives', 'unknown', 'array<AnyNode>', true, loc),
       anyNodeField('declaredReturnType', 'string', null, true, loc),
-      anyNodeField('returnPromiseValueType', 'string', null, true, loc),
+      anyNodeField('returnAsyncResultValueType', 'string', null, true, loc),
       anyNodeField('returnNullable', 'boolean', null, false, loc),
       anyNodeField('returnShape', 'object', null, true, loc, { shape: objectShapeMetadata }),
       anyNodeField('functionType', 'object', null, true, loc),
+      anyNodeField('functionOverloads', 'unknown', 'array<AnyNode>', true, loc),
       anyNodeField('shape', 'object', null, true, loc, { shape: objectShapeMetadata }),
       anyNodeField('rest', 'boolean', null, false, loc),
       anyNodeField('libraryBindingId', 'string', null, true, loc),
@@ -223,13 +224,46 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('libraryConstantValue', 'string', null, true, loc),
       anyNodeField('libraryCallbackLifetime', 'string', null, true, loc),
       anyNodeField('libraryOwned', 'boolean', null, false, loc),
-      anyNodeField('libraryCapabilities', 'array', 'array<string>', false, loc),
-      anyNodeField('libraryCArgumentAdapters', 'array', 'array<string>', false, loc),
-      anyNodeField('libraryCArgumentKinds', 'array', 'array<string>', true, loc),
-      anyNodeField('libraryCArgumentMethodNames', 'array', 'array<string>', false, loc),
-      anyNodeField('libraryCArgumentSources', 'array', 'array<AnyNode>', false, loc),
-      anyNodeField('libraryCResultShapeFields', 'array', 'array<string>', false, loc),
-      anyNodeField('libraryRuntimeRequirements', 'array', 'array<string>', false, loc)
+      anyNodeField('libraryCapabilities', 'unknown', 'array<string>', false, loc),
+      anyNodeField('libraryCArgumentAdapters', 'unknown', 'array<string>', true, loc),
+      anyNodeField('libraryCArgumentKinds', 'unknown', 'array<string>', true, loc),
+      anyNodeField('libraryCArgumentMethodNames', 'unknown', 'array<string>', true, loc),
+      anyNodeField('libraryCArgumentSources', 'unknown', 'array<AnyNode>', true, loc),
+      anyNodeField('libraryCResultShapeFields', 'unknown', 'array<string>', false, loc),
+      anyNodeField('libraryRuntimeRequirements', 'unknown', 'array<string>', false, loc),
+      anyNodeField('builtin', 'string', null, true, loc),
+      anyNodeField('kind', 'string', null, true, loc),
+      anyNodeField('ownership', 'string', null, true, loc),
+      anyNodeField('libraryCIteratorMethod', 'string', null, true, loc),
+      anyNodeField('libraryCIteratorNextMethod', 'string', null, true, loc),
+      anyNodeField('libraryCIteratorDoneMember', 'string', null, true, loc),
+      anyNodeField('libraryCIteratorValueMember', 'string', null, true, loc),
+      anyNodeField('libraryCIteratorReceiverAdapter', 'string', null, true, loc),
+      anyNodeField('libraryCIteratorValueAdapter', 'string', null, true, loc),
+      anyNodeField('libraryCIteratorFailureMode', 'string', null, true, loc),
+      anyNodeField('className', 'string', null, true, loc),
+      anyNodeField('functionTypeOwnership', 'string', null, true, loc),
+      anyNodeField('shapeOwnership', 'string', null, true, loc),
+      anyNodeField('syntheticValueImportName', 'string', null, true, loc),
+      anyNodeField('async', 'boolean', null, true, loc),
+      anyNodeField('exported', 'boolean', null, true, loc),
+      anyNodeField('optional', 'boolean', null, true, loc),
+      anyNodeField('optionalChainProtected', 'boolean', null, true, loc),
+      anyNodeField('readonly', 'boolean', null, true, loc),
+      anyNodeField('readonlyField', 'boolean', null, true, loc),
+      anyNodeField('spread', 'boolean', null, true, loc),
+      anyNodeField('static', 'boolean', null, true, loc),
+      anyNodeField('weakTypeValidated', 'boolean', null, true, loc),
+      anyNodeField('condition', 'object', 'AnyNode', false, loc),
+      anyNodeField('discriminant', 'object', 'AnyNode', false, loc),
+      anyNodeField('defaultValue', 'object', 'AnyNode', true, loc),
+      anyNodeField('dynamicField', 'object', 'AnyNode', true, loc),
+      anyNodeField('libraryArgumentNarrowing', 'object', null, true, loc),
+      anyNodeField('libraryRuntimeCallbackFunctionType', 'object', null, true, loc),
+      anyNodeField('iterable', 'object', null, false, loc),
+      anyNodeField('mapValueShape', 'object', null, true, loc),
+      anyNodeField('staticLoc', 'object', null, false, loc, { shape: anyNodeLocObjectShape(loc) }),
+      anyNodeField('update', 'object', 'AnyNode', false, loc)
     ]
   }
 }
@@ -239,11 +273,11 @@ function objectShapeInfoMetadataShape(loc: SourceLocation): ObjectShapeInfo {
     kind: 'object',
     fields: [
       anyNodeField('kind', 'string', null, false, loc),
-      anyNodeField('baseTypes', 'array', 'array<string>', true, loc),
+      anyNodeField('baseTypes', 'unknown', 'array<string>', true, loc),
       anyNodeField('builtin', 'string', null, true, loc),
       anyNodeField('dynamic', 'boolean', null, true, loc),
       anyNodeField('dynamicField', 'object', null, true, loc),
-      anyNodeField('fields', 'array', 'array<AnyNode>', false, loc),
+      anyNodeField('fields', 'unknown', 'array<AnyNode>', false, loc),
       anyNodeField('libraryTypeId', 'string', null, true, loc),
       anyNodeField('libraryCppType', 'string', null, true, loc)
     ]
@@ -277,7 +311,7 @@ export function anyNodeField(
     declaredType,
     valueType,
     nullable,
-    promiseValueType: null,
+    asyncResultValueType: null,
     functionType: null,
     shape: options.shape ?? null,
     loc
@@ -299,8 +333,8 @@ export function cloneObjectShapeField(field: AnyNode): AnyNode {
     typeRef: field.typeRef ?? null,
     valueType: field.valueType ?? 'unknown',
     nullable: field.nullable === true,
-    promiseValueType: field.promiseValueType ?? null,
-    promiseRejectionValueType: field.promiseRejectionValueType ?? null,
+    asyncResultValueType: field.asyncResultValueType ?? null,
+    asyncResultRejectionValueType: field.asyncResultRejectionValueType ?? null,
     functionType: field.functionType ?? null,
     functionOverloads: field.functionOverloads ?? null,
     className: field.className ?? null,
@@ -530,8 +564,8 @@ export function resolvedTypeListHasNullable(infos: ResolvedTypeInfo[]): boolean 
   return false
 }
 
-export function commonResolvedPromiseValueType(infos: ResolvedTypeInfo[]): ValueType | null {
-  return commonResolvedOptionalValueType(infos, resolvedPromiseValueTypeKind)
+export function commonResolvedAsyncResultValueType(infos: ResolvedTypeInfo[]): ValueType | null {
+  return commonResolvedOptionalValueType(infos, resolvedAsyncResultValueTypeKind)
 }
 
 export function commonResolvedObjectShape(infos: ResolvedTypeInfo[]): ObjectShapeInfo | null {
@@ -636,7 +670,7 @@ export function commonResolvedObjectShapeField(name: string, infos: ResolvedType
     typeRef: commonResolvedObjectShapeFieldTypeRef(fields),
     valueType,
     nullable,
-    promiseValueType: commonResolvedObjectShapeFieldPromiseValueType(fields),
+    asyncResultValueType: commonResolvedObjectShapeFieldAsyncResultValueType(fields),
     functionType: commonResolvedObjectShapeFieldFunctionType(fields),
     shape: commonResolvedObjectShapeFieldShape(fields)
   }
@@ -733,11 +767,11 @@ export function commonResolvedObjectShapeFieldTypeRef(fields: AnyNode[]): TypeRe
   return typeRef
 }
 
-export function commonResolvedObjectShapeFieldPromiseValueType(fields: AnyNode[]): ValueType | null {
+export function commonResolvedObjectShapeFieldAsyncResultValueType(fields: AnyNode[]): ValueType | null {
   const values: ValueType[] = []
 
   for (let index = 0; index < fields.length; index = index + 1) {
-    const value = fields[index].promiseValueType
+    const value = fields[index].asyncResultValueType
 
     if (value === null || typeof value === 'undefined') {
       return null
@@ -798,8 +832,8 @@ export function commonResolvedObjectShapeFieldShape(fields: AnyNode[]): ObjectSh
 }
 
 export function resolvedTypeInfoValue(info: ResolvedTypeInfo, kind: ResolvedTypeInfoValueKind): ValueType | null {
-  if (kind === resolvedPromiseValueTypeKind) {
-    return info.promiseValueType ?? null
+  if (kind === resolvedAsyncResultValueTypeKind) {
+    return info.asyncResultValueType ?? null
   }
 
   return null
@@ -895,7 +929,12 @@ function typeRefsEqual(left: TypeRef, right: TypeRef): boolean {
     )
   }
 
-  return left.kind === 'unknown' && right.kind === 'unknown' && left.nullable === right.nullable && left.ownership === right.ownership
+  return (
+    left.kind === 'unknown' &&
+    right.kind === 'unknown' &&
+    left.nullable === right.nullable &&
+    left.ownership === right.ownership
+  )
 }
 
 function typeRefListsEqual(left: TypeRef[], right: TypeRef[]): boolean {

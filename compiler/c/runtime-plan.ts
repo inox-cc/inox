@@ -1,4 +1,4 @@
-import type { AnyNode, IrGlobalUsage, IrProgram, IrRuntimeRequirement } from '../types.ts'
+import type { IrGlobalUsage, IrProgram, IrRuntimeRequirement } from '../types.ts'
 import type {
   CompilerLibrarySet,
   RuntimeEntrypointAdapterDescriptor,
@@ -14,7 +14,6 @@ export type CRuntimePreludeRequirements = {
   needsClassDescriptorRuntime: boolean
   needsCppValueRuntime: boolean
   needsStringHeader: boolean
-  needsCollectionRuntime: boolean
   needsObjectRuntime: boolean
   runtimeEntrypointAdapter: RuntimeEntrypointAdapterDescriptor | null
   libraryCPreludeIncludes: string[]
@@ -46,9 +45,7 @@ export function resolveCRuntimePreludeRequirements(
     input.hasRuntimeCallbackWrapper ||
     runtimeRequirements.has('callback-values') ||
     signatureRuntimeTypes.has('function')
-  const needsAsyncRuntime = runtimeRequirements.has('async-runtime') || signatureRuntimeTypes.has('promise')
-  const needsCollectionRuntime =
-    runtimeRequirements.has('collections') || signatureRuntimeTypes.has('array')
+  const needsAsyncRuntime = runtimeRequirements.has('async-runtime') || signatureRuntimeTypes.has('async-result')
   const needsClassRuntime = input.classDescriptorCount > 0
   const needsClassDescriptorRuntime = needsClassRuntime
   const needsCppValueRuntime =
@@ -63,7 +60,6 @@ export function resolveCRuntimePreludeRequirements(
     input.throwingFunctionCount > 0 ||
     needsAsyncRuntime ||
     needsCallbackRuntime ||
-    needsCollectionRuntime ||
     needsObjectRuntime ||
     needsClassRuntime ||
     needsCppValueRuntime ||
@@ -78,7 +74,6 @@ export function resolveCRuntimePreludeRequirements(
     needsClassDescriptorRuntime,
     needsCppValueRuntime,
     needsStringHeader,
-    needsCollectionRuntime,
     needsObjectRuntime,
     runtimeEntrypointAdapter: libraryRuntime.entrypointAdapter,
     libraryCPreludeIncludes: libraryRuntime.includes,

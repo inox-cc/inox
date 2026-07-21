@@ -181,6 +181,10 @@ function stringArrayIncludes(values: string[], value: string): boolean {
 }
 
 function isStatementBoundaryToken(token: Token): boolean {
+  if (token.type === 'identifier') {
+    return true
+  }
+
   if (token.type !== 'keyword') {
     return false
   }

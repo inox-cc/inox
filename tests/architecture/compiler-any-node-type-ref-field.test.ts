@@ -5,6 +5,7 @@ import { compilerAnyNodeObjectFields } from '../../compiler/c/values/any-node-fi
 import { anyNodeObjectShape } from '../../compiler/checker/resolved-types.ts'
 import {
   compileMemoryPackageToCModules,
+  compileMemoryPackageToIrModules,
   compileSource,
   compileSourceToIr
 } from '../../compiler/core.ts'
@@ -106,4 +107,96 @@ export function namesDiffer(module: ModuleRecord): boolean {
   assert.ok(main)
   assert.ok((main.code.match(/INOX_TAG_STRING/g) ?? []).length >= 2)
   assert.doesNotMatch(main.code, /INOX_TAG_NUMBER/)
+})
+
+test('declaration import preserves nested AnyNode array element TypeRef', async () => {
+  const provider = await compileMemoryPackageToIrModules(
+    '/project/types.ts',
+    [
+      {
+        path: '/project/types.ts',
+        source: `
+export type AnyNode = { type?: string; [key: string]: any }
+export type ObjectShapeInfo = {
+  kind: 'object'
+  typeParameters?: AnyNode[]
+  baseTypes?: string[]
+  builtin?: string | null
+  dynamic?: boolean
+  dynamicField?: AnyNode | null
+  fields: AnyNode[]
+  functionCompanions?: boolean
+  libraryTypeId?: string | null
+  libraryCppType?: string | null
+  [key: string]: any
+}
+`
+      }
+    ],
+    { libraries: defaultCompilerLibrarySet, target: 'cc' }
+  )
+  const resolvedProgram = provider.graph.modules.find(
+    (module) => module.path === '/project/types.ts'
+  )?.declarationProgram
+
+  assert.ok(resolvedProgram)
+
+  const metadataProvider = await compileMemoryPackageToIrModules(
+    '/project/metadata.ts',
+    [
+      {
+        path: '/project/metadata.ts',
+        source: `
+import type { ObjectShapeInfo } from './types.ts'
+export type Metadata = { shape: ObjectShapeInfo | null }
+export function compatibilityMetadata(): Metadata { return { shape: null } }
+`
+      }
+    ],
+    {
+      declarationImports: [{ sourcePath: '/project/types.ts', resolvedProgram }],
+      libraries: defaultCompilerLibrarySet,
+      target: 'cc'
+    }
+  )
+  const metadataProgram = metadataProvider.graph.modules.find(
+    (module) => module.path === '/project/metadata.ts'
+  )?.declarationProgram
+
+  assert.ok(metadataProgram)
+
+  const result = await compileMemoryPackageToIrModules(
+    '/project/main.ts',
+    [
+      {
+        path: '/project/main.ts',
+        source: `
+import { compatibilityMetadata } from './metadata.ts'
+
+export function firstFieldName(): string {
+  const metadata = compatibilityMetadata()
+  const fields = metadata.shape?.fields ?? []
+  return fields[0].name
+}
+`
+      }
+    ],
+    {
+      declarationImports: [
+        {
+          sourcePath: '/project/types.ts',
+          resolvedProgram
+        },
+        {
+          sourcePath: '/project/metadata.ts',
+          resolvedProgram: metadataProgram
+        }
+      ],
+      libraries: defaultCompilerLibrarySet,
+      target: 'cc'
+    }
+  )
+  const main = result.graph.modules.find((module) => module.path === '/project/main.ts')
+
+  assert.ok(main?.ir)
 })

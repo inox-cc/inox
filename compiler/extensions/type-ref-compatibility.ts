@@ -7,9 +7,12 @@ import type {
   LibraryCResultFieldMappingDescriptor,
   LibraryCResultMappingDescriptor,
   LibraryResultShapeFieldDescriptor,
+  ObjectTypeRef,
+  ObjectTypeRefField,
   TypeRef,
   TypeTraitId,
-  TypeTraitRef
+  TypeTraitRef,
+  UnknownTypeRef
 } from './types.ts'
 import type { AnyNode, ObjectShapeInfo, SourceLocation, ValueType } from '../types.ts'
 
@@ -22,10 +25,9 @@ export type TypeRefCompatibilityMetadata = {
   libraryCAwaitExpression: string | null
   libraryResultTypeId: string | null
   shape: ObjectShapeInfo | null
-  arrayElementTypeId: string | null
-  promiseValueType: ValueType | null
-  promiseRejectionValueType: ValueType | null
-  promiseRejectionIntrinsicRole: IntrinsicRole | null
+  asyncResultValueType: ValueType | null
+  asyncResultRejectionValueType: ValueType | null
+  asyncResultRejectionIntrinsicRole: IntrinsicRole | null
 }
 
 export function typeRefCompatibilityMetadata(
@@ -237,6 +239,239 @@ export function typeRefValueTypeOrNull(typeRef: TypeRef, libraries: CompilerLibr
   return nativeType.valueType as ValueType
 }
 
+/** Returns the most specific TypeRef shared by two expression paths. */
+export function commonTypeRef(left: TypeRef | null, right: TypeRef | null): TypeRef | null {
+  if (left === null) {
+    return right
+  }
+
+  if (right === null) {
+    return left
+  }
+
+  if (typeRefsEquivalent(left, right)) {
+    return left
+  }
+
+  if (left.kind === 'unknown' && right.kind !== 'parameter') {
+    return commonUnknownTypeRef(left, right)
+  }
+
+  if (right.kind === 'unknown' && left.kind !== 'parameter') {
+    return commonUnknownTypeRef(right, left)
+  }
+
+  if (left.kind === 'nominal' && right.kind === 'nominal' && left.typeId === right.typeId) {
+    if (left.args.length !== right.args.length) {
+      return null
+    }
+
+    const args: TypeRef[] = []
+
+    for (let index = 0; index < left.args.length; index = index + 1) {
+      args.push(commonTypeArgument(left.args[index], right.args[index]))
+    }
+
+    return {
+      ...left,
+      args,
+      nullable: left.nullable || right.nullable,
+      ownership: commonTypeOwnership(left.ownership, right.ownership)
+    }
+  }
+
+  if (
+    left.kind === 'object' &&
+    right.kind === 'object' &&
+    typeof left.declaredName === 'string' &&
+    left.declaredName === right.declaredName
+  ) {
+    return commonNamedObjectTypeRef(left, right)
+  }
+
+  return null
+}
+
+function commonNamedObjectTypeRef(left: ObjectTypeRef, right: ObjectTypeRef): ObjectTypeRef {
+  if (objectTypeRefFieldNamesEqual(left.fields, right.fields)) {
+    return {
+      ...left,
+      nullable: left.nullable || right.nullable,
+      ownership: commonTypeOwnership(left.ownership, right.ownership)
+    }
+  }
+
+  const fields: ObjectTypeRefField[] = []
+
+  for (const field of left.fields) {
+    fields.push(field)
+  }
+
+  for (const field of right.fields) {
+    let existingIndex = -1
+
+    for (let index = 0; index < fields.length; index = index + 1) {
+      if (fields[index].name === field.name) {
+        existingIndex = index
+        break
+      }
+    }
+
+    if (existingIndex === -1) {
+      fields.push(field)
+      continue
+    }
+
+    const existing = fields[existingIndex]
+    fields[existingIndex] = {
+      name: existing.name,
+      typeRef: commonNamedObjectFieldTypeRef(existing.typeRef, field.typeRef),
+      readonly: existing.readonly && field.readonly,
+      optional: existing.optional === true || field.optional === true
+    }
+  }
+
+  const result: ObjectTypeRef = {
+    kind: 'object',
+    declaredName: left.declaredName,
+    fields,
+    nullable: left.nullable || right.nullable,
+    ownership: commonTypeOwnership(left.ownership, right.ownership),
+    traits: left.traits
+  }
+
+  if (left.dynamic === true || right.dynamic === true) {
+    result.dynamic = true
+  }
+
+  if (left.dynamicField !== null && typeof left.dynamicField !== 'undefined') {
+    result.dynamicField = left.dynamicField
+  } else if (right.dynamicField !== null && typeof right.dynamicField !== 'undefined') {
+    result.dynamicField = right.dynamicField
+  }
+
+  return result
+}
+
+function objectTypeRefFieldNamesEqual(left: ObjectTypeRefField[], right: ObjectTypeRefField[]): boolean {
+  if (left.length !== right.length) {
+    return false
+  }
+
+  for (let index = 0; index < left.length; index = index + 1) {
+    if (left[index].name !== right[index].name) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function commonNamedObjectFieldTypeRef(left: TypeRef, right: TypeRef): TypeRef {
+  if (typeRefsEquivalent(left, right)) {
+    return left
+  }
+
+  if (left.kind === 'unknown' && right.kind !== 'parameter') {
+    return commonUnknownTypeRef(left, right)
+  }
+
+  if (right.kind === 'unknown' && left.kind !== 'parameter') {
+    return commonUnknownTypeRef(right, left)
+  }
+
+  if (left.kind === 'object' && right.kind === 'object') {
+    return left.fields.length >= right.fields.length ? left : right
+  }
+
+  return left
+}
+
+function commonUnknownTypeRef(unknown: UnknownTypeRef, observed: ConcreteTypeRef): ConcreteTypeRef {
+  return {
+    ...observed,
+    nullable: unknown.nullable || observed.nullable,
+    ownership: commonTypeOwnership(unknown.ownership, observed.ownership)
+  }
+}
+
+function commonTypeArgument(left: TypeRef, right: TypeRef): TypeRef {
+  const common = commonTypeRef(left, right)
+
+  if (common !== null) {
+    return common
+  }
+
+  return {
+    kind: 'unknown',
+    nullable: left.nullable === true || right.nullable === true,
+    ownership: 'value',
+    traits: []
+  }
+}
+
+function commonTypeOwnership(left: ConcreteTypeRef['ownership'], right: ConcreteTypeRef['ownership']): ConcreteTypeRef['ownership'] {
+  return left === right ? left : 'value'
+}
+
+export function typeRefsEquivalent(left: TypeRef, right: TypeRef): boolean {
+  if (left === right) {
+    return true
+  }
+
+  if (left.kind !== right.kind) {
+    return false
+  }
+
+  if (left.kind === 'parameter' && right.kind === 'parameter') {
+    return left.name === right.name && (left.nullable === true) === (right.nullable === true)
+  }
+
+  if (left.kind === 'primitive' && right.kind === 'primitive') {
+    return left.name === right.name && concreteTypeRefQualifiersEqual(left, right)
+  }
+
+  if (left.kind === 'nominal' && right.kind === 'nominal') {
+    return (
+      left.typeId === right.typeId &&
+      concreteTypeRefQualifiersEqual(left, right) &&
+      typeRefListsEquivalent(left.args, right.args)
+    )
+  }
+
+  if (left.kind === 'function' && right.kind === 'function') {
+    return (
+      concreteTypeRefQualifiersEqual(left, right) &&
+      typeRefListsEquivalent(left.params, right.params) &&
+      typeRefsEquivalent(left.result, right.result)
+    )
+  }
+
+  if (left.kind === 'object' && right.kind === 'object') {
+    return false
+  }
+
+  return left.kind === 'unknown' && right.kind === 'unknown' && concreteTypeRefQualifiersEqual(left, right)
+}
+
+function concreteTypeRefQualifiersEqual(left: ConcreteTypeRef, right: ConcreteTypeRef): boolean {
+  return left.nullable === right.nullable && left.ownership === right.ownership
+}
+
+function typeRefListsEquivalent(left: TypeRef[], right: TypeRef[]): boolean {
+  if (left.length !== right.length) {
+    return false
+  }
+
+  for (let index = 0; index < left.length; index = index + 1) {
+    if (!typeRefsEquivalent(left[index], right[index])) {
+      return false
+    }
+  }
+
+  return true
+}
+
 /** Preserves a contextual TypeRef while filling only its unknown leaves from an observed value. */
 export function refineTypeRefUnknowns(contextual: TypeRef, observed: TypeRef): TypeRef {
   if (contextual.kind === 'unknown' && observed.kind !== 'parameter') {
@@ -406,9 +641,9 @@ function baseTypeRefCompatibilityMetadata(
         readonly: field.readonly,
         nullable: fieldMetadata.nullable,
         typeRef: field.typeRef,
-        promiseValueType: fieldMetadata.promiseValueType,
-        promiseRejectionValueType: fieldMetadata.promiseRejectionValueType,
-        promiseRejectionIntrinsicRole: fieldMetadata.promiseRejectionIntrinsicRole,
+        asyncResultValueType: fieldMetadata.asyncResultValueType,
+        asyncResultRejectionValueType: fieldMetadata.asyncResultRejectionValueType,
+        asyncResultRejectionIntrinsicRole: fieldMetadata.asyncResultRejectionIntrinsicRole,
         shape: fieldMetadata.shape,
         libraryCMember: null,
         libraryCppType: fieldMetadata.libraryCppType,
@@ -422,6 +657,9 @@ function baseTypeRefCompatibilityMetadata(
       fields,
       libraryCppType: null
     }
+    if (typeRef.declaredName === 'AnyNode') {
+      metadata.shape.builtin = 'compiler.AnyNode'
+    }
     if (typeRef.dynamicField !== null && typeof typeRef.dynamicField !== 'undefined') {
       const dynamicMetadata = typeRefCompatibilityMetadata(typeRef.dynamicField, libraries, loc)
       metadata.shape.dynamicField = {
@@ -431,7 +669,7 @@ function baseTypeRefCompatibilityMetadata(
         valueType: dynamicMetadata.valueType,
         nullable: dynamicMetadata.nullable,
         typeRef: typeRef.dynamicField,
-        promiseValueType: dynamicMetadata.promiseValueType,
+        asyncResultValueType: dynamicMetadata.asyncResultValueType,
         shape: dynamicMetadata.shape,
         loc
       }
@@ -457,10 +695,9 @@ function emptyCompatibilityMetadata(
     libraryCAwaitExpression: null,
     libraryResultTypeId: null,
     shape: null,
-    arrayElementTypeId: null,
-    promiseValueType: null,
-    promiseRejectionValueType: null,
-    promiseRejectionIntrinsicRole: null
+    asyncResultValueType: null,
+    asyncResultRejectionValueType: null,
+    asyncResultRejectionIntrinsicRole: null
   }
 }
 
@@ -539,24 +776,17 @@ function applyTypeTraits(
   for (let index = 0; index < traits.length; index = index + 1) {
     const trait = traits[index]
 
-    if (trait.traitId === 'iterable' && trait.args.length > 0) {
-      const element = typeRefCompatibilityMetadata(trait.args[0], libraries, loc)
-
-      metadata.arrayElementTypeId = element.libraryResultTypeId
-    }
-
     if (trait.traitId === 'awaitable' && trait.args.length > 0) {
       const fulfilled = typeRefCompatibilityMetadata(trait.args[0], libraries, loc)
 
-      metadata.promiseValueType = fulfilled.valueType
+      metadata.asyncResultValueType = fulfilled.valueType
       metadata.libraryResultTypeId = fulfilled.libraryResultTypeId
       metadata.shape = fulfilled.shape
-      metadata.arrayElementTypeId = fulfilled.arrayElementTypeId
       if (trait.args.length > 1) {
         const rejected = typeRefCompatibilityMetadata(trait.args[1], libraries, loc)
 
-        metadata.promiseRejectionValueType = rejected.valueType
-        metadata.promiseRejectionIntrinsicRole = rejected.intrinsicRole
+        metadata.asyncResultRejectionValueType = rejected.valueType
+        metadata.asyncResultRejectionIntrinsicRole = rejected.intrinsicRole
       }
     }
   }

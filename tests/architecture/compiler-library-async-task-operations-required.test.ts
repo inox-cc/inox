@@ -7,7 +7,7 @@ import { compilerLibraryPackage as promiseCompilerLibraryPackage } from '../../s
 import { compilerLibraryPackageWithGlobalDeclaration } from './helpers/compiler-library-fixtures.ts'
 
 test('async-result provider требует все операции async task', () => {
-  for (const kind of ['resolve', 'reject', 'then'] as LibraryAsyncResultOperationKind[]) {
+  for (const kind of ['fulfill', 'reject', 'map-fulfilled'] as LibraryAsyncResultOperationKind[]) {
     const library = compilerLibraryPackageWithGlobalDeclaration(
       promiseCompilerLibraryPackage,
       'stdlib/global/promise/index.d.ts'

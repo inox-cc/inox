@@ -24,7 +24,7 @@ test('async-result C++ storage type не имеет raw fallback', () => {
 
     const branch = declaration.body.statements.find(
       (statement): statement is ts.IfStatement =>
-        ts.isIfStatement(statement) && isPromiseValueTypeCondition(statement.expression)
+        ts.isIfStatement(statement) && isAsyncResultValueTypeCondition(statement.expression)
     )
 
     assert.ok(branch, `${target.file}: missing internal async-result branch`)
@@ -39,18 +39,21 @@ test('async-result C++ storage type не имеет raw fallback', () => {
   assert.deepEqual(tails, [])
 })
 
-function isPromiseValueTypeCondition(expression: ts.Expression): boolean {
+function isAsyncResultValueTypeCondition(expression: ts.Expression): boolean {
   if (!ts.isBinaryExpression(expression) || expression.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken) {
     return false
   }
 
   return (
-    isValueTypeAndPromise(expression.left, expression.right) || isValueTypeAndPromise(expression.right, expression.left)
+    isValueTypeAndAsyncResult(expression.left, expression.right) ||
+    isValueTypeAndAsyncResult(expression.right, expression.left)
   )
 }
 
-function isValueTypeAndPromise(left: ts.Expression, right: ts.Expression): boolean {
-  return ts.isIdentifier(left) && left.text === 'valueType' && ts.isStringLiteral(right) && right.text === 'promise'
+function isValueTypeAndAsyncResult(left: ts.Expression, right: ts.Expression): boolean {
+  return (
+    ts.isIdentifier(left) && left.text === 'valueType' && ts.isStringLiteral(right) && right.text === 'async-result'
+  )
 }
 
 function callNames(node: ts.Node, sourceFile: ts.SourceFile): string[] {

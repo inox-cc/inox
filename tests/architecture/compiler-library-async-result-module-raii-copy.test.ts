@@ -5,7 +5,10 @@ import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
 import type { CompilerLibrarySet } from '../../compiler/extensions/types.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
-import { futureLibrarySet } from './helpers/compiler-future-library-fixtures.ts'
+import {
+  assertFutureValidityContract,
+  futureLibrarySet
+} from './helpers/compiler-future-library-fixtures.ts'
 
 test('default и alternate async-result module values используют один RAII storage и mapped copy', () => {
   assertModuleRaiiCopy(
@@ -18,7 +21,7 @@ test('default и alternate async-result module values используют од�
     'export const first = Future.succeed(7)\nexport const second = first\n',
     futureLibrarySet('FixtureFuture'),
     'FixtureFuture',
-    'FixtureFuture::resolve'
+    'FixtureFuture::completed'
   )
 })
 
@@ -48,6 +51,10 @@ function assertModuleRaiiCopy(
   assert.match(output, new RegExp(`${symbols[1]} = ${symbols[0]};`))
   assert.doesNotMatch(output, /= first;/)
   assert.doesNotMatch(output, /\binox_promise/)
+
+  if (cppType === 'FixtureFuture') {
+    assertFutureValidityContract(output, cppType)
+  }
 }
 
 function generatedFile(files: Array<{ path: string; code: string }>, suffix: string): string {

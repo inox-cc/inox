@@ -9,7 +9,8 @@ import {
 import type {
   CompilerLibraryDescriptor,
   CompilerLibrarySet,
-  LibraryOperationDescriptor
+  LibraryOperationDescriptor,
+  TypeRef
 } from '../../compiler/extensions/types.ts'
 
 test('global operations resolve from package-owned binding paths', () => {
@@ -68,8 +69,8 @@ test('library fingerprint covers recursive result and entrypoint adapter metadat
   const changedNestedField = createCompilerLibrarySet([
     fingerprintLibrary({ nestedFieldName: 'changedName' })
   ]).fingerprint
-  const changedArrayElement = createCompilerLibrarySet([
-    fingerprintLibrary({ resultArrayElementType: 'number' })
+  const changedGenericResult = createCompilerLibrarySet([
+    fingerprintLibrary({ genericResultType: 'number' })
   ]).fingerprint
   const changedCallContract = createCompilerLibrarySet([
     fingerprintLibrary({ assignmentCall: true })
@@ -81,7 +82,7 @@ test('library fingerprint covers recursive result and entrypoint adapter metadat
   assert.notEqual(changedNestedType, baseline)
   assert.notEqual(changedNestedCppType, baseline)
   assert.notEqual(changedNestedField, baseline)
-  assert.notEqual(changedArrayElement, baseline)
+  assert.notEqual(changedGenericResult, baseline)
   assert.notEqual(changedCallContract, baseline)
   assert.notEqual(changedEntrypoint, baseline)
 })
@@ -90,7 +91,7 @@ type FingerprintLibraryOptions = {
   nestedResultTypeId?: string
   nestedCppType?: string
   nestedFieldName?: string
-  resultArrayElementType?: string
+  genericResultType?: 'number' | 'string'
   assignmentCall?: boolean
   acceptsEntryPath?: boolean
 }
@@ -108,7 +109,6 @@ function fingerprintLibrary(options: FingerprintLibraryOptions = {}): CompilerLi
           ? ['receiver', 'optional-argument']
           : ['member-name-string-view', 'optional-argument'],
         cCallStyle: options.assignmentCall === true ? 'member-assignment' : 'index',
-        resultArrayElementType: options.resultArrayElementType ?? 'string',
         resultShapeFields: [
           {
             name: 'release',
@@ -125,6 +125,10 @@ function fingerprintLibrary(options: FingerprintLibraryOptions = {}): CompilerLi
             ]
           }
         ]
+      },
+      {
+        ...operation('global:host.generic', 'call'),
+        resultTypeRef: primitiveTypeRef(options.genericResultType ?? 'string')
       }
     ],
     intrinsicBindings: [],
@@ -140,6 +144,16 @@ function fingerprintLibrary(options: FingerprintLibraryOptions = {}): CompilerLi
         }
       }
     ]
+  }
+}
+
+function primitiveTypeRef(name: 'number' | 'string'): TypeRef {
+  return {
+    kind: 'primitive',
+    name,
+    nullable: false,
+    ownership: 'value',
+    traits: []
   }
 }
 

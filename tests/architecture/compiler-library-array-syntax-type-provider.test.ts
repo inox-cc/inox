@@ -42,7 +42,7 @@ function fixtureLibrary(): CompilerLibraryDescriptor {
         libraryId: 'fixture',
         typeId: sequenceTypeId,
         declarationNames: ['FixtureSequence'],
-        valueType: 'array',
+        valueType: 'object',
         cppType: 'FixtureSequence',
         baseTypeIds: [],
         runtimeRequirements: [],
@@ -67,6 +67,7 @@ function fixtureLibrary(): CompilerLibraryDescriptor {
         operationId: 'fixture.sequence.intrinsic',
         kind: 'construct',
         runtimeRequirements: [],
+        cSequenceMaterialization: fixtureSequenceMaterialization(),
         typeParameters: [{ name: 'T', sources: [{ source: 'contextual-type-argument', argumentIndex: 0 }] }],
         resultTypeRef: nominalTypeRef(sequenceTypeId, [parameterTypeRef]),
         minArgs: 0,
@@ -76,6 +77,15 @@ function fixtureLibrary(): CompilerLibraryDescriptor {
     ],
     intrinsicBindings: [{ role: 'array-literal', bindingId: 'intrinsic:fixture-sequence' }],
     runtimeRequirements: []
+  }
+}
+
+function fixtureSequenceMaterialization() {
+  return {
+    createExpression: 'FixtureSequence::empty()',
+    appendElementExpression: '$target.add($value)',
+    appendSpreadExpression: '$target.addAll($value)',
+    failureMode: 'thrown' as const
   }
 }
 

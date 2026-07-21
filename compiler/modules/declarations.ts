@@ -114,7 +114,7 @@ function moduleDeclarationTypeNameValueType(typeName: string): ValueType {
   }
 
   if (typeName.startsWith('array<') || typeName.endsWith('[]')) {
-    return 'array'
+    return 'object'
   }
 
   return 'object'
@@ -1874,7 +1874,7 @@ function declarationReturnType(item: AnyNode): string {
     {
       valueType: item.returnType,
       nullable: item.returnNullable,
-      promiseValueType: item.returnPromiseValueType,
+      asyncResultValueType: item.returnAsyncResultValueType,
       shape: item.returnShape
     },
     'void'
@@ -1913,10 +1913,8 @@ function typeNameFromMetadata(item: AnyNode, fallback: string): string {
   const valueType = stringMetadata(item.valueType, fallback)
   let typeName = valueType
 
-  if (valueType === 'array') {
-    typeName = 'array<unknown>'
-  } else if (valueType === 'promise') {
-    typeName = `promise<${stringMetadata(item.promiseValueType, 'unknown')}>`
+  if (valueType === 'async-result') {
+    typeName = `asyncResult<${stringMetadata(item.asyncResultValueType, 'unknown')}>`
   }
 
   if (item.nullable === true && typeName !== 'null' && !typeName.startsWith('nullable<')) {
@@ -2095,7 +2093,7 @@ function cloneFunctionDeclaration(item: AnyNode): AnyNode {
     returnType: stringMetadata(item.returnType, 'void'),
     returnTypeRef: nullableMetadata(item.returnTypeRef),
     returnNullable: item.returnNullable === true,
-    returnPromiseValueType: nullableMetadata(item.returnPromiseValueType),
+    returnAsyncResultValueType: nullableMetadata(item.returnAsyncResultValueType),
     returnShape: nullableMetadata(item.returnShape),
     body: []
   }
@@ -2142,7 +2140,7 @@ function cloneVariableDeclaration(item: AnyNode): AnyNode {
     nullable: item.nullable === true,
     shape: nullableMetadata(item.shape),
     functionType: nullableMetadata(item.functionType),
-    promiseValueType: nullableMetadata(item.promiseValueType),
+    asyncResultValueType: nullableMetadata(item.asyncResultValueType),
     init: null
   }
 }
@@ -2194,7 +2192,7 @@ function arrayLiteralDeclarationValueMetadata(expression: AnyNode): DeclarationV
   const elementType = arrayLiteralElementType(expression)
 
   return {
-    valueType: 'array',
+    valueType: 'object',
     declaredType: `array<${elementType ?? 'unknown'}>`
   }
 }
@@ -2296,7 +2294,7 @@ function cloneClassFields(fields: AnyNode[] | null | undefined): AnyNode[] {
       optional: field.optional === true,
       valueType: stringMetadata(field.valueType, 'unknown'),
       nullable: field.nullable === true,
-      promiseValueType: nullableMetadata(field.promiseValueType),
+      asyncResultValueType: nullableMetadata(field.asyncResultValueType),
       shape: nullableMetadata(field.shape),
       functionType: nullableMetadata(field.functionType),
       className: nullableMetadata(field.className)
@@ -2326,7 +2324,7 @@ function cloneClassMethods(methods: AnyNode[] | null | undefined): AnyNode[] {
       returnType: stringMetadata(method.returnType, 'void'),
       returnTypeRef: nullableMetadata(method.returnTypeRef),
       returnNullable: method.returnNullable === true,
-      returnPromiseValueType: nullableMetadata(method.returnPromiseValueType),
+      returnAsyncResultValueType: nullableMetadata(method.returnAsyncResultValueType),
       body: []
     })
   }
@@ -2350,7 +2348,7 @@ function cloneParams(params: AnyNode[] | null | undefined): AnyNode[] {
       declaredType: nullableMetadata(param.declaredType),
       typeRef: nullableMetadata(param.typeRef),
       nullable: param.nullable === true,
-      promiseValueType: nullableMetadata(param.promiseValueType),
+      asyncResultValueType: nullableMetadata(param.asyncResultValueType),
       shape: nullableMetadata(param.shape),
       functionType: nullableMetadata(param.functionType),
       className: nullableMetadata(param.className)

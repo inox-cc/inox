@@ -251,7 +251,7 @@ export function normalizeTypeName(name: string): string {
   }
 
   if (name === 'any') {
-    return 'unknown'
+    return 'any'
   }
 
   const genericApplication = genericTypeApplicationFromTypeName(name)

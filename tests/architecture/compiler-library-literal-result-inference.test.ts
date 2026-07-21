@@ -35,7 +35,7 @@ test('package literal result inference can prefer contextual declared metadata',
   )
   const call = result.ast.body[0].init
 
-  assert.equal(call.valueType, 'array')
+  assert.equal(call.valueType, 'object')
   assert.deepEqual(call.typeRef, arrayTypeRef(primitiveTypeRef('number')))
   assert.equal(call.libraryCppType, 'inox::Value')
 })

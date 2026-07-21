@@ -10,12 +10,12 @@ test('nominal TypeRef без awaitable trait не разворачивается
   })
   const awaited = result.ast.body[0].init
 
-  assert.equal(awaited.argument.valueType, 'promise')
-  assert.equal(awaited.argument.promiseValueType, null)
-  assert.equal(awaited.argument.promiseRejectionValueType, null)
+  assert.equal(awaited.argument.valueType, 'async-result')
+  assert.equal(awaited.argument.asyncResultValueType, null)
+  assert.equal(awaited.argument.asyncResultRejectionValueType, null)
   assert.equal(awaited.argument.typeRef.kind, 'nominal')
   assert.equal(awaited.argument.typeRef.typeId, 'fixture:awaitable#Completion')
   assert.deepEqual(awaited.argument.typeRef.traits, [])
-  assert.equal(awaited.valueType, 'promise')
+  assert.equal(awaited.valueType, 'async-result')
   assert.equal(awaited.typeRef ?? null, null)
 })

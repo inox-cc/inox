@@ -37,7 +37,7 @@ function binaryLibrary(): CompilerLibraryDescriptor {
     runtimeRequirements: [
       {
         id: 'global:binary',
-        dependencies: ['collections', 'managed-values'],
+        dependencies: ['managed-values'],
         cPreludeIncludes: ['inox/binary.h'],
         capabilities: []
       }

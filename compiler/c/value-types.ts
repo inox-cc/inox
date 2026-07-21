@@ -2,6 +2,7 @@ import {
   compilerLibraryAsyncResultOperationForIntrinsic,
   compilerLibraryNativeTypeForId,
   compilerLibraryNativeTypeForIntrinsic,
+  compilerLibraryOperationForIntrinsic,
   resolveCompilerLibrarySet
 } from '../extensions/library-set.ts'
 import { compilerLibraryIntrinsicResultMetadata } from '../extensions/intrinsic-metadata.ts'
@@ -18,6 +19,7 @@ import type {
   LibraryAsyncResultOperationKind,
   LibraryCAsyncTaskBridgeDescriptor,
   LibraryCAsyncTaskBridgeRenderRequest,
+  LibraryCSequenceMaterializationDescriptor,
   LibraryNativeIterationDescriptor,
   TypeRef
 } from '../extensions/types.ts'
@@ -62,6 +64,14 @@ type CNullableScalarParamRecord = {
 }
 
 export type CRuntimeValueTag = string | null
+
+export function compilerLibraryIntrinsicSequenceMaterialization(
+  libraries: CCompilerLibrarySet,
+  role: IntrinsicRole
+): LibraryCSequenceMaterializationDescriptor | null {
+  return compilerLibraryOperationForIntrinsic(cCompilerLibrarySetValue(libraries), role, 'construct')
+    ?.cSequenceMaterialization ?? null
+}
 
 export function cTypeRefDeclaredName(
   typeRef: CTypeRef | null | undefined,
@@ -151,7 +161,7 @@ export function cFunctionTypeFromTypeRef(
       typeRef: paramTypeRef,
       nullable: metadata.nullable,
       declaredType: null,
-      promiseValueType: metadata.promiseValueType,
+      asyncResultValueType: metadata.asyncResultValueType,
       functionType: cFunctionTypeFromTypeRef(paramTypeRef, resolvedLibraries, loc),
       shape: metadata.shape
     })
@@ -171,7 +181,7 @@ export function cFunctionTypeFromTypeRef(
     returnType: result.valueType,
     returnTypeRef: resultTypeRef,
     returnNullable: result.nullable,
-    returnPromiseValueType: result.promiseValueType,
+    returnAsyncResultValueType: result.asyncResultValueType,
     returnShape: result.shape
   }
 }
@@ -179,14 +189,14 @@ export function cFunctionTypeFromTypeRef(
 function cTypeRefMetadata(typeRef: TypeRef, libraries: CompilerLibrarySet, loc: SourceLocation): {
   valueType: string
   nullable: boolean
-  promiseValueType: string | null
+  asyncResultValueType: string | null
   shape: CFunctionParam['shape']
 } {
   if (typeRef.kind === 'parameter') {
     return {
       valueType: 'unknown',
       nullable: typeRef.nullable === true,
-      promiseValueType: null,
+      asyncResultValueType: null,
       shape: null
     }
   }
@@ -196,7 +206,7 @@ function cTypeRefMetadata(typeRef: TypeRef, libraries: CompilerLibrarySet, loc: 
   return {
     valueType: metadata.valueType,
     nullable: metadata.nullable,
-    promiseValueType: metadata.promiseValueType,
+    asyncResultValueType: metadata.asyncResultValueType,
     shape: metadata.shape as CFunctionParam['shape']
   }
 }
@@ -205,8 +215,7 @@ function isConcreteManagedRuntimeReturnType(valueType: CValueTypeInput): boolean
   return (
     valueType === 'bytes' ||
     valueType === 'string' ||
-    valueType === 'object' ||
-    valueType === 'array'
+    valueType === 'object'
   )
 }
 
@@ -226,7 +235,7 @@ export function isOpaqueRuntimeValueType(valueType: CValueTypeInput): boolean {
   return (
     valueType !== 'void' &&
     valueType !== 'function' &&
-    valueType !== 'promise' &&
+    valueType !== 'async-result' &&
     valueType !== 'optional' &&
     valueType !== 'js-global'
   )
@@ -257,7 +266,7 @@ export function emitCType(valueType: CValueTypeInput): string {
     return 'void*'
   }
 
-  if (valueType === 'promise') {
+  if (valueType === 'async-result') {
     return ''
   }
 
@@ -384,6 +393,19 @@ export function compilerLibraryIntrinsicNativeCAsyncTaskBridge(
   )
 }
 
+export function compilerLibraryIntrinsicAsyncResultCValidExpression(
+  libraries: CCompilerLibrarySet,
+  source: string
+): string {
+  const bridge = compilerLibraryIntrinsicNativeCAsyncTaskBridge(libraries, 'async-result')
+
+  if (bridge === null) {
+    return 'false'
+  }
+
+  return renderCompilerLibraryCAsyncTaskBridgeExpression(bridge, { kind: 'valid', source })
+}
+
 export function renderCompilerLibraryCAsyncTaskBridgeExpression(
   bridge: LibraryCAsyncTaskBridgeDescriptor,
   request: LibraryCAsyncTaskBridgeRenderRequest
@@ -482,6 +504,59 @@ export function compilerLibraryNativeRuntimeValueExpressionForId(
   )?.cRuntimeValueExpression ?? null
 }
 
+export function compilerLibraryNativeRuntimeValueExpressionForTypeRef(
+  libraries: CCompilerLibrarySet | null | undefined,
+  typeRef: CTypeRef | null | undefined
+): string | null {
+  const resolvedLibraries = cOptionalCompilerLibrarySetValue(libraries)
+  const resolvedTypeRef = cTypeRefValue(typeRef)
+
+  if (resolvedLibraries === null || resolvedTypeRef === null || resolvedTypeRef.kind !== 'nominal') {
+    return null
+  }
+
+  const typeId = resolvedTypeRef.typeId
+
+  if (typeId === null || typeof typeId === 'undefined' || typeId === '') {
+    return null
+  }
+
+  return compilerLibraryNativeTypeForId(resolvedLibraries, typeId)?.cRuntimeValueExpression ?? null
+}
+
+export function compilerLibraryNativeRuntimeValueValidExpressionForTypeRef(
+  libraries: CCompilerLibrarySet | null | undefined,
+  typeRef: CTypeRef | null | undefined
+): string | null {
+  const resolvedLibraries = cOptionalCompilerLibrarySetValue(libraries)
+  const resolvedTypeRef = cTypeRefValue(typeRef)
+
+  if (resolvedLibraries === null || resolvedTypeRef === null || resolvedTypeRef.kind !== 'nominal') {
+    return null
+  }
+
+  const typeId = resolvedTypeRef.typeId
+
+  if (typeId === null || typeof typeId === 'undefined' || typeId === '') {
+    return null
+  }
+
+  return compilerLibraryNativeRuntimeValueValidExpressionForTypeId(resolvedLibraries, typeId)
+}
+
+export function compilerLibraryNativeRuntimeValueValidExpressionForTypeId(
+  libraries: CCompilerLibrarySet | null | undefined,
+  typeId: string | null | undefined
+): string | null {
+  const resolvedLibraries = cOptionalCompilerLibrarySetValue(libraries)
+
+  if (resolvedLibraries === null || typeId === null || typeof typeId === 'undefined') {
+    return null
+  }
+
+  return compilerLibraryNativeTypeForId(resolvedLibraries, typeId)?.cRuntimeValueValidExpression ?? null
+}
+
 export function applyCompilerLibraryIntrinsicNativeValueAdapter(
   value: string,
   cppType: string | null | undefined,
@@ -578,10 +653,6 @@ export function cRuntimeValueTag(valueType: CValueTypeInput): CRuntimeValueTag {
 
   if (valueType === 'object') {
     return 'INOX_TAG_OBJECT'
-  }
-
-  if (valueType === 'array') {
-    return 'INOX_TAG_ARRAY'
   }
 
   if (valueType === 'function') {

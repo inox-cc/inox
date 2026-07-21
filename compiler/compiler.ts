@@ -1,4 +1,4 @@
-import type { CModuleCompileOptions, CModuleCompileResult, GraphIrCompileResult } from './core.ts'
+import type { CModuleCompileOptions, CModuleCompileResult, CModuleTextFile, GraphIrCompileResult } from './core.ts'
 import {
   compileFile as compileFileCore,
   compileFileSync as compileFileSyncCore,
@@ -45,6 +45,7 @@ export {
 export type {
   CModuleCompileOptions,
   CModuleCompileResult,
+  CModuleTextFile,
   GraphIrCompileResult,
   MemoryCModuleCompileOptions,
   MemoryCompileOptions,
@@ -143,7 +144,7 @@ export function compileFileToCModuleTextsSync(
   entry: string,
   options: CModuleCompileOptions = {},
   libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
-): any[] {
+): CModuleTextFile[] {
   if (options.host !== null && typeof options.host !== 'undefined') {
     return compileFileToCModuleTextsSyncCore(entry, options, libraryLiteralTypeInference)
   }

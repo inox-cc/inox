@@ -2,7 +2,6 @@ import { diagnostic } from '../../diagnostics.ts'
 import type { AnyNode, Diagnostic } from '../../types.ts'
 import {
   isPlainObjectFunctionField,
-  isPlainFunctionPointerType,
   isRuntimeFunctionType
 } from '../async/callbacks.ts'
 import {
@@ -39,6 +38,7 @@ import {
   applyLibraryNativeValueAdapter,
   cIterableElementDeclaredName,
   cRuntimeValueTag,
+  compilerLibraryNativeRuntimeValueValidExpressionForTypeRef,
   isManagedRuntimeReturnType,
   isNullableScalarType,
   isOpaqueRuntimeValueType,
@@ -53,10 +53,6 @@ import {
   compilerAnyNodeStringFields,
   compilerAnyNodeUnknownFields
 } from './any-node-fields.ts'
-import { inferExpressionType } from './types.ts'
-import { emitPreparedStringBytesOperand } from './strings.ts'
-import { emitCValueExpression } from './expressions.ts'
-
 type ObjectShapeContext = {
   objectAliases?: Map<string, string>
   objectDeclaredTypes?: Map<string, string | null>
@@ -269,11 +265,21 @@ function findObjectShapeFieldIndex(fields: CObjectShapeField[], key: string): nu
 export function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeField[]): void {
   appendCompilerAnyNodeFallbackShapeFieldGroup(fields, compilerAnyNodeStringFields, 'string')
   appendCompilerAnyNodeFallbackShapeFieldGroup(fields, compilerAnyNodeBooleanFields, 'boolean')
-  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, compilerAnyNodeArrayFields, 'array')
+  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, compilerAnyNodeArrayFields, 'object')
   appendCompilerAnyNodeFallbackShapeFieldGroup(fields, compilerAnyNodeObjectFields, 'object', 'AnyNode', {
     builtin: 'compiler.AnyNode'
   })
   appendCompilerAnyNodeFallbackShapeFieldGroup(fields, compilerAnyNodeUnknownFields, 'unknown')
+}
+
+export function compilerAnyNodeFallbackShapeHasField(name: string): boolean {
+  return (
+    compilerAnyNodeStringFields.includes(name) ||
+    compilerAnyNodeBooleanFields.includes(name) ||
+    compilerAnyNodeArrayFields.includes(name) ||
+    compilerAnyNodeObjectFields.includes(name) ||
+    compilerAnyNodeUnknownFields.includes(name)
+  )
 }
 
 export function appendCompilerObjectShapeInfoFallbackShapeFields(fields: CObjectShapeField[]): void {
@@ -475,7 +481,7 @@ function normalizedObjectShapeField(field: CObjectShapeField): CObjectShapeField
     declaredType: field.declaredType,
     typeRef: field.typeRef,
     valueType: field.valueType,
-    promiseValueType: field.promiseValueType,
+    asyncResultValueType: field.asyncResultValueType,
     libraryCMember: field.libraryCMember,
     libraryCppType: field.libraryCppType,
     functionTypeOwnership: field.functionTypeOwnership,
@@ -1024,7 +1030,7 @@ function emitPreparedDynamicObjectIndexExpressionValueExpression(
   appendLines(lines, key.lines)
   lines.push(`auto ${temp} = inox::get(${object.expression}, inox::StringView(${key.bytes}, ${key.length}));`)
   appendLines(lines, emitObjectThrownCheckLines(context))
-  appendLines(lines, emitRuntimeOptionalObjectFieldValueCheck(temp, tag, context))
+  appendLines(lines, emitDynamicObjectFieldValueCheck(temp, expression, tag, context))
 
   return {
     lines,
@@ -1150,13 +1156,12 @@ function emitPreparedKnownObjectFieldValueExpression(
   }
 
   const temp = nextCName(context, 'inox_value')
-  const tag = objectFieldRuntimeValueTag(field)
   const object = emitObjectValueReference(access.objectName, context)
   const lines: string[] = []
 
   lines.push(`auto ${temp} = inox::get(${object}, ${cStringLiteral(access.key)});`)
   appendLines(lines, emitObjectThrownCheckLines(context))
-  appendLines(lines, emitKnownObjectFieldValueCheck(temp, tag, field, expression, context))
+  appendLines(lines, emitKnownObjectFieldValueCheck(temp, field, expression, context))
 
   return preparedObjectFieldReadValue(field, temp, lines)
 }
@@ -1182,7 +1187,6 @@ function emitPreparedObjectExpressionFieldValueExpression(
 
   const object = dependencies.emitCValueExpression(objectExpression, context)
   const temp = nextCName(context, 'inox_value')
-  const tag = objectFieldRuntimeValueTag(field)
   const lines: string[] = []
 
   if (isOptionalChainContinuationReceiver(objectExpression)) {
@@ -1195,7 +1199,7 @@ function emitPreparedObjectExpressionFieldValueExpression(
     lines.push(`  ${emitRuntimeTypeCheck(runtimeObjectLikeValueMismatchCondition(object.expression), context)}`)
     lines.push(`  ${temp} = inox::get(${object.expression}, ${cStringLiteral(field.key)});`)
     appendPrefixedLines(lines, emitObjectThrownCheckLines(context), '  ')
-    appendPrefixedLines(lines, emitRuntimeOptionalObjectFieldValueCheck(temp, tag, context), '  ')
+    appendPrefixedLines(lines, emitObjectFieldRuntimeValueCheck(temp, field, expression, context), '  ')
     lines.push('}')
 
     return preparedObjectFieldReadValue(field, temp, lines)
@@ -1205,9 +1209,9 @@ function emitPreparedObjectExpressionFieldValueExpression(
   lines.push(`auto ${temp} = inox::get(${object.expression}, ${cStringLiteral(field.key)});`)
   appendLines(lines, emitObjectThrownCheckLines(context))
   if (objectFieldValueMayBeNullish(field)) {
-    appendLines(lines, emitRuntimeOptionalObjectFieldValueCheck(temp, tag, context))
+    appendLines(lines, emitObjectFieldRuntimeValueCheck(temp, field, expression, context))
   } else {
-    appendLines(lines, emitRuntimeFieldValueCheck(temp, tag, expression, context))
+    appendLines(lines, emitObjectFieldRuntimeValueCheck(temp, field, expression, context))
   }
 
   return preparedObjectFieldReadValue(field, temp, lines)
@@ -1277,7 +1281,7 @@ function emitPreparedDynamicObjectFieldValueExpression(
     lines.push(`  ${emitRuntimeTypeCheck(runtimeObjectLikeValueMismatchCondition(object.expression), context)}`)
     lines.push(`  ${temp} = inox::get(${object.expression}, ${cStringLiteral(key)});`)
     appendPrefixedLines(lines, emitObjectThrownCheckLines(context), '  ')
-    appendPrefixedLines(lines, emitRuntimeOptionalObjectFieldValueCheck(temp, tag, context), '  ')
+    appendPrefixedLines(lines, emitDynamicObjectFieldValueCheck(temp, expression, tag, context), '  ')
     lines.push('}')
 
     return {
@@ -1291,7 +1295,7 @@ function emitPreparedDynamicObjectFieldValueExpression(
   appendLines(lines, object.lines)
   lines.push(`auto ${temp} = inox::get(${object.expression}, ${cStringLiteral(key)});`)
   appendLines(lines, emitObjectThrownCheckLines(context))
-  appendLines(lines, emitRuntimeOptionalObjectFieldValueCheck(temp, tag, context))
+  appendLines(lines, emitDynamicObjectFieldValueCheck(temp, expression, tag, context))
 
   return {
     lines,
@@ -1455,7 +1459,6 @@ function isManagedObjectFieldValueType(valueType: string): boolean {
     valueType === 'number' ||
     valueType === 'boolean' ||
     valueType === 'bytes' ||
-    valueType === 'array' ||
     valueType === 'object' ||
     valueType === 'string'
   )
@@ -1581,7 +1584,8 @@ function emitNestedObjectFunctionFieldVariableDeclarations(
     objectFunctionFieldSource(property.value),
     context,
     dependencies,
-    nestedSeenTypes
+    nestedSeenTypes,
+    false
   )
 }
 
@@ -1591,7 +1595,8 @@ function emitObjectShapeFunctionFieldVariableDeclarations(
   source: ObjectFunctionFieldSource,
   context: ObjectFunctionContext,
   dependencies: ObjectVariableDeclarationDependencies,
-  seenTypes: string[]
+  seenTypes: string[],
+  allowMissing: boolean
 ): string[] {
   const lines: string[] = []
 
@@ -1606,7 +1611,15 @@ function emitObjectShapeFunctionFieldVariableDeclarations(
       if (isSupportedObjectFunctionField(field, seenTypes)) {
         appendLines(
           lines,
-          emitObjectShapeFunctionFieldVariableDeclaration(objectName, field, source, context, dependencies, seenTypes)
+          emitObjectShapeFunctionFieldVariableDeclaration(
+            objectName,
+            field,
+            source,
+            context,
+            dependencies,
+            seenTypes,
+            allowMissing
+          )
         )
       }
     } else if (field.valueType === 'object') {
@@ -1633,7 +1646,8 @@ function emitObjectShapeFunctionFieldVariableDeclarations(
           nestedObjectFunctionFieldSource(source, field.name),
           context,
           dependencies,
-          seenTypes
+          seenTypes,
+          allowMissing
         )
       )
 
@@ -1652,12 +1666,26 @@ function emitObjectShapeFunctionFieldVariableDeclaration(
   source: ObjectFunctionFieldSource,
   context: ObjectFunctionContext,
   dependencies: ObjectVariableDeclarationDependencies,
-  seenTypes: string[]
+  seenTypes: string[],
+  allowMissing: boolean
 ): string[] {
   const value = objectFunctionFieldSourcePropertyValue(source, field.name)
   const name = emitCObjectFunctionFieldName(objectName, field.name)
 
   if (isRuntimeObjectFunctionField(field, seenTypes)) {
+    if (
+      allowMissing &&
+      (source.expression === null || typeof source.expression === 'undefined') &&
+      (source.pathName === null || typeof source.pathName === 'undefined')
+    ) {
+      registerOwnedValue(context, name)
+      const lines: string[] = []
+
+      appendLines(lines, emitPrepareOwnedValueWrite(name))
+      lines.push(`${name} = inox_null_value();`)
+      return lines
+    }
+
     return emitRuntimeObjectShapeFunctionFieldVariableDeclaration(name, field, source, value, context, dependencies)
   }
 
@@ -1705,7 +1733,9 @@ function emitObjectShapeFunctionFieldVariableDeclaration(
     ]
   }
 
-  context.diagnostics.push(diagnostic('INOX_MISSING_FIELD', `missing field ${field.name}`, source.loc))
+  if (!allowMissing) {
+    context.diagnostics.push(diagnostic('INOX_MISSING_FIELD', `missing field ${field.name}`, source.loc))
+  }
 
   return [
     `${dependencies.emitFunctionPointerVariableWithCInitializer(
@@ -1844,16 +1874,42 @@ function emitRuntimeObjectShapeFunctionFieldVariableDeclaration(
 
 function emitKnownObjectFieldValueCheck(
   value: string,
-  expectedTag: string | null,
   field: CKnownObjectField,
   expression: AnyNode,
   context: ObjectFunctionContext
 ): string[] {
-  if (objectFieldValueMayBeNullish(field)) {
-    return emitRuntimeOptionalObjectFieldValueCheck(value, expectedTag, context)
+  return emitObjectFieldRuntimeValueCheck(value, field, expression, context)
+}
+
+function emitObjectFieldRuntimeValueCheck(
+  value: string,
+  field: CObjectFieldInfo,
+  expression: AnyNode,
+  context: ObjectFunctionContext
+): string[] {
+  let validExpression = compilerLibraryNativeRuntimeValueValidExpressionForTypeRef(context.libraries, field.typeRef)
+
+  if (validExpression === null) {
+    validExpression = compilerLibraryNativeRuntimeValueValidExpressionForTypeRef(context.libraries, expression.typeRef)
   }
 
-  return emitRuntimeFieldValueCheck(value, expectedTag, expression, context)
+  if (validExpression === null) {
+    const expectedTag = objectFieldRuntimeValueTag(field)
+
+    if (objectFieldValueMayBeNullish(field)) {
+      return emitRuntimeOptionalObjectFieldValueCheck(value, expectedTag, context)
+    }
+
+    return emitRuntimeFieldValueCheck(value, expectedTag, expression, context)
+  }
+
+  const valid = validExpression.split('$value').join(value)
+  const mismatch =
+    objectFieldValueMayBeNullish(field) || expression.nullable === true
+      ? `${value}.tag != INOX_TAG_UNDEFINED && ${value}.tag != INOX_TAG_NULL && !(${valid})`
+      : `!(${valid})`
+
+  return [emitRuntimeTypeCheck(mismatch, context)]
 }
 
 function objectFieldValueMayBeNullish(field: CObjectFieldInfo): boolean {
@@ -1899,6 +1955,30 @@ function emitRuntimeOptionalObjectFieldValueCheck(
   return [
     emitRuntimeTypeCheck(
       `${value}.tag != INOX_TAG_UNDEFINED && ${value}.tag != INOX_TAG_NULL && (${value}.tag != ${expectedTag} || ${value}.as.ref == 0)`,
+      context
+    )
+  ]
+}
+
+function emitDynamicObjectFieldValueCheck(
+  value: string,
+  expression: AnyNode,
+  expectedTag: string | null,
+  context: ObjectFunctionContext
+): string[] {
+  const validExpression = compilerLibraryNativeRuntimeValueValidExpressionForTypeRef(
+    context.libraries,
+    expression.typeRef
+  )
+
+  if (validExpression === null) {
+    return emitRuntimeOptionalObjectFieldValueCheck(value, expectedTag, context)
+  }
+
+  const valid = validExpression.split('$value').join(value)
+  return [
+    emitRuntimeTypeCheck(
+      `${value}.tag != INOX_TAG_UNDEFINED && ${value}.tag != INOX_TAG_NULL && !(${valid})`,
       context
     )
   ]
@@ -2016,6 +2096,64 @@ export function emitObjectVariableDeclaration(
         continue
       }
 
+      if (field.valueType === 'function' && isSupportedObjectFunctionField(field, seenTypes)) {
+        appendLines(
+          lines,
+          emitObjectShapeFunctionFieldVariableDeclaration(
+            statement.name,
+            field,
+            {
+              expression: null,
+              loc: statement.loc,
+              pathName: null
+            },
+            context,
+            dependencies,
+            seenTypes,
+            true
+          )
+        )
+      } else if (field.valueType === 'object') {
+        if (
+          field.declaredType !== null &&
+          typeof field.declaredType !== 'undefined' &&
+          seenTypes.includes(field.declaredType)
+        ) {
+          continue
+        }
+
+        const nestedSeenTypes: string[] = []
+
+        for (const seenType of seenTypes) {
+          nestedSeenTypes.push(seenType)
+        }
+
+        if (
+          field.declaredType !== null &&
+          typeof field.declaredType !== 'undefined' &&
+          !nestedSeenTypes.includes(field.declaredType)
+        ) {
+          nestedSeenTypes.push(field.declaredType)
+        }
+
+        appendLines(
+          lines,
+          emitObjectShapeFunctionFieldVariableDeclarations(
+            `${statement.name}_${field.name}`,
+            field.shape,
+            {
+              expression: null,
+              loc: statement.loc,
+              pathName: null
+            },
+            context,
+            dependencies,
+            nestedSeenTypes,
+            true
+          )
+        )
+      }
+
       if (field.optional !== true) {
         context.diagnostics.push(diagnostic('INOX_MISSING_FIELD', `missing field ${field.name}`, statement.loc))
       }
@@ -2085,6 +2223,10 @@ function objectSpreadPropertyHasField(property: ObjectPropertyNode, fieldName: s
 
   if (shape === null || typeof shape === 'undefined') {
     return false
+  }
+
+  if (isCompilerAnyNodeShape(shape) && compilerAnyNodeFallbackShapeHasField(fieldName)) {
+    return true
   }
 
   for (const field of shape.fields) {

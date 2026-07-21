@@ -8,14 +8,15 @@ import type { CompilerLibraryDescriptor, TypeRef } from '../../compiler/extensio
 const sequenceTypeId = 'fixture#Sequence'
 const parameterTypeRef: TypeRef = { kind: 'parameter', name: 'T' }
 
-test('array spread brace-initializes an arbitrary library native facade', () => {
+test('array spread uses materialization expressions of an arbitrary sequence provider', () => {
   const result = compileSource(
     'const source: Item[] = []\nconst values: Item[] = [...source]\n',
     { libraries: createCompilerLibrarySet([fixtureLibrary()]), target: 'cc' }
   )
 
-  assert.match(result.code, /FixtureSequence inox_spread_array_\d+\{source\};/)
-  assert.doesNotMatch(result.code, /FixtureSequence inox_spread_array_\d+\(source\);/)
+  assert.match(result.code, /FixtureSequence::empty\(\)/)
+  assert.match(result.code, /\.addAll\(source\)/)
+  assert.doesNotMatch(result.code, /\.(?:length|get|push|set)\(/)
 })
 
 function fixtureLibrary(): CompilerLibraryDescriptor {
@@ -36,7 +37,7 @@ function fixtureLibrary(): CompilerLibraryDescriptor {
         libraryId: 'fixture',
         typeId: sequenceTypeId,
         declarationNames: ['FixtureSequence'],
-        valueType: 'array',
+        valueType: 'object',
         cppType: 'FixtureSequence',
         baseTypeIds: [],
         runtimeRequirements: [],
@@ -51,6 +52,7 @@ function fixtureLibrary(): CompilerLibraryDescriptor {
         operationId: 'fixture.sequence.intrinsic',
         kind: 'construct',
         runtimeRequirements: [],
+        cSequenceMaterialization: fixtureSequenceMaterialization(),
         typeParameters: [{ name: 'T', sources: [{ source: 'contextual-type-argument', argumentIndex: 0 }] }],
         resultTypeRef: nominalSequenceTypeRef(),
         minArgs: 0,
@@ -60,6 +62,15 @@ function fixtureLibrary(): CompilerLibraryDescriptor {
     ],
     intrinsicBindings: [{ role: 'array-literal', bindingId: 'intrinsic:fixture-sequence' }],
     runtimeRequirements: []
+  }
+}
+
+function fixtureSequenceMaterialization() {
+  return {
+    createExpression: 'FixtureSequence::empty()',
+    appendElementExpression: '$target.add($value)',
+    appendSpreadExpression: '$target.addAll($value)',
+    failureMode: 'thrown' as const
   }
 }
 

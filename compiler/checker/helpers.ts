@@ -3,7 +3,6 @@ import type { CompilerLibrarySet, TypeRef } from '../extensions/types.ts'
 import type { AnyNode, ValueType } from '../types.ts'
 import {
   checkerNodeAt,
-  firstPathSegment,
   isOptionalParam,
   nodeNameEquals,
   optionalParamAt,
@@ -93,7 +92,7 @@ export function paramForArgument(params: OptionalParamInfo[], index: number): Op
 }
 
 export function argumentParamValueType(param: OptionalParamInfo, libraries: CompilerLibrarySet): ValueType {
-  if (param.rest === true && param.valueType === 'array') {
+  if (param.rest === true) {
     const elementValueType = typeRefIterableElementValueType(
       param.typeRef as TypeRef | null | undefined,
       libraries
@@ -146,11 +145,19 @@ export function statementAlwaysExits(statement: AnyNode): boolean {
   }
 
   if (statement.type === 'IfStatement') {
-    if (statement.alternate === null || typeof statement.alternate === 'undefined') {
+    const consequent: AnyNode | null | undefined = statement.consequent
+    const alternate: AnyNode | null | undefined = statement.alternate
+
+    if (
+      consequent === null ||
+      typeof consequent === 'undefined' ||
+      alternate === null ||
+      typeof alternate === 'undefined'
+    ) {
       return false
     }
 
-    return statementAlwaysExits(statement.consequent) && statementAlwaysExits(statement.alternate)
+    return statementAlwaysExits(consequent) && statementAlwaysExits(alternate)
   }
 
   return false
@@ -211,9 +218,8 @@ export function isConditionValueType(valueType: ValueType): boolean {
     valueType === 'unknown' ||
     valueType === 'string' ||
     valueType === 'object' ||
-    valueType === 'array' ||
     valueType === 'bytes' ||
-    valueType === 'promise' ||
+    valueType === 'async-result' ||
     valueType === 'function'
   )
 }
@@ -260,7 +266,6 @@ export function isRuntimeNullableType(valueType: ValueType | null | undefined): 
     valueType === 'string' ||
     valueType === 'bytes' ||
     valueType === 'object' ||
-    valueType === 'array' ||
     valueType === 'function'
   )
 }

@@ -3,31 +3,28 @@ import { test } from 'node:test'
 
 import { compileFileToCModulesSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
+import { emitModuleDeclarationContract } from '../../compiler/modules/declarations.ts'
 
-test('resolved declaration program preserves the provider recursive companion ABI exactly', () => {
-  const host = createMemoryCompilerHost(
-    [
-      {
-        path: '/pkg/provider.ts',
-        source: `
+test('textual reexport declaration preserves the provider recursive companion ABI exactly', () => {
+  const typesSource = `
 type FirstDependencies = { alpha(value: string): string; };
-type RecursiveDependencies = {
+export type RecursiveDependencies = {
   create(base: EmitContext): FunctionContext;
   run(context: FunctionContext): string;
 };
 type WithDependencies<First, Recursive> = { first: First; recursive: Recursive };
-type EmitContext = WithDependencies<FirstDependencies, RecursiveDependencies>;
+export type EmitContext = WithDependencies<FirstDependencies, RecursiveDependencies>;
 type FunctionContext = WithDependencies<FirstDependencies, RecursiveDependencies> & { active: boolean };
+`
+  const providerSource = `
+import type { EmitContext, RecursiveDependencies } from './types.ts'
 
 export function collect(context: EmitContext, dependencies: RecursiveDependencies): string {
   return ''
 }
 `
-      },
-      {
-        path: '/pkg/index.ts',
-        source: `
-import { collect } from './provider.ts'
+  const consumerSource = `
+import { collect } from './facade.ts'
 
 type FirstDependencies = { alpha(value: string): string }
 type RecursiveDependencies = {
@@ -41,37 +38,80 @@ function invoke(context: EmitContext, dependencies: RecursiveDependencies): stri
   return collect(context, dependencies)
 }
 `
+  const providerHost = createMemoryCompilerHost(
+    [
+      {
+        path: '/pkg/provider.ts',
+        source: providerSource
+      },
+      {
+        path: '/pkg/types.ts',
+        source: typesSource
       }
     ],
     { root: '/' }
   )
   const providerResult = compileFileToCModulesSync('/pkg/provider.ts', {
     callMain: false,
-    host,
+    host: providerHost,
     sourceRoot: '/pkg'
   })
   const provider = providerResult.graph.modules.find((module) => module.path === '/pkg/provider.ts')
-  const resolvedProgram = provider?.declarationProgram
+  const providerProgram = provider?.declarationProgram
+  const typesProgram = providerResult.graph.modules.find((module) => module.path === '/pkg/types.ts')
+    ?.declarationProgram
 
-  assert.ok(resolvedProgram)
+  assert.ok(providerProgram)
+  assert.ok(typesProgram)
+  const providerDeclarationSource = emitModuleDeclarationContract(providerProgram)
+  const typesDeclarationSource = emitModuleDeclarationContract(typesProgram)
+  const facadeHost = createMemoryCompilerHost(
+    [
+      { path: '/pkg/facade.ts', source: "export { collect } from './provider.ts'\n" },
+      { path: '/pkg/provider.d.ts', source: providerDeclarationSource },
+      { path: '/pkg/types.d.ts', source: typesDeclarationSource }
+    ],
+    { root: '/' }
+  )
+  const facadeResult = compileFileToCModulesSync('/pkg/facade.ts', {
+    callMain: false,
+    declarationImports: [
+      { sourcePath: '/pkg/provider.ts', declarationPath: '/pkg/provider.d.ts' },
+      { sourcePath: '/pkg/types.ts', declarationPath: '/pkg/types.d.ts' }
+    ],
+    host: facadeHost,
+    sourceRoot: '/pkg'
+  })
+  const facadeProgram = facadeResult.graph.modules.find((module) => module.path === '/pkg/facade.ts')
+    ?.declarationProgram
 
-  const collect = resolvedProgram.body.find((item) => item.name === 'collect')
-  const contextShape = collect?.params[0]?.shape
+  assert.ok(facadeProgram)
+  const facadeDeclarationSource = emitModuleDeclarationContract(facadeProgram)
+  const host = createMemoryCompilerHost(
+    [
+      { path: '/pkg/index.ts', source: consumerSource },
+      { path: '/pkg/provider.d.ts', source: providerDeclarationSource },
+      { path: '/pkg/facade.d.ts', source: facadeDeclarationSource },
+      { path: '/pkg/types.d.ts', source: typesDeclarationSource }
+    ],
+    { root: '/' }
+  )
   const result = compileFileToCModulesSync('/pkg/index.ts', {
     callMain: false,
-    declarationImports: [{ sourcePath: '/pkg/provider.ts', resolvedProgram }],
+    declarationImports: [
+      { sourcePath: '/pkg/provider.ts', declarationPath: '/pkg/provider.d.ts' },
+      { sourcePath: '/pkg/facade.ts', declarationPath: '/pkg/facade.d.ts' },
+      { sourcePath: '/pkg/types.ts', declarationPath: '/pkg/types.d.ts' }
+    ],
     host,
     sourceRoot: '/pkg'
   })
   const source = result.files.find((file) => file.path === 'index.cc')
 
-  assert.equal(contextShape?.fields[0]?.name, 'first')
-  assert.equal(contextShape?.fields[1]?.name, 'recursive')
-  assert.equal(contextShape?.fields[0]?.shape?.fields[0]?.name, 'alpha')
   assert.ok(source)
   assert.match(
     source.code,
-    /collect\(context, inox_objfn_context_first_alpha, dependencies, inox_objfn_dependencies_create, inox_objfn_dependencies_run\)/
+    /collect\(context, inox_objfn_context_first_alpha, inox_objfn_context_recursive_create, inox_objfn_context_recursive_run, dependencies, inox_objfn_dependencies_create, inox_objfn_dependencies_run\)/
   )
   assert.doesNotMatch(source.code, /inox_function_pointer_adapter_/)
 })

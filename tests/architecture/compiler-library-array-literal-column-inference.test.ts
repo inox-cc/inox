@@ -70,7 +70,7 @@ function fixtureLibraries(): CompilerLibrarySet {
         resultTypeRef: nativeTableTypeRef(),
         minArgs: 1,
         maxArgs: 1,
-        argumentChecks: [{ valueTypes: ['array'] }]
+        argumentChecks: [{ valueTypes: ['object'] }]
       }
     ]
   }

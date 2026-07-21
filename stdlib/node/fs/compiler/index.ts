@@ -14,6 +14,7 @@ import { errorTypeRef } from '../../../global/error/compiler/index.ts'
 
 const libraryId = 'node:fs'
 const collectionsLibraryId = 'global:collections'
+const arrayRuntimeRequirement = `${collectionsLibraryId}#array`
 const arrayTypeId = `${collectionsLibraryId}#Array`
 const promiseTypeId = 'global:promise#Promise'
 const promisesLibraryId = 'node:fs/promises'
@@ -86,6 +87,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       cppType: 'FsDirent',
       baseTypeIds: [],
       runtimeRequirements: [runtimeRequirement],
+      cValueAdapter: 'FsDirent(inox::Value($value))',
       fields: [{ name: 'name', valueType: 'string', readonly: true }]
     }
   ],
@@ -94,7 +96,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: ['async-runtime', 'collections', 'managed-values', 'node:buffer', 'string-bytes'],
+      dependencies: ['async-runtime', arrayRuntimeRequirement, 'managed-values', 'node:buffer', 'string-bytes'],
       cPreludeIncludes: ['inox/fs.h'],
       capabilities: ['fs']
     }

@@ -32,6 +32,7 @@ export function callExpressionArgumentLabel(expression: AnyNode): string {
 export function dynamicShapeField(shape: ObjectShapeInfo, name: string): AnyNode {
   if (shape.dynamicField !== null && typeof shape.dynamicField !== 'undefined') {
     const field = shape.dynamicField
+    const nestedShape = field.shape ?? dynamicUnknownObjectShape(field.loc)
 
     return {
       name,
@@ -47,20 +48,44 @@ export function dynamicShapeField(shape: ObjectShapeInfo, name: string): AnyNode
       typeRef: field.typeRef,
       valueType: field.valueType,
       nullable: field.nullable,
-      promiseValueType: field.promiseValueType,
+      asyncResultValueType: field.asyncResultValueType,
       functionType: field.functionType,
-      shape: field.shape,
+      shape: nestedShape,
       className: field.className
     }
   }
+
+  const nestedShape = dynamicUnknownObjectShape(null)
 
   return {
     name,
     optional: true,
     readonly: false,
     ownership: 'strong',
-    valueType: 'unknown'
+    valueType: 'unknown',
+    shape: nestedShape
   }
+}
+
+function dynamicUnknownObjectShape(loc: SourceLocation | null | undefined): ObjectShapeInfo {
+  const dynamicField: AnyNode = {
+    name: '',
+    optional: true,
+    readonly: false,
+    ownership: 'strong',
+    valueType: 'unknown',
+    nullable: true,
+    loc: loc ?? { line: 1, column: 1 }
+  }
+  const shape: ObjectShapeInfo = {
+    kind: 'object',
+    dynamic: true,
+    dynamicField,
+    fields: []
+  }
+
+  dynamicField.shape = shape
+  return shape
 }
 
 export function createArrowFunctionTypeMetadata(
@@ -86,7 +111,7 @@ export function createArrowFunctionTypeMetadata(
     returnTypeRef: expression.returnTypeRef ?? null,
     declaredReturnType: expression.declaredReturnType,
     returnNullable: expression.returnNullable === true,
-    returnPromiseValueType: expression.returnPromiseValueType ?? null,
+    returnAsyncResultValueType: expression.returnAsyncResultValueType ?? null,
     returnShape
   }
 }
@@ -119,25 +144,25 @@ export function knownCheckedExpressionType(expression: AnyNode): ValueType | nul
   return null
 }
 
-export function resolveExpressionPromiseRejectionValueType(expression: AnyNode | null | undefined): ValueType | null {
+export function resolveExpressionAsyncResultRejectionValueType(expression: AnyNode | null | undefined): ValueType | null {
   if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
   if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
     if (
-      expression.valueType === 'promise' &&
-      expression.promiseRejectionValueType !== null &&
-      typeof expression.promiseRejectionValueType !== 'undefined'
+      expression.valueType === 'async-result' &&
+      expression.asyncResultRejectionValueType !== null &&
+      typeof expression.asyncResultRejectionValueType !== 'undefined'
     ) {
-      return expression.promiseRejectionValueType
+      return expression.asyncResultRejectionValueType
     }
 
     return null
   }
 
   if (expression.type === 'MemberExpression') {
-    const objectRejectionValueType = resolveExpressionPromiseRejectionValueType(expression.object)
+    const objectRejectionValueType = resolveExpressionAsyncResultRejectionValueType(expression.object)
 
     if (objectRejectionValueType !== null && typeof objectRejectionValueType !== 'undefined') {
       return objectRejectionValueType
@@ -147,15 +172,15 @@ export function resolveExpressionPromiseRejectionValueType(expression: AnyNode |
   return null
 }
 
-export function resolveExpressionPromiseRejectionIntrinsicRole(
+export function resolveExpressionAsyncResultRejectionIntrinsicRole(
   expression: AnyNode | null | undefined
 ): IntrinsicRole | null {
   if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
-  if (expression.valueType === 'promise') {
-    const role = expression.promiseRejectionIntrinsicRole
+  if (expression.valueType === 'async-result') {
+    const role = expression.asyncResultRejectionIntrinsicRole
 
     if (role !== null && typeof role !== 'undefined') {
       return role
@@ -163,7 +188,7 @@ export function resolveExpressionPromiseRejectionIntrinsicRole(
   }
 
   if (expression.type === 'MemberExpression') {
-    return resolveExpressionPromiseRejectionIntrinsicRole(expression.object)
+    return resolveExpressionAsyncResultRejectionIntrinsicRole(expression.object)
   }
 
   return null

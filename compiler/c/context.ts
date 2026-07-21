@@ -1,19 +1,20 @@
 import type { AnyNode, Diagnostic, IrFunctionEffect } from '../types.ts'
 import type { RuntimeEntrypointAdapterDescriptor } from '../extensions/types.ts'
 import type {
-  CArrayElementInfo,
   CAsyncTaskWrapper,
   CCallbackWrapper,
   CClassInfo,
   CFunctionParam,
   CFunctionPointerAdapter,
   CFunctionPointerRuntimeAdapter,
+  CPreparedFunctionCompanion,
   CFunctionType,
   CObjectAccessorReturnPath,
   CObjectShape,
   CObjectShapeField,
-  CPromiseChainWrapper,
-  CPromiseConstructorHandler,
+  CRuntimeTypeAlternative,
+  CAsyncResultChainWrapper,
+  CAsyncResultConstructorHandler,
   CCompilerLibrarySet,
   CTypeRefMap
 } from './types.ts'
@@ -34,17 +35,15 @@ export type CLoopFlowTarget = {
   used?: boolean
 }
 
-export type CArrayShapeMap = Map<string, CArrayElementInfo[]>
 export type CAsyncTaskWrapperMap = Map<string, CAsyncTaskWrapper>
 export type CBooleanMap = Map<string, boolean>
 export type CCallbackWrapperMap = Map<string, CCallbackWrapper>
 export type CFunctionTypeMap = Map<string, CFunctionType>
 export type CFunctionPointerAdapterMap = Map<string, string>
-export type CNumberMap = Map<string, number>
 export type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
 export type CObjectAccessorReturnPathMap = Map<string, CObjectAccessorReturnPath>
-export type CPromiseChainWrapperMap = Map<string, CPromiseChainWrapper>
-export type CPromiseConstructorHandlerMap = Map<string, CPromiseConstructorHandler>
+export type CAsyncResultChainWrapperMap = Map<string, CAsyncResultChainWrapper>
+export type CAsyncResultConstructorHandlerMap = Map<string, CAsyncResultConstructorHandler>
 export type CStringMap = Map<string, string>
 export type CStringNullableMap = Map<string, string | null>
 export type CStringSet = Set<string>
@@ -69,20 +68,6 @@ export function cloneCStringMap(values: CStringMap): CStringMap {
   return new Map(values)
 }
 
-export function cloneCNumberMap(values: CNumberMap): CNumberMap {
-  return new Map(values)
-}
-
-export function cloneCArrayShapeMap(values: CArrayShapeMap | null | undefined): CArrayShapeMap {
-  const result: CArrayShapeMap = new Map()
-
-  if (values === null || typeof values === 'undefined') {
-    return result
-  }
-
-  return new Map(values)
-}
-
 export function cloneCFunctionTypeMap(values: CFunctionTypeMap | null | undefined): CFunctionTypeMap {
   const result: CFunctionTypeMap = new Map()
 
@@ -103,10 +88,10 @@ export function cloneCObjectShapeFieldMap(values: CObjectShapeFieldMap | null | 
   return new Map(values)
 }
 
-export function cloneCPromiseConstructorHandlerMap(
-  values: CPromiseConstructorHandlerMap | null | undefined
-): CPromiseConstructorHandlerMap {
-  const result: CPromiseConstructorHandlerMap = new Map()
+export function cloneCAsyncResultConstructorHandlerMap(
+  values: CAsyncResultConstructorHandlerMap | null | undefined
+): CAsyncResultConstructorHandlerMap {
+  const result: CAsyncResultConstructorHandlerMap = new Map()
 
   if (values === null || typeof values === 'undefined') {
     return result
@@ -116,14 +101,12 @@ export function cloneCPromiseConstructorHandlerMap(
 }
 
 export type CEmitContextWithDependencies<
-  ArrayDependencies,
   AsyncTaskDependencies,
   ClassDependencies,
   NullableDependencies,
   StatementDependencies,
   StringDependencies
 > = {
-  arrayLoweringDependencies: ArrayDependencies
   asyncTaskLoweringDependencies: AsyncTaskDependencies
   asyncTaskWrappers: CAsyncTaskWrapperMap
   boxedMutableCaptureDeclarations: Set<AnyNode>
@@ -144,7 +127,8 @@ export type CEmitContextWithDependencies<
   functionPointerRuntimeAdapters: CFunctionPointerRuntimeAdapter[]
   functionReturnDeclaredTypes: CStringNullableMap
   functionReturnNullables: CBooleanMap
-  functionReturnPromiseValueTypes: CStringNullableMap
+  functionReturnRuntimeTypeAlternatives: Map<string, CRuntimeTypeAlternative[]>
+  functionReturnAsyncResultValueTypes: CStringNullableMap
   functionReturnShapes: Map<string, CObjectShape | null>
   functionReturnTypeRefs: CTypeRefMap
   functionReturnTypes: CStringMap
@@ -163,8 +147,8 @@ export type CEmitContextWithDependencies<
   nullableLoweringDependencies: NullableDependencies
   runtimeEntryPath: string | null
   runtimeEntrypointAdapter: RuntimeEntrypointAdapterDescriptor | null
-  promiseChainArrowWrappers: Map<AnyNode, CPromiseChainWrapper>
-  promiseChainWrappers: CPromiseChainWrapperMap
+  asyncResultChainArrowWrappers: Map<AnyNode, CAsyncResultChainWrapper>
+  asyncResultChainWrappers: CAsyncResultChainWrapperMap
   runtimeFunctionParams: CFunctionTypeMap
   statementLoweringDependencies: StatementDependencies
   stringLoweringDependencies: StringDependencies
@@ -172,7 +156,7 @@ export type CEmitContextWithDependencies<
   unhandledRejectionFlag: string | null
 }
 
-export type CEmitContext = CEmitContextWithDependencies<object, object, object, object, object, object>
+export type CEmitContext = CEmitContextWithDependencies<object, object, object, object, object>
 
 export type CFailureContext = {
   cleanupEnabled: boolean
@@ -201,10 +185,10 @@ export type COwnedValueContext = {
   ownedValues: string[]
 }
 
-export type COwnedPromiseContext = {
-  ownedPromises: string[]
-  promiseRejectionValueTypes: CStringMap
-  promiseValueTypes: CStringMap
+export type COwnedAsyncResultContext = {
+  ownedAsyncResults: string[]
+  asyncResultRejectionValueTypes: CStringMap
+  asyncResultValueTypes: CStringMap
   variables: CStringMap
 }
 
@@ -218,8 +202,6 @@ type CNullableScalarContext = {
 }
 
 type CVariableScopeContext = {
-  arrayLengths: CNumberMap
-  arrayShapes: CArrayShapeMap
   boxedVariables: CStringSet
   classInstanceTypes: CStringMap
   cppStringValues: CStringSet
@@ -233,10 +215,9 @@ type CVariableScopeContext = {
   objectAliases: CStringMap
   objectDeclaredTypes: CStringMap
   objectShapes: CObjectShapeFieldMap
-  promiseConstructorHandlers: CPromiseConstructorHandlerMap
-  promiseRejectionValueTypes: CStringMap
-  promiseValueTypes: CStringMap
-  runtimeArrayElementTypes: CStringMap
+  asyncResultConstructorHandlers: CAsyncResultConstructorHandlerMap
+  asyncResultRejectionValueTypes: CStringMap
+  asyncResultValueTypes: CStringMap
   runtimeCallbacks: CStringSet
   runtimeStringValues: CStringMap
   runtimeStrings: CStringSet
@@ -245,22 +226,18 @@ type CVariableScopeContext = {
 }
 
 export type CFunctionContextWithDependencies<
-  ArrayDependencies,
   AsyncTaskDependencies,
   ClassDependencies,
   NullableDependencies,
   StatementDependencies,
   StringDependencies
 > = CEmitContextWithDependencies<
-  ArrayDependencies,
   AsyncTaskDependencies,
   ClassDependencies,
   NullableDependencies,
   StatementDependencies,
   StringDependencies
 > & {
-  arrayLengths: CNumberMap
-  arrayShapes: CArrayShapeMap
   breakFlowUsed: boolean
   breakTargets: CLoopFlowTarget[]
   boxedValueTypes: CStringMap
@@ -283,6 +260,7 @@ export type CFunctionContextWithDependencies<
   failureStatementUsed?: boolean
   functionErrorOut: string | null
   functionReturnOut: string | null
+  returnFunctionCompanions: CPreparedFunctionCompanion[]
   functionTypes: CFunctionTypeMap
   localValueNames: CStringSet
   moduleValueDeclarationScope: boolean
@@ -290,12 +268,12 @@ export type CFunctionContextWithDependencies<
   nullableVariables: CStringSet
   objectAliases: CStringMap
   objectDeclaredTypes: CStringMap
-  ownedPromises: string[]
+  ownedAsyncResults: string[]
   ownedValues: string[]
   objectShapes: CObjectShapeFieldMap
-  promiseConstructorHandlers: CPromiseConstructorHandlerMap
-  promiseRejectionValueTypes: CStringMap
-  promiseValueTypes: CStringMap
+  asyncResultConstructorHandlers: CAsyncResultConstructorHandlerMap
+  asyncResultRejectionValueTypes: CStringMap
+  asyncResultValueTypes: CStringMap
   returnNullable: boolean
   returnLibraryNative: boolean
   returnFlowUsed: boolean
@@ -307,7 +285,6 @@ export type CFunctionContextWithDependencies<
   runtimeCallbackReturnShape?: CObjectShape | null
   runtimeCallbackReturnType?: string
   runtimeCallbacks: CStringSet
-  runtimeArrayElementTypes: CStringMap
   runtimeStringValues: CStringMap
   runtimeStrings: CStringSet
   runtimeValueStorageNames: CStringSet
@@ -318,11 +295,9 @@ export type CFunctionContextWithDependencies<
   variables: CStringMap
 }
 
-export type CFunctionContext = CFunctionContextWithDependencies<object, object, object, object, object, object>
+export type CFunctionContext = CFunctionContextWithDependencies<object, object, object, object, object>
 
 export type CVariableScopeSnapshot = {
-  arrayLengths: CNumberMap
-  arrayShapes: CArrayShapeMap
   boxedVariables: CStringSet
   classInstanceTypes: CStringMap
   cppStringValues: CStringSet
@@ -335,10 +310,9 @@ export type CVariableScopeSnapshot = {
   objectAliases: CStringMap
   objectDeclaredTypes: CStringMap
   objectShapes: CObjectShapeFieldMap
-  promiseConstructorHandlers: CPromiseConstructorHandlerMap
-  promiseRejectionValueTypes: CStringMap
-  promiseValueTypes: CStringMap
-  runtimeArrayElementTypes: CStringMap
+  asyncResultConstructorHandlers: CAsyncResultConstructorHandlerMap
+  asyncResultRejectionValueTypes: CStringMap
+  asyncResultValueTypes: CStringMap
   runtimeCallbacks: CStringSet
   runtimeStringValues: CStringMap
   runtimeStrings: CStringSet
@@ -352,7 +326,6 @@ export type CNullableScalarNarrowingSnapshot = {
 }
 
 export function createFunctionContext<
-  ArrayDependencies,
   AsyncTaskDependencies,
   ClassDependencies,
   NullableDependencies,
@@ -360,7 +333,6 @@ export function createFunctionContext<
   StringDependencies
 >(
   baseContext: CEmitContextWithDependencies<
-    ArrayDependencies,
     AsyncTaskDependencies,
     ClassDependencies,
     NullableDependencies,
@@ -370,7 +342,6 @@ export function createFunctionContext<
   returnType: string,
   returnNullable: boolean
 ): CFunctionContextWithDependencies<
-  ArrayDependencies,
   AsyncTaskDependencies,
   ClassDependencies,
   NullableDependencies,
@@ -378,7 +349,6 @@ export function createFunctionContext<
   StringDependencies
 > {
   return {
-    arrayLoweringDependencies: baseContext.arrayLoweringDependencies,
     asyncTaskLoweringDependencies: baseContext.asyncTaskLoweringDependencies,
     asyncTaskWrappers: baseContext.asyncTaskWrappers,
     boxedMutableCaptureDeclarations: baseContext.boxedMutableCaptureDeclarations,
@@ -399,7 +369,8 @@ export function createFunctionContext<
     functionPointerRuntimeAdapters: baseContext.functionPointerRuntimeAdapters,
     functionReturnDeclaredTypes: baseContext.functionReturnDeclaredTypes,
     functionReturnNullables: baseContext.functionReturnNullables,
-    functionReturnPromiseValueTypes: baseContext.functionReturnPromiseValueTypes,
+    functionReturnRuntimeTypeAlternatives: baseContext.functionReturnRuntimeTypeAlternatives,
+    functionReturnAsyncResultValueTypes: baseContext.functionReturnAsyncResultValueTypes,
     functionReturnShapes: baseContext.functionReturnShapes,
     functionReturnTypeRefs: baseContext.functionReturnTypeRefs,
     functionReturnTypes: baseContext.functionReturnTypes,
@@ -417,15 +388,13 @@ export function createFunctionContext<
     nullableLoweringDependencies: baseContext.nullableLoweringDependencies,
     runtimeEntryPath: baseContext.runtimeEntryPath,
     runtimeEntrypointAdapter: baseContext.runtimeEntrypointAdapter,
-    promiseChainArrowWrappers: baseContext.promiseChainArrowWrappers,
-    promiseChainWrappers: baseContext.promiseChainWrappers,
+    asyncResultChainArrowWrappers: baseContext.asyncResultChainArrowWrappers,
+    asyncResultChainWrappers: baseContext.asyncResultChainWrappers,
     runtimeFunctionParams: baseContext.runtimeFunctionParams,
     statementLoweringDependencies: baseContext.statementLoweringDependencies,
     stringLoweringDependencies: baseContext.stringLoweringDependencies,
     throwingFunctions: baseContext.throwingFunctions,
     unhandledRejectionFlag: baseContext.unhandledRejectionFlag,
-    arrayLengths: new Map(),
-    arrayShapes: new Map(),
     breakFlowUsed: false,
     breakTargets: [],
     boxedValueTypes: new Map(),
@@ -443,6 +412,7 @@ export function createFunctionContext<
     errorTargetActiveFlags: [],
     functionErrorOut: null,
     functionReturnOut: null,
+    returnFunctionCompanions: [],
     functionTypes: new Map(),
     localValueNames: new Set(),
     eventLoopUsed: false,
@@ -454,16 +424,15 @@ export function createFunctionContext<
     objectAliases: new Map(),
     objectDeclaredTypes: new Map(),
     objectShapes: cloneCObjectShapeFieldMap(baseContext.moduleObjectShapes),
-    ownedPromises: [],
+    ownedAsyncResults: [],
     ownedValues: [],
-    promiseRejectionValueTypes: new Map(),
-    promiseConstructorHandlers: new Map(),
-    promiseValueTypes: new Map(),
+    asyncResultRejectionValueTypes: new Map(),
+    asyncResultConstructorHandlers: new Map(),
+    asyncResultValueTypes: new Map(),
     returnFlowUsed: false,
     returnLibraryNative: false,
     returnTargets: [],
     runtimeCallbacks: new Set(),
-    runtimeArrayElementTypes: new Map(),
     runtimeStringValues: new Map(),
     runtimeStrings: new Set(),
     runtimeValueStorageNames: cloneCStringSet(baseContext.moduleRuntimeValueNames),
@@ -531,19 +500,19 @@ export function registerOwnedValue(context: COwnedValueContext, name: string): v
   }
 }
 
-export function registerOwnedPromise(
-  context: COwnedPromiseContext,
+export function registerOwnedAsyncResult(
+  context: COwnedAsyncResultContext,
   name: string,
   valueType: string = 'unknown',
   rejectionValueType: string = 'unknown'
 ): void {
-  if (!stringArrayHas(context.ownedPromises, name)) {
-    context.ownedPromises.push(name)
+  if (!stringArrayHas(context.ownedAsyncResults, name)) {
+    context.ownedAsyncResults.push(name)
   }
 
-  context.variables.set(name, 'promise')
-  context.promiseValueTypes.set(name, valueType)
-  context.promiseRejectionValueTypes.set(name, rejectionValueType)
+  context.variables.set(name, 'async-result')
+  context.asyncResultValueTypes.set(name, valueType)
+  context.asyncResultRejectionValueTypes.set(name, rejectionValueType)
 }
 
 export function registerEventLoop(context: CEventLoopContext): void {
@@ -620,10 +589,10 @@ type COwnedValueDeclarationContext = {
   ownedValues?: string[] | null
 }
 
-type COwnedPromiseDeclarationContext = {
+type COwnedAsyncResultDeclarationContext = {
   cleanupEnabled?: boolean | null
   libraries: CCompilerLibrarySet
-  ownedPromises?: string[] | null
+  ownedAsyncResults?: string[] | null
 }
 
 type CEventLoopDeclarationContext = {
@@ -670,7 +639,7 @@ export function emitReturnValueDeclarations(context: CReturnValueDeclarationCont
     return [`${emitCReturnType(returnType, false, context.returnShape)} inox_return{};`]
   }
 
-  if (returnType === 'promise') {
+  if (returnType === 'async-result') {
     if (context.libraries === null || typeof context.libraries === 'undefined') {
       throw new Error('C async-result return storage requires compiler libraries')
     }
@@ -750,20 +719,20 @@ export function emitOwnedValueDeclarations(context: COwnedValueDeclarationContex
   return lines
 }
 
-export function emitOwnedPromiseDeclarations(context: COwnedPromiseDeclarationContext): string[] {
+export function emitOwnedAsyncResultDeclarations(context: COwnedAsyncResultDeclarationContext): string[] {
   const lines: string[] = []
-  let ownedPromises: string[] = []
+  let ownedAsyncResults: string[] = []
   const cppType = compilerLibraryIntrinsicNativeCppType(context.libraries, 'async-result')
 
   if (cppType === null) {
     return lines
   }
 
-  if (context.ownedPromises !== null && typeof context.ownedPromises !== 'undefined') {
-    ownedPromises = context.ownedPromises
+  if (context.ownedAsyncResults !== null && typeof context.ownedAsyncResults !== 'undefined') {
+    ownedAsyncResults = context.ownedAsyncResults
   }
 
-  for (const name of ownedPromises) {
+  for (const name of ownedAsyncResults) {
     lines.push(`${cppType} ${emitCLocalName(name)};`)
   }
 
@@ -814,7 +783,7 @@ export function emitOwnedValueCleanup(_context: CFunctionContext): string[] {
   return []
 }
 
-export function emitOwnedPromiseCleanup(context: CFunctionContext): string[] {
+export function emitOwnedAsyncResultCleanup(_context: CFunctionContext): string[] {
   return []
 }
 
@@ -842,7 +811,7 @@ export function emitEventLoopDrain(context: CFunctionContext): string[] {
   return [emitStatusCheck('inox::run()', context)]
 }
 
-export function emitEventLoopCleanup(context: CFunctionContext): string[] {
+export function emitEventLoopCleanup(_context: CFunctionContext): string[] {
   return []
 }
 
@@ -927,8 +896,6 @@ export function nextCName(context: CNameContext, prefix: string): string {
 
 export function pushVariableScope(context: CVariableScopeContext): CVariableScopeSnapshot {
   const previousVariables = context.variables
-  const previousArrayLengths = context.arrayLengths
-  const previousArrayShapes = context.arrayShapes
   const previousBoxedVariables = context.boxedVariables
   const previousClassInstanceTypes = context.classInstanceTypes
   const previousCppStringValues = context.cppStringValues
@@ -941,18 +908,15 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   const previousObjectAliases = context.objectAliases
   const previousObjectDeclaredTypes = context.objectDeclaredTypes
   const previousObjectShapes = context.objectShapes
-  const previousPromiseConstructorHandlers = context.promiseConstructorHandlers
-  const previousPromiseRejectionValueTypes = context.promiseRejectionValueTypes
-  const previousPromiseValueTypes = context.promiseValueTypes
+  const previousAsyncResultConstructorHandlers = context.asyncResultConstructorHandlers
+  const previousAsyncResultRejectionValueTypes = context.asyncResultRejectionValueTypes
+  const previousAsyncResultValueTypes = context.asyncResultValueTypes
   const previousRuntimeCallbacks = context.runtimeCallbacks
-  const previousRuntimeArrayElementTypes = context.runtimeArrayElementTypes
   const previousRuntimeStringValues = context.runtimeStringValues
   const previousRuntimeStrings = context.runtimeStrings
   const previousRuntimeValueStorageNames = context.runtimeValueStorageNames
 
   context.variables = cloneCStringMap(previousVariables)
-  context.arrayLengths = cloneCNumberMap(previousArrayLengths)
-  context.arrayShapes = cloneCArrayShapeMap(previousArrayShapes)
   context.boxedVariables = cloneCStringSet(previousBoxedVariables)
   context.classInstanceTypes = cloneCStringMap(previousClassInstanceTypes)
   context.cppStringValues = cloneCStringSet(previousCppStringValues)
@@ -965,18 +929,15 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   context.objectAliases = cloneCStringMap(previousObjectAliases)
   context.objectDeclaredTypes = new Map(previousObjectDeclaredTypes)
   context.objectShapes = cloneCObjectShapeFieldMap(previousObjectShapes)
-  context.promiseConstructorHandlers = cloneCPromiseConstructorHandlerMap(previousPromiseConstructorHandlers)
-  context.promiseRejectionValueTypes = cloneCStringMap(previousPromiseRejectionValueTypes)
-  context.promiseValueTypes = cloneCStringMap(previousPromiseValueTypes)
+  context.asyncResultConstructorHandlers = cloneCAsyncResultConstructorHandlerMap(previousAsyncResultConstructorHandlers)
+  context.asyncResultRejectionValueTypes = cloneCStringMap(previousAsyncResultRejectionValueTypes)
+  context.asyncResultValueTypes = cloneCStringMap(previousAsyncResultValueTypes)
   context.runtimeCallbacks = cloneCStringSet(previousRuntimeCallbacks)
-  context.runtimeArrayElementTypes = cloneCStringMap(previousRuntimeArrayElementTypes)
   context.runtimeStringValues = cloneCStringMap(previousRuntimeStringValues)
   context.runtimeStrings = cloneCStringSet(previousRuntimeStrings)
   context.runtimeValueStorageNames = cloneCStringSet(previousRuntimeValueStorageNames)
 
   return {
-    arrayLengths: previousArrayLengths,
-    arrayShapes: previousArrayShapes,
     boxedVariables: previousBoxedVariables,
     classInstanceTypes: previousClassInstanceTypes,
     cppStringValues: previousCppStringValues,
@@ -989,10 +950,9 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
     objectAliases: previousObjectAliases,
     objectDeclaredTypes: previousObjectDeclaredTypes,
     objectShapes: previousObjectShapes,
-    promiseConstructorHandlers: previousPromiseConstructorHandlers,
-    promiseRejectionValueTypes: previousPromiseRejectionValueTypes,
-    promiseValueTypes: previousPromiseValueTypes,
-    runtimeArrayElementTypes: previousRuntimeArrayElementTypes,
+    asyncResultConstructorHandlers: previousAsyncResultConstructorHandlers,
+    asyncResultRejectionValueTypes: previousAsyncResultRejectionValueTypes,
+    asyncResultValueTypes: previousAsyncResultValueTypes,
     runtimeCallbacks: previousRuntimeCallbacks,
     runtimeStringValues: previousRuntimeStringValues,
     runtimeStrings: previousRuntimeStrings,
@@ -1002,11 +962,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
 }
 
 export function restoreVariableScope(context: CVariableScopeContext, snapshot: CVariableScopeSnapshot): void {
-  mergeScopedArrayMetadata(context, snapshot)
-
   context.variables = snapshot.variables
-  context.arrayLengths = snapshot.arrayLengths
-  context.arrayShapes = snapshot.arrayShapes
   context.boxedVariables = snapshot.boxedVariables
   context.classInstanceTypes = snapshot.classInstanceTypes
   context.cppStringValues = snapshot.cppStringValues
@@ -1019,128 +975,13 @@ export function restoreVariableScope(context: CVariableScopeContext, snapshot: C
   context.objectAliases = snapshot.objectAliases
   context.objectDeclaredTypes = snapshot.objectDeclaredTypes
   context.objectShapes = snapshot.objectShapes
-  context.promiseConstructorHandlers = snapshot.promiseConstructorHandlers
-  context.promiseRejectionValueTypes = snapshot.promiseRejectionValueTypes
-  context.promiseValueTypes = snapshot.promiseValueTypes
+  context.asyncResultConstructorHandlers = snapshot.asyncResultConstructorHandlers
+  context.asyncResultRejectionValueTypes = snapshot.asyncResultRejectionValueTypes
+  context.asyncResultValueTypes = snapshot.asyncResultValueTypes
   context.runtimeCallbacks = snapshot.runtimeCallbacks
-  context.runtimeArrayElementTypes = snapshot.runtimeArrayElementTypes
   context.runtimeStringValues = snapshot.runtimeStringValues
   context.runtimeStrings = snapshot.runtimeStrings
   context.runtimeValueStorageNames = snapshot.runtimeValueStorageNames
-}
-
-function mergeScopedArrayMetadata(context: CVariableScopeContext, snapshot: CVariableScopeSnapshot): void {
-  for (const name of snapshot.variables.keys()) {
-    if (snapshot.variables.get(name) !== 'array') {
-      continue
-    }
-
-    const lengthChanged = !optionalNumbersEqual(context.arrayLengths.get(name), snapshot.arrayLengths.get(name))
-    const shapeChanged = !optionalArrayShapesEqual(context.arrayShapes.get(name), snapshot.arrayShapes.get(name))
-
-    if (lengthChanged || shapeChanged) {
-      const elementType = mergedScopedArrayElementType(context, snapshot, name)
-      snapshot.arrayLengths.delete(name)
-      snapshot.arrayShapes.delete(name)
-
-      if (elementType !== null && typeof elementType !== 'undefined') {
-        snapshot.runtimeArrayElementTypes.set(name, elementType)
-      }
-    } else {
-      mergeScopedStringMapValue(context.runtimeArrayElementTypes, snapshot.runtimeArrayElementTypes, name)
-    }
-  }
-}
-
-function optionalNumbersEqual(first: number | null | undefined, second: number | null | undefined): boolean {
-  if (first === null || typeof first === 'undefined') {
-    return second === null || typeof second === 'undefined'
-  }
-
-  if (second === null || typeof second === 'undefined') {
-    return false
-  }
-
-  return first === second
-}
-
-function optionalArrayShapesEqual(
-  first: CArrayElementInfo[] | null | undefined,
-  second: CArrayElementInfo[] | null | undefined
-): boolean {
-  if (first === null || typeof first === 'undefined') {
-    return second === null || typeof second === 'undefined'
-  }
-
-  if (second === null || typeof second === 'undefined') {
-    return false
-  }
-
-  if (first.length !== second.length) {
-    return false
-  }
-
-  for (let index = 0; index < first.length; index = index + 1) {
-    if (first[index].valueType !== second[index].valueType) {
-      return false
-    }
-  }
-
-  return true
-}
-
-function mergedScopedArrayElementType(
-  context: CVariableScopeContext,
-  snapshot: CVariableScopeSnapshot,
-  name: string
-): string | null {
-  const scopedRuntimeType = context.runtimeArrayElementTypes.get(name)
-
-  if (scopedRuntimeType !== null && typeof scopedRuntimeType !== 'undefined') {
-    return scopedRuntimeType
-  }
-
-  const previousRuntimeType = snapshot.runtimeArrayElementTypes.get(name)
-
-  if (previousRuntimeType !== null && typeof previousRuntimeType !== 'undefined') {
-    return previousRuntimeType
-  }
-
-  const scopedShapeType = arrayShapeElementType(context.arrayShapes.get(name))
-
-  if (scopedShapeType !== null && typeof scopedShapeType !== 'undefined') {
-    return scopedShapeType
-  }
-
-  return arrayShapeElementType(snapshot.arrayShapes.get(name))
-}
-
-function arrayShapeElementType(elements: CArrayElementInfo[] | null | undefined): string | null {
-  if (elements === null || typeof elements === 'undefined' || elements.length === 0) {
-    return null
-  }
-
-  let elementType: string | null = null
-
-  for (const element of elements) {
-    if (elementType === null || typeof elementType === 'undefined') {
-      elementType = element.valueType
-    } else if (elementType !== element.valueType) {
-      return 'unknown'
-    }
-  }
-
-  return elementType
-}
-
-function mergeScopedStringMapValue(source: CStringMap, target: CStringMap, name: string): void {
-  const value = source.get(name)
-
-  if (value !== null && typeof value !== 'undefined') {
-    target.set(name, value)
-  } else {
-    target.delete(name)
-  }
 }
 
 export function pushNullableScalarNarrowing(

@@ -19,7 +19,7 @@ new Host(Future.succeed(1))
   const returnContext: Parameters<typeof emitReturnValueDeclarations>[0] & { libraries: object } = {
     libraries,
     returnNullable: false,
-    returnType: 'promise'
+    returnType: 'async-result'
   }
 
   assert.match(result.code, /FixtureFuture forward\(FixtureFuture input\)/)

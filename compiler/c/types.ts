@@ -10,6 +10,7 @@ export type CEmitOptions = {
 export type CPreparedExpression = {
   lines: string[]
   expression: string
+  functionCompanions?: CPreparedFunctionCompanion[]
   nullable?: boolean
   owned?: boolean
   rejectionValueType?: string
@@ -18,6 +19,13 @@ export type CPreparedExpression = {
   valueType?: string
   cppType?: string
   cppDeclaredName?: string
+}
+
+export type CPreparedFunctionCompanion = {
+  path: string[]
+  expression: string
+  functionType: CFunctionTypeValue
+  seenTypes: string[]
 }
 
 export type CPreparedStatement = {
@@ -51,6 +59,13 @@ export type CPreparedCallOptions = {
 export type CTypeRef = object
 export type CTypeRefMap = Map<string, CTypeRef | null>
 
+/** Opaque storage boundary that keeps recursive function metadata out of prepared-expression shapes. */
+export type CFunctionTypeValue = object
+
+export function cFunctionTypeValue(value: CFunctionTypeValue): CFunctionType {
+  return value as CFunctionType
+}
+
 /** Opaque storage boundary for library descriptors that contain recursive TypeRef values. */
 export type CCompilerLibrarySet = object
 
@@ -83,7 +98,7 @@ export function cTypeRefMapValue(values: CTypeRefMap, name: string): TypeRef | n
 export type CShapeValueMetadata = {
   declaredType?: string | null
   nullable?: boolean
-  promiseValueType?: string | null
+  asyncResultValueType?: string | null
   typeRef?: CTypeRef | null
   valueType: string
 }
@@ -184,21 +199,6 @@ export type CKnownObjectMemberField = CKnownObjectField & {
   key: string | null
 }
 
-export type CArrayElementInfo = {
-  functionType?: CFunctionType | null
-  valueType: string
-}
-
-export type CKnownArrayElement = CArrayElementInfo & {
-  arrayName: string
-  index: number
-}
-
-export type CRuntimeArrayElement = CArrayElementInfo & {
-  index: number
-  indexExpression?: AnyNode | null
-}
-
 export type CFunctionParam = {
   className?: string | null
   declaredType?: string | null
@@ -210,18 +210,28 @@ export type CFunctionParam = {
   nullable?: boolean
   optional?: boolean
   ownership?: string
-  promiseValueType?: string | null
+  asyncResultValueType?: string | null
   rest?: boolean
+  runtimeTypeAlternatives?: CRuntimeTypeAlternative[] | null
+  shape?: CObjectShape | null
+  typeRef?: CTypeRef | null
+  valueType: string
+}
+
+export type CRuntimeTypeAlternative = {
+  nullable?: boolean
   shape?: CObjectShape | null
   typeRef?: CTypeRef | null
   valueType: string
 }
 
 export type CFunctionType = {
+  declaredReturnType?: string | null
   kind?: 'function'
   params: CFunctionParam[]
   returnNullable?: boolean
-  returnPromiseValueType?: string | null
+  returnRuntimeTypeAlternatives?: CRuntimeTypeAlternative[] | null
+  returnAsyncResultValueType?: string | null
   returnShape?: CObjectShape | null
   returnType: string
   returnTypeRef?: CTypeRef | null
@@ -250,9 +260,9 @@ export type CRuntimeArrowCapture = {
   loc?: AnyNode['loc']
   mutable?: boolean
   name: string
-  promiseSettlementCExpression?: string | null
-  promiseSettlementCppType?: string | null
-  promiseSettlementKind?: 'reject' | 'resolve' | null
+  asyncResultSettlementCExpression?: string | null
+  asyncResultSettlementCppType?: string | null
+  asyncResultSettlementKind?: 'reject' | 'fulfill' | null
   runtimeManaged?: boolean
   shape?: CObjectShape | null
   valueType: string
@@ -308,21 +318,20 @@ export type CRuntimeCallbackWrapper = CNamedCallbackWrapper | CRuntimeArrowCallb
 
 export type CCallbackWrapper = CRuntimeCallbackWrapper | CPlainArrowCallbackWrapper
 
-export type CPromiseChainWrapper = {
-  kind: 'promise-chain-arrow'
+export type CAsyncResultChainWrapper = {
+  kind: 'asyncResult-chain-arrow'
   key: string
   name: string
   captures: CRuntimeArrowCapture[]
   contextTypeName: string
   expression: AnyNode
   finalizerName: string
-  inputRejectionValueType: string
   needsEventLoop: boolean
   returnShape: CObjectShape | null
   returnType: string
 }
 
-export type CCallbackContextWrapper = CRuntimeArrowCallbackWrapper | CPromiseChainWrapper
+export type CCallbackContextWrapper = CRuntimeArrowCallbackWrapper | CAsyncResultChainWrapper
 
 export type CAsyncTaskParam = CFunctionParam & {
   argName: string
@@ -350,7 +359,7 @@ export type CAsyncTaskAwaitStep = {
   type: string
   fieldName: string | null
   awaitedExpression: AnyNode | null
-  awaitedPromiseExpression: AnyNode | null
+  awaitedAsyncResultExpression: AnyNode | null
   shape?: CObjectShape | null
   typeRef?: CTypeRef | null
 }
@@ -400,10 +409,10 @@ export type CAsyncTaskWrapper = {
   tryPhases: CAsyncTaskPhase[]
 }
 
-export type CPromiseConstructorHandler = {
+export type CAsyncResultConstructorHandler = {
   cExpression: string
-  kind: 'reject' | 'resolve'
-  promise: string
+  kind: 'reject' | 'fulfill'
+  asyncResult: string
 }
 
 export type CModuleOutputFile = {

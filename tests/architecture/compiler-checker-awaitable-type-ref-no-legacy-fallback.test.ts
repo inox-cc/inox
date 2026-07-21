@@ -56,7 +56,7 @@ test('checker await использует только awaitable TypeRef для f
       }
     }
 
-    if (ts.isBinaryExpression(node) && isPromiseArgumentTypeCondition(node)) {
+    if (ts.isBinaryExpression(node) && isAsyncResultArgumentTypeCondition(node)) {
       usesPromiseCategoryFallback = true
     }
   })
@@ -119,17 +119,22 @@ function isAwaitableTraitLookup(call: ts.CallExpression): boolean {
   )
 }
 
-function isPromiseArgumentTypeCondition(expression: ts.BinaryExpression): boolean {
+function isAsyncResultArgumentTypeCondition(expression: ts.BinaryExpression): boolean {
   if (expression.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken) {
     return false
   }
 
   return (
-    isArgumentTypeAndPromise(expression.left, expression.right) ||
-    isArgumentTypeAndPromise(expression.right, expression.left)
+    isArgumentTypeAndAsyncResult(expression.left, expression.right) ||
+    isArgumentTypeAndAsyncResult(expression.right, expression.left)
   )
 }
 
-function isArgumentTypeAndPromise(left: ts.Expression, right: ts.Expression): boolean {
-  return ts.isIdentifier(left) && left.text === 'argumentType' && ts.isStringLiteral(right) && right.text === 'promise'
+function isArgumentTypeAndAsyncResult(left: ts.Expression, right: ts.Expression): boolean {
+  return (
+    ts.isIdentifier(left) &&
+    left.text === 'argumentType' &&
+    ts.isStringLiteral(right) &&
+    right.text === 'async-result'
+  )
 }

@@ -27,12 +27,6 @@ function pushCPreludeInclude(systemIncludes: string[], localIncludes: string[], 
   pushUniqueCPreludeLine(localIncludes, line)
 }
 
-function pushCPreludeIncludes(systemIncludes: string[], localIncludes: string[], lines: string[]): void {
-  for (let index = 0; index < lines.length; index = index + 1) {
-    pushCPreludeInclude(systemIncludes, localIncludes, lines[index])
-  }
-}
-
 function pushLibraryCPreludeIncludes(systemIncludes: string[], localIncludes: string[], includes: string[]): void {
   for (let index = 0; index < includes.length; index = index + 1) {
     const include = includes[index]
@@ -168,7 +162,6 @@ export function emitCPrelude(
   needsClassDescriptorRuntime: boolean,
   needsCppValueRuntime: boolean,
   needsStringHeader: boolean,
-  needsCollectionRuntime: boolean,
   needsObjectRuntime: boolean,
   libraryCPreludeIncludes: string[]
 ): string[] {

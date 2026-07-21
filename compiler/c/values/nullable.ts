@@ -19,15 +19,12 @@ import type {
   CObjectIndexFieldInfo,
   CObjectShape,
   CObjectShapeField,
-  CRuntimeArrayElement,
   CPreparedExpression as PreparedExpression,
-  CTypeRefMap
+  CTypeRef
 } from '../types.ts'
-import { cTypeRefMapValue } from '../types.ts'
 import {
-  applyCompilerLibraryIntrinsicNativeValueAdapter,
-  cIterableElementValueType,
   cRuntimeValueTag,
+  compilerLibraryNativeRuntimeValueValidExpressionForTypeRef,
   isNullableScalarType,
   isOpaqueRuntimeValueType,
   isRuntimeNullableType,
@@ -41,13 +38,11 @@ import {
   resolveObjectExpressionIndex,
   resolveObjectExpressionMember
 } from './objects.ts'
-import { anyNodeLikeArrayFieldElementValueType, isAnyNodeLikeDeclaredType } from './types.ts'
 
 type CBooleanMap = Map<string, boolean>
 type CFunctionTypeMap = Map<string, CFunctionType>
 type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
 type CStringMap = Map<string, string>
-type CStringNullableMap = Map<string, string | null>
 type CStringSet = Set<string>
 
 type NullableFunctionContext = {
@@ -59,7 +54,6 @@ type NullableFunctionContext = {
   errorTargets?: string[]
   failureStatement?: string | null
   failureStatementUsed?: boolean
-  functionReturnTypeRefs: CTypeRefMap
   functionReturnNullables: CBooleanMap
   functionTypes: CFunctionTypeMap
   libraries: CCompilerLibrarySet
@@ -67,11 +61,9 @@ type NullableFunctionContext = {
   nextId: number
   nullableLoweringDependencies: NullableLoweringDependencies
   nullableVariables: CStringSet
-  objectDeclaredTypes: CStringMap
   objectShapes: CObjectShapeFieldMap
   ownedValues: string[]
   returnType?: string
-  runtimeArrayElementTypes: CStringMap
   runtimeCallbacks: CStringSet
   statusReturn: boolean
   throwingFunction: boolean
@@ -203,7 +195,6 @@ export type NullableLoweringDependencies = {
     functionType: CFunctionType | null | undefined,
     context: NullableFunctionContext
   ): PreparedExpression
-  emitPreparedNumberExpression(expression: AnyNode, context: NullableFunctionContext): PreparedExpression
   emitNullableScalarValueExpression(expression: AnyNode, context: NullableFunctionContext): PreparedExpression
   inferExpressionType(expression: AnyNode, context: NullableFunctionContext): string
   resolveRuntimeCallbackCalleeType(callee: AnyNode, context: NullableFunctionContext): CFunctionType | null
@@ -761,6 +752,17 @@ export function emitNullableRuntimeValueVariableDeclaration(
     valueType === 'object' && libraryNativeCppType(statement.shape) !== null
       ? null
       : cRuntimeValueTag(valueType)
+  let nativeValidExpression = compilerLibraryNativeRuntimeValueValidExpressionForTypeRef(
+    context.libraries,
+    statement.typeRef
+  )
+
+  if (nativeValidExpression === null && statement.init !== null && typeof statement.init !== 'undefined') {
+    nativeValidExpression = compilerLibraryNativeRuntimeValueValidExpressionForTypeRef(
+      context.libraries,
+      statement.init.typeRef
+    )
+  }
 
   registerOwnedValue(context, statement.name)
   context.variables.set(statement.name, valueType)
@@ -768,11 +770,6 @@ export function emitNullableRuntimeValueVariableDeclaration(
 
   if (valueType === 'object') {
     registerObjectShape(context, statement.name, statement.shape)
-  } else if (valueType === 'array') {
-    context.runtimeArrayElementTypes.set(
-      statement.name,
-      cIterableElementValueType(statement.typeRef, context.libraries) ?? 'unknown'
-    )
   } else if (valueType === 'function') {
     context.functionTypes.set(statement.name, normalizeNullableFunctionType(statement.functionType))
     context.runtimeCallbacks.add(statement.name)
@@ -793,7 +790,19 @@ export function emitNullableRuntimeValueVariableDeclaration(
 
   appendLines(lines, value.lines)
   lines.push(`${emitCIdentifier(statement.name)} = ${value.expression};`)
-  appendLines(lines, emitRuntimeNullableValueCheck(emitCIdentifier(statement.name), expectedTag, context))
+  const name = emitCIdentifier(statement.name)
+
+  if (nativeValidExpression !== null) {
+    const valid = nativeValidExpression.split('$value').join(name)
+    lines.push(
+      emitRuntimeTypeCheck(
+        `${name}.tag != INOX_TAG_UNDEFINED && ${name}.tag != INOX_TAG_NULL && !(${valid})`,
+        context
+      )
+    )
+  } else {
+    appendLines(lines, emitRuntimeNullableValueCheck(name, expectedTag, context))
+  }
 
   return lines
 }
@@ -816,25 +825,45 @@ function emitNullableRuntimeValueInitializer(
     return deps.emitCObjectLiteralValueExpression(statement.init, context, statement.shape)
   }
 
+  if (
+    (statement.init.typeRef === null || typeof statement.init.typeRef === 'undefined') &&
+    statement.typeRef !== null &&
+    typeof statement.typeRef !== 'undefined'
+  ) {
+    return deps.emitCValueExpression(
+      {
+        ...statement.init,
+        typeRef: statement.typeRef
+      },
+      context
+    )
+  }
+
   return deps.emitCValueExpression(statement.init, context)
 }
 
 export function emitCOptionalMemberValueExpression(
   expression: AnyNode,
-  context: NullableFunctionContext
+  context: NullableFunctionContext,
+  expectedTypeRef?: CTypeRef | null
 ): PreparedExpression {
-  if (
-    expression.property === 'length' &&
-    (expression.object.valueType === 'array' ||
-      nullableDeps(context).inferExpressionType(expression.object, context) === 'array')
-  ) {
-    return emitCOptionalArrayLengthValueExpression(expression, context)
-  }
-
   let member: CObjectFieldInfo | null = resolveKnownObjectMember(expression, context)
 
   if (member === null || typeof member === 'undefined') {
     member = resolveObjectExpressionMember(expression)
+  }
+
+  if (
+    member !== null &&
+    typeof member !== 'undefined' &&
+    (member.typeRef === null || typeof member.typeRef === 'undefined') &&
+    (expectedTypeRef !== null && typeof expectedTypeRef !== 'undefined' ||
+      expression.typeRef !== null && typeof expression.typeRef !== 'undefined')
+  ) {
+    member = {
+      ...member,
+      typeRef: expectedTypeRef ?? expression.typeRef
+    }
   }
 
   if (member !== null && typeof member !== 'undefined' && isRuntimeNullableType(member.valueType)) {
@@ -851,50 +880,6 @@ export function emitCOptionalMemberValueExpression(
   }
 
   return emitCOptionalDynamicObjectMemberValueExpression(expression, context)
-}
-
-function emitCOptionalArrayLengthValueExpression(
-  expression: AnyNode,
-  context: NullableFunctionContext
-): PreparedExpression {
-  const array = nullableDeps(context).emitCValueExpression(expression.object, context)
-  const out = nextCName(context, 'inox_optional_array_length')
-  const length = nextCName(context, 'inox_array_len')
-  const lines: string[] = []
-
-  registerOwnedValue(context, out)
-  appendLines(lines, array.lines)
-  appendLines(lines, emitPrepareOwnedValueWrite(out))
-  lines.push(`if (${array.expression}.tag != INOX_TAG_NULL && ${array.expression}.tag != INOX_TAG_UNDEFINED) {`)
-  lines.push(
-    `  ${emitRuntimeTypeCheck(
-      `${array.expression}.tag != INOX_TAG_ARRAY || ${array.expression}.as.ref == 0`,
-      context
-    )}`
-  )
-  const facade = applyCompilerLibraryIntrinsicNativeValueAdapter(
-    array.expression,
-    array.cppType,
-    context.libraries,
-    'array-literal'
-  )
-  lines.push(`  size_t ${length} = ${facade}.length();`)
-
-  const thrownLines = emitNullableThrownCheckLines(context)
-
-  for (let index = 0; index < thrownLines.length; index = index + 1) {
-    lines.push(`  ${thrownLines[index]}`)
-  }
-
-  lines.push(`  ${out} = inox_number_value((double)${length});`)
-  lines.push('}')
-
-  return {
-    lines,
-    expression: out,
-    nullable: true,
-    valueType: 'number'
-  }
 }
 
 function emitCOptionalDynamicObjectMemberValueExpression(
@@ -923,12 +908,26 @@ function emitCOptionalDynamicObjectMemberValueExpression(
 
 export function emitCOptionalIndexValueExpression(
   expression: AnyNode,
-  context: NullableFunctionContext
+  context: NullableFunctionContext,
+  expectedTypeRef?: CTypeRef | null
 ): PreparedExpression {
   let field: CObjectIndexFieldInfo | null = resolveKnownObjectIndex(expression, context)
 
   if (field === null || typeof field === 'undefined') {
     field = resolveObjectExpressionIndex(expression)
+  }
+
+  if (
+    field !== null &&
+    typeof field !== 'undefined' &&
+    (field.typeRef === null || typeof field.typeRef === 'undefined') &&
+    (expectedTypeRef !== null && typeof expectedTypeRef !== 'undefined' ||
+      expression.typeRef !== null && typeof expression.typeRef !== 'undefined')
+  ) {
+    field = {
+      ...field,
+      typeRef: expectedTypeRef ?? expression.typeRef
+    }
   }
 
   if (field !== null && typeof field !== 'undefined') {
@@ -958,27 +957,6 @@ export function emitCOptionalIndexValueExpression(
     return emitCOptionalObjectReadValueExpression(objectExpression, field, context, access)
   }
 
-  const element = resolveNullableOptionalRuntimeArrayIndex(expression, context)
-
-  if (element !== null && typeof element !== 'undefined') {
-    if (!isRuntimeNullableType(element.valueType)) {
-      context.diagnostics.push(
-        diagnostic(
-          'INOX_C_OPTIONAL_CHAINING',
-          'optional array index access for this element type is not supported by the current C backend slice',
-          expression.loc
-        )
-      )
-
-      return {
-        lines: [],
-        expression: 'inox_undefined_value()'
-      }
-    }
-
-    return emitCOptionalArrayIndexValueExpression(expression.object, element, context)
-  }
-
   context.diagnostics.push(
     diagnostic(
       'INOX_C_OPTIONAL_CHAINING',
@@ -1005,6 +983,10 @@ function emitCOptionalObjectReadValueExpression(
     field.valueType === 'object' && libraryNativeCppType(field.shape) !== null
       ? null
       : cRuntimeValueTag(field.valueType)
+  const nativeValidExpression = compilerLibraryNativeRuntimeValueValidExpressionForTypeRef(
+    context.libraries,
+    field.typeRef
+  )
   const typeCheck = emitRuntimeTypeCheck(runtimeObjectReadValueMismatchCondition(object.expression), context)
   const getLines = optionalObjectReadGetLines(access, object.expression, temp, context)
   const lines: string[] = []
@@ -1018,7 +1000,19 @@ function emitCOptionalObjectReadValueExpression(
   lines.push('} else {')
   lines.push(`  ${typeCheck}`)
   appendPrefixedLines(lines, getLines, '  ')
-  appendPrefixedLines(lines, emitRuntimeNullableValueCheck(temp, expectedTag, context), '  ')
+
+  if (nativeValidExpression !== null) {
+    const valid = nativeValidExpression.split('$value').join(temp)
+    lines.push(
+      `  ${emitRuntimeTypeCheck(
+        `${temp}.tag != INOX_TAG_UNDEFINED && ${temp}.tag != INOX_TAG_NULL && !(${valid})`,
+        context
+      )}`
+    )
+  } else {
+    appendPrefixedLines(lines, emitRuntimeNullableValueCheck(temp, expectedTag, context), '  ')
+  }
+
   lines.push('}')
 
   return {
@@ -1042,261 +1036,6 @@ function optionalObjectReadGetLines(
   }
 
   return emitNullableObjectGetValueLines(object, access.key, temp, context)
-}
-
-function emitCOptionalArrayIndexValueExpression(
-  arrayExpression: AnyNode,
-  element: CRuntimeArrayElement,
-  context: NullableFunctionContext
-): PreparedExpression {
-  const array = nullableDeps(context).emitCValueExpression(arrayExpression, context)
-  const temp = nextCName(context, 'inox_optional_value')
-  const expectedTag = cRuntimeValueTag(element.valueType)
-  const typeCheck = emitRuntimeTypeCheck(
-    `${array.expression}.tag != INOX_TAG_ARRAY || ${array.expression}.as.ref == 0`,
-    context
-  )
-  const index = emitOptionalArrayIndexExpression(element, context)
-  const lines: string[] = []
-
-  registerOwnedValue(context, temp)
-
-  appendLines(lines, array.lines)
-  appendLines(lines, emitPrepareOwnedValueWrite(temp))
-  const facade = applyCompilerLibraryIntrinsicNativeValueAdapter(
-    array.expression,
-    array.cppType,
-    context.libraries,
-    'array-literal'
-  )
-  lines.push(`if (${array.expression}.tag == INOX_TAG_NULL || ${array.expression}.tag == INOX_TAG_UNDEFINED) {`)
-  lines.push(`  ${temp} = inox_undefined_value();`)
-  lines.push('} else {')
-  lines.push(`  ${typeCheck}`)
-  appendPrefixedLines(lines, index.lines, '  ')
-  lines.push(`  ${temp} = ${facade}.get(${index.expression});`)
-  lines.push(`  ${emitRuntimeTypeCheck('inox::thrown()', context)}`)
-  appendPrefixedLines(lines, emitRuntimeNullableValueCheck(temp, expectedTag, context), '  ')
-  lines.push('}')
-
-  return {
-    lines,
-    expression: temp
-  }
-}
-
-function emitOptionalArrayIndexExpression(
-  element: CRuntimeArrayElement,
-  context: NullableFunctionContext
-): PreparedExpression {
-  const expression = element.indexExpression
-
-  if (expression === null || typeof expression === 'undefined') {
-    return { lines: [], expression: `${element.index}` }
-  }
-
-  const index = nullableDeps(context).emitPreparedNumberExpression(expression, context)
-
-  return {
-    lines: index.lines,
-    expression: `(size_t)(${index.expression})`
-  }
-}
-
-function resolveNullableOptionalRuntimeArrayIndex(
-  expression: AnyNode,
-  context: NullableFunctionContext
-): CRuntimeArrayElement | null {
-  if (expression.type !== 'OptionalIndexExpression') {
-    return null
-  }
-
-  const valueType = resolveNullableRuntimeArrayElementType(expression.object, context)
-
-  if (valueType === null || typeof valueType === 'undefined') {
-    return null
-  }
-
-  const elementValueType = isRuntimeNullableType(expression.valueType) ? expression.valueType : valueType
-
-  if (expression.index.type !== 'NumberLiteral') {
-    if (nullableDeps(context).inferExpressionType(expression.index, context) !== 'number') {
-      return null
-    }
-
-    return {
-      index: 0,
-      indexExpression: expression.index,
-      valueType: elementValueType
-    }
-  }
-
-  const index = parseNonNegativeIntegerLiteral(expression.index.value)
-
-  if (index < 0) {
-    return null
-  }
-
-  return { index, indexExpression: null, valueType: elementValueType }
-}
-
-function resolveNullableRuntimeArrayElementType(expression: AnyNode, context: NullableFunctionContext): string | null {
-  const typeRefElementValueType = cIterableElementValueType(expression.typeRef, context.libraries)
-
-  if (typeRefElementValueType !== null) {
-    return typeRefElementValueType
-  }
-
-  if (expression.type === 'Reference' && expression.path.length === 1) {
-    const name = nullableStringAt(expression.path, 0)
-    const runtimeElementType = context.runtimeArrayElementTypes.get(name)
-
-    if (runtimeElementType === null || typeof runtimeElementType === 'undefined') {
-      return null
-    }
-
-    return runtimeElementType
-  }
-
-  if (expression.type === 'CallExpression') {
-    if (expression.valueType !== 'array') {
-      return null
-    }
-
-    const functionReturn = resolveNullableFunctionReturnNameFromCall(expression)
-
-    if (functionReturn !== null && typeof functionReturn !== 'undefined') {
-      const returnTypeRef = cTypeRefMapValue(context.functionReturnTypeRefs, functionReturn)
-      const elementValueType = cIterableElementValueType(returnTypeRef, context.libraries)
-
-      if (elementValueType !== null) {
-        return elementValueType
-      }
-    }
-
-    return 'unknown'
-  }
-
-  if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
-    const member = resolveKnownObjectMember(expression, context)
-
-    if (member !== null && typeof member !== 'undefined') {
-      if (member.valueType !== 'array') {
-        return null
-      }
-
-      return cIterableElementValueType(member.typeRef, context.libraries) ?? 'unknown'
-    }
-
-    const anyNodeElementValueType = nullableAnyNodeArrayElementValueType(expression, context)
-
-    if (anyNodeElementValueType !== null) {
-      return anyNodeElementValueType
-    }
-
-    if (nullableDeps(context).inferExpressionType(expression.object, context) === 'object') {
-      return 'unknown'
-    }
-
-    return null
-  }
-
-  if (
-    (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') &&
-    expression.index.type === 'StringLiteral'
-  ) {
-    const field = resolveKnownObjectIndex(expression, context)
-
-    if (field !== null && typeof field !== 'undefined') {
-      if (field.valueType !== 'array') {
-        return null
-      }
-
-      return cIterableElementValueType(field.typeRef, context.libraries) ?? 'unknown'
-    }
-
-    if (nullableDeps(context).inferExpressionType(expression.object, context) === 'object') {
-      return 'unknown'
-    }
-
-    return null
-  }
-
-  return null
-}
-
-function nullableAnyNodeArrayElementValueType(
-  expression: AnyNode,
-  context: NullableFunctionContext
-): string | null {
-  if (expression.type !== 'MemberExpression' && expression.type !== 'OptionalMemberExpression') {
-    return null
-  }
-
-  const rootName = nullableObjectAccessRootName(expression)
-
-  if (rootName === null) {
-    return null
-  }
-
-  const declaredType = context.objectDeclaredTypes.get(rootName)
-
-  if (
-    declaredType === null ||
-    typeof declaredType === 'undefined' ||
-    !isAnyNodeLikeDeclaredType(declaredType)
-  ) {
-    return null
-  }
-
-  return anyNodeLikeArrayFieldElementValueType(expression.property)
-}
-
-function nullableObjectAccessRootName(expression: AnyNode): string | null {
-  let current = expression
-
-  while (
-    current.type === 'MemberExpression' ||
-    current.type === 'OptionalMemberExpression' ||
-    current.type === 'IndexExpression' ||
-    current.type === 'OptionalIndexExpression'
-  ) {
-    current = current.object
-  }
-
-  if (current.type !== 'Reference' || current.path.length !== 1) {
-    return null
-  }
-
-  return nullableStringAt(current.path, 0)
-}
-
-function parseNonNegativeIntegerLiteral(value: string): number {
-  if (value.length === 0) {
-    return -1
-  }
-
-  let result = 0
-
-  for (let index = 0; index < value.length; index = index + 1) {
-    const code = value.charCodeAt(index)
-
-    if (code < 48 || code > 57) {
-      return -1
-    }
-
-    result = result * 10 + code - 48
-  }
-
-  return result
-}
-
-function resolveNullableFunctionReturnNameFromCall(expression: AnyNode): string | null {
-  if (expression.callee.type === 'Reference' && expression.callee.path.length === 1) {
-    return nullableStringAt(expression.callee.path, 0)
-  }
-
-  return null
 }
 
 function normalizeNullableFunctionType(functionType: CFunctionType | null | undefined): CFunctionType {

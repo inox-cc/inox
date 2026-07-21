@@ -114,8 +114,6 @@ function cResultMapping(cppType: string): LibraryCResultMappingDescriptor {
 function assertLegacyResultMetadataIsAbsent(value: LibraryOperationDescriptor): void {
   assert.equal(value.resultTypeId, undefined)
   assert.equal(value.resultShapeFields, undefined)
-  assert.equal(value.resultArrayElementType, undefined)
-  assert.equal(value.resultArrayElementTypeId, undefined)
   assert.equal(value.cppType, undefined)
   assert.equal(value.valueType, undefined)
   assert.equal(Object.prototype.hasOwnProperty.call(value, 'promiseValueType'), false)

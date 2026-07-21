@@ -45,6 +45,10 @@ export function arrayTypeRef(elementType: TypeRef): NominalTypeRef {
     ownership: 'value',
     traits: [
       {
+        traitId: 'indexable',
+        args: [numberTypeRef, elementType]
+      },
+      {
         traitId: 'iterable',
         args: [elementType]
       }
@@ -96,6 +100,12 @@ const arrayIntrinsicOperation: LibraryOperationDescriptor = {
   operationId: arrayIntrinsicBindingId,
   kind: 'construct',
   runtimeRequirements: [arrayRuntimeRequirement],
+  cSequenceMaterialization: {
+    createExpression: 'Array::create(0)',
+    appendElementExpression: '$target.push($value)',
+    appendSpreadExpression: '$target.appendAll(Array($value))',
+    failureMode: 'thrown'
+  },
   typeParameters: [{ name: 'T', sources: [{ source: 'contextual-type-argument', argumentIndex: 0 }] }],
   resultTypeRef: arrayTypeRef(parameterTypeRef),
   minArgs: 0,
@@ -109,8 +119,7 @@ const arrayOperations: LibraryOperationDescriptor[] = [
   ]),
   arrayStaticCall('isArray', 'Array::isArray', booleanTypeRef, ['runtime-value'], [], 1, 1, {
     argumentIndex: 0,
-    trueValueType: 'array',
-    falseValueType: 'object',
+    trueTypeRef: arrayTypeRef(unknownTypeRef),
     trueNonNullable: true
   }),
   arrayMemberRead('length', numberTypeRef, 'static_cast<double>($value)'),
@@ -194,7 +203,7 @@ const setOperations: LibraryOperationDescriptor[] = [
         maxArgs: 1,
         cExpression: 'Set::from',
         cArgumentKinds: ['runtime-value'],
-        argumentChecks: [{ valueTypes: ['array', 'object'] }]
+        argumentChecks: [{ valueTypes: ['object'] }]
       }
     ],
     cCallStyle: 'function',
@@ -256,7 +265,7 @@ const mapOperations: LibraryOperationDescriptor[] = [
         maxArgs: 1,
         cExpression: 'Map::from',
         cArgumentKinds: ['runtime-value'],
-        argumentChecks: [{ valueTypes: ['array', 'object'] }]
+        argumentChecks: [{ valueTypes: ['object'] }]
       }
     ],
     cCallStyle: 'function',
@@ -306,14 +315,18 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       libraryId,
       typeId: arrayNativeTypeId,
       declarationNames: ['Array'],
-      valueType: 'array',
+      valueType: 'object',
       cppType: 'Array',
       baseTypeIds: [],
       runtimeRequirements: [arrayRuntimeRequirement],
       cValueAdapter: 'Array($value)',
       cRuntimeValueExpression: '$value.raw()',
+      cRuntimeValueValidExpression: 'Array(inox::Value($value)).valid()',
       typeParameters: ['T'],
-      traits: [{ traitId: 'iterable', args: [parameterTypeRef] }],
+      traits: [
+        { traitId: 'indexable', args: [numberTypeRef, parameterTypeRef] },
+        { traitId: 'iterable', args: [parameterTypeRef] }
+      ],
       cIteration: {
         iteratorMethod: 'values',
         nextMethod: 'next',
@@ -334,6 +347,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       runtimeRequirements: [mapRuntimeRequirement],
       cValueAdapter: 'Map($value)',
       cRuntimeValueExpression: '$value.raw()',
+      cRuntimeValueValidExpression: 'Map(inox::Value($value)).valid()',
       typeParameters: ['K', 'V'],
       traits: [
         { traitId: 'indexable', args: [keyParameterTypeRef, valueParameterTypeRef] },
@@ -362,6 +376,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       runtimeRequirements: [setRuntimeRequirement],
       cValueAdapter: 'Set($value)',
       cRuntimeValueExpression: '$value.raw()',
+      cRuntimeValueValidExpression: 'Set(inox::Value($value)).valid()',
       typeParameters: ['T'],
       traits: [{ traitId: 'iterable', args: [parameterTypeRef] }],
       cIteration: {
@@ -380,7 +395,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: arrayRuntimeRequirement,
-      dependencies: ['collections', 'managed-values'],
+      dependencies: ['managed-values'],
       cPreludeIncludes: ['inox/array.h'],
       capabilities: []
     },
@@ -392,13 +407,13 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
     },
     {
       id: mapRuntimeRequirement,
-      dependencies: ['collections', 'managed-values'],
+      dependencies: [arrayRuntimeRequirement, 'managed-values'],
       cPreludeIncludes: ['inox/map.h'],
       capabilities: []
     },
     {
       id: setRuntimeRequirement,
-      dependencies: ['collections', 'managed-values'],
+      dependencies: [arrayRuntimeRequirement, 'managed-values'],
       cPreludeIncludes: ['inox/set.h'],
       capabilities: []
     }
@@ -453,6 +468,7 @@ function arrayMemberRead(
   return {
     libraryId,
     bindingId: `${arrayNativeTypeId}.${name}`,
+    acceptsUnknownReceiver: true,
     operationId: `${arrayNativeTypeId}.${name}`,
     kind: 'member-read',
     runtimeRequirements: [arrayRuntimeRequirement],
@@ -635,6 +651,7 @@ function arrayIndexRead(): LibraryOperationDescriptor {
     bindingId: `${arrayNativeTypeId}.*`,
     operationId: `${arrayNativeTypeId}#index-read`,
     kind: 'index-read',
+    acceptsUnknownReceiver: true,
     runtimeRequirements: [arrayRuntimeRequirement],
     receiverTypeId: arrayNativeTypeId,
     typeParameters: arrayTypeParameters(),
@@ -642,6 +659,7 @@ function arrayIndexRead(): LibraryOperationDescriptor {
     cArgumentKinds: ['receiver', 'number'],
     cCallStyle: 'member',
     cFailureMode: 'thrown',
+    cResultMode: 'value',
     resultTypeRef: parameterTypeRef,
     cResultMapping: { cppType: 'inox::Value', fields: [] },
     minArgs: 1,
@@ -656,6 +674,7 @@ function arrayIndexWrite(): LibraryOperationDescriptor {
     bindingId: `${arrayNativeTypeId}.*`,
     operationId: `${arrayNativeTypeId}#index-write`,
     kind: 'index-write',
+    acceptsUnknownReceiver: true,
     runtimeRequirements: [arrayRuntimeRequirement],
     receiverTypeId: arrayNativeTypeId,
     typeParameters: arrayTypeParameters(),
@@ -663,6 +682,7 @@ function arrayIndexWrite(): LibraryOperationDescriptor {
     cArgumentKinds: ['receiver', 'number', 'runtime-value'],
     cCallStyle: 'member',
     cFailureMode: 'thrown',
+    cResultMapping: { cppType: 'inox::Value', fields: [] },
     resultTypeRef: parameterTypeRef,
     minArgs: 2,
     maxArgs: 2,

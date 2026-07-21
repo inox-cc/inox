@@ -35,7 +35,6 @@ type DeclarationContract = {
   functionEffectsPath: string
   source: string
   functionEffects: IrFunctionEffect[]
-  resolvedProgram: ProgramNode | null
 }
 
 type GeneratedFile = {
@@ -69,8 +68,8 @@ const cmakeSourceDir = compilerDistDir
 const cmakeBuildDir = join(compilerDistDir, 'build')
 const cmakeBinDir = join(compilerDistDir, 'bin')
 const projectSourceRoot = '/project'
-const compilerSourceRoot = `${projectSourceRoot}/compiler`
 const generatedLibrarySourceRoot = `${projectSourceRoot}/dist/compiler-libraries`
+const stage6SemanticContractPath = `${projectSourceRoot}/tests/contracts/stage6-semantic-contract.ts`
 const selfHostedSourceDirs = ['compiler', 'stdlib']
 const selfHostedExcludedSourcePaths = new Set([join(rootDir, 'compiler/index.ts')])
 const buildLoopBackend = 'libuv'
@@ -105,9 +104,11 @@ async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
   const bootstrapLibraries = generatedRegistry.librarySet
 
   const compilerFiles = await readCompilerSources()
+  compilerFiles.push(await readProjectSource(stage6SemanticContractPath))
   compilerFiles.push(...(await readGeneratedCompilerLibrarySources()))
   const stdlibDeclarationFiles = await readStdlibDeclarationSources()
   const driverPath = `${generatedLibrarySourceRoot}/native-entry.ts`
+  const semanticProbeDriverPath = `${generatedLibrarySourceRoot}/native-semantic-probe-entry.ts`
 
   console.log('emitting self-hosted compiler declaration contracts')
   const declarationContracts = await emitCompilerDeclarationContracts(
@@ -121,7 +122,7 @@ async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
   console.log('emitting self-hosted compiler C++ modules')
   await emitCompilerModules(
     compilerFiles,
-    driverPath,
+    new Set([driverPath, semanticProbeDriverPath]),
     declarationContracts,
     generatedFiles,
     stdlibDeclarationFiles,
@@ -213,9 +214,9 @@ async function refineCompilerDeclarationContracts(
       bootstrapLibraries
     )
 
-    replaceDeclarationContractSource(refined, file.path, result.source, result.resolvedProgram)
+    replaceDeclarationContractSource(refined, file.path, result.source)
     compiledModules.push(result.module)
-    releaseDeclarationRefinementMemory()
+    releaseSelfHostedCompilationMemory()
   }
 
   const functionEffects: FunctionEffectMap = new Map()
@@ -226,7 +227,7 @@ async function refineCompilerDeclarationContracts(
   return refined
 }
 
-function releaseDeclarationRefinementMemory(): void {
+function releaseSelfHostedCompilationMemory(): void {
   const collectGarbage = (globalThis as { gc?: () => void }).gc
 
   if (typeof collectGarbage !== 'function') {
@@ -241,7 +242,7 @@ async function refineCompilerDeclarationContract(
   contracts: DeclarationContract[],
   stdlibDeclarationFiles: SourceFile[],
   bootstrapLibraries: CompilerLibrarySet
-): Promise<{ module: DeclarationEffectModule; resolvedProgram: ProgramNode; source: string }> {
+): Promise<{ module: DeclarationEffectModule; source: string }> {
   const modules = await compileCompilerModuleIr(file, contracts, stdlibDeclarationFiles, bootstrapLibraries)
   const module = compiledDeclarationModule(modules.graph.modules, file.path)
   const declarationProgram = module.declarationProgram
@@ -254,12 +255,12 @@ async function refineCompilerDeclarationContract(
 
   compactDeclarationEffectModule(module)
 
-  return { module, resolvedProgram: declarationProgram, source }
+  return { module, source }
 }
 
 async function emitCompilerModules(
   compilerFiles: SourceFile[],
-  driverPath: string,
+  driverPaths: Set<string>,
   declarationContracts: DeclarationContract[],
   generatedFiles: GeneratedFileMap,
   stdlibDeclarationFiles: SourceFile[],
@@ -269,13 +270,14 @@ async function emitCompilerModules(
     console.log(`emitting compiler module ${file.path.slice('/project/'.length)}`)
     const modules = await compileCompilerModule(
       file,
-      file.path === driverPath,
+      driverPaths.has(file.path),
       declarationContracts,
       stdlibDeclarationFiles,
       bootstrapLibraries
     )
 
     addGeneratedFiles(generatedFiles, modules.files)
+    releaseSelfHostedCompilationMemory()
   }
 }
 
@@ -291,7 +293,7 @@ async function compileCompilerModule(
   const contractFiles = declarationContractSourceFiles(declarationContracts, file.path)
   const declarationImports = declarationImportOptions(declarationContracts, file.path)
 
-  return await compileMemoryPackageToCModules(file.path, [file, ...contractFiles, ...stdlibDeclarationFiles], {
+  const result = await compileMemoryPackageToCModules(file.path, [file, ...contractFiles, ...stdlibDeclarationFiles], {
     callMain,
     declarationImports,
     libraries: bootstrapLibraries,
@@ -300,6 +302,8 @@ async function compileCompilerModule(
     target: 'cc',
     tlsBackend: buildTlsBackend
   })
+
+  return { files: result.files }
 }
 
 async function compileCompilerModuleIr(
@@ -335,8 +339,7 @@ function seedCompilerDeclarationContracts(modules: CompilerSourceModule[]): Decl
       declarationPath: declarationPathForSourcePath(module.file.path),
       functionEffectsPath: functionEffectsPathForSourcePath(module.file.path),
       source: emitModuleDeclarationContract(program),
-      functionEffects: [],
-      resolvedProgram: null
+      functionEffects: []
     })
   }
 
@@ -502,8 +505,7 @@ function copyDeclarationContracts(contracts: DeclarationContract[]): Declaration
       declarationPath: contract.declarationPath,
       functionEffectsPath: contract.functionEffectsPath,
       source: contract.source,
-      functionEffects: copyFunctionEffects(contract.functionEffects),
-      resolvedProgram: contract.resolvedProgram
+      functionEffects: copyFunctionEffects(contract.functionEffects)
     })
   }
 
@@ -513,13 +515,11 @@ function copyDeclarationContracts(contracts: DeclarationContract[]): Declaration
 function replaceDeclarationContractSource(
   contracts: DeclarationContract[],
   sourcePath: string,
-  source: string,
-  resolvedProgram: ProgramNode
+  source: string
 ): void {
   for (const contract of contracts) {
     if (contract.sourcePath === sourcePath) {
       contract.source = source
-      contract.resolvedProgram = resolvedProgram
       return
     }
   }
@@ -843,8 +843,7 @@ function declarationImportOptions(
     imports.push({
       sourcePath: contract.sourcePath,
       declarationPath: contract.declarationPath,
-      functionEffectsPath: contract.functionEffectsPath,
-      resolvedProgram: contract.resolvedProgram ?? undefined
+      functionEffectsPath: contract.functionEffectsPath
     })
   }
 
@@ -935,11 +934,17 @@ async function linkNativeCompiler(options: BuildOptions): Promise<{ code: number
   }
 
   const outputTemp = `${options.out}.tmp`
+  const semanticProbeOut = `${options.out}-stage6-semantic-probe`
+  const semanticProbeOutputTemp = `${semanticProbeOut}.tmp`
 
   await rm(outputTemp, { force: true })
+  await rm(semanticProbeOutputTemp, { force: true })
   await copyFile(join(cmakeBinDir, 'inox'), outputTemp)
+  await copyFile(join(cmakeBinDir, 'inox-stage6-semantic-probe'), semanticProbeOutputTemp)
   await chmod(outputTemp, 0o755)
+  await chmod(semanticProbeOutputTemp, 0o755)
   await rename(outputTemp, options.out)
+  await rename(semanticProbeOutputTemp, semanticProbeOut)
 
   return {
     code: 0
@@ -968,7 +973,7 @@ async function readCompilerSources(): Promise<SourceFile[]> {
 
 async function readGeneratedCompilerLibrarySources(): Promise<SourceFile[]> {
   const root = join(rootDir, 'dist/compiler-libraries')
-  const names = ['default-registry.ts', 'native-entry.ts']
+  const names = ['default-registry.ts', 'native-entry.ts', 'native-semantic-probe-entry.ts']
   const files: SourceFile[] = []
 
   for (const name of names) {
@@ -979,6 +984,19 @@ async function readGeneratedCompilerLibrarySources(): Promise<SourceFile[]> {
   }
 
   return files
+}
+
+async function readProjectSource(projectPath: string): Promise<SourceFile> {
+  const relativePath = projectPath.slice(`${projectSourceRoot}/`.length)
+
+  if (!projectPath.startsWith(`${projectSourceRoot}/`) || relativePath.length === 0) {
+    throw new Error(`unsupported project source path ${projectPath}`)
+  }
+
+  return {
+    path: projectPath,
+    source: await readFile(join(rootDir, relativePath), 'utf8')
+  }
 }
 
 async function readStdlibDeclarationSources(): Promise<SourceFile[]> {
@@ -1146,11 +1164,36 @@ add_subdirectory("${cmakeString(join(rootDir, 'runtime'))}" "${cmakeString(join(
 
 file(GLOB_RECURSE INOX_GENERATED_SOURCES CONFIGURE_DEPENDS "${cmakeString(generatedDir)}/*.cc")
 
-add_executable(inox \${INOX_GENERATED_SOURCES})
-target_include_directories(inox PRIVATE "${cmakeString(generatedDir)}")
-target_link_libraries(inox PRIVATE inox_runtime)
+set(INOX_NATIVE_ENTRY_SOURCE "${cmakeString(join(generatedDir, 'dist/compiler-libraries/native-entry.cc'))}")
+set(INOX_SEMANTIC_PROBE_ENTRY_SOURCE "${cmakeString(join(generatedDir, 'dist/compiler-libraries/native-semantic-probe-entry.cc'))}")
+set(INOX_SEMANTIC_CONTRACT_SOURCE "${cmakeString(join(generatedDir, 'tests/contracts/stage6-semantic-contract.cc'))}")
+set(INOX_COMPILER_MODULE_SOURCES \${INOX_GENERATED_SOURCES})
+list(REMOVE_ITEM INOX_COMPILER_MODULE_SOURCES
+  \${INOX_NATIVE_ENTRY_SOURCE}
+  \${INOX_SEMANTIC_PROBE_ENTRY_SOURCE}
+  \${INOX_SEMANTIC_CONTRACT_SOURCE}
+)
 
-set_property(TARGET inox PROPERTY LINKER_LANGUAGE CXX)
+add_library(inox_compiler_modules OBJECT \${INOX_COMPILER_MODULE_SOURCES})
+target_include_directories(inox_compiler_modules PRIVATE "${cmakeString(generatedDir)}")
+target_link_libraries(inox_compiler_modules PRIVATE inox_runtime)
+
+function(inox_add_native_driver target entry)
+  add_executable(\${target} "\${entry}" \${ARGN} $<TARGET_OBJECTS:inox_compiler_modules>)
+  target_include_directories(\${target} PRIVATE "${cmakeString(generatedDir)}")
+  target_link_libraries(\${target} PRIVATE inox_runtime)
+  set_property(TARGET \${target} PROPERTY LINKER_LANGUAGE CXX)
+endfunction()
+
+inox_add_native_driver(inox \${INOX_NATIVE_ENTRY_SOURCE})
+inox_add_native_driver(
+  inox_stage6_semantic_probe
+  \${INOX_SEMANTIC_PROBE_ENTRY_SOURCE}
+  \${INOX_SEMANTIC_CONTRACT_SOURCE}
+)
+set_property(TARGET inox_stage6_semantic_probe PROPERTY OUTPUT_NAME "inox-stage6-semantic-probe")
+add_dependencies(inox inox_stage6_semantic_probe)
+
 `
 }
 

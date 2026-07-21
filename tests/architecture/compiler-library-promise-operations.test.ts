@@ -31,20 +31,20 @@ test('data-only library Promise operations preserve fulfilled metadata and lower
   const awaitedEntries = result.ir.body[2].init
 
   assert.equal(pendingCall.libraryOperationId, 'fixture#load')
-  assert.equal(pendingCall.valueType, 'promise')
-  assert.equal(pendingCall.promiseValueType, 'object')
-  assert.equal(pendingCall.promiseRejectionValueType, 'object')
-  assert.equal(pendingCall.promiseRejectionIntrinsicRole, 'exception-value')
+  assert.equal(pendingCall.valueType, 'async-result')
+  assert.equal(pendingCall.asyncResultValueType, 'object')
+  assert.equal(pendingCall.asyncResultRejectionValueType, 'object')
+  assert.equal(pendingCall.asyncResultRejectionIntrinsicRole, 'exception-value')
   assert.equal(pendingCall.shape.libraryTypeId, 'fixture#Item')
   assert.equal(awaitedItem.valueType, 'object')
   assert.equal(awaitedItem.shape.libraryTypeId, 'fixture#Item')
 
   assert.equal(listCall.libraryOperationId, 'fixture#list')
-  assert.equal(listCall.promiseValueType, 'array')
-  assert.equal(listCall.promiseRejectionValueType, 'object')
-  assert.equal(listCall.promiseRejectionIntrinsicRole, 'exception-value')
+  assert.equal(listCall.asyncResultValueType, 'object')
+  assert.equal(listCall.asyncResultRejectionValueType, 'object')
+  assert.equal(listCall.asyncResultRejectionIntrinsicRole, 'exception-value')
   assert.deepEqual(listCall.typeRef, promiseTypeRef(arrayTypeRef(fixtureItemTypeRef()), errorTypeRef()))
-  assert.equal(awaitedEntries.valueType, 'array')
+  assert.equal(awaitedEntries.valueType, 'object')
   assert.deepEqual(awaitedEntries.typeRef, arrayTypeRef(fixtureItemTypeRef()))
 
   assert.match(result.code, /static inox::Promise pending;/)
@@ -52,7 +52,7 @@ test('data-only library Promise operations preserve fulfilled metadata and lower
   assert.match(result.code, /pending = fixture\.load\(\);/)
   assert.match(result.code, /auto inox_await_\d+ = \(pending\)\.awaitValue\(\);/)
   assert.match(result.code, /auto inox_await_converted_\d+ = FixtureItem\(inox_await_\d+\);/)
-  assert.match(result.code, /auto inox_await_\d+ = \(inox_library_promise_\d+\)\.awaitValue\(\);/)
+  assert.match(result.code, /auto inox_await_\d+ = \(inox_library_asyncResult_\d+\)\.awaitValue\(\);/)
   assert.match(result.code, /auto inox_await_converted_\d+ = Array\(inox_await_\d+\);/)
   assert.doesNotMatch(result.code, /inox::await_value</)
   assert.doesNotMatch(result.code, /item = [^;]+\.release\(\);/)
@@ -67,8 +67,8 @@ test('data-only library Promise operations preserve fulfilled metadata and lower
     { libraries: promiseLibrarySet(), target: 'cc' }
   )
 
-  assert.match(asyncResult.code, /inox_library_promise_\d+ = fixture\.load\(\);/)
-  assert.match(asyncResult.code, /\(inox_library_promise_\d+\)\.awaitValue\(\)/)
+  assert.match(asyncResult.code, /inox_library_asyncResult_\d+ = fixture\.load\(\);/)
+  assert.match(asyncResult.code, /\(inox_library_asyncResult_\d+\)\.awaitValue\(\)/)
   assert.match(asyncResult.code, /FixtureItem\(inox_await_\d+\)/)
 
   const changed = promiseLibrary()
@@ -82,7 +82,7 @@ test('data-only library Promise operations preserve fulfilled metadata and lower
 function promiseLibrary(): CompilerLibraryDescriptor {
   return {
     id: 'fixture',
-    dependencies: [],
+    dependencies: ['global:collections'],
     declarations: [],
     nativeTypes: [
       {
@@ -100,7 +100,7 @@ function promiseLibrary(): CompilerLibraryDescriptor {
     runtimeRequirements: [
       {
         id: 'fixture',
-        dependencies: ['async-runtime', 'collections', 'managed-values', 'objects'],
+        dependencies: ['async-runtime', 'global:collections#array', 'managed-values', 'objects'],
         cPreludeIncludes: ['fixture.h'],
         capabilities: []
       }

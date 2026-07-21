@@ -10,6 +10,7 @@ import type { AnyNode, ObjectShapeInfo, ValueType } from '../../../../compiler/t
 
 const libraryId = 'global:json'
 const collectionsLibraryId = 'global:collections'
+const arrayRuntimeRequirement = `${collectionsLibraryId}#array`
 const arrayTypeId = `${collectionsLibraryId}#Array`
 const runtimeRequirement = libraryId
 const runtimeRequirements = [runtimeRequirement]
@@ -30,7 +31,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: ['collections', 'managed-values', 'objects', 'string-bytes'],
+      dependencies: [arrayRuntimeRequirement, 'managed-values', 'objects', 'string-bytes'],
       cPreludeIncludes: ['inox/json.h'],
       capabilities: []
     }
@@ -196,11 +197,21 @@ function jsonArrayElementTypeRef(info: JsonParseLiteralTypeInfo): TypeRef {
 
 function jsonShapeFieldTypeRef(field: AnyNode): TypeRef {
   return jsonLiteralInfoTypeRef({
-    valueType: field.valueType,
+    valueType: jsonShapeFieldValueType(field),
     shape: field.shape ?? null,
     arrayElementType: field.arrayElementType ?? null,
     arrayElementDeclaredType: field.arrayElementDeclaredType ?? null
   })
+}
+
+function jsonShapeFieldValueType(field: AnyNode): ValueType {
+  const valueType = field.valueType
+
+  if (typeof valueType === 'string') {
+    return valueType
+  }
+
+  return 'unknown'
 }
 
 function primitiveTypeRef(name: 'boolean' | 'bytes' | 'number' | 'string' | 'void'): TypeRef {
@@ -664,13 +675,7 @@ function commonJsonObjectField(name: string, elements: JsonParseLiteralTypeInfo[
 
     if (field !== null) {
       fields.push(field)
-      const fieldValueType = field.valueType
-
-      if (fieldValueType === null || typeof fieldValueType === 'undefined') {
-        valueTypes.push('unknown')
-      } else {
-        valueTypes.push(fieldValueType)
-      }
+      valueTypes.push(jsonShapeFieldValueType(field))
     }
   }
 
@@ -694,7 +699,7 @@ function commonJsonFieldShape(fields: AnyNode[]): ObjectShapeInfo | null {
 
   for (let index = 0; index < fields.length; index = index + 1) {
     elements.push({
-      valueType: fields[index].valueType,
+      valueType: jsonShapeFieldValueType(fields[index]),
       shape: fields[index].shape ?? null,
       arrayElementType: fields[index].arrayElementType ?? null,
       arrayElementDeclaredType: fields[index].arrayElementDeclaredType ?? null
@@ -769,7 +774,7 @@ function jsonObjectLiteralField(name: string, fieldType: JsonParseLiteralTypeInf
     arrayElementDeclaredType: fieldType.arrayElementDeclaredType,
     mapKeyType: null,
     mapValueType: null,
-    promiseValueType: null,
+    asyncResultValueType: null,
     setElementType: null,
     shape: fieldType.shape,
     loc: { line: 1, column: 1 }

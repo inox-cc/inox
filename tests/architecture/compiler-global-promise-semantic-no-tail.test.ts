@@ -10,6 +10,8 @@ const forbiddenSourcePatterns = [
   /['"](?:then|catch|resolve|reject)['"]\s*(?:===|!==)\s*(?:[A-Za-z_$][A-Za-z0-9_$]*\.)*\bcallee\.property\b/
 ]
 const forbiddenPatterns = [
+  /(?:^|[^A-Za-z0-9_$])[A-Za-z0-9_$]*[Pp]romise[A-Za-z0-9_$]*(?:$|[^A-Za-z0-9_$])/,
+  /['"]promise['"]/,
   /(?:===|!==)\s*['"]Promise['"]/,
   /['"]Promise['"]\s*(?:===|!==)/,
   /\b(?:checkPromiseStaticCall|checkPromiseMethodCall|checkPromiseConstructorExpression|checkPromiseCallback)\b/,
@@ -29,9 +31,21 @@ test('portable compiler не содержит global Promise API semantic tails'
 
   assert.equal(sourceHasForbiddenMemberComparison("expression.callee.property\n  !== 'then'"), true)
   assert.equal(sourceHasForbiddenMemberComparison("'catch'\n  === expression.callee.property"), true)
+  assert.equal(isHostPromiseImplementation('compiler/core.ts', '): Promise<FileCompileResult> {'), true)
+  assert.equal(isHostPromiseImplementation('compiler/core.ts', "if (name === 'Promise') {"), false)
+  assert.equal(isHostPromiseImplementation('compiler/core.ts', 'return Promise.resolve(value)'), false)
+  assert.equal(
+    isHostPromiseImplementation('compiler/node-host.ts', 'return Promise.resolve(source)'),
+    true
+  )
 
   for (const file of await typescriptFiles(compilerRoot)) {
     const relative = file.slice(projectRoot.length + 1)
+
+    if (/promise/i.test(relative)) {
+      tails.push(`${relative}: target Promise terminology in portable file name`)
+    }
+
     const source = await readFile(file, 'utf8')
     const lines = source.split('\n')
 
@@ -56,6 +70,19 @@ test('portable compiler не содержит global Promise API semantic tails'
     }
   }
 
+  const extensionTypes = await readFile(resolve(compilerRoot, 'extensions/types.ts'), 'utf8')
+  const operationKind = extensionTypes.match(
+    /export type LibraryAsyncResultOperationKind\s*=([\s\S]*?)(?:\n\n|$)/
+  )?.[1]
+
+  assert.ok(operationKind, 'LibraryAsyncResultOperationKind declaration not found')
+
+  for (const oldRole of ['construct', 'resolve', 'then', 'catch']) {
+    if (operationKind.includes(`'${oldRole}'`)) {
+      tails.push(`compiler/extensions/types.ts: legacy async-result role ${oldRole}`)
+    }
+  }
+
   assert.equal(tails.length, 0, tails.join('\n'))
 })
 
@@ -70,9 +97,17 @@ function sourceHasForbiddenMemberComparison(source: string): boolean {
 }
 
 function isHostPromiseImplementation(relative: string, line: string): boolean {
+  if (!line.includes("'") && !line.includes('"')) {
+    const withoutTypeReferences = line.replace(/\bPromise<[^<>]+>/g, '')
+
+    if (!/\bPromise\b/.test(withoutTypeReferences)) {
+      return true
+    }
+  }
+
   return (
     (relative === 'compiler/memory-host.ts' || relative === 'compiler/node-host.ts') &&
-    (line.includes('Promise.resolve') || line.includes('Promise.reject'))
+    /^\s*return Promise\.(?:resolve|reject)\(/.test(line)
   )
 }
 

@@ -23,7 +23,7 @@ export function emitModuleFunctionEffectsContract(functionEffects: IrFunctionEff
 
   return `${JSON.stringify(
     {
-      version: 1,
+      version: 2,
       functions: effects
     },
     null,
@@ -53,7 +53,7 @@ export function parseModuleFunctionEffectsContractResult(
     }
   }
 
-  if (parsed.version !== 1) {
+  if (parsed.version !== 2) {
     diagnostics.push(moduleFunctionEffectsDiagnostic('unsupported function effects contract version', file))
     return {
       functionEffects: [],
@@ -152,7 +152,7 @@ function isUnknownRecord(value: unknown): boolean {
 }
 
 function isIrThrowValueType(value: unknown): boolean {
-  return value === 'error' || value === 'other' || value === 'string'
+  return value === 'exception-object' || value === 'other' || value === 'string'
 }
 
 function moduleFunctionEffectsDiagnostic(message: string, file: string | null): Diagnostic {

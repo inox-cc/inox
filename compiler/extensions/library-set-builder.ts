@@ -20,6 +20,7 @@ import type {
   LibraryResultShapeFieldDescriptor,
   LibraryRuntimeInitializerArgumentDescriptor,
   LibraryRuntimeInitializerDescriptor,
+  LibraryStringPrefixBackendConstraintDescriptor,
   RuntimeRequirementDescriptor,
   ObjectTypeRef,
   TypeRef,
@@ -38,7 +39,6 @@ import {
 const compilerCoreRuntimeRequirementIds = [
   'async-runtime',
   'callback-values',
-  'collections',
   'managed-values',
   'objects',
   'string-bytes',
@@ -185,6 +185,7 @@ function validateCompilerLibrarySet(
   validateUniqueOperationIds(operations)
   validateUniqueIntrinsicRoles(intrinsicBindings)
   validateIntrinsicOperationBindings(intrinsicBindings, operations)
+  validateSequenceMaterializationIntrinsic(intrinsicBindings, operations)
   validateAsyncResultIntrinsicNativeType(intrinsicBindings, operations, nativeTypes)
 }
 
@@ -642,6 +643,7 @@ function validateNativeTypes(nativeTypes: LibraryNativeTypeDescriptor[]): void {
     validateTypeTraits(`native type ${nativeType.typeId}`, nativeType.traits ?? [], nativeTypes, typeParameters)
     validateNativeTypeValueAdapter(nativeType)
     validateNativeTypeRuntimeValueExpression(nativeType)
+    validateNativeTypeRuntimeValueValidExpression(nativeType)
     validateNativeTypeAwaitExpression(nativeType)
     validateNativeTypeAsyncTaskBridge(nativeType)
     validateNativeTypeIteration(nativeType)
@@ -669,6 +671,14 @@ function validateNativeTypeRuntimeValueExpression(nativeType: LibraryNativeTypeD
 
   if (expression !== null && typeof expression !== 'undefined' && !expression.includes('$value')) {
     throw new Error(`native type ${nativeType.typeId} C++ runtime value expression requires $value`)
+  }
+}
+
+function validateNativeTypeRuntimeValueValidExpression(nativeType: LibraryNativeTypeDescriptor): void {
+  const expression = nativeType.cRuntimeValueValidExpression
+
+  if (expression !== null && typeof expression !== 'undefined' && !expression.includes('$value')) {
+    throw new Error(`native type ${nativeType.typeId} C++ runtime value validity expression requires $value`)
   }
 }
 
@@ -855,7 +865,7 @@ function validateOperationTypeRefs(
     const typeParameters = validateOperationTypeParameters(operation)
     const operationTypeRef = operation.resultTypeRef
 
-    validateOperationArgumentNarrowing(operation)
+    validateOperationArgumentNarrowing(operation, nativeTypes, typeParameters)
 
     if (operationTypeRef !== null && typeof operationTypeRef !== 'undefined') {
       validateTypeRef(`operation ${operation.operationId} result`, operationTypeRef, nativeTypes, typeParameters)
@@ -907,7 +917,11 @@ function validateOperationTypeRefs(
   }
 }
 
-function validateOperationArgumentNarrowing(operation: LibraryOperationDescriptor): void {
+function validateOperationArgumentNarrowing(
+  operation: LibraryOperationDescriptor,
+  nativeTypes: LibraryNativeTypeDescriptor[],
+  typeParameters: Set<string> | null
+): void {
   const narrowing = operation.argumentNarrowing
 
   if (narrowing === null || typeof narrowing === 'undefined') {
@@ -927,8 +941,20 @@ function validateOperationArgumentNarrowing(operation: LibraryOperationDescripto
 
   const trueValueType = narrowing.trueValueType
   const falseValueType = narrowing.falseValueType
+  const trueTypeRef = narrowing.trueTypeRef
+  const falseTypeRef = narrowing.falseTypeRef
+
+  if (trueTypeRef !== null && typeof trueTypeRef !== 'undefined') {
+    validateTypeRef(`operation ${operation.operationId} true argument narrowing`, trueTypeRef, nativeTypes, typeParameters)
+  }
+
+  if (falseTypeRef !== null && typeof falseTypeRef !== 'undefined') {
+    validateTypeRef(`operation ${operation.operationId} false argument narrowing`, falseTypeRef, nativeTypes, typeParameters)
+  }
 
   if (
+    (trueTypeRef === null || typeof trueTypeRef === 'undefined') &&
+    (falseTypeRef === null || typeof falseTypeRef === 'undefined') &&
     (trueValueType === null || typeof trueValueType === 'undefined' || trueValueType.length === 0) &&
     (falseValueType === null || typeof falseValueType === 'undefined' || falseValueType.length === 0) &&
     narrowing.trueNonNullable !== true &&
@@ -1290,12 +1316,6 @@ function legacyResultMetadataField(
   if (legacyMetadataIsPresent(variant?.resultShapeFields ?? operation.resultShapeFields)) {
     return 'resultShapeFields'
   }
-  if (legacyMetadataIsPresent(variant?.resultArrayElementType ?? operation.resultArrayElementType)) {
-    return 'resultArrayElementType'
-  }
-  if (legacyMetadataIsPresent(variant?.resultArrayElementTypeId ?? operation.resultArrayElementTypeId)) {
-    return 'resultArrayElementTypeId'
-  }
   if (legacyMetadataIsPresent(variant?.resultTypeId ?? operation.resultTypeId)) {
     return 'resultTypeId'
   }
@@ -1546,6 +1566,81 @@ function validateIntrinsicOperationBindings(
   }
 }
 
+function validateSequenceMaterializationIntrinsic(
+  bindings: IntrinsicRoleBinding[],
+  operations: LibraryOperationDescriptor[]
+): void {
+  for (let bindingIndex = 0; bindingIndex < bindings.length; bindingIndex = bindingIndex + 1) {
+    const binding = bindings[bindingIndex]
+
+    if (binding.role !== 'array-literal') {
+      continue
+    }
+
+    let provider: LibraryOperationDescriptor | null = null
+
+    for (let operationIndex = 0; operationIndex < operations.length; operationIndex = operationIndex + 1) {
+      const operation = operations[operationIndex]
+
+      if (
+        operation.kind === 'construct' &&
+        (operation.bindingId === binding.bindingId || (operation.bindingAliases ?? []).includes(binding.bindingId))
+      ) {
+        if (provider !== null) {
+          throw new Error(`Compiler library intrinsic provider array-literal has multiple construct operations`)
+        }
+
+        provider = operation
+      }
+    }
+
+    if (provider === null) {
+      throw new Error(`Compiler library intrinsic provider array-literal requires a construct operation`)
+    }
+
+    const materialization = provider.cSequenceMaterialization
+
+    if (materialization === null || typeof materialization === 'undefined') {
+      throw new Error(
+        `Compiler library intrinsic provider array-literal operation ${provider.operationId} requires C++ sequence materialization`
+      )
+    }
+
+    validateSequenceMaterializationExpression(provider.operationId, 'create', materialization.createExpression, [])
+    validateSequenceMaterializationExpression(
+      provider.operationId,
+      'append element',
+      materialization.appendElementExpression,
+      ['$target', '$value']
+    )
+    validateSequenceMaterializationExpression(
+      provider.operationId,
+      'append spread',
+      materialization.appendSpreadExpression,
+      ['$target', '$value']
+    )
+  }
+}
+
+function validateSequenceMaterializationExpression(
+  operationId: string,
+  label: string,
+  expression: string,
+  requiredPlaceholders: string[]
+): void {
+  if (expression.trim().length === 0) {
+    throw new Error(`operation ${operationId} C++ sequence ${label} expression must not be empty`)
+  }
+
+  for (let index = 0; index < requiredPlaceholders.length; index = index + 1) {
+    if (!expression.includes(requiredPlaceholders[index])) {
+      throw new Error(
+        `operation ${operationId} C++ sequence ${label} expression requires ${requiredPlaceholders[index]}`
+      )
+    }
+  }
+}
+
 function validateAsyncResultIntrinsicNativeType(
   bindings: IntrinsicRoleBinding[],
   operations: LibraryOperationDescriptor[],
@@ -1579,7 +1674,7 @@ function validateAsyncResultIntrinsicNativeType(
 
     const constructOperation = constructOperations[0]
 
-    if (constructOperation.asyncResultOperation !== 'construct') {
+    if (constructOperation.asyncResultOperation !== 'create') {
       throw new Error(
         `Compiler library intrinsic provider async-result construct operation ${constructOperation.operationId} must declare async-result construct role`
       )
@@ -1597,7 +1692,25 @@ function validateAsyncResultIntrinsicNativeType(
 
     if (typeof constructOperation.cExpression !== 'string' || constructOperation.cExpression.trim().length === 0) {
       throw new Error(
-        `Compiler library intrinsic provider async-result construct operation ${constructOperation.operationId} requires a C++ expression`
+        `Compiler library intrinsic provider async-result create operation ${constructOperation.operationId} requires a C++ expression`
+      )
+    }
+
+    if (
+      typeof constructOperation.cAsyncFulfillExpression !== 'string' ||
+      constructOperation.cAsyncFulfillExpression.trim().length === 0
+    ) {
+      throw new Error(
+        `Compiler library intrinsic provider async-result create operation ${constructOperation.operationId} requires non-empty cAsyncFulfillExpression`
+      )
+    }
+
+    if (
+      typeof constructOperation.cAsyncRejectExpression !== 'string' ||
+      constructOperation.cAsyncRejectExpression.trim().length === 0
+    ) {
+      throw new Error(
+        `Compiler library intrinsic provider async-result create operation ${constructOperation.operationId} requires non-empty cAsyncRejectExpression`
       )
     }
 
@@ -1615,7 +1728,7 @@ function validateAsyncResultTaskOperations(
   constructOperation: LibraryOperationDescriptor,
   operations: LibraryOperationDescriptor[]
 ): void {
-  const requiredKinds: LibraryAsyncResultOperationKind[] = ['construct', 'resolve', 'reject', 'then']
+  const requiredKinds: LibraryAsyncResultOperationKind[] = ['create', 'fulfill', 'reject', 'map-fulfilled']
 
   for (let kindIndex = 0; kindIndex < requiredKinds.length; kindIndex = kindIndex + 1) {
     const kind = requiredKinds[kindIndex]
@@ -1636,7 +1749,7 @@ function validateAsyncResultTaskOperations(
     }
 
     const operation = matches[0]
-    const expectedKind = kind === 'construct' ? 'construct' : 'call'
+    const expectedKind = kind === 'create' ? 'construct' : 'call'
 
     if (operation.kind !== expectedKind) {
       throw new Error(
@@ -1644,7 +1757,7 @@ function validateAsyncResultTaskOperations(
       )
     }
 
-    if (kind === 'construct' && operation !== constructOperation) {
+    if (kind === 'create' && operation !== constructOperation) {
       throw new Error(
         `Compiler library intrinsic provider async-result construct binding and async-result operation must match`
       )
@@ -1720,6 +1833,8 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           ':' +
           (item.cAsyncRejectExpression ?? '') +
           ':' +
+          sequenceMaterializationFingerprint(item) +
+          ':' +
           sortedStrings(item.bindingAliases ?? []).join(',') +
           ':' +
           (item.acceptsUnknownReceiver === true ? 'unknown-receiver' : 'typed-receiver') +
@@ -1757,10 +1872,6 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           resultInferenceFingerprint(item.resultInference) +
           ':' +
           operationResultShapeFingerprint(item) +
-          ':' +
-          (item.resultArrayElementType ?? '') +
-          ':' +
-          (item.resultArrayElementTypeId ?? '') +
           ':' +
           (item.receiverTypeId ?? '') +
           ':' +
@@ -1886,6 +1997,8 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           (item.cValueAdapter ?? '') +
           ':runtime-value-expression=' +
           (item.cRuntimeValueExpression ?? '') +
+          ':runtime-value-valid-expression=' +
+          (item.cRuntimeValueValidExpression ?? '') +
           ':await-expression=' +
           (item.cAwaitExpression ?? '') +
           ':async-task-bridge=' +
@@ -2163,10 +2276,6 @@ function operationVariantsFingerprint(operation: LibraryOperationDescriptor): st
         ':' +
         resultShapeFieldsFingerprint(variant.resultShapeFields ?? []) +
         ':' +
-        (variant.resultArrayElementType ?? '') +
-        ':' +
-        (variant.resultArrayElementTypeId ?? '') +
-        ':' +
         (variant.resultTypeId ?? '') +
         ':' +
         (variant.cppType ?? '') +
@@ -2182,6 +2291,24 @@ function operationVariantsFingerprint(operation: LibraryOperationDescriptor): st
   return rows.join(';')
 }
 
+function sequenceMaterializationFingerprint(operation: LibraryOperationDescriptor): string {
+  const materialization = operation.cSequenceMaterialization
+
+  if (materialization === null || typeof materialization === 'undefined') {
+    return ''
+  }
+
+  return (
+    materialization.createExpression +
+    ':' +
+    materialization.appendElementExpression +
+    ':' +
+    materialization.appendSpreadExpression +
+    ':' +
+    materialization.failureMode
+  )
+}
+
 function operationArgumentNarrowingFingerprint(
   narrowing: LibraryOperationDescriptor['argumentNarrowing']
 ): string {
@@ -2191,6 +2318,8 @@ function operationArgumentNarrowingFingerprint(
 
   return (
     `${narrowing.argumentIndex}:` +
+    `${typeRefFingerprintOrEmpty(narrowing.trueTypeRef)}:` +
+    `${typeRefFingerprintOrEmpty(narrowing.falseTypeRef)}:` +
     `${fingerprintAtom(narrowing.trueValueType ?? '')}:` +
     `${fingerprintAtom(narrowing.falseValueType ?? '')}:` +
     `${narrowing.trueNonNullable === true ? 'true-required' : 'true-nullable'}:` +
@@ -2333,13 +2462,7 @@ function objectLiteralFieldsFingerprint(fields: LibraryObjectLiteralFieldDescrip
 }
 
 function stringPrefixBackendConstraintsFingerprint(
-  constraints: {
-    prefixes: string[]
-    option: string
-    allowedValues: string[]
-    diagnosticCode: string
-    diagnosticMessage: string
-  }[]
+  constraints: LibraryStringPrefixBackendConstraintDescriptor[]
 ): string {
   const rows: string[] = []
 

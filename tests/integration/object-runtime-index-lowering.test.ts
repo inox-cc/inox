@@ -41,9 +41,9 @@ for (const a of foo.v) {
   ) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /auto inox_library_result_\d+ = Object\.values\(inox::Value\(a\)\);/)
-  assert.match(source, /auto inox_library_result_\d+ = Object\.entries\(inox::Value\(a\)\);/)
-  assert.equal(source.match(/auto inox_library_result_\d+ = inox_library_result_\d+\.get\(0\);/g)?.length, 2)
+  assert.match(source, /auto inox_library_object_\d+ = Object\.values\(inox::Value\(a\)\);/)
+  assert.match(source, /auto inox_library_object_\d+ = Object\.entries\(inox::Value\(a\)\);/)
+  assert.equal(source.match(/auto inox_library_(?:result|object)_\d+ = inox_library_object_\d+\.get\(0\);/g)?.length, 2)
   assert.match(source, /auto inox_library_iterator_\d+ = \(Array\(inox_value_\d+\)\)\.values\(\);/)
   assert.match(source, /while \(true\) \{/)
   assert.match(source, /auto inox_library_step_\d+ = inox_library_iterator_\d+\.next\(\);/)

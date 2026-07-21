@@ -15,5 +15,5 @@ function path(item: Item): string[] {
 
   const result = compileSourceToIr(source, { libraries: defaultCompilerLibrarySet })
 
-  assert.equal(result.ir.functionDeclarations[0].returnType, 'array')
+  assert.equal(result.ir.functionDeclarations[0].returnType, 'object')
 })

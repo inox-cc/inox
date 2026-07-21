@@ -332,7 +332,7 @@ class Foo {
   }
 
   isPromise(): boolean {
-    return this.name === 'promise'
+    return this.name === 'async-result'
   }
 }
 
@@ -364,7 +364,7 @@ console.log(f.isPromise())
   assert.match(result.code, /!inox_cmp_string_\d+\.valid\(\)/)
   assert.match(
     result.code,
-    /inox_cmp_string_\d+\.length\(\) == 7 && memcmp\(inox_cmp_string_\d+\.bytes\(\), "promise", inox_cmp_string_\d+\.length\(\)\) == 0/
+    /inox_cmp_string_\d+\.length\(\) == 12 && memcmp\(inox_cmp_string_\d+\.bytes\(\), "async-result", inox_cmp_string_\d+\.length\(\)\) == 0/
   )
   assert.doesNotMatch(constructor, /this->name/)
   assert.doesNotMatch(constructor, /inox::Value/)

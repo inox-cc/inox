@@ -56,7 +56,6 @@ export function isEqualityComparableType(left: ValueType, right: ValueType): boo
       left === 'string' ||
       left === 'null' ||
       left === 'object' ||
-      left === 'array' ||
       left === 'bytes') &&
     left === right
   )
@@ -138,7 +137,7 @@ function assignabilityBaseType(valueType: ValueType): ValueType {
   }
 
   if (isArrayTypeName(valueType)) {
-    return 'array'
+    return 'object'
   }
 
   return valueType

@@ -1,3 +1,5 @@
+import { compilerAnyNodeSyntaxChildFields } from '../../any-node-fields.ts'
+
 export const compilerAnyNodeStringFields: readonly string[] = [
   'type',
   'builtin',
@@ -11,10 +13,9 @@ export const compilerAnyNodeStringFields: readonly string[] = [
   'declaredType',
   'declaredName',
   'valueType',
-  'arrayElementTypeId',
-  'promiseValueType',
-  'promiseRejectionValueType',
-  'promiseRejectionIntrinsicRole',
+  'asyncResultValueType',
+  'asyncResultRejectionValueType',
+  'asyncResultRejectionIntrinsicRole',
   'propertyValueType',
   'libraryBindingId',
   'libraryOperationId',
@@ -44,9 +45,8 @@ export const compilerAnyNodeStringFields: readonly string[] = [
   'libraryCallbackLifetime',
   'returnType',
   'declaredReturnType',
-  'returnPromiseValueType',
+  'returnAsyncResultValueType',
   'className',
-  'collectionKind',
   'constraint',
   'param',
   'functionTypeOwnership',
@@ -89,11 +89,14 @@ export const compilerAnyNodeArrayFields: readonly string[] = [
   'narrowingFalseNames',
   'narrowingTrueNames',
   'fields',
+  'functionOverloads',
   'indexSignatures',
   'methods',
   'params',
   'path',
   'properties',
+  'runtimeTypeAlternatives',
+  'returnRuntimeTypeAlternatives',
   'specifiers',
   'typeArguments',
   'typeParameters'
@@ -108,43 +111,30 @@ export const compilerAnyNodeStringArrayFields: readonly string[] = [
   'libraryRuntimeRequirements',
   'narrowingFalseNames',
   'narrowingTrueNames',
-  'path'
+  'path',
+  'typeArguments'
 ]
 
 export const compilerAnyNodeObjectFields: readonly string[] = [
-  'argument',
+  ...compilerAnyNodeSyntaxChildFields,
   'block',
-  'callee',
   'condition',
-  'consequent',
   'discriminant',
   'defaultValue',
   'dynamicField',
-  'alternate',
-  'expression',
-  'finalizer',
   'functionType',
-  'functionOverloads',
   'libraryArgumentNarrowing',
   'libraryRuntimeCallbackFunctionType',
-  'handler',
-  'index',
-  'init',
   'iterable',
-  'left',
   'mapValueShape',
   'loc',
-  'object',
   'paramLoc',
   'returnTypeRef',
   'returnShape',
-  'right',
   'shape',
   'staticLoc',
-  'target',
-  'test',
   'typeRef',
   'update'
 ]
 
-export const compilerAnyNodeUnknownFields: readonly string[] = ['body', 'raw', 'source', 'value']
+export const compilerAnyNodeUnknownFields: readonly string[] = ['body', 'consequent', 'raw', 'source', 'value']

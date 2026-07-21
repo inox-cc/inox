@@ -13,6 +13,8 @@ test('pnpm test не запускает проверки собранного co
   assert.doesNotMatch(packageJson.scripts.test, /dist\/inox|\bbuild\b/)
   assert.doesNotMatch(packageJson.scripts['test:features'], /dist\/inox|\bbuild\b/)
   assert.match(packageJson.scripts['test:inox'], /--compiler dist\/inox/)
+  assert.match(packageJson.scripts['test:inox'], /--semantic-probe dist\/inox-stage6-semantic-probe/)
+  assert.doesNotMatch(packageJson.scripts['test:inox'], /\bbuild\b/)
   assert.ok(hostedStart >= 0, 'hosted integration runner is missing')
   assert.ok(nativeStart > hostedStart, 'native integration runner must be separate from hosted checks')
   assert.match(

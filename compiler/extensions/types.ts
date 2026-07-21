@@ -182,6 +182,7 @@ export type LibraryNativeTypeDescriptor = {
   runtimeRequirements: RuntimeRequirementId[]
   cValueAdapter?: string | null
   cRuntimeValueExpression?: string | null
+  cRuntimeValueValidExpression?: string | null
   cAwaitExpression?: string | null
   cAsyncTaskBridge?: LibraryCAsyncTaskBridgeDescriptor | null
   typeParameters?: string[]
@@ -191,7 +192,12 @@ export type LibraryNativeTypeDescriptor = {
 }
 
 export type LibraryOperationKind = 'call' | 'construct' | 'member-read' | 'member-write' | 'index-read' | 'index-write'
-export type LibraryAsyncResultOperationKind = 'construct' | 'resolve' | 'reject' | 'then' | 'catch'
+export type LibraryAsyncResultOperationKind =
+  | 'create'
+  | 'fulfill'
+  | 'reject'
+  | 'map-fulfilled'
+  | 'map-rejected'
 
 export type LibraryCArgumentKind =
   | 'receiver'
@@ -386,8 +392,6 @@ export type LibraryOperationVariantDescriptor = {
   resultTypeRef?: TypeRef | null
   resultInference?: LibraryResultInferenceDescriptor | null
   resultShapeFields?: LibraryResultShapeFieldDescriptor[]
-  resultArrayElementType?: string | null
-  resultArrayElementTypeId?: LibraryNativeTypeId | null
   resultTypeId?: LibraryObjectTypeId | null
   cppType?: string | null
   valueType?: string | null
@@ -396,8 +400,17 @@ export type LibraryOperationVariantDescriptor = {
   callbackLifetime?: LibraryCallbackLifetime | null
 }
 
+export type LibraryCSequenceMaterializationDescriptor = {
+  createExpression: string
+  appendElementExpression: string
+  appendSpreadExpression: string
+  failureMode: 'thrown'
+}
+
 export type LibraryArgumentNarrowingDescriptor = {
   argumentIndex: number
+  trueTypeRef?: TypeRef | null
+  falseTypeRef?: TypeRef | null
   trueValueType?: string | null
   falseValueType?: string | null
   trueNonNullable?: boolean
@@ -414,6 +427,7 @@ export type LibraryOperationDescriptor = {
   asyncResultOperation?: LibraryAsyncResultOperationKind | null
   cAsyncFulfillExpression?: string | null
   cAsyncRejectExpression?: string | null
+  cSequenceMaterialization?: LibraryCSequenceMaterializationDescriptor | null
   runtimeRequirements: RuntimeRequirementId[]
   typeParameters?: LibraryOperationTypeParameterDescriptor[]
   cExpression?: string | null
@@ -429,8 +443,6 @@ export type LibraryOperationDescriptor = {
   resultTypeRef?: TypeRef | null
   resultInference?: LibraryResultInferenceDescriptor | null
   resultShapeFields?: LibraryResultShapeFieldDescriptor[]
-  resultArrayElementType?: string | null
-  resultArrayElementTypeId?: LibraryNativeTypeId | null
   receiverTypeId?: LibraryObjectTypeId | null
   resultTypeId?: LibraryObjectTypeId | null
   cCallStyle?: 'function' | 'member' | 'index' | 'index-assignment' | 'member-assignment' | null

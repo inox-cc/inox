@@ -16,9 +16,9 @@ test('awaitable TypeRef определяет fulfilled и rejected metadata', ()
 
 function assertAwaitedString(expression: AnyNode): void {
   assert.equal(expression.type, 'AwaitExpression')
-  assert.equal(expression.argument.valueType, 'promise')
-  assert.equal(expression.argument.promiseValueType, 'string')
-  assert.equal(expression.argument.promiseRejectionValueType, 'boolean')
+  assert.equal(expression.argument.valueType, 'async-result')
+  assert.equal(expression.argument.asyncResultValueType, 'string')
+  assert.equal(expression.argument.asyncResultRejectionValueType, 'boolean')
   assert.equal(expression.argument.typeRef.kind, 'nominal')
   assert.equal(expression.argument.typeRef.typeId, 'fixture:awaitable#Completion')
   assert.equal(expression.valueType, 'string')

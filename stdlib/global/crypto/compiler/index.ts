@@ -4,6 +4,8 @@ import type {
 } from '../../../../compiler/extensions/types.ts'
 
 const libraryId = 'global:crypto'
+const collectionsLibraryId = 'global:collections'
+const arrayRuntimeRequirement = `${collectionsLibraryId}#array`
 const runtimeRequirement = libraryId
 const uint8ArrayTypeId = 'global:binary#Uint8Array'
 
@@ -35,13 +37,13 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:binary'],
+  dependencies: ['global:binary', collectionsLibraryId],
   operations,
   intrinsicBindings: [],
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: [],
+      dependencies: [arrayRuntimeRequirement],
       cPreludeIncludes: ['inox/crypto.h'],
       capabilities: ['entropy']
     }

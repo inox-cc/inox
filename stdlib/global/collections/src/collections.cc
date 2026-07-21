@@ -1675,6 +1675,22 @@ inox::Value Array::pop() const {
   return inox::adopt(std::exchange(instance->items[instance->length], inox_undefined_value()));
 }
 
+void Array::appendAll(const Array& values) const {
+  size_t count = values.length();
+
+  if (inox::thrown()) {
+    return;
+  }
+
+  for (size_t index = 0; index < count; index += 1) {
+    push(values.get(index));
+
+    if (inox::thrown()) {
+      return;
+    }
+  }
+}
+
 size_t Array::push(const inox::Value& value) const {
   inox_value array = inox::Value::raw();
 

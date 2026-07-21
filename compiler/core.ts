@@ -1,5 +1,5 @@
 import { checkCCompileBudgets } from './budgets.ts'
-import type { CEmitOptions, CModuleEmitOptions } from './c/types.ts'
+import type { CEmitOptions, CModuleEmitOptions, CModuleOutputFile } from './c/types.ts'
 import { checkCProfileCapabilities } from './capabilities.ts'
 import { checkProgram } from './checker.ts'
 import { emitCBundleFromIrModules, emitCFromIr, emitCModuleFilesFromGraph } from './codegen-c.ts'
@@ -79,10 +79,10 @@ export type MemoryCModuleCompileOptions = {
 export type CModuleCompileResult = {
   target: 'cc'
   graph: ModuleGraph
-  files: any[]
+  files: CModuleOutputFile[]
 }
 
-type CModuleTextFile = {
+export type CModuleTextFile = {
   path: string
   code: string
 }
@@ -271,7 +271,7 @@ export function compileFileToCModuleTextsSync(
   entry: string,
   options: CModuleCompileOptions = {},
   libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
-): any[] {
+): CModuleTextFile[] {
   if (options.host === null || typeof options.host === 'undefined') {
     throw new Error('compileFileToCModuleTexts requires a compiler host')
   }
@@ -284,7 +284,7 @@ export function compileFileToCModuleTextsWithHostSync(
   options: CModuleCompileOptions,
   host: CompilerHost,
   libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
-): any[] {
+): CModuleTextFile[] {
   const compiled = compileGraphToIrModulesWithHostSync(
     entry,
     cModuleOptionsWithHostAndTarget(options, host, 'cc'),

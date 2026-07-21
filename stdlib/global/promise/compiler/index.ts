@@ -51,7 +51,7 @@ const operations: LibraryOperationDescriptor[] = [
     bindingId: promiseIntrinsicBindingId,
     operationId: `${promiseNativeTypeId}.construct`,
     kind: 'construct',
-    asyncResultOperation: 'construct',
+    asyncResultOperation: 'create',
     cAsyncFulfillExpression: 'fulfill',
     cAsyncRejectExpression: 'rejectWith',
     runtimeRequirements: [promiseRuntimeRequirement],
@@ -96,7 +96,7 @@ const operations: LibraryOperationDescriptor[] = [
     bindingId: 'global:Promise.resolve',
     operationId: `${promiseNativeTypeId}.resolve`,
     kind: 'call',
-    asyncResultOperation: 'resolve',
+    asyncResultOperation: 'fulfill',
     runtimeRequirements: [promiseRuntimeRequirement],
     typeParameters: [{ name: 'T', sources: [{ source: 'argument-type', argumentIndex: 0 }] }],
     cExpression: 'inox::Promise::resolve',
@@ -148,6 +148,7 @@ const operations: LibraryOperationDescriptor[] = [
   promiseReceiverOperation(
     'then',
     'then',
+    'map-fulfilled',
     promiseTypeRef(mappedParameterTypeRef, rejectedParameterTypeRef),
     fulfilledParameterTypeRef,
     false
@@ -155,6 +156,7 @@ const operations: LibraryOperationDescriptor[] = [
   promiseReceiverOperation(
     'catch',
     'catchError',
+    'map-rejected',
     promiseTypeRef(fulfilledParameterTypeRef, unknownTypeRef),
     rejectedParameterTypeRef,
     true
@@ -169,7 +171,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       libraryId,
       typeId: promiseNativeTypeId,
       declarationNames: ['Promise'],
-      valueType: 'promise',
+      valueType: 'async-result',
       cppType: 'inox::Promise',
       cValueAdapter: 'inox::Promise($value)',
       baseTypeIds: [],
@@ -200,6 +202,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
 function promiseReceiverOperation(
   sourceName: 'catch' | 'then',
   cName: 'catchError' | 'then',
+  operationRole: 'map-fulfilled' | 'map-rejected',
   resultTypeRef: TypeRef,
   callbackParameterTypeRef: TypeRef,
   catchOperation: boolean
@@ -224,7 +227,7 @@ function promiseReceiverOperation(
     bindingId: `${promiseNativeTypeId}.${sourceName}`,
     operationId: `${promiseNativeTypeId}.${sourceName}`,
     kind: 'call',
-    asyncResultOperation: sourceName,
+    asyncResultOperation: operationRole,
     runtimeRequirements: [promiseRuntimeRequirement],
     receiverTypeId: promiseNativeTypeId,
     typeParameters,

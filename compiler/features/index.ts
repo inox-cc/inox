@@ -250,12 +250,6 @@ function copyStrings(values: string[]): string[] {
   return result
 }
 
-function pushAll(target: string[], values: string[]): void {
-  for (let index = 0; index < values.length; index = index + 1) {
-    target.push(values[index])
-  }
-}
-
 function pushAllDescriptors(target: CompilerFeatureDescriptor[], values: CompilerFeatureDescriptor[]): void {
   for (let index = 0; index < values.length; index = index + 1) {
     target.push(values[index])

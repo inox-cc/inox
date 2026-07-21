@@ -5,12 +5,10 @@ import type { CFunctionContext } from '../context.ts'
 import { isCJsGlobalRoot, usesCJsGlobal } from '../globals.ts'
 import { isOptionalChainExpression } from '../syntax.ts'
 import type {
-  CKnownArrayElement,
   CKnownObjectField,
   CKnownObjectIndexField,
   CFunctionType,
-  CObjectFieldInfo,
-  CRuntimeArrayElement
+  CObjectFieldInfo
 } from '../types.ts'
 import { isNullableScalarType, isOpaqueRuntimeValueType } from '../value-types.ts'
 import {
@@ -20,32 +18,17 @@ import {
   compilerAnyNodeStringArrayFields,
   compilerAnyNodeStringFields
 } from './any-node-fields.ts'
-import {
-  isMemberAccessExpression,
-  resolveKnownObjectMember,
-  resolveObjectExpressionMember,
-  isIndexAccessExpression,
-  resolveKnownObjectIndex,
-  resolveObjectExpressionIndex
-} from './objects.ts'
-
 export type CExpressionTypeDependencies = {
-  isArrayIncludesCall: (expression: AnyNode) => boolean
-  isArrayJoinCall: (expression: AnyNode, context: CFunctionContext) => boolean
-  isArrayLengthExpression: (expression: AnyNode, context: CFunctionContext) => boolean
   isClassConstructorExpression: (expression: AnyNode, context: CFunctionContext) => boolean
   isIndexAccessExpression: (expression: AnyNode) => boolean
   isMemberAccessExpression: (expression: AnyNode) => boolean
-  isPromiseReturningFunctionCallee: (callee: AnyNode, context: CFunctionContext) => boolean
+  isAsyncResultReturningFunctionCallee: (callee: AnyNode, context: CFunctionContext) => boolean
   knownValueType: (valueType: string | null | undefined) => string | null
-  resolveKnownArrayIndex: (expression: AnyNode, context: CFunctionContext) => CKnownArrayElement | null
-  resolveKnownArrayLength: (expression: AnyNode, context: CFunctionContext) => string | null
   resolveKnownObjectIndex: (expression: AnyNode, context: CFunctionContext) => CKnownObjectIndexField | null
   resolveKnownObjectMember: (expression: AnyNode, context: CFunctionContext) => CKnownObjectField | null
   resolveObjectExpressionIndex: (expression: AnyNode) => CObjectFieldInfo | null
   resolveObjectExpressionMember: (expression: AnyNode) => CObjectFieldInfo | null
-  resolvePromiseExpressionValueType: (expression: AnyNode, context: CFunctionContext) => string | null
-  resolveRuntimeArrayIndex: (expression: AnyNode, context: CFunctionContext) => CRuntimeArrayElement | null
+  resolveAsyncResultExpressionValueType: (expression: AnyNode, context: CFunctionContext) => string | null
 }
 
 function cValueTypeOrUnknown(expression: AnyNode): string {
@@ -54,6 +37,14 @@ function cValueTypeOrUnknown(expression: AnyNode): string {
   }
 
   return 'unknown'
+}
+
+function cExpressionChild(value: AnyNode | null | undefined): AnyNode | null {
+  if (value === null || typeof value === 'undefined') {
+    return null
+  }
+
+  return value
 }
 
 function cStringAt(values: string[], index: number): string {
@@ -365,11 +356,7 @@ function isBooleanBinaryOperator(operator: string): boolean {
   return operator === '||'
 }
 
-function cReferenceExpressionType(
-  expression: AnyNode,
-  context: CFunctionContext,
-  deps: CExpressionTypeDependencies
-): string {
+function cReferenceExpressionType(expression: AnyNode, context: CFunctionContext): string {
   const variableType = context.variables.get(cDottedPath(expression.path))
   const name = cStringAt(expression.path, 0)
   const localName = expression.path.length === 1 && context.localValueNames.has(name)
@@ -402,13 +389,6 @@ function cReferenceExpressionType(
     }
 
     return moduleValueType
-  }
-
-  if (
-    (variableType === null || typeof variableType === 'undefined') &&
-    (context.runtimeArrayElementTypes.has(name) || context.arrayShapes.has(name))
-  ) {
-    return 'array'
   }
 
   if (shouldPreferReferenceMetadataType(variableType, metadataType)) {
@@ -498,8 +478,8 @@ export function inferExpressionType(
     return cValueTypeOrUnknown(expression)
   }
 
-  if (expression.type === 'CallExpression' && deps.isPromiseReturningFunctionCallee(expression.callee, context)) {
-    return 'promise'
+  if (expression.type === 'CallExpression' && deps.isAsyncResultReturningFunctionCallee(expression.callee, context)) {
+    return 'async-result'
   }
 
   if (expression.type === 'CallExpression') {
@@ -518,14 +498,6 @@ export function inferExpressionType(
     }
   }
 
-  if (deps.isArrayIncludesCall(expression)) {
-    return 'boolean'
-  }
-
-  if (deps.isArrayJoinCall(expression, context)) {
-    return 'string'
-  }
-
   if (deps.isClassConstructorExpression(expression, context)) {
     return 'object'
   }
@@ -541,12 +513,12 @@ export function inferExpressionType(
   if (expression.type === 'AwaitExpression') {
     let valueType = deps.knownValueType(expression.valueType)
 
-    if (valueType === 'promise') {
+    if (valueType === 'async-result') {
       valueType = null
     }
 
     if (valueType === null || typeof valueType === 'undefined') {
-      valueType = deps.resolvePromiseExpressionValueType(expression.argument, context)
+      valueType = deps.resolveAsyncResultExpressionValueType(expression.argument, context)
     }
 
     if (valueType !== null && typeof valueType !== 'undefined') {
@@ -555,7 +527,7 @@ export function inferExpressionType(
 
     const argumentType = inferExpressionType(expression.argument, context, deps)
 
-    if (argumentType === 'promise') {
+    if (argumentType === 'async-result') {
       return 'unknown'
     }
 
@@ -569,14 +541,21 @@ export function inferExpressionType(
       return knownType
     }
 
-    const consequentType = inferExpressionType(expression.consequent, context, deps)
-    const alternateType = inferExpressionType(expression.alternate, context, deps)
+    const consequent = cExpressionChild(expression.consequent)
+    const alternate = cExpressionChild(expression.alternate)
 
-    if (isUndefinedReferenceExpression(expression.consequent)) {
+    if (consequent === null || alternate === null) {
+      return 'unknown'
+    }
+
+    const consequentType = inferExpressionType(consequent, context, deps)
+    const alternateType = inferExpressionType(alternate, context, deps)
+
+    if (isUndefinedReferenceExpression(consequent)) {
       return alternateType
     }
 
-    if (isUndefinedReferenceExpression(expression.alternate)) {
+    if (isUndefinedReferenceExpression(alternate)) {
       return consequentType
     }
 
@@ -592,7 +571,7 @@ export function inferExpressionType(
   }
 
   if (expression.type === 'Reference') {
-    return cReferenceExpressionType(expression, context, deps)
+    return cReferenceExpressionType(expression, context)
   }
 
   if (
@@ -651,7 +630,7 @@ export function inferExpressionType(
   }
 
   if (expression.type === 'ArrayLiteral') {
-    return 'array'
+    return expression.valueType ?? 'unknown'
   }
 
   if (expression.type === 'ObjectLiteral') {
@@ -663,16 +642,6 @@ export function inferExpressionType(
 
     if (narrowedType !== null && typeof narrowedType !== 'undefined') {
       return narrowedType
-    }
-
-    if (deps.isArrayLengthExpression(expression, context)) {
-      return 'number'
-    }
-
-    const length = deps.resolveKnownArrayLength(expression, context)
-
-    if (length !== null && typeof length !== 'undefined') {
-      return 'number'
     }
 
     const member = deps.resolveKnownObjectMember(expression, context)
@@ -727,6 +696,10 @@ export function inferExpressionType(
       return 'unknown'
     }
 
+    if (expression.declaredType === 'any') {
+      return 'unknown'
+    }
+
     return 'number'
   }
 
@@ -737,13 +710,7 @@ export function inferExpressionType(
       return narrowedType
     }
 
-    const element = deps.resolveKnownArrayIndex(expression, context)
     const field = deps.resolveKnownObjectIndex(expression, context)
-    const runtimeElement = deps.resolveRuntimeArrayIndex(expression, context)
-
-    if (element !== null && typeof element !== 'undefined') {
-      return element.valueType
-    }
 
     if (
       field !== null &&
@@ -777,10 +744,6 @@ export function inferExpressionType(
       return shapeField.valueType
     }
 
-    if (runtimeElement !== null && typeof runtimeElement !== 'undefined') {
-      return runtimeElement.valueType
-    }
-
     const anyNodeValueType = anyNodeLikeObjectAccessValueType(expression, context)
 
     if (anyNodeValueType !== null && typeof anyNodeValueType !== 'undefined') {
@@ -808,6 +771,10 @@ export function inferExpressionType(
     }
 
     if (expression.templatePlaceholder === true && expression.valueType === 'unknown') {
+      return 'unknown'
+    }
+
+    if (expression.declaredType === 'any') {
       return 'unknown'
     }
 
@@ -1035,7 +1002,7 @@ function anyNodeLikeFieldValueType(fieldName: string): string {
   }
 
   if (compilerAnyNodeArrayFields.includes(fieldName)) {
-    return 'array'
+    return 'object'
   }
 
   if (compilerAnyNodeObjectFields.includes(fieldName)) {
@@ -1067,7 +1034,6 @@ export function anyNodeLikeObjectFieldDeclaredType(fieldName: string): string | 
     fieldName === 'block' ||
     fieldName === 'callee' ||
     fieldName === 'condition' ||
-    fieldName === 'consequent' ||
     fieldName === 'defaultValue' ||
     fieldName === 'discriminant' ||
     fieldName === 'dynamicField' ||

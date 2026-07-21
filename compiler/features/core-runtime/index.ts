@@ -61,12 +61,6 @@ export const callbackValuesFeature: CompilerFeatureDescriptor = {
   cPreludeIncludes: [],
   hasCPreludeHelpers: false
 }
-export const collectionsFeature: CompilerFeatureDescriptor = {
-  id: 'collections',
-  runtimeRequirements: ['collections', 'managed-values'],
-  cPreludeIncludes: [],
-  hasCPreludeHelpers: false
-}
 export const objectsFeature: CompilerFeatureDescriptor = {
   id: 'objects',
   runtimeRequirements: ['managed-values', 'objects'],
@@ -95,7 +89,6 @@ export const weakReferencesFeature: CompilerFeatureDescriptor = {
 export const coreRuntimeFeatures: CompilerFeatureDescriptor[] = [
   asyncRuntimeFeature,
   callbackValuesFeature,
-  collectionsFeature,
   objectsFeature,
   runtimeValuesFeature,
   stringBytesFeature,
@@ -109,7 +102,7 @@ export function collectCoreRuntimeIrFeatures(node: AnyNode, features: CoreRuntim
     features.add('runtime-values')
   }
 
-  if (item.valueType === 'promise' || item.returnType === 'promise') {
+  if (item.valueType === 'async-result' || item.returnType === 'async-result') {
     features.add('async-runtime')
   }
 
@@ -158,10 +151,6 @@ export function collectCoreRuntimeIrFeatures(node: AnyNode, features: CoreRuntim
     }
   }
 
-  if (item.type === 'ArrayLiteral') {
-    features.add('collections')
-  }
-
   if (item.type === 'CallExpression' || item.type === 'OptionalCallExpression' || item.type === 'NewExpression') {
     recordCallFeatures(item, features)
   }
@@ -173,10 +162,6 @@ export function collectCoreRuntimeIrFeatures(node: AnyNode, features: CoreRuntim
       features.add('runtime-values')
       features.add('string-bytes')
     }
-  }
-
-  if (isArrayIndexExpression(item)) {
-    features.add('collections')
   }
 
   if (item.type === 'AssignmentExpression' && isObjectFieldExpression(item.target)) {
@@ -341,20 +326,6 @@ function isObjectFieldExpression(expression: CoreRuntimeNode | null | undefined)
   return shape !== null && typeof shape !== 'undefined' && shape.kind === 'object'
 }
 
-function isArrayIndexExpression(expression: CoreRuntimeNode | null | undefined): boolean {
-  if (
-    expression === null ||
-    typeof expression === 'undefined' ||
-    (expression.type !== 'IndexExpression' && expression.type !== 'OptionalIndexExpression')
-  ) {
-    return false
-  }
-
-  const object = expression.object
-
-  return object !== null && typeof object !== 'undefined' && object.valueType === 'array'
-}
-
 function mayBeStringBytesOperand(expression: CoreRuntimeNode | null | undefined): boolean {
   if (expression === null || typeof expression === 'undefined') {
     return false
@@ -431,8 +402,7 @@ function isSupportedRuntimeCallbackReturnType(returnType: string | null | undefi
     returnType === 'boolean' ||
     returnType === 'string' ||
     returnType === 'bytes' ||
-    returnType === 'object' ||
-    returnType === 'array'
+    returnType === 'object'
   )
 }
 

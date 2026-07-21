@@ -15,6 +15,7 @@ import type {
 
 const libraryId = 'node:crypto'
 const collectionsLibraryId = 'global:collections'
+const arrayRuntimeRequirement = `${collectionsLibraryId}#array`
 const arrayTypeId = `${collectionsLibraryId}#Array`
 const runtimeRequirement = 'node:crypto'
 const hashRuntimeRequirement = 'node:crypto:hash'
@@ -105,7 +106,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: ['global:binary', 'collections', 'managed-values', 'string-bytes'],
+      dependencies: ['global:binary', arrayRuntimeRequirement, 'managed-values', 'string-bytes'],
       cPreludeIncludes: ['inox/crypto.h'],
       capabilities: [],
       backendConstraints: [

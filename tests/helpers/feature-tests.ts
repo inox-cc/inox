@@ -1,7 +1,7 @@
-import assert, { equal, fail, ok } from 'node:assert/strict'
+import assert from 'node:assert/strict'
 import { constants } from 'node:fs'
 import { access, readdir, stat } from 'node:fs/promises'
-import path, { basename, extname, join, resolve } from 'node:path'
+import { basename, extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { CompileError, formatDiagnostics } from '../../compiler/diagnostics.ts'

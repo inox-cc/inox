@@ -1,6 +1,7 @@
 import { diagnostic } from '../../diagnostics.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import {
+  collectFunctionPointerReturnCompanionInfos,
   emitFunctionPointerParams,
   emitFunctionPointerReturnType,
   isPlainObjectFunctionField,
@@ -16,7 +17,6 @@ import {
   emitRuntimeTypeCheck,
   emitStatusCheck,
   nextCName,
-  pushDiagnostic,
   registerEventLoop,
   registerOwnedValue
 } from '../context.ts'
@@ -29,10 +29,9 @@ import {
 } from '../library-operations.ts'
 import {
   emitRuntimeNullableValueCheck,
-  emitRuntimeValueCheck,
-  runtimeObjectApiValueMismatchCondition,
-  runtimeObjectLikeTagMatchCondition
+  emitRuntimeValueCheck
 } from '../runtime-values.ts'
+import { runtimeTypeAlternativeValidExpressions } from '../runtime-type-alternatives.ts'
 import {
   cUnsupportedExpressionCode,
   emitCOperator,
@@ -40,30 +39,26 @@ import {
   isOptionalChainExpression
 } from '../syntax.ts'
 import type {
-  CCompilerLibrarySet,
   CFunctionParam,
-  CFunctionPointerRuntimeAdapter,
   CFunctionType,
-  CArrayElementInfo,
-  CKnownArrayElement,
   CKnownObjectField,
   CKnownObjectIndexField,
   CObjectAccessorReturnPath,
   CObjectShape,
   CObjectShapeField,
-  CRuntimeArrayElement,
   CPreparedCallArgs as PreparedCallArgs,
   CPreparedCallOptions as PreparedCallOptions,
+  CPreparedFunctionCompanion,
   CPreparedExpression as PreparedExpression,
   CPreparedStringBytesOperand as PreparedStringBytesOperand,
-  CClassInfo,
-  CTypeRefMap
+  CRuntimeTypeAlternative
 } from '../types.ts'
+import { cFunctionTypeValue } from '../types.ts'
 import {
-  applyCompilerLibraryIntrinsicNativeValueAdapter,
   applyLibraryNativeValueAdapter,
-  cIterableElementValueType,
   cRuntimeValueTag,
+  compilerLibraryNativeRuntimeValueExpressionForTypeRef,
+  compilerLibraryNativeRuntimeValueValidExpressionForTypeRef,
   isManagedRuntimeReturnType,
   isBoxedScalarParam,
   isNullableScalarType,
@@ -73,7 +68,6 @@ import {
   libraryNativeCppType,
   libraryNativeValueAdapter
 } from '../value-types.ts'
-import type { ArrayLoweringDependencies } from './arrays.ts'
 import {
   cClassValueTypeName,
   emitPreparedClassInstanceRefValueExpression,
@@ -92,12 +86,8 @@ import {
 import type { StatementLoweringDependencies } from './statements.ts'
 import type { StringLoweringDependencies } from './strings.ts'
 
-type CBooleanMap = Map<string, boolean>
-type CFunctionTypeMap = Map<string, CFunctionType>
 type CObjectAccessorReturnPathMap = Map<string, CObjectAccessorReturnPath>
-type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
 type CStringMap = Map<string, string>
-type CStringNullableMap = Map<string, string | null>
 type CStringSet = Set<string>
 type CValueNode = AnyNode
 type CObjectPathContext = {
@@ -110,7 +100,9 @@ type CObjectLiteralPropertyNode = {
 }
 
 type ObjectFunctionArgumentSource = {
+  companionPath: string[]
   expression: CValueNode | null
+  functionCompanions: CPreparedFunctionCompanion[]
   loc?: SourceLocation
   pathName: string | null
   shape: CObjectShape | null
@@ -130,18 +122,9 @@ type ObjectFunctionFieldResolution = {
   objectName: string
 }
 
-type CDynamicObjectArrayIndexDependencies = {
+type CDynamicObjectValueDependencies = {
   emitCValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitPreparedArrayLengthExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedNumberExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitPreparedRuntimeArrayIndexValue(
-    expression: CValueNode,
-    element: CRuntimeArrayElement,
-    context: CFunctionContext,
-    tempPrefix: string
-  ): PreparedExpression
   inferExpressionType(expression: CValueNode, context: CFunctionContext): string
-  resolveRuntimeArrayIndex(expression: CValueNode, context: CFunctionContext): CRuntimeArrayElement | null
 }
 
 type CDynamicObjectFieldAccessDependencies = {
@@ -153,12 +136,7 @@ type CDynamicObjectFieldAccess = {
   key: string
 }
 
-type CDynamicObjectArrayReceiver = PreparedExpression & {
-  key: string
-}
-
 type CEmitContext = CEmitContextWithDependencies<
-  ArrayLoweringDependencies,
   AsyncTaskLoweringDependencies,
   ClassLoweringDependencies,
   NullableLoweringDependencies,
@@ -166,7 +144,6 @@ type CEmitContext = CEmitContextWithDependencies<
   StringLoweringDependencies
 >
 type CFunctionContext = CFunctionContextWithDependencies<
-  ArrayLoweringDependencies,
   AsyncTaskLoweringDependencies,
   ClassLoweringDependencies,
   NullableLoweringDependencies,
@@ -184,6 +161,14 @@ function cBooleanValueIsTrue(value: boolean | null | undefined): boolean {
   }
 
   return false
+}
+
+function cValueChild(value: CValueNode | null | undefined): CValueNode | null {
+  if (value === null || typeof value === 'undefined') {
+    return null
+  }
+
+  return value
 }
 
 type NullableScalarNarrowingSnapshot = {
@@ -339,7 +324,6 @@ function canEmitStringCompareOperands(
 function isRuntimeReferenceEqualityType(valueType: string): boolean {
   return (
     valueType === 'object' ||
-    valueType === 'array' ||
     valueType === 'bytes'
   )
 }
@@ -775,11 +759,17 @@ function objectLiteralPropertyValue(expression: CValueNode, key: string): CValue
   return null
 }
 
-function objectFunctionArgumentSource(expression: CValueNode, context: CFunctionContext): ObjectFunctionArgumentSource {
+function objectFunctionArgumentSource(
+  expression: CValueNode,
+  context: CFunctionContext,
+  functionCompanions: CPreparedFunctionCompanion[] = []
+): ObjectFunctionArgumentSource {
   const pathName = objectExpressionPathName(expression, context)
 
   return {
+    companionPath: [],
     expression,
+    functionCompanions,
     loc: expression.loc,
     pathName,
     shape: objectFunctionArgumentSourceShape(expression, pathName, context),
@@ -804,7 +794,9 @@ function nestedObjectFunctionArgumentSource(
     const pathName = objectExpressionPathName(expression, context)
 
     return {
+      companionPath: objectFunctionCompanionPath(source.companionPath, fieldName),
       expression,
+      functionCompanions: source.functionCompanions,
       loc: expression.loc ?? source.loc,
       pathName: pathName ?? nestedObjectPathName(source.pathName, fieldName),
       shape: objectFunctionArgumentSourceShape(expression, pathName, context),
@@ -822,12 +814,25 @@ function nestedObjectFunctionArgumentSource(
   }
 
   return {
+    companionPath: objectFunctionCompanionPath(source.companionPath, fieldName),
     expression: null,
+    functionCompanions: source.functionCompanions,
     loc: source.loc,
     pathName: nestedObjectPathName(source.pathName, fieldName),
     shape,
     shapeKnown
   }
+}
+
+function objectFunctionCompanionPath(path: string[], fieldName: string): string[] {
+  const result: string[] = []
+
+  for (const segment of path) {
+    result.push(segment)
+  }
+
+  result.push(fieldName)
+  return result
 }
 
 function nestedObjectPathName(pathName: string | null, fieldName: string): string | null {
@@ -924,6 +929,26 @@ function emitObjectFunctionFieldArgument(
 
   if (expression !== null && typeof expression !== 'undefined') {
     literalValue = objectLiteralPropertyValue(expression, field.name)
+  }
+
+  const companion = objectFunctionCompanionAt(
+    source.functionCompanions,
+    objectFunctionCompanionPath(source.companionPath, field.name)
+  )
+
+  if (companion !== null && !isRuntimeObjectFunctionField(field, seenTypes)) {
+    return {
+      lines: [],
+      expression: emitAdaptedFunctionPointerExpression(
+        companion.expression,
+        cFunctionTypeValue(companion.functionType),
+        field.functionType,
+        context,
+        deps,
+        seenTypes,
+        companion.seenTypes
+      )
+    }
   }
 
   if (isRuntimeObjectFunctionField(field, seenTypes)) {
@@ -1051,6 +1076,33 @@ function emitObjectFunctionFieldArgument(
   }
 }
 
+function objectFunctionCompanionAt(
+  companions: CPreparedFunctionCompanion[],
+  path: string[]
+): CPreparedFunctionCompanion | null {
+  for (const companion of companions) {
+    if (functionCompanionPathEquals(companion.path, path)) {
+      return companion
+    }
+  }
+
+  return null
+}
+
+function functionCompanionPathEquals(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false
+  }
+
+  for (let index = 0; index < left.length; index = index + 1) {
+    if (left[index] !== right[index]) {
+      return false
+    }
+  }
+
+  return true
+}
+
 function runtimeCallbackBridgeFunctionType(functionType: CFunctionType): CFunctionType {
   const params: CFunctionParam[] = []
 
@@ -1066,7 +1118,7 @@ function runtimeCallbackBridgeFunctionType(functionType: CFunctionType): CFuncti
       nullable: param.nullable,
       optional: param.optional,
       ownership: param.ownership,
-      promiseValueType: param.promiseValueType,
+      asyncResultValueType: param.asyncResultValueType,
       rest: param.rest,
       shape: param.valueType === 'object' ? null : param.shape,
       typeRef: param.typeRef,
@@ -1075,11 +1127,12 @@ function runtimeCallbackBridgeFunctionType(functionType: CFunctionType): CFuncti
   }
 
   return {
+    declaredReturnType: functionType.declaredReturnType,
     kind: functionType.kind,
     params,
     returnTypeRef: functionType.returnTypeRef,
     returnNullable: functionType.returnNullable,
-    returnPromiseValueType: functionType.returnPromiseValueType,
+    returnAsyncResultValueType: functionType.returnAsyncResultValueType,
     returnShape: functionType.returnShape,
     returnType: functionType.returnType
   }
@@ -1163,7 +1216,8 @@ function appendObjectFunctionFieldArguments(
   param: CFunctionParam,
   context: CFunctionContext,
   deps: CCallExpressionDependencies,
-  calleeSeenTypes: string[]
+  calleeSeenTypes: string[],
+  functionCompanions: CPreparedFunctionCompanion[] = []
 ): void {
   const seenTypes: string[] = []
 
@@ -1180,7 +1234,7 @@ function appendObjectFunctionFieldArguments(
   appendObjectShapeFunctionFieldArguments(
     lines,
     args,
-    objectFunctionArgumentSource(expression, context),
+    objectFunctionArgumentSource(expression, context, functionCompanions),
     param.shape,
     context,
     deps,
@@ -1279,6 +1333,24 @@ function emitObjectFunctionFieldArgumentName(objectName: string, fieldName: stri
   }
 
   return emitCObjectFunctionFieldName(objectName, fieldName)
+}
+
+export function emitObjectFunctionCompanionReference(
+  rootName: string,
+  path: string[],
+  context: CFunctionContext
+): string | null {
+  if (path.length === 0) {
+    return null
+  }
+
+  let objectName = context.objectAliases.get(rootName) ?? rootName
+
+  for (let index = 0; index + 1 < path.length; index = index + 1) {
+    objectName = `${objectName}_${path[index]}`
+  }
+
+  return emitObjectFunctionFieldArgumentName(objectName, path[path.length - 1], context)
 }
 
 function emitDependencyObjectFunctionFieldArgumentName(
@@ -1493,8 +1565,9 @@ function runtimeObjectFunctionFieldCallee(
   }
 
   const fieldIndex = runtimeClassFunctionFieldIndex(resolved, context)
+  const seenTypes = objectFunctionCalleeArgumentSeenTypes(callee, context)
 
-  if (fieldIndex === -1 && !isRuntimeObjectFunctionField(resolved.field)) {
+  if (fieldIndex === -1 && !isRuntimeObjectFunctionField(resolved.field, seenTypes)) {
     return null
   }
 
@@ -1592,6 +1665,10 @@ function appendObjectFunctionCalleeSeenTypes(seenTypes: string[], object: CValue
   const objectName = objectExpressionName(object, context)
 
   if (objectName !== null && typeof objectName !== 'undefined') {
+    if (context.moduleObjectShapes.has(objectName)) {
+      pushSeenDeclaredType(seenTypes, 'CFunctionContext')
+    }
+
     const contextDeclaredType = context.objectDeclaredTypes.get(objectName)
 
     pushSeenDeclaredType(seenTypes, contextDeclaredType)
@@ -1694,17 +1771,15 @@ function isDependencyCarrierContextPair(left: string, right: string): boolean {
 
 function isContextDeclaredType(value: string): boolean {
   return (
-    value === 'ArrayFunctionContext' ||
     value === 'CEmitContext' ||
     value === 'CFunctionContext' ||
     value === 'CDeclarationFunctionContext' ||
     value === 'CallbackEmitContext' ||
     value === 'CallbackFunctionContext' ||
     value === 'ClassFunctionContext' ||
-    value === 'CollectionFunctionContext' ||
     value === 'NullableFunctionContext' ||
-    value === 'PromiseEmitContext' ||
-    value === 'PromiseFunctionContext' ||
+    value === 'AsyncResultEmitContext' ||
+    value === 'AsyncResultFunctionContext' ||
     value === 'StringCContext' ||
     value === 'AsyncTaskEmitContext' ||
     value === 'AsyncTaskFunctionContext' ||
@@ -1716,13 +1791,11 @@ function isDependencyCarrierDeclaredType(value: string): boolean {
   return (
     value === 'CModuleEmissionDependencies' ||
     value === 'CDeclarationEmissionDependencies' ||
-    value === 'ArrayLoweringDependencies' ||
     value === 'AsyncTaskLoweringDependencies' ||
     value === 'CallbackLoweringDependencies' ||
     value === 'ClassLoweringDependencies' ||
-    value === 'CollectionLoweringDependencies' ||
     value === 'NullableLoweringDependencies' ||
-    value === 'PromiseChainLoweringDependencies' ||
+    value === 'AsyncResultChainLoweringDependencies' ||
     value === 'StatementLoweringDependencies' ||
     value === 'StringLoweringDependencies'
   )
@@ -1836,9 +1909,6 @@ export type CScalarExpressionDependencies = {
   emitCAwaitValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitObjectValueReference(name: string, context: CFunctionContext): string
-  emitPreparedArrayLengthExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedArrayIncludesCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedArrayUnshiftCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedClassMethodCallExpression(
     expression: CValueNode,
@@ -1864,12 +1934,6 @@ export type CScalarExpressionDependencies = {
   ): PreparedExpression | null
   emitPreparedCompilerLibraryExpression(expression: CValueNode): PreparedExpression | null
   emitPreparedNumberExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitPreparedRuntimeArrayIndexValue(
-    expression: CValueNode,
-    element: CRuntimeArrayElement,
-    context: CFunctionContext,
-    tempPrefix: string
-  ): PreparedExpression
   emitPreparedStringCompareExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedCppStringArgument(
     expression: CValueNode,
@@ -1889,10 +1953,8 @@ export type CScalarExpressionDependencies = {
   isNullableRuntimeExpression(expression: CValueNode, context: CFunctionContext): boolean
   isNullableScalarRuntimeExpression(expression: CValueNode, context: CFunctionContext): boolean
   reportCJsGlobalDiagnostic(diagnostics: Diagnostic[], loc: SourceLocation | undefined): void
-  resolveKnownArrayIndex(expression: CValueNode, context: CFunctionContext): CKnownArrayElement | null
   resolveKnownObjectIndex(expression: CValueNode, context: CFunctionContext): CKnownObjectIndexField | null
   resolveKnownObjectMember(expression: CValueNode, context: CFunctionContext): CKnownObjectField | null
-  resolveRuntimeArrayIndex(expression: CValueNode, context: CFunctionContext): CRuntimeArrayElement | null
 }
 
 export type CCallExpressionDependencies = {
@@ -1932,14 +1994,6 @@ export type CCallExpressionDependencies = {
     context: CFunctionContext,
     options?: PreparedCallOptions
   ): PreparedExpression | null
-  emitPreparedArrayJoinCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedArrayLengthExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedArrayPopCallExpression(
-    expression: CValueNode,
-    context: CFunctionContext,
-    options: PreparedCallOptions | null
-  ): PreparedExpression | null
-  emitPreparedArraySliceCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedClassMethodCallExpression(
     expression: CValueNode,
     context: CFunctionContext,
@@ -1948,12 +2002,6 @@ export type CCallExpressionDependencies = {
   emitPreparedNumberExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedAsyncResultChainExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedAsyncResultStaticExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedRuntimeArrayIndexValue(
-    expression: CValueNode,
-    element: CRuntimeArrayElement,
-    context: CFunctionContext,
-    tempPrefix: string
-  ): PreparedExpression
   emitRuntimeCallbackCall(
     expression: CValueNode,
     callbackType: CFunctionType,
@@ -1967,12 +2015,11 @@ export type CCallExpressionDependencies = {
   inferExpressionType(expression: CValueNode, context: CFunctionContext): string
   isExternalEventLoopFunctionCallee(callee: CValueNode, context: CFunctionContext): boolean
   isNullableFunctionType(valueType: string | null | undefined, nullable: boolean | null | undefined): boolean
-  isPromiseReturningFunctionCallee(callee: CValueNode, context: CFunctionContext): boolean
+  isAsyncResultReturningFunctionCallee(callee: CValueNode, context: CFunctionContext): boolean
   registerErrorChannel(context: CFunctionContext): void
   registerErrorValue(context: CFunctionContext): void
   resolveFunctionValueType(expression: CValueNode, context: CFunctionContext): CFunctionType | null
   resolveFunctionParams(callee: CValueNode, context: CFunctionContext): CFunctionParam[] | null
-  resolveRuntimeArrayIndex(expression: CValueNode, context: CFunctionContext): CRuntimeArrayElement | null
   resolveRuntimeCallbackCalleeType(callee: CValueNode, context: CFunctionContext): CFunctionType | null
   resolveRuntimeFunctionArgumentType(
     callee: CValueNode,
@@ -2013,34 +2060,16 @@ export function emitPreparedCallExpression(
     return classMethodCall
   }
 
-  const arrayPopCall = deps.emitPreparedArrayPopCallExpression(expression, context, null)
+  const asyncResult = deps.emitPreparedAsyncResultStaticExpression(expression, context)
 
-  if (arrayPopCall !== null && typeof arrayPopCall !== 'undefined') {
-    return arrayPopCall
+  if (asyncResult !== null && typeof asyncResult !== 'undefined') {
+    return asyncResult
   }
 
-  const arrayJoinCall = deps.emitPreparedArrayJoinCallExpression(expression, context)
+  const asyncResultMethod = deps.emitPreparedAsyncResultChainExpression(expression, context)
 
-  if (arrayJoinCall !== null && typeof arrayJoinCall !== 'undefined') {
-    return arrayJoinCall
-  }
-
-  const arraySliceCall = deps.emitPreparedArraySliceCallExpression(expression, context)
-
-  if (arraySliceCall !== null && typeof arraySliceCall !== 'undefined') {
-    return arraySliceCall
-  }
-
-  const promise = deps.emitPreparedAsyncResultStaticExpression(expression, context)
-
-  if (promise !== null && typeof promise !== 'undefined') {
-    return promise
-  }
-
-  const promiseMethod = deps.emitPreparedAsyncResultChainExpression(expression, context)
-
-  if (promiseMethod !== null && typeof promiseMethod !== 'undefined') {
-    return promiseMethod
+  if (asyncResultMethod !== null && typeof asyncResultMethod !== 'undefined') {
+    return asyncResultMethod
   }
 
   const callbackType = deps.resolveRuntimeCallbackCalleeType(expression.callee, context)
@@ -2058,8 +2087,6 @@ export function emitPreparedCallExpression(
   const params = deps.resolveFunctionParams(expression.callee, context)
 
   if (params === null || typeof params === 'undefined') {
-    invalidateArrayReferenceArguments(expression, [], context)
-
     return {
       lines: [],
       expression: emitCallExpression(expression, context, deps)
@@ -2075,24 +2102,34 @@ export function emitPreparedCallExpression(
   )
   const lines = prepared.lines
   const args = prepared.args
-  invalidateArrayReferenceArguments(expression, params, context)
+  const returnFunctionCompanions = prepareCallReturnFunctionCompanions(expression, lines, context)
 
   if (isThrowingFunctionCallee(expression.callee, context)) {
     return withFunctionCallReturnMetadata(
       expression,
-      emitPreparedThrowingCallExpression(expression, args, lines, context, deps),
+      emitPreparedThrowingCallExpression(
+        expression,
+        args,
+        lines,
+        returnFunctionCompanions,
+        context,
+        deps
+      ),
       context
     )
   }
 
-  if (deps.isPromiseReturningFunctionCallee(expression.callee, context)) {
+  appendCallReturnFunctionCompanionArgs(args, returnFunctionCompanions)
+
+  if (deps.isAsyncResultReturningFunctionCallee(expression.callee, context)) {
     registerEventLoop(context)
 
     return withFunctionCallReturnMetadata(
       expression,
       {
         lines,
-        expression: `${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')})`
+        expression: `${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')})`,
+        functionCompanions: returnFunctionCompanions
       },
       context
     )
@@ -2105,7 +2142,8 @@ export function emitPreparedCallExpression(
       expression,
       {
         lines,
-        expression: `${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')})`
+        expression: `${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')})`,
+        functionCompanions: returnFunctionCompanions
       },
       context
     )
@@ -2115,10 +2153,71 @@ export function emitPreparedCallExpression(
     expression,
     {
       lines,
-      expression: `${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')})`
+      expression: `${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')})`,
+      functionCompanions: returnFunctionCompanions
     },
     context
   )
+}
+
+function prepareCallReturnFunctionCompanions(
+  expression: CValueNode,
+  lines: string[],
+  context: CFunctionContext
+): CPreparedFunctionCompanion[] {
+  const companions: CPreparedFunctionCompanion[] = []
+
+  if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
+    return companions
+  }
+
+  const name = expression.callee.path[0]
+  const returnType = context.functionReturnTypes.get(name)
+
+  if (returnType === null || typeof returnType === 'undefined') {
+    return companions
+  }
+
+  const infos = collectFunctionPointerReturnCompanionInfos({
+    declaredReturnType: context.functionReturnDeclaredTypes.get(name) ?? null,
+    kind: 'function',
+    params: [],
+    returnShape: context.functionReturnShapes.get(name),
+    returnType
+  })
+
+  for (const info of infos) {
+    if (info.runtimeFunction || info.functionType === null) {
+      continue
+    }
+
+    const name = nextCName(context, 'inox_call_function')
+
+    lines.push(
+      `${emitFunctionPointerReturnType(info.functionType)} (*${name})(${emitFunctionPointerParams(
+        info.functionType,
+        [],
+        info.seenTypes
+      )}) = 0;`
+    )
+    companions.push({
+      path: info.path,
+      expression: name,
+      functionType: info.functionType,
+      seenTypes: info.seenTypes
+    })
+  }
+
+  return companions
+}
+
+function appendCallReturnFunctionCompanionArgs(
+  args: string[],
+  companions: CPreparedFunctionCompanion[]
+): void {
+  for (const companion of companions) {
+    args.push(`&${companion.expression}`)
+  }
 }
 
 function withFunctionCallReturnMetadata(
@@ -2158,91 +2257,6 @@ function withFunctionCallReturnMetadata(
   value.cppType = cppType
   value.valueType = 'object'
   return value
-}
-
-function invalidateArrayReferenceArguments(
-  expression: CValueNode,
-  params: CFunctionParam[],
-  context: CFunctionContext
-): void {
-  for (let index = 0; index < expression.args.length; index = index + 1) {
-    const param = functionParamAt(params, index)
-
-    invalidateArrayReferenceArgument(expression.args[index], param, context)
-  }
-}
-
-function invalidateArrayReferenceArgument(
-  argument: CValueNode,
-  param: CFunctionParam | null,
-  context: CFunctionContext
-): void {
-  if (argument.type !== 'Reference' || argument.path.length !== 1) {
-    return
-  }
-
-  const name = argument.path[0]
-
-  if (context.variables.get(name) !== 'array') {
-    return
-  }
-
-  const elementType = invalidatedArrayElementType(name, argument, param, context)
-
-  context.arrayShapes.delete(name)
-  context.arrayLengths.delete(name)
-  context.runtimeArrayElementTypes.set(name, elementType)
-}
-
-function invalidatedArrayElementType(
-  name: string,
-  argument: CValueNode,
-  param: CFunctionParam | null,
-  context: CFunctionContext
-): string {
-  const current = context.runtimeArrayElementTypes.get(name)
-
-  if (current !== null && typeof current !== 'undefined') {
-    return current
-  }
-
-  const argumentElementValueType = cIterableElementValueType(argument.typeRef, context.libraries)
-
-  if (argumentElementValueType !== null) {
-    return argumentElementValueType
-  }
-
-  const paramElementValueType = cIterableElementValueType(param?.typeRef, context.libraries)
-
-  if (paramElementValueType !== null) {
-    return paramElementValueType
-  }
-
-  const elements = context.arrayShapes.get(name)
-
-  if (elements === null || typeof elements === 'undefined') {
-    return 'unknown'
-  }
-
-  return arrayShapeElementType(elements)
-}
-
-function arrayShapeElementType(elements: CArrayElementInfo[]): string {
-  let elementType: string | null = null
-
-  for (const element of elements) {
-    if (elementType === null || typeof elementType === 'undefined') {
-      elementType = element.valueType
-    } else if (elementType !== element.valueType) {
-      return 'unknown'
-    }
-  }
-
-  if (elementType !== null && typeof elementType !== 'undefined') {
-    return elementType
-  }
-
-  return 'unknown'
 }
 
 export function emitPreparedCallArgs(
@@ -2370,10 +2384,35 @@ function appendPreparedCallArg(
     }
 
     appendLines(lines, value.lines)
+    const runtimeValueExpression = compilerLibraryNativeRuntimeValueExpressionForTypeRef(
+      context.libraries,
+      param.typeRef
+    )
+
+    if (
+      runtimeValueExpression !== null &&
+      value.cppType !== null &&
+      typeof value.cppType !== 'undefined' &&
+      value.cppType !== 'inox::Value' &&
+      value.cppType !== 'inox_value'
+    ) {
+      args.push(runtimeValueExpression.split('$value').join(value.expression))
+      return
+    }
+
     const objectValue = emitPreparedObjectCallArgumentExpression(value, context)
     appendLines(lines, objectValue.lines)
     args.push(objectValue.expression)
-    appendObjectFunctionFieldArguments(lines, args, arg, param, context, deps, calleeSeenTypes)
+    appendObjectFunctionFieldArguments(
+      lines,
+      args,
+      arg,
+      param,
+      context,
+      deps,
+      calleeSeenTypes,
+      value.functionCompanions
+    )
   } else if (isManagedRuntimeReturnType(paramValueType)) {
     const value = deps.emitCValueExpression(arg, context)
 
@@ -2407,12 +2446,14 @@ function emitPreparedObjectCallArgumentExpression(
   const classInstance = emitPreparedClassInstanceRefValueExpression(value, context)
 
   if (classInstance !== null && typeof classInstance !== 'undefined') {
+    classInstance.functionCompanions = value.functionCompanions
     return classInstance
   }
 
   return {
     lines: [],
     expression: value.expression,
+    functionCompanions: value.functionCompanions,
     valueType: value.valueType
   }
 }
@@ -2472,6 +2513,7 @@ function emitPreparedThrowingCallExpression(
   expression: CValueNode,
   args: string[],
   preparedLines: string[],
+  returnFunctionCompanions: CPreparedFunctionCompanion[],
   context: CFunctionContext,
   deps: CCallExpressionDependencies
 ): PreparedExpression {
@@ -2540,6 +2582,8 @@ function emitPreparedThrowingCallExpression(
     }
   }
 
+  appendCallReturnFunctionCompanionArgs(callArgs, returnFunctionCompanions)
+
   callArgs.push('&inox_error')
 
   const status = nextCName(context, 'inox_call_status')
@@ -2549,7 +2593,8 @@ function emitPreparedThrowingCallExpression(
 
   return {
     lines,
-    expression: result
+    expression: result,
+    functionCompanions: returnFunctionCompanions
   }
 }
 
@@ -2561,12 +2606,12 @@ function resolveCFunctionCallReturnInfo(name: string, context: CFunctionContext)
     returnType = configuredReturnType
   }
 
-  if (cBooleanValueIsTrue(context.functionAsyncFlags.get(name)) && returnType === 'promise') {
-    const promiseValueType = context.functionReturnPromiseValueTypes.get(name)
+  if (cBooleanValueIsTrue(context.functionAsyncFlags.get(name)) && returnType === 'async-result') {
+    const asyncResultValueType = context.functionReturnAsyncResultValueTypes.get(name)
     let asyncReturnType = 'void'
 
-    if (promiseValueType !== null && typeof promiseValueType !== 'undefined') {
-      asyncReturnType = promiseValueType
+    if (asyncResultValueType !== null && typeof asyncResultValueType !== 'undefined') {
+      asyncReturnType = asyncResultValueType
     }
 
     return {
@@ -2927,6 +2972,19 @@ export function emitPreparedNumberExpression(
       return dynamicObjectStringLiteralCompare
     }
 
+    const nullableRuntimeStringLiteralCompare = emitPreparedNullableRuntimeStringLiteralCompareExpression(
+      expression,
+      context,
+      deps
+    )
+
+    if (
+      nullableRuntimeStringLiteralCompare !== null &&
+      typeof nullableRuntimeStringLiteralCompare !== 'undefined'
+    ) {
+      return nullableRuntimeStringLiteralCompare
+    }
+
     const nullableStringCompare = emitPreparedNullableStringCompareExpression(expression, context, deps)
 
     if (nullableStringCompare !== null && typeof nullableStringCompare !== 'undefined') {
@@ -3002,18 +3060,6 @@ export function emitPreparedNumberExpression(
   }
 
   if (expression.type === 'CallExpression') {
-    const arrayIncludesCall = deps.emitPreparedArrayIncludesCallExpression(expression, context)
-
-    if (arrayIncludesCall !== null && typeof arrayIncludesCall !== 'undefined') {
-      return arrayIncludesCall
-    }
-
-    const arrayUnshiftCall = deps.emitPreparedArrayUnshiftCallExpression(expression, context)
-
-    if (arrayUnshiftCall !== null && typeof arrayUnshiftCall !== 'undefined') {
-      return arrayUnshiftCall
-    }
-
     return deps.emitPreparedCallExpression(expression, context)
   }
 
@@ -3037,16 +3083,6 @@ export function emitPreparedNumberExpression(
 
     if (libraryNativeField !== null) {
       return libraryNativeField
-    }
-
-    let length: PreparedExpression | null = null
-
-    if (expression.property === 'length') {
-      length = deps.emitPreparedArrayLengthExpression(expression, context)
-    }
-
-    if (length !== null && typeof length !== 'undefined') {
-      return length
     }
 
     const nativeClassField = emitPreparedNativeClassFieldScalarExpression(expression, context)
@@ -3091,18 +3127,6 @@ export function emitPreparedNumberExpression(
   }
 
   if (deps.isIndexAccessExpression(expression)) {
-    const element = deps.resolveKnownArrayIndex(expression, context)
-
-    if (element !== null && typeof element !== 'undefined' && isNumberOrBooleanValueType(element.valueType)) {
-      const value = nextCName(context, 'inox_expr_value')
-      const getLines = [
-        `${value} = ${element.arrayName}.get(${element.index});`,
-        emitRuntimeTypeCheck('inox::thrown()', context)
-      ]
-
-      return emitPreparedRuntimeNumberValue(element.valueType, value, getLines, context)
-    }
-
     const field = deps.resolveKnownObjectIndex(expression, context)
 
     if (field !== null && typeof field !== 'undefined' && isNumberOrBooleanValueType(field.valueType)) {
@@ -3122,20 +3146,6 @@ export function emitPreparedNumberExpression(
       }
     }
 
-    const runtimeElement = deps.resolveRuntimeArrayIndex(expression, context)
-
-    if (
-      runtimeElement !== null &&
-      typeof runtimeElement !== 'undefined' &&
-      isNumberOrBooleanValueType(runtimeElement.valueType)
-    ) {
-      const value = deps.emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'inox_expr_value')
-
-      return {
-        lines: value.lines,
-        expression: scalarRuntimeValueExpression(value.expression, runtimeElement.valueType)
-      }
-    }
   }
 
   if (expression.type === 'AwaitExpression') {
@@ -3191,13 +3201,20 @@ function emitPreparedScalarTypeAssertionExpression(
   const valueType = expression.valueType
 
   if (
-    operand.type === 'Reference' &&
     (valueType === 'number' || valueType === 'boolean') &&
-    isRuntimeValueReferenceExpression(operand, context)
+    isRuntimeScalarTypeAssertionOperand(operand, context, deps)
   ) {
-    const value = deps.emitReference(operand, context)
-    const check = emitRuntimeValueCheck(value, cRuntimeValueTag(valueType), context)
+    const value = deps.emitCValueExpression(operand, context)
+    let runtimeValueExpression = value.expression
+
+    if (value.cppType === 'inox::Value') {
+      runtimeValueExpression = `${value.expression}.raw()`
+    }
+
+    const check = emitRuntimeValueCheck(runtimeValueExpression, cRuntimeValueTag(valueType), context)
     const lines: string[] = []
+
+    appendLines(lines, value.lines)
 
     if (check !== '') {
       lines.push(check)
@@ -3205,11 +3222,29 @@ function emitPreparedScalarTypeAssertionExpression(
 
     return {
       lines,
-      expression: scalarRuntimeValueExpression(value, valueType)
+      expression: scalarRuntimeValueExpression(runtimeValueExpression, valueType)
     }
   }
 
   return emitPreparedNumberExpression(operand, context, deps)
+}
+
+function isRuntimeScalarTypeAssertionOperand(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): boolean {
+  if (expression.type === 'Reference' && isRuntimeValueReferenceExpression(expression, context)) {
+    return true
+  }
+
+  const valueType = deps.inferExpressionType(expression, context)
+
+  return (
+    valueType === 'unknown' ||
+    isOpaqueRuntimeValueType(valueType) ||
+    deps.isNullableScalarRuntimeExpression(expression, context)
+  )
 }
 
 export function emitPreparedRuntimeTruthinessExpression(
@@ -3412,6 +3447,52 @@ function emitPreparedRuntimeStringLiteralCompareExpression(
   const rightLiteral = stringLiteralValue(expression.right)
 
   if (rightLiteral !== null && typeof rightLiteral !== 'undefined') {
+    return emitPreparedRuntimeValueStringLiteralCompare(
+      expression.left,
+      rightLiteral,
+      expression.operator,
+      context,
+      deps
+    )
+  }
+
+  return null
+}
+
+function emitPreparedNullableRuntimeStringLiteralCompareExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): PreparedExpression | null {
+  if (!isEqualityOperator(expression.operator)) {
+    return null
+  }
+
+  const leftLiteral = stringLiteralValue(expression.left)
+
+  if (
+    leftLiteral !== null &&
+    typeof leftLiteral !== 'undefined' &&
+    (deps.isNullableRuntimeExpression(expression.right, context) ||
+      isDynamicRuntimeValueExpression(expression.right, context, deps))
+  ) {
+    return emitPreparedRuntimeValueStringLiteralCompare(
+      expression.right,
+      leftLiteral,
+      expression.operator,
+      context,
+      deps
+    )
+  }
+
+  const rightLiteral = stringLiteralValue(expression.right)
+
+  if (
+    rightLiteral !== null &&
+    typeof rightLiteral !== 'undefined' &&
+    (deps.isNullableRuntimeExpression(expression.left, context) ||
+      isDynamicRuntimeValueExpression(expression.left, context, deps))
+  ) {
     return emitPreparedRuntimeValueStringLiteralCompare(
       expression.left,
       rightLiteral,
@@ -3630,6 +3711,12 @@ function emitPreparedRuntimeValueStringLiteralCompare(
   context: CFunctionContext,
   deps: CScalarExpressionDependencies
 ): PreparedExpression {
+  const runtimeStringValue = emitPreparedRuntimeStringReferenceValue(valueExpression, context)
+
+  if (runtimeStringValue !== null && typeof runtimeStringValue !== 'undefined') {
+    return emitPreparedRuntimePreparedValueStringLiteralCompare(runtimeStringValue, literal, operator, context)
+  }
+
   if (isDynamicReferenceObjectFieldExpression(valueExpression, context, deps)) {
     const objectFieldValue = emitPreparedOptionalDynamicObjectFieldValueExpression(valueExpression, context, deps)
 
@@ -3647,6 +3734,27 @@ function emitPreparedRuntimeValueStringLiteralCompare(
   const value = deps.emitCValueExpression(valueExpression, context)
 
   return emitPreparedRuntimePreparedValueStringLiteralCompare(value, literal, operator, context)
+}
+
+export function emitPreparedRuntimeStringReferenceValue(
+  expression: CValueNode,
+  context: CFunctionContext
+): PreparedExpression | null {
+  if (expression.type !== 'Reference' || expression.path.length !== 1) {
+    return null
+  }
+
+  const value = context.runtimeStringValues.get(expression.path[0])
+
+  if (value === null || typeof value === 'undefined') {
+    return null
+  }
+
+  return {
+    lines: [],
+    expression: value,
+    valueType: 'string'
+  }
 }
 
 function isDynamicReferenceObjectFieldExpression(
@@ -3774,15 +3882,26 @@ function emitPreparedConditionalNumberExpression(
   context: CFunctionContext,
   deps: CScalarExpressionDependencies
 ): PreparedExpression {
-  const test = emitPreparedBooleanOperandExpression(expression.test, context, deps)
-  const narrowing = resolveNullableScalarConditionNarrowing(expression.test, context)
+  const testExpression = cValueChild(expression.test)
+  const consequentExpression = cValueChild(expression.consequent)
+  const alternateExpression = cValueChild(expression.alternate)
+
+  if (testExpression === null || consequentExpression === null || alternateExpression === null) {
+    return {
+      lines: [],
+      expression: '0'
+    }
+  }
+
+  const test = emitPreparedBooleanOperandExpression(testExpression, context, deps)
+  const narrowing = resolveNullableScalarConditionNarrowing(testExpression, context)
   const consequentSnapshot = pushNullableScalarNarrowing(context, narrowing.trueNames)
-  const consequent = emitPreparedNumberExpression(expression.consequent, context, deps)
+  const consequent = emitPreparedNumberExpression(consequentExpression, context, deps)
 
   restoreNullableScalarNarrowing(context, consequentSnapshot)
 
   const alternateSnapshot = pushNullableScalarNarrowing(context, narrowing.falseNames)
-  const alternate = emitPreparedNumberExpression(expression.alternate, context, deps)
+  const alternate = emitPreparedNumberExpression(alternateExpression, context, deps)
 
   restoreNullableScalarNarrowing(context, alternateSnapshot)
 
@@ -3863,11 +3982,10 @@ function asRequiredCallExpression(expression: CValueNode): CValueNode {
     valueType: expression.valueType,
     typeRef: expression.typeRef,
     nullable: expression.nullable === true,
-    promiseValueType: expression.promiseValueType,
+    asyncResultValueType: expression.asyncResultValueType,
     functionType: expression.functionType,
     shape: expression.shape,
     className: expression.className,
-    collectionKind: expression.collectionKind,
     loc: expression.loc
   }
 }
@@ -4175,10 +4293,16 @@ function emitPreparedDynamicObjectNullCompareExpression(
     return null
   }
 
-  const value = emitPreparedDynamicRuntimeValueExpression(valueExpression, context, deps)
+  let value = emitPreparedDynamicRuntimeValueExpression(valueExpression, context, deps)
 
   if (value === null || typeof value === 'undefined') {
-    return null
+    const prepared = deps.emitCValueExpression(valueExpression, context)
+
+    if (prepared.cppType !== 'inox::Value' && prepared.cppType !== 'inox_value') {
+      return null
+    }
+
+    value = prepared
   }
 
   const equals = `(${value.expression}.tag == INOX_TAG_NULL || ${value.expression}.tag == INOX_TAG_UNDEFINED)`
@@ -4253,18 +4377,10 @@ function emitPreparedExpectedDynamicRuntimeScalarValueExpression(
   expression: CValueNode,
   valueType: string,
   context: CFunctionContext,
-  deps: CDynamicObjectArrayIndexDependencies
+  deps: CDynamicObjectValueDependencies
 ): PreparedExpression | null {
   if (!isNumberOrBooleanValueType(valueType)) {
     return null
-  }
-
-  if (expression.type === 'MemberExpression' && expression.property === 'length') {
-    const arrayLength = deps.emitPreparedArrayLengthExpression(expression, context)
-
-    if (arrayLength !== null && typeof arrayLength !== 'undefined') {
-      return arrayLength
-    }
   }
 
   const value = emitPreparedDynamicRuntimeValueExpression(expression, context, deps)
@@ -4299,7 +4415,7 @@ function booleanLiteralValue(expression: CValueNode): boolean | null {
 function isDynamicObjectFieldValueExpression(
   expression: CValueNode,
   context: CFunctionContext,
-  deps: CDynamicObjectArrayIndexDependencies
+  deps: CDynamicObjectValueDependencies
 ): boolean {
   if (expression.type === 'MemberExpression') {
     return deps.inferExpressionType(expression.object, context) === 'object'
@@ -4328,21 +4444,13 @@ export function isDynamicRuntimeValueExpression(
     return true
   }
 
-  if (isDynamicObjectArrayIndexValueExpression(expression, context, deps)) {
-    return true
-  }
-
-  if (isRuntimeArrayObjectIndexExpression(expression, context, deps)) {
-    return true
-  }
-
   return isDynamicRuntimeObjectFieldValueExpression(expression, context, deps)
 }
 
 function emitPreparedDynamicRuntimeValueExpression(
   expression: CValueNode,
   context: CFunctionContext,
-  deps: CDynamicObjectArrayIndexDependencies
+  deps: CDynamicObjectValueDependencies
 ): PreparedExpression | null {
   const runtimeReference = emitPreparedRuntimeValueReferenceExpression(expression, context)
 
@@ -4354,25 +4462,13 @@ function emitPreparedDynamicRuntimeValueExpression(
     return deps.emitCValueExpression(expression, context)
   }
 
-  const arrayIndexValue = emitPreparedDynamicObjectArrayIndexValueExpression(expression, context, deps)
-
-  if (arrayIndexValue !== null && typeof arrayIndexValue !== 'undefined') {
-    return arrayIndexValue
-  }
-
-  const runtimeArrayIndexValue = emitPreparedRuntimeArrayObjectIndexValueExpression(expression, context, deps)
-
-  if (runtimeArrayIndexValue !== null && typeof runtimeArrayIndexValue !== 'undefined') {
-    return runtimeArrayIndexValue
-  }
-
   return emitPreparedDynamicRuntimeObjectFieldValueExpression(expression, context, deps)
 }
 
 function isDynamicRuntimeObjectFieldValueExpression(
   expression: CValueNode,
   context: CFunctionContext,
-  deps: CDynamicObjectArrayIndexDependencies
+  deps: CDynamicObjectValueDependencies
 ): boolean {
   const access = dynamicRuntimeObjectFieldAccess(expression)
 
@@ -4386,7 +4482,7 @@ function isDynamicRuntimeObjectFieldValueExpression(
 function isDynamicRuntimeObjectValueExpression(
   expression: CValueNode,
   context: CFunctionContext,
-  deps: CDynamicObjectArrayIndexDependencies
+  deps: CDynamicObjectValueDependencies
 ): boolean {
   if (isRuntimeValueReferenceExpression(expression, context)) {
     return true
@@ -4396,17 +4492,13 @@ function isDynamicRuntimeObjectValueExpression(
     return true
   }
 
-  if (isDynamicObjectArrayIndexValueExpression(expression, context, deps)) {
-    return true
-  }
-
   return isDynamicRuntimeObjectFieldValueExpression(expression, context, deps)
 }
 
 function emitPreparedDynamicRuntimeObjectFieldValueExpression(
   expression: CValueNode,
   context: CFunctionContext,
-  deps: CDynamicObjectArrayIndexDependencies
+  deps: CDynamicObjectValueDependencies
 ): PreparedExpression | null {
   const access = dynamicRuntimeObjectFieldAccess(expression)
 
@@ -4425,11 +4517,7 @@ function emitPreparedDynamicRuntimeObjectFieldValueExpression(
 
   appendLines(lines, object.lines)
   lines.push(`inox::Value ${value};`)
-  lines.push(`if (${object.expression}.tag == INOX_TAG_ARRAY) {`)
-  lines.push(`  ${value} = inox::Value();`)
-  lines.push('} else {')
-  lines.push(`  ${value} = inox::get(${object.expression}, ${cStringLiteral(access.key)});`)
-  lines.push('}')
+  lines.push(`${value} = inox::get(${object.expression}, ${cStringLiteral(access.key)});`)
   appendLines(lines, emitRuntimeThrownCheckLines(context))
 
   return {
@@ -4440,94 +4528,10 @@ function emitPreparedDynamicRuntimeObjectFieldValueExpression(
   }
 }
 
-function emitPreparedDynamicObjectArrayIndexValueExpression(
-  expression: CValueNode,
-  context: CFunctionContext,
-  deps: CDynamicObjectArrayIndexDependencies
-): PreparedExpression | null {
-  if (expression.type !== 'IndexExpression') {
-    return null
-  }
-
-  const receiver = emitPreparedDynamicObjectArrayReceiver(expression.object, context, deps)
-  const index = emitPreparedDynamicArrayIndexExpression(expression.index, context, deps)
-
-  if (receiver === null || typeof receiver === 'undefined' || index === null || typeof index === 'undefined') {
-    return null
-  }
-
-  const array = nextCName(context, 'inox_array_value')
-  const value = nextCName(context, 'inox_value')
-  const lines: string[] = []
-
-  registerOwnedValue(context, array)
-  registerOwnedValue(context, value)
-  appendLines(lines, receiver.lines)
-  appendLines(lines, index.lines)
-  appendLines(lines, emitPrepareOwnedValueWrite(array))
-  appendLines(lines, emitRuntimeObjectGetValueLines(receiver.expression, receiver.key, array, context))
-  lines.push(emitRuntimeTypeCheck(`${array}.tag != INOX_TAG_ARRAY || ${array}.as.ref == 0`, context))
-  appendLines(lines, emitPrepareOwnedValueWrite(value))
-  const facade = applyCompilerLibraryIntrinsicNativeValueAdapter(
-    array,
-    'inox::Value',
-    context.libraries,
-    'array-literal'
-  )
-  lines.push(`${value} = ${facade}.get(${index.expression});`)
-  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
-
-  return {
-    lines,
-    expression: value
-  }
-}
-
-function emitPreparedDynamicObjectArrayReceiver(
-  expression: CValueNode,
-  context: CFunctionContext,
-  deps: CDynamicObjectArrayIndexDependencies
-): CDynamicObjectArrayReceiver | null {
-  const access = dynamicObjectFieldAccess(expression, context, deps)
-
-  if (access !== null && typeof access !== 'undefined') {
-    const object = deps.emitCValueExpression(access.object, context)
-
-    return {
-      lines: object.lines,
-      expression: object.expression,
-      key: access.key
-    }
-  }
-
-  const runtimeAccess = dynamicRuntimeObjectFieldAccess(expression)
-
-  if (runtimeAccess === null || typeof runtimeAccess === 'undefined') {
-    return null
-  }
-
-  const object = emitPreparedDynamicRuntimeObjectValueExpression(runtimeAccess.object, context, deps)
-
-  if (object === null || typeof object === 'undefined') {
-    return null
-  }
-
-  const lines: string[] = []
-
-  appendLines(lines, object.lines)
-  lines.push(emitRuntimeTypeCheck(runtimeObjectApiValueMismatchCondition(object.expression), context))
-
-  return {
-    lines,
-    expression: object.expression,
-    key: runtimeAccess.key
-  }
-}
-
 function emitPreparedDynamicRuntimeObjectValueExpression(
   expression: CValueNode,
   context: CFunctionContext,
-  deps: CDynamicObjectArrayIndexDependencies
+  deps: CDynamicObjectValueDependencies
 ): PreparedExpression | null {
   const runtimeReference = emitPreparedRuntimeValueReferenceExpression(expression, context)
 
@@ -4537,12 +4541,6 @@ function emitPreparedDynamicRuntimeObjectValueExpression(
 
   if (isDynamicObjectFieldValueExpression(expression, context, deps)) {
     return deps.emitCValueExpression(expression, context)
-  }
-
-  const arrayIndexValue = emitPreparedDynamicObjectArrayIndexValueExpression(expression, context, deps)
-
-  if (arrayIndexValue !== null && typeof arrayIndexValue !== 'undefined') {
-    return arrayIndexValue
   }
 
   return emitPreparedDynamicRuntimeObjectFieldValueExpression(expression, context, deps)
@@ -4564,78 +4562,8 @@ function emitPreparedRuntimeValueReferenceExpression(
   }
 }
 
-function isDynamicObjectArrayIndexValueExpression(
-  expression: CValueNode,
-  context: CFunctionContext,
-  deps: CDynamicObjectArrayIndexDependencies
-): boolean {
-  if (expression.type !== 'IndexExpression') {
-    return false
-  }
-
-  if (dynamicObjectFieldAccess(expression.object, context, deps)) {
-    return isDynamicArrayIndexExpression(expression.index, context, deps)
-  }
-
-  const runtimeAccess = dynamicRuntimeObjectFieldAccess(expression.object)
-
-  if (runtimeAccess === null || typeof runtimeAccess === 'undefined') {
-    return false
-  }
-
-  if (!isDynamicRuntimeObjectValueExpression(runtimeAccess.object, context, deps)) {
-    return false
-  }
-
-  return isDynamicArrayIndexExpression(expression.index, context, deps)
-}
-
-function isDynamicArrayIndexExpression(
-  expression: CValueNode,
-  context: CFunctionContext,
-  deps: CDynamicObjectArrayIndexDependencies
-): boolean {
-  if (expression.type === 'NumberLiteral') {
-    return true
-  }
-
-  return deps.inferExpressionType(expression, context) === 'number'
-}
-
 function isRuntimeValueReferenceExpression(expression: CValueNode, context: CFunctionContext): boolean {
   return !!runtimeValueReferenceName(expression, context)
-}
-
-function isRuntimeArrayObjectIndexExpression(
-  expression: CValueNode,
-  context: CFunctionContext,
-  deps: CDynamicObjectArrayIndexDependencies
-): boolean {
-  const element = deps.resolveRuntimeArrayIndex(expression, context)
-
-  if (element === null || typeof element === 'undefined') {
-    return false
-  }
-
-  return element.valueType === 'object' || element.valueType === 'unknown'
-}
-
-function emitPreparedRuntimeArrayObjectIndexValueExpression(
-  expression: CValueNode,
-  context: CFunctionContext,
-  deps: CDynamicObjectArrayIndexDependencies
-): PreparedExpression | null {
-  const element = deps.resolveRuntimeArrayIndex(expression, context)
-
-  if (
-    element === null ||
-    typeof element === 'undefined' ||
-    (element.valueType !== 'object' && element.valueType !== 'unknown')
-  ) {
-    return null
-  }
-
-  return deps.emitPreparedRuntimeArrayIndexValue(expression, element, context, 'inox_object_value')
 }
 
 function runtimeValueReferenceName(expression: CValueNode, context: CFunctionContext): string | null {
@@ -4689,50 +4617,6 @@ function isOwnedRuntimeValueName(name: string, context: CFunctionContext): boole
   }
 
   return false
-}
-
-function emitPreparedDynamicArrayIndexExpression(
-  expression: CValueNode,
-  context: CFunctionContext,
-  deps: CDynamicObjectArrayIndexDependencies
-): PreparedExpression | null {
-  if (expression.type === 'NumberLiteral') {
-    return {
-      lines: [],
-      expression: `${parseArrayIndexExpression(expression.value)}`
-    }
-  }
-
-  if (deps.inferExpressionType(expression, context) !== 'number') {
-    return null
-  }
-
-  const index = deps.emitPreparedNumberExpression(expression, context)
-
-  return {
-    lines: index.lines,
-    expression: `(size_t)(${index.expression})`
-  }
-}
-
-function parseArrayIndexExpression(value: string): string {
-  let out = 0
-
-  if (value.length === 0) {
-    return '0'
-  }
-
-  for (let index = 0; index < value.length; index = index + 1) {
-    const code = value.charCodeAt(index)
-
-    if (code < 48 || code > 57) {
-      return '0'
-    }
-
-    out = out * 10 + (code - 48)
-  }
-
-  return `${out}`
 }
 
 function dynamicObjectFieldAccess(
@@ -4840,23 +4724,11 @@ export type CValueExpressionDependencies = {
   emitCStringConcatValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCTemplateLiteralValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitOptionalRuntimeCallbackCallValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitPreparedArrayLengthExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedArrayPopCallExpression(
-    expression: CValueNode,
-    context: CFunctionContext,
-    options: PreparedCallOptions | null
-  ): PreparedExpression | null
-  emitPreparedArrayJoinCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedArraySliceCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedClassMethodCallExpression(
     expression: CValueNode,
     context: CFunctionContext,
     options?: PreparedCallOptions
-  ): PreparedExpression | null
-  emitPreparedKnownArrayIndexValueExpression(
-    expression: CValueNode,
-    context: CFunctionContext
   ): PreparedExpression | null
   emitPreparedKnownObjectIndexValueExpression(
     expression: CValueNode,
@@ -4894,16 +4766,6 @@ export type CValueExpressionDependencies = {
     context: CFunctionContext,
     options?: PreparedCallOptions
   ): PreparedExpression | null
-  emitPreparedRuntimeArrayIndexValueExpression(
-    expression: CValueNode,
-    context: CFunctionContext
-  ): PreparedExpression | null
-  emitPreparedRuntimeArrayIndexValue(
-    expression: CValueNode,
-    element: CRuntimeArrayElement,
-    context: CFunctionContext,
-    tempPrefix: string
-  ): PreparedExpression
   inferExpressionType(expression: CValueNode, context: CFunctionContext): string
   isBoxedRuntimeValueName(name: string, context: CFunctionContext): boolean
   isClassConstructorExpression(expression: CValueNode, context: CFunctionContext): boolean
@@ -4912,7 +4774,6 @@ export type CValueExpressionDependencies = {
   isNullableRuntimeExpression(expression: CValueNode, context: CFunctionContext): boolean
   isNullableScalarRuntimeExpression(expression: CValueNode, context: CFunctionContext): boolean
   isStringConcatExpression(expression: CValueNode, context: CFunctionContext): boolean
-  resolveRuntimeArrayIndex(expression: CValueNode, context: CFunctionContext): CRuntimeArrayElement | null
 }
 
 export function emitCValueExpression(
@@ -4942,36 +4803,6 @@ export function emitCValueExpression(
 
   if (libraryExpression !== null) {
     return boxPreparedRuntimeScalarValue(libraryExpression)
-  }
-
-  const arrayPopCall = deps.emitPreparedArrayPopCallExpression(expression, context, null)
-
-  if (arrayPopCall !== null && typeof arrayPopCall !== 'undefined') {
-    return arrayPopCall
-  }
-
-  const arrayJoinCall = deps.emitPreparedArrayJoinCallExpression(expression, context)
-
-  if (arrayJoinCall !== null && typeof arrayJoinCall !== 'undefined') {
-    return arrayJoinCall
-  }
-
-  const arraySliceCall = deps.emitPreparedArraySliceCallExpression(expression, context)
-
-  if (arraySliceCall !== null && typeof arraySliceCall !== 'undefined') {
-    return arraySliceCall
-  }
-
-  if (expression.type === 'MemberExpression' && expression.property === 'length') {
-    let arrayLength: PreparedExpression | null = null
-    arrayLength = deps.emitPreparedArrayLengthExpression(expression, context)
-
-    if (arrayLength !== null && typeof arrayLength !== 'undefined') {
-      return {
-        lines: arrayLength.lines,
-        expression: `inox_number_value(${arrayLength.expression})`
-      }
-    }
   }
 
   if (deps.isClassConstructorExpression(expression, context)) {
@@ -5059,10 +4890,6 @@ export function emitCValueExpression(
       if (resolvedModuleValueName !== null && typeof resolvedModuleValueName !== 'undefined') {
         moduleValueName = resolvedModuleValueName
       }
-    }
-
-    if (valueType === '' && (context.runtimeArrayElementTypes.has(name) || context.arrayShapes.has(name))) {
-      valueType = 'array'
     }
 
     if (moduleValueName !== '') {
@@ -5195,7 +5022,7 @@ export function emitCValueExpression(
       }
     }
 
-    if (valueType === 'bytes' || valueType === 'object' || valueType === 'array') {
+    if (valueType === 'bytes' || valueType === 'object') {
       return {
         lines: [],
         expression: reference
@@ -5285,24 +5112,6 @@ export function emitCValueExpression(
   }
 
   if (deps.isIndexAccessExpression(expression)) {
-    const arrayValue = deps.emitPreparedKnownArrayIndexValueExpression(expression, context)
-
-    if (arrayValue !== null && typeof arrayValue !== 'undefined') {
-      return arrayValue
-    }
-
-    const runtimeArrayValue = deps.emitPreparedRuntimeArrayIndexValueExpression(expression, context)
-
-    if (runtimeArrayValue !== null && typeof runtimeArrayValue !== 'undefined') {
-      return runtimeArrayValue
-    }
-
-    const dynamicArrayValue = emitPreparedDynamicObjectArrayIndexValueExpression(expression, context, deps)
-
-    if (dynamicArrayValue !== null && typeof dynamicArrayValue !== 'undefined') {
-      return dynamicArrayValue
-    }
-
     const objectValue = deps.emitPreparedKnownObjectIndexValueExpression(expression, context)
 
     if (objectValue !== null && typeof objectValue !== 'undefined') {
@@ -5339,7 +5148,7 @@ export function emitCValueExpression(
 
     if (
       valueType !== 'unknown' &&
-      valueType !== 'promise' &&
+      valueType !== 'async-result' &&
       !isManagedRuntimeReturnType(valueType) &&
       !isOpaqueRuntimeValueType(valueType)
     ) {
@@ -5354,6 +5163,11 @@ export function emitCValueExpression(
 
     const temp = nextCName(context, 'inox_value')
     const tag = cRuntimeValueTag(valueType)
+    const nativeValidExpression = compilerLibraryNativeRuntimeValueValidExpressionForTypeRef(
+      context.libraries,
+      expression.typeRef
+    )
+    const returnRuntimeTypeAlternatives = callExpressionReturnRuntimeTypeAlternatives(expression, context)
     const call = deps.emitPreparedCallExpression(expression, context)
 
     if (call.cppType !== null && typeof call.cppType !== 'undefined') {
@@ -5371,7 +5185,30 @@ export function emitCValueExpression(
       lines.push(`inox_retain(${temp});`)
     }
 
-    if (callExpressionReturnsNullableRuntimeValue(expression, valueType, context)) {
+    if (nativeValidExpression !== null) {
+      const valid = nativeValidExpression.split('$value').join(temp)
+      const mismatch =
+        callExpressionReturnsNullableRuntimeValue(expression, valueType, context)
+          ? `${temp}.tag != INOX_TAG_UNDEFINED && ${temp}.tag != INOX_TAG_NULL && !(${valid})`
+          : `!(${valid})`
+
+      lines.push(emitRuntimeTypeCheck(mismatch, context))
+    } else if (returnRuntimeTypeAlternatives !== null && typeof returnRuntimeTypeAlternatives !== 'undefined') {
+      const validExpressions = runtimeTypeAlternativeValidExpressions(
+        returnRuntimeTypeAlternatives,
+        temp,
+        context.libraries
+      )
+
+      if (validExpressions !== null && validExpressions.length > 0) {
+        const valid = validExpressions.join(' || ')
+        const mismatch = callExpressionReturnsNullableRuntimeValue(expression, valueType, context)
+          ? `${temp}.tag != INOX_TAG_UNDEFINED && ${temp}.tag != INOX_TAG_NULL && !(${valid})`
+          : `!(${valid})`
+
+        lines.push(emitRuntimeTypeCheck(mismatch, context))
+      }
+    } else if (callExpressionReturnsNullableRuntimeValue(expression, valueType, context)) {
       appendLines(lines, emitRuntimeNullableValueCheck(temp, tag, context))
     } else {
       lines.push(emitRuntimeValueCheck(temp, tag, context))
@@ -5379,11 +5216,24 @@ export function emitCValueExpression(
 
     return {
       lines,
-      expression: temp
+      expression: temp,
+      functionCompanions: call.functionCompanions
     }
   }
 
   return emitUnsupportedCValueExpression(expression, context, deps)
+}
+
+function callExpressionReturnRuntimeTypeAlternatives(
+  expression: CValueNode,
+  context: CFunctionContext
+): CRuntimeTypeAlternative[] | null | undefined {
+  if (expression.callee.type === 'Reference' && expression.callee.path.length === 1) {
+    return context.functionReturnRuntimeTypeAlternatives.get(expression.callee.path[0])
+  }
+
+  const resolved = resolveObjectFunctionField(expression.callee, context)
+  return resolved?.field.functionType?.returnRuntimeTypeAlternatives
 }
 
 function callExpressionReturnsNullableRuntimeValue(
@@ -5445,25 +5295,37 @@ function emitCConditionalValueExpression(
   context: CFunctionContext,
   deps: CValueExpressionDependencies
 ): PreparedExpression {
-  let test = deps.emitPreparedRuntimeTruthinessExpression(expression.test, context)
+  const testExpression = cValueChild(expression.test)
+  const consequentExpression = cValueChild(expression.consequent)
+  const alternateExpression = cValueChild(expression.alternate)
+
+  if (testExpression === null || consequentExpression === null || alternateExpression === null) {
+    return emitUnsupportedCValueExpression(expression, context, deps)
+  }
+
+  let test = deps.emitPreparedRuntimeTruthinessExpression(testExpression, context)
 
   if (test === null || typeof test === 'undefined') {
-    test = deps.emitPreparedNumberExpression(expression.test, context)
+    test = deps.emitPreparedNumberExpression(testExpression, context)
   }
-  const narrowing = resolveNullableScalarConditionNarrowing(expression.test, context)
+  const narrowing = resolveNullableScalarConditionNarrowing(testExpression, context)
   const consequentSnapshot = pushNullableScalarNarrowing(context, narrowing.trueNames)
-  const consequent = emitCConditionalBranchValueExpression(expression.consequent, expression, context, deps)
+  const consequent = emitCConditionalBranchValueExpression(consequentExpression, expression, context, deps)
 
   restoreNullableScalarNarrowing(context, consequentSnapshot)
 
   const alternateSnapshot = pushNullableScalarNarrowing(context, narrowing.falseNames)
-  const alternate = emitCConditionalBranchValueExpression(expression.alternate, expression, context, deps)
+  const alternate = emitCConditionalBranchValueExpression(alternateExpression, expression, context, deps)
 
   restoreNullableScalarNarrowing(context, alternateSnapshot)
 
   const temp = nextCName(context, 'inox_conditional_value')
   const valueType = deps.inferExpressionType(expression, context)
   const tag = cRuntimeValueTag(valueType)
+  const nativeValidExpression = compilerLibraryNativeRuntimeValueValidExpressionForTypeRef(
+    context.libraries,
+    expression.typeRef
+  )
   const lines: string[] = []
 
   registerOwnedValue(context, temp)
@@ -5480,7 +5342,15 @@ function emitCConditionalValueExpression(
   appendPrefixedLines(lines, retainConditionalBranchValueExpression(alternate.expression, context), '  ')
   lines.push('}')
 
-  if (expression.nullable === true) {
+  if (nativeValidExpression !== null) {
+    const valid = nativeValidExpression.split('$value').join(temp)
+    const mismatch =
+      expression.nullable === true
+        ? `${temp}.tag != INOX_TAG_UNDEFINED && ${temp}.tag != INOX_TAG_NULL && !(${valid})`
+        : `!(${valid})`
+
+    lines.push(emitRuntimeTypeCheck(mismatch, context))
+  } else if (expression.nullable === true) {
     appendLines(lines, emitRuntimeNullableValueCheck(temp, tag, context))
   } else {
     const check = emitRuntimeValueCheck(temp, tag, context)
