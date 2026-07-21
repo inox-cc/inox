@@ -12,7 +12,7 @@ test('global:strings владеет primitive string declarations, operations и
   assert.ok(strings)
   assert.equal(strings.compilerEntrypoint, 'stdlib/global/strings/compiler/index.ts')
   assert.deepEqual(strings.nativeSources, ['stdlib/global/strings/src/strings.cc'])
-  assert.deepEqual(strings.nativeIncludeDirs, ['stdlib/global/strings/include'])
+  assert.deepEqual(strings.nativeIncludeDirs, [])
   assert.match(strings.declarationSource ?? '', /interface String/)
 
   const result = compileSource(

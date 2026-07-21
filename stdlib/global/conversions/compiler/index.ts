@@ -23,12 +23,12 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
     numericCastOperation('f32', false),
     numericCastOperation('f64', false)
   ],
-  intrinsicBindings: [],
+  intrinsicBindings: [{ role: 'string-conversion', bindingId: 'global:String' }],
   runtimeRequirements: [
     {
       id: runtimeRequirement,
       dependencies: ['managed-values', 'string-bytes'],
-      cPreludeIncludes: ['inox/conversions.h', 'inox/string.h'],
+      cPreludeIncludes: ['inox/conversions.h'],
       capabilities: []
     }
   ]

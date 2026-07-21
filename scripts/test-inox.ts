@@ -1,5 +1,7 @@
 import { resolve } from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
 
+import { runStage6SemanticContract } from '../tests/contracts/stage6-semantic-contract.ts'
 import { rootDir } from './lib/repo-root.ts'
 import { runCommand } from './lib/run-command.ts'
 
@@ -26,8 +28,38 @@ if (probe.code !== 0) {
   process.exit(probe.code)
 }
 
-if (!probe.stdout.includes('Stage 6 semantic contract passed')) {
-  console.error('Stage 6 semantic probe did not report a successful contract check')
+const contractPrefix = 'INOX_DECOUPLING_CONTRACT '
+const nativeSnapshotLine = probe.stdout
+  .split('\n')
+  .find((line) => line.startsWith(contractPrefix))
+
+if (typeof nativeSnapshotLine === 'undefined') {
+  console.error('Native decoupling probe did not report its semantic snapshot')
+  process.exit(1)
+}
+
+const hostedContract = runStage6SemanticContract()
+
+if (!hostedContract.ok) {
+  for (const failure of hostedContract.failures) {
+    console.error(failure)
+  }
+
+  process.exit(1)
+}
+
+const nativeSnapshot = nativeSnapshotLine.slice(contractPrefix.length)
+let parsedNativeSnapshot: unknown
+
+try {
+  parsedNativeSnapshot = JSON.parse(nativeSnapshot)
+} catch {
+  console.error('Native decoupling probe reported invalid JSON')
+  process.exit(1)
+}
+
+if (!isDeepStrictEqual(parsedNativeSnapshot, hostedContract.snapshot)) {
+  console.error('Hosted and native compiler decoupling snapshots differ')
   process.exit(1)
 }
 

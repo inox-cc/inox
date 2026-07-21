@@ -462,7 +462,13 @@ export type LibraryOperationDescriptor = {
   argumentNarrowing?: LibraryArgumentNarrowingDescriptor | null
 }
 
-export type IntrinsicRole = 'array-literal' | 'async-result' | 'exception-value' | 'dynamic-object' | 'regexp-literal'
+export type IntrinsicRole =
+  | 'array-literal'
+  | 'async-result'
+  | 'exception-value'
+  | 'dynamic-object'
+  | 'regexp-literal'
+  | 'string-conversion'
 
 export type IntrinsicRoleBinding = {
   role: IntrinsicRole

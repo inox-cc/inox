@@ -3,6 +3,7 @@ import { test } from 'node:test'
 
 import { compileMemoryPackageToIrModules } from '../../compiler/core.ts'
 import { emitModuleDeclarationContract } from '../../compiler/modules/declarations.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 test('imported generic type alias сохраняет параметры и type-only boundary', async () => {
   const result = await compileMemoryPackageToIrModules(
@@ -87,7 +88,8 @@ test('imported generic type alias сохраняет параметры и type-
           declarationPath: '/project/provider.d.ts'
         }
       ],
-      target: 'cc'
+      target: 'cc',
+      libraries: defaultCompilerLibrarySet
     }
   )
   const downstreamModule = downstream.graph.modules.find((item) => item.path === '/project/unit.ts')

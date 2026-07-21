@@ -132,7 +132,7 @@ console.log(strNum, strBool, strNull, strTpl, numText, hexText)
 
 export function assertStringRuntimeMethodsStayDirect(): void {
   const source = readFileSync(resolve('stdlib/global/strings/src/strings.cc'), 'utf8')
-  const header = readFileSync(resolve('stdlib/global/strings/include/inox/string.h'), 'utf8')
+  const header = readFileSync(resolve('runtime/include/inox/string.h'), 'utf8')
 
   assert.doesNotMatch(
     source,

@@ -19,7 +19,6 @@ const forbiddenPatterns = [
   /['"]f64['"]/,
   /\bnumericCast\b/,
   /\bnumber-from-string\b/,
-  /\bstring-conversion\b/,
   /\bLibraryCLoweringKind\b/,
   /\blibraryCLowering\b/,
   /\bcLowering\b/

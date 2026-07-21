@@ -13,11 +13,31 @@ import type {
 export type Stage6SemanticContractResult = {
   ok: boolean
   failures: string[]
+  snapshot: Stage8DecouplingContractSnapshot
 }
 
 type ContractDiagnostic = {
   code: string
   message: string
+}
+
+type ContractSnapshotDiagnostic = ContractDiagnostic & {
+  column: number
+  file: string | null
+  line: number
+  severity: string
+}
+
+type Stage8DecouplingContractCase = {
+  code: string | null
+  diagnostics: ContractSnapshotDiagnostic[]
+  name: string
+  runtimeRequirements: string[]
+}
+
+export type Stage8DecouplingContractSnapshot = {
+  cases: Stage8DecouplingContractCase[]
+  version: number
 }
 
 const sequenceLibraryId = 'fixture:sequence-profile'
@@ -27,6 +47,38 @@ const futureLibraryId = 'fixture:future-profile'
 const futureTypeId = `${futureLibraryId}#FutureState`
 const futureBindingId = 'global:FixtureFuture'
 const futureRuntimeRequirement = `${futureLibraryId}#engine`
+const sequenceContractSource = [
+  'function update(values: FixtureSequence<number>): number {',
+  '  const first = values[0]',
+  '  values[0] = first + 1',
+  '  let total = 0',
+  '  for (const value of values) total = total + value',
+  '  return values.append(2) + values.count + total',
+  '}',
+  'update([1])'
+].join('\n')
+const futureContractSource = [
+  'async function advance(value: number): FixtureFuture<number> {',
+  '  const current = await FixtureFuture.succeed(value)',
+  '  return current + 1',
+  '}',
+  'advance(1).map((value) => value + 1)',
+  'FixtureFuture.fail(1).recover(() => 1)'
+].join('\n')
+const providerAbsentCoreSource = [
+  'class Counter { value: number = 1 }',
+  'function add(left: number, right: number): number {',
+  '  return left + right',
+  '}',
+  'add(new Counter().value, 2)'
+].join('\n')
+const missingArrayLiteralSource = 'const values = [1, 2]'
+const missingArrayLengthSource = 'let values: number[]\nconst size = values.length'
+const missingArrayPushSource = 'let values: number[]\nvalues.push(1)'
+const missingAsyncResultSource = 'async function work() {}\nwork()'
+const missingSequenceTypeSource =
+  'function read(values: FixtureSequence<number>): number { return values.count }'
+const missingFutureGlobalSource = 'function start(): unknown { return FixtureFuture.succeed(1) }'
 
 const elementTypeRef: TypeRef = { kind: 'parameter', name: 'T' }
 const mappedTypeRef: TypeRef = { kind: 'parameter', name: 'U' }
@@ -63,7 +115,29 @@ export function runStage6SemanticContract(): Stage6SemanticContractResult {
 
   return {
     ok: failures.length === 0,
-    failures
+    failures,
+    snapshot: stage8DecouplingContractSnapshot(libraries)
+  }
+}
+
+export function stage8DecouplingContractSnapshot(
+  libraries: CompilerLibrarySet = stage6RenamedProviderLibrarySet()
+): Stage8DecouplingContractSnapshot {
+  const absentLibraries = createCompilerLibrarySet([])
+
+  return {
+    version: 1,
+    cases: [
+      contractCaseSnapshot('renamed-sequence-provider', sequenceContractSource, libraries),
+      contractCaseSnapshot('renamed-async-result-provider', futureContractSource, libraries),
+      contractCaseSnapshot('provider-absent-core', providerAbsentCoreSource, absentLibraries),
+      contractCaseSnapshot('provider-absent-array-literal', missingArrayLiteralSource, absentLibraries),
+      contractCaseSnapshot('provider-absent-array-member', missingArrayLengthSource, absentLibraries),
+      contractCaseSnapshot('provider-absent-array-call', missingArrayPushSource, absentLibraries),
+      contractCaseSnapshot('provider-absent-async-result', missingAsyncResultSource, absentLibraries),
+      contractCaseSnapshot('provider-absent-sequence-type', missingSequenceTypeSource, absentLibraries),
+      contractCaseSnapshot('provider-absent-future-global', missingFutureGlobalSource, absentLibraries)
+    ]
   }
 }
 
@@ -72,19 +146,7 @@ export function stage6RenamedProviderLibrarySet(): CompilerLibrarySet {
 }
 
 function checkSequenceProvider(libraries: CompilerLibrarySet, failures: string[]): void {
-  const result = compileSource(
-    [
-      'function update(values: FixtureSequence<number>): number {',
-      '  const first = values[0]',
-      '  values[0] = first + 1',
-      '  let total = 0',
-      '  for (const value of values) total = total + value',
-      '  return values.append(2) + values.count + total',
-      '}',
-      'update([1])'
-    ].join('\n'),
-    { libraries, target: 'cc' }
-  )
+  const result = compileSource(sequenceContractSource, { libraries, target: 'cc' })
 
   requireText(result.code, 'FixtureSequence::empty()', 'sequence literal provider was not selected', failures)
   requireText(result.code, '.readNative(0)', 'sequence index-read operation was not selected', failures)
@@ -98,17 +160,7 @@ function checkSequenceProvider(libraries: CompilerLibrarySet, failures: string[]
 }
 
 function checkFutureProvider(libraries: CompilerLibrarySet, failures: string[]): void {
-  const result = compileSource(
-    [
-      'async function advance(value: number): FixtureFuture<number> {',
-      '  const current = await FixtureFuture.succeed(value)',
-      '  return current + 1',
-      '}',
-      'advance(1).map((value) => value + 1)',
-      'FixtureFuture.fail(1).recover(() => 1)'
-    ].join('\n'),
-    { libraries, target: 'cc' }
-  )
+  const result = compileSource(futureContractSource, { libraries, target: 'cc' })
 
   requireText(result.code, 'FixtureFuture::start', 'renamed async-result create operation was not selected', failures)
   requireText(
@@ -138,23 +190,14 @@ function checkFutureProvider(libraries: CompilerLibrarySet, failures: string[]):
 
 function checkProviderAbsentProfile(failures: string[]): void {
   const libraries = createCompilerLibrarySet([])
-  const result = compileSource(
-    [
-      'class Counter { value: number = 1 }',
-      'function add(left: number, right: number): number {',
-      '  return left + right',
-      '}',
-      'add(new Counter().value, 2)'
-    ].join('\n'),
-    { libraries, target: 'cc' }
-  )
+  const result = compileSource(providerAbsentCoreSource, { libraries, target: 'cc' })
 
   rejectText(result.code, 'FixtureSequence', 'provider-absent core program retained a sequence tail', failures)
   rejectText(result.code, 'FixtureFuture', 'provider-absent core program retained a future tail', failures)
   rejectText(result.code, 'Array::', 'provider-absent core program retained an Array tail', failures)
   rejectText(result.code, 'Promise', 'provider-absent core program retained a Promise tail', failures)
   requireDiagnostic(
-    'const values = [1, 2]',
+    missingArrayLiteralSource,
     libraries,
     'INOX_MISSING_INTRINSIC_PROVIDER',
     'missing compiler library intrinsic provider array-literal',
@@ -162,7 +205,7 @@ function checkProviderAbsentProfile(failures: string[]): void {
     failures
   )
   requireDiagnostic(
-    'let values: number[]\nconst size = values.length',
+    missingArrayLengthSource,
     libraries,
     'INOX_UNKNOWN_FIELD',
     'unknown field length',
@@ -170,7 +213,7 @@ function checkProviderAbsentProfile(failures: string[]): void {
     failures
   )
   requireDiagnostic(
-    'let values: number[]\nvalues.push(1)',
+    missingArrayPushSource,
     libraries,
     'INOX_UNKNOWN_FIELD',
     'unknown field push',
@@ -178,7 +221,7 @@ function checkProviderAbsentProfile(failures: string[]): void {
     failures
   )
   requireDiagnostic(
-    'async function work() {}\nwork()',
+    missingAsyncResultSource,
     libraries,
     'INOX_MISSING_INTRINSIC_PROVIDER',
     'missing compiler library intrinsic provider async-result',
@@ -186,17 +229,50 @@ function checkProviderAbsentProfile(failures: string[]): void {
     failures
   )
   requireCompileFailure(
-    'function read(values: FixtureSequence<number>): number { return values.count }',
+    missingSequenceTypeSource,
     libraries,
     'provider-absent profile still knows FixtureSequence',
     failures
   )
   requireCompileFailure(
-    'function start(): unknown { return FixtureFuture.succeed(1) }',
+    missingFutureGlobalSource,
     libraries,
     'provider-absent profile still knows FixtureFuture',
     failures
   )
+}
+
+function contractCaseSnapshot(
+  name: string,
+  source: string,
+  libraries: CompilerLibrarySet
+): Stage8DecouplingContractCase {
+  try {
+    const result = compileSource(source, { libraries, target: 'cc' })
+
+    return {
+      name,
+      code: result.code,
+      runtimeRequirements: result.ir.runtimeRequirements.slice().sort(),
+      diagnostics: []
+    }
+  } catch (error) {
+    const diagnostics = contractDiagnosticsFromThrownValue(error) ?? []
+
+    return {
+      name,
+      code: null,
+      runtimeRequirements: [],
+      diagnostics: diagnostics.map((item: any) => ({
+        code: item.code,
+        message: item.message,
+        line: item.line,
+        column: item.column,
+        file: typeof item.file === 'string' ? item.file : null,
+        severity: item.severity
+      }))
+    }
+  }
 }
 
 function requireDiagnostic(

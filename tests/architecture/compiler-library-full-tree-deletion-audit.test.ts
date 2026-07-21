@@ -1,163 +1,121 @@
 import assert from 'node:assert/strict'
+import { execFile } from 'node:child_process'
 import { cp, rm } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import process from 'node:process'
 import { test } from 'node:test'
+import { promisify } from 'node:util'
 
-import { compileSource } from '../../compiler/core.ts'
-import { CompileError } from '../../compiler/diagnostics.ts'
 import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
 import type { DiscoveredCompilerLibrary } from '../../scripts/lib/compiler-library-discovery.ts'
+import { renderCompilerLibraryRegistry } from '../../scripts/lib/compiler-library-registry.ts'
 import {
-  createCompilerLibrarySetFromDiscovered,
-  renderCompilerLibraryRegistry
-} from '../../scripts/lib/compiler-library-registry.ts'
+  compilerLibraryDeletionSnapshot,
+  type CompilerLibraryDeletionSnapshot
+} from './helpers/compiler-library-deletion-snapshot.ts'
 
+type DeletionProbeResult = {
+  ids: string[]
+  snapshot?: CompilerLibraryDeletionSnapshot
+  error?: string
+  phase?: 'discovery' | 'render'
+}
+
+const execFileAsync = promisify(execFile)
 const fixtureRoot = resolve('dist/test-tmp/compiler-library-full-tree-deletion-audit')
+const probePath = resolve('tests/architecture/helpers/compiler-library-deletion-probe.ts')
 
-test('физическое удаление каждого stdlib package убирает его из полного рабочего profile', async () => {
+test('изолированное удаление каждого stdlib package точно перестраивает оставшийся profile', async () => {
   await rm(fixtureRoot, { recursive: true, force: true })
-  await cp(resolve('stdlib'), resolve(fixtureRoot, 'stdlib'), { recursive: true })
-
   const original = await discoverCompilerLibraries()
 
   try {
-    for (const target of original) {
-      const targetRoot = resolve(fixtureRoot, target.root)
-      await rm(targetRoot, { recursive: true, force: true })
-
-      const directlyRemoved = original.filter(
-        (library) => library.root === target.root || library.root.startsWith(`${target.root}/`)
-      )
-      const directlyRemovedIds = new Set(directlyRemoved.map((library) => library.id))
-      const directlyDiscovered = await discoverCompilerLibraries(fixtureRoot)
-      const missingEdges = missingDependencyEdges(directlyDiscovered, directlyRemovedIds)
-
-      if (missingEdges.length > 0) {
-        assert.throws(
-          () => createCompilerLibrarySetFromDiscovered(directlyDiscovered),
-          /Missing compiler library dependency/,
-          `${target.id}: missing dependency was not rejected (${missingEdges.join(', ')})`
-        )
-      }
-
-      const removed = target.kind === 'node' ? dependentClosure(original, directlyRemovedIds) : directlyRemoved
-      const removedIds = new Set(removed.map((library) => library.id))
-      const removedRequirementIds = runtimeRequirementIds(removed)
-
-      for (const root of topLevelRoots(removed)) {
-        if (root !== target.root) {
-          await rm(resolve(fixtureRoot, root), { recursive: true, force: true })
-        }
-      }
-
-      const discovered = await discoverCompilerLibraries(fixtureRoot)
-      const remainingIds = new Set(discovered.map((library) => library.id))
-
-      for (const library of removed) {
-        assert.equal(remainingIds.has(library.id), false, `${target.id}: ${library.id} remained discoverable`)
-        assert.equal(
-          discovered.some((candidate) =>
-            candidate.nativeSources.some((source) => source.startsWith(`${library.root}/`))
-          ),
-          false,
-          `${target.id}: ${library.id} native source remained in discovery`
-        )
-        assert.equal(
-          discovered.some((candidate) =>
-            candidate.nativeIncludeDirs.some((path) => path.startsWith(`${library.root}/`))
-          ),
-          false,
-          `${target.id}: ${library.id} native include remained in discovery`
-        )
-      }
-
-      const remainingMissingEdges = missingDependencyEdges(discovered, removedIds)
-
-      if (remainingMissingEdges.length === 0) {
-        const rendered = renderCompilerLibraryRegistry(discovered)
-
-        assert.equal(
-          rendered.librarySet.declarations.some((declaration) => removedIds.has(declaration.libraryId)),
-          false,
-          `${target.id}: declaration remained in selected library set`
-        )
-        assert.equal(
-          rendered.librarySet.operations.some((operation) => removedIds.has(operation.libraryId)),
-          false,
-          `${target.id}: operation remained in selected library set`
-        )
-        assert.equal(
-          rendered.librarySet.nativeTypes.some((nativeType) => removedIds.has(nativeType.libraryId)),
-          false,
-          `${target.id}: native type remained in selected library set`
-        )
-        assert.equal(
-          rendered.librarySet.runtimeRequirements.some((requirement) =>
-            removedRequirementIds.has(requirement.id)
-          ),
-          false,
-          `${target.id}: runtime requirement remained in selected library set`
-        )
-
-        for (const library of removed) {
-          assert.equal(
-            rendered.nativePlanSource.includes(`${library.root}/`),
-            false,
-            `${target.id}: ${library.id} remained in generated native plan`
-          )
-        }
-
-        if (target.kind === 'node' && target.importSource !== null) {
-          const neutralResult = compileSource('const answer = 40 + 2\n', {
-            libraries: rendered.librarySet
-          })
-
-          assert.equal(
-            neutralResult.ir.runtimeRequirements.some((requirement) =>
-              removedRequirementIds.has(requirement)
-            ),
-            false,
-            `${target.id}: removed package requirement reached neutral IR`
-          )
-          assert.throws(
-            () =>
-              compileSource(
-                `import removedPackage from '${target.importSource}'\nremovedPackage\n`,
-                { libraries: rendered.librarySet }
-              ),
-            (error: unknown) =>
-              error instanceof CompileError &&
-              error.diagnostics[0].code === 'INOX_UNSUPPORTED_IMPORT_SOURCE',
-            `${target.id}: removed import remained available`
-          )
-        }
-      } else {
-        assert.throws(
-          () => createCompilerLibrarySetFromDiscovered(discovered),
-          /Missing compiler library dependency/,
-          `${target.id}: dependency closure remained invalid (${remainingMissingEdges.join(', ')})`
-        )
-      }
-
-      for (const root of topLevelRoots(removed)) {
-        await cp(resolve(root), resolve(fixtureRoot, root), { recursive: true })
-      }
-    }
+    await mapConcurrent(original, 4, async (target) => {
+      await auditPackageDeletion(original, target)
+    })
   } finally {
     await rm(fixtureRoot, { recursive: true, force: true })
   }
 })
 
-function missingDependencyEdges(
-  discovered: DiscoveredCompilerLibrary[],
-  removedIds: Set<string>
-): string[] {
-  return discovered.flatMap(
-    (library) =>
-      library.compilerPackage?.dependencies
-        .filter((dependency) => removedIds.has(dependency))
-        .map((dependency) => `${library.id} -> ${dependency}`) ?? []
-  )
+async function auditPackageDeletion(
+  original: DiscoveredCompilerLibrary[],
+  target: DiscoveredCompilerLibrary
+): Promise<void> {
+  const fixture = resolve(fixtureRoot, safeName(target.id))
+
+  await cp(resolve('stdlib'), resolve(fixture, 'stdlib'), { recursive: true })
+
+  try {
+    const directlyRemoved = original.filter(
+      (library) => library.root === target.root || library.root.startsWith(`${target.root}/`)
+    )
+    const directlyRemovedIds = new Set(directlyRemoved.map((library) => library.id))
+    const directlyRemaining = original.filter((library) => !directlyRemovedIds.has(library.id))
+
+    await rm(resolve(fixture, target.root), { recursive: true, force: true })
+
+    const directResult = await runDeletionProbe(fixture)
+
+    assert.deepEqual(directResult.ids, libraryIds(directlyRemaining), `${target.id}: direct inventory differs`)
+    assertExpectedRenderResult(target.id, directlyRemaining, directResult)
+
+    const removedClosure = dependentClosure(original, directlyRemovedIds)
+    const removedClosureIds = new Set(removedClosure.map((library) => library.id))
+    const remainingClosure = original.filter((library) => !removedClosureIds.has(library.id))
+
+    for (const root of topLevelRoots(removedClosure)) {
+      await rm(resolve(fixture, root), { recursive: true, force: true })
+    }
+
+    const closureResult = await runDeletionProbe(fixture)
+
+    assert.deepEqual(closureResult.ids, libraryIds(remainingClosure), `${target.id}: closure inventory differs`)
+    assert.equal(closureResult.phase, undefined, `${target.id}: closure failed in ${closureResult.phase}`)
+    assert.equal(closureResult.error, undefined, `${target.id}: ${closureResult.error}`)
+    assert.deepEqual(
+      closureResult.snapshot,
+      compilerLibraryDeletionSnapshot(renderCompilerLibraryRegistry(remainingClosure)),
+      `${target.id}: registry/native-plan/neutral compilation differs after closure removal`
+    )
+  } finally {
+    await rm(fixture, { recursive: true, force: true })
+  }
+}
+
+function assertExpectedRenderResult(
+  targetId: string,
+  remaining: DiscoveredCompilerLibrary[],
+  actual: DeletionProbeResult
+): void {
+  let expected: CompilerLibraryDeletionSnapshot | null = null
+  let expectedError: string | null = null
+
+  try {
+    expected = compilerLibraryDeletionSnapshot(renderCompilerLibraryRegistry(remaining))
+  } catch (error) {
+    expectedError = error instanceof Error ? error.message : String(error)
+  }
+
+  if (expectedError !== null) {
+    assert.equal(actual.phase, 'render', `${targetId}: dependency error must occur after discovery`)
+    assert.equal(actual.error, expectedError, `${targetId}: dependency diagnostic differs`)
+    assert.equal(actual.snapshot, undefined, `${targetId}: invalid direct profile was rendered`)
+    return
+  }
+
+  assert.equal(actual.phase, undefined, `${targetId}: direct removal failed in ${actual.phase}`)
+  assert.equal(actual.error, undefined, `${targetId}: ${actual.error}`)
+  assert.deepEqual(actual.snapshot, expected, `${targetId}: direct profile differs`)
+}
+
+async function runDeletionProbe(projectRoot: string): Promise<DeletionProbeResult> {
+  const result = await execFileAsync(process.execPath, [probePath, projectRoot], {
+    cwd: resolve('.'),
+    maxBuffer: 1024 * 1024
+  })
+
+  return JSON.parse(result.stdout) as DeletionProbeResult
 }
 
 function dependentClosure(
@@ -191,10 +149,34 @@ function topLevelRoots(libraries: DiscoveredCompilerLibrary[]): string[] {
     .sort()
 }
 
-function runtimeRequirementIds(libraries: DiscoveredCompilerLibrary[]): Set<string> {
-  return new Set(
-    libraries.flatMap(
-      (library) => library.compilerPackage?.runtimeRequirements.map((requirement) => requirement.id) ?? []
-    )
-  )
+function libraryIds(libraries: DiscoveredCompilerLibrary[]): string[] {
+  return libraries.map((library) => library.id).sort()
+}
+
+function safeName(value: string): string {
+  return value.replace(/[^A-Za-z0-9_-]/g, '-')
+}
+
+async function mapConcurrent<T>(
+  values: T[],
+  concurrency: number,
+  callback: (value: T) => Promise<void>
+): Promise<void> {
+  let nextIndex = 0
+
+  async function worker(): Promise<void> {
+    while (nextIndex < values.length) {
+      const currentIndex = nextIndex
+      nextIndex = nextIndex + 1
+      await callback(values[currentIndex])
+    }
+  }
+
+  const workers: Promise<void>[] = []
+
+  for (let index = 0; index < concurrency; index = index + 1) {
+    workers.push(worker())
+  }
+
+  await Promise.all(workers)
 }

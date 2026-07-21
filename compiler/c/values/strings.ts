@@ -122,17 +122,16 @@ export type StringLoweringDependencies = {
   ): PreparedExpression | null
   emitPreparedNumberExpression(expression: AnyNode, context: StringCContext): PreparedExpression
   emitPreparedNativeClassStringFieldExpression(expression: AnyNode, context: StringCContext): PreparedExpression | null
-  emitPreparedNodeRuntimeStringExpression(expression: AnyNode, context: StringCContext): PreparedExpression | null
-  emitPreparedClassToStringExpression(expression: AnyNode, context: StringCContext): PreparedExpression | null
+  emitPreparedConfiguredRuntimeStringExpression(expression: AnyNode, context: StringCContext): PreparedExpression | null
+  emitPreparedIntrinsicStringConversionExpression(expression: AnyNode, context: StringCContext): PreparedExpression | null
   emitReference(expression: AnyNode, context: StringCContext): string
   inferExpressionType(expression: AnyNode, context: StringCContext): string
-  hasClassToStringExpression(expression: AnyNode, context: StringCContext): boolean
   isBoxedRuntimeStringName(name: string, context: StringCContext): boolean
   isBoxedRuntimeStringReference(expression: AnyNode, context: StringCContext): boolean
   isMemberAccessExpression(expression: AnyNode): boolean
-  isNodeRuntimeProducedStringExpression(expression: AnyNode | null | undefined): boolean
+  isConfiguredRuntimeProducedStringExpression(expression: AnyNode | null | undefined): boolean
   isNullableScalarRuntimeExpression(expression: AnyNode, context: StringCContext): boolean
-  nodeRuntimeStringConstantValue(expression: AnyNode | null | undefined): string | null
+  configuredRuntimeStringConstantValue(expression: AnyNode | null | undefined): string | null
   resolveKnownObjectIndex(expression: AnyNode, context: StringCContext): CObjectFieldInfo | null
   resolveKnownObjectMember(expression: AnyNode, context: StringCContext): CObjectFieldInfo | null
 }
@@ -333,9 +332,9 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
   if (
     expression !== null &&
     typeof expression !== 'undefined' &&
-    stringDeps(context).isNodeRuntimeProducedStringExpression(expression)
+    stringDeps(context).isConfiguredRuntimeProducedStringExpression(expression)
   ) {
-    const runtimeString = emitPreparedNodeRuntimeStringExpression(expression, context)
+    const runtimeString = emitPreparedConfiguredRuntimeStringExpression(expression, context)
 
     if (runtimeString !== null && runtimeString.lines.length === 0) {
       return runtimeString.expression
@@ -414,7 +413,7 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
 }
 
 function runtimeStringConstantValue(expression: AnyNode | null | undefined, context: StringCContext): string | null {
-  return stringDeps(context).nodeRuntimeStringConstantValue(expression)
+  return stringDeps(context).configuredRuntimeStringConstantValue(expression)
 }
 
 export function emitPreparedStringCompareExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
@@ -547,7 +546,7 @@ export function canEmitStringBytesOperand(expression: AnyNode | null | undefined
     return true
   }
 
-  if (stringDeps(context).isNodeRuntimeProducedStringExpression(expression)) {
+  if (stringDeps(context).isConfiguredRuntimeProducedStringExpression(expression)) {
     return true
   }
 
@@ -667,12 +666,12 @@ export function emitPreparedStringBytesOperand(
   if (
     expression !== null &&
     typeof expression !== 'undefined' &&
-    stringDeps(context).isNodeRuntimeProducedStringExpression(expression)
+    stringDeps(context).isConfiguredRuntimeProducedStringExpression(expression)
   ) {
-    const nodeRuntimeString = emitPreparedNodeRuntimeStringExpression(expression, context)
+    const configuredRuntimeString = emitPreparedConfiguredRuntimeStringExpression(expression, context)
     const value =
-      nodeRuntimeString !== null && typeof nodeRuntimeString !== 'undefined'
-        ? nodeRuntimeString
+      configuredRuntimeString !== null && typeof configuredRuntimeString !== 'undefined'
+        ? configuredRuntimeString
         : stringDeps(context).emitCValueExpression(expression, context)
 
     return emitPreparedRuntimeStringValueBytesOperand(value, context, tempPrefix)
@@ -965,11 +964,11 @@ function emitPreparedCppStringExpression(
     }
   }
 
-  if (stringDeps(context).isNodeRuntimeProducedStringExpression(expression)) {
-    const nodeRuntimeString = emitPreparedNodeRuntimeStringExpression(expression, context)
+  if (stringDeps(context).isConfiguredRuntimeProducedStringExpression(expression)) {
+    const configuredRuntimeString = emitPreparedConfiguredRuntimeStringExpression(expression, context)
     const value =
-      nodeRuntimeString !== null && typeof nodeRuntimeString !== 'undefined'
-        ? nodeRuntimeString
+      configuredRuntimeString !== null && typeof configuredRuntimeString !== 'undefined'
+        ? configuredRuntimeString
         : stringDeps(context).emitCValueExpression(expression, context)
 
     if (value.cppType === 'inox::String') {
@@ -1072,11 +1071,11 @@ function emitPreparedCppStringExpression(
   return null
 }
 
-function emitPreparedNodeRuntimeStringExpression(
+function emitPreparedConfiguredRuntimeStringExpression(
   expression: AnyNode,
   context: StringCContext
 ): PreparedExpression | null {
-  return stringDeps(context).emitPreparedNodeRuntimeStringExpression(expression, context)
+  return stringDeps(context).emitPreparedConfiguredRuntimeStringExpression(expression, context)
 }
 
 export function emitPreparedCppStringArgument(
@@ -1967,14 +1966,6 @@ function emitPreparedTemplatePlaceholderFormat(expression: AnyNode, context: Str
     return emitPreparedStringBytesFormat(knownString)
   }
 
-  const classString = stringDeps(context).emitPreparedClassToStringExpression(expression, context)
-
-  if (classString !== null && typeof classString !== 'undefined') {
-    return emitPreparedStringBytesFormat(
-      emitPreparedRuntimeStringValueBytesOperand(classString, context, 'inox_template_string')
-    )
-  }
-
   if (valueType === 'string') {
     return emitPreparedStringBytesFormat(emitPreparedStringBytesOperand(expression, context, 'inox_template_string'))
   }
@@ -2146,85 +2137,24 @@ function runtimeObjectNameStringMemberObjectName(expression: AnyNode, context: S
 }
 
 export function emitPreparedStringConversionExpression(arg: AnyNode, context: StringCContext): PreparedExpression {
-  const classString = stringDeps(context).emitPreparedClassToStringExpression(arg, context)
+  const configured = stringDeps(context).emitPreparedIntrinsicStringConversionExpression(arg, context)
 
-  if (classString !== null && typeof classString !== 'undefined') {
-    return classString
+  if (configured !== null && typeof configured !== 'undefined') {
+    return configured
   }
 
-  const valueType = stringDeps(context).inferExpressionType(arg, context)
-
-  if (
-    stringDeps(context).isNullableScalarRuntimeExpression(arg, context) &&
-    !isNarrowedNullableScalarPath(arg, context)
-  ) {
-    const value = stringDeps(context).emitCValueExpression(arg, context)
-    const lines: string[] = []
-
-    pushAllLines(lines, value.lines)
-
-    return {
-      lines,
-      expression: `inox::String::fromValue(${value.expression})`,
-      cppType: 'inox::String',
-      runtimeTypeChecked: true,
-      valueType: 'string'
-    }
-  }
-
-  if (valueType === 'string') {
-    const value = emitPreparedStringBytesOperand(arg, context, 'inox_string_conversion')
-    const lines: string[] = []
-
-    pushAllLines(lines, value.lines)
-
-    return {
-      lines,
-      expression: `inox::String(${value.bytes}, ${value.length})`,
-      cppType: 'inox::String',
-      runtimeTypeChecked: true,
-      valueType: 'string'
-    }
-  }
-
-  if (valueType === 'null') {
-    return {
-      lines: [],
-      expression: 'inox::String("null")',
-      cppType: 'inox::String',
-      runtimeTypeChecked: true,
-      valueType: 'string'
-    }
-  }
-
-  if (valueType === 'unknown' || isManagedRuntimeReturnType(valueType) || isOpaqueRuntimeValueType(valueType)) {
-    const value = stringDeps(context).emitCValueExpression(arg, context)
-    const lines: string[] = []
-
-    pushAllLines(lines, value.lines)
-
-    return {
-      lines,
-      expression: `inox::String::fromValue(${value.expression})`,
-      cppType: 'inox::String',
-      runtimeTypeChecked: true,
-      valueType: 'string'
-    }
-  }
-
-  const value = stringDeps(context).emitPreparedNumberExpression(arg, context)
-  let helper = `inox::String::fromNumber(${value.expression})`
-  const lines: string[] = []
-
-  pushAllLines(lines, value.lines)
-
-  if (valueType === 'boolean') {
-    helper = `inox::String((${value.expression}) != 0 ? "true" : "false")`
-  }
+  pushStringDiagnostic(
+    context,
+    diagnostic(
+      'INOX_MISSING_INTRINSIC_PROVIDER',
+      'missing compiler library intrinsic provider string-conversion',
+      nodeLocation(arg)
+    )
+  )
 
   return {
-    lines,
-    expression: helper,
+    lines: [],
+    expression: 'inox::String()',
     cppType: 'inox::String',
     runtimeTypeChecked: true,
     valueType: 'string'
@@ -2261,7 +2191,7 @@ export function isRuntimeProducedStringExpression(
     return true
   }
 
-  if (stringDeps(context).isNodeRuntimeProducedStringExpression(expression)) {
+  if (stringDeps(context).isConfiguredRuntimeProducedStringExpression(expression)) {
     return true
   }
 

@@ -12,6 +12,7 @@ import type {
   ModuleGraph,
   SourceLocation
 } from '../types.ts'
+import { compilerLibraryOperationForIntrinsic } from '../extensions/library-set.ts'
 
 import type { CallbackLoweringDependencies, RuntimeCallbackArgumentInfo } from './async/callbacks.ts'
 import {
@@ -154,6 +155,7 @@ import type {
   CTypeRefMap
 } from './types.ts'
 import {
+  cCompilerLibrarySetValue,
   cFunctionTypeValue,
   cTypeRefMapValue,
   isReadonlyCObjectShapeField
@@ -192,7 +194,6 @@ import {
   emitPreparedNativeClassFieldValueExpression,
   emitPreparedClassMethodCallExpression as emitPreparedClassMethodCallExpressionWithDependencies,
   hasNativeClassInstanceMethod,
-  hasNativeClassInstanceMethodReturnType,
   isClassConstructorExpression as isClassConstructorExpressionWithDependencies,
   resolveNativeClassFieldMetadata
 } from './values/classes.ts'
@@ -552,34 +553,53 @@ objectVariableDeclarationDependencies = {
 }
 statementLoweringDependencies.objectVariableDeclarationDependencies = objectVariableDeclarationDependencies
 
-function hasPreparedClassToStringExpression(expression: AnyNode, context: CFunctionContext): boolean {
-  return hasNativeClassInstanceMethodReturnType(expression, 'toString', 0, 'string', context)
-}
-
-function emitPreparedClassToStringExpression(
+function emitPreparedIntrinsicStringConversionExpression(
   expression: AnyNode,
   context: CFunctionContext
 ): PreparedExpression | null {
-  if (!hasPreparedClassToStringExpression(expression, context)) {
+  const operation = compilerLibraryOperationForIntrinsic(
+    cCompilerLibrarySetValue(context.libraries),
+    'string-conversion',
+    'call'
+  )
+
+  if (operation === null) {
     return null
   }
 
-  return emitPreparedClassMethodCallExpression(
-    {
-      type: 'CallExpression',
-      callee: {
-        type: 'MemberExpression',
-        object: expression,
-        property: 'toString',
-        loc: expression.loc
-      },
-      args: [],
-      loc: expression.loc,
-      valueType: 'string'
-    },
-    context,
-    {}
+  const variant = operation.variants?.find(
+    (candidate) => (candidate.minArgs ?? operation.minArgs ?? 0) <= 1 && (candidate.maxArgs ?? operation.maxArgs ?? 1) >= 1
   )
+  const cExpression = variant?.cExpression ?? operation.cExpression
+
+  if (typeof cExpression !== 'string') {
+    return null
+  }
+
+  const resultMapping = variant?.cResultMapping ?? operation.cResultMapping
+  const call: AnyNode = {
+    type: 'CallExpression',
+    callee: { type: 'Reference', path: [], loc: expression.loc },
+    args: [expression],
+    loc: expression.loc,
+    valueType: 'string',
+    libraryOperationId: operation.operationId,
+    libraryCExpression: cExpression,
+    libraryCArgumentKinds: variant?.cArgumentKinds ?? operation.cArgumentKinds,
+    libraryCArgumentAdapters: variant?.cArgumentAdapters ?? operation.cArgumentAdapters,
+    libraryCArgumentMethodNames: variant?.cArgumentMethodNames ?? operation.cArgumentMethodNames,
+    libraryCArgumentSources: variant?.cArgumentSources ?? operation.cArgumentSources,
+    libraryCCallStyle: operation.cCallStyle,
+    libraryCFailureMode: operation.cFailureMode,
+    libraryCReceiverAdapter: variant?.cReceiverAdapter ?? operation.cReceiverAdapter,
+    libraryCResultAdapter: variant?.cResultAdapter ?? operation.cResultAdapter,
+    libraryCResultMode: variant?.cResultMode ?? operation.cResultMode,
+    libraryCppType: resultMapping?.cppType ?? variant?.cppType ?? operation.cppType,
+    nullable: (variant?.nullable ?? operation.nullable) === true,
+    libraryOwned: (variant?.owned ?? operation.owned) === true
+  }
+
+  return emitPreparedCompilerLibraryCallExpression(call, context)
 }
 
 function emitPreparedNativeClassStringFieldExpression(
@@ -633,28 +653,27 @@ const stringLoweringDependencies = {
   emitCallExpression,
   emitCValueExpression,
   emitObjectValueReference,
-  emitPreparedNodeRuntimeStringExpression,
+  emitPreparedConfiguredRuntimeStringExpression,
   emitPreparedObjectExpressionIndexValueExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedObjectExpressionIndexValueExpression(expression, context, objectExpressionFieldDependencies),
   emitPreparedObjectExpressionMemberValueExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedObjectExpressionMemberValueExpression(expression, context, objectExpressionFieldDependencies),
   emitPreparedNumberExpression,
   emitPreparedNativeClassStringFieldExpression,
-  emitPreparedClassToStringExpression,
+  emitPreparedIntrinsicStringConversionExpression,
   emitReference,
   inferExpressionType,
-  hasClassToStringExpression: hasPreparedClassToStringExpression,
   isBoxedRuntimeStringName,
   isBoxedRuntimeStringReference,
   isMemberAccessExpression,
-  isNodeRuntimeProducedStringExpression: isConfiguredRuntimeProducedStringExpression,
+  isConfiguredRuntimeProducedStringExpression,
   isNullableScalarRuntimeExpression,
-  nodeRuntimeStringConstantValue: runtimeStringConstantValue,
+  configuredRuntimeStringConstantValue: runtimeStringConstantValue,
   resolveKnownObjectIndex,
   resolveKnownObjectMember
 } as StringLoweringDependencies
 
-function emitPreparedNodeRuntimeStringExpression(
+function emitPreparedConfiguredRuntimeStringExpression(
   expression: AnyNode,
   context: CFunctionContext
 ): PreparedExpression | null {

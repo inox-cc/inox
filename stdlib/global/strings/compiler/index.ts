@@ -79,7 +79,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
     {
       id: runtimeRequirement,
       dependencies: [arrayRuntimeRequirement, 'managed-values', 'string-bytes'],
-      cPreludeIncludes: ['inox/string.h'],
+      cPreludeIncludes: [],
       capabilities: []
     }
   ]

@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 
-test('global strings использует package-local declarations-only C++ facade', async () => {
-  const header = await readFile('stdlib/global/strings/include/inox/string.h', 'utf8')
+test('primitive string facade остаётся declarations-only runtime boundary', async () => {
+  const header = await readFile('runtime/include/inox/string.h', 'utf8')
   const source = await readFile('stdlib/global/strings/src/strings.cc', 'utf8')
 
   assert.match(header, /class String : public Value/)

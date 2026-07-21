@@ -120,10 +120,10 @@ export function renderCompilerLibraryRegistry(
     '  if (!result.ok) {\n' +
     '    process.exitCode = 1\n' +
     '  } else {\n' +
-    "    console.log('Stage 6 semantic contract passed')\n" +
+    "    console.log(`INOX_DECOUPLING_CONTRACT ${JSON.stringify(result.snapshot)}`)\n" +
     '  }\n' +
     '} catch {\n' +
-    "  console.error('Stage 6 semantic contract threw unexpectedly')\n" +
+    "  console.error('Compiler/stdlib decoupling contract threw unexpectedly')\n" +
     '  process.exitCode = 1\n' +
     '}\n'
 

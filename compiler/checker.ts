@@ -2265,8 +2265,10 @@ class Checker {
 
       this.diagnostics = placeholderDiagnostics
 
+      let placeholderType: ValueType = 'unknown'
+
       try {
-        this.checkExpression(placeholder)
+        placeholderType = this.checkExpression(placeholder)
       } finally {
         this.diagnostics = outerDiagnostics
       }
@@ -2275,6 +2277,15 @@ class Checker {
         for (const item of placeholderDiagnostics) {
           outerDiagnostics.push(item)
         }
+      }
+
+      if (
+        placeholderType !== 'string' &&
+        placeholderType !== 'number' &&
+        placeholderType !== 'boolean' &&
+        placeholderType !== 'null'
+      ) {
+        this.requireImplicitStringConversionProvider(expression, placeholder)
       }
 
       expressions.push(placeholder)
@@ -2557,11 +2568,32 @@ class Checker {
     expression.valueType = valueType
     expression.nullable = expression.operator === '??' && this.expressionCanBeNull(expression.right)
 
+    if (expression.operator === '+' && valueType === 'string' && (left !== 'string' || right !== 'string')) {
+      this.requireImplicitStringConversionProvider(expression, expression)
+    }
+
     if (expression.operator === '??') {
       this.applyNullishCoalescingMetadata(expression, valueType)
     }
 
     return valueType
+  }
+
+  requireImplicitStringConversionProvider(target: AnyNode, diagnosticExpression: AnyNode): void {
+    const libraries = resolveCompilerLibrarySet(this.options.libraries)
+    const operation = compilerLibraryOperationForIntrinsic(libraries, 'string-conversion', 'call')
+
+    if (operation === null) {
+      this.reportMissingCompilerLibraryIntrinsicProvider(diagnosticExpression, 'string-conversion')
+      return
+    }
+
+    target.libraryRuntimeRequirements = operation.runtimeRequirements
+    target.libraryCapabilities = compilerLibraryCapabilities(
+      libraries,
+      operation.runtimeRequirements,
+      this.options.libraryOptions
+    )
   }
 
   applyNullishCoalescingMetadata(expression: AnyNode, valueType: ValueType): void {

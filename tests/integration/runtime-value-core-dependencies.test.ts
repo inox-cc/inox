@@ -19,7 +19,6 @@ export async function assertRuntimeValueCoreDoesNotReferenceFeatureDisposers(): 
   try {
     const compile = await runCommand('cc', [
       '-Iruntime/include',
-      '-Istdlib/global/strings/include',
       '-c',
       'runtime/src/core/value.c',
       '-o',

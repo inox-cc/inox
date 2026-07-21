@@ -10,7 +10,6 @@ import type {
   PrimitiveTypeRef,
   TypeRef
 } from '../../../../compiler/extensions/types.ts'
-import { errorTypeRef } from '../../../global/error/compiler/index.ts'
 
 const libraryId = 'node:fs'
 const collectionsLibraryId = 'global:collections'
@@ -22,6 +21,7 @@ const runtimeRequirement = libraryId
 const statsTypeId = `${libraryId}#Stats`
 const direntTypeId = `${libraryId}#Dirent`
 const bufferTypeId = 'node:buffer#Buffer'
+const errorTypeId = 'global:error#Error'
 const statsTypeRef = nominalTypeRef(statsTypeId)
 const direntTypeRef = nominalTypeRef(direntTypeId)
 const bufferTypeRef = nominalTypeRef(bufferTypeId)
@@ -473,6 +473,10 @@ function primitiveTypeRef(name: 'boolean' | 'number' | 'string' | 'void'): Primi
 
 function nominalTypeRef(typeId: string): NominalTypeRef {
   return { kind: 'nominal', typeId, args: [], nullable: false, ownership: 'value', traits: [] }
+}
+
+function errorTypeRef(): NominalTypeRef {
+  return nominalTypeRef(errorTypeId)
 }
 
 function unsupportedCallbackOperation(name: string): LibraryOperationDescriptor {

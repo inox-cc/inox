@@ -11,9 +11,9 @@ import type {
   PrimitiveTypeRef,
   TypeRef
 } from '../../../../compiler/extensions/types.ts'
-import { errorTypeRef } from '../../error/compiler/index.ts'
 
 const libraryId = 'global:fetch'
+const errorTypeId = 'global:error#Error'
 const promiseTypeId = 'global:promise#Promise'
 const runtimeRequirement = libraryId
 const abortControllerTypeId = `${libraryId}#AbortController`
@@ -290,6 +290,10 @@ function nominalTypeRef(typeId: string): NominalTypeRef {
     ownership: 'value',
     traits: []
   }
+}
+
+function errorTypeRef(): NominalTypeRef {
+  return nominalTypeRef(errorTypeId)
 }
 
 function promiseTypeRef(fulfilledType: TypeRef, rejectedType: TypeRef): NominalTypeRef {

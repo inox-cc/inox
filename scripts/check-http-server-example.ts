@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { once } from 'node:events'
+import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+import { runCommand } from './lib/run-command.ts'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 const compilerMode = process.argv[2] ?? 'node'
@@ -10,8 +13,11 @@ const compilerMode = process.argv[2] ?? 'node'
 assert.ok(compilerMode === 'node' || compilerMode === 'native', `Неизвестный режим compiler: ${compilerMode}`)
 
 const executable = join(repoRoot, 'dist/http-server', 'out', compilerMode, 'http-server')
+const buildRoot = join(repoRoot, 'dist/http-server', `acceptance-${compilerMode}-${process.pid}`)
 
 async function main(): Promise<void> {
+  await buildFreshExecutable()
+
   const server = spawn(executable, [], {
     cwd: repoRoot,
     stdio: 'pipe'
@@ -43,7 +49,32 @@ async function main(): Promise<void> {
     assert.equal(await text.text(), 'Hello from inox HTTP static files.\n')
   } finally {
     await stopServer(server)
+    await rm(buildRoot, { recursive: true, force: true })
   }
+}
+
+async function buildFreshExecutable(): Promise<void> {
+  await rm(buildRoot, { recursive: true, force: true })
+  await rm(join(repoRoot, 'dist/http-server', 'out', compilerMode), { recursive: true, force: true })
+  await requireCommand('pnpm', ['run', 'libuv:bootstrap'])
+  await requireCommand('cmake', [
+    '-S',
+    'examples/http-server',
+    '-B',
+    buildRoot,
+    `-DINOX_COMPILER_MODE=${compilerMode}`
+  ])
+  await requireCommand('cmake', ['--build', buildRoot, '--target', 'http-server'])
+}
+
+async function requireCommand(command: string, args: string[]): Promise<void> {
+  const result = await runCommand(command, args, {
+    cwd: repoRoot,
+    stdout: process.stdout,
+    stderr: process.stderr
+  })
+
+  assert.equal(result.code, 0, `${command} ${args.join(' ')} завершился с кодом ${result.code}`)
 }
 
 async function waitForServer(

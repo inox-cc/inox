@@ -4,7 +4,7 @@ import { test } from 'node:test'
 
 import { renderCompilerLibraryRegistry } from '../../scripts/lib/compiler-library-registry.ts'
 
-test('native Stage 6 probe переиспользует объекты свежесобранного compiler', async () => {
+test('native decoupling probe точно сравнивается с hosted contract', async () => {
   const [buildSource, registrySource, contractSource, packageSource, testInoxSource] = await Promise.all([
     readFile('scripts/build.ts', 'utf8'),
     readFile('scripts/lib/compiler-library-registry.ts', 'utf8'),
@@ -34,15 +34,17 @@ test('native Stage 6 probe переиспользует объекты свеж�
   assert.match(buildSource, /add_dependencies\(inox inox_stage6_semantic_probe\)/)
   assert.match(packageJson.scripts['test:inox'], /scripts\/test-inox\.ts/)
   assert.match(packageJson.scripts['test:inox'], /--semantic-probe dist\/inox-stage6-semantic-probe/)
-  assert.match(testInoxSource, /probe\.stdout\.includes\('Stage 6 semantic contract passed'\)/)
+  assert.match(testInoxSource, /runStage6SemanticContract/)
+  assert.match(testInoxSource, /isDeepStrictEqual\(parsedNativeSnapshot, hostedContract\.snapshot\)/)
 
   const probeEntry = renderCompilerLibraryRegistry([]).nativeSemanticProbeEntrySource
 
   assert.match(probeEntry, /try \{[\s\S]+runStage6SemanticContract\(\)/)
   assert.match(probeEntry, /for \(const failure of result\.failures\) \{\n    console\.error\(failure\)/)
   assert.match(probeEntry, /if \(!result\.ok\) \{\n    process\.exitCode = 1/)
+  assert.match(probeEntry, /INOX_DECOUPLING_CONTRACT/)
   assert.match(
     probeEntry,
-    /\} catch \{\n  console\.error\('Stage 6 semantic contract threw unexpectedly'\)\n  process\.exitCode = 1/
+    /\} catch \{\n  console\.error\('Compiler\/stdlib decoupling contract threw unexpectedly'\)\n  process\.exitCode = 1/
   )
 })
