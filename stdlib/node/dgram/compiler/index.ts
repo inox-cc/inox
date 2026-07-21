@@ -41,7 +41,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['node:buffer'],
+  dependencies: ['global:platform', 'node:buffer'],
   nativeTypes: [
     {
       libraryId,
@@ -85,13 +85,13 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       dependencies: ['async-runtime', 'callback-values', 'managed-values', 'node:buffer', 'objects', 'string-bytes'],
       cPreludeIncludes: ['inox/dgram.h'],
       capabilities: ['udp'],
-      backendConstraints: [
+      optionConstraints: [
         {
-          option: 'loopBackend',
+          optionId: 'global:platform#loop-backend',
           allowedValues: ['libuv'],
           diagnosticCode: 'INOX_NOT_IMPLEMENTED',
           diagnosticMessage:
-            "node:dgram is not implemented for C without libuv; compile with loopBackend: 'libuv' or --loop-backend libuv"
+            'node:dgram is not implemented for C without libuv; select --loop-backend libuv'
         }
       ]
     }

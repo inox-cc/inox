@@ -34,10 +34,21 @@ test('CLI получает aliases и значения options только из
     assert.equal(missing.exitCode, 1)
     assert.equal(missing.errors[0], 'unknown option --random-seed')
 
+    const selectedPlatform = runCli(defaultCompilerLibrarySet, [input, '--loop-backend', 'libuv'])
+
+    assert.equal(selectedPlatform.exitCode, 0)
+
+    const missingPlatform = runCli(emptyCompilerLibrarySet, [input, '--loop-backend', 'libuv'])
+
+    assert.equal(missingPlatform.exitCode, 1)
+    assert.equal(missingPlatform.errors[0], 'unknown option --loop-backend')
+
     const help = runCli(defaultCompilerLibrarySet, ['--help'])
 
     assert.match(help.logs[0], /--random-backend/)
     assert.match(help.logs[0], /--random-seed/)
+    assert.match(help.logs[0], /--loop-backend/)
+    assert.match(help.logs[0], /--tls-backend/)
   } finally {
     await rm(workspace, { force: true, recursive: true })
   }

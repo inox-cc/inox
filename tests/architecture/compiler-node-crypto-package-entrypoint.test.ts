@@ -13,6 +13,7 @@ test('entrypoint package node:crypto владеет operations и backend requir
   assert.deepEqual(cryptoPackage.compilerPackage.dependencies, [
     'global:crypto',
     'global:binary',
+    'global:platform',
     'global:collections',
     'node:buffer'
   ])
@@ -45,7 +46,19 @@ test('entrypoint package node:crypto владеет operations и backend requir
   const hashRequirement = cryptoPackage.compilerPackage.runtimeRequirements[1]
 
   assert.equal(randomRequirement.id, 'node:crypto')
-  assert.deepEqual(randomRequirement.backendConstraints?.[0].allowedValues, ['libuv'])
+  assert.deepEqual(randomRequirement.optionConstraints?.[0], {
+    optionId: 'global:platform#loop-backend',
+    allowedValues: ['libuv'],
+    diagnosticCode: 'INOX_NOT_IMPLEMENTED',
+    diagnosticMessage:
+      'node:crypto is not implemented for C without libuv; select --loop-backend libuv'
+  })
   assert.equal(hashRequirement.id, 'node:crypto:hash')
-  assert.deepEqual(hashRequirement.backendConstraints?.[0].allowedValues, ['boringssl', 'openssl'])
+  assert.deepEqual(hashRequirement.optionConstraints?.[0], {
+    optionId: 'global:platform#tls-backend',
+    allowedValues: ['boringssl', 'openssl'],
+    diagnosticCode: 'INOX_NOT_IMPLEMENTED',
+    diagnosticMessage:
+      'node:crypto hash APIs require --tls-backend boringssl or --tls-backend openssl in the current C++ backend'
+  })
 })

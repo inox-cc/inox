@@ -20,6 +20,7 @@ test('удаление node:http убирает API и native plan без centra
   await mkdir(resolve(fixture, 'stdlib/node'), { recursive: true })
   await copyPackage('stdlib/global/collections')
   await copyPackage('stdlib/global/binary')
+  await copyPackage('stdlib/global/platform')
   await copyPackage('stdlib/node/net')
   await copyPackage('stdlib/node/http')
   await generateCompilerLibraryRegistry(fixture, output)
@@ -27,7 +28,10 @@ test('удаление node:http убирает API и native plan без centra
   const before = createCompilerLibrarySetFromDiscovered(await discoverCompilerLibraries(fixture))
   const beforePlan = await readFile(resolve(output, 'native-plan.json'), 'utf8')
   const source = "import http from 'node:http'\nhttp.createServer()\n"
-  const beforeResult = compileSource(source, { libraries: before, loopBackend: 'libuv' })
+  const beforeResult = compileSource(source, {
+    libraries: before,
+    libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }]
+  })
 
   assert.match(beforePlan, /stdlib\/node\/http\/src\/http\.cc/)
   assert.match(beforePlan, /stdlib\/node\/http\/include/)
@@ -45,7 +49,10 @@ test('удаление node:http убирает API и native plan без centra
   assert.match(afterPlan, /stdlib\/global\/binary\/src\/binary\.cc/)
   assert.match(afterPlan, /stdlib\/node\/net\/src\/net\.cc/)
   assert.throws(
-    () => compileSource(source, { libraries: after, loopBackend: 'libuv' }),
+    () => compileSource(source, {
+      libraries: after,
+      libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }]
+    }),
     (error: unknown) =>
       error instanceof CompileError &&
       error.diagnostics[0].code === 'INOX_UNSUPPORTED_IMPORT_SOURCE'

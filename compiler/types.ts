@@ -240,20 +240,15 @@ export type ModuleGraph = {
 export type CompileTarget = 'cc'
 
 export type RuntimeProfile = 'embedded' | 'hosted'
-export type RuntimeLoopBackend = 'embedded' | 'libuv'
 
 export type RuntimeCapabilities = {
   [key: string]: boolean | undefined
-  entropy?: boolean
-  heap?: boolean
 }
 
 export type RuntimeBudgets = {
   maxFeatures?: number
   maxRuntimeRequirements?: number
 }
-
-export type TlsBackend = 'none' | 'boringssl' | 'openssl'
 
 export type ModuleDeclarationImport = {
   sourcePath: string
@@ -274,9 +269,7 @@ export type CompileOptions = {
   host?: CompilerHost
   libraries?: CompilerLibrarySet
   libraryOptions?: CompilerLibraryOptionValue[]
-  loopBackend?: RuntimeLoopBackend
   profile?: RuntimeProfile
-  tlsBackend?: TlsBackend
 }
 
 export type SourceCompileResult = {

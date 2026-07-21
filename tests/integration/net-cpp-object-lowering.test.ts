@@ -49,7 +49,7 @@ client.end()
     callMain: true,
     host,
     libraries: defaultCompilerLibrarySet,
-    loopBackend: 'libuv',
+    libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }],
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code

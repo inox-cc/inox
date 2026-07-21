@@ -43,7 +43,11 @@ import {
   parseCompilerLibraryGlobalDeclarations,
   type ParsedCompilerLibraryGlobalDeclaration
 } from './extensions/global-declarations.ts'
-import { compilerLibraryCapabilities } from './extensions/library-options.ts'
+import {
+  compilerLibraryCapabilities,
+  compilerLibraryOptionScalarsEqual,
+  resolveCompilerLibraryOptionValue
+} from './extensions/library-options.ts'
 import type {
   ConcreteTypeRef,
   CompilerLibrarySet,
@@ -56,6 +60,7 @@ import type {
   LibraryArgumentCheckDescriptor,
   LibraryObjectMethodCheckDescriptor,
   LibraryObjectLiteralFieldDescriptor,
+  LibraryOptionConstraintDescriptor,
   LibraryOperationVariantDescriptor,
   LibraryResultInferenceDescriptor,
   LibraryResultShapeFieldDescriptor,
@@ -3671,7 +3676,7 @@ class Checker {
       expression.optionalChainProtected = true
     }
 
-    this.checkCompilerLibraryBackendConstraints(expression, operation)
+    this.checkCompilerLibraryOptionConstraints(expression, operation)
     this.applyCompilerLibraryResultInference(expression, operation, variant, contextualResult)
 
     return typeof expression.valueType === 'string'
@@ -4226,7 +4231,7 @@ class Checker {
         )
       }
 
-      this.checkCompilerLibraryStringPrefixBackendConstraints(argument, check)
+      this.checkCompilerLibraryStringPrefixOptionConstraints(argument, check)
 
       if (check.arrayLiteralRequired === true && argument.type !== 'ArrayLiteral') {
         const libraries = resolveCompilerLibrarySet(this.options.libraries)
@@ -4676,12 +4681,12 @@ class Checker {
     }
   }
 
-  checkCompilerLibraryStringPrefixBackendConstraints(argument: AnyNode, check: LibraryArgumentCheckDescriptor): void {
+  checkCompilerLibraryStringPrefixOptionConstraints(argument: AnyNode, check: LibraryArgumentCheckDescriptor): void {
     if (argument.type !== 'StringLiteral') {
       return
     }
 
-    const constraints = check.stringPrefixBackendConstraints ?? []
+    const constraints = check.stringPrefixOptionConstraints ?? []
 
     for (let constraintIndex = 0; constraintIndex < constraints.length; constraintIndex = constraintIndex + 1) {
       const constraint = constraints[constraintIndex]
@@ -4698,18 +4703,13 @@ class Checker {
         continue
       }
 
-      const actual =
-        constraint.option === 'tlsBackend'
-          ? (this.options.tlsBackend ?? 'none')
-          : (this.options.loopBackend ?? 'embedded')
-
-      if (!constraint.allowedValues.includes(actual)) {
+      if (!this.compilerLibraryOptionConstraintAllows(constraint)) {
         this.report(constraint.diagnosticCode, constraint.diagnosticMessage, argument.loc)
       }
     }
   }
 
-  checkCompilerLibraryBackendConstraints(expression: AnyNode, operation: LibraryOperationDescriptor): void {
+  checkCompilerLibraryOptionConstraints(expression: AnyNode, operation: LibraryOperationDescriptor): void {
     const libraries = resolveCompilerLibrarySet(this.options.libraries)
 
     for (
@@ -4730,22 +4730,34 @@ class Checker {
           continue
         }
 
-        const constraints = requirement.backendConstraints ?? []
+        const constraints = requirement.optionConstraints ?? []
 
         for (let constraintIndex = 0; constraintIndex < constraints.length; constraintIndex = constraintIndex + 1) {
           const constraint = constraints[constraintIndex]
-          let actual: string = this.options.loopBackend ?? 'embedded'
 
-          if (constraint.option === 'tlsBackend') {
-            actual = this.options.tlsBackend ?? 'none'
-          }
-
-          if (!constraint.allowedValues.includes(actual)) {
+          if (!this.compilerLibraryOptionConstraintAllows(constraint)) {
             this.report(constraint.diagnosticCode, constraint.diagnosticMessage, expression.loc)
           }
         }
       }
     }
+  }
+
+  compilerLibraryOptionConstraintAllows(constraint: LibraryOptionConstraintDescriptor): boolean {
+    const libraries = resolveCompilerLibrarySet(this.options.libraries)
+    const actual = resolveCompilerLibraryOptionValue(libraries, this.options.libraryOptions, constraint.optionId)
+
+    if (actual === null) {
+      return false
+    }
+
+    for (let index = 0; index < constraint.allowedValues.length; index = index + 1) {
+      if (compilerLibraryOptionScalarsEqual(actual, constraint.allowedValues[index])) {
+        return true
+      }
+    }
+
+    return false
   }
 
   checkCompilerLibrarySingleArgument(
@@ -5346,20 +5358,6 @@ class Checker {
     }
   }
 
-  requireLibuvBackend(feature: string, loc: SourceLocation): boolean {
-    if (this.options.loopBackend === 'libuv') {
-      return true
-    }
-
-    this.report(
-      'INOX_NOT_IMPLEMENTED',
-      `${feature} is not implemented for C without libuv; compile with loopBackend: 'libuv' or --loop-backend libuv`,
-      loc
-    )
-
-    return false
-  }
-
   resolveClassMethodReceiverClassName(expression: AnyNode): string | null {
     if (this.isThisExpression(expression)) {
       const symbol = this.scope.resolve('this')
@@ -5873,7 +5871,7 @@ class Checker {
     }
 
     this.checkCompilerLibraryOperationArguments(expression, operation, variant)
-    this.checkCompilerLibraryBackendConstraints(expression, operation)
+    this.checkCompilerLibraryOptionConstraints(expression, operation)
 
     return typeof expression.valueType === 'string' ? (expression.valueType as ValueType) : 'unknown'
   }
@@ -6017,7 +6015,7 @@ class Checker {
 
     this.applyCompilerLibraryOperation(expression, operation, variant, contextualResult, checkedArgInfos)
 
-    this.checkCompilerLibraryBackendConstraints(expression, operation)
+    this.checkCompilerLibraryOptionConstraints(expression, operation)
 
     return typeof expression.valueType === 'string'
       ? (expression.valueType as ValueType)

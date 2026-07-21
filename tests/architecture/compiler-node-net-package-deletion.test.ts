@@ -18,13 +18,17 @@ test('удаление node:net убирает API и native plan без central
   await rm(fixture, { recursive: true, force: true })
   await mkdir(resolve(fixture, 'stdlib/global'), { recursive: true })
   await mkdir(resolve(fixture, 'stdlib/node'), { recursive: true })
+  await cp(resolve('stdlib/global/platform'), resolve(fixture, 'stdlib/global/platform'), { recursive: true })
   await cp(resolve('stdlib/node/net'), resolve(fixture, 'stdlib/node/net'), { recursive: true })
   await generateCompilerLibraryRegistry(fixture, output)
 
   const before = createCompilerLibrarySetFromDiscovered(await discoverCompilerLibraries(fixture))
   const beforePlan = await readFile(resolve(output, 'native-plan.json'), 'utf8')
   const source = "import net from 'node:net'\nnet.createServer()\n"
-  const beforeResult = compileSource(source, { libraries: before, loopBackend: 'libuv' })
+  const beforeResult = compileSource(source, {
+    libraries: before,
+    libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }]
+  })
 
   assert.match(beforePlan, /stdlib\/node\/net\/src\/net\.cc/)
   assert.match(beforePlan, /stdlib\/node\/net\/include/)
@@ -38,7 +42,10 @@ test('удаление node:net убирает API и native plan без central
 
   assert.doesNotMatch(afterPlan, /node\/net/)
   assert.throws(
-    () => compileSource(source, { libraries: after, loopBackend: 'libuv' }),
+    () => compileSource(source, {
+      libraries: after,
+      libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }]
+    }),
     (error: unknown) =>
       error instanceof CompileError &&
       error.diagnostics[0].code === 'INOX_UNSUPPORTED_IMPORT_SOURCE'

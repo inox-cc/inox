@@ -17,10 +17,8 @@ const reservedCompilerCliAliases = [
   '--emit',
   '--entry',
   '--help',
-  '--loop-backend',
   '--out',
   '--out-dir',
-  '--tls-backend',
   '-h',
   '-o'
 ]
@@ -138,6 +136,16 @@ export function resolveCompilerLibraryOptions(
   }
 
   return resolved
+}
+
+export function resolveCompilerLibraryOptionValue(
+  libraries: CompilerLibrarySet,
+  selections: CompilerLibraryOptionValue[] | null | undefined,
+  optionId: string
+): LibraryOptionScalar | null {
+  const option = resolvedCompilerLibraryOption(resolveCompilerLibraryOptions(libraries, selections), optionId)
+
+  return option === null ? null : option.value
 }
 
 export function validateCompilerLibraryOptionDescriptors(

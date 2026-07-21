@@ -50,9 +50,11 @@ console.log(hashes.length, bytes.length, filled.length, value, small, uuid.lengt
     callMain: true,
     host,
     libraries: defaultCompilerLibrarySet,
-    loopBackend: 'libuv',
-    sourceRoot: '/pkg',
-    tlsBackend: 'boringssl'
+    libraryOptions: [
+      { optionId: 'global:platform#loop-backend', value: 'libuv' },
+      { optionId: 'global:platform#tls-backend', value: 'boringssl' }
+    ],
+    sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
@@ -66,14 +68,14 @@ console.log(hashes.length, bytes.length, filled.length, value, small, uuid.lengt
   assert.match(source, /auto hash = crypto\.createHash\("sha256"\);/)
   assert.match(source, /hash\.update\("test"\);/)
   assert.match(source, /hash\.digest\("hex"\)/)
-  assert.match(source, /auto digestHex = inox_library_result_\d+;/)
+  assert.match(source, /auto digestHex = hash\.digest\("hex"\);/)
   assert.match(source, /crypto\.createHash\("sha256"\)/)
   assert.match(source, /\.update\("test"\);/)
   assert.match(source, /\.digest\("hex"\)/)
   assert.match(source, /auto hmac = crypto\.createHmac\("sha256", "key"\);/)
   assert.match(source, /hmac\.update\("test"\);/)
   assert.match(source, /hmac\.digest\("hex"\)/)
-  assert.match(source, /auto hmacDigest = inox_library_result_\d+;/)
+  assert.match(source, /auto hmacDigest = hmac\.digest\("hex"\);/)
   assert.match(source, /crypto\.timingSafeEqual\(/)
   assert.doesNotMatch(
     source,

@@ -6,13 +6,22 @@ import { CompileError } from '../../compiler/diagnostics.ts'
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
-test('library string prefix constraint обобщённо зависит от backend option', () => {
+test('library string prefix constraint обобщённо зависит от package option', () => {
   const libraries = createCompilerLibrarySet([requestLibrary()])
 
-  compileSource("request('http://example.com')", { libraries, tlsBackend: 'none' })
-  compileSource("request('https://example.com')", { libraries, tlsBackend: 'openssl' })
+  compileSource("request('http://example.com')", {
+    libraries,
+    libraryOptions: [{ optionId: 'bridge#secure-transport', value: 'none' }]
+  })
+  compileSource("request('https://example.com')", {
+    libraries,
+    libraryOptions: [{ optionId: 'bridge#secure-transport', value: 'openssl' }]
+  })
   assert.throws(
-    () => compileSource("request('https://example.com')", { libraries, tlsBackend: 'none' }),
+    () => compileSource("request('https://example.com')", {
+      libraries,
+      libraryOptions: [{ optionId: 'bridge#secure-transport', value: 'none' }]
+    }),
     (error: unknown) =>
       error instanceof CompileError &&
       error.diagnostics.some((item) => item.code === 'BRIDGE_TLS' && item.message === 'request requires TLS')
@@ -23,6 +32,16 @@ function requestLibrary(): CompilerLibraryDescriptor {
   return {
     id: 'bridge',
     dependencies: [],
+    options: [
+      {
+        libraryId: 'bridge',
+        optionId: 'bridge#secure-transport',
+        cliAliases: ['--bridge-secure-transport'],
+        valueType: 'string',
+        defaultValue: 'none',
+        allowedValues: ['none', 'boringssl', 'openssl']
+      }
+    ],
     declarations: [
       {
         libraryId: 'bridge',
@@ -46,10 +65,10 @@ function requestLibrary(): CompilerLibraryDescriptor {
         argumentChecks: [
           {
             valueTypes: ['string'],
-            stringPrefixBackendConstraints: [
+            stringPrefixOptionConstraints: [
               {
                 prefixes: ['https://'],
-                option: 'tlsBackend',
+                optionId: 'bridge#secure-transport',
                 allowedValues: ['boringssl', 'openssl'],
                 diagnosticCode: 'BRIDGE_TLS',
                 diagnosticMessage: 'request requires TLS'

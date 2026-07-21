@@ -13,6 +13,7 @@ import type {
   LibraryNativeTypeDescriptor,
   LibraryObjectLiteralFieldDescriptor,
   LibraryOptionDescriptor,
+  LibraryOptionConstraintDescriptor,
   LibraryOptionScalar,
   LibraryNestedResultShapeFieldDescriptor,
   LibraryOperationDescriptor,
@@ -20,7 +21,7 @@ import type {
   LibraryResultShapeFieldDescriptor,
   LibraryRuntimeInitializerArgumentDescriptor,
   LibraryRuntimeInitializerDescriptor,
-  LibraryStringPrefixBackendConstraintDescriptor,
+  LibraryStringPrefixOptionConstraintDescriptor,
   RuntimeRequirementDescriptor,
   ObjectTypeRef,
   TypeRef,
@@ -177,6 +178,7 @@ function validateCompilerLibrarySet(
   validateUniqueRuntimeRequirementIds(runtimeRequirements)
   validateRuntimeInitializers(runtimeInitializers, options, runtimeRequirements)
   validateRuntimeOptionConditions(runtimeRequirements, options)
+  validateRuntimeOptionConstraints(runtimeRequirements, operations, options)
   validateRuntimeRequirementReferences(operations, nativeTypes, runtimeRequirements)
   validateNativeTypes(nativeTypes)
   validateOperationTypeRefs(operations, nativeTypes)
@@ -300,6 +302,105 @@ function validateRuntimeOptionCondition(
       if (compilerLibraryOptionScalarsEqual(condition.values[previousIndex], value)) {
         throw new Error(
           `runtime requirement ${requirement.id} option ${condition.optionId} has duplicate condition value ` +
+            compilerLibraryOptionScalarText(value)
+        )
+      }
+    }
+  }
+}
+
+function validateRuntimeOptionConstraints(
+  requirements: RuntimeRequirementDescriptor[],
+  operations: LibraryOperationDescriptor[],
+  options: LibraryOptionDescriptor[]
+): void {
+  for (let index = 0; index < requirements.length; index = index + 1) {
+    const requirement = requirements[index]
+    const constraints = requirement.optionConstraints ?? []
+
+    for (let constraintIndex = 0; constraintIndex < constraints.length; constraintIndex = constraintIndex + 1) {
+      validateRuntimeOptionConstraint(
+        `runtime requirement ${requirement.id}`,
+        constraints[constraintIndex],
+        options
+      )
+    }
+  }
+
+  for (let index = 0; index < operations.length; index = index + 1) {
+    const operation = operations[index]
+
+    validateArgumentOptionConstraints(`operation ${operation.operationId}`, operation.argumentChecks ?? [], options)
+
+    const variants = operation.variants ?? []
+
+    for (let variantIndex = 0; variantIndex < variants.length; variantIndex = variantIndex + 1) {
+      validateArgumentOptionConstraints(
+        `operation ${operation.operationId} variant ${variantIndex}`,
+        variants[variantIndex].argumentChecks ?? [],
+        options
+      )
+    }
+  }
+}
+
+function validateArgumentOptionConstraints(
+  label: string,
+  checks: LibraryArgumentCheckDescriptor[],
+  options: LibraryOptionDescriptor[]
+): void {
+  for (let index = 0; index < checks.length; index = index + 1) {
+    const constraints = checks[index].stringPrefixOptionConstraints ?? []
+
+    for (let constraintIndex = 0; constraintIndex < constraints.length; constraintIndex = constraintIndex + 1) {
+      const constraint = constraints[constraintIndex]
+
+      if (constraint.prefixes.length === 0) {
+        throw new Error(`${label} argument ${index} option ${constraint.optionId} constraint has no prefixes`)
+      }
+
+      for (let prefixIndex = 0; prefixIndex < constraint.prefixes.length; prefixIndex = prefixIndex + 1) {
+        if (constraint.prefixes[prefixIndex].length === 0) {
+          throw new Error(`${label} argument ${index} option ${constraint.optionId} constraint has an empty prefix`)
+        }
+      }
+
+      validateRuntimeOptionConstraint(`${label} argument ${index}`, constraint, options)
+    }
+  }
+}
+
+function validateRuntimeOptionConstraint(
+  label: string,
+  constraint: LibraryOptionConstraintDescriptor,
+  options: LibraryOptionDescriptor[]
+): void {
+  const option = libraryOptionDescriptor(options, constraint.optionId)
+
+  if (option === null) {
+    throw new Error(`${label} references missing option ${constraint.optionId}`)
+  }
+
+  if (constraint.allowedValues.length === 0) {
+    throw new Error(`${label} option ${constraint.optionId} constraint has no allowed values`)
+  }
+
+  for (let index = 0; index < constraint.allowedValues.length; index = index + 1) {
+    const value = constraint.allowedValues[index]
+
+    if (compilerLibraryOptionScalarType(value) !== option.valueType) {
+      throw new Error(
+        `${label} option ${constraint.optionId} constraint value ` +
+          `${compilerLibraryOptionScalarText(value)} expects ${option.valueType}`
+      )
+    }
+
+    validateCompilerLibraryOptionValue(option, value)
+
+    for (let previousIndex = 0; previousIndex < index; previousIndex = previousIndex + 1) {
+      if (compilerLibraryOptionScalarsEqual(constraint.allowedValues[previousIndex], value)) {
+        throw new Error(
+          `${label} option ${constraint.optionId} has duplicate constraint value ` +
             compilerLibraryOptionScalarText(value)
         )
       }
@@ -2032,8 +2133,8 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           sortedStrings(item.capabilities).join(',') +
           ':conditional=' +
           runtimeConditionalCapabilitiesFingerprint(item) +
-          ':backend=' +
-          runtimeBackendConstraintsFingerprint(item) +
+          ':options=' +
+          runtimeOptionConstraintsFingerprint(item) +
           ':entrypoint=' +
           runtimeEntrypointAdapterFingerprint(item)
       )
@@ -2129,7 +2230,7 @@ function operationArgumentChecksFingerprint(operation: { argumentChecks?: Librar
         ':' +
         sortedStrings(check.stringLiterals ?? []).join(',') +
         ':' +
-        stringPrefixBackendConstraintsFingerprint(check.stringPrefixBackendConstraints ?? []) +
+        stringPrefixOptionConstraintsFingerprint(check.stringPrefixOptionConstraints ?? []) +
         ':' +
         (check.literalDiagnosticCode ?? '') +
         ':' +
@@ -2461,8 +2562,8 @@ function objectLiteralFieldsFingerprint(fields: LibraryObjectLiteralFieldDescrip
   return rows.join(';')
 }
 
-function stringPrefixBackendConstraintsFingerprint(
-  constraints: LibraryStringPrefixBackendConstraintDescriptor[]
+function stringPrefixOptionConstraintsFingerprint(
+  constraints: LibraryStringPrefixOptionConstraintDescriptor[]
 ): string {
   const rows: string[] = []
 
@@ -2471,9 +2572,9 @@ function stringPrefixBackendConstraintsFingerprint(
     rows.push(
       sortedStrings(constraint.prefixes).join(',') +
         ':' +
-        constraint.option +
+        constraint.optionId +
         ':' +
-        sortedStrings(constraint.allowedValues).join(',') +
+        sortedOptionScalars(constraint.allowedValues).join(',') +
         ':' +
         constraint.diagnosticCode +
         ':' +
@@ -2509,16 +2610,16 @@ function sortedBooleans(values: boolean[]): string[] {
   return rows
 }
 
-function runtimeBackendConstraintsFingerprint(requirement: RuntimeRequirementDescriptor): string {
-  const constraints = requirement.backendConstraints ?? []
+function runtimeOptionConstraintsFingerprint(requirement: RuntimeRequirementDescriptor): string {
+  const constraints = requirement.optionConstraints ?? []
   const rows: string[] = []
 
   for (let index = 0; index < constraints.length; index = index + 1) {
     const constraint = constraints[index]
     rows.push(
-      constraint.option +
+      constraint.optionId +
         ':' +
-        sortedStrings(constraint.allowedValues).join(',') +
+        sortedOptionScalars(constraint.allowedValues).join(',') +
         ':' +
         constraint.diagnosticCode +
         ':' +

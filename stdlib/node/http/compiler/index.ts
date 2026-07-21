@@ -36,7 +36,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:binary', 'node:net'],
+  dependencies: ['global:binary', 'global:platform', 'node:net'],
   nativeTypes: [
     {
       libraryId,
@@ -84,13 +84,13 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       ],
       cPreludeIncludes: ['inox/http.h'],
       capabilities: ['tcp'],
-      backendConstraints: [
+      optionConstraints: [
         {
-          option: 'loopBackend',
+          optionId: 'global:platform#loop-backend',
           allowedValues: ['libuv'],
           diagnosticCode: 'INOX_NOT_IMPLEMENTED',
           diagnosticMessage:
-            "node:http is not implemented for C without libuv; compile with loopBackend: 'libuv' or --loop-backend libuv"
+            'node:http is not implemented for C without libuv; select --loop-backend libuv'
         }
       ]
     }

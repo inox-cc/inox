@@ -12,7 +12,10 @@ test('empty library set не знает global fetch и AbortController', () => 
 
 function assertUnknownGlobal(source: string, message: string): void {
   assert.throws(
-    () => compileSourceToIr(source, { libraries: emptyCompilerLibrarySet, loopBackend: 'libuv' }),
+    () => compileSourceToIr(source, {
+      libraries: emptyCompilerLibrarySet,
+      libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }]
+    }),
     (error: unknown) =>
       error instanceof CompileError &&
       error.diagnostics[0].code === 'INOX_UNKNOWN_NAME' &&

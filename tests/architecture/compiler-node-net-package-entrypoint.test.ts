@@ -11,7 +11,7 @@ test('entrypoint package node:net владеет native API и runtime plan', as
   assert.equal(netPackage.compilerEntrypoint, 'stdlib/node/net/compiler/index.ts')
   assert.ok(netPackage.compilerPackage)
   assert.equal(netPackage.compilerPackage.id, 'node:net')
-  assert.deepEqual(netPackage.compilerPackage.dependencies, [])
+  assert.deepEqual(netPackage.compilerPackage.dependencies, ['global:platform'])
   assert.deepEqual(netPackage.nativeSources, ['stdlib/node/net/src/net.cc'])
   assert.deepEqual(netPackage.nativeIncludeDirs, ['stdlib/node/net/include'])
 
@@ -43,11 +43,11 @@ test('entrypoint package node:net владеет native API и runtime plan', as
     'objects',
     'string-bytes'
   ])
-  assert.deepEqual(runtime.backendConstraints?.[0], {
-    option: 'loopBackend',
+  assert.deepEqual(runtime.optionConstraints?.[0], {
+    optionId: 'global:platform#loop-backend',
     allowedValues: ['libuv'],
     diagnosticCode: 'INOX_NOT_IMPLEMENTED',
     diagnosticMessage:
-      "node:net is not implemented for C without libuv; compile with loopBackend: 'libuv' or --loop-backend libuv"
+      'node:net is not implemented for C without libuv; select --loop-backend libuv'
   })
 })

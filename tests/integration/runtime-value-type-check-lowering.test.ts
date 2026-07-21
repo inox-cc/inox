@@ -52,7 +52,7 @@ for (const a of foo.v) {
       callMain: true,
       host,
       libraries: defaultCompilerLibrarySet,
-      loopBackend: 'libuv',
+      libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }],
       sourceRoot: '/pkg'
     },
     defaultCompilerLibraryLiteralTypeInference

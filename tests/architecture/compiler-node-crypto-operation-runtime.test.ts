@@ -9,7 +9,14 @@ test('node:crypto проходит через generic variants, adapters и nomi
   const libraries = createCompilerLibrarySetFromDiscovered(await discoverCompilerLibraries())
   const result = compileSource(
     "import crypto, { hash, randomBytes } from 'node:crypto'\nconst bytes = randomBytes(8)\nconst filled = crypto.randomFillSync(bytes, 0, 4)\nconst hex = hash('sha256', 'payload')\nconst raw = hash('sha256', 'payload', 'buffer')\nconst digest = crypto.createHash('sha256').update('payload', 'utf8').digest('hex')\nconst hmac = crypto.createHmac('sha256', 'key').update('payload').digest()\nconst equal = crypto.timingSafeEqual(bytes, filled)\n",
-    { libraries, loopBackend: 'libuv', target: 'cc', tlsBackend: 'boringssl' }
+    {
+      libraries,
+      libraryOptions: [
+        { optionId: 'global:platform#loop-backend', value: 'libuv' },
+        { optionId: 'global:platform#tls-backend', value: 'boringssl' }
+      ],
+      target: 'cc'
+    }
   )
   const bytes = result.ir.body[1].init
   const filled = result.ir.body[2].init

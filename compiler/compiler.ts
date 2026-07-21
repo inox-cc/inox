@@ -232,9 +232,7 @@ function compileOptionsWithNodeHost(options: CompileOptions): CompileOptions {
     host,
     libraries: options.libraries,
     libraryOptions: options.libraryOptions,
-    loopBackend: options.loopBackend,
-    profile: options.profile,
-    tlsBackend: options.tlsBackend
+    profile: options.profile
   }
 }
 
@@ -249,9 +247,7 @@ function cModuleOptionsWithNodeHost(options: CModuleCompileOptions): CModuleComp
       host: options.host,
       libraries: options.libraries,
       libraryOptions: options.libraryOptions,
-      loopBackend: options.loopBackend,
       profile: options.profile,
-      tlsBackend: options.tlsBackend,
       sourceRoot: options.sourceRoot
     }
   }
@@ -284,9 +280,7 @@ function cModuleOptionsWithNodeHost(options: CModuleCompileOptions): CModuleComp
     },
     libraries: options.libraries,
     libraryOptions: options.libraryOptions,
-    loopBackend: options.loopBackend,
     profile: options.profile,
-    tlsBackend: options.tlsBackend,
     sourceRoot: options.sourceRoot
   }
 }

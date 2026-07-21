@@ -22,7 +22,10 @@ test('удаление global:fetch убирает API и native plan без cen
   const before = createCompilerLibrarySetFromDiscovered(await discoverCompilerLibraries(fixture))
   const beforeRegistry = await readFile(resolve(output, 'default-registry.ts'), 'utf8')
   const beforePlan = await readFile(resolve(output, 'native-plan.json'), 'utf8')
-  const beforeResult = compileSource(source, { libraries: before, loopBackend: 'libuv' })
+  const beforeResult = compileSource(source, {
+    libraries: before,
+    libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }]
+  })
 
   assert.match(beforeRegistry, /stdlib\/global\/fetch\/compiler\/index\.ts/)
   assert.match(beforePlan, /stdlib\/global\/fetch\/src\/fetch\.cc/)
@@ -39,7 +42,10 @@ test('удаление global:fetch убирает API и native plan без cen
   assert.doesNotMatch(afterPlan, /stdlib\/global\/fetch/)
   assert.match(afterPlan, /stdlib\/global\/math\/src\/math\.cc/)
   assert.throws(
-    () => compileSource(source, { libraries: after, loopBackend: 'libuv' }),
+    () => compileSource(source, {
+      libraries: after,
+      libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }]
+    }),
     (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_UNKNOWN_NAME'
   )
 })
@@ -49,7 +55,7 @@ async function createFixture(): Promise<void> {
   await mkdir(resolve(fixture, 'stdlib/global'), { recursive: true })
   await mkdir(resolve(fixture, 'stdlib/node'), { recursive: true })
 
-  for (const name of ['binary', 'collections', 'error', 'fetch', 'math', 'promise', 'strings']) {
+  for (const name of ['binary', 'collections', 'error', 'fetch', 'math', 'platform', 'promise', 'strings']) {
     await cp(resolve(`stdlib/global/${name}`), resolve(fixture, `stdlib/global/${name}`), { recursive: true })
   }
 }

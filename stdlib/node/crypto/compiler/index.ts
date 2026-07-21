@@ -99,7 +99,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:crypto', 'global:binary', collectionsLibraryId, 'node:buffer'],
+  dependencies: ['global:crypto', 'global:binary', 'global:platform', collectionsLibraryId, 'node:buffer'],
   nativeTypes: [nativeType(hashTypeId, 'Hash'), nativeType(hmacTypeId, 'Hmac')],
   operations,
   intrinsicBindings: [],
@@ -109,13 +109,13 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       dependencies: ['global:binary', arrayRuntimeRequirement, 'managed-values', 'string-bytes'],
       cPreludeIncludes: ['inox/crypto.h'],
       capabilities: [],
-      backendConstraints: [
+      optionConstraints: [
         {
-          option: 'loopBackend',
+          optionId: 'global:platform#loop-backend',
           allowedValues: ['libuv'],
           diagnosticCode: 'INOX_NOT_IMPLEMENTED',
           diagnosticMessage:
-            "node:crypto is not implemented for C without libuv; compile with loopBackend: 'libuv' or --loop-backend libuv"
+            'node:crypto is not implemented for C without libuv; select --loop-backend libuv'
         }
       ]
     },
@@ -124,13 +124,13 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       dependencies: [],
       cPreludeIncludes: ['inox/crypto.h'],
       capabilities: [],
-      backendConstraints: [
+      optionConstraints: [
         {
-          option: 'tlsBackend',
+          optionId: 'global:platform#tls-backend',
           allowedValues: ['boringssl', 'openssl'],
           diagnosticCode: 'INOX_NOT_IMPLEMENTED',
           diagnosticMessage:
-            "node:crypto hash APIs require tlsBackend: 'boringssl' or 'openssl' in the current C++ backend"
+            'node:crypto hash APIs require --tls-backend boringssl or --tls-backend openssl in the current C++ backend'
         }
       ]
     }

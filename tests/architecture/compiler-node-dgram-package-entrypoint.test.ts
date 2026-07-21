@@ -11,7 +11,7 @@ test('entrypoint package node:dgram владеет native API и runtime plan', 
   assert.equal(dgramPackage.compilerEntrypoint, 'stdlib/node/dgram/compiler/index.ts')
   assert.ok(dgramPackage.compilerPackage)
   assert.equal(dgramPackage.compilerPackage.id, 'node:dgram')
-  assert.deepEqual(dgramPackage.compilerPackage.dependencies, ['node:buffer'])
+  assert.deepEqual(dgramPackage.compilerPackage.dependencies, ['global:platform', 'node:buffer'])
   assert.deepEqual(dgramPackage.nativeSources, ['stdlib/node/dgram/src/dgram.cc'])
   assert.deepEqual(dgramPackage.nativeIncludeDirs, ['stdlib/node/dgram/include'])
 
@@ -45,11 +45,11 @@ test('entrypoint package node:dgram владеет native API и runtime plan', 
     'objects',
     'string-bytes'
   ])
-  assert.deepEqual(runtime.backendConstraints?.[0], {
-    option: 'loopBackend',
+  assert.deepEqual(runtime.optionConstraints?.[0], {
+    optionId: 'global:platform#loop-backend',
     allowedValues: ['libuv'],
     diagnosticCode: 'INOX_NOT_IMPLEMENTED',
     diagnosticMessage:
-      "node:dgram is not implemented for C without libuv; compile with loopBackend: 'libuv' or --loop-backend libuv"
+      'node:dgram is not implemented for C without libuv; select --loop-backend libuv'
   })
 })

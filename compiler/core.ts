@@ -26,10 +26,8 @@ import type {
   ProgramNode,
   RuntimeBudgets,
   RuntimeCapabilities,
-  RuntimeLoopBackend,
   RuntimeProfile,
-  SourceCompileResult,
-  TlsBackend
+  SourceCompileResult
 } from './types.ts'
 
 export type CModuleCompileOptions = {
@@ -41,9 +39,7 @@ export type CModuleCompileOptions = {
   host?: CompilerHost
   libraries?: CompilerLibrarySet
   libraryOptions?: CompilerLibraryOptionValue[]
-  loopBackend?: RuntimeLoopBackend
   profile?: RuntimeProfile
-  tlsBackend?: TlsBackend
   sourceRoot?: string
 }
 
@@ -55,10 +51,8 @@ export type MemoryCompileOptions = {
   declarationImports?: ModuleDeclarationImport[]
   libraries?: CompilerLibrarySet
   libraryOptions?: CompilerLibraryOptionValue[]
-  loopBackend?: RuntimeLoopBackend
   profile?: RuntimeProfile
   root?: string
-  tlsBackend?: TlsBackend
 }
 
 export type MemoryCModuleCompileOptions = {
@@ -69,10 +63,8 @@ export type MemoryCModuleCompileOptions = {
   declarationImports?: ModuleDeclarationImport[]
   libraries?: CompilerLibrarySet
   libraryOptions?: CompilerLibraryOptionValue[]
-  loopBackend?: RuntimeLoopBackend
   profile?: RuntimeProfile
   root?: string
-  tlsBackend?: TlsBackend
   sourceRoot?: string
 }
 
@@ -420,9 +412,7 @@ function compileOptionsWithTargetAndLibraries(
     host: options.host,
     libraries,
     libraryOptions: options.libraryOptions,
-    loopBackend: options.loopBackend,
-    profile: options.profile,
-    tlsBackend: options.tlsBackend
+    profile: options.profile
   }
 }
 
@@ -440,9 +430,7 @@ function compileOptionsWithHostAndTarget(
     host,
     libraries: options.libraries,
     libraryOptions: options.libraryOptions,
-    loopBackend: options.loopBackend,
-    profile: options.profile,
-    tlsBackend: options.tlsBackend
+    profile: options.profile
   }
 }
 
@@ -460,9 +448,7 @@ function cModuleOptionsWithHostAndTarget(
     host,
     libraries: options.libraries,
     libraryOptions: options.libraryOptions,
-    loopBackend: options.loopBackend,
-    profile: options.profile,
-    tlsBackend: options.tlsBackend
+    profile: options.profile
   }
 }
 
@@ -476,9 +462,7 @@ function memoryCompileOptions(options: MemoryCompileOptions, host: any): Compile
     host,
     libraries: options.libraries,
     libraryOptions: options.libraryOptions,
-    loopBackend: options.loopBackend,
-    profile: options.profile,
-    tlsBackend: options.tlsBackend
+    profile: options.profile
   }
 }
 
@@ -494,9 +478,7 @@ function memoryCModuleCompileOptions(options: MemoryCModuleCompileOptions, host:
     host: base.host,
     libraries: base.libraries,
     libraryOptions: base.libraryOptions,
-    loopBackend: base.loopBackend,
     profile: base.profile,
-    tlsBackend: base.tlsBackend,
     sourceRoot: options.sourceRoot
   }
 }

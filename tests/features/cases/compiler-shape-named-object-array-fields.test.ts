@@ -1,22 +1,22 @@
 // @targets cc
 // @expect pass
-// @stdout https://:tlsBackend:openssl:BRIDGE_TLS:request requires TLS
+// @stdout https://:bridge#secure-transport:openssl:BRIDGE_TLS:request requires TLS
 
-type PrefixBackendConstraint = {
+type PrefixOptionConstraint = {
   prefixes: string[]
-  option: 'loopBackend' | 'tlsBackend'
+  optionId: string
   allowedValues: string[]
   diagnosticCode: string
   diagnosticMessage: string
 }
 
-function constraintFingerprint(constraints: PrefixBackendConstraint[]): string {
+function constraintFingerprint(constraints: PrefixOptionConstraint[]): string {
   const constraint = constraints[0]
 
   return (
     constraint.prefixes[0] +
     ':' +
-    constraint.option +
+    constraint.optionId +
     ':' +
     constraint.allowedValues[0] +
     ':' +
@@ -30,7 +30,7 @@ console.log(
   constraintFingerprint([
     {
       prefixes: ['https://'],
-      option: 'tlsBackend',
+      optionId: 'bridge#secure-transport',
       allowedValues: ['openssl'],
       diagnosticCode: 'BRIDGE_TLS',
       diagnosticMessage: 'request requires TLS'

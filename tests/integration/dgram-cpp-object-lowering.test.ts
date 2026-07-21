@@ -50,7 +50,7 @@ dgram.createSocket('udp4').bind(0, '127.0.0.1')
     callMain: true,
     host,
     libraries: defaultCompilerLibrarySet,
-    loopBackend: 'libuv',
+    libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }],
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
@@ -72,7 +72,7 @@ dgram.createSocket('udp4').bind(0, '127.0.0.1')
   )
   assert.match(source, /args\[0\]\.tag != INOX_TAG_BYTES/)
   assert.match(source, /inox_value message = args\[0\];/)
-  assert.match(source, /inox_value rinfo = args\[1\];/)
+  assert.match(source, /DgramRemoteInfo rinfo = args\[1\];/)
   assert.match(source, /return INOX_OK;/)
   assert.match(source, /inox_callback_new\([^\n]+inox_callback_arrow_\d+/)
   assert.match(source, /dgram\.createSocket\("udp4", inox_callback_\d+\)/)

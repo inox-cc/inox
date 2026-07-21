@@ -35,7 +35,10 @@ test('global:fetch владеет declarations, native types, operations и runt
   const libraries = createCompilerLibrarySetFromDiscovered(discovered)
   const result = compileSource(
     "const request = fetch('http://127.0.0.1/')\nconst controller = new AbortController()\ncontroller.abort()\n",
-    { libraries, loopBackend: 'libuv' }
+    {
+      libraries,
+      libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }]
+    }
   )
   const fetchCall = result.ir.body[0].init
   const construct = result.ir.body[1].init

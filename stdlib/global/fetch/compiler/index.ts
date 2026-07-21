@@ -78,7 +78,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:binary', 'global:error', 'global:promise'],
+  dependencies: ['global:binary', 'global:error', 'global:platform', 'global:promise'],
   nativeTypes: [
     {
       libraryId,
@@ -137,12 +137,12 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       dependencies: ['async-runtime', 'managed-values', 'objects', 'string-bytes'],
       cPreludeIncludes: ['inox/fetch.h'],
       capabilities: ['tcp'],
-      backendConstraints: [
+      optionConstraints: [
         {
-          option: 'loopBackend',
+          optionId: 'global:platform#loop-backend',
           allowedValues: ['libuv'],
           diagnosticCode: 'INOX_NOT_IMPLEMENTED',
-          diagnosticMessage: "fetch is not implemented for C without libuv; compile with loopBackend: 'libuv' or --loop-backend libuv"
+          diagnosticMessage: 'fetch is not implemented for C without libuv; select --loop-backend libuv'
         }
       ]
     }
@@ -264,10 +264,10 @@ function stringArgument(): LibraryArgumentCheckDescriptor {
 function fetchUrlArgument(): LibraryArgumentCheckDescriptor {
   return {
     valueTypes: ['string'],
-    stringPrefixBackendConstraints: [
+    stringPrefixOptionConstraints: [
       {
         prefixes: ['https://'],
-        option: 'tlsBackend',
+        optionId: 'global:platform#tls-backend',
         allowedValues: ['boringssl', 'openssl'],
         diagnosticCode: 'INOX_FETCH',
         diagnosticMessage: 'https fetch URLs require a configured TLS adapter and are not supported by the current C/libuv fetch slice'

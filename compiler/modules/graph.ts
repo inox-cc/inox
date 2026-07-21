@@ -109,9 +109,7 @@ export function buildModuleGraphWithHostSync(
       host,
       libraries,
       libraryOptions: options.libraryOptions,
-      loopBackend: options.loopBackend,
-      profile: options.profile,
-      tlsBackend: options.tlsBackend
+      profile: options.profile
     },
     declarationImports: prepareModuleGraphDeclarationImports(options.declarationImports, host),
     modules: new Map(),

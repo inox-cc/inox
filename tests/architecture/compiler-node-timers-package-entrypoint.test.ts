@@ -53,5 +53,5 @@ test('entrypoint package node:timers владеет native handles и runtime pl
   ])
   assert.deepEqual(runtime.cPreludeIncludes, ['inox/timers.h'])
   assert.deepEqual(runtime.capabilities, ['timers'])
-  assert.deepEqual(runtime.backendConstraints ?? [], [])
+  assert.deepEqual(runtime.optionConstraints ?? [], [])
 })

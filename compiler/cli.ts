@@ -9,7 +9,7 @@ import type {
   CompilerLibraryOptionValue,
   CompilerLibrarySet
 } from './extensions/types.ts'
-import type { CompileOptions, Diagnostic, RuntimeLoopBackend, TlsBackend } from './types.ts'
+import type { CompileOptions, Diagnostic } from './types.ts'
 
 type DiagnosticError = {
   diagnostics: Diagnostic[]
@@ -38,10 +38,8 @@ type CliPlan = {
   hasOutput: boolean
   input: string
   libraryOptions: CompilerLibraryOptionValue[]
-  loopBackend: RuntimeLoopBackend | null
   outDir: string
   output: string
-  tlsBackend: TlsBackend | null
 }
 
 type CliParseResult =
@@ -70,7 +68,7 @@ function defaultOutputPath(input: string): string {
 
 function usage(libraries: CompilerLibrarySet): string {
   let source =
-    'Usage:\n  inox --help\n  inox input.ts [output.cc]\n  inox input.ts --emit cc [-o output.cc] [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]\n  inox input.ts --emit cc --out-dir generated --entry [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]\n\nCompiles a TypeScript entry file to C++ source.\nIf output.cc is omitted, inox writes input.cc.'
+    'Usage:\n  inox --help\n  inox input.ts [output.cc]\n  inox input.ts --emit cc [-o output.cc]\n  inox input.ts --emit cc --out-dir generated --entry\n\nCompiles a TypeScript entry file to C++ source.\nIf output.cc is omitted, inox writes input.cc.'
   const options = libraries.options ?? []
 
   if (options.length > 0) {
@@ -109,10 +107,8 @@ function parseCliArgs(args: string[], libraries: CompilerLibrarySet): CliParseRe
   let hasOutput = false
   let input: string | null = null
   const libraryOptions: CompilerLibraryOptionValue[] = []
-  let loopBackend: RuntimeLoopBackend | null = null
   let outDir = ''
   let output = ''
-  let tlsBackend: TlsBackend | null = null
 
   for (let index = 0; index < args.length; index = index + 1) {
     const arg = args[index]
@@ -152,24 +148,6 @@ function parseCliArgs(args: string[], libraries: CompilerLibrarySet): CliParseRe
       outDir = value
     } else if (arg === '--entry') {
       entryMode = true
-    } else if (arg === '--loop-backend') {
-      const value = args[index + 1]
-      index = index + 1
-
-      if (value !== 'embedded' && value !== 'libuv') {
-        return failCliParse('--loop-backend expects embedded or libuv')
-      }
-
-      loopBackend = value
-    } else if (arg === '--tls-backend') {
-      const value = args[index + 1]
-      index = index + 1
-
-      if (value !== 'none' && value !== 'boringssl' && value !== 'openssl') {
-        return failCliParse('--tls-backend expects none, boringssl or openssl')
-      }
-
-      tlsBackend = value
     } else if (arg.startsWith('-')) {
       const descriptor = compilerLibraryOptionForCliAlias(libraries, arg)
 
@@ -228,10 +206,8 @@ function parseCliArgs(args: string[], libraries: CompilerLibrarySet): CliParseRe
       hasOutput,
       input,
       libraryOptions,
-      loopBackend,
       outDir,
-      output,
-      tlsBackend
+      output
     }
   }
 }
@@ -257,15 +233,7 @@ function compileOptions(plan: CliPlan, libraries: CompilerLibrarySet): CompileOp
     libraries
   }
 
-  if (plan.loopBackend !== null) {
-    options.loopBackend = plan.loopBackend
-  }
-
   options.libraryOptions = plan.libraryOptions
-
-  if (plan.tlsBackend !== null) {
-    options.tlsBackend = plan.tlsBackend
-  }
 
   return options
 }
@@ -282,15 +250,7 @@ function cModuleCompileOptions(
     sourceRoot: environment.cwd
   }
 
-  if (plan.loopBackend !== null) {
-    options.loopBackend = plan.loopBackend
-  }
-
   options.libraryOptions = plan.libraryOptions
-
-  if (plan.tlsBackend !== null) {
-    options.tlsBackend = plan.tlsBackend
-  }
 
   return options
 }

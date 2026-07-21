@@ -55,7 +55,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: [],
+  dependencies: ['global:platform'],
   nativeTypes: [
     {
       libraryId,
@@ -98,13 +98,13 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       dependencies: ['async-runtime', 'callback-values', 'managed-values', 'objects', 'string-bytes'],
       cPreludeIncludes: ['inox/net.h'],
       capabilities: ['tcp'],
-      backendConstraints: [
+      optionConstraints: [
         {
-          option: 'loopBackend',
+          optionId: 'global:platform#loop-backend',
           allowedValues: ['libuv'],
           diagnosticCode: 'INOX_NOT_IMPLEMENTED',
           diagnosticMessage:
-            "node:net is not implemented for C without libuv; compile with loopBackend: 'libuv' or --loop-backend libuv"
+            'node:net is not implemented for C without libuv; select --loop-backend libuv'
         }
       ]
     }

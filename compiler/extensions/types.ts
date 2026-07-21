@@ -258,14 +258,14 @@ export type LibraryResultInferenceDescriptor = {
 
 export type CompilerLibraryLiteralTypeInference = (providerId: string, source: string) => TypeRef | null
 
-export type LibraryBackendConstraintDescriptor = {
-  option: 'loopBackend' | 'tlsBackend'
-  allowedValues: string[]
+export type LibraryOptionConstraintDescriptor = {
+  optionId: string
+  allowedValues: LibraryOptionScalar[]
   diagnosticCode: string
   diagnosticMessage: string
 }
 
-export type LibraryStringPrefixBackendConstraintDescriptor = LibraryBackendConstraintDescriptor & {
+export type LibraryStringPrefixOptionConstraintDescriptor = LibraryOptionConstraintDescriptor & {
   prefixes: string[]
 }
 
@@ -299,7 +299,7 @@ export type LibraryArgumentCheckDescriptor = {
   arrayLiteralRequired?: boolean
   arrayElementValueTypes?: string[]
   stringLiterals?: string[]
-  stringPrefixBackendConstraints?: LibraryStringPrefixBackendConstraintDescriptor[]
+  stringPrefixOptionConstraints?: LibraryStringPrefixOptionConstraintDescriptor[]
   literalDiagnosticCode?: string | null
   literalDiagnosticMessage?: string | null
   objectLiteralFields?: LibraryObjectLiteralFieldDescriptor[]
@@ -480,7 +480,7 @@ export type RuntimeRequirementDescriptor = {
   cPreludeIncludes: string[]
   capabilities: PlatformCapabilityId[]
   conditionalCapabilities?: LibraryConditionalCapabilityDescriptor[]
-  backendConstraints?: LibraryBackendConstraintDescriptor[]
+  optionConstraints?: LibraryOptionConstraintDescriptor[]
   cEntrypointAdapter?: RuntimeEntrypointAdapterDescriptor | null
 }
 

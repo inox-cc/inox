@@ -6,15 +6,21 @@ import { CompileError } from '../../compiler/diagnostics.ts'
 import { createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet } from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
-test('library runtime requirements обобщённо проверяют backend options компилятора', () => {
+test('library runtime requirements обобщённо проверяют package options', () => {
   const libraries = createCompilerLibrarySet([backendLibrary()])
 
   assert.throws(
-    () => compileSource('platform.random()\n', { libraries, loopBackend: 'embedded' }),
+    () => compileSource('platform.random()\n', {
+      libraries,
+      libraryOptions: [{ optionId: 'platform#scheduler-engine', value: 'embedded' }]
+    }),
     hasDiagnostic('PLATFORM_LOOP_BACKEND', 'platform.random requires libuv')
   )
   assert.throws(
-    () => compileSource('platform.secure()\n', { libraries, tlsBackend: 'none' }),
+    () => compileSource('platform.secure()\n', {
+      libraries,
+      libraryOptions: [{ optionId: 'platform#secure-transport', value: 'none' }]
+    }),
     hasDiagnostic('PLATFORM_TLS_BACKEND', 'platform.secure requires TLS')
   )
 })
@@ -24,6 +30,24 @@ function backendLibrary(): CompilerLibraryDescriptor {
     id: 'platform',
     dependencies: [],
     declarations: [],
+    options: [
+      {
+        libraryId: 'platform',
+        optionId: 'platform#scheduler-engine',
+        cliAliases: ['--platform-scheduler-engine'],
+        valueType: 'string',
+        defaultValue: 'embedded',
+        allowedValues: ['embedded', 'libuv']
+      },
+      {
+        libraryId: 'platform',
+        optionId: 'platform#secure-transport',
+        cliAliases: ['--platform-secure-transport'],
+        valueType: 'string',
+        defaultValue: 'none',
+        allowedValues: ['none', 'boringssl', 'openssl']
+      }
+    ],
     operations: [operation('random', 'platform:random'), operation('secure', 'platform:secure')],
     intrinsicBindings: [],
     runtimeRequirements: [
@@ -32,9 +56,9 @@ function backendLibrary(): CompilerLibraryDescriptor {
         dependencies: [],
         cPreludeIncludes: [],
         capabilities: [],
-        backendConstraints: [
+        optionConstraints: [
           {
-            option: 'loopBackend',
+            optionId: 'platform#scheduler-engine',
             allowedValues: ['libuv'],
             diagnosticCode: 'PLATFORM_LOOP_BACKEND',
             diagnosticMessage: 'platform.random requires libuv'
@@ -46,9 +70,9 @@ function backendLibrary(): CompilerLibraryDescriptor {
         dependencies: [],
         cPreludeIncludes: [],
         capabilities: [],
-        backendConstraints: [
+        optionConstraints: [
           {
-            option: 'tlsBackend',
+            optionId: 'platform#secure-transport',
             allowedValues: ['boringssl', 'openssl'],
             diagnosticCode: 'PLATFORM_TLS_BACKEND',
             diagnosticMessage: 'platform.secure requires TLS'
