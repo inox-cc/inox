@@ -2,6 +2,9 @@ import { resolve } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 
 import { runStage6SemanticContract } from '../tests/contracts/stage6-semantic-contract.ts'
+import { discoverCompilerLibraries } from './lib/compiler-library-discovery.ts'
+import { renderCompilerLibraryRegistry } from './lib/compiler-library-registry.ts'
+import { normalizeParitySnapshot } from './lib/parity-snapshot.ts'
 import { rootDir } from './lib/repo-root.ts'
 import { runCommand } from './lib/run-command.ts'
 
@@ -20,8 +23,7 @@ if (options === null) {
 }
 
 const probe = await runCommand(resolve(rootDir, options.semanticProbe), [], {
-  stderr: process.stderr,
-  stdout: process.stdout
+  stderr: process.stderr
 })
 
 if (probe.code !== 0) {
@@ -58,8 +60,20 @@ try {
   process.exit(1)
 }
 
-if (!isDeepStrictEqual(parsedNativeSnapshot, hostedContract.snapshot)) {
-  console.error('Hosted and native compiler decoupling snapshots differ')
+const discoveredLibraries = await discoverCompilerLibraries(rootDir)
+const hostedRegistry = renderCompilerLibraryRegistry(discoveredLibraries)
+const expectedNativeSnapshot = {
+  contract: hostedContract.snapshot,
+  nativePlan: hostedRegistry.nativePlan
+}
+
+if (
+  !isDeepStrictEqual(
+    normalizeParitySnapshot(parsedNativeSnapshot),
+    normalizeParitySnapshot(expectedNativeSnapshot)
+  )
+) {
+  console.error('Hosted and native compiler decoupling or native-plan snapshots differ')
   process.exit(1)
 }
 

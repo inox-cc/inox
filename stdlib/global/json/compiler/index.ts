@@ -132,6 +132,7 @@ type JsonObjectField = {
   valueType: JsonValueType
   nullable: boolean
   shape: JsonObjectShape | null
+  shapeOwnership?: 'weak'
   arrayElementType: JsonValueType | null
 }
 

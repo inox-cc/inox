@@ -6,7 +6,9 @@ test('self-hosted сборка выбирает native-файлы stdlib чер�
   const buildSource = await readFile('scripts/build.ts', 'utf8')
   const runtimeCMakeSource = await readFile('runtime/CMakeLists.txt', 'utf8')
 
-  assert.match(buildSource, /set\(INOX_STDLIB_NATIVE_PLAN/)
+  assert.match(buildSource, /writeFile\(join\(cmakeSourceDir, 'native-plan\.cmake'\), nativePlanCMakeSource\)/)
+  assert.match(buildSource, /set\(INOX_STDLIB_NATIVE_PLAN "\$\{cmakeString\(join\(compilerDistDir, 'native-plan\.cmake'\)\)\}"\)/)
+  assert.doesNotMatch(buildSource, /dist\/compiler-libraries\/native-plan\.cmake/)
   assert.match(runtimeCMakeSource, /if\(NOT INOX_STDLIB_NATIVE_PLAN\)/)
   assert.match(runtimeCMakeSource, /include\("\$\{INOX_STDLIB_NATIVE_PLAN\}"\)/)
   assert.match(runtimeCMakeSource, /\$\{INOX_STDLIB_SOURCES\}/)

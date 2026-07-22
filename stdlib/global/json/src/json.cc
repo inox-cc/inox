@@ -1065,6 +1065,7 @@ static inox_status
 inox_json_stringify_object(JsonBuffer* buffer, JsonStringifyStack* stack, inox_value value, size_t depth) {
   inox_object* object = (inox_object*)value.as.ref;
   inox_status status = inox_json_stringify_stack_push(stack, value.as.ref);
+  uint32_t printed = 0;
 
   if (status != INOX_OK) {
     return status;
@@ -1077,10 +1078,24 @@ inox_json_stringify_object(JsonBuffer* buffer, JsonStringifyStack* stack, inox_v
   }
 
   for (uint32_t index = 0; index < object->shape->field_count; index += 1) {
-    if (index != 0) {
+    inox_value field = inox_undefined_value();
+    status = inox_object_get_known(value, index, &field);
+
+    if (status != INOX_OK) {
+      inox_release(field);
+      goto done;
+    }
+
+    if (field.tag == INOX_TAG_UNDEFINED || field.tag == INOX_TAG_FUNCTION) {
+      inox_release(field);
+      continue;
+    }
+
+    if (printed != 0) {
       status = inox_json_buffer_push_char(buffer, ',');
 
       if (status != INOX_OK) {
+        inox_release(field);
         goto done;
       }
     }
@@ -1093,19 +1108,16 @@ inox_json_stringify_object(JsonBuffer* buffer, JsonStringifyStack* stack, inox_v
     }
 
     if (status == INOX_OK) {
-      inox_value field = inox_undefined_value();
-      status = inox_object_get_known(value, index, &field);
-
-      if (status == INOX_OK) {
-        status = inox_json_stringify_value(buffer, stack, field, depth + 1);
-      }
-
-      inox_release(field);
+      status = inox_json_stringify_value(buffer, stack, field, depth + 1);
     }
+
+    inox_release(field);
 
     if (status != INOX_OK) {
       goto done;
     }
+
+    printed += 1;
   }
 
   status = inox_json_buffer_push_char(buffer, '}');

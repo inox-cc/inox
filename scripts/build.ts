@@ -163,7 +163,7 @@ async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
   })
 
   console.log(`linking ${relative(rootDir, options.out)}`)
-  const compile = await linkNativeCompiler(options)
+  const compile = await linkNativeCompiler(options, generatedRegistry.nativePlanCMakeSource)
 
   if (compile.code !== 0) {
     process.exitCode = compile.code
@@ -894,13 +894,14 @@ function generatedPathForSourcePath(sourcePath: string, extension: string): stri
   return `${sourcePath.slice(`${projectSourceRoot}/`.length, -'.ts'.length)}${extension}`
 }
 
-async function linkNativeCompiler(options: BuildOptions): Promise<{ code: number }> {
+async function linkNativeCompiler(options: BuildOptions, nativePlanCMakeSource: string): Promise<{ code: number }> {
   await rm(join(cmakeSourceDir, 'CMakeLists.txt'), {
     force: true
   })
   await mkdir(cmakeSourceDir, {
     recursive: true
   })
+  await writeFile(join(cmakeSourceDir, 'native-plan.cmake'), nativePlanCMakeSource)
   await writeFile(join(cmakeSourceDir, 'CMakeLists.txt'), nativeCompilerCMakeLists(options.generatedDir))
 
   const configure = await runCommand(
@@ -1156,7 +1157,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${cmakeString(cmakeBinDir)}")
-set(INOX_STDLIB_NATIVE_PLAN "${cmakeString(join(rootDir, 'dist/compiler-libraries/native-plan.cmake'))}")
+set(INOX_STDLIB_NATIVE_PLAN "${cmakeString(join(compilerDistDir, 'native-plan.cmake'))}")
 
 add_subdirectory("${cmakeString(join(rootDir, 'runtime'))}" "${cmakeString(join(cmakeBuildDir, 'inox_runtime'))}")
 

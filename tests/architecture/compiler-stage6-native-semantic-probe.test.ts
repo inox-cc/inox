@@ -35,16 +35,24 @@ test('native decoupling probe точно сравнивается с hosted cont
   assert.match(packageJson.scripts['test:inox'], /scripts\/test-inox\.ts/)
   assert.match(packageJson.scripts['test:inox'], /--semantic-probe dist\/inox-stage6-semantic-probe/)
   assert.match(testInoxSource, /runStage6SemanticContract/)
-  assert.match(testInoxSource, /isDeepStrictEqual\(parsedNativeSnapshot, hostedContract\.snapshot\)/)
+  assert.match(testInoxSource, /discoverCompilerLibraries\(rootDir\)/)
+  assert.match(testInoxSource, /nativePlan: hostedRegistry\.nativePlan/)
+  assert.match(testInoxSource, /normalizeParitySnapshot\(parsedNativeSnapshot\)/)
+  assert.match(testInoxSource, /normalizeParitySnapshot\(expectedNativeSnapshot\)/)
 
-  const probeEntry = renderCompilerLibraryRegistry([]).nativeSemanticProbeEntrySource
+  const rendered = renderCompilerLibraryRegistry([])
+  const probeEntry = rendered.nativeSemanticProbeEntrySource
 
   assert.match(probeEntry, /try \{[\s\S]+runStage6SemanticContract\(\)/)
   assert.match(probeEntry, /for \(const failure of result\.failures\) \{\n    console\.error\(failure\)/)
   assert.match(probeEntry, /if \(!result\.ok\) \{\n    process\.exitCode = 1/)
   assert.match(probeEntry, /INOX_DECOUPLING_CONTRACT/)
+  assert.match(probeEntry, /JSON\.stringify\(\{ contract: result\.snapshot, nativePlan \}\)/)
   assert.match(
     probeEntry,
     /\} catch \{\n  console\.error\('Compiler\/stdlib decoupling contract threw unexpectedly'\)\n  process\.exitCode = 1/
   )
+  assert.deepEqual(rendered.nativePlan.sources, [])
+  assert.deepEqual(rendered.nativePlan.includeDirs, [])
+  assert.equal(rendered.nativePlan.librarySetFingerprint, rendered.librarySet.fingerprint)
 })

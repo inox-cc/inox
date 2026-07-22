@@ -9,6 +9,7 @@ import type {
   PrimitiveTypeRef,
   TypeRef
 } from '../../compiler/extensions/types.ts'
+import type { IrProgram } from '../../compiler/types.ts'
 
 export type Stage6SemanticContractResult = {
   ok: boolean
@@ -31,6 +32,7 @@ type ContractSnapshotDiagnostic = ContractDiagnostic & {
 type Stage8DecouplingContractCase = {
   code: string | null
   diagnostics: ContractSnapshotDiagnostic[]
+  ir: IrProgram | null
   name: string
   runtimeRequirements: string[]
 }
@@ -126,7 +128,7 @@ export function stage8DecouplingContractSnapshot(
   const absentLibraries = createCompilerLibrarySet([])
 
   return {
-    version: 1,
+    version: 2,
     cases: [
       contractCaseSnapshot('renamed-sequence-provider', sequenceContractSource, libraries),
       contractCaseSnapshot('renamed-async-result-provider', futureContractSource, libraries),
@@ -253,6 +255,7 @@ function contractCaseSnapshot(
     return {
       name,
       code: result.code,
+      ir: result.ir,
       runtimeRequirements: result.ir.runtimeRequirements.slice().sort(),
       diagnostics: []
     }
@@ -262,6 +265,7 @@ function contractCaseSnapshot(
     return {
       name,
       code: null,
+      ir: null,
       runtimeRequirements: [],
       diagnostics: diagnostics.map((item: any) => ({
         code: item.code,

@@ -23,10 +23,18 @@ export type RenderedCompilerLibraryRegistry = {
   librarySet: CompilerLibrarySet
   registrySource: string
   manifestSource: string
+  nativePlan: CompilerLibraryNativePlan
   nativePlanSource: string
   nativePlanCMakeSource: string
   nativeEntrySource: string
   nativeSemanticProbeEntrySource: string
+}
+
+export type CompilerLibraryNativePlan = {
+  version: 1
+  librarySetFingerprint: string
+  sources: string[]
+  includeDirs: string[]
 }
 
 export async function generateCompilerLibraryRegistry(
@@ -77,21 +85,20 @@ export function renderCompilerLibraryRegistry(
   }
 
   const librarySet = createCompilerLibrarySetFromDiscovered(discovered)
+  const nativePlan: CompilerLibraryNativePlan = {
+    version: 1,
+    librarySetFingerprint: librarySet.fingerprint,
+    sources: Array.from(nativeSources).sort(),
+    includeDirs: Array.from(nativeIncludeDirs).sort()
+  }
   const registrySource = renderRegistrySource(librarySet, discovered)
   const manifestSource = jsonSource({
     version: 1,
     fingerprint: librarySet.fingerprint,
     packages: manifestPackages
   })
-  const nativePlanSource = jsonSource({
-    version: 1,
-    sources: Array.from(nativeSources).sort(),
-    includeDirs: Array.from(nativeIncludeDirs).sort()
-  })
-  const nativePlanCMakeSource = renderNativePlanCMake(
-    Array.from(nativeSources).sort(),
-    Array.from(nativeIncludeDirs).sort()
-  )
+  const nativePlanSource = jsonSource(nativePlan)
+  const nativePlanCMakeSource = renderNativePlanCMake(nativePlan)
   const nativeEntrySource =
     "import fs from 'node:fs'\n" +
     "import process from 'node:process'\n" +
@@ -113,6 +120,7 @@ export function renderCompilerLibraryRegistry(
   const nativeSemanticProbeEntrySource =
     "import process from 'node:process'\n" +
     "import { runStage6SemanticContract } from '../../tests/contracts/stage6-semantic-contract.ts'\n\n" +
+    `const nativePlan = ${JSON.stringify(nativePlan)}\n\n` +
     'try {\n' +
     '  const result = runStage6SemanticContract()\n\n' +
     '  for (const failure of result.failures) {\n' +
@@ -121,7 +129,7 @@ export function renderCompilerLibraryRegistry(
     '  if (!result.ok) {\n' +
     '    process.exitCode = 1\n' +
     '  } else {\n' +
-    "    console.log(`INOX_DECOUPLING_CONTRACT ${JSON.stringify(result.snapshot)}`)\n" +
+    "    console.log(`INOX_DECOUPLING_CONTRACT ${JSON.stringify({ contract: result.snapshot, nativePlan })}`)\n" +
     '  }\n' +
     '} catch {\n' +
     "  console.error('Compiler/stdlib decoupling contract threw unexpectedly')\n" +
@@ -132,6 +140,7 @@ export function renderCompilerLibraryRegistry(
     librarySet,
     registrySource,
     manifestSource,
+    nativePlan,
     nativePlanSource,
     nativePlanCMakeSource,
     nativeEntrySource,
@@ -139,10 +148,11 @@ export function renderCompilerLibraryRegistry(
   }
 }
 
-function renderNativePlanCMake(sources: string[], includeDirs: string[]): string {
+function renderNativePlanCMake(plan: CompilerLibraryNativePlan): string {
   return (
-    renderNativePlanCMakeList('INOX_STDLIB_SOURCES', sources) +
-    renderNativePlanCMakeList('INOX_STDLIB_INCLUDE_DIRS', includeDirs)
+    `set(INOX_STDLIB_LIBRARY_SET_FINGERPRINT "${plan.librarySetFingerprint}")\n` +
+    renderNativePlanCMakeList('INOX_STDLIB_SOURCES', plan.sources) +
+    renderNativePlanCMakeList('INOX_STDLIB_INCLUDE_DIRS', plan.includeDirs)
   )
 }
 

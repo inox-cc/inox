@@ -64,6 +64,7 @@ export const compilerAnyNodeBooleanFields: readonly string[] = [
   'optionalChainProtected',
   'readonly',
   'readonlyField',
+  'resolved',
   'libraryOwned',
   'returnNullable',
   'spread',
@@ -75,6 +76,7 @@ export const compilerAnyNodeBooleanFields: readonly string[] = [
 
 export const compilerAnyNodeArrayFields: readonly string[] = [
   'args',
+  'baseTypes',
   'bindingElements',
   'cases',
   'elements',
@@ -103,6 +105,7 @@ export const compilerAnyNodeArrayFields: readonly string[] = [
 ]
 
 export const compilerAnyNodeStringArrayFields: readonly string[] = [
+  'baseTypes',
   'libraryCapabilities',
   'libraryCArgumentAdapters',
   'libraryCArgumentKinds',
