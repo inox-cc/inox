@@ -6,7 +6,6 @@ import type {
   ObjectTypeRef,
   TypeRef
 } from '../../../../compiler/extensions/types.ts'
-import type { AnyNode, ObjectShapeInfo, ValueType } from '../../../../compiler/types.ts'
 
 const libraryId = 'global:json'
 const collectionsLibraryId = 'global:collections'
@@ -117,10 +116,23 @@ function stringifyVariant(cArgumentKinds: Array<'runtime-value' | 'number'>) {
 }
 
 type JsonParseLiteralTypeInfo = {
-  valueType: ValueType
-  shape: ObjectShapeInfo | null
-  arrayElementType: ValueType | null
-  arrayElementDeclaredType: string | null
+  valueType: JsonValueType
+  shape: JsonObjectShape | null
+  arrayElementType: JsonValueType | null
+}
+
+type JsonValueType = 'array' | 'boolean' | 'number' | 'object' | 'string' | 'unknown'
+
+type JsonObjectShape = {
+  fields: JsonObjectField[]
+}
+
+type JsonObjectField = {
+  name: string
+  valueType: JsonValueType
+  nullable: boolean
+  shape: JsonObjectShape | null
+  arrayElementType: JsonValueType | null
 }
 
 type JsonParseLiteralResult = {
@@ -171,10 +183,8 @@ function jsonLiteralInfoTypeRef(info: JsonParseLiteralTypeInfo): TypeRef {
 
   if (
     info.valueType === 'boolean' ||
-    info.valueType === 'bytes' ||
     info.valueType === 'number' ||
-    info.valueType === 'string' ||
-    info.valueType === 'void'
+    info.valueType === 'string'
   ) {
     return primitiveTypeRef(info.valueType)
   }
@@ -190,28 +200,16 @@ function jsonArrayElementTypeRef(info: JsonParseLiteralTypeInfo): TypeRef {
   return jsonLiteralInfoTypeRef({
     valueType: info.arrayElementType,
     shape: info.shape,
-    arrayElementType: null,
-    arrayElementDeclaredType: null
+    arrayElementType: null
   })
 }
 
-function jsonShapeFieldTypeRef(field: AnyNode): TypeRef {
+function jsonShapeFieldTypeRef(field: JsonObjectField): TypeRef {
   return jsonLiteralInfoTypeRef({
-    valueType: jsonShapeFieldValueType(field),
-    shape: field.shape ?? null,
-    arrayElementType: field.arrayElementType ?? null,
-    arrayElementDeclaredType: field.arrayElementDeclaredType ?? null
+    valueType: field.valueType,
+    shape: field.shape,
+    arrayElementType: field.arrayElementType
   })
-}
-
-function jsonShapeFieldValueType(field: AnyNode): ValueType {
-  const valueType = field.valueType
-
-  if (typeof valueType === 'string') {
-    return valueType
-  }
-
-  return 'unknown'
 }
 
 function primitiveTypeRef(name: 'boolean' | 'bytes' | 'number' | 'string' | 'void'): TypeRef {
@@ -344,7 +342,7 @@ function parseJsonArrayLiteralType(source: string, index: number): JsonParseLite
 }
 
 function parseJsonObjectLiteralType(source: string, index: number): JsonParseLiteralResult | null {
-  const fields: AnyNode[] = []
+  const fields: JsonObjectField[] = []
   let nextIndex = skipJsonWhitespace(source, index)
 
   if (source[nextIndex] === '}') {
@@ -612,19 +610,14 @@ function sourceStartsWith(source: string, index: number, expected: string): bool
 }
 
 function jsonArrayLiteralTypeInfo(elements: JsonParseLiteralTypeInfo[]): JsonParseLiteralTypeInfo {
-  const elementTypes: ValueType[] = []
+  const elementTypes: JsonValueType[] = []
 
   for (let index = 0; index < elements.length; index = index + 1) {
     elementTypes.push(elements[index].valueType)
   }
 
   const arrayElementType = commonJsonValueType(elementTypes)
-  let arrayElementDeclaredType: string | null = null
-  let shape: ObjectShapeInfo | null = null
-
-  if (arrayElementType !== 'unknown') {
-    arrayElementDeclaredType = arrayElementType
-  }
+  let shape: JsonObjectShape | null = null
 
   if (arrayElementType === 'object') {
     shape = commonJsonArrayElementShape(elements)
@@ -633,13 +626,12 @@ function jsonArrayLiteralTypeInfo(elements: JsonParseLiteralTypeInfo[]): JsonPar
   return {
     valueType: 'array',
     shape,
-    arrayElementType,
-    arrayElementDeclaredType
+    arrayElementType
   }
 }
 
-function commonJsonArrayElementShape(elements: JsonParseLiteralTypeInfo[]): ObjectShapeInfo | null {
-  const fields: AnyNode[] = []
+function commonJsonArrayElementShape(elements: JsonParseLiteralTypeInfo[]): JsonObjectShape | null {
+  const fields: JsonObjectField[] = []
 
   for (let index = 0; index < elements.length; index = index + 1) {
     const elementFields = elements[index].shape?.fields
@@ -663,19 +655,19 @@ function commonJsonArrayElementShape(elements: JsonParseLiteralTypeInfo[]): Obje
     return null
   }
 
-  return { kind: 'object', fields }
+  return { fields }
 }
 
-function commonJsonObjectField(name: string, elements: JsonParseLiteralTypeInfo[]): AnyNode {
-  const fields: AnyNode[] = []
-  const valueTypes: ValueType[] = []
+function commonJsonObjectField(name: string, elements: JsonParseLiteralTypeInfo[]): JsonObjectField {
+  const fields: JsonObjectField[] = []
+  const valueTypes: JsonValueType[] = []
 
   for (let index = 0; index < elements.length; index = index + 1) {
     const field = jsonShapeFieldByName(elements[index].shape?.fields ?? [], name)
 
     if (field !== null) {
       fields.push(field)
-      valueTypes.push(jsonShapeFieldValueType(field))
+      valueTypes.push(field.valueType)
     }
   }
 
@@ -688,28 +680,26 @@ function commonJsonObjectField(name: string, elements: JsonParseLiteralTypeInfo[
     name,
     valueType,
     nullable,
-    arrayElementType: commonJsonNullableStringField(fields, 'arrayElementType'),
-    arrayElementDeclaredType: commonJsonNullableStringField(fields, 'arrayElementDeclaredType'),
+    arrayElementType: commonJsonArrayElementType(fields),
     shape: valueType === 'object' ? commonJsonFieldShape(fields) : null
   }
 }
 
-function commonJsonFieldShape(fields: AnyNode[]): ObjectShapeInfo | null {
+function commonJsonFieldShape(fields: JsonObjectField[]): JsonObjectShape | null {
   const elements: JsonParseLiteralTypeInfo[] = []
 
   for (let index = 0; index < fields.length; index = index + 1) {
     elements.push({
-      valueType: jsonShapeFieldValueType(fields[index]),
-      shape: fields[index].shape ?? null,
-      arrayElementType: fields[index].arrayElementType ?? null,
-      arrayElementDeclaredType: fields[index].arrayElementDeclaredType ?? null
+      valueType: fields[index].valueType,
+      shape: fields[index].shape,
+      arrayElementType: fields[index].arrayElementType
     })
   }
 
   return commonJsonArrayElementShape(elements)
 }
 
-function jsonShapeFieldByName(fields: AnyNode[], name: string): AnyNode | null {
+function jsonShapeFieldByName(fields: JsonObjectField[], name: string): JsonObjectField | null {
   for (let index = 0; index < fields.length; index = index + 1) {
     if (fields[index].name === name) {
       return fields[index]
@@ -719,23 +709,23 @@ function jsonShapeFieldByName(fields: AnyNode[], name: string): AnyNode | null {
   return null
 }
 
-function commonJsonNullableStringField(fields: AnyNode[], name: string): string | null {
+function commonJsonArrayElementType(fields: JsonObjectField[]): JsonValueType | null {
   if (fields.length === 0) {
     return null
   }
 
-  const first = fields[0][name]
+  const first = fields[0].arrayElementType
 
   for (let index = 1; index < fields.length; index = index + 1) {
-    if (fields[index][name] !== first) {
+    if (fields[index].arrayElementType !== first) {
       return null
     }
   }
 
-  return typeof first === 'string' ? first : null
+  return first
 }
 
-function commonJsonValueType(valueTypes: ValueType[]): ValueType {
+function commonJsonValueType(valueTypes: JsonValueType[]): JsonValueType {
   if (valueTypes.length === 0) {
     return 'unknown'
   }
@@ -751,41 +741,28 @@ function commonJsonValueType(valueTypes: ValueType[]): ValueType {
   return first
 }
 
-function jsonObjectLiteralTypeInfo(fields: AnyNode[]): JsonParseLiteralTypeInfo {
+function jsonObjectLiteralTypeInfo(fields: JsonObjectField[]): JsonParseLiteralTypeInfo {
   return {
     valueType: 'object',
-    shape: {
-      kind: 'object',
-      dynamic: true,
-      fields
-    },
-    arrayElementType: null,
-    arrayElementDeclaredType: null
+    shape: { fields },
+    arrayElementType: null
   }
 }
 
-function jsonObjectLiteralField(name: string, fieldType: JsonParseLiteralTypeInfo): AnyNode {
+function jsonObjectLiteralField(name: string, fieldType: JsonParseLiteralTypeInfo): JsonObjectField {
   return {
-    type: 'Field',
     name,
     valueType: fieldType.valueType,
     nullable: fieldType.valueType === 'unknown',
     arrayElementType: fieldType.arrayElementType,
-    arrayElementDeclaredType: fieldType.arrayElementDeclaredType,
-    mapKeyType: null,
-    mapValueType: null,
-    asyncResultValueType: null,
-    setElementType: null,
-    shape: fieldType.shape,
-    loc: { line: 1, column: 1 }
+    shape: fieldType.shape
   }
 }
 
-function jsonLiteralTypeInfo(valueType: ValueType): JsonParseLiteralTypeInfo {
+function jsonLiteralTypeInfo(valueType: JsonValueType): JsonParseLiteralTypeInfo {
   return {
     valueType,
     shape: null,
-    arrayElementType: null,
-    arrayElementDeclaredType: null
+    arrayElementType: null
   }
 }
