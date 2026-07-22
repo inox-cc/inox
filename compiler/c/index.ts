@@ -154,12 +154,7 @@ import type {
   CPreparedExpression as PreparedExpression,
   CTypeRefMap
 } from './types.ts'
-import {
-  cCompilerLibrarySetValue,
-  cFunctionTypeValue,
-  cTypeRefMapValue,
-  isReadonlyCObjectShapeField
-} from './types.ts'
+import { cCompilerLibrarySetValue, cFunctionTypeValue, cTypeRefMapValue, isReadonlyCObjectShapeField } from './types.ts'
 import type { CCompilerLibrarySet } from './types.ts'
 import { emitCUnit as emitCUnitWithDependencies } from './unit.ts'
 import type { CUnitDependencies } from './unit.ts'
@@ -568,7 +563,8 @@ function emitPreparedIntrinsicStringConversionExpression(
   }
 
   const variant = operation.variants?.find(
-    (candidate) => (candidate.minArgs ?? operation.minArgs ?? 0) <= 1 && (candidate.maxArgs ?? operation.maxArgs ?? 1) >= 1
+    (candidate) =>
+      (candidate.minArgs ?? operation.minArgs ?? 0) <= 1 && (candidate.maxArgs ?? operation.maxArgs ?? 1) >= 1
   )
   const cExpression = variant?.cExpression ?? operation.cExpression
 
@@ -753,7 +749,9 @@ function runtimeCallbackArgumentInfoForNodeStdlibCall(expression: AnyNode): Runt
 }
 
 function isConfiguredExternalEventLoopCallExpression(expression: AnyNode | null | undefined): boolean {
-  return isCompilerLibraryExternalEventLoopCallExpression(expression) || isCompilerLibraryAsyncResultExpression(expression)
+  return (
+    isCompilerLibraryExternalEventLoopCallExpression(expression) || isCompilerLibraryAsyncResultExpression(expression)
+  )
 }
 
 const callbackLoweringDependencies: CallbackLoweringDependencies = {
@@ -1186,10 +1184,7 @@ function createBaseContext(
     functionParams.set(item.name, item.params as CFunctionParam[])
     functionReturnDeclaredTypes.set(item.name, item.declaredReturnType ?? null)
     functionReturnNullables.set(item.name, item.returnNullable === true)
-    if (
-      item.returnRuntimeTypeAlternatives !== null &&
-      typeof item.returnRuntimeTypeAlternatives !== 'undefined'
-    ) {
+    if (item.returnRuntimeTypeAlternatives !== null && typeof item.returnRuntimeTypeAlternatives !== 'undefined') {
       functionReturnRuntimeTypeAlternatives.set(
         item.name,
         item.returnRuntimeTypeAlternatives as CRuntimeTypeAlternative[]
@@ -1576,8 +1571,7 @@ function collectModuleObjectLiteralShapeFields(
     }
 
     const value = property.value
-    const expectedField =
-      expectedFields === null ? null : moduleObjectShapeFieldAt(expectedFields, property.key)
+    const expectedField = expectedFields === null ? null : moduleObjectShapeFieldAt(expectedFields, property.key)
 
     if (property.spread === true) {
       let spreadFields = moduleObjectReferenceShapeFields(value, knownObjectShapes)
@@ -1623,11 +1617,7 @@ function collectModuleObjectLiteralShapeFields(
     if (functionType !== null && typeof functionType !== 'undefined') {
       let functionStorage: 'pointer' | undefined
 
-      if (
-        value.type === 'Reference' &&
-        value.path.length === 1 &&
-        functionParams.has(value.path[0])
-      ) {
+      if (value.type === 'Reference' && value.path.length === 1 && functionParams.has(value.path[0])) {
         functionStorage = 'pointer'
         value.functionStorage = 'pointer'
       }
@@ -3073,10 +3063,7 @@ function moduleObjectFunctionCompanionTarget(
   return moduleObjectFunctionCompanionTarget(field.shape?.fields, nestedPath, nestedSeenTypes)
 }
 
-function objectShapeFieldForName(
-  fields: CObjectShapeField[],
-  name: string
-): CObjectShapeField | null {
+function objectShapeFieldForName(fields: CObjectShapeField[], name: string): CObjectShapeField | null {
   for (const field of fields) {
     if (field.name === name) {
       return field
@@ -3836,16 +3823,9 @@ function emitObjectMemberVariableDeclaration(
   objectName: string,
   key: string
 ): string[] {
-  const declaredFieldType = anyNodeLikeDeclaredObjectFieldValueType(
-    context.objectDeclaredTypes.get(objectName),
-    key
-  )
+  const declaredFieldType = anyNodeLikeDeclaredObjectFieldValueType(context.objectDeclaredTypes.get(objectName), key)
 
-  if (
-    member.valueType === 'unknown' &&
-    declaredFieldType !== null &&
-    declaredFieldType !== 'unknown'
-  ) {
+  if (member.valueType === 'unknown' && declaredFieldType !== null && declaredFieldType !== 'unknown') {
     member.valueType = declaredFieldType
   }
 
@@ -4713,11 +4693,7 @@ function arrayLiteralElementFunctionType(
     return element.functionType
   }
 
-  return cIterableElementFunctionType(
-    arrayExpression.typeRef,
-    context.libraries,
-    cNodeSourceLocation(arrayExpression)
-  )
+  return cIterableElementFunctionType(arrayExpression.typeRef, context.libraries, cNodeSourceLocation(arrayExpression))
 }
 
 function cNodeSourceLocation(node: AnyNode): SourceLocation {
@@ -5270,9 +5246,7 @@ function emitCNullishCoalescingValueExpression(expression: AnyNode, context: CFu
 
   const temp = nextCName(context, 'inox_value')
   const expectedTag =
-    resultType === 'object' && libraryNativeCppType(expression.shape) !== null
-      ? null
-      : cRuntimeValueTag(resultType)
+    resultType === 'object' && libraryNativeCppType(expression.shape) !== null ? null : cRuntimeValueTag(resultType)
   const lines: string[] = []
   registerOwnedValue(context, temp)
 
@@ -5628,11 +5602,7 @@ function emitDirectStringLogValue(expression: AnyNode, context: CFunctionContext
 }
 
 function isRuntimeLogValueType(valueType: string): boolean {
-  return (
-    valueType === 'bytes' ||
-    valueType === 'function' ||
-    valueType === 'object'
-  )
+  return valueType === 'bytes' || valueType === 'function' || valueType === 'object'
 }
 
 function isOwnedRuntimeValueName(name: string, context: CFunctionContext): boolean {
@@ -5941,7 +5911,6 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): For
     if (field !== null && typeof field !== 'undefined' && field.valueType === 'string') {
       return emitRuntimeStringLogValue({ kind: 'known-object-index', field }, context)
     }
-
   }
 
   if (expression.type === 'CallExpression') {
@@ -6096,7 +6065,7 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): For
       return {
         lines: libraryNativeField.lines,
         format: formattedOutputNumberFormat,
-        values: [`((double)${libraryNativeField.expression})`]
+        values: [`static_cast<double>(${libraryNativeField.expression})`]
       }
     }
 
@@ -6106,7 +6075,7 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): For
       return {
         lines: nativeClassField.lines,
         format: formattedOutputNumberFormat,
-        values: [`((double)${nativeClassField.expression})`]
+        values: [`static_cast<double>(${nativeClassField.expression})`]
       }
     }
 
@@ -6123,7 +6092,6 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): For
     if (field !== null && typeof field !== 'undefined' && isNullableScalarType(field.valueType)) {
       return emitRuntimeNumberLogValue(field.valueType, { kind: 'known-object-index', field }, context)
     }
-
   }
 
   const value = emitPreparedNumberExpression(expression, context)
@@ -6140,7 +6108,7 @@ function emitFormattedOutputNumberValue(value: PreparedExpression): string {
     return value.expression
   }
 
-  return `((double)${value.expression})`
+  return `static_cast<double>(${value.expression})`
 }
 
 function emitBooleanLogValue(expression: AnyNode, context: CFunctionContext): FormattedOutputValue {
@@ -6208,7 +6176,6 @@ function emitBooleanLogValue(expression: AnyNode, context: CFunctionContext): Fo
     if (field !== null && typeof field !== 'undefined' && field.valueType === 'boolean') {
       return emitRuntimeBooleanLogValue({ kind: 'known-object-index', field }, context)
     }
-
   }
 
   const value = emitPreparedNumberExpression(expression, context)
@@ -6253,7 +6220,7 @@ function emitModuleRuntimeScalarLogValue(expression: AnyNode, context: CFunction
 
   if (valueType === 'boolean') {
     tag = 'INOX_TAG_BOOL'
-    formattedValue = `((double)(${storage}.as.boolean ? 1 : 0))`
+    formattedValue = `static_cast<double>(${storage}.as.boolean ? 1 : 0)`
   }
 
   return {
@@ -6327,7 +6294,7 @@ function emitRuntimeNumberLogValue(
 
   if (valueType === 'boolean') {
     tag = 'INOX_TAG_BOOL'
-    formattedValue = `((double)(${value}.as.boolean ? 1 : 0))`
+    formattedValue = `static_cast<double>(${value}.as.boolean ? 1 : 0)`
   }
 
   pushAll(lines, emitPrepareOwnedValueWrite(value))
@@ -6903,7 +6870,10 @@ function resolveCFunctionRejectionValueType(callee: AnyNode, context: CFunctionC
   return 'unknown'
 }
 
-function emitPreparedAwaitAsyncResultExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null {
+function emitPreparedAwaitAsyncResultExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression | null {
   const asyncResultExpression = emitPreparedAsyncResultExpression(expression, context, asyncResultLoweringDependencies)
 
   if (asyncResultExpression !== null && typeof asyncResultExpression !== 'undefined') {
@@ -6972,19 +6942,8 @@ function emitAwaitValueVariableDeclaration(statement: AnyNode, context: CFunctio
   const valueTag = cRuntimeValueTag(valueType)
   const valueCheckNeeded = emitRuntimeValueCheck('inox_await_value', valueTag, context) !== ''
   const rawValue = nextCName(context, 'inox_await_value')
-  const valueInfo = resolveAwaitResultCppValueInfo(
-    expression,
-    rawValue,
-    valueType,
-    valueTag,
-    valueCheckNeeded,
-    context
-  )
-  const awaitExpression = emitAsyncResultAwaitExpression(
-    expression.argument,
-    preparedAsyncResult.expression,
-    context
-  )
+  const valueInfo = resolveAwaitResultCppValueInfo(expression, rawValue, valueType, valueTag, valueCheckNeeded, context)
+  const awaitExpression = emitAsyncResultAwaitExpression(expression.argument, preparedAsyncResult.expression, context)
 
   if (awaitExpression === null) {
     return null
@@ -7104,11 +7063,7 @@ function emitPreparedAwaitResultExpression(
     valueCheckNeeded,
     context
   )
-  const awaitExpression = emitAsyncResultAwaitExpression(
-    expression.argument,
-    preparedAsyncResult.expression,
-    context
-  )
+  const awaitExpression = emitAsyncResultAwaitExpression(expression.argument, preparedAsyncResult.expression, context)
   const lines: string[] = []
 
   pushAll(lines, preparedAsyncResult.lines)
@@ -7202,18 +7157,11 @@ function resolveAwaitResultCppValueInfo(
   }
   const asyncResultCppType = compilerLibraryIntrinsicNativeCppType(context.libraries, 'async-result')
 
-  if (
-    libraryCppType !== null &&
-    typeof libraryCppType !== 'undefined' &&
-    libraryCppType !== asyncResultCppType
-  ) {
+  if (libraryCppType !== null && typeof libraryCppType !== 'undefined' && libraryCppType !== asyncResultCppType) {
     const valueCheck =
       nativeValidExpression === null
         ? emitRuntimeValueCheck(valueExpression, valueTag, context)
-        : emitRuntimeTypeCheck(
-            `!(${nativeValidExpression.split('$value').join(valueExpression)})`,
-            context
-          )
+        : emitRuntimeTypeCheck(`!(${nativeValidExpression.split('$value').join(valueExpression)})`, context)
 
     return {
       cppType: libraryCppType,
@@ -7495,10 +7443,7 @@ function emitRuntimeCallbackCalleeReference(callee: AnyNode, context: CFunctionC
   if (
     objectField !== null &&
     typeof objectField !== 'undefined' &&
-    isRuntimeObjectFunctionField(
-      objectField.field,
-      objectFunctionFieldSeenTypes(objectField.objectName, context)
-    )
+    isRuntimeObjectFunctionField(objectField.field, objectFunctionFieldSeenTypes(objectField.objectName, context))
   ) {
     return objectField.name
   }
@@ -7571,10 +7516,7 @@ function emitRuntimeCallbackValueInto(
     objectField !== null &&
     typeof objectField !== 'undefined' &&
     !context.classInstanceTypes.has(objectField.objectName) &&
-    isRuntimeObjectFunctionField(
-      objectField.field,
-      objectFunctionFieldSeenTypes(objectField.objectName, context)
-    )
+    isRuntimeObjectFunctionField(objectField.field, objectFunctionFieldSeenTypes(objectField.objectName, context))
   ) {
     const lines: string[] = []
 
@@ -7658,9 +7600,7 @@ function emitUndefinedRuntimeCallbackValueInto(out: string): string[] {
 
 function isSupportedRuntimeArrowCaptureValueType(valueType: string): boolean {
   return (
-    isNullableScalarType(valueType) ||
-    isManagedRuntimeReturnType(valueType) ||
-    valueType === 'asyncResult-settlement'
+    isNullableScalarType(valueType) || isManagedRuntimeReturnType(valueType) || valueType === 'asyncResult-settlement'
   )
 }
 

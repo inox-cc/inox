@@ -76,11 +76,7 @@ import { emitNullableRuntimeValueVariableDeclaration } from './nullable.ts'
 import { registerObjectShape } from './objects.ts'
 import type { ObjectVariableDeclarationDependencies } from './objects.ts'
 import { isRawStringLiteralExpression } from './strings.ts'
-import {
-  anyNodeLikeObjectFieldDeclaredType,
-  isAnyNodeLikeArrayFieldName,
-  isAnyNodeLikeDeclaredType
-} from './types.ts'
+import { anyNodeLikeObjectFieldDeclaredType, isAnyNodeLikeArrayFieldName, isAnyNodeLikeDeclaredType } from './types.ts'
 
 type CSourceLocation = SourceLocation | null | undefined
 
@@ -184,11 +180,7 @@ export type StatementLoweringDependencies = {
     context: CFunctionContext,
     dependencies: ObjectVariableDeclarationDependencies
   ): string[]
-  emitObjectFunctionCompanionReference(
-    rootName: string,
-    path: string[],
-    context: CFunctionContext
-  ): string | null
+  emitObjectFunctionCompanionReference(rootName: string, path: string[], context: CFunctionContext): string | null
   emitOptionalRuntimeCallbackCallExpression(expression: StatementNode, context: CFunctionContext): string[]
   objectVariableDeclarationDependencies: ObjectVariableDeclarationDependencies
   emitPreparedAsyncFunctionAsyncResultCallExpression(
@@ -270,9 +262,7 @@ function statementDeps(context: CFunctionContext): StatementLoweringDependencies
   return context.statementLoweringDependencies
 }
 
-function statementChild(
-  value: StatementNode | StatementNode[] | null | undefined
-): StatementNode | null {
+function statementChild(value: StatementNode | StatementNode[] | null | undefined): StatementNode | null {
   if (value === null || typeof value === 'undefined' || Array.isArray(value)) {
     return null
   }
@@ -280,9 +270,7 @@ function statementChild(
   return value
 }
 
-function statementNodeArray(
-  value: StatementNode | StatementNode[] | null | undefined
-): StatementNode[] {
+function statementNodeArray(value: StatementNode | StatementNode[] | null | undefined): StatementNode[] {
   if (Array.isArray(value)) {
     return value
   }
@@ -601,11 +589,7 @@ function applyNullableScalarEarlyReturnNarrowing(statement: StatementNode, conte
   const consequent = statementChild(statement.consequent)
   const alternate = statementChild(statement.alternate)
 
-  if (
-    statement.type !== 'IfStatement' ||
-    alternate !== null ||
-    !statementDefinitelyReturns(consequent)
-  ) {
+  if (statement.type !== 'IfStatement' || alternate !== null || !statementDefinitelyReturns(consequent)) {
     return
   }
 
@@ -804,12 +788,7 @@ export function emitIfStatement(statement: StatementNode, context: CFunctionCont
   lines.push(`if ${emitCConditionClause(condition.expression)} {`)
   pushIndentedLines(
     lines,
-    emitScopedStatementBody(
-      consequent,
-      context,
-      narrowing.trueNames,
-      typeNarrowing.trueTypes
-    ),
+    emitScopedStatementBody(consequent, context, narrowing.trueNames, typeNarrowing.trueTypes),
     '  '
   )
 
@@ -821,12 +800,7 @@ export function emitIfStatement(statement: StatementNode, context: CFunctionCont
   lines.push('} else {')
   pushIndentedLines(
     lines,
-    emitScopedStatementBody(
-      alternate,
-      context,
-      narrowing.falseNames,
-      typeNarrowing.falseTypes
-    ),
+    emitScopedStatementBody(alternate, context, narrowing.falseNames, typeNarrowing.falseTypes),
     '  '
   )
   lines.push('}')
@@ -842,12 +816,7 @@ export function emitWhileStatement(statement: StatementNode, context: CFunctionC
   const continueTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_continue'), throughFinally: false }
   pushFlowTarget(context.breakTargets, breakTarget)
   pushFlowTarget(context.continueTargets, continueTarget)
-  const body = emitScopedStatementBody(
-    statement.body,
-    context,
-    narrowing.trueNames,
-    typeNarrowing.trueTypes
-  )
+  const body = emitScopedStatementBody(statement.body, context, narrowing.trueNames, typeNarrowing.trueTypes)
   popFlowTarget(context.continueTargets)
   popFlowTarget(context.breakTargets)
 
@@ -898,12 +867,7 @@ export function emitForStatement(statement: StatementNode, context: CFunctionCon
     const continueTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_continue'), throughFinally: false }
     pushFlowTarget(context.breakTargets, breakTarget)
     pushFlowTarget(context.continueTargets, continueTarget)
-    const body = emitScopedStatementBody(
-      statement.body,
-      context,
-      narrowing.trueNames,
-      typeNarrowing.trueTypes
-    )
+    const body = emitScopedStatementBody(statement.body, context, narrowing.trueNames, typeNarrowing.trueTypes)
     popFlowTarget(context.continueTargets)
     popFlowTarget(context.breakTargets)
     const needsPreparedLowering = init.lines.length > 0 || test.lines.length > 0 || update.lines.length > 0
@@ -1247,12 +1211,7 @@ export function emitRuntimeValueVariableDeclaration(
     statement.shape ??
     cTypeRefNativeShape(statement.typeRef, context.libraries) ??
     cTypeRefNativeShape(expression.typeRef, context.libraries)
-  const nativeCppType = libraryNativeBoundaryCppType(
-    valueType,
-    statement.nullable === true,
-    false,
-    nativeShape
-  )
+  const nativeCppType = libraryNativeBoundaryCppType(valueType, statement.nullable === true, false, nativeShape)
   const expectedTag = valueType === 'object' && nativeCppType !== null ? null : cRuntimeValueTag(valueType)
   const runtimeTypeAlternatives = statement.runtimeTypeAlternatives ?? expression.runtimeTypeAlternatives
   let nativeValidExpression = compilerLibraryNativeRuntimeValueValidExpressionForTypeRef(
@@ -1333,9 +1292,10 @@ export function emitRuntimeValueVariableDeclaration(
     if (validExpressions !== null && validExpressions.length > 0) {
       const name = emitCIdentifier(statement.name)
       const valid = validExpressions.join(' || ')
-      const mismatch = statement.nullable === true
-        ? `${name}.tag != INOX_TAG_UNDEFINED && ${name}.tag != INOX_TAG_NULL && !(${valid})`
-        : `!(${valid})`
+      const mismatch =
+        statement.nullable === true
+          ? `${name}.tag != INOX_TAG_UNDEFINED && ${name}.tag != INOX_TAG_NULL && !(${valid})`
+          : `!(${valid})`
 
       lines.push(emitRuntimeTypeCheck(mismatch, context))
     }
@@ -1591,20 +1551,13 @@ function anyNodeLikeObjectAccessDeclaredType(expression: StatementNode, context:
   return anyNodeLikeObjectFieldDeclaredType(field)
 }
 
-function variableDeclarationNativeShape(
-  statement: StatementNode,
-  context: CFunctionContext
-): CObjectShape | null {
+function variableDeclarationNativeShape(statement: StatementNode, context: CFunctionContext): CObjectShape | null {
   const declaredShape =
     statement.shape ??
     cTypeRefNativeShape(statement.typeRef, context.libraries) ??
     cTypeRefNativeShape(statement.init?.typeRef, context.libraries)
 
-  if (
-    declaredShape !== null &&
-    typeof declaredShape !== 'undefined' &&
-    libraryNativeCppType(declaredShape) !== null
-  ) {
+  if (declaredShape !== null && typeof declaredShape !== 'undefined' && libraryNativeCppType(declaredShape) !== null) {
     return declaredShape
   }
 
@@ -1621,8 +1574,7 @@ function variableDeclarationNativeShape(
     return null
   }
 
-  const rootDeclaredType =
-    context.objectDeclaredTypes.get(root) ?? objectAccessRootDeclaredType(expression)
+  const rootDeclaredType = context.objectDeclaredTypes.get(root) ?? objectAccessRootDeclaredType(expression)
 
   if (
     rootDeclaredType === null ||
@@ -1920,12 +1872,7 @@ function registerForOfElementMetadata(
     registerForOfObjectElementDeclaredType(context, name, statement)
   }
 
-  const nativeCppType = libraryNativeBoundaryCppType(
-    elementType,
-    statement.nullable === true,
-    false,
-    statement.shape
-  )
+  const nativeCppType = libraryNativeBoundaryCppType(elementType, statement.nullable === true, false, statement.shape)
 
   if (nativeCppType !== null) {
     context.cppValueTypes.set(name, nativeCppType)
@@ -1958,12 +1905,7 @@ function emitForOfElementDeclaration(
   const name = statement.name
   let declaration = `double ${name} = ${value}.as.number;`
   const checks: string[] = []
-  const nativeCppType = libraryNativeBoundaryCppType(
-    elementType,
-    statement.nullable === true,
-    false,
-    statement.shape
-  )
+  const nativeCppType = libraryNativeBoundaryCppType(elementType, statement.nullable === true, false, statement.shape)
   const nativeValidExpression = compilerLibraryNativeRuntimeValueValidExpressionForTypeRef(
     context.libraries,
     statement.typeRef
@@ -1987,7 +1929,7 @@ function emitForOfElementDeclaration(
   } else if (elementType === 'unknown') {
     declaration = `inox_value ${name} = ${value};`
   } else if (elementType === 'boolean') {
-    declaration = `double ${name} = ((double)(${value}.as.boolean ? 1 : 0));`
+    declaration = `double ${name} = static_cast<double>(${value}.as.boolean ? 1 : 0);`
     checks.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_BOOL`, context))
   } else if (isManagedRuntimeReturnType(elementType)) {
     const expectedTag = cRuntimeValueTag(elementType)
@@ -2038,7 +1980,11 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
     }
   }
 
-  const asyncResult = deps.emitPreparedAsyncResultStaticExpression(statement.init, context, preparedCallOut(statement.name))
+  const asyncResult = deps.emitPreparedAsyncResultStaticExpression(
+    statement.init,
+    context,
+    preparedCallOut(statement.name)
+  )
 
   if (asyncResult !== null && typeof asyncResult !== 'undefined') {
     registerAsyncResultVariableMetadata(statement, asyncResult, context)
@@ -2530,7 +2476,7 @@ export function emitSwitchStatement(statement: StatementNode, context: CFunction
   const breakTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_break'), throughFinally: false }
   const lines: string[] = []
   pushAllLines(lines, discriminant.lines)
-  lines.push(`switch ((int)${discriminant.expression}) {`)
+  lines.push(`switch (static_cast<int>(${discriminant.expression})) {`)
 
   for (const item of statement.cases) {
     const test = statementChild(item.test)
@@ -2559,22 +2505,22 @@ export function emitSwitchStatement(statement: StatementNode, context: CFunction
 
 function emitSwitchCaseLabel(expression: StatementNode | null | undefined, context: CFunctionContext): string {
   if (expression !== null && typeof expression !== 'undefined' && expression.type === 'NumberLiteral') {
-    return `(int)${expression.value}`
+    return `static_cast<int>(${expression.value})`
   }
 
   if (expression !== null && typeof expression !== 'undefined' && expression.type === 'BooleanLiteral') {
     if (expression.value) {
-      return '(int)1'
+      return 'static_cast<int>(1)'
     }
 
-    return '(int)0'
+    return 'static_cast<int>(0)'
   }
 
   if (expression !== null && typeof expression !== 'undefined' && expression.type === 'UnaryExpression') {
     const argument = expression.argument
 
     if (argument.type === 'NumberLiteral' && isSwitchCaseUnaryOperator(expression.operator)) {
-      return `(int)(${expression.operator}${argument.value})`
+      return `static_cast<int>(${expression.operator}${argument.value})`
     }
   }
 
@@ -3267,7 +3213,11 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return asyncResultConstructor.lines
   }
 
-  const asyncResult = deps.emitPreparedAsyncResultStaticExpression(statement.init, context, preparedCallOut(statement.name))
+  const asyncResult = deps.emitPreparedAsyncResultStaticExpression(
+    statement.init,
+    context,
+    preparedCallOut(statement.name)
+  )
 
   if (asyncResult !== null && typeof asyncResult !== 'undefined') {
     registerAsyncResultVariableMetadata(statement, asyncResult, context)
@@ -3357,9 +3307,7 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
 
   const nativeShape = variableDeclarationNativeShape(statement, context)
 
-  if (
-    libraryNativeBoundaryCppType(statement.valueType, statement.nullable === true, false, nativeShape) !== null
-  ) {
+  if (libraryNativeBoundaryCppType(statement.valueType, statement.nullable === true, false, nativeShape) !== null) {
     return emitRuntimeValueVariableDeclaration(statement, statement.init, context, statement.valueType, nativeShape)
   }
 
@@ -3458,12 +3406,7 @@ function materializeSynthesizedCompilerLibraryIndexOperation(
   }
 
   const libraries = cCompilerLibrarySetValue(context.libraries)
-  const operation = compilerLibraryOperationForReceiver(
-    libraries,
-    receiverTypeRef.typeId,
-    '',
-    'index-read'
-  )
+  const operation = compilerLibraryOperationForReceiver(libraries, receiverTypeRef.typeId, '', 'index-read')
 
   if (operation === null || (operation.variants ?? []).length > 0) {
     return
@@ -3478,10 +3421,8 @@ function materializeSynthesizedCompilerLibraryIndexOperation(
   expression.libraryCArgumentMethodNames = operation.cArgumentMethodNames ?? null
   expression.libraryCArgumentSources = operation.cArgumentSources ?? null
   expression.libraryCResultMode = operation.cResultMode ?? null
-  expression.libraryCReceiverAdapter = operation.cReceiverAdapter ?? defaultLibraryReceiverAdapter(
-    receiverTypeRef.typeId,
-    context
-  )
+  expression.libraryCReceiverAdapter =
+    operation.cReceiverAdapter ?? defaultLibraryReceiverAdapter(receiverTypeRef.typeId, context)
   expression.libraryCResultAdapter = operation.cResultAdapter ?? null
   expression.libraryCppType = operation.cResultMapping?.cppType ?? null
   expression.libraryOwned =
@@ -3699,10 +3640,7 @@ function isDynamicRuntimeValueDeclaration(statement: StatementNode, context: CFu
 
 function isRuntimeValueDeclarationValueType(valueType: string | null | undefined): boolean {
   return (
-    valueType === 'unknown' ||
-    isOpaqueRuntimeValueType(valueType) ||
-    valueType === 'bytes' ||
-    valueType === 'object'
+    valueType === 'unknown' || isOpaqueRuntimeValueType(valueType) || valueType === 'bytes' || valueType === 'object'
   )
 }
 
@@ -3721,7 +3659,7 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
   }
 
   if (expression.type === 'CallExpression') {
-    const libraryCall = deps.emitPreparedCompilerLibraryCallExpression(expression, context)
+    const libraryCall = deps.emitPreparedCompilerLibraryCallExpression(expression, context, { discard: true })
 
     if (libraryCall !== null) {
       const lines: string[] = []
@@ -3734,7 +3672,7 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
       return lines
     }
 
-    const classMethodCall = deps.emitPreparedClassMethodCallExpression(expression, context, {})
+    const classMethodCall = deps.emitPreparedClassMethodCallExpression(expression, context, { discard: true })
 
     if (classMethodCall !== null && typeof classMethodCall !== 'undefined') {
       if (classMethodCall.expression === '') {
@@ -3774,10 +3712,11 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
   if (expression.type === 'UpdateExpression') {
     const value = deps.emitPreparedUpdateExpression(expression, context)
 
-    const lines: string[] = []
-    pushAllLines(lines, value.lines)
-    lines.push(`${value.expression};`)
-    return lines
+    if (expression.prefix === false) {
+      return value.lines.slice(1)
+    }
+
+    return [`${value.expression.slice(1, value.expression.length - 1)};`]
   }
 
   if (expression.type === 'AssignmentExpression') {
@@ -3787,7 +3726,7 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
       return moduleValueAssignment
     }
 
-    const libraryAssignment = deps.emitPreparedCompilerLibraryCallExpression(expression, context)
+    const libraryAssignment = deps.emitPreparedCompilerLibraryCallExpression(expression, context, { discard: true })
 
     if (libraryAssignment !== null) {
       const lines = libraryAssignment.lines
@@ -3948,7 +3887,8 @@ function emitModuleValueAssignmentExpression(
 function shouldNormalizeCAsyncReturnArgument(argument: StatementNode, context: CFunctionContext): boolean {
   return (
     context.returnType !== 'async-result' &&
-    (argument.valueType === 'async-result' || statementDeps(context).inferExpressionType(argument, context) === 'async-result')
+    (argument.valueType === 'async-result' ||
+      statementDeps(context).inferExpressionType(argument, context) === 'async-result')
   )
 }
 
@@ -4155,8 +4095,9 @@ function pushFunctionReturnCompanionAssignments(
   context: CFunctionContext
 ): void {
   for (const output of context.returnFunctionCompanions) {
-    const source = preparedFunctionCompanionForPath(value.functionCompanions, output.path)
-      ?? referenceFunctionCompanionForPath(argument, output.path, context)
+    const source =
+      preparedFunctionCompanionForPath(value.functionCompanions, output.path) ??
+      referenceFunctionCompanionForPath(argument, output.path, context)
 
     if (source !== null) {
       lines.push(`if (${output.expression} != 0) *${output.expression} = ${source};`)

@@ -28,20 +28,8 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
     stringCall('charCodeAt', numberTypeRef, ['number'], [numberArgument()]),
     stringCall('concat', stringTypeRef, ['string-view'], [stringArgument()]),
     stringCall('endsWith', booleanTypeRef, ['string-view'], [stringArgument()]),
-    stringCall(
-      'includes',
-      booleanTypeRef,
-      ['string-view', 'optional-number'],
-      [stringArgument(), numberArgument()],
-      1
-    ),
-    stringCall(
-      'indexOf',
-      numberTypeRef,
-      ['string-view', 'optional-number'],
-      [stringArgument(), numberArgument()],
-      1
-    ),
+    stringCall('includes', booleanTypeRef, ['string-view', 'optional-number'], [stringArgument(), numberArgument()], 1),
+    stringCall('indexOf', numberTypeRef, ['string-view', 'optional-number'], [stringArgument(), numberArgument()], 1),
     stringCall(
       'lastIndexOf',
       numberTypeRef,
@@ -49,20 +37,8 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       [stringArgument(), numberArgument()],
       1
     ),
-    stringCall(
-      'padStart',
-      stringTypeRef,
-      ['number', 'optional-string-view'],
-      [numberArgument(), stringArgument()],
-      1
-    ),
-    stringCall(
-      'slice',
-      stringTypeRef,
-      ['number', 'optional-number'],
-      [numberArgument(), numberArgument()],
-      1
-    ),
+    stringCall('padStart', stringTypeRef, ['number', 'optional-string-view'], [numberArgument(), stringArgument()], 1),
+    stringCall('slice', stringTypeRef, ['number', 'optional-number'], [numberArgument(), numberArgument()], 1),
     stringCall('split', arrayTypeRef(stringTypeRef), ['string-view'], [stringArgument()]),
     stringCall('startsWith', booleanTypeRef, ['string-view'], [stringArgument()]),
     stringCall('toUpperCase', stringTypeRef, [], []),
@@ -120,7 +96,7 @@ function numberToString(): LibraryOperationDescriptor {
         maxArgs: 1,
         cExpression: 'inox::String::fromNumberRadix',
         cArgumentKinds: ['receiver-number', 'number'],
-        cArgumentAdapters: ['(int)($value)']
+        cArgumentAdapters: ['static_cast<int>($value)']
       }
     ]
   }

@@ -1813,7 +1813,7 @@ class Parser {
         continue
       }
 
-      if (this.isValue('++') || this.isValue('--')) {
+      if ((this.isValue('++') || this.isValue('--')) && this.current().line === this.previous().line) {
         const operator = this.advance()
         expression = createUpdateExpression(operator, expression, false)
         continue

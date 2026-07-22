@@ -16,12 +16,7 @@ test('global:console владеет declaration, operations и C++ facade loweri
   assert.match(consolePackage.declarationSource ?? '', /declare global/)
   assert.deepEqual(
     consolePackage.compilerPackage?.operations.map((operation) => operation.operationId),
-    [
-      'global:console#error',
-      'global:console#info',
-      'global:console#log',
-      'global:console#warn'
-    ]
+    ['global:console#error', 'global:console#info', 'global:console#log', 'global:console#warn']
   )
 
   const libraries = createCompilerLibrarySetFromDiscovered(discovered)
@@ -33,5 +28,5 @@ test('global:console владеет declaration, operations и C++ facade loweri
   assert.equal(call.typeRef?.name, 'void')
   assert.deepEqual(call.libraryRuntimeRequirements, ['global:console'])
   assert.match(result.code, /#include "inox\/console\.h"/)
-  assert.match(result.code, /console\.log\("ready %\.17g", \(\(double\)7\)\)/)
+  assert.match(result.code, /console\.log\("ready %\.17g", static_cast<double>\(7\)\)/)
 })

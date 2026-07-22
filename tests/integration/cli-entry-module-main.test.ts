@@ -55,19 +55,19 @@ export async function assertCliEntryModuleMain(compilerPath: string): Promise<vo
     const generatedDependencyHeader = await readFile(join(outDir, 'src/lib/value.h'), 'utf8')
     const generatedDeclaration = await readFile(join(outDir, 'src/lib/value.d.ts'), 'utf8')
 
-    assert.match(generated, /int main\(void\)/)
+    assert.match(generated, /int main\(\)/)
     assert.match(generatedDependency, /inox_mod_src_lib_value_ts_.*_init/)
-    assert.doesNotMatch(generatedDependency, /static [^\n]* localValue\(void\);/)
-    assert.doesNotMatch(generatedDependency, /static [^\n]* inox_mod_src_lib_value_ts_.*_localValue\(void\);/)
-    assert.doesNotMatch(generatedDependency, /static [^\n]* inox_mod_src_lib_value_ts_.*_exportedValue\(void\);/)
-    const localValueDefinition = generatedDependency.search(/\nstatic [^\n]* localValue\(void\) \{/)
-    const exportedValueDefinition = generatedDependency.search(/\ninox_value [^\n]*_exportedValue\(void\) \{/)
+    assert.doesNotMatch(generatedDependency, /static [^\n]* localValue\(\);/)
+    assert.doesNotMatch(generatedDependency, /static [^\n]* inox_mod_src_lib_value_ts_.*_localValue\(\);/)
+    assert.doesNotMatch(generatedDependency, /static [^\n]* inox_mod_src_lib_value_ts_.*_exportedValue\(\);/)
+    const localValueDefinition = generatedDependency.search(/\nstatic [^\n]* localValue\(\) \{/)
+    const exportedValueDefinition = generatedDependency.search(/\ninox_value [^\n]*_exportedValue\(\) \{/)
 
     assert.ok(localValueDefinition >= 0, 'missing localValue definition')
     assert.ok(exportedValueDefinition >= 0, 'missing exportedValue definition')
     assert.ok(localValueDefinition < exportedValueDefinition, 'localValue should be defined before exportedValue')
     assert.doesNotMatch(generatedDependencyHeader, /localValue/)
-    assert.match(generatedDependencyHeader, /inox_mod_src_lib_value_ts_.*_exportedValue\(void\);/)
+    assert.match(generatedDependencyHeader, /inox_mod_src_lib_value_ts_.*_exportedValue\(\);/)
     assert.match(generatedDeclaration, /export const value: string;/)
   } finally {
     await rm(workspace, {

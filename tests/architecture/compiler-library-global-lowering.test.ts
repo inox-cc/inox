@@ -35,8 +35,8 @@ test('package globals lower through generic member, index, optional argument and
   assert.match(result.code, /inox::host\.argv\[0(?:\.0)?\]/)
   assert.match(result.code, /inox::host\.exit\(\)/)
   assert.match(result.code, /inox::host\.exit\(2(?:\.0)?\)/)
-  assert.match(result.code, /\(inox::host\.exitCode = 3(?:\.0)?\)/)
-  assert.match(result.code, /\(inox::host\.argv\[0(?:\.0)?\] = 7(?:\.0)?\)/)
+  assert.match(result.code, /inox::host\.exitCode = 3(?:\.0)?;/)
+  assert.match(result.code, /inox::host\.argv\[0(?:\.0)?\] = 7(?:\.0)?;/)
 })
 
 test('package global result metadata preserves nested shapes and iterable TypeRef', () => {

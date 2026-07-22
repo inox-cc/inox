@@ -62,5 +62,5 @@ test('global:strings владеет primitive string declarations, operations и
   assert.match(result.code, /\.split\(/)
   assert.match(result.code, /\.charCodeAt\(/)
   assert.match(result.code, /inox::String::fromNumber\(12\)/)
-  assert.match(result.code, /inox::String::fromNumberRadix\(255, \(int\)\(16\)\)/)
+  assert.match(result.code, /inox::String::fromNumberRadix\(255, static_cast<int>\(16\)\)/)
 })

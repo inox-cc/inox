@@ -86,10 +86,7 @@ import { emitCompilerLibraryRuntimeInitializerDefinitions } from './library-init
 import { emitCPrelude, emitLibraryCPreludeIncludeLines, filterUnusedCPreludeIncludes } from './prelude.ts'
 import { collectCReferencedFunctionPrototypeNames } from './prototype-references.ts'
 import { resolveCRuntimePreludeRequirements, resolveLibraryRuntimeCPreludeIncludes } from './runtime-plan.ts'
-import {
-  cObjectShapeFromMetadata,
-  cTypeRefMapValue
-} from './types.ts'
+import { cObjectShapeFromMetadata, cTypeRefMapValue } from './types.ts'
 import type {
   CCallbackWrapper,
   CClassInfo,
@@ -416,11 +413,7 @@ export function emitCModuleSource(
   const functions: AnyNode[] = []
   const context = createCModuleBaseContext(plan, diagnostics, deps, options.libraries)
   context.exceptionValueShape = cObjectShapeFromMetadata(
-    compilerLibraryIntrinsicResultCShape(
-      options.libraries,
-      'exception-value',
-      { line: 1, column: 1 }
-    )
+    compilerLibraryIntrinsicResultCShape(options.libraries, 'exception-value', { line: 1, column: 1 })
   )
   const runtimeRequirements = runtimeRequirementSetFromArray(collectIrRuntimeRequirements(irPrograms))
   const emitsMain = plan.isEntry || plan.initName === null || typeof plan.initName === 'undefined'
@@ -725,7 +718,7 @@ export function emitCModuleHeader(
   lines.push('')
 
   if (plan.initName !== null && typeof plan.initName !== 'undefined') {
-    lines.push(`void ${plan.initName}(void);`)
+    lines.push(`void ${plan.initName}();`)
   }
 
   for (let functionIndex = 0; functionIndex < exportedFunctions.length; functionIndex = functionIndex + 1) {
@@ -1216,9 +1209,7 @@ function emitRuntimeFunctionPointerAdapterTargetCall(
       `  inox_status inox_adapter_status = inox_callback_call(${adapter.target}, inox_adapter_args, ${args.length}, &inox_adapter_result);`
     )
   } else {
-    lines.push(
-      `  inox_status inox_adapter_status = inox_callback_call(${adapter.target}, 0, 0, &inox_adapter_result);`
-    )
+    lines.push(`  inox_status inox_adapter_status = inox_callback_call(${adapter.target}, 0, 0, &inox_adapter_result);`)
   }
 
   lines.push('  if (inox_adapter_status != INOX_OK) {')
@@ -1499,14 +1490,7 @@ function emitFunctionPointerAdapterTargetArgs(
         bridgeLines,
         cleanupLines
       )
-      args.push(
-        emitFunctionPointerNativeBoundaryArgument(
-          name,
-          value,
-          adapter.functionType,
-          targetFunctionType
-        )
-      )
+      args.push(emitFunctionPointerNativeBoundaryArgument(name, value, adapter.functionType, targetFunctionType))
       continue
     }
 
@@ -1572,7 +1556,6 @@ function emitFunctionPointerAdapterRuntimeBridgeForInfos(
   bridgeLines: string[],
   cleanupLines: string[]
 ): string {
-
   if (!functionPointerParamNeedsRuntimeBridge(expectedInfo, targetInfo)) {
     return name
   }
@@ -1591,9 +1574,7 @@ function emitFunctionPointerAdapterRuntimeBridgeForInfos(
   const bridgeValue = `inox_adapter_callback_${bridgeIndex}`
   const adapterReturnType = emitFunctionPointerReturnType(adapter.functionType)
   const failureReturn =
-    adapterReturnType === 'void'
-      ? 'return;'
-      : `return ${cFunctionPointerAdapterDefaultReturnValue(adapterReturnType)};`
+    adapterReturnType === 'void' ? 'return;' : `return ${cFunctionPointerAdapterDefaultReturnValue(adapterReturnType)};`
 
   bridgeLines.push(
     `  ${runtimeAdapter.contextTypeName}* ${bridgeContext} = (${runtimeAdapter.contextTypeName}*)inox_default_alloc(0, sizeof(${runtimeAdapter.contextTypeName}), _Alignof(${runtimeAdapter.contextTypeName}));`
@@ -1943,7 +1924,11 @@ function createCModuleBaseContext(
   context.functionNames = createCModuleFunctionNames(plan)
   context.externalEventLoopFunctions = collectCModuleExternalEventLoopFunctionNames(plan, deps, new Map(), new Set())
   context.callbackWrappers = collectCallbackWrappers(irPrograms, context, deps.callbackLoweringDependencies)
-  context.asyncResultChainWrappers = collectAsyncResultChainWrappers(irPrograms, context, deps.asyncResultChainLoweringDependencies)
+  context.asyncResultChainWrappers = collectAsyncResultChainWrappers(
+    irPrograms,
+    context,
+    deps.asyncResultChainLoweringDependencies
+  )
   context.asyncTaskWrappers = collectAsyncTaskWrappers(functionEntries, context, deps.asyncTaskLoweringDependencies)
 
   return context
@@ -2826,7 +2811,7 @@ function emitCModuleInitFunction(
   pushIndentedCModuleLines(bodyLines, emitEventLoopDrain(context))
   const lines: string[] = []
 
-  lines.push(`void ${plan.initName}(void) {`)
+  lines.push(`void ${plan.initName}() {`)
   lines.push('  static bool inox_initialized = false;')
   lines.push('  if (inox_initialized) return;')
   lines.push('  inox_initialized = true;')
@@ -2872,7 +2857,7 @@ function emitCModuleMainFunction(
   pushIndentedCModuleLines(bodyLines, deps.emitStatementList(body, context))
   const lines: string[] = []
 
-  lines.push('static void inox_main(void) {')
+  lines.push('static void inox_main() {')
   pushIndentedCModuleLines(lines, emitLoopFlowDeclarations(context))
   pushIndentedCModuleLines(lines, emitMainReturnValueDeclarations(context))
   pushIndentedCModuleLines(lines, emitReturnFlowDeclarations(context))
@@ -2894,7 +2879,7 @@ function emitCModuleMainFunction(
       lines.push(`  return ${context.runtimeEntrypointAdapter.cFunction}(argc, argv, inox_main);`)
     }
   } else {
-    lines.push('int main(void) {')
+    lines.push('int main() {')
     lines.push('  return inox::main(inox_main);')
   }
 

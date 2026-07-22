@@ -52,18 +52,18 @@ await checkFetch()
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
-  const checkFetch = functionSource(source, 'static void checkFetch(void) {')
+  const checkFetch = functionSource(source, 'static void checkFetch() {')
 
-  assert.doesNotMatch(source, /^static void checkFetch\(void\);$/m)
-  assert.match(checkFetch, /static void checkFetch\(void\) \{\n  inox::Promise inox_library_asyncResult_\d+;/)
+  assert.doesNotMatch(source, /^static void checkFetch\(\);$/m)
+  assert.match(checkFetch, /static void checkFetch\(\) \{\n  inox::Promise inox_library_asyncResult_\d+;/)
   assert.match(checkFetch, /\n  \{ \/\/ try_0\n/)
-  assert.doesNotMatch(checkFetch, /static void checkFetch\(void\) \{\n\n  \{/)
+  assert.doesNotMatch(checkFetch, /static void checkFetch\(\) \{\n\n  \{/)
   assert.doesNotMatch(checkFetch, /\n  \{\n    \{/)
   assert.match(
     checkFetch,
     /inox_library_asyncResult_(\d+) = inox::fetch\("http:\/\/example.com\/"\);\n    if \(!\(inox_library_asyncResult_\1\.valid\(\)\)\) return;\n    auto (inox_await_\d+) = \(inox_library_asyncResult_\1\)\.awaitValue\(\);[\s\S]*?auto (inox_await_converted_\d+) = inox::FetchResponse\(\2\);\n    auto res = \3;/
   )
-  assert.match(checkFetch, /console\.log\("Status %\.17g", \(\(double\)res\.status\)\);/)
+  assert.match(checkFetch, /console\.log\("Status %\.17g", static_cast<double>\(res\.status\)\);/)
   assert.match(
     checkFetch,
     /inox_library_asyncResult_(\d+) = res\.text\(\);\n    if \(!\(inox_library_asyncResult_\1\.valid\(\)\)\) return;\n    auto inox_await_value_\d+ = \(inox_library_asyncResult_\1\)\.awaitValue\(\);[\s\S]*?auto txt = inox::String\(inox_await_value_\d+\);/
@@ -77,7 +77,7 @@ await checkFetch()
   )
   assert.match(
     checkFetch,
-    /auto (inox_await_\d+) = \(inox_library_asyncResult_\d+\)\.awaitValue\(\);\n\s+if \(inox::thrown\(\)\) goto catch_0;[\s\S]*?auto (inox_await_converted_\d+) = inox::FetchResponse\(\1\);\n\s+auto res = \2;\n\n\s+console\.log\("Status %\.17g", \(\(double\)res\.status\)\);/
+    /auto (inox_await_\d+) = \(inox_library_asyncResult_\d+\)\.awaitValue\(\);\n\s+if \(inox::thrown\(\)\) goto catch_0;[\s\S]*?auto (inox_await_converted_\d+) = inox::FetchResponse\(\1\);\n\s+auto res = \2;\n\n\s+console\.log\("Status %\.17g", static_cast<double>\(res\.status\)\);/
   )
   assert.match(
     checkFetch,
@@ -151,7 +151,7 @@ await checkFetchFacade()
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
-  const checkFetchFacade = functionSource(source, 'static void checkFetchFacade(void) {')
+  const checkFetchFacade = functionSource(source, 'static void checkFetchFacade() {')
 
   assert.match(checkFetchFacade, /auto controller = inox::AbortController\(\);/)
   assert.match(checkFetchFacade, /controller\.abort\(\);/)

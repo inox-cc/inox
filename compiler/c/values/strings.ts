@@ -123,7 +123,10 @@ export type StringLoweringDependencies = {
   emitPreparedNumberExpression(expression: AnyNode, context: StringCContext): PreparedExpression
   emitPreparedNativeClassStringFieldExpression(expression: AnyNode, context: StringCContext): PreparedExpression | null
   emitPreparedConfiguredRuntimeStringExpression(expression: AnyNode, context: StringCContext): PreparedExpression | null
-  emitPreparedIntrinsicStringConversionExpression(expression: AnyNode, context: StringCContext): PreparedExpression | null
+  emitPreparedIntrinsicStringConversionExpression(
+    expression: AnyNode,
+    context: StringCContext
+  ): PreparedExpression | null
   emitReference(expression: AnyNode, context: StringCContext): string
   inferExpressionType(expression: AnyNode, context: StringCContext): string
   isBoxedRuntimeStringName(name: string, context: StringCContext): boolean
@@ -691,8 +694,7 @@ export function emitPreparedStringBytesOperand(
     const name = expression.path[0]
     const cppValueTypes = context.cppValueTypes
     const moduleValueCppTypes = context.moduleValueCppTypes
-    const directCppType =
-      cppValueTypes?.get(name) ?? moduleValueCppTypes?.get(name)
+    const directCppType = cppValueTypes?.get(name) ?? moduleValueCppTypes?.get(name)
 
     if (directCppType === 'inox::String') {
       const reference = stringDeps(context).emitReference(expression, context)
@@ -768,9 +770,7 @@ export function emitPreparedStringBytesOperand(
 
       if (
         (cppStringValues !== null && typeof cppStringValues !== 'undefined' && cppStringValues.has(name)) ||
-        (cppValueTypes !== null &&
-          typeof cppValueTypes !== 'undefined' &&
-          cppValueTypes.get(name) === 'inox::String')
+        (cppValueTypes !== null && typeof cppValueTypes !== 'undefined' && cppValueTypes.get(name) === 'inox::String')
       ) {
         return {
           lines: [],
@@ -984,9 +984,7 @@ function emitPreparedCppStringExpression(
 
     if (
       (cppStringValues !== null && typeof cppStringValues !== 'undefined' && cppStringValues.has(name)) ||
-      (cppValueTypes !== null &&
-        typeof cppValueTypes !== 'undefined' &&
-        cppValueTypes.get(name) === 'inox::String')
+      (cppValueTypes !== null && typeof cppValueTypes !== 'undefined' && cppValueTypes.get(name) === 'inox::String')
     ) {
       return {
         lines: [],
@@ -1976,7 +1974,7 @@ function emitPreparedTemplatePlaceholderFormat(expression: AnyNode, context: Str
     return {
       lines: value.lines,
       format: '%.17g',
-      values: [`((double)${value.expression})`]
+      values: [`static_cast<double>(${value.expression})`]
     }
   }
 
@@ -2026,7 +2024,7 @@ function emitPreparedStringBytesFormat(operand: PreparedStringBytesOperand): Pre
   return {
     lines: operand.lines,
     format: '%.*s',
-    values: [`(int)${operand.length}`, operand.bytes]
+    values: [`static_cast<int>(${operand.length})`, operand.bytes]
   }
 }
 

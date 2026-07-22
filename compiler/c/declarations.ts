@@ -51,10 +51,7 @@ import {
   emitCObjectFunctionFieldName,
   utf8ByteLength
 } from './identifiers.ts'
-import {
-  emitRuntimeNullableValueCheck,
-  emitRuntimeValueCheck
-} from './runtime-values.ts'
+import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from './runtime-values.ts'
 import { runtimeTypeAlternativeValidExpressions } from './runtime-type-alternatives.ts'
 import type {
   CClassInfo,
@@ -63,7 +60,7 @@ import type {
   CObjectShape,
   CObjectShapeField,
   CPreparedFunctionCompanion,
-  CPreparedExpression as PreparedExpression,
+  CPreparedExpression as PreparedExpression
 } from './types.ts'
 import { cFunctionTypeValue } from './types.ts'
 import {
@@ -247,10 +244,6 @@ function joinDeclarationParams(params: string[]): string {
 }
 
 function declarationParamList(params: string[]): string {
-  if (params.length === 0) {
-    return 'void'
-  }
-
   return joinDeclarationParams(params)
 }
 
@@ -480,10 +473,7 @@ function registerFunctionParamsInContext(
   }
 }
 
-function registerFunctionParamObjectDeclaredType(
-  context: CDeclarationFunctionContext,
-  param: CFunctionParam
-): void {
+function registerFunctionParamObjectDeclaredType(context: CDeclarationFunctionContext, param: CFunctionParam): void {
   const declaredType = param.declaredType ?? param.shape?.builtin
 
   if (declaredType !== null && typeof declaredType !== 'undefined' && declaredType !== '') {
@@ -523,9 +513,7 @@ export function emitFunctionHead(statement: CNode, context: CEmitContext): strin
 
   if (isThrowingFunctionName(statement.name, context)) {
     if (returnType !== 'void') {
-      params.push(
-        `${emitThrowingFunctionOutType(returnType, returnNullable, returnShape)}* inox_out`
-      )
+      params.push(`${emitThrowingFunctionOutType(returnType, returnNullable, returnShape)}* inox_out`)
     }
 
     pushFunctionReturnCompanionParams(params, returnCompanions)
@@ -569,10 +557,7 @@ function functionReturnCompanions(
   return companions
 }
 
-function pushFunctionReturnCompanionParams(
-  params: string[],
-  companions: CPreparedFunctionCompanion[]
-): void {
+function pushFunctionReturnCompanionParams(params: string[], companions: CPreparedFunctionCompanion[]): void {
   for (const companion of companions) {
     params.push(
       emitFunctionPointerOutParameter(
@@ -764,13 +749,7 @@ function emitObjectFunctionFieldParam(
     return emitFunctionPointerParameter(name, field.functionType, seenTypes)
   }
 
-  return emitFunctionParameter(
-    name,
-    field.functionType,
-    context,
-    loc,
-    seenTypes
-  )
+  return emitFunctionParameter(name, field.functionType, context, loc, seenTypes)
 }
 
 function emitFunctionHeadParam(param: CFunctionParam, index: number, statement: CNode, context: CEmitContext): string {
@@ -1319,7 +1298,10 @@ function physicalReturnShape(
 }
 
 function hasPhysicalNativeReturn(declaration: CNode, context: CEmitContext): boolean {
-  return !cBooleanValueIsTrue(declaration.async) && cTypeRefNativeShape(declaration.returnTypeRef, context.libraries) !== null
+  return (
+    !cBooleanValueIsTrue(declaration.async) &&
+    cTypeRefNativeShape(declaration.returnTypeRef, context.libraries) !== null
+  )
 }
 
 function resolveCFunctionReturnInfo(statement: CNode, context: CEmitContext): CFunctionReturnInfo {
@@ -1413,7 +1395,7 @@ export function emitMainWrapper(
 
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(body, context))
 
-  lines.push('static void inox_main(void) {')
+  lines.push('static void inox_main() {')
   pushIndentedDeclarationLines(lines, emitLoopFlowDeclarations(context))
   pushIndentedDeclarationLines(lines, emitMainReturnValueDeclarations(context))
   pushIndentedDeclarationLines(lines, emitReturnFlowDeclarations(context))
@@ -1435,7 +1417,7 @@ export function emitMainWrapper(
       lines.push(`  return ${context.runtimeEntrypointAdapter.cFunction}(argc, argv, inox_main);`)
     }
   } else {
-    lines.push('int main(void) {')
+    lines.push('int main() {')
     lines.push('  return inox::main(inox_main);')
   }
 
@@ -1482,9 +1464,10 @@ function emitRuntimeParamPreludeForParam(
 
   if (nativeValidExpression !== null) {
     const valid = nativeValidExpression.split('$value').join(localName)
-    const mismatch = param.nullable === true || param.optional === true
-      ? `${localName}.tag != INOX_TAG_NULL && ${localName}.tag != INOX_TAG_UNDEFINED && !(${valid})`
-      : `!(${valid})`
+    const mismatch =
+      param.nullable === true || param.optional === true
+        ? `${localName}.tag != INOX_TAG_NULL && ${localName}.tag != INOX_TAG_UNDEFINED && !(${valid})`
+        : `!(${valid})`
 
     lines.push(emitRuntimeTypeCheck(mismatch, context))
     return lines
@@ -1499,9 +1482,10 @@ function emitRuntimeParamPreludeForParam(
   if (alternativeValidExpressions !== null) {
     if (alternativeValidExpressions.length > 0) {
       const valid = alternativeValidExpressions.join(' || ')
-      const mismatch = param.nullable === true || param.optional === true
-        ? `${localName}.tag != INOX_TAG_NULL && ${localName}.tag != INOX_TAG_UNDEFINED && !(${valid})`
-        : `!(${valid})`
+      const mismatch =
+        param.nullable === true || param.optional === true
+          ? `${localName}.tag != INOX_TAG_NULL && ${localName}.tag != INOX_TAG_UNDEFINED && !(${valid})`
+          : `!(${valid})`
 
       lines.push(emitRuntimeTypeCheck(mismatch, context))
     }
@@ -1644,12 +1628,7 @@ function emitDefaultRuntimeParamPreludeForParam(
   const value = param.defaultValue
   const localName = emitCLocalName(param.name)
 
-  if (
-    param.valueType === 'number' &&
-    value !== null &&
-    typeof value !== 'undefined' &&
-    param.optional === true
-  ) {
+  if (param.valueType === 'number' && value !== null && typeof value !== 'undefined' && param.optional === true) {
     const paramName = emitCScalarParamName(param.name)
     const prepared = deps.emitPreparedNumberExpression(value, context)
     const lines = [`if (${paramName}.tag == INOX_TAG_UNDEFINED) {`]
@@ -1725,12 +1704,7 @@ function emitDefaultRuntimeParamPreludeForParam(
     return lines
   }
 
-  if (
-    value !== null &&
-    typeof value !== 'undefined' &&
-    value.type === 'ArrayLiteral' &&
-    value.elements.length === 0
-  ) {
+  if (value !== null && typeof value !== 'undefined' && value.type === 'ArrayLiteral' && value.elements.length === 0) {
     const temp = nextCName(context, `${param.name}_default`)
     const created = nextCName(context, `${param.name}_default_sequence`)
     const materialization = compilerLibraryIntrinsicSequenceMaterialization(context.libraries, 'array-literal')

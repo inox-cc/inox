@@ -761,9 +761,7 @@ export function emitPreparedCompilerLibraryCallExpression(
       } else {
         const adaptedCall = applyCompilerLibraryValueAdapter(callExpression, resultAdapter)
         const boxedCall =
-          item.valueType === 'boolean'
-            ? `inox_bool_value(${adaptedCall})`
-            : `inox_number_value(${adaptedCall})`
+          item.valueType === 'boolean' ? `inox_bool_value(${adaptedCall})` : `inox_number_value(${adaptedCall})`
 
         lines.push(`auto ${out} = ((${optionalReceiverCondition}) ? ${boxedCall} : inox_undefined_value());`)
       }
@@ -800,6 +798,10 @@ export function emitPreparedCompilerLibraryCallExpression(
     callExpression = `((${optionalReceiverCondition}) ? ${callExpression} : ${undefinedExpression})`
   }
 
+  if (options?.discard === true && item.valueType !== 'async-result') {
+    return emitDiscardedCompilerLibraryCall(item, context, dependencies, lines, callExpression, cppType)
+  }
+
   if (item.valueType === 'async-result') {
     const asyncResultValueType = item.asyncResultValueType ?? 'unknown'
     const rejectionValueType = item.asyncResultRejectionValueType ?? 'unknown'
@@ -821,10 +823,7 @@ export function emitPreparedCompilerLibraryCallExpression(
     registerOwnedAsyncResult(context, out, asyncResultValueType, rejectionValueType)
     lines.push(`${out} = ${callExpression};`)
     lines.push(
-      emitRuntimeTypeCheck(
-        `!(${compilerLibraryIntrinsicAsyncResultCValidExpression(context.libraries, out)})`,
-        context
-      )
+      emitRuntimeTypeCheck(`!(${compilerLibraryIntrinsicAsyncResultCValidExpression(context.libraries, out)})`, context)
     )
 
     return {
@@ -913,6 +912,43 @@ export function emitPreparedCompilerLibraryCallExpression(
     valueType: item.valueType ?? undefined,
     owned: item.libraryOwned === true
   }
+}
+
+function emitDiscardedCompilerLibraryCall(
+  item: CompilerLibraryExpressionNode,
+  context: CFunctionContext,
+  dependencies: CompilerLibraryLoweringDependencies,
+  lines: string[],
+  callExpression: string,
+  cppType: string
+): PreparedExpression {
+  const expression = discardedCompilerLibraryCallExpression(callExpression, item.libraryCCallStyle)
+
+  if (item.libraryCFailureMode === 'invalid-result') {
+    lines.push(emitRuntimeTypeCheck(`!(${expression}).valid()`, context))
+  } else {
+    lines.push(`${expression};`)
+    pushCompilerLibraryFailureCheck(lines, item.libraryCFailureMode, '', context, dependencies)
+  }
+
+  return {
+    lines,
+    expression: '',
+    cppType,
+    valueType: item.valueType ?? undefined
+  }
+}
+
+function discardedCompilerLibraryCallExpression(expression: string, callStyle: string | null | undefined): string {
+  if (
+    (callStyle === 'index-assignment' || callStyle === 'member-assignment') &&
+    expression.startsWith('(') &&
+    expression.endsWith(')')
+  ) {
+    return expression.slice(1, expression.length - 1)
+  }
+
+  return expression
 }
 
 function compilerLibraryScalarType(valueType: string | null | undefined): string | undefined {
@@ -1301,12 +1337,7 @@ function compilerLibraryOptionalReceiverCondition(
   cppType: string | null | undefined,
   context: CFunctionContext
 ): string | null {
-  if (
-    cppType === null ||
-    typeof cppType === 'undefined' ||
-    cppType === 'inox::Value' ||
-    cppType === 'inox_value'
-  ) {
+  if (cppType === null || typeof cppType === 'undefined' || cppType === 'inox::Value' || cppType === 'inox_value') {
     return `${expression}.tag != INOX_TAG_NULL && ${expression}.tag != INOX_TAG_UNDEFINED`
   }
 

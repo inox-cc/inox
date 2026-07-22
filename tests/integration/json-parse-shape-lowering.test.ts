@@ -82,7 +82,8 @@ try {
   ) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /auto inox_library_object_\d+ = JSON\.parse\("\{"\);/)
+  assert.match(source, /JSON\.parse\("\{"\);/)
+  assert.doesNotMatch(source, /auto inox_library_object_\d+ = JSON\.parse/)
   assert.match(source, /if \(inox::thrown\(\)\) goto catch_\d+;/)
   assert.match(source, /auto error = inox::take_exception\(\);/)
   assert.doesNotMatch(source, /inox::throw_value\(inox_json_error_\d+\);/)

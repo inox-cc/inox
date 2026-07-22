@@ -44,8 +44,11 @@ for (const a of foo.v) {
   ) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.doesNotMatch(source, /static void inox_main\(void\) \{\n  \{/)
-  assert.match(source, /\n  auto foo = JSON\.parse\("\{\\"v\\":\[\{\\"1\\":2\},\{\\"3\\":4,\\"5\\":\\"text\\"\}\]\}"\);/)
+  assert.doesNotMatch(source, /static void inox_main\(\) \{\n  \{/)
+  assert.match(
+    source,
+    /\n  auto foo = JSON\.parse\("\{\\"v\\":\[\{\\"1\\":2\},\{\\"3\\":4,\\"5\\":\\"text\\"\}\]\}"\);/
+  )
   assert.match(source, /if \(inox::thrown\(\)\) return;/)
   assert.doesNotMatch(source, /\n  inox::Value b;/)
   assert.doesNotMatch(source, /\n  inox::Value c;/)
@@ -59,16 +62,25 @@ for (const a of foo.v) {
   assert.match(source, /inox_value a = inox_library_value_\d+;/)
   assert.doesNotMatch(source, /ArrayStorage|->items|inox_for_array_/)
   assert.match(source, /\n    auto b = Object\.values\(inox::Value\(a\)\);\n    if \(inox::thrown\(\)\) return;/)
-  assert.doesNotMatch(source, /auto inox_values_\d+ = Object\.values\(a\);\n    if \(inox::thrown\(\)\) return;\n    inox::Value b = inox_values_\d+;/)
+  assert.doesNotMatch(
+    source,
+    /auto inox_values_\d+ = Object\.values\(a\);\n    if \(inox::thrown\(\)\) return;\n    inox::Value b = inox_values_\d+;/
+  )
   assert.match(source, /auto inox_library_result_\d+ = inox_library_object_\d+\.get\(0\);/)
   assert.match(source, /auto c = inox_library_result_\d+;/)
   assert.doesNotMatch(source, /\n    inox::Value c = inox_object_value_\d+;/)
   assert.doesNotMatch(source, /inox::Value c = inox::adopt\(inox_object_value_\d+\.release\(\)\);/)
   assert.match(source, /\n    auto d = Object\.entries\(inox::Value\(a\)\);\n    if \(inox::thrown\(\)\) return;/)
-  assert.doesNotMatch(source, /auto inox_entries_\d+ = Object\.entries\(a\);\n    if \(inox::thrown\(\)\) return;\n    inox::Value d = inox_entries_\d+;/)
+  assert.doesNotMatch(
+    source,
+    /auto inox_entries_\d+ = Object\.entries\(a\);\n    if \(inox::thrown\(\)\) return;\n    inox::Value d = inox_entries_\d+;/
+  )
   assert.equal(source.match(/auto inox_library_result_\d+ = inox_library_object_\d+\.get\(0\);/g)?.length, 1)
   assert.match(source, /auto e = inox_library_object_\d+\.get\(0\);/)
-  assert.doesNotMatch(source, /if \(e\.tag != INOX_TAG_UNDEFINED && \(e\.tag != INOX_TAG_ARRAY \|\| e\.as\.ref == 0\)\) return;/)
+  assert.doesNotMatch(
+    source,
+    /if \(e\.tag != INOX_TAG_UNDEFINED && \(e\.tag != INOX_TAG_ARRAY \|\| e\.as\.ref == 0\)\) return;/
+  )
   assert.doesNotMatch(source, /\n    inox::Value e = inox_object_entry_\d+;/)
   assert.doesNotMatch(source, /inox::Value e = inox::adopt\(inox_object_entry_\d+\.release\(\)\);/)
   assert.doesNotMatch(source, /inox::object_values\(a, inox_object_values_\d+\)/)

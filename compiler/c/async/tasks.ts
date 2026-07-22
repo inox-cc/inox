@@ -1377,11 +1377,7 @@ function splitAsyncTaskLeadingPrefixStatements(statements: AsyncTaskAstNode[]): 
 }
 
 function isAsyncTaskDirectAwaitStatementShape(statement: AsyncTaskAstNode | null | undefined): boolean {
-  if (
-    statement === null ||
-    typeof statement === 'undefined' ||
-    statement.type !== 'VariableDeclaration'
-  ) {
+  if (statement === null || typeof statement === 'undefined' || statement.type !== 'VariableDeclaration') {
     return false
   }
 
@@ -1885,7 +1881,12 @@ function resolveAsyncTaskAwaitStepsAndTrailingStatements(
       continue
     }
 
-    const localAsyncResultAwait = resolveAsyncTaskLocalAsyncResultAwaitStep(statement, nextStatement, context, awaits.length)
+    const localAsyncResultAwait = resolveAsyncTaskLocalAsyncResultAwaitStep(
+      statement,
+      nextStatement,
+      context,
+      awaits.length
+    )
 
     if (localAsyncResultAwait !== null && typeof localAsyncResultAwait !== 'undefined') {
       awaits.push(localAsyncResultAwait)
@@ -1918,11 +1919,7 @@ function resolveAsyncTaskDirectAwaitStep(
   context: AsyncTaskPlannerContext,
   index: number
 ): CAsyncTaskAwaitStep | null {
-  if (
-    statement === null ||
-    typeof statement === 'undefined' ||
-    statement.type !== 'VariableDeclaration'
-  ) {
+  if (statement === null || typeof statement === 'undefined' || statement.type !== 'VariableDeclaration') {
     return null
   }
 
@@ -2083,7 +2080,10 @@ function resolveAsyncTaskLocalAsyncResultAwaitStep(
       shape = awaitStatement.shape
     } else if (init.shape !== null && typeof init.shape !== 'undefined') {
       shape = init.shape
-    } else if (awaitedAsyncResultExpression.shape !== null && typeof awaitedAsyncResultExpression.shape !== 'undefined') {
+    } else if (
+      awaitedAsyncResultExpression.shape !== null &&
+      typeof awaitedAsyncResultExpression.shape !== 'undefined'
+    ) {
       shape = awaitedAsyncResultExpression.shape
     } else {
       shape = null
@@ -2759,7 +2759,7 @@ function emitAsyncTaskScheduleStatusCheck(
     `  inox_status reject_status = ${asyncTaskProviderRejectExpression(
       libraries,
       'frame->asyncResult',
-      'inox_number_value((inox_number)status)'
+      'inox_number_value(static_cast<inox_number>(status))'
     )};`
   )
   lines.push(`  ${wrapper.finalizerName}(frame);`)
@@ -2966,11 +2966,9 @@ function emitPreparedAsyncTaskAsyncResultSourceExpression(
     return rejected
   }
 
-  const libraryCall = asyncTaskDeps(context).emitPreparedCompilerLibraryCallExpression(
-    expression,
-    context,
-    { owned: false }
-  )
+  const libraryCall = asyncTaskDeps(context).emitPreparedCompilerLibraryCallExpression(expression, context, {
+    owned: false
+  })
 
   if (libraryCall !== null && asyncTaskDeps(context).isCompilerLibraryAsyncResultExpression(expression)) {
     const lines: string[] = []
@@ -3333,9 +3331,7 @@ function emitPreparedAsyncTaskAwaitedAsyncResultChainForWrapper(
   lines.push(`${providerCppType} ${source};`)
   appendAsyncTaskLines(lines, value.lines)
   lines.push(`${source} = ${asyncTaskProviderResolvedExpression(context.libraries, value.expression)};`)
-  lines.push(
-    `status = ${asyncTaskProviderValidExpression(context.libraries, source)} ? INOX_OK : INOX_ERR_TYPE;`
-  )
+  lines.push(`status = ${asyncTaskProviderValidExpression(context.libraries, source)} ? INOX_OK : INOX_ERR_TYPE;`)
   appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, context.libraries, options, cleanupLines))
   lines.push(
     `frame->awaited = ${source}.${chainExpression}(${chainWrapper.name}, ${callbackContext.expression}, ${callbackContext.finalizer});`
@@ -3571,7 +3567,7 @@ function emitAsyncTaskResumeDeclaration(wrapper: CAsyncTaskWrapper, baseContext:
     `    return ${asyncTaskProviderRejectExpression(
       baseContext.libraries,
       'frame->asyncResult',
-      'inox_number_value((inox_number)INOX_ERR_TYPE)'
+      'inox_number_value(static_cast<inox_number>(INOX_ERR_TYPE))'
     )};`
   )
   lines.push('  }')
@@ -3678,7 +3674,7 @@ function emitAsyncTaskResumeCase(
       wrapper,
       item,
       baseContext.libraries,
-      'inox_number_value((inox_number)INOX_ERR_TYPE)'
+      'inox_number_value(static_cast<inox_number>(INOX_ERR_TYPE))'
     ),
     '    '
   )
@@ -3765,7 +3761,12 @@ function emitAsyncTaskFulfilledValueCheck(
   lines.push(`if (inox_value_input.tag != ${expectedTag}${refCheck}) {`)
   appendIndentedAsyncTaskLines(
     lines,
-    emitAsyncTaskRejectAndMaybeFinalizeLines(wrapper, item, libraries, 'inox_number_value((inox_number)INOX_ERR_TYPE)'),
+    emitAsyncTaskRejectAndMaybeFinalizeLines(
+      wrapper,
+      item,
+      libraries,
+      'inox_number_value(static_cast<inox_number>(INOX_ERR_TYPE))'
+    ),
     '  '
   )
   lines.push('}')
@@ -4082,7 +4083,7 @@ function emitAsyncTaskTryRejectHandlerCase(
         asyncTaskProviderRejectExpression(
           baseContext.libraries,
           'frame->asyncResult',
-          'inox_number_value((inox_number)INOX_ERR_TYPE)'
+          'inox_number_value(static_cast<inox_number>(INOX_ERR_TYPE))'
         )
       ),
       '    '

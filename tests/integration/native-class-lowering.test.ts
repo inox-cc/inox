@@ -107,7 +107,10 @@ console.log(box.payload)
   assert.match(result.code, /inox::Value payload/)
   assert.match(result.code, /Box box/)
   assert.match(result.code, /class Parent : public inox::Class<Parent>/)
-  assert.match(result.code, /const inox_class_descriptor Parent::inox_descriptor = inox::class_descriptor<Parent>\("Parent"\)/)
+  assert.match(
+    result.code,
+    /const inox_class_descriptor Parent::inox_descriptor = inox::class_descriptor<Parent>\("Parent"\)/
+  )
   assert.match(result.code, /inox_class_instance_ref_copy\(\s*&inox_default_allocator,\s*&Parent::inox_descriptor/)
   assert.doesNotMatch(result.code, /inox_retain\(payload\)/)
   assert.doesNotMatch(result.code, /Box::inox_descriptor/)
@@ -314,7 +317,10 @@ console.log(holder.label())
     target: 'cc'
   })
 
-  assert.match(result.code, /inox::class_assign_from_value\(\s*inox_value_\d+,\s*&Scope::inox_descriptor,\s*&this->scope\s*\)/)
+  assert.match(
+    result.code,
+    /inox::class_assign_from_value\(\s*inox_value_\d+,\s*&Scope::inox_descriptor,\s*&this->scope\s*\)/
+  )
   assert.doesNotMatch(result.code, /this->scope = inox_value_\d+;/)
 }
 
@@ -349,10 +355,7 @@ console.log(f.isPromise())
   assert.match(result.code, /inox::String name/)
   assert.match(result.code, /Foo\(const inox::String& name\);/)
   assert.match(result.code, /Foo::Foo\(const inox::String& name\) : name\(name\) \{\n\}/)
-  assert.match(
-    result.code,
-    /Foo f\{inox::String\("foo 1", 5\)\};|f = Foo\(inox::String\("foo 1", 5\)\);/
-  )
+  assert.match(result.code, /Foo f\{inox::String\("foo 1", 5\)\};|f = Foo\(inox::String\("foo 1", 5\)\);/)
   assert.doesNotMatch(result.code, /Foo\(const inox::Value& name\)/)
   assert.doesNotMatch(result.code, /Foo::Foo\(const inox::Value& name\)/)
   assert.doesNotMatch(result.code, /Foo\(const char\* name\)/)
@@ -410,7 +413,7 @@ f.test()
   const methodIndex = result.code.indexOf('void Foo::test()')
   const numberValueIndex = result.code.indexOf('static double v = 0;')
   const classValueIndex = result.code.indexOf('static Foo f;')
-  const mainIndex = result.code.indexOf('int main(void)')
+  const mainIndex = result.code.indexOf('int main()')
 
   assert.notEqual(methodIndex, -1, 'missing Foo::test definition')
   assert.notEqual(numberValueIndex, -1, 'missing number module value')

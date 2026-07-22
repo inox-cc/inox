@@ -26,7 +26,7 @@ console.log(value)
   const main = mainFunctionSource(result.code)
 
   assert.match(result.code, /#include "inox\/main\.h"/)
-  assert.match(result.code, /static void inox_main\(void\)/)
+  assert.match(result.code, /static void inox_main\(\)/)
   assert.doesNotMatch(appMain, /\ncleanup:/)
   assert.doesNotMatch(appMain, /goto cleanup;/)
   assert.doesNotMatch(appMain, /while \(inox_loop_has_work/)
@@ -52,7 +52,7 @@ console.log(value)
   const main = mainFunctionSource(source)
 
   assert.match(source, /#include "inox\/main\.h"/)
-  assert.match(source, /static void inox_main\(void\)/)
+  assert.match(source, /static void inox_main\(\)/)
   assert.doesNotMatch(appMain, /\ncleanup:/)
   assert.doesNotMatch(appMain, /goto cleanup;/)
   assert.doesNotMatch(appMain, /while \(inox_loop_has_work/)
@@ -88,10 +88,7 @@ console.log(value)
 }
 
 export function assertProcessMainEntryPathUsesStringView(): void {
-  const header = readFileSync(
-    new URL('../../stdlib/node/process/include/inox/process.h', import.meta.url),
-    'utf8'
-  )
+  const header = readFileSync(new URL('../../stdlib/node/process/include/inox/process.h', import.meta.url), 'utf8')
 
   assert.match(
     header,
@@ -116,11 +113,11 @@ main()
     }
   )
 
-  assert.match(result.code, /void inox_user_main\(void\)/)
-  assert.match(result.code, /static void inox_main\(void\)/)
+  assert.match(result.code, /void inox_user_main\(\)/)
+  assert.match(result.code, /static void inox_main\(\)/)
   assert.match(result.code, /inox_user_main\(\);/)
   assert.match(result.code, /return inox::main\(inox_main\);/)
-  assert.doesNotMatch(result.code, /void inox_main\(void\) \{\n  console\.log/)
+  assert.doesNotMatch(result.code, /void inox_main\(\) \{\n  console\.log/)
 }
 
 export function assertAwaitFunctionUsesExternalLoopRuntime(): void {
@@ -136,10 +133,10 @@ async function checkFetch() {
 
 await checkFetch()
 `)
-  const checkFetch = functionSource(source, 'static void checkFetch(void) {')
+  const checkFetch = functionSource(source, 'static void checkFetch() {')
   const main = mainFunctionSource(source)
 
-  assert.match(source, /static void checkFetch\(void\)/)
+  assert.match(source, /static void checkFetch\(\)/)
   assert.doesNotMatch(checkFetch, /inox::Loop/)
   assert.doesNotMatch(checkFetch, /while \(inox_loop_has_work/)
   assert.doesNotMatch(checkFetch, /\ncleanup:/)
@@ -180,7 +177,7 @@ function mainFunctionSource(source: string): string {
 }
 
 function appMainFunctionSource(source: string): string {
-  return functionSource(source, 'static void inox_main(void) {')
+  return functionSource(source, 'static void inox_main() {')
 }
 
 function functionSource(source: string, signatureStart: string): string {

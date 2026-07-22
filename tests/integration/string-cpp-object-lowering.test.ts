@@ -100,27 +100,18 @@ console.log(strNum, strBool, strNull, strTpl, numText, hexText)
   assert.match(source, /trimmed\.lastIndexOf\("i"\)/)
   assert.match(
     source,
-    /console\.log\("%.17g %.17g", \(\(double\)inox_library_result_\d+\), \(\(double\)inox_library_result_\d+\)\);/
+    /console\.log\("%.17g %.17g", static_cast<double>\(inox_library_result_\d+\), static_cast<double>\(inox_library_result_\d+\)\);/
   )
   assert.doesNotMatch(source, /\(\(double\)trimmed\.indexOf/)
   assert.match(source, /auto parts = inox::String\("alpha,beta", 10\)\.split\(","\);/)
   assert.match(source, /parts\.join\("\|"\)/)
   assert.match(source, /inox::String\("alpha,beta", 10\)\.split\(","\)/)
-  assert.match(
-    source,
-    /auto strNum = inox::String::fromValue\(inox::Value\(inox_number_value\(12\)\)\);/
-  )
-  assert.match(
-    source,
-    /auto strBool = inox::String::fromValue\(inox::Value\(inox_bool_value\(true\)\)\);/
-  )
-  assert.match(
-    source,
-    /auto strNull = inox::String::fromValue\(inox::Value\(inox_null_value\(\)\)\);/
-  )
-  assert.match(source, /auto strTpl = inox::String::fromFormat\("value %.17g", \(\(double\)12\)\);/)
+  assert.match(source, /auto strNum = inox::String::fromValue\(inox::Value\(inox_number_value\(12\)\)\);/)
+  assert.match(source, /auto strBool = inox::String::fromValue\(inox::Value\(inox_bool_value\(true\)\)\);/)
+  assert.match(source, /auto strNull = inox::String::fromValue\(inox::Value\(inox_null_value\(\)\)\);/)
+  assert.match(source, /auto strTpl = inox::String::fromFormat\("value %.17g", static_cast<double>\(12\)\);/)
   assert.match(source, /auto numText = inox::String::fromNumber\(12\);/)
-  assert.match(source, /auto hexText = inox::String::fromNumberRadix\(255, \(int\)\(16\)\);/)
+  assert.match(source, /auto hexText = inox::String::fromNumberRadix\(255, static_cast<int>\(16\)\);/)
   assert.doesNotMatch(source, /inox::Value parts = inox::String\("alpha,beta"\)\.split\(","\);/)
   assert.doesNotMatch(source, /inox_array_join\(&inox_default_allocator, parts/)
   assert.doesNotMatch(source, /inox::String::from(?:Literal|Number|NumberRadix|Format|Value)\(&inox_default_allocator/)

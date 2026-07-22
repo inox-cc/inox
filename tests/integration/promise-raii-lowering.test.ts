@@ -35,12 +35,12 @@ run()
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
-  const appMain = functionSource(source, 'static void inox_main(void) {')
-  const main = functionSource(source, 'int main(void) {')
+  const appMain = functionSource(source, 'static void inox_main() {')
+  const main = functionSource(source, 'int main() {')
 
   assert.match(source, /#include "inox\/promise\.h"/)
   assert.match(source, /#include "inox\/main\.h"/)
-  assert.match(source, /static void inox_main\(void\)/)
+  assert.match(source, /static void inox_main\(\)/)
   assert.doesNotMatch(appMain, /inox::RuntimeContext inox_runtime/)
   assert.doesNotMatch(main, /inox::RuntimeContext inox_runtime/)
   assert.doesNotMatch(source, /inox::Runtime inox_runtime;/)

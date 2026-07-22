@@ -44,8 +44,8 @@ console.log('label', text)
   const source = generatedTextFile(files, 'src/index.cc').code
 
   assert.match(source, /console\.log\("hello world"\);/)
-  assert.match(source, /console\.log\("num %.17g blabla", \(\(double\)v\)\);/)
-  assert.match(source, /auto text = inox::String::fromFormat\("value %.17g%%", \(\(double\)v\)\);/)
+  assert.match(source, /console\.log\("num %.17g blabla", static_cast<double>\(v\)\);/)
+  assert.match(source, /auto text = inox::String::fromFormat\("value %.17g%%", static_cast<double>\(v\)\);/)
   assert.match(source, /console\.log\(text\);/)
   assert.match(source, /console\.log\("label %s", text\);/)
   assert.doesNotMatch(source, /\\x25/)
@@ -217,10 +217,7 @@ console.log(response.status)
   }) as GeneratedTextFile[]
   const fetchSource = generatedTextFile(fetchFiles, 'src/index.cc').code
 
-  assert.match(
-    fetchSource,
-    /inox::fetch\("http:\/\/127\.0\.0\.1"\)/
-  )
+  assert.match(fetchSource, /inox::fetch\("http:\/\/127\.0\.0\.1"\)/)
   assert.doesNotMatch(fetchSource, /inox::fetch\(inox::StringView/)
 
   const processEntryHost = createMemoryCompilerHost(

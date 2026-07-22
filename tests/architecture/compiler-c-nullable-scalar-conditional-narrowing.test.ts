@@ -11,5 +11,5 @@ test('C++ lowering narrows nullable scalars in conditional branches', () => {
   )
 
   assert.match(result.code, /inox_conditional_/)
-  assert.match(result.code, /inox::String::fromFormat\("value %\.17g", \(\(double\)value\.as\.number\)\)/)
+  assert.match(result.code, /inox::String::fromFormat\("value %\.17g", static_cast<double>\(value\.as\.number\)\)/)
 })

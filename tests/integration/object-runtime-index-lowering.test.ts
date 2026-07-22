@@ -51,7 +51,10 @@ for (const a of foo.v) {
   assert.doesNotMatch(source, /ArrayStorage|->items|Array\.raw/)
   assert.doesNotMatch(source, /inox::object_(?:value|entry)_at/)
   assert.doesNotMatch(source, /Array\(inox_(?:values|entries)_\d+\)\.get\(0\)/)
-  assert.match(source, /if \(\(inox_library_value_\d+\.tag != INOX_TAG_OBJECT && inox_library_value_\d+\.tag != INOX_TAG_CLASS_INSTANCE\)/)
+  assert.match(
+    source,
+    /if \(\(inox_library_value_\d+\.tag != INOX_TAG_OBJECT && inox_library_value_\d+\.tag != INOX_TAG_CLASS_INSTANCE\)/
+  )
   assert.doesNotMatch(source, /inox_object_values\(&inox_default_allocator, a, &inox_object_values_\d+\)/)
   assert.doesNotMatch(source, /inox_object_entries\(&inox_default_allocator, a, &inox_object_entries_\d+\)/)
   assert.doesNotMatch(source, /inox_status inox_object_values_status_\d+/)
@@ -60,8 +63,8 @@ for (const a of foo.v) {
   assert.doesNotMatch(source, /if \(inox_object_entries_status_\d+ == INOX_ERR_FIELD\)/)
   assert.doesNotMatch(source, /inox_array_len\(inox_value_\d+, &inox_for_length_\d+\)/)
   assert.doesNotMatch(source, /inox_array_get\(inox_value_\d+, inox_for_index_\d+, &inox_for_value_\d+\)/)
-  assert.doesNotMatch(source, /int main\(void\) \{\n\s+inox::Value inox_object_value_\d+;/)
-  assert.doesNotMatch(source, /int main\(void\) \{\n\s+inox::Value inox_object_entry_\d+;/)
+  assert.doesNotMatch(source, /int main\(\) \{\n\s+inox::Value inox_object_value_\d+;/)
+  assert.doesNotMatch(source, /int main\(\) \{\n\s+inox::Value inox_object_entry_\d+;/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {
