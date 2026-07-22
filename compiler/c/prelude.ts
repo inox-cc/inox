@@ -87,6 +87,10 @@ export function filterUnusedCPreludeIncludes(code: string): string {
       continue
     }
 
+    if (line === '#include <new>' && !body.includes('new (')) {
+      continue
+    }
+
     filtered.push(line)
   }
 

@@ -86,7 +86,7 @@ import { emitCompilerLibraryRuntimeInitializerDefinitions } from './library-init
 import { emitCPrelude, emitLibraryCPreludeIncludeLines, filterUnusedCPreludeIncludes } from './prelude.ts'
 import { collectCReferencedFunctionPrototypeNames } from './prototype-references.ts'
 import { resolveCRuntimePreludeRequirements, resolveLibraryRuntimeCPreludeIncludes } from './runtime-plan.ts'
-import { cObjectShapeFromMetadata, cTypeRefMapValue } from './types.ts'
+import { cCompilerLibrarySetValue, cObjectShapeFromMetadata, cTypeRefMapValue } from './types.ts'
 import type {
   CCallbackWrapper,
   CClassInfo,
@@ -432,6 +432,7 @@ export function emitCModuleSource(
   const syntaxFeatures = collectIrSyntaxFeatureUsages(irPrograms)
   const signatureRuntimeTypes = collectCModuleContextRuntimeTypes(context)
   const moduleValues = collectCModuleStaticValueDeclarations(plan, context)
+  addCModuleImplementationNativeRuntimeRequirements(runtimeRequirements, context, moduleValues, options.libraries)
   const classDescriptorNames = collectCClassDescriptorNames(irPrograms, context.classInfos)
   const prelude = resolveCRuntimePreludeRequirements({
     classDescriptorCount: classDescriptorNames.size,
@@ -470,6 +471,7 @@ export function emitCModuleSource(
 
   const lines: string[] = []
   lines.push(`#include "${relativeCIncludePath(plan.sourcePath, plan.headerPath, options.host)}"`)
+  const headerIncludes = collectCModuleHeaderIncludeLines(plan, context, options.libraries, deps)
 
   const imports = uniqueCModuleImports(plan.imports)
 
@@ -488,16 +490,19 @@ export function emitCModuleSource(
 
   pushCModuleLines(
     lines,
-    emitCPrelude(
-      prelude.needsRuntime,
-      emitsMain,
-      prelude.needsAsyncRuntime,
-      prelude.needsCallbackRuntime,
-      prelude.needsClassDescriptorRuntime,
-      prelude.needsCppValueRuntime,
-      prelude.needsStringHeader,
-      prelude.needsObjectRuntime,
-      prelude.libraryCPreludeIncludes
+    filterCModuleIncludesProvidedByHeader(
+      emitCPrelude(
+        prelude.needsRuntime,
+        emitsMain,
+        prelude.needsAsyncRuntime,
+        prelude.needsCallbackRuntime,
+        prelude.needsClassDescriptorRuntime,
+        prelude.needsCppValueRuntime,
+        prelude.needsStringHeader,
+        prelude.needsObjectRuntime,
+        prelude.libraryCPreludeIncludes
+      ),
+      headerIncludes
     )
   )
   pushCModuleLines(lines, context.runtimeInitializerDefinitions)
@@ -669,21 +674,31 @@ function cModuleDeclarationLinesReferenceName(lines: string[], name: string): bo
 }
 
 function cModuleLineReferencesName(line: string, name: string): boolean {
-  const index = line.indexOf(name)
+  let offset = 0
 
-  if (index < 0) {
-    return false
+  while (offset < line.length) {
+    const index = line.indexOf(name, offset)
+
+    if (index < 0) {
+      return false
+    }
+
+    const before = index > 0 ? line[index - 1] : ''
+    const afterIndex = index + name.length
+    const after = afterIndex < line.length ? line[afterIndex] : ''
+
+    if (!cModuleIdentifierChar(before) && !cModuleIdentifierChar(after)) {
+      return true
+    }
+
+    offset = index + name.length
   }
 
-  const before = index > 0 ? line[index - 1] : ''
-  const afterIndex = index + name.length
-  const after = afterIndex < line.length ? line[afterIndex] : ''
-
-  return !cModuleIdentifierChar(before) && !cModuleIdentifierChar(after)
+  return false
 }
 
 function cModuleIdentifierChar(value: string): boolean {
-  return 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_'.indexOf(value) >= 0
+  return value !== '' && 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_'.indexOf(value) >= 0
 }
 
 export function emitCModuleHeader(
@@ -694,28 +709,38 @@ export function emitCModuleHeader(
   deps: CModuleEmissionDependencies
 ): string {
   const context = createCModuleBaseContext(plan, diagnostics, deps, options.libraries)
-  const exportedFunctions = collectCModuleExportedFunctions(plan)
-  const exportedValues = collectCModuleExportedValueDeclarations(plan)
-  const runtimeRequirements = runtimeRequirementSetFromArray(collectIrRuntimeRequirements([plan.ir]))
-
-  addCModuleNativeSignatureRuntimeRequirements(runtimeRequirements, context, exportedValues, options.libraries)
-
-  const libraryIncludes = emitLibraryCPreludeIncludeLines(
-    resolveLibraryRuntimeCPreludeIncludes(runtimeRequirements, options.libraries)
-  )
+  const declarationLines = collectCModuleHeaderDeclarationLines(plan, context, deps)
+  const includes = collectCModuleHeaderIncludeLines(plan, context, options.libraries, deps, declarationLines)
   const lines: string[] = []
 
   lines.push(`#ifndef ${plan.headerGuard}`)
   lines.push(`#define ${plan.headerGuard}`)
   lines.push('')
-  lines.push('#include "inox/value.h"')
-  lines.push('#include "inox/loop.h"')
 
-  for (let includeIndex = 0; includeIndex < libraryIncludes.length; includeIndex = includeIndex + 1) {
-    lines.push(libraryIncludes[includeIndex])
+  for (let includeIndex = 0; includeIndex < includes.length; includeIndex = includeIndex + 1) {
+    lines.push(includes[includeIndex])
   }
 
+  if (includes.length > 0) {
+    lines.push('')
+  }
+
+  pushCModuleLines(lines, declarationLines)
+
   lines.push('')
+  lines.push(`#endif`)
+
+  return joinCModuleLines(lines)
+}
+
+function collectCModuleHeaderDeclarationLines(
+  plan: CModulePlan,
+  context: CEmitContext,
+  deps: CModuleEmissionDependencies
+): string[] {
+  const exportedFunctions = collectCModuleExportedFunctions(plan)
+  const exportedValues = collectCModuleExportedValueDeclarations(plan)
+  const lines: string[] = []
 
   if (plan.initName !== null && typeof plan.initName !== 'undefined') {
     lines.push(`void ${plan.initName}();`)
@@ -733,16 +758,109 @@ export function emitCModuleHeader(
     lines.push(`extern ${cModuleValueDeclarationCType(item, context)} ${item.symbolName};`)
   }
 
-  lines.push('')
-  lines.push(`#endif`)
-
-  return joinCModuleLines(lines)
+  return lines
 }
 
-function addCModuleNativeSignatureRuntimeRequirements(
+function collectCModuleHeaderIncludeLines(
+  plan: CModulePlan,
+  context: CEmitContext,
+  libraries: CCompilerLibrarySet | null | undefined,
+  deps: CModuleEmissionDependencies,
+  declarationLines: string[] = collectCModuleHeaderDeclarationLines(plan, context, deps)
+): string[] {
+  const runtimeRequirements: Set<IrRuntimeRequirement> = new Set()
+  const includes: string[] = []
+
+  addCModuleNativeDeclarationRuntimeRequirements(runtimeRequirements, declarationLines, libraries)
+
+  if (cModuleHeaderDeclarationsNeedValue(declarationLines)) {
+    includes.push('#include "inox/value.h"')
+  }
+
+  if (cModuleDeclarationLinesReferenceName(declarationLines, 'inox_loop')) {
+    includes.push('#include "inox/loop.h"')
+  }
+
+  pushCModuleLines(
+    includes,
+    emitLibraryCPreludeIncludeLines(resolveLibraryRuntimeCPreludeIncludes(runtimeRequirements, libraries))
+  )
+
+  return includes
+}
+
+function cModuleHeaderDeclarationsNeedValue(lines: string[]): boolean {
+  const valueTypes = ['inox_value', 'inox_status', 'inox_number', 'inox_ref', 'inox_allocator']
+
+  for (let index = 0; index < valueTypes.length; index = index + 1) {
+    if (cModuleDeclarationLinesReferenceName(lines, valueTypes[index])) {
+      return true
+    }
+  }
+
+  for (let index = 0; index < lines.length; index = index + 1) {
+    if (lines[index].includes('inox::Value')) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function filterCModuleIncludesProvidedByHeader(lines: string[], headerIncludes: string[]): string[] {
+  const filtered: string[] = []
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex = lineIndex + 1) {
+    const line = lines[lineIndex]
+    let provided = false
+
+    for (let includeIndex = 0; includeIndex < headerIncludes.length; includeIndex = includeIndex + 1) {
+      if (line === headerIncludes[includeIndex]) {
+        provided = true
+        break
+      }
+    }
+
+    if (!provided) {
+      filtered.push(line)
+    }
+  }
+
+  return filtered
+}
+
+function addCModuleNativeDeclarationRuntimeRequirements(
+  requirements: Set<IrRuntimeRequirement>,
+  declarationLines: string[],
+  libraries: CCompilerLibrarySet | null | undefined
+): void {
+  if (libraries === null || typeof libraries === 'undefined') {
+    return
+  }
+
+  const nativeTypes = cCompilerLibrarySetValue(libraries).nativeTypes
+
+  for (let typeIndex = 0; typeIndex < nativeTypes.length; typeIndex = typeIndex + 1) {
+    const nativeType = nativeTypes[typeIndex]
+
+    if (!cModuleDeclarationLinesReferenceName(declarationLines, nativeType.cppType)) {
+      continue
+    }
+
+    for (
+      let requirementIndex = 0;
+      requirementIndex < nativeType.runtimeRequirements.length;
+      requirementIndex = requirementIndex + 1
+    ) {
+      requirements.add(nativeType.runtimeRequirements[requirementIndex])
+    }
+  }
+}
+
+function addCModuleImplementationNativeRuntimeRequirements(
   requirements: Set<IrRuntimeRequirement>,
   context: CEmitContext,
-  exportedValues: CModuleValueDeclaration[],
+  moduleValues: CModuleValueDeclaration[],
   libraries: CCompilerLibrarySet | null | undefined
 ): void {
   if (libraries === null || typeof libraries === 'undefined') {
@@ -761,8 +879,8 @@ function addCModuleNativeSignatureRuntimeRequirements(
     }
   }
 
-  for (let valueIndex = 0; valueIndex < exportedValues.length; valueIndex = valueIndex + 1) {
-    const value = exportedValues[valueIndex]
+  for (let valueIndex = 0; valueIndex < moduleValues.length; valueIndex = valueIndex + 1) {
+    const value = moduleValues[valueIndex]
 
     addCModuleNativeCppTypeRuntimeRequirements(requirements, value.cppType, libraries)
     addCModuleNativeShapeRuntimeRequirements(requirements, value.shape, libraries, seen)
@@ -796,10 +914,9 @@ function addCModuleNativeShapeRuntimeRequirements(
   }
 
   seen.add(shape)
-  const typeId = shape.libraryTypeId
 
-  if (typeId !== null && typeof typeId !== 'undefined') {
-    const nativeRequirements = compilerLibraryNativeRuntimeRequirementsForId(libraries, typeId)
+  if (shape.libraryTypeId !== null && typeof shape.libraryTypeId !== 'undefined') {
+    const nativeRequirements = compilerLibraryNativeRuntimeRequirementsForId(libraries, shape.libraryTypeId)
 
     for (let index = 0; index < nativeRequirements.length; index = index + 1) {
       requirements.add(nativeRequirements[index])

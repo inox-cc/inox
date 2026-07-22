@@ -24,10 +24,13 @@ test('generated module header includes package runtime required by native signat
     sourceRoot: '/pkg'
   })
   const header = files.find((file) => file.path === 'index.h')
+  const source = files.find((file) => file.path === 'index.cc')
 
   assert.ok(header)
+  assert.ok(source)
   assert.match(header.code, /#include "fixture\/native\.h"/)
   assert.match(header.code, /FixtureNative/)
+  assert.equal(source.code.match(/#include "fixture\/native\.h"/g)?.length ?? 0, 0)
 })
 
 test('generated module header includes selected stdlib facade used only by signature', () => {
@@ -47,10 +50,13 @@ test('generated module header includes selected stdlib facade used only by signa
     sourceRoot: '/pkg'
   })
   const header = files.find((file) => file.path === 'index.h')
+  const source = files.find((file) => file.path === 'index.cc')
 
   assert.ok(header)
+  assert.ok(source)
   assert.match(header.code, /#include "inox\/set\.h"/)
   assert.match(header.code, /Set features/)
+  assert.equal(source.code.match(/#include "inox\/set\.h"/g)?.length ?? 0, 0)
 })
 
 test('generated module header keeps native type of exported value', () => {

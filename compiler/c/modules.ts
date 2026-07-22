@@ -417,7 +417,7 @@ function reportUnsupportedCModuleImports(
     diagnostics.push(
       diagnostic(
         'INOX_C_MODULE_IMPORT',
-        'modular C output currently supports importing exported functions only',
+        'modular C output currently supports importing exported functions and variables only',
         specifier.loc
       )
     )
