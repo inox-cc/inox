@@ -14,10 +14,14 @@ import { parse } from '../compiler/parser.ts'
 import type { AnyNode, IrFunctionEffect, IrProgram, ModuleDeclarationImport, ProgramNode } from '../compiler/types.ts'
 import { quietCMakeConfigureArgs } from './lib/cmake-args.ts'
 import { generateCompilerLibraryRegistry } from './lib/compiler-library-registry.ts'
+import {
+  compilerTargetCMakeConfigureArgs,
+  nativeCompilerTargetProfile
+} from './lib/compiler-target-profile.ts'
 import { compactDeclarationEffectModule } from './lib/declaration-effect-compaction.ts'
 import { rootDir } from './lib/repo-root.ts'
 import { runCommand } from './lib/run-command.ts'
-import type { CompilerLibraryOptionValue, CompilerLibrarySet } from '../compiler/extensions/types.ts'
+import type { CompilerLibrarySet } from '../compiler/extensions/types.ts'
 
 type BuildOptions = {
   generatedDir: string
@@ -72,16 +76,6 @@ const generatedLibrarySourceRoot = `${projectSourceRoot}/dist/compiler-libraries
 const stage6SemanticContractPath = `${projectSourceRoot}/tests/contracts/stage6-semantic-contract.ts`
 const selfHostedSourceDirs = ['compiler', 'stdlib']
 const selfHostedExcludedSourcePaths = new Set([join(rootDir, 'compiler/index.ts')])
-const buildLoopBackend = 'libuv'
-const buildTlsBackend = 'boringssl'
-
-function buildCompilerLibraryOptions(): CompilerLibraryOptionValue[] {
-  return [
-    { optionId: 'global:platform#loop-backend', value: buildLoopBackend },
-    { optionId: 'global:platform#tls-backend', value: buildTlsBackend }
-  ]
-}
-
 const parsed = parseArgs(process.argv.slice(2))
 
 if (!parsed.ok) {
@@ -304,7 +298,7 @@ async function compileCompilerModule(
     callMain,
     declarationImports,
     libraries: bootstrapLibraries,
-    libraryOptions: buildCompilerLibraryOptions(),
+    libraryOptions: nativeCompilerTargetProfile.optionValues,
     sourceRoot: projectSourceRoot,
     target: 'cc'
   })
@@ -328,7 +322,7 @@ async function compileCompilerModuleIr(
   return await compileMemoryPackageToIrModules(file.path, [file, ...contractFiles, ...stdlibDeclarationFiles], {
     declarationImports,
     libraries: bootstrapLibraries,
-    libraryOptions: buildCompilerLibraryOptions(),
+    libraryOptions: nativeCompilerTargetProfile.optionValues,
     target: 'cc'
   })
 }
@@ -916,8 +910,7 @@ async function linkNativeCompiler(options: BuildOptions): Promise<{ code: number
       cmakeSourceDir,
       '-B',
       cmakeBuildDir,
-      `-DINOX_LOOP_BACKEND=${buildLoopBackend}`,
-      `-DINOX_TLS_BACKEND=${buildTlsBackend}`
+      ...compilerTargetCMakeConfigureArgs(nativeCompilerTargetProfile)
     ]),
     {
       stderr: process.stderr,

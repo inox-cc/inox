@@ -18,7 +18,6 @@ test('удаление node:net убирает API и native plan без central
   await rm(fixture, { recursive: true, force: true })
   await mkdir(resolve(fixture, 'stdlib/global'), { recursive: true })
   await mkdir(resolve(fixture, 'stdlib/node'), { recursive: true })
-  await cp(resolve('stdlib/global/platform'), resolve(fixture, 'stdlib/global/platform'), { recursive: true })
   await cp(resolve('stdlib/node/net'), resolve(fixture, 'stdlib/node/net'), { recursive: true })
   await generateCompilerLibraryRegistry(fixture, output)
 
@@ -27,7 +26,7 @@ test('удаление node:net убирает API и native plan без central
   const source = "import net from 'node:net'\nnet.createServer()\n"
   const beforeResult = compileSource(source, {
     libraries: before,
-    libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }]
+    libraryOptions: [{ optionId: 'target:runtime#loop-backend', value: 'libuv' }]
   })
 
   assert.match(beforePlan, /stdlib\/node\/net\/src\/net\.cc/)
@@ -44,7 +43,7 @@ test('удаление node:net убирает API и native plan без central
   assert.throws(
     () => compileSource(source, {
       libraries: after,
-      libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }]
+      libraryOptions: [{ optionId: 'target:runtime#loop-backend', value: 'libuv' }]
     }),
     (error: unknown) =>
       error instanceof CompileError &&

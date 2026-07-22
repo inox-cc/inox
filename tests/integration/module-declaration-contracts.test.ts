@@ -363,7 +363,7 @@ console.log(params.get('a'))
 
   const result = compileGraphToIrModulesSync('/project/compiler/index.ts', {
     host,
-    libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }],
+    libraryOptions: [{ optionId: 'target:runtime#loop-backend', value: 'libuv' }],
     libraries: defaultCompilerLibrarySet
   })
   const entry = result.graph.modules.find((module) => module.path === '/project/compiler/index.ts')

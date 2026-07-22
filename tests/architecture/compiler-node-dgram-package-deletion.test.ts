@@ -20,7 +20,6 @@ test('удаление node:dgram убирает API и native plan без centr
   await mkdir(resolve(fixture, 'stdlib/node'), { recursive: true })
   await copyPackage('stdlib/global/binary')
   await copyPackage('stdlib/global/collections')
-  await copyPackage('stdlib/global/platform')
   await copyPackage('stdlib/node/buffer')
   await copyPackage('stdlib/node/dgram')
   await generateCompilerLibraryRegistry(fixture, output)
@@ -30,7 +29,7 @@ test('удаление node:dgram убирает API и native plan без centr
 
   const beforeResult = compileSource("import dgram from 'node:dgram'\ndgram.createSocket('udp4')\n", {
     libraries: before,
-    libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }]
+    libraryOptions: [{ optionId: 'target:runtime#loop-backend', value: 'libuv' }]
   })
   assert.match(beforePlan, /stdlib\/node\/dgram\/src\/dgram\.cc/)
   assert.match(beforePlan, /stdlib\/node\/dgram\/include/)
@@ -48,7 +47,7 @@ test('удаление node:dgram убирает API и native plan без centr
     () =>
       compileSource("import dgram from 'node:dgram'\ndgram.createSocket('udp4')\n", {
         libraries: after,
-        libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }]
+        libraryOptions: [{ optionId: 'target:runtime#loop-backend', value: 'libuv' }]
       }),
     (error: unknown) =>
       error instanceof CompileError &&

@@ -14,7 +14,7 @@ function assertUnknownGlobal(source: string, message: string): void {
   assert.throws(
     () => compileSourceToIr(source, {
       libraries: emptyCompilerLibrarySet,
-      libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }]
+      libraryOptions: [{ optionId: 'target:runtime#loop-backend', value: 'libuv' }]
     }),
     (error: unknown) =>
       error instanceof CompileError &&

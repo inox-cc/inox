@@ -99,7 +99,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:crypto', 'global:binary', 'global:platform', collectionsLibraryId, 'node:buffer'],
+  dependencies: ['global:crypto', 'global:binary', collectionsLibraryId, 'node:buffer'],
   nativeTypes: [nativeType(hashTypeId, 'Hash'), nativeType(hmacTypeId, 'Hmac')],
   operations,
   intrinsicBindings: [],
@@ -111,7 +111,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       capabilities: [],
       optionConstraints: [
         {
-          optionId: 'global:platform#loop-backend',
+          optionId: 'target:runtime#loop-backend',
           allowedValues: ['libuv'],
           diagnosticCode: 'INOX_NOT_IMPLEMENTED',
           diagnosticMessage:
@@ -126,7 +126,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       capabilities: [],
       optionConstraints: [
         {
-          optionId: 'global:platform#tls-backend',
+          optionId: 'target:runtime#tls-backend',
           allowedValues: ['boringssl', 'openssl'],
           diagnosticCode: 'INOX_NOT_IMPLEMENTED',
           diagnosticMessage:

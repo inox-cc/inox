@@ -212,7 +212,7 @@ console.log(response.status)
     callMain: true,
     host: fetchHost,
     libraries: defaultCompilerLibrarySet,
-    libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }],
+    libraryOptions: [{ optionId: 'target:runtime#loop-backend', value: 'libuv' }],
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const fetchSource = generatedTextFile(fetchFiles, 'src/index.cc').code

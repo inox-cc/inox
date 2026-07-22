@@ -24,7 +24,7 @@ test('удаление global:fetch убирает API и native plan без cen
   const beforePlan = await readFile(resolve(output, 'native-plan.json'), 'utf8')
   const beforeResult = compileSource(source, {
     libraries: before,
-    libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }]
+    libraryOptions: [{ optionId: 'target:runtime#loop-backend', value: 'libuv' }]
   })
 
   assert.match(beforeRegistry, /stdlib\/global\/fetch\/compiler\/index\.ts/)
@@ -44,7 +44,7 @@ test('удаление global:fetch убирает API и native plan без cen
   assert.throws(
     () => compileSource(source, {
       libraries: after,
-      libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }]
+      libraryOptions: [{ optionId: 'target:runtime#loop-backend', value: 'libuv' }]
     }),
     (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_UNKNOWN_NAME'
   )
@@ -55,7 +55,7 @@ async function createFixture(): Promise<void> {
   await mkdir(resolve(fixture, 'stdlib/global'), { recursive: true })
   await mkdir(resolve(fixture, 'stdlib/node'), { recursive: true })
 
-  for (const name of ['binary', 'collections', 'error', 'fetch', 'math', 'platform', 'promise', 'strings']) {
+  for (const name of ['binary', 'collections', 'error', 'fetch', 'math', 'promise', 'strings']) {
     await cp(resolve(`stdlib/global/${name}`), resolve(fixture, `stdlib/global/${name}`), { recursive: true })
   }
 }

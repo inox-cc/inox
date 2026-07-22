@@ -47,7 +47,7 @@ createServer((request, response) => {
     callMain: true,
     host,
     libraries: defaultCompilerLibrarySet,
-    libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }],
+    libraryOptions: [{ optionId: 'target:runtime#loop-backend', value: 'libuv' }],
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code

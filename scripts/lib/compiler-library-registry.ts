@@ -16,6 +16,7 @@ import type {
   TypeRef
 } from '../../compiler/extensions/types.ts'
 import { discoverCompilerLibraries, type DiscoveredCompilerLibrary } from './compiler-library-discovery.ts'
+import { defaultCompilerTargetOptions } from './compiler-target-profile.ts'
 import { rootDir } from './repo-root.ts'
 
 export type RenderedCompilerLibraryRegistry = {
@@ -156,7 +157,8 @@ function renderNativePlanCMakeList(name: string, paths: string[]): string {
 }
 
 export function createCompilerLibrarySetFromDiscovered(
-  discoveredLibraries: DiscoveredCompilerLibrary[]
+  discoveredLibraries: DiscoveredCompilerLibrary[],
+  targetOptions: LibraryOptionDescriptor[] = defaultCompilerTargetOptions
 ): CompilerLibrarySet {
   const discovered = discoveredLibraries.slice()
   const descriptors: CompilerLibraryDescriptor[] = []
@@ -167,7 +169,7 @@ export function createCompilerLibrarySetFromDiscovered(
     descriptors.push(compilerLibraryDescriptor(library))
   }
 
-  return createCompilerLibrarySet(descriptors)
+  return createCompilerLibrarySet(descriptors, targetOptions)
 }
 
 export function createCompilerLibraryLiteralTypeInferenceFromDiscovered(

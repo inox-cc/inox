@@ -50,7 +50,7 @@ dgram.createSocket('udp4').bind(0, '127.0.0.1')
     callMain: true,
     host,
     libraries: defaultCompilerLibrarySet,
-    libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }],
+    libraryOptions: [{ optionId: 'target:runtime#loop-backend', value: 'libuv' }],
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code

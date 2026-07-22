@@ -46,7 +46,10 @@ const compilerCoreRuntimeRequirementIds = [
   'weak-references'
 ]
 
-export function createCompilerLibrarySet(libraries: CompilerLibraryDescriptor[]): CompilerLibrarySet {
+export function createCompilerLibrarySet(
+  libraries: CompilerLibraryDescriptor[],
+  targetOptions: LibraryOptionDescriptor[] = []
+): CompilerLibrarySet {
   const ordered = orderCompilerLibraries(libraries)
   const declarations: LibraryDeclarationDescriptor[] = []
   const options: LibraryOptionDescriptor[] = []
@@ -55,6 +58,8 @@ export function createCompilerLibrarySet(libraries: CompilerLibraryDescriptor[])
   const operations: LibraryOperationDescriptor[] = []
   const intrinsicBindings: IntrinsicRoleBinding[] = []
   const runtimeRequirements: RuntimeRequirementDescriptor[] = []
+
+  pushLibraryOptions(options, targetOptions)
 
   for (let libraryIndex = 0; libraryIndex < ordered.length; libraryIndex = libraryIndex + 1) {
     const library = ordered[libraryIndex]
@@ -80,7 +85,7 @@ export function createCompilerLibrarySet(libraries: CompilerLibraryDescriptor[])
   )
 
   return {
-    fingerprint: compilerLibrarySetFingerprint(ordered),
+    fingerprint: compilerLibrarySetFingerprint(ordered, targetOptions),
     declarations,
     options,
     runtimeInitializers,
@@ -1886,8 +1891,21 @@ function validateUniqueRuntimeRequirementIds(requirements: RuntimeRequirementDes
   }
 }
 
-function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): string {
+function compilerLibrarySetFingerprint(
+  libraries: CompilerLibraryDescriptor[],
+  targetOptions: LibraryOptionDescriptor[]
+): string {
   const rows: string[] = []
+
+  if (targetOptions.length > 0) {
+    const optionIds: string[] = []
+
+    for (let index = 0; index < targetOptions.length; index = index + 1) {
+      insertSortedString(optionIds, libraryOptionDescriptorFingerprint(targetOptions[index]))
+    }
+
+    rows.push('@target-options|options=' + optionIds.join(','))
+  }
 
   for (let index = 0; index < libraries.length; index = index + 1) {
     const library = libraries[index]
@@ -2010,26 +2028,7 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
 
     for (let itemIndex = 0; itemIndex < libraryOptions.length; itemIndex = itemIndex + 1) {
       const item = libraryOptions[itemIndex]
-      insertSortedString(
-        optionIds,
-        item.libraryId +
-          ':' +
-          item.optionId +
-          ':' +
-          sortedStrings(item.cliAliases).join(',') +
-          ':' +
-          item.valueType +
-          ':' +
-          compilerLibraryOptionScalarText(item.defaultValue) +
-          ':' +
-          sortedOptionScalars(item.allowedValues ?? []).join(',') +
-          ':' +
-          (item.integer === true ? 'integer' : '') +
-          ':' +
-          (item.minimum ?? '') +
-          ':' +
-          (item.maximum ?? '')
-      )
+      insertSortedString(optionIds, libraryOptionDescriptorFingerprint(item))
     }
 
     const libraryInitializers = library.runtimeInitializers ?? []
@@ -2162,6 +2161,28 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
   }
 
   return 'inox:library-set:v1:' + shortStableHash(rows.join(';'))
+}
+
+function libraryOptionDescriptorFingerprint(item: LibraryOptionDescriptor): string {
+  return (
+    item.libraryId +
+    ':' +
+    item.optionId +
+    ':' +
+    sortedStrings(item.cliAliases).join(',') +
+    ':' +
+    item.valueType +
+    ':' +
+    compilerLibraryOptionScalarText(item.defaultValue) +
+    ':' +
+    sortedOptionScalars(item.allowedValues ?? []).join(',') +
+    ':' +
+    (item.integer === true ? 'integer' : '') +
+    ':' +
+    (item.minimum ?? '') +
+    ':' +
+    (item.maximum ?? '')
+  )
 }
 
 function nativeAsyncTaskBridgeFingerprint(nativeType: LibraryNativeTypeDescriptor): string {

@@ -32,7 +32,6 @@ test('node:crypto implemented results принадлежат TypeRef, включ
   assert.deepEqual(compilerLibraryPackage.dependencies, [
     'global:crypto',
     'global:binary',
-    'global:platform',
     'global:collections',
     'node:buffer'
   ])

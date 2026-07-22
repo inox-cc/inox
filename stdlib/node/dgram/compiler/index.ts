@@ -41,7 +41,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:platform', 'node:buffer'],
+  dependencies: ['node:buffer'],
   nativeTypes: [
     {
       libraryId,
@@ -87,7 +87,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       capabilities: ['udp'],
       optionConstraints: [
         {
-          optionId: 'global:platform#loop-backend',
+          optionId: 'target:runtime#loop-backend',
           allowedValues: ['libuv'],
           diagnosticCode: 'INOX_NOT_IMPLEMENTED',
           diagnosticMessage:

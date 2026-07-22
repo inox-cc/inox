@@ -78,7 +78,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:binary', 'global:error', 'global:platform', 'global:promise'],
+  dependencies: ['global:binary', 'global:error', 'global:promise'],
   nativeTypes: [
     {
       libraryId,
@@ -139,7 +139,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       capabilities: ['tcp'],
       optionConstraints: [
         {
-          optionId: 'global:platform#loop-backend',
+          optionId: 'target:runtime#loop-backend',
           allowedValues: ['libuv'],
           diagnosticCode: 'INOX_NOT_IMPLEMENTED',
           diagnosticMessage: 'fetch is not implemented for C without libuv; select --loop-backend libuv'
@@ -267,7 +267,7 @@ function fetchUrlArgument(): LibraryArgumentCheckDescriptor {
     stringPrefixOptionConstraints: [
       {
         prefixes: ['https://'],
-        optionId: 'global:platform#tls-backend',
+        optionId: 'target:runtime#tls-backend',
         allowedValues: ['boringssl', 'openssl'],
         diagnosticCode: 'INOX_FETCH',
         diagnosticMessage: 'https fetch URLs require a configured TLS adapter and are not supported by the current C/libuv fetch slice'

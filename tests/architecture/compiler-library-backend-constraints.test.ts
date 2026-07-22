@@ -10,14 +10,14 @@ test('library runtime requirements обобщённо проверяют package
   const libraries = createCompilerLibrarySet([backendLibrary()])
 
   assert.throws(
-    () => compileSource('platform.random()\n', {
+    () => compileSource('backendFixture.random()\n', {
       libraries,
       libraryOptions: [{ optionId: 'platform#scheduler-engine', value: 'embedded' }]
     }),
     hasDiagnostic('PLATFORM_LOOP_BACKEND', 'platform.random requires libuv')
   )
   assert.throws(
-    () => compileSource('platform.secure()\n', {
+    () => compileSource('backendFixture.secure()\n', {
       libraries,
       libraryOptions: [{ optionId: 'platform#secure-transport', value: 'none' }]
     }),
@@ -86,7 +86,7 @@ function backendLibrary(): CompilerLibraryDescriptor {
 function operation(name: string, requirement: string) {
   return {
     libraryId: 'platform',
-    bindingId: `global:platform.${name}`,
+    bindingId: `global:backendFixture.${name}`,
     operationId: `platform#${name}`,
     kind: 'call' as const,
     runtimeRequirements: [requirement],

@@ -36,7 +36,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:binary', 'global:platform', 'node:net'],
+  dependencies: ['global:binary', 'node:net'],
   nativeTypes: [
     {
       libraryId,
@@ -86,7 +86,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       capabilities: ['tcp'],
       optionConstraints: [
         {
-          optionId: 'global:platform#loop-backend',
+          optionId: 'target:runtime#loop-backend',
           allowedValues: ['libuv'],
           diagnosticCode: 'INOX_NOT_IMPLEMENTED',
           diagnosticMessage:

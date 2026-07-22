@@ -11,7 +11,7 @@ test('entrypoint package node:net владеет native API и runtime plan', as
   assert.equal(netPackage.compilerEntrypoint, 'stdlib/node/net/compiler/index.ts')
   assert.ok(netPackage.compilerPackage)
   assert.equal(netPackage.compilerPackage.id, 'node:net')
-  assert.deepEqual(netPackage.compilerPackage.dependencies, ['global:platform'])
+  assert.deepEqual(netPackage.compilerPackage.dependencies, [])
   assert.deepEqual(netPackage.nativeSources, ['stdlib/node/net/src/net.cc'])
   assert.deepEqual(netPackage.nativeIncludeDirs, ['stdlib/node/net/include'])
 
@@ -44,7 +44,7 @@ test('entrypoint package node:net владеет native API и runtime plan', as
     'string-bytes'
   ])
   assert.deepEqual(runtime.optionConstraints?.[0], {
-    optionId: 'global:platform#loop-backend',
+    optionId: 'target:runtime#loop-backend',
     allowedValues: ['libuv'],
     diagnosticCode: 'INOX_NOT_IMPLEMENTED',
     diagnosticMessage:

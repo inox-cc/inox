@@ -20,7 +20,6 @@ test('удаление node:http убирает API и native plan без centra
   await mkdir(resolve(fixture, 'stdlib/node'), { recursive: true })
   await copyPackage('stdlib/global/collections')
   await copyPackage('stdlib/global/binary')
-  await copyPackage('stdlib/global/platform')
   await copyPackage('stdlib/node/net')
   await copyPackage('stdlib/node/http')
   await generateCompilerLibraryRegistry(fixture, output)
@@ -30,7 +29,7 @@ test('удаление node:http убирает API и native plan без centra
   const source = "import http from 'node:http'\nhttp.createServer()\n"
   const beforeResult = compileSource(source, {
     libraries: before,
-    libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }]
+    libraryOptions: [{ optionId: 'target:runtime#loop-backend', value: 'libuv' }]
   })
 
   assert.match(beforePlan, /stdlib\/node\/http\/src\/http\.cc/)
@@ -51,7 +50,7 @@ test('удаление node:http убирает API и native plan без centra
   assert.throws(
     () => compileSource(source, {
       libraries: after,
-      libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }]
+      libraryOptions: [{ optionId: 'target:runtime#loop-backend', value: 'libuv' }]
     }),
     (error: unknown) =>
       error instanceof CompileError &&

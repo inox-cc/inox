@@ -12,8 +12,8 @@ test('node:crypto проходит через generic variants, adapters и nomi
     {
       libraries,
       libraryOptions: [
-        { optionId: 'global:platform#loop-backend', value: 'libuv' },
-        { optionId: 'global:platform#tls-backend', value: 'boringssl' }
+        { optionId: 'target:runtime#loop-backend', value: 'libuv' },
+        { optionId: 'target:runtime#tls-backend', value: 'boringssl' }
       ],
       target: 'cc'
     }

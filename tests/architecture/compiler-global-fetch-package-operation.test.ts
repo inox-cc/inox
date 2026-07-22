@@ -37,7 +37,7 @@ test('global:fetch владеет declarations, native types, operations и runt
     "const request = fetch('http://127.0.0.1/')\nconst controller = new AbortController()\ncontroller.abort()\n",
     {
       libraries,
-      libraryOptions: [{ optionId: 'global:platform#loop-backend', value: 'libuv' }]
+      libraryOptions: [{ optionId: 'target:runtime#loop-backend', value: 'libuv' }]
     }
   )
   const fetchCall = result.ir.body[0].init

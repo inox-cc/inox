@@ -51,8 +51,8 @@ console.log(hashes.length, bytes.length, filled.length, value, small, uuid.lengt
     host,
     libraries: defaultCompilerLibrarySet,
     libraryOptions: [
-      { optionId: 'global:platform#loop-backend', value: 'libuv' },
-      { optionId: 'global:platform#tls-backend', value: 'boringssl' }
+      { optionId: 'target:runtime#loop-backend', value: 'libuv' },
+      { optionId: 'target:runtime#tls-backend', value: 'boringssl' }
     ],
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]

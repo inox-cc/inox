@@ -13,7 +13,6 @@ test('entrypoint package node:crypto владеет operations и backend requir
   assert.deepEqual(cryptoPackage.compilerPackage.dependencies, [
     'global:crypto',
     'global:binary',
-    'global:platform',
     'global:collections',
     'node:buffer'
   ])
@@ -47,7 +46,7 @@ test('entrypoint package node:crypto владеет operations и backend requir
 
   assert.equal(randomRequirement.id, 'node:crypto')
   assert.deepEqual(randomRequirement.optionConstraints?.[0], {
-    optionId: 'global:platform#loop-backend',
+    optionId: 'target:runtime#loop-backend',
     allowedValues: ['libuv'],
     diagnosticCode: 'INOX_NOT_IMPLEMENTED',
     diagnosticMessage:
@@ -55,7 +54,7 @@ test('entrypoint package node:crypto владеет operations и backend requir
   })
   assert.equal(hashRequirement.id, 'node:crypto:hash')
   assert.deepEqual(hashRequirement.optionConstraints?.[0], {
-    optionId: 'global:platform#tls-backend',
+    optionId: 'target:runtime#tls-backend',
     allowedValues: ['boringssl', 'openssl'],
     diagnosticCode: 'INOX_NOT_IMPLEMENTED',
     diagnosticMessage:
