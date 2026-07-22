@@ -38,6 +38,8 @@ type VocabularyPhrase = {
   words: string[]
 }
 
+type VocabularyPhraseIndex = Map<string, VocabularyPhrase[]>
+
 const projectRoot = resolve('.')
 const hostImportSpecifiers = new Map<string, Set<string>>([
   ['compiler/index.ts', new Set(['node:fs', 'node:path', 'node:process', 'node:url'])],
@@ -76,6 +78,7 @@ const coreProtocolValues = new Set([
   'member-assignment',
   'member-read',
   'member-write',
+  'name',
   'nominal',
   'null',
   'number',
@@ -92,6 +95,7 @@ const coreProtocolValues = new Set([
   'string',
   'string-bytes',
   'thrown',
+  'type',
   'unknown',
   'value',
   'void',
@@ -199,6 +203,7 @@ const semanticCallNameMarkers = [
   'backend',
   'binding',
   'builtin',
+  'callee',
   'capability',
   'global',
   'library',
@@ -207,7 +212,10 @@ const semanticCallNameMarkers = [
   'native',
   'operation',
   'option',
+  'property',
+  'properties',
   'requirement',
+  'root',
   'runtime'
 ]
 const membershipMethodNames = new Set(['get', 'has', 'includes', 'indexOf', 'set'])
@@ -539,7 +547,11 @@ function addVocabulary(
   category: CompilerSemanticVocabularyCategory,
   token: string | null | undefined
 ): void {
-  if (token === null || typeof token === 'undefined' || token.length < 3) {
+  if (token === null || typeof token === 'undefined' || token.length === 0) {
+    return
+  }
+
+  if (token.length < 3 && category !== 'api-root' && category !== 'api-member') {
     return
   }
 
@@ -594,8 +606,8 @@ function substringVocabulary(vocabulary: CompilerSemanticVocabularyEntry[]): Com
   )
 }
 
-function identifierPhrases(vocabulary: CompilerSemanticVocabularyEntry[]): VocabularyPhrase[] {
-  const phrases: VocabularyPhrase[] = []
+function identifierPhrases(vocabulary: CompilerSemanticVocabularyEntry[]): VocabularyPhraseIndex {
+  const phrases: VocabularyPhraseIndex = new Map()
 
   for (const entry of vocabulary) {
     if (entry.category !== 'api-member' && entry.category !== 'api-root' && entry.category !== 'native') {
@@ -608,14 +620,14 @@ function identifierPhrases(vocabulary: CompilerSemanticVocabularyEntry[]): Vocab
 
     const words = identifierWords(entry.token)
 
-    if (
-      words.length === 0 ||
-      (words.length === 1 && entry.token.slice(0, 1) === entry.token.slice(0, 1).toLowerCase())
-    ) {
+    if (words.length === 0) {
       continue
     }
 
-    phrases.push({ entry, words })
+    const firstWord = words[0]
+    const candidates = phrases.get(firstWord) ?? []
+    candidates.push({ entry, words })
+    phrases.set(firstWord, candidates)
   }
 
   return phrases
@@ -627,7 +639,7 @@ function visitCompilerSource(
   file: string,
   exact: Map<string, CompilerSemanticVocabularyEntry[]>,
   substring: CompilerSemanticVocabularyEntry[],
-  phrases: VocabularyPhrase[],
+  phrases: VocabularyPhraseIndex,
   tails: CompilerSemanticTail[],
   seen: Set<string>
 ): void {
@@ -684,7 +696,7 @@ function checkIdentifier(
   sourceFile: ts.SourceFile,
   file: string,
   exact: Map<string, CompilerSemanticVocabularyEntry[]>,
-  phrases: VocabularyPhrase[],
+  phrases: VocabularyPhraseIndex,
   tails: CompilerSemanticTail[],
   seen: Set<string>
 ): void {
@@ -702,30 +714,59 @@ function checkIdentifier(
 
   const words = identifierWords(node.text)
 
-  for (const phrase of phrases) {
-    if (!containsWordSequence(words, phrase.words)) {
-      continue
+  for (const word of words) {
+    for (const phrase of phrases.get(word) ?? []) {
+      if (!containsWordSequence(words, phrase.words)) {
+        continue
+      }
+
+      const exactIdentifier = node.text === phrase.entry.token
+
+      if (
+        exactIdentifier &&
+        phrase.entry.token.slice(0, 1) === phrase.entry.token.slice(0, 1).toLowerCase()
+      ) {
+        continue
+      }
+
+      if (!exactIdentifier && !isDedicatedIdentifierUse(words, phrase)) {
+        continue
+      }
+
+      if (exactIdentifier && phrase.entry.category === 'api-member') {
+        continue
+      }
+
+      addSemanticTail(tails, seen, sourceFile, file, node, phrase.entry, 'dedicated-identifier')
     }
-
-    const exactIdentifier = node.text === phrase.entry.token
-
-    if (
-      exactIdentifier &&
-      phrase.entry.token.slice(0, 1) === phrase.entry.token.slice(0, 1).toLowerCase()
-    ) {
-      continue
-    }
-
-    if (!exactIdentifier && !containsDedicatedIdentifierMarker(words)) {
-      continue
-    }
-
-    if (exactIdentifier && phrase.entry.category === 'api-member') {
-      continue
-    }
-
-    addSemanticTail(tails, seen, sourceFile, file, node, phrase.entry, 'dedicated-identifier')
   }
+}
+
+function isDedicatedIdentifierUse(words: string[], phrase: VocabularyPhrase): boolean {
+  const lowerCaseSingleWord =
+    phrase.words.length === 1 &&
+    phrase.entry.token.slice(0, 1) === phrase.entry.token.slice(0, 1).toLowerCase()
+
+  if (!lowerCaseSingleWord) {
+    return containsDedicatedIdentifierMarker(words)
+  }
+
+  if (
+    (phrase.entry.token.length > 2 && !/[0-9]/.test(phrase.entry.token)) ||
+    dedicatedIdentifierMarkers.has(phrase.words[0])
+  ) {
+    return false
+  }
+
+  if (phrase.entry.category === 'api-root') {
+    return words.includes('global') || words.includes('builtin')
+  }
+
+  if (phrase.entry.category === 'api-member') {
+    return words.includes('member') || words.includes('method') || words.includes('property')
+  }
+
+  return false
 }
 
 function isUnconditionalTextEntry(entry: CompilerSemanticVocabularyEntry): boolean {
@@ -795,10 +836,6 @@ function isSemanticLiteralUse(node: ts.Node, entry: CompilerSemanticVocabularyEn
 }
 
 function isApiMemberLiteralUse(node: ts.Node): boolean {
-  if (!isDistinctiveApiMemberText(textLikeNodeText(node))) {
-    return false
-  }
-
   const parent = node.parent
 
   if (ts.isPropertyAssignment(parent) && parent.initializer === node) {
@@ -825,24 +862,35 @@ function isApiMemberLiteralUse(node: ts.Node): boolean {
   return false
 }
 
-function isDistinctiveApiMemberText(value: string): boolean {
-  return identifierWords(value).length >= 2 || value.length >= 7
-}
-
 function isApiRootLiteralUse(node: ts.Node): boolean {
   const parent = node.parent
 
   if (ts.isBinaryExpression(parent)) {
-    const text = binaryOtherOperand(parent, node).getText().toLowerCase()
-    return text.includes('global') || text.includes('import') || text.includes('name') || text.includes('root')
+    return semanticExpressionText(binaryOtherOperand(parent, node))
   }
 
   if (ts.isCaseClause(parent)) {
-    const text = parent.parent.parent.expression.getText().toLowerCase()
-    return text.includes('global') || text.includes('import') || text.includes('name') || text.includes('root')
+    return semanticExpressionText(parent.parent.parent.expression)
   }
 
-  return false
+  if (ts.isLiteralTypeNode(parent)) {
+    return true
+  }
+
+  if (ts.isPropertyAssignment(parent) && parent.initializer === node) {
+    return semanticMetadataPropertyNames.has(propertyNameText(parent.name) ?? '')
+  }
+
+  if (ts.isCallExpression(parent)) {
+    const argumentIndex = parent.arguments.indexOf(node as ts.Expression)
+    return argumentIndex >= 0 && isSemanticCall(parent, argumentIndex)
+  }
+
+  if (ts.isElementAccessExpression(parent) && parent.argumentExpression === node) {
+    return semanticExpressionText(parent.expression)
+  }
+
+  return isInsideCollectionInitializer(node)
 }
 
 function isOptionValueLiteralUse(node: ts.Node): boolean {
@@ -1055,10 +1103,6 @@ function isTextLikeNode(
     ts.isTemplateMiddle(node) ||
     ts.isTemplateTail(node)
   )
-}
-
-function textLikeNodeText(node: ts.Node): string {
-  return isTextLikeNode(node) ? node.text : ''
 }
 
 function textNodeContext(node: ts.Node): string {
