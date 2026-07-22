@@ -79,7 +79,7 @@ async function importedPackageVocabulary(): Promise<VocabularyEntry[]> {
       addVocabulary(entries, library.id, operation.bindingId)
       addVocabulary(entries, library.id, operation.operationId)
       addQualifiedVocabulary(entries, library.id, operation.cExpression)
-      addCppTypeVocabulary(entries, library.id, operation.cppType)
+      addCppTypeVocabulary(entries, library.id, operation.cResultMapping?.cppType)
 
       for (const alias of operation.bindingAliases ?? []) {
         addVocabulary(entries, library.id, alias)
@@ -87,6 +87,7 @@ async function importedPackageVocabulary(): Promise<VocabularyEntry[]> {
 
       for (const variant of operation.variants ?? []) {
         addQualifiedVocabulary(entries, library.id, variant.cExpression)
+        addCppTypeVocabulary(entries, library.id, variant.cResultMapping?.cppType)
       }
     }
   }

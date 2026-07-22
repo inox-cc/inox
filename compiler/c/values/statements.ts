@@ -3483,8 +3483,9 @@ function materializeSynthesizedCompilerLibraryIndexOperation(
     context
   )
   expression.libraryCResultAdapter = operation.cResultAdapter ?? null
-  expression.libraryCppType = operation.cResultMapping?.cppType ?? operation.cppType ?? null
-  expression.libraryOwned = operation.owned === true
+  expression.libraryCppType = operation.cResultMapping?.cppType ?? null
+  expression.libraryOwned =
+    operation.resultTypeRef?.kind !== 'parameter' && operation.resultTypeRef?.ownership === 'owned'
   expression.libraryCCallStyle = operation.cCallStyle ?? null
   expression.libraryCFailureMode = operation.cFailureMode ?? null
 }

@@ -3,7 +3,10 @@ import { test } from 'node:test'
 
 import { compileSourceToIr } from '../../compiler/core.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
-import { createCompilerLibrarySetWithCollections } from './helpers/compiler-library-fixtures.ts'
+import {
+  createCompilerLibrarySetWithCollections,
+  fixturePrimitiveTypeRef
+} from './helpers/compiler-library-fixtures.ts'
 
 test('library operation variants выбирают result metadata по arg count и literal', () => {
   const result = compileSourceToIr(
@@ -54,8 +57,8 @@ function codecLibrary(): CompilerLibraryDescriptor {
             cExpression: 'codec.digest',
             cArgumentKinds: [],
             cResultMode: 'value',
-            cppType: 'Buffer',
-            valueType: 'bytes'
+            resultTypeRef: fixturePrimitiveTypeRef('bytes'),
+            cResultMapping: { cppType: 'Buffer', fields: [] }
           },
           {
             minArgs: 1,
@@ -66,8 +69,8 @@ function codecLibrary(): CompilerLibraryDescriptor {
             cArgumentKinds: ['string-view'],
             cArgumentAdapters: ['$value'],
             cResultMode: 'value',
-            cppType: 'inox::String',
-            valueType: 'string'
+            resultTypeRef: fixturePrimitiveTypeRef('string'),
+            cResultMapping: { cppType: 'inox::String', fields: [] }
           }
         ]
       },
@@ -88,8 +91,8 @@ function codecLibrary(): CompilerLibraryDescriptor {
             argumentValueTypes: ['number'],
             cExpression: 'codec.convert',
             cArgumentKinds: ['number'],
-            cppType: 'Buffer',
-            valueType: 'bytes'
+            resultTypeRef: fixturePrimitiveTypeRef('bytes'),
+            cResultMapping: { cppType: 'Buffer', fields: [] }
           },
           {
             minArgs: 1,
@@ -98,8 +101,8 @@ function codecLibrary(): CompilerLibraryDescriptor {
             argumentValueTypes: ['object'],
             cExpression: 'codec.convert',
             cArgumentKinds: ['value'],
-            cppType: 'Buffer',
-            valueType: 'bytes'
+            resultTypeRef: fixturePrimitiveTypeRef('bytes'),
+            cResultMapping: { cppType: 'Buffer', fields: [] }
           }
         ]
       },
@@ -120,8 +123,8 @@ function codecLibrary(): CompilerLibraryDescriptor {
             argumentValueTypes: ['number'],
             cExpression: 'Packet',
             cArgumentKinds: ['number'],
-            cppType: 'Packet',
-            valueType: 'bytes'
+            resultTypeRef: fixturePrimitiveTypeRef('bytes'),
+            cResultMapping: { cppType: 'Packet', fields: [] }
           },
           {
             minArgs: 1,
@@ -130,8 +133,8 @@ function codecLibrary(): CompilerLibraryDescriptor {
             argumentValueTypes: ['object'],
             cExpression: 'Packet',
             cArgumentKinds: ['value'],
-            cppType: 'Packet',
-            valueType: 'bytes'
+            resultTypeRef: fixturePrimitiveTypeRef('bytes'),
+            cResultMapping: { cppType: 'Packet', fields: [] }
           }
         ]
       }

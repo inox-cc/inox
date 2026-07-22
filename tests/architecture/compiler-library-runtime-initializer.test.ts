@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import { compileSource } from '../../compiler/core.ts'
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
+import { fixturePrimitiveTypeRef } from './helpers/compiler-library-fixtures.ts'
 
 test('library options валидируются и формируют ordered runtime initializer', () => {
   const libraries = createCompilerLibrarySet([bridgeLibrary()])
@@ -97,7 +98,7 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
         runtimeRequirements: ['global:bridge'],
         cExpression: 'bridge.run',
         cArgumentKinds: [],
-        valueType: 'number'
+        resultTypeRef: fixturePrimitiveTypeRef('number')
       }
     ],
     intrinsicBindings: [],

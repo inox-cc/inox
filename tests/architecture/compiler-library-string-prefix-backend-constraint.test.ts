@@ -5,6 +5,7 @@ import { compileSource } from '../../compiler/core.ts'
 import { CompileError } from '../../compiler/diagnostics.ts'
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
+import { fixturePrimitiveTypeRef } from './helpers/compiler-library-fixtures.ts'
 
 test('library string prefix constraint обобщённо зависит от package option', () => {
   const libraries = createCompilerLibrarySet([requestLibrary()])
@@ -76,8 +77,7 @@ function requestLibrary(): CompilerLibraryDescriptor {
             ]
           }
         ],
-        valueType: 'void',
-        cppType: 'void'
+        resultTypeRef: fixturePrimitiveTypeRef('void')
       }
     ],
     intrinsicBindings: [],

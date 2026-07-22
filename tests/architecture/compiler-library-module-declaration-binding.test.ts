@@ -5,6 +5,7 @@ import { compileMemoryPackageToIrModules } from '../../compiler/core.ts'
 import { CompileError } from '../../compiler/diagnostics.ts'
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
+import { fixturePrimitiveTypeRef } from './helpers/compiler-library-fixtures.ts'
 
 const entry = '/project/main.ts'
 const libraryId = 'fixture:renamed-module'
@@ -63,7 +64,7 @@ function fixtureLibrary(withDeclaration: boolean): CompilerLibraryDescriptor {
         kind: 'call',
         runtimeRequirements: [],
         cExpression: 'renamed_execute',
-        valueType: 'string'
+        resultTypeRef: fixturePrimitiveTypeRef('string')
       },
       {
         libraryId,
@@ -72,7 +73,7 @@ function fixtureLibrary(withDeclaration: boolean): CompilerLibraryDescriptor {
         kind: 'call',
         runtimeRequirements: [],
         cExpression: 'renamed_inspect',
-        valueType: 'string'
+        resultTypeRef: fixturePrimitiveTypeRef('string')
       }
     ],
     intrinsicBindings: [],

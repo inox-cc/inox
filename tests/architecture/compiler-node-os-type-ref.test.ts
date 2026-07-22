@@ -36,10 +36,5 @@ test('node:os operations describe string results only through TypeRef', async ()
       cppType: 'inox::String',
       fields: []
     })
-    assert.equal(operation.resultTypeId, undefined)
-    assert.equal(operation.cppType, undefined)
-    assert.equal(operation.valueType, undefined)
-    assert.equal(operation.nullable, undefined)
-    assert.equal(operation.owned, undefined)
   }
 })

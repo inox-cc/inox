@@ -31,10 +31,5 @@ test('global:regexp operations describe results only through TypeRef', async () 
 
   for (const operation of [literal, matches]) {
     assert.ok(operation)
-    assert.equal(operation.resultTypeId, undefined)
-    assert.equal(operation.cppType, undefined)
-    assert.equal(operation.valueType, undefined)
-    assert.equal(operation.nullable, undefined)
-    assert.equal(operation.owned, undefined)
   }
 })

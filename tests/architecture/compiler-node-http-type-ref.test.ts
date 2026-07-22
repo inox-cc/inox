@@ -88,12 +88,6 @@ function primitiveTypeRef(name: 'boolean' | 'number' | 'string' | 'void'): TypeR
 function assertLegacyResultMetadataIsAbsent(
   value: LibraryOperationDescriptor | LibraryOperationVariantDescriptor
 ): void {
-  assert.equal(value.resultTypeId, undefined)
-  assert.equal(value.resultShapeFields, undefined)
-  assert.equal(value.cppType, undefined)
-  assert.equal(value.valueType, undefined)
   assert.equal(Object.prototype.hasOwnProperty.call(value, 'promiseValueType'), false)
   assert.equal(Object.prototype.hasOwnProperty.call(value, 'promiseRejectionValueType'), false)
-  assert.equal(value.nullable, undefined)
-  assert.equal(value.owned, undefined)
 }

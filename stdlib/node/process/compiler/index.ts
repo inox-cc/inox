@@ -329,9 +329,6 @@ function unsupportedOperation(name: string, kind: LibraryOperationKind): Library
     kind,
     runtimeRequirements: [],
     cExpression: null,
-    cppType: null,
-    valueType: null,
-    owned: false,
     diagnosticCode: 'INOX_NOT_IMPLEMENTED',
     diagnosticMessage: `node:process ${name} is not implemented by the current C backend`
   }

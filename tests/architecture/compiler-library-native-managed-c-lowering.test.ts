@@ -2,7 +2,10 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
-import { createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet } from './helpers/compiler-library-fixtures.ts'
+import {
+  createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet,
+  fixtureNominalTypeRef
+} from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('managed native library values lower without C++ type name cases in core', () => {
@@ -50,9 +53,8 @@ function nativeLibrary(): CompilerLibraryDescriptor {
         runtimeRequirements: ['native'],
         cExpression: 'api.make',
         cArgumentKinds: [],
-        resultTypeId: 'native#Bytes',
-        cppType: 'NativeBytes',
-        valueType: 'bytes',
+        resultTypeRef: fixtureNominalTypeRef('native#Bytes'),
+        cResultMapping: { cppType: 'NativeBytes', fields: [] },
         minArgs: 0,
         maxArgs: 0,
         argumentChecks: []

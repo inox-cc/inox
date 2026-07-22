@@ -391,12 +391,6 @@ export type LibraryOperationVariantDescriptor = {
   cResultMapping?: LibraryCResultMappingDescriptor | null
   resultTypeRef?: TypeRef | null
   resultInference?: LibraryResultInferenceDescriptor | null
-  resultShapeFields?: LibraryResultShapeFieldDescriptor[]
-  resultTypeId?: LibraryObjectTypeId | null
-  cppType?: string | null
-  valueType?: string | null
-  nullable?: boolean
-  owned?: boolean
   callbackLifetime?: LibraryCallbackLifetime | null
 }
 
@@ -442,19 +436,13 @@ export type LibraryOperationDescriptor = {
   cResultMapping?: LibraryCResultMappingDescriptor | null
   resultTypeRef?: TypeRef | null
   resultInference?: LibraryResultInferenceDescriptor | null
-  resultShapeFields?: LibraryResultShapeFieldDescriptor[]
   receiverTypeId?: LibraryObjectTypeId | null
-  resultTypeId?: LibraryObjectTypeId | null
   cCallStyle?: 'function' | 'member' | 'index' | 'index-assignment' | 'member-assignment' | null
   cFailureMode?: 'thrown' | 'invalid-result' | null
   minArgs?: number | null
   maxArgs?: number | null
   argumentChecks?: LibraryArgumentCheckDescriptor[]
   variants?: LibraryOperationVariantDescriptor[]
-  cppType?: string | null
-  valueType?: string | null
-  nullable?: boolean
-  owned?: boolean
   constantValue?: string | null
   diagnosticCode?: string | null
   diagnosticMessage?: string | null

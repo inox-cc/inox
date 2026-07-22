@@ -2,7 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
-import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-fixtures.ts'
+import {
+  createCompilerLibrarySetWithConsole,
+  fixtureNominalTypeRef,
+  fixturePrimitiveTypeRef
+} from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('captured materializable library object сохраняет native receiver adapter', () => {
@@ -56,11 +60,8 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
         minArgs: 0,
         maxArgs: 0,
         argumentChecks: [],
-        resultTypeId: handleTypeId,
-        cppType: 'BridgeHandle',
-        valueType: 'object',
-        nullable: false,
-        owned: false
+        resultTypeRef: fixtureNominalTypeRef(handleTypeId),
+        cResultMapping: { cppType: 'BridgeHandle', fields: [] }
       },
       {
         libraryId: 'bridge',
@@ -81,8 +82,7 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
             functionReturnType: 'void'
           }
         ],
-        cppType: 'void',
-        valueType: 'void'
+        resultTypeRef: fixturePrimitiveTypeRef('void')
       },
       {
         libraryId: 'bridge',
@@ -118,10 +118,7 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
             callbackLifetime: 'event-loop'
           }
         ],
-        cppType: 'void',
-        valueType: 'void',
-        nullable: false,
-        owned: false
+        resultTypeRef: fixturePrimitiveTypeRef('void')
       }
     ],
     intrinsicBindings: [],

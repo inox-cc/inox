@@ -2,7 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
-import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-fixtures.ts'
+import {
+  createCompilerLibrarySetWithConsole,
+  fixtureNominalTypeRef
+} from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 import { compilerLibraryPackage as stringsCompilerLibraryPackage } from '../../stdlib/global/strings/compiler/index.ts'
 
@@ -69,11 +72,8 @@ function bridgeLibrary(dataValueType: string = 'string'): CompilerLibraryDescrip
         minArgs: 0,
         maxArgs: 0,
         argumentChecks: [],
-        resultTypeId: channelTypeId,
-        cppType: 'BridgeChannel',
-        valueType: 'object',
-        nullable: false,
-        owned: false
+        resultTypeRef: fixtureNominalTypeRef(channelTypeId),
+        cResultMapping: { cppType: 'BridgeChannel', fields: [] }
       },
       {
         libraryId: 'bridge',
@@ -126,11 +126,8 @@ function bridgeLibrary(dataValueType: string = 'string'): CompilerLibraryDescrip
             callbackLifetime: 'event-loop'
           }
         ],
-        resultTypeId: channelTypeId,
-        cppType: 'BridgeChannel',
-        valueType: 'object',
-        nullable: false,
-        owned: false,
+        resultTypeRef: fixtureNominalTypeRef(channelTypeId, 'borrowed'),
+        cResultMapping: { cppType: 'BridgeChannel', fields: [] },
         callbackLifetime: 'event-loop'
       }
     ],

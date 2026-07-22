@@ -36,10 +36,5 @@ test('global:math operations describe number results only through TypeRef', asyn
       ownership: 'value',
       traits: []
     })
-    assert.equal(operation.resultTypeId, undefined)
-    assert.equal(operation.cppType, undefined)
-    assert.equal(operation.valueType, undefined)
-    assert.equal(operation.nullable, undefined)
-    assert.equal(operation.owned, undefined)
   }
 })

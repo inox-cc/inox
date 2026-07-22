@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import { compileSource } from '../../compiler/core.ts'
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
+import { fixturePrimitiveTypeRef } from './helpers/compiler-library-fixtures.ts'
 
 test('zero-argument runtime initializer эмитится как C++ object', () => {
   const libraries = createCompilerLibrarySet([fixtureLibrary()])
@@ -46,7 +47,7 @@ function fixtureLibrary(): CompilerLibraryDescriptor {
         runtimeRequirements: ['global:fixture'],
         cExpression: 'fixture',
         cArgumentKinds: [],
-        valueType: 'number'
+        resultTypeRef: fixturePrimitiveTypeRef('number')
       }
     ],
     intrinsicBindings: [],

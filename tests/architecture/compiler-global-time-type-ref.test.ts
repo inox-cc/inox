@@ -62,16 +62,11 @@ test('global:time operations describe results only through TypeRef', async () =>
     }
   }
 
-  for (const operation of operations) {
-    assertLegacyResultMetadataIsAbsent(operation)
-  }
-
   const variants = operations[0]?.variants ?? []
   assert.equal(variants.length, 5)
 
   for (const variant of variants) {
     assert.equal(variant.resultTypeRef, undefined)
-    assertLegacyResultMetadataIsAbsent(variant)
   }
 })
 
@@ -94,18 +89,4 @@ function primitiveTypeRef(name: 'number' | 'string') {
     ownership: 'value',
     traits: []
   }
-}
-
-function assertLegacyResultMetadataIsAbsent(value: {
-  resultTypeId?: string | null
-  cppType?: string | null
-  valueType?: string | null
-  nullable?: boolean
-  owned?: boolean
-}): void {
-  assert.equal(value.resultTypeId, undefined)
-  assert.equal(value.cppType, undefined)
-  assert.equal(value.valueType, undefined)
-  assert.equal(value.nullable, undefined)
-  assert.equal(value.owned, undefined)
 }

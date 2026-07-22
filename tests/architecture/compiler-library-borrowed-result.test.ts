@@ -2,7 +2,11 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
-import { createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet } from './helpers/compiler-library-fixtures.ts'
+import {
+  createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet,
+  fixtureNominalTypeRef,
+  fixturePrimitiveTypeRef
+} from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('borrowed library receiver results понижаются в C++ references', () => {
@@ -21,6 +25,17 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
     id: 'bridge',
     dependencies: [],
     declarations: [],
+    nativeTypes: [
+      {
+        libraryId: 'bridge',
+        typeId: 'bridge#Session',
+        declarationNames: ['Session'],
+        valueType: 'object',
+        cppType: 'Session',
+        baseTypeIds: [],
+        runtimeRequirements: []
+      }
+    ],
     operations: [
       {
         libraryId: 'bridge',
@@ -31,9 +46,8 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
         cExpression: 'bridge.open',
         cArgumentKinds: [],
         cResultMode: 'value',
-        resultTypeId: 'bridge#Session',
-        cppType: 'Session',
-        valueType: 'object'
+        resultTypeRef: fixtureNominalTypeRef('bridge#Session'),
+        cResultMapping: { cppType: 'Session', fields: [] }
       },
       {
         libraryId: 'bridge',
@@ -46,9 +60,8 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
         cArgumentKinds: ['receiver'],
         cCallStyle: 'member',
         cResultMode: 'borrowed',
-        resultTypeId: 'bridge#Session',
-        cppType: 'Session',
-        valueType: 'object'
+        resultTypeRef: fixtureNominalTypeRef('bridge#Session', 'borrowed'),
+        cResultMapping: { cppType: 'Session', fields: [] }
       },
       {
         libraryId: 'bridge',
@@ -60,8 +73,7 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
         cExpression: 'close',
         cArgumentKinds: ['receiver'],
         cCallStyle: 'member',
-        cppType: 'void',
-        valueType: 'void'
+        resultTypeRef: fixturePrimitiveTypeRef('void')
       }
     ],
     intrinsicBindings: [],

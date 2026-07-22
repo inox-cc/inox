@@ -52,7 +52,6 @@ test('node:buffer operations describe results only through TypeRef', async () =>
       })
     }
 
-    assertLegacyResultMetadataIsAbsent(operation)
   }
 
   const variants = operations.flatMap((operation) => operation.variants ?? [])
@@ -60,7 +59,6 @@ test('node:buffer operations describe results only through TypeRef', async () =>
 
   for (const variant of variants) {
     assert.equal(variant.resultTypeRef, undefined)
-    assertLegacyResultMetadataIsAbsent(variant)
   }
 })
 
@@ -83,18 +81,4 @@ function primitiveTypeRef(name: 'boolean' | 'number' | 'string') {
     ownership: 'value',
     traits: []
   }
-}
-
-function assertLegacyResultMetadataIsAbsent(value: {
-  resultTypeId?: string | null
-  cppType?: string | null
-  valueType?: string | null
-  nullable?: boolean
-  owned?: boolean
-}): void {
-  assert.equal(value.resultTypeId, undefined)
-  assert.equal(value.cppType, undefined)
-  assert.equal(value.valueType, undefined)
-  assert.equal(value.nullable, undefined)
-  assert.equal(value.owned, undefined)
 }

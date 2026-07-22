@@ -81,12 +81,6 @@ function primitiveTypeRef(name: 'number' | 'void'): TypeRef {
 function assertLegacyResultMetadataIsAbsent(
   value: LibraryOperationDescriptor | LibraryOperationVariantDescriptor
 ): void {
-  assert.equal(value.resultTypeId, undefined)
-  assert.equal(value.resultShapeFields, undefined)
-  assert.equal(value.cppType, undefined)
-  assert.equal(value.valueType, undefined)
   assert.equal(Object.prototype.hasOwnProperty.call(value, 'asyncResultValueType'), false)
   assert.equal(Object.prototype.hasOwnProperty.call(value, 'asyncResultRejectionValueType'), false)
-  assert.equal(value.nullable, undefined)
-  assert.equal(value.owned, undefined)
 }

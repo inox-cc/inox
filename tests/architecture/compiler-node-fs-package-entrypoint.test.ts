@@ -49,14 +49,12 @@ test('node:fs и node:fs/promises имеют отдельные compiler entrypo
   assert.equal(constant.kind, 'member-read')
   assert.equal(constant.cExpression, 'fs.constants.F_OK')
   assert.deepEqual(constant.resultTypeRef, primitiveTypeRef('number'))
-  assert.equal(constant.valueType, undefined)
 
   const statsIsFile = operation(fs, 'node:fs#Stats.isFile')
   assert.equal(statsIsFile.receiverTypeId, 'node:fs#Stats')
   assert.equal(statsIsFile.cExpression, 'isFile')
   assert.equal(statsIsFile.cCallStyle, 'member')
   assert.deepEqual(statsIsFile.resultTypeRef, primitiveTypeRef('boolean'))
-  assert.equal(statsIsFile.valueType, undefined)
 
   const readFile = operation(promises, 'node:fs/promises#readFile')
   assert.equal(readFile.libraryId, 'node:fs/promises')

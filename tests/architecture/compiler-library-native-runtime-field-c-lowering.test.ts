@@ -2,7 +2,10 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
-import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-fixtures.ts'
+import {
+  createCompilerLibrarySetWithConsole,
+  fixtureNominalTypeRef
+} from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('native library type fields stay runtime-backed without cMember metadata', () => {
@@ -41,9 +44,8 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
         runtimeRequirements: [],
         cExpression: 'bridge.open',
         cArgumentKinds: [],
-        resultTypeId: 'bridge#Entry',
-        cppType: 'BridgeEntry',
-        valueType: 'object'
+        resultTypeRef: fixtureNominalTypeRef('bridge#Entry'),
+        cResultMapping: { cppType: 'BridgeEntry', fields: [] }
       }
     ],
     intrinsicBindings: [],

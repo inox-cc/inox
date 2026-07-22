@@ -49,8 +49,6 @@ test('node:events exhaustive diagnostics принадлежат package operatio
   assert.equal(operations.every((operation) => operation.libraryId === libraryId), true)
   assert.equal(operations.every((operation) => operation.runtimeRequirements.length === 0), true)
   assert.equal(operations.every((operation) => operation.cExpression === null), true)
-  assert.equal(operations.every((operation) => operation.cppType === null), true)
-  assert.equal(operations.every((operation) => operation.valueType === null), true)
 })
 
 function assertDiagnosticOperation(

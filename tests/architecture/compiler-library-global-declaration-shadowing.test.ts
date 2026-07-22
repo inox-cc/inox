@@ -3,7 +3,7 @@ import { test } from 'node:test'
 
 import { compileSourceToIr } from '../../compiler/core.ts'
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
-import { globalDeclarationLibrary } from './helpers/compiler-library-fixtures.ts'
+import { fixturePrimitiveTypeRef, globalDeclarationLibrary } from './helpers/compiler-library-fixtures.ts'
 
 test('module-local function shadowing побеждает ambient library binding', () => {
   const libraries = createCompilerLibrarySet([
@@ -18,7 +18,7 @@ test('module-local function shadowing побеждает ambient library binding
           kind: 'call',
           runtimeRequirements: [],
           cExpression: 'bridge',
-          valueType: 'string'
+          resultTypeRef: fixturePrimitiveTypeRef('string')
         }
       ]
     )

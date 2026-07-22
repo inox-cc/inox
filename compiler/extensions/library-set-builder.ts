@@ -975,7 +975,6 @@ function validateOperationTypeRefs(
 
     if (operationTypeRef !== null && typeof operationTypeRef !== 'undefined') {
       validateTypeRef(`operation ${operation.operationId} result`, operationTypeRef, nativeTypes, typeParameters)
-      validateTypeRefHasNoLegacyResultMetadata(operation.operationId, operation, null)
     }
 
     validateOperationArgumentTypeRefs(operation.operationId, operation.argumentChecks, nativeTypes, typeParameters)
@@ -1013,7 +1012,6 @@ function validateOperationTypeRefs(
         )
       }
 
-      validateTypeRefHasNoLegacyResultMetadata(operation.operationId, operation, variant, variantIndex)
       validateCResultMapping(
         `operation ${operation.operationId} variant ${variantIndex}`,
         variant.cResultMapping ?? operation.cResultMapping,
@@ -1396,53 +1394,6 @@ function validateCResultFieldMappings(
 
     validateCResultFieldMappings(`${label} field ${mapping.name}`, nestedMappings, semanticField.typeRef)
   }
-}
-
-function validateTypeRefHasNoLegacyResultMetadata(
-  operationId: string,
-  operation: LibraryOperationDescriptor,
-  variant: LibraryOperationVariantDescriptor | null,
-  variantIndex: number | null = null
-): void {
-  const field = legacyResultMetadataField(operation, variant)
-
-  if (field === null) {
-    return
-  }
-
-  const label = variantIndex === null ? `operation ${operationId}` : `operation ${operationId} variant ${variantIndex}`
-
-  throw new Error(`${label} cannot combine resultTypeRef with legacy result metadata ${field}`)
-}
-
-function legacyResultMetadataField(
-  operation: LibraryOperationDescriptor,
-  variant: LibraryOperationVariantDescriptor | null
-): string | null {
-  if (legacyMetadataIsPresent(variant?.resultShapeFields ?? operation.resultShapeFields)) {
-    return 'resultShapeFields'
-  }
-  if (legacyMetadataIsPresent(variant?.resultTypeId ?? operation.resultTypeId)) {
-    return 'resultTypeId'
-  }
-  if (legacyMetadataIsPresent(variant?.cppType ?? operation.cppType)) {
-    return 'cppType'
-  }
-  if (legacyMetadataIsPresent(variant?.valueType ?? operation.valueType)) {
-    return 'valueType'
-  }
-  if (legacyMetadataIsPresent(variant?.nullable ?? operation.nullable)) {
-    return 'nullable'
-  }
-  if (legacyMetadataIsPresent(variant?.owned ?? operation.owned)) {
-    return 'owned'
-  }
-
-  return null
-}
-
-function legacyMetadataIsPresent(value: unknown): boolean {
-  return value !== null && typeof value !== 'undefined'
 }
 
 function validateTypeRef(
@@ -1990,11 +1941,7 @@ function compilerLibrarySetFingerprint(
           ':' +
           resultInferenceFingerprint(item.resultInference) +
           ':' +
-          operationResultShapeFingerprint(item) +
-          ':' +
           (item.receiverTypeId ?? '') +
-          ':' +
-          (item.resultTypeId ?? '') +
           ':' +
           (item.cCallStyle ?? '') +
           ':' +
@@ -2005,14 +1952,6 @@ function compilerLibrarySetFingerprint(
           (item.maxArgs ?? '') +
           ':' +
           operationArgumentChecksFingerprint(item) +
-          ':' +
-          (item.cppType ?? '') +
-          ':' +
-          (item.valueType ?? '') +
-          ':' +
-          (item.nullable === true ? 'nullable' : 'required') +
-          ':' +
-          (item.owned === true ? 'owned' : 'borrowed') +
           ':' +
           (item.constantValue ?? '') +
           ':' +
@@ -2394,19 +2333,7 @@ function operationVariantsFingerprint(operation: LibraryOperationDescriptor): st
         ':' +
         typeRefFingerprintOrEmpty(variant.resultTypeRef) +
         ':' +
-        resultInferenceFingerprint(variant.resultInference) +
-        ':' +
-        resultShapeFieldsFingerprint(variant.resultShapeFields ?? []) +
-        ':' +
-        (variant.resultTypeId ?? '') +
-        ':' +
-        (variant.cppType ?? '') +
-        ':' +
-        (variant.valueType ?? '') +
-        ':' +
-        (variant.nullable === true ? 'nullable' : 'required') +
-        ':' +
-        (variant.owned === true ? 'owned' : 'borrowed')
+        resultInferenceFingerprint(variant.resultInference)
     )
   }
 
@@ -2672,16 +2599,6 @@ function runtimeConditionalCapabilitiesFingerprint(requirement: RuntimeRequireme
 
   rows.sort()
   return rows.join(';')
-}
-
-function operationResultShapeFingerprint(operation: LibraryOperationDescriptor): string {
-  const fields = operation.resultShapeFields
-
-  if (fields === null || typeof fields === 'undefined') {
-    return ''
-  }
-
-  return resultShapeFieldsFingerprint(fields)
 }
 
 function cResultMappingFingerprint(mapping: LibraryCResultMappingDescriptor | null | undefined): string {

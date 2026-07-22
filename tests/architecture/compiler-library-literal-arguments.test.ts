@@ -3,7 +3,10 @@ import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
 import { CompileError } from '../../compiler/diagnostics.ts'
-import { createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet } from './helpers/compiler-library-fixtures.ts'
+import {
+  createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet,
+  fixturePrimitiveTypeRef
+} from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('library argument checks владеют literal restrictions и diagnostics', () => {
@@ -43,8 +46,7 @@ function codecLibrary(): CompilerLibraryDescriptor {
             literalDiagnosticMessage: "codec.open only supports 'sha256'"
           }
         ],
-        cppType: 'void',
-        valueType: 'void'
+        resultTypeRef: fixturePrimitiveTypeRef('void')
       }
     ],
     intrinsicBindings: [],

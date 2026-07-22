@@ -3,7 +3,10 @@ import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
 import { CompileError } from '../../compiler/diagnostics.ts'
-import { createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet } from './helpers/compiler-library-fixtures.ts'
+import {
+  createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet,
+  fixturePrimitiveTypeRef
+} from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('unconditional capabilities раскрываются через runtime requirement dependencies', () => {
@@ -45,8 +48,7 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
         runtimeRequirements: ['fixture:leaf'],
         cExpression: 'bridge',
         cArgumentKinds: [],
-        cppType: 'void',
-        valueType: 'void'
+        resultTypeRef: fixturePrimitiveTypeRef('void')
       }
     ],
     intrinsicBindings: [],

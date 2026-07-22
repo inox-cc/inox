@@ -40,24 +40,11 @@ test('global:binary operations describe results only through TypeRef', async () 
     fields: []
   })
 
-  for (const operation of operations) {
-    assert.equal(operation.resultTypeId, undefined)
-    assert.equal(operation.cppType, undefined)
-    assert.equal(operation.valueType, undefined)
-    assert.equal(operation.nullable, undefined)
-    assert.equal(operation.owned, undefined)
-  }
-
   const variants = operations[0]?.variants ?? []
   assert.equal(variants.length, 2)
 
   for (const variant of variants) {
     assert.equal(variant.resultTypeRef, undefined)
-    assert.equal(variant.resultTypeId, undefined)
-    assert.equal(variant.cppType, undefined)
-    assert.equal(variant.valueType, undefined)
-    assert.equal(variant.nullable, undefined)
-    assert.equal(variant.owned, undefined)
   }
 })
 

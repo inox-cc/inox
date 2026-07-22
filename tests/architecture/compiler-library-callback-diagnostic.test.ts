@@ -4,7 +4,10 @@ import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
 import { CompileError } from '../../compiler/diagnostics.ts'
-import { createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet } from './helpers/compiler-library-fixtures.ts'
+import {
+  createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet,
+  fixturePrimitiveTypeRef
+} from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 import { compilerLibraryPackage as promisePackage } from '../../stdlib/global/promise/compiler/index.ts'
 
@@ -79,8 +82,7 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
             functionAsyncDiagnosticMessage: diagnosticMessage
           }
         ],
-        cppType: 'void',
-        valueType: 'void'
+        resultTypeRef: fixturePrimitiveTypeRef('void')
       }
     ],
     intrinsicBindings: [],

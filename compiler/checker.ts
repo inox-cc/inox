@@ -3121,7 +3121,7 @@ class Checker {
         return 'unknown'
       }
 
-      return (expression.valueType ?? libraryOperation.valueType ?? 'unknown') as ValueType
+      return (expression.valueType ?? 'unknown') as ValueType
     }
 
     const optionalChainReceiver = isOptionalChainProtectedExpression(expression.object)
@@ -3242,7 +3242,7 @@ class Checker {
         return 'unknown'
       }
 
-      return (expression.valueType ?? libraryOperation.valueType ?? 'unknown') as ValueType
+      return (expression.valueType ?? 'unknown') as ValueType
     }
 
     if (this.reportUnsupportedClassPrototypeAccess(expression, true)) {
@@ -3713,7 +3713,7 @@ class Checker {
 
     return typeof expression.valueType === 'string'
       ? (expression.valueType as ValueType)
-      : ((variant?.valueType ?? declaredType ?? operation.valueType ?? 'unknown') as ValueType)
+      : (declaredType ?? 'unknown')
   }
 
   applyCompilerLibraryResultInference(
@@ -5110,51 +5110,6 @@ class Checker {
         )
       }
       this.applyCompilerLibraryTypeRef(expression, resultTypeRef, cResultMapping)
-    } else {
-      const resultTypeId = variant?.resultTypeId ?? operation.resultTypeId
-      const cppType = variant?.cppType ?? operation.cppType
-      const valueType = variant?.valueType ?? operation.valueType
-      const nativeResultType =
-        resultTypeId === null || typeof resultTypeId === 'undefined'
-          ? null
-          : compilerLibraryNativeTypeForId(libraries, resultTypeId)
-      const resultShapeFields = variant?.resultShapeFields ?? operation.resultShapeFields ?? nativeResultType?.fields
-      const resultCppType =
-        valueType === 'async-result' && nativeResultType !== null ? nativeResultType.cppType : cppType
-
-      if (
-        (resultShapeFields !== null && typeof resultShapeFields !== 'undefined') ||
-        (resultTypeId !== null && typeof resultTypeId !== 'undefined')
-      ) {
-        const shapeFields: AnyNode[] = []
-        const cResultShapeFields: string[] = []
-
-        const fields = resultShapeFields ?? []
-
-        for (let index = 0; index < fields.length; index = index + 1) {
-          const field = fields[index]
-
-          shapeFields.push(this.compilerLibraryResultShapeField(field, nodeSourceLocation(expression)))
-          cResultShapeFields.push(field.name)
-        }
-
-        expression.shape = {
-          kind: 'object',
-          fields: shapeFields,
-          libraryTypeId: resultTypeId ?? null,
-          libraryCppType: resultCppType ?? null
-        }
-        expression.libraryCResultShapeFields = cResultShapeFields
-      }
-      expression.libraryCppType = cppType ?? null
-
-      if (valueType !== null && typeof valueType !== 'undefined') {
-        expression.valueType = valueType
-      }
-
-      expression.libraryOwned = (variant?.owned ?? operation.owned) === true
-      expression.libraryResultTypeId = resultTypeId ?? null
-      expression.nullable = (variant?.nullable ?? operation.nullable) === true
     }
 
     expression.libraryConstantValue = operation.constantValue ?? null
@@ -6051,7 +6006,7 @@ class Checker {
 
     return typeof expression.valueType === 'string'
       ? (expression.valueType as ValueType)
-      : ((variant?.valueType ?? declaredType ?? operation.valueType ?? 'object') as ValueType)
+      : (declaredType ?? 'object')
   }
 
   checkImportedClassConstructorArguments(expression: AnyNode, rawParams: AnyNode[] | null | undefined): void {

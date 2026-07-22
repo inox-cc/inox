@@ -5,7 +5,7 @@ import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-
 import type { CompilerLibraryDescriptor, NominalTypeRef, TypeRef } from '../../compiler/extensions/types.ts'
 
 test('builder validates recursive TypeRef contracts', () => {
-  const invalidRefs: Array<{ typeRef: TypeRef; message: RegExp; legacyValueType?: string }> = [
+  const invalidRefs: Array<{ typeRef: TypeRef; message: RegExp }> = [
     {
       typeRef: nominalTypeRef('fixture#Missing'),
       message: /unknown nominal type fixture#Missing/
@@ -32,24 +32,19 @@ test('builder validates recursive TypeRef contracts', () => {
         traits: []
       },
       message: /duplicate object field value/
-    },
-    {
-      typeRef: nominalTypeRef('fixture#Box'),
-      legacyValueType: 'object',
-      message: /cannot combine resultTypeRef with legacy result metadata valueType/
     }
   ]
 
   for (let index = 0; index < invalidRefs.length; index = index + 1) {
     const invalid = invalidRefs[index]
     assert.throws(
-      () => createCompilerLibrarySet([fixtureLibrary(invalid.typeRef, invalid.legacyValueType)]),
+      () => createCompilerLibrarySet([fixtureLibrary(invalid.typeRef)]),
       invalid.message
     )
   }
 })
 
-function fixtureLibrary(resultTypeRef: TypeRef, valueType?: string): CompilerLibraryDescriptor {
+function fixtureLibrary(resultTypeRef: TypeRef): CompilerLibraryDescriptor {
   return {
     id: 'fixture',
     dependencies: [],
@@ -72,8 +67,7 @@ function fixtureLibrary(resultTypeRef: TypeRef, valueType?: string): CompilerLib
         operationId: 'fixture#make',
         kind: 'call',
         runtimeRequirements: [],
-        resultTypeRef,
-        valueType
+        resultTypeRef
       }
     ],
     intrinsicBindings: [],

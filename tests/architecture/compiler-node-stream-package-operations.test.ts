@@ -38,8 +38,6 @@ test('node:stream package исчерпывающе владеет diagnostic ope
     assert.deepEqual(operation.runtimeRequirements, [])
     assert.equal(operation.diagnosticCode, 'INOX_NOT_IMPLEMENTED')
     assert.equal(operation.cExpression ?? null, null)
-    assert.equal(operation.cppType ?? null, null)
-    assert.equal(operation.valueType ?? null, null)
   }
 })
 

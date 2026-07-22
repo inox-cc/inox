@@ -94,9 +94,6 @@ function unsupportedOperation(name: string): LibraryOperationDescriptor {
     kind: 'call',
     runtimeRequirements: [],
     cExpression: null,
-    cppType: null,
-    valueType: null,
-    owned: false,
     constantValue: null,
     diagnosticCode: 'INOX_NOT_IMPLEMENTED',
     diagnosticMessage: `node:os ${name} is not implemented by the current C backend`

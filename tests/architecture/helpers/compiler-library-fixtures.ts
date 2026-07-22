@@ -4,7 +4,11 @@ import type {
   CompilerLibraryDescriptor,
   CompilerLibraryPackageDescriptor,
   CompilerLibrarySet,
-  LibraryOperationDescriptor
+  LibraryOperationDescriptor,
+  ObjectTypeRef,
+  ObjectTypeRefField,
+  TypeOwnership,
+  TypeRef
 } from '../../../compiler/extensions/types.ts'
 import { parseCompilerLibraryGlobalDeclarations } from '../../../compiler/extensions/global-declarations.ts'
 import { createCompilerLibrarySet } from '../../../compiler/extensions/library-set-builder.ts'
@@ -75,6 +79,30 @@ export function compilerLibrary(id: string, dependencies: string[] = []): Compil
     intrinsicBindings: [],
     runtimeRequirements: []
   }
+}
+
+export function fixturePrimitiveTypeRef(
+  name: 'boolean' | 'bytes' | 'null' | 'number' | 'string' | 'void',
+  nullable = false,
+  ownership: TypeOwnership = 'value'
+): TypeRef {
+  return { kind: 'primitive', name, nullable, ownership, traits: [] }
+}
+
+export function fixtureNominalTypeRef(
+  typeId: string,
+  ownership: TypeOwnership = 'value',
+  nullable = false
+): TypeRef {
+  return { kind: 'nominal', typeId, args: [], nullable, ownership, traits: [] }
+}
+
+export function fixtureObjectTypeRef(
+  fields: ObjectTypeRefField[],
+  ownership: TypeOwnership = 'value',
+  nullable = false
+): ObjectTypeRef {
+  return { kind: 'object', fields, nullable, ownership, traits: [] }
 }
 
 export function globalDeclarationLibrary(
@@ -180,7 +208,7 @@ function operationGlobalRootMembers(library: CompilerLibraryDescriptor): Map<str
   const roots: Map<string, Set<string>> = new Map()
 
   for (const operation of library.operations) {
-    const resultFields = operation.resultShapeFields ?? []
+    const resultFields = operationObjectFields(operation)
 
     addOperationGlobalPath(roots, operation.bindingId, resultFields)
 
@@ -278,21 +306,46 @@ function withSyntheticGlobalRootFields(
       continue
     }
 
-    const fields = [...(operation.resultShapeFields ?? [])]
+    const resultTypeRef = operation.resultTypeRef
+
+    if (resultTypeRef?.kind !== 'object') {
+      operations.push(operation)
+      continue
+    }
+
+    const fields = [...resultTypeRef.fields]
     const fieldNames = new Set(fields.map((field) => field.name))
     const members = roots.get(rootName) ?? new Set()
 
     for (const member of members) {
       if (!fieldNames.has(member)) {
-        fields.push({ name: member, valueType: 'unknown', readonly: false })
+        fields.push({
+          name: member,
+          typeRef: {
+            kind: 'unknown',
+            nullable: true,
+            ownership: 'value',
+            traits: []
+          },
+          readonly: false
+        })
       }
     }
 
     operations.push({
       ...operation,
-      resultShapeFields: fields
+      resultTypeRef: {
+        ...resultTypeRef,
+        fields
+      }
     })
   }
 
   return operations
+}
+
+function operationObjectFields(operation: LibraryOperationDescriptor): ObjectTypeRef['fields'] {
+  const resultTypeRef = operation.resultTypeRef
+
+  return resultTypeRef?.kind === 'object' ? resultTypeRef.fields : []
 }

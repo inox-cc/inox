@@ -3,7 +3,7 @@ import { test } from 'node:test'
 
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
 import { compilerLibraryOperationForIntrinsic } from '../../compiler/extensions/library-set.ts'
-import { compilerLibrary } from './helpers/compiler-library-fixtures.ts'
+import { compilerLibrary, fixtureObjectTypeRef } from './helpers/compiler-library-fixtures.ts'
 
 test('intrinsic provider разрешается в обычную library operation', () => {
   const library = compilerLibrary('global:fixture')
@@ -20,8 +20,8 @@ test('intrinsic provider разрешается в обычную library operat
     runtimeRequirements: [],
     cExpression: 'FixtureLiteral',
     cArgumentKinds: [],
-    cppType: 'FixtureLiteral',
-    valueType: 'object'
+    resultTypeRef: fixtureObjectTypeRef([]),
+    cResultMapping: { cppType: 'FixtureLiteral', fields: [] }
   })
 
   const libraries = createCompilerLibrarySet([library])

@@ -380,9 +380,6 @@ function unsupportedOperation(name: string): LibraryOperationDescriptor {
     kind: 'call',
     runtimeRequirements: [],
     cExpression: null,
-    cppType: null,
-    valueType: null,
-    owned: false,
     diagnosticCode: 'INOX_NOT_IMPLEMENTED',
     diagnosticMessage: `node:crypto ${name} is not implemented by the current C++ backend`
   }

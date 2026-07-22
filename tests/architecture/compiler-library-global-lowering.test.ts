@@ -2,7 +2,12 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { compileSource, compileSourceToIr } from '../../compiler/core.ts'
-import { createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet } from './helpers/compiler-library-fixtures.ts'
+import {
+  createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet,
+  fixtureNominalTypeRef,
+  fixtureObjectTypeRef,
+  fixturePrimitiveTypeRef
+} from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor, TypeRef } from '../../compiler/extensions/types.ts'
 
 test('package globals lower through generic member, index, optional argument and assignment operations', () => {
@@ -69,6 +74,15 @@ function hostLibrary(): CompilerLibraryDescriptor {
         baseTypeIds: [],
         runtimeRequirements: [],
         traits: [{ traitId: 'iterable', args: [primitiveTypeRef('string')] }]
+      },
+      {
+        libraryId: 'host',
+        typeId: 'host:env',
+        declarationNames: ['HostEnv'],
+        valueType: 'object',
+        cppType: 'inox::HostEnv&',
+        baseTypeIds: [],
+        runtimeRequirements: []
       }
     ],
     operations: [
@@ -79,19 +93,26 @@ function hostLibrary(): CompilerLibraryDescriptor {
         kind: 'member-read',
         runtimeRequirements: [],
         cExpression: 'inox::host',
-        resultTypeId: 'host:root',
-        resultShapeFields: [
+        resultTypeRef: fixtureObjectTypeRef([
           {
             name: 'versions',
-            valueType: 'object',
-            readonly: true,
-            resultTypeId: 'host:versions',
-            cppType: 'inox::HostVersions',
-            resultShapeFields: [{ name: 'node', valueType: 'string', readonly: true }]
+            typeRef: fixtureObjectTypeRef([
+              { name: 'node', typeRef: fixturePrimitiveTypeRef('string'), readonly: true }
+            ]),
+            readonly: true
           }
-        ],
-        cppType: 'inox::Host&',
-        valueType: 'object'
+        ]),
+        cResultMapping: {
+          cppType: 'inox::Host&',
+          fields: [
+            {
+              name: 'versions',
+              cMember: 'versions',
+              cppType: 'inox::HostVersions',
+              fields: [{ name: 'node', cMember: 'node', cppType: 'inox::String' }]
+            }
+          ]
+        }
       },
       {
         libraryId: 'host',
@@ -100,9 +121,8 @@ function hostLibrary(): CompilerLibraryDescriptor {
         kind: 'member-read',
         runtimeRequirements: [],
         cExpression: 'inox::host.env',
-        resultTypeId: 'host:env',
-        cppType: 'inox::HostEnv&',
-        valueType: 'object'
+        resultTypeRef: fixtureNominalTypeRef('host:env'),
+        cResultMapping: { cppType: 'inox::HostEnv&', fields: [] }
       },
       {
         libraryId: 'host',
@@ -114,10 +134,8 @@ function hostLibrary(): CompilerLibraryDescriptor {
         cArgumentKinds: ['receiver', 'member-name-string-view'],
         receiverTypeId: 'host:env',
         cCallStyle: 'index',
-        cppType: 'inox::String',
-        valueType: 'string',
-        nullable: true,
-        owned: true
+        resultTypeRef: fixturePrimitiveTypeRef('string', true, 'owned'),
+        cResultMapping: { cppType: 'inox::String', fields: [] }
       },
       {
         libraryId: 'host',
@@ -139,9 +157,8 @@ function hostLibrary(): CompilerLibraryDescriptor {
         receiverTypeId: 'host:argv',
         cCallStyle: 'index',
         argumentChecks: [{ valueTypes: ['number'] }],
-        cppType: 'inox::String',
-        valueType: 'string',
-        owned: true
+        resultTypeRef: fixturePrimitiveTypeRef('string', false, 'owned'),
+        cResultMapping: { cppType: 'inox::String', fields: [] }
       },
       {
         libraryId: 'host',
@@ -154,8 +171,7 @@ function hostLibrary(): CompilerLibraryDescriptor {
         receiverTypeId: 'host:argv',
         cCallStyle: 'index-assignment',
         argumentChecks: [{ valueTypes: ['number'] }, { valueTypes: ['number'] }],
-        cppType: 'double',
-        valueType: 'number'
+        resultTypeRef: fixturePrimitiveTypeRef('number')
       },
       {
         libraryId: 'host',
@@ -168,8 +184,7 @@ function hostLibrary(): CompilerLibraryDescriptor {
         minArgs: 0,
         maxArgs: 1,
         argumentChecks: [{ valueTypes: ['number'] }],
-        cppType: 'void',
-        valueType: 'unknown'
+        resultTypeRef: fixturePrimitiveTypeRef('void')
       },
       {
         libraryId: 'host',
@@ -181,8 +196,7 @@ function hostLibrary(): CompilerLibraryDescriptor {
         cArgumentKinds: ['receiver', 'number'],
         cCallStyle: 'member-assignment',
         argumentChecks: [{ valueTypes: ['number'] }],
-        cppType: 'double',
-        valueType: 'number'
+        resultTypeRef: fixturePrimitiveTypeRef('number')
       }
     ],
     intrinsicBindings: [],

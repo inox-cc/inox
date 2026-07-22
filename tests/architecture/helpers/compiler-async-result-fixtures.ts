@@ -40,7 +40,6 @@ export function incompleteAsyncResultLibrary(): CompilerLibraryDescriptor {
         kind: 'call',
         runtimeRequirements: [],
         cExpression: 'fixture_make_task',
-        valueType: 'async-result',
         minArgs: 0,
         maxArgs: 0,
         argumentChecks: []

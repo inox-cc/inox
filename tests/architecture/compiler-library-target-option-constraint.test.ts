@@ -3,7 +3,10 @@ import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
 import { CompileError } from '../../compiler/diagnostics.ts'
-import { createCompilerLibrarySetWithSyntheticGlobalDeclarations } from './helpers/compiler-library-fixtures.ts'
+import {
+  createCompilerLibrarySetWithSyntheticGlobalDeclarations,
+  fixturePrimitiveTypeRef
+} from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 const libraryId = 'fixture:accelerator'
@@ -52,8 +55,7 @@ function acceleratorLibrary(): CompilerLibraryDescriptor {
         runtimeRequirements: [requirementId],
         cExpression: 'accelerator.run',
         cArgumentKinds: [],
-        valueType: 'void',
-        cppType: 'void'
+        resultTypeRef: fixturePrimitiveTypeRef('void')
       }
     ],
     intrinsicBindings: [],

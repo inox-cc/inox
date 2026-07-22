@@ -44,10 +44,5 @@ test('node:timers operations describe results only through TypeRef', async () =>
       })
     }
 
-    assert.equal(operations[index].resultTypeId, undefined)
-    assert.equal(operations[index].cppType, undefined)
-    assert.equal(operations[index].valueType, undefined)
-    assert.equal(operations[index].nullable, undefined)
-    assert.equal(operations[index].owned, undefined)
   }
 })

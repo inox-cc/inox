@@ -2,7 +2,12 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
-import { createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet } from './helpers/compiler-library-fixtures.ts'
+import {
+  createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet,
+  fixtureNominalTypeRef,
+  fixtureObjectTypeRef,
+  fixturePrimitiveTypeRef
+} from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('library C arguments поддерживают templates и string-view-or-value lowering', () => {
@@ -68,21 +73,10 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
         kind: 'member-read',
         runtimeRequirements: [],
         cExpression: 'bridge',
-        resultShapeFields: [
-          {
-            name: 'box',
-            valueType: 'object',
-            readonly: true,
-            resultTypeId: 'bridge#Box',
-            resultShapeFields: [
-              { name: 'touch', valueType: 'function', readonly: true },
-              { name: 'accept', valueType: 'function', readonly: true }
-            ],
-            cppType: 'BridgeBox'
-          }
-        ],
-        cppType: 'Bridge',
-        valueType: 'object'
+        resultTypeRef: fixtureObjectTypeRef([
+          { name: 'box', typeRef: fixtureNominalTypeRef('bridge#Box'), readonly: true }
+        ]),
+        cResultMapping: { cppType: 'Bridge', fields: [] }
       },
       {
         libraryId: 'bridge',
@@ -98,8 +92,7 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
         minArgs: 0,
         maxArgs: 0,
         argumentChecks: [],
-        cppType: 'void',
-        valueType: 'void'
+        resultTypeRef: fixturePrimitiveTypeRef('void')
       },
       {
         libraryId: 'bridge',
@@ -116,8 +109,7 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
         minArgs: 1,
         maxArgs: 1,
         argumentChecks: [{ valueTypes: ['number'] }],
-        cppType: 'void',
-        valueType: 'void'
+        resultTypeRef: fixturePrimitiveTypeRef('void')
       },
       {
         libraryId: 'bridge',
@@ -131,8 +123,7 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
         minArgs: 1,
         maxArgs: 1,
         argumentChecks: [{ valueTypes: ['number'] }],
-        cppType: 'void',
-        valueType: 'void'
+        resultTypeRef: fixturePrimitiveTypeRef('void')
       },
       {
         libraryId: 'bridge',
@@ -146,8 +137,7 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
         minArgs: 1,
         maxArgs: 1,
         argumentChecks: [{ valueTypes: ['string', 'object'] }],
-        cppType: 'void',
-        valueType: 'void'
+        resultTypeRef: fixturePrimitiveTypeRef('void')
       }
     ],
     intrinsicBindings: [],

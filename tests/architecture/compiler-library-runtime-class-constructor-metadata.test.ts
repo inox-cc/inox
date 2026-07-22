@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import { compileSource } from '../../compiler/core.ts'
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
+import { fixtureNominalTypeRef } from './helpers/compiler-library-fixtures.ts'
 
 test('runtime class constructor substitution preserves package operation metadata', () => {
   const result = compileSource(
@@ -99,9 +100,8 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
         cExpression: 'FixtureBridge',
         cArgumentKinds: [],
         cCallStyle: 'function',
-        resultTypeId: 'fixture#Bridge',
-        cppType: 'FixtureBridge',
-        valueType: 'object',
+        resultTypeRef: fixtureNominalTypeRef('fixture#Bridge'),
+        cResultMapping: { cppType: 'FixtureBridge', fields: [] },
         minArgs: 0,
         maxArgs: 0,
         argumentChecks: []

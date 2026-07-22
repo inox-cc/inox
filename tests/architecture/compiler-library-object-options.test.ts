@@ -3,7 +3,10 @@ import { test } from 'node:test'
 
 import { compileSource, compileSourceToIr } from '../../compiler/core.ts'
 import { CompileError } from '../../compiler/diagnostics.ts'
-import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-fixtures.ts'
+import {
+  createCompilerLibrarySetWithConsole,
+  fixturePrimitiveTypeRef
+} from './helpers/compiler-library-fixtures.ts'
 import type {
   CompilerLibraryDescriptor,
   LibraryObjectLiteralFieldDescriptor,
@@ -113,8 +116,7 @@ function objectOptionsLibrary(): CompilerLibraryDescriptor {
             ]
           }
         ],
-        cppType: 'void',
-        valueType: 'void'
+        resultTypeRef: fixturePrimitiveTypeRef('void')
       },
       {
         libraryId: 'bridge',
@@ -160,8 +162,7 @@ function objectOptionsLibrary(): CompilerLibraryDescriptor {
         minArgs: 0,
         maxArgs: 0,
         argumentChecks: [],
-        cppType: 'bool',
-        valueType: 'boolean'
+        resultTypeRef: fixturePrimitiveTypeRef('boolean')
       }
     ],
     intrinsicBindings: [],

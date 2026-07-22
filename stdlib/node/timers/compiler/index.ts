@@ -146,8 +146,6 @@ function unsupportedHandleOperation(
     minArgs: 0,
     maxArgs: 0,
     argumentChecks: [],
-    cppType: 'void',
-    valueType: 'void',
     diagnosticCode: 'INOX_TIMER_REF_UNREF',
     diagnosticMessage:
       'timer handle ref() and unref() are not supported in the MVP; timer handles are referenced by default'

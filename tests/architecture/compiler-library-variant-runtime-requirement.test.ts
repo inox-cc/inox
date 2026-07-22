@@ -3,7 +3,10 @@ import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
 import { CompileError } from '../../compiler/diagnostics.ts'
-import { createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet } from './helpers/compiler-library-fixtures.ts'
+import {
+  createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet,
+  fixturePrimitiveTypeRef
+} from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor, LibraryOperationVariantDescriptor } from '../../compiler/extensions/types.ts'
 
 type RuntimeVariant = LibraryOperationVariantDescriptor & {
@@ -50,8 +53,7 @@ function variantLibrary(zeroRequirement = 'fixture:wall'): CompilerLibraryDescri
     runtimeRequirements: [zeroRequirement],
     cExpression: 'clockProbe',
     cArgumentKinds: [],
-    cppType: 'double',
-    valueType: 'number'
+    resultTypeRef: fixturePrimitiveTypeRef('number')
   }
   const oneArg: RuntimeVariant = {
     minArgs: 1,
@@ -59,8 +61,7 @@ function variantLibrary(zeroRequirement = 'fixture:wall'): CompilerLibraryDescri
     runtimeRequirements: ['fixture:base'],
     cExpression: 'clockProbe',
     cArgumentKinds: ['number'],
-    cppType: 'double',
-    valueType: 'number'
+    resultTypeRef: fixturePrimitiveTypeRef('number')
   }
 
   return {
@@ -76,9 +77,7 @@ function variantLibrary(zeroRequirement = 'fixture:wall'): CompilerLibraryDescri
         runtimeRequirements: ['fixture:base'],
         variants: [zeroArgs, oneArg],
         minArgs: 0,
-        maxArgs: 1,
-        cppType: 'double',
-        valueType: 'number'
+        maxArgs: 1
       }
     ],
     intrinsicBindings: [],

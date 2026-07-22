@@ -2,7 +2,11 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
-import { createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet } from './helpers/compiler-library-fixtures.ts'
+import {
+  createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet,
+  fixtureNominalTypeRef,
+  fixturePrimitiveTypeRef
+} from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 const handleTypeId = 'bridge#Handle'
@@ -58,11 +62,8 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
         runtimeRequirements: ['bridge'],
         cExpression: 'bridge.open',
         cArgumentKinds: [],
-        resultTypeId: handleTypeId,
-        cppType: 'BridgeHandle',
-        valueType: 'object',
-        nullable: false,
-        owned: false
+        resultTypeRef: fixtureNominalTypeRef(handleTypeId),
+        cResultMapping: { cppType: 'BridgeHandle', fields: [] }
       },
       {
         libraryId: 'bridge',
@@ -81,8 +82,7 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
             functionReturnType: 'void'
           }
         ],
-        cppType: 'void',
-        valueType: 'void'
+        resultTypeRef: fixturePrimitiveTypeRef('void')
       },
       {
         libraryId: 'bridge',
@@ -94,8 +94,7 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
         cArgumentKinds: ['value'],
         cArgumentAdapters: ['BridgeHandle($value)'],
         argumentChecks: [{ valueTypes: ['object'], objectTypeIds: [handleTypeId] }],
-        cppType: 'void',
-        valueType: 'void'
+        resultTypeRef: fixturePrimitiveTypeRef('void')
       }
     ],
     intrinsicBindings: [],

@@ -2,7 +2,10 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { compileSource, compileSourceToIr } from '../../compiler/core.ts'
-import { createCompilerLibrarySetWithConsole } from './helpers/compiler-library-fixtures.ts'
+import {
+  createCompilerLibrarySetWithConsole,
+  fixturePrimitiveTypeRef
+} from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
 test('library operation декларативно создаёт runtime callback с event-loop lifetime', () => {
@@ -39,8 +42,7 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
         minArgs: 1,
         maxArgs: 1,
         argumentChecks: [{ valueTypes: ['function'] }],
-        cppType: 'void',
-        valueType: 'void'
+        resultTypeRef: fixturePrimitiveTypeRef('void')
       }
     ],
     intrinsicBindings: [],

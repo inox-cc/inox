@@ -97,11 +97,31 @@ type FingerprintLibraryOptions = {
 }
 
 function fingerprintLibrary(options: FingerprintLibraryOptions = {}): CompilerLibraryDescriptor {
+  const nestedTypeId = options.nestedResultTypeId ?? 'platform:nested'
+  const nestedCppType = options.nestedCppType ?? 'inox::Nested'
+
   return {
     id: 'platform:host',
     dependencies: [],
     declarations: [],
-    nativeTypes: [],
+    nativeTypes: [
+      {
+        libraryId: 'platform:host',
+        typeId: nestedTypeId,
+        declarationNames: ['Nested'],
+        valueType: 'object',
+        cppType: nestedCppType,
+        baseTypeIds: [],
+        runtimeRequirements: [],
+        fields: [
+          {
+            name: options.nestedFieldName ?? 'name',
+            valueType: 'string',
+            readonly: true
+          }
+        ]
+      }
+    ],
     operations: [
       {
         ...operation('global:host.values', 'call'),
@@ -109,22 +129,30 @@ function fingerprintLibrary(options: FingerprintLibraryOptions = {}): CompilerLi
           ? ['receiver', 'optional-argument']
           : ['member-name-string-view', 'optional-argument'],
         cCallStyle: options.assignmentCall === true ? 'member-assignment' : 'index',
-        resultShapeFields: [
-          {
-            name: 'release',
-            valueType: 'object',
-            readonly: true,
-            resultTypeId: options.nestedResultTypeId ?? 'platform:nested',
-            cppType: options.nestedCppType ?? 'inox::Nested',
-            resultShapeFields: [
-              {
-                name: options.nestedFieldName ?? 'name',
-                valueType: 'string',
-                readonly: true
-              }
-            ]
-          }
-        ]
+        resultTypeRef: {
+          kind: 'object',
+          fields: [
+            {
+              name: 'release',
+              typeRef: {
+                kind: 'nominal',
+                typeId: nestedTypeId,
+                args: [],
+                nullable: false,
+                ownership: 'value',
+                traits: []
+              },
+              readonly: true
+            }
+          ],
+          nullable: false,
+          ownership: 'value',
+          traits: []
+        },
+        cResultMapping: {
+          cppType: 'inox::Value',
+          fields: [{ name: 'release', cMember: 'release', cppType: nestedCppType }]
+        }
       },
       {
         ...operation('global:host.generic', 'call'),

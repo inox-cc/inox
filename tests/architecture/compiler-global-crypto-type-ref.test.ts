@@ -18,9 +18,4 @@ test('global:crypto result uses only a cross-package nominal TypeRef', async () 
     ownership: 'value',
     traits: []
   })
-  assert.equal(operation?.resultTypeId, undefined)
-  assert.equal(operation?.cppType, undefined)
-  assert.equal(operation?.valueType, undefined)
-  assert.equal(operation?.nullable, undefined)
-  assert.equal(operation?.owned, undefined)
 })

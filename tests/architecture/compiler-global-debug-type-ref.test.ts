@@ -48,10 +48,4 @@ test('global:debug memory result separates TypeRef from C++ mapping', async () =
       cppType: 'size_t'
     }))
   })
-  assert.equal(operation?.resultTypeId, undefined)
-  assert.equal(operation?.resultShapeFields, undefined)
-  assert.equal(operation?.cppType, undefined)
-  assert.equal(operation?.valueType, undefined)
-  assert.equal(operation?.nullable, undefined)
-  assert.equal(operation?.owned, undefined)
 })

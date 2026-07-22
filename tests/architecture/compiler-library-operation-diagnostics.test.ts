@@ -3,7 +3,10 @@ import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
 import { CompileError } from '../../compiler/diagnostics.ts'
-import { createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet } from './helpers/compiler-library-fixtures.ts'
+import {
+  createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet,
+  fixtureNominalTypeRef
+} from './helpers/compiler-library-fixtures.ts'
 import type {
   CompilerLibraryDescriptor,
   LibraryOperationDescriptor,
@@ -38,7 +41,17 @@ function diagnosticLibrary(): CompilerLibraryDescriptor {
     id: 'test:diagnostics',
     dependencies: [],
     declarations: [],
-    nativeTypes: [],
+    nativeTypes: [
+      {
+        libraryId: 'test:diagnostics',
+        typeId: 'test:diagnostics#UnsupportedObject',
+        declarationNames: ['UnsupportedObject'],
+        valueType: 'object',
+        cppType: 'UnsupportedObject',
+        baseTypeIds: [],
+        runtimeRequirements: []
+      }
+    ],
     operations: [
       diagnosticOperation('global:unsupportedCall', 'call', 'TEST_CALL'),
       diagnosticOperation('global:UnsupportedConstruct', 'construct', 'TEST_CONSTRUCT'),
@@ -49,8 +62,7 @@ function diagnosticLibrary(): CompilerLibraryDescriptor {
         operationId: 'test:diagnostics#unsupportedObject',
         kind: 'member-read',
         runtimeRequirements: [],
-        resultTypeId: 'test:diagnostics#UnsupportedObject',
-        valueType: 'object'
+        resultTypeRef: fixtureNominalTypeRef('test:diagnostics#UnsupportedObject')
       },
       diagnosticOperation('global:unsupportedObject.value', 'member-read', 'TEST_MEMBER_READ'),
       diagnosticOperation('global:unsupportedObject.value', 'member-write', 'TEST_MEMBER_WRITE'),
@@ -77,8 +89,7 @@ function diagnosticOperation(bindingId: string, kind: LibraryOperationKind, code
     kind,
     runtimeRequirements: [],
     diagnosticCode: code,
-    diagnosticMessage: `${code} is package-owned`,
-    valueType: 'unknown'
+    diagnosticMessage: `${code} is package-owned`
   }
 }
 

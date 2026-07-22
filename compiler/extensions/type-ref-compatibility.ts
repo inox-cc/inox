@@ -604,7 +604,7 @@ function baseTypeRefCompatibilityMetadata(
     const fields: AnyNode[] = []
 
     for (let index = 0; index < (nativeType.fields ?? []).length; index = index + 1) {
-      fields.push(legacyResultShapeField((nativeType.fields ?? [])[index], loc))
+      fields.push(descriptorResultShapeField((nativeType.fields ?? [])[index], loc))
     }
 
     metadata.libraryCppType = nativeType.cppType
@@ -792,7 +792,7 @@ function applyTypeTraits(
   }
 }
 
-function legacyResultShapeField(field: LibraryResultShapeFieldDescriptor, loc: SourceLocation): AnyNode {
+function descriptorResultShapeField(field: LibraryResultShapeFieldDescriptor, loc: SourceLocation): AnyNode {
   const result: AnyNode = {
     name: field.name,
     valueType: field.valueType,
@@ -812,7 +812,7 @@ function legacyResultShapeField(field: LibraryResultShapeFieldDescriptor, loc: S
     const fields: AnyNode[] = []
 
     for (let index = 0; index < (nestedFields ?? []).length; index = index + 1) {
-      fields.push(legacyResultShapeField((nestedFields ?? [])[index], loc))
+      fields.push(descriptorResultShapeField((nestedFields ?? [])[index], loc))
     }
 
     result.shape = {

@@ -577,6 +577,7 @@ function emitPreparedIntrinsicStringConversionExpression(
   }
 
   const resultMapping = variant?.cResultMapping ?? operation.cResultMapping
+  const resultTypeRef = variant?.resultTypeRef ?? operation.resultTypeRef
   const call: AnyNode = {
     type: 'CallExpression',
     callee: { type: 'Reference', path: [], loc: expression.loc },
@@ -594,9 +595,9 @@ function emitPreparedIntrinsicStringConversionExpression(
     libraryCReceiverAdapter: variant?.cReceiverAdapter ?? operation.cReceiverAdapter,
     libraryCResultAdapter: variant?.cResultAdapter ?? operation.cResultAdapter,
     libraryCResultMode: variant?.cResultMode ?? operation.cResultMode,
-    libraryCppType: resultMapping?.cppType ?? variant?.cppType ?? operation.cppType,
-    nullable: (variant?.nullable ?? operation.nullable) === true,
-    libraryOwned: (variant?.owned ?? operation.owned) === true
+    libraryCppType: resultMapping?.cppType ?? null,
+    nullable: resultTypeRef?.kind !== 'parameter' && resultTypeRef?.nullable === true,
+    libraryOwned: resultTypeRef?.kind !== 'parameter' && resultTypeRef?.ownership === 'owned'
   }
 
   return emitPreparedCompilerLibraryCallExpression(call, context)
