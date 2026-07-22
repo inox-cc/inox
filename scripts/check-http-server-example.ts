@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { once } from 'node:events'
 import { rm } from 'node:fs/promises'
+import { createServer as createPortReservationServer } from 'node:net'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -12,13 +13,18 @@ const compilerMode = process.argv[2] ?? 'node'
 
 assert.ok(compilerMode === 'node' || compilerMode === 'native', `Неизвестный режим compiler: ${compilerMode}`)
 
-const executable = join(repoRoot, 'dist/http-server', 'out', compilerMode, 'http-server')
 const buildRoot = join(repoRoot, 'dist/http-server', `acceptance-${compilerMode}-${process.pid}`)
+const outputRoot = join(buildRoot, 'out')
+const executable = join(outputRoot, compilerMode, 'http-server')
+const staticRoot = join(outputRoot, 'static')
 
 async function main(): Promise<void> {
+  const port = await reservePort()
+  const nonce = `${compilerMode}-${process.pid}-${Date.now()}`
+
   await buildFreshExecutable()
 
-  const server = spawn(executable, [], {
+  const server = spawn(executable, [String(port), nonce, staticRoot], {
     cwd: repoRoot,
     stdio: 'pipe'
   })
@@ -33,20 +39,25 @@ async function main(): Promise<void> {
   })
 
   try {
-    const health = await waitForServer(server, () => stdout, () => stderr)
+    await waitForServer(server, nonce, port, () => stdout, () => stderr)
+
+    const health = await fetchWithTimeout(`http://127.0.0.1:${port}/health`, 2_000)
     assert.equal(health.status, 200)
     assert.equal(health.headers.get('content-type'), 'application/json')
-    assert.deepEqual(await health.json(), { ok: true })
+    assert.deepEqual(await health.json(), { ok: true, nonce })
+    assertServerIsAlive(server, stdout, stderr)
 
-    const page = await fetch('http://127.0.0.1:8080/')
+    const page = await fetchWithTimeout(`http://127.0.0.1:${port}/`, 2_000)
     assert.equal(page.status, 200)
     assert.equal(page.headers.get('content-type'), 'text/html; charset=utf-8')
     assert.match(await page.text(), /<h1>inox HTTP server<\/h1>/)
+    assertServerIsAlive(server, stdout, stderr)
 
-    const text = await fetch('http://127.0.0.1:8080/hello.txt')
+    const text = await fetchWithTimeout(`http://127.0.0.1:${port}/hello.txt`, 2_000)
     assert.equal(text.status, 200)
     assert.equal(text.headers.get('content-type'), 'text/plain; charset=utf-8')
     assert.equal(await text.text(), 'Hello from inox HTTP static files.\n')
+    assertServerIsAlive(server, stdout, stderr)
   } finally {
     await stopServer(server)
     await rm(buildRoot, { recursive: true, force: true })
@@ -55,14 +66,14 @@ async function main(): Promise<void> {
 
 async function buildFreshExecutable(): Promise<void> {
   await rm(buildRoot, { recursive: true, force: true })
-  await rm(join(repoRoot, 'dist/http-server', 'out', compilerMode), { recursive: true, force: true })
   await requireCommand('pnpm', ['run', 'libuv:bootstrap'])
   await requireCommand('cmake', [
     '-S',
     'examples/http-server',
     '-B',
     buildRoot,
-    `-DINOX_COMPILER_MODE=${compilerMode}`
+    `-DINOX_COMPILER_MODE=${compilerMode}`,
+    `-DINOX_OUTPUT_DIR=${outputRoot}`
   ])
   await requireCommand('cmake', ['--build', buildRoot, '--target', 'http-server'])
 }
@@ -79,22 +90,24 @@ async function requireCommand(command: string, args: string[]): Promise<void> {
 
 async function waitForServer(
   server: ChildProcessWithoutNullStreams,
+  nonce: string,
+  port: number,
   stdout: () => string,
   stderr: () => string
-): Promise<Response> {
+): Promise<void> {
+  const readyLine = `INOX_HTTP_READY ${nonce} ${port}`
+
   for (let attempt = 0; attempt < 50; attempt = attempt + 1) {
-    if (server.exitCode !== null || server.signalCode !== null) {
-      assert.fail(`HTTP server завершился до запуска\nstdout: ${stdout()}\nstderr: ${stderr()}`)
+    assertServerIsAlive(server, stdout(), stderr())
+
+    if (stdout().split(/\r?\n/).includes(readyLine)) {
+      return
     }
 
-    try {
-      return await fetchWithTimeout('http://127.0.0.1:8080/health', 500)
-    } catch {
-      await delay(100)
-    }
+    await delay(100)
   }
 
-  assert.fail(`HTTP server не начал принимать запросы\nstdout: ${stdout()}\nstderr: ${stderr()}`)
+  assert.fail(`HTTP server не подтвердил готовность ${readyLine}\nstdout: ${stdout()}\nstderr: ${stderr()}`)
 }
 
 async function fetchWithTimeout(url: string, milliseconds: number): Promise<Response> {
@@ -117,9 +130,44 @@ async function stopServer(server: ChildProcessWithoutNullStreams): Promise<void>
     return
   }
 
-  const exited = once(server, 'exit')
   server.kill('SIGTERM')
-  await exited
+  if (await waitForExit(server, 2_000)) {
+    return
+  }
+
+  server.kill('SIGKILL')
+  assert.ok(await waitForExit(server, 2_000), 'HTTP server не завершился после SIGKILL')
+}
+
+async function reservePort(): Promise<number> {
+  const reservation = createPortReservationServer()
+  reservation.listen(0, '127.0.0.1')
+  await once(reservation, 'listening')
+
+  const address = reservation.address()
+  assert.ok(address !== null && typeof address !== 'string', 'Не удалось выделить TCP port')
+  const port = address.port
+  const closed = once(reservation, 'close')
+  reservation.close()
+  await closed
+  return port
+}
+
+async function waitForExit(server: ChildProcessWithoutNullStreams, milliseconds: number): Promise<boolean> {
+  if (server.exitCode !== null || server.signalCode !== null) {
+    return true
+  }
+
+  return Promise.race([
+    once(server, 'exit').then(() => true),
+    delay(milliseconds).then(() => false)
+  ])
+}
+
+function assertServerIsAlive(server: ChildProcessWithoutNullStreams, stdout: string, stderr: string): void {
+  if (server.exitCode !== null || server.signalCode !== null) {
+    assert.fail(`HTTP server завершился до конца проверки\nstdout: ${stdout}\nstderr: ${stderr}`)
+  }
 }
 
 function delay(milliseconds: number): Promise<void> {

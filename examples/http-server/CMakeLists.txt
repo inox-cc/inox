@@ -18,7 +18,7 @@ set(INOX_NATIVE_COMPILER "${INOX_REPO_ROOT}/dist/inox" CACHE FILEPATH "inox nati
 set(INOX_ENTRY "${CMAKE_CURRENT_SOURCE_DIR}/index.ts")
 set(INOX_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(INOX_GENERATED_CC "${INOX_GENERATED_DIR}/index.cc")
-set(INOX_OUTPUT_DIR "${INOX_REPO_ROOT}/dist/http-server/out")
+set(INOX_OUTPUT_DIR "${INOX_REPO_ROOT}/dist/http-server/out" CACHE PATH "inox HTTP server output directory")
 set(INOX_STATIC_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/public")
 set(INOX_STATIC_OUTPUT_DIR "${INOX_OUTPUT_DIR}/static")
 
