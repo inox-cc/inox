@@ -10,6 +10,12 @@ import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-di
 import type { DiscoveredCompilerLibrary } from '../../scripts/lib/compiler-library-discovery.ts'
 import { renderCompilerLibraryRegistry } from '../../scripts/lib/compiler-library-registry.ts'
 import {
+  compilerLibraryDeletionApiProbe,
+  runCompilerLibraryDeletionApiProbe,
+  type CompilerLibraryDeletionApiProbe,
+  type CompilerLibraryDeletionApiProbeResult
+} from './helpers/compiler-library-deletion-api-probe.ts'
+import {
   compilerLibraryDeletionSnapshot,
   type CompilerLibraryDeletionSnapshot
 } from './helpers/compiler-library-deletion-snapshot.ts'
@@ -17,6 +23,7 @@ import {
 type DeletionProbeResult = {
   ids: string[]
   snapshot?: CompilerLibraryDeletionSnapshot
+  apiProbe?: CompilerLibraryDeletionApiProbeResult
   error?: string
   phase?: 'discovery' | 'render'
 }
@@ -28,10 +35,26 @@ const probePath = resolve('tests/architecture/helpers/compiler-library-deletion-
 test('изолированное удаление каждого stdlib package точно перестраивает оставшийся profile', async () => {
   await rm(fixtureRoot, { recursive: true, force: true })
   const original = await discoverCompilerLibraries()
+  const originalLibrarySet = renderCompilerLibraryRegistry(original).librarySet
+  const targets: Array<{
+    library: DiscoveredCompilerLibrary
+    apiProbe: CompilerLibraryDeletionApiProbe
+  }> = []
+
+  for (const library of original) {
+    const apiProbe = await compilerLibraryDeletionApiProbe(library)
+
+    assert.deepEqual(
+      runCompilerLibraryDeletionApiProbe(apiProbe.source, originalLibrarySet).diagnosticCodes,
+      apiProbe.presentDiagnosticCodes,
+      `${library.id}: focused API probe is not active in the full profile`
+    )
+    targets.push({ library, apiProbe })
+  }
 
   try {
-    await mapConcurrent(original, 4, async (target) => {
-      await auditPackageDeletion(original, target)
+    await mapConcurrent(targets, 4, async (target) => {
+      await auditPackageDeletion(original, target.library, target.apiProbe)
     })
   } finally {
     await rm(fixtureRoot, { recursive: true, force: true })
@@ -40,7 +63,8 @@ test('изолированное удаление каждого stdlib package 
 
 async function auditPackageDeletion(
   original: DiscoveredCompilerLibrary[],
-  target: DiscoveredCompilerLibrary
+  target: DiscoveredCompilerLibrary,
+  apiProbe: CompilerLibraryDeletionApiProbe
 ): Promise<void> {
   const fixture = resolve(fixtureRoot, safeName(target.id))
 
@@ -55,10 +79,10 @@ async function auditPackageDeletion(
 
     await rm(resolve(fixture, target.root), { recursive: true, force: true })
 
-    const directResult = await runDeletionProbe(fixture)
+    const directResult = await runDeletionProbe(fixture, apiProbe)
 
     assert.deepEqual(directResult.ids, libraryIds(directlyRemaining), `${target.id}: direct inventory differs`)
-    assertExpectedRenderResult(target.id, directlyRemaining, directResult)
+    assertExpectedRenderResult(target.id, directlyRemaining, directResult, apiProbe)
 
     const removedClosure = dependentClosure(original, directlyRemovedIds)
     const removedClosureIds = new Set(removedClosure.map((library) => library.id))
@@ -68,11 +92,16 @@ async function auditPackageDeletion(
       await rm(resolve(fixture, root), { recursive: true, force: true })
     }
 
-    const closureResult = await runDeletionProbe(fixture)
+    const closureResult = await runDeletionProbe(fixture, apiProbe)
 
     assert.deepEqual(closureResult.ids, libraryIds(remainingClosure), `${target.id}: closure inventory differs`)
     assert.equal(closureResult.phase, undefined, `${target.id}: closure failed in ${closureResult.phase}`)
     assert.equal(closureResult.error, undefined, `${target.id}: ${closureResult.error}`)
+    assert.deepEqual(
+      closureResult.apiProbe?.diagnosticCodes,
+      apiProbe.absentDiagnosticCodes,
+      `${target.id}: focused API semantics survived closure removal`
+    )
     assert.deepEqual(
       closureResult.snapshot,
       compilerLibraryDeletionSnapshot(renderCompilerLibraryRegistry(remainingClosure)),
@@ -86,7 +115,8 @@ async function auditPackageDeletion(
 function assertExpectedRenderResult(
   targetId: string,
   remaining: DiscoveredCompilerLibrary[],
-  actual: DeletionProbeResult
+  actual: DeletionProbeResult,
+  apiProbe: CompilerLibraryDeletionApiProbe
 ): void {
   let expected: CompilerLibraryDeletionSnapshot | null = null
   let expectedError: string | null = null
@@ -107,10 +137,18 @@ function assertExpectedRenderResult(
   assert.equal(actual.phase, undefined, `${targetId}: direct removal failed in ${actual.phase}`)
   assert.equal(actual.error, undefined, `${targetId}: ${actual.error}`)
   assert.deepEqual(actual.snapshot, expected, `${targetId}: direct profile differs`)
+  assert.deepEqual(
+    actual.apiProbe?.diagnosticCodes,
+    apiProbe.absentDiagnosticCodes,
+    `${targetId}: focused API semantics survived direct removal`
+  )
 }
 
-async function runDeletionProbe(projectRoot: string): Promise<DeletionProbeResult> {
-  const result = await execFileAsync(process.execPath, [probePath, projectRoot], {
+async function runDeletionProbe(
+  projectRoot: string,
+  apiProbe: CompilerLibraryDeletionApiProbe
+): Promise<DeletionProbeResult> {
+  const result = await execFileAsync(process.execPath, [probePath, projectRoot, JSON.stringify(apiProbe)], {
     cwd: resolve('.'),
     maxBuffer: 1024 * 1024
   })
