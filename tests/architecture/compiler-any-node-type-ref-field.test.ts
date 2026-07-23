@@ -56,7 +56,7 @@ function size(expression: AnyNode): number {
   assert.deepEqual(length?.libraryRuntimeRequirements, [arrayRuntimeRequirement])
 })
 
-test('AnyNode import names remain strings in C lowering', () => {
+test('AnyNode import names remain strings in C++ lowering', () => {
   const result = compileSource(
     `
 function namesDiffer(specifier: AnyNode): boolean {

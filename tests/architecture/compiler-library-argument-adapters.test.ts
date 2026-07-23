@@ -10,7 +10,7 @@ import {
 } from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
-test('library C arguments поддерживают templates и string-view-or-value lowering', () => {
+test('library C++ arguments поддерживают templates и string-view-or-value lowering', () => {
   const result = compileSource(
     "const payload = { ok: true }\nbridge.take(3)\nbridge.accept('text')\nbridge.accept(payload)\nbridge.box.touch()\nbridge.box.accept(3)\n",
     { libraries: createCompilerLibrarySet([bridgeLibrary()]), target: 'cc' }

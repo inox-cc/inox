@@ -3842,11 +3842,11 @@ function emitObjectMemberVariableDeclaration(
   }
 
   if (!isNullableScalarType(member.valueType)) {
-    let message = `object field type ${member.valueType} is not supported by the current C backend slice`
+    let message = `object field type ${member.valueType} is not supported by the current C++ backend slice`
 
     if (member.valueType === 'function') {
       message =
-        'stored callback object fields need delayed closure lifetime support and are not supported by the current C backend slice'
+        'stored callback object fields need delayed closure lifetime support and are not supported by the current C++ backend slice'
     }
 
     pushDiagnostic(context, diagnostic(cUnsupportedExpressionCode(member.valueType), message, statement.loc))
@@ -4120,10 +4120,10 @@ function isSupportedObjectFieldStorageType(valueType: string): boolean {
 
 function unsupportedObjectFieldStorageMessage(valueType: string): string {
   if (valueType === 'function') {
-    return 'stored callback object fields need delayed closure lifetime support and are not supported by the current C backend slice'
+    return 'stored callback object fields need delayed closure lifetime support and are not supported by the current C++ backend slice'
   }
 
-  return `object field type ${valueType} is not supported by the current C backend slice`
+  return `object field type ${valueType} is not supported by the current C++ backend slice`
 }
 
 function unsupportedObjectFieldValueExpression(
@@ -4398,7 +4398,7 @@ function emitPreparedNullableScalarRuntimeValueExpression(
     context,
     diagnostic(
       'INOX_C_NULLISH',
-      'this nullable scalar expression is not supported by the current C backend slice',
+      'this nullable scalar expression is not supported by the current C++ backend slice',
       expression.loc
     )
   )
@@ -5223,7 +5223,7 @@ function emitCNullishCoalescingValueExpression(expression: AnyNode, context: CFu
   if (!canLowerCNullishCoalescingExpression(expression, context)) {
     pushDiagnostic(
       context,
-      diagnostic('INOX_C_NULLISH', 'nullish coalescing is not supported by the current C backend slice', expression.loc)
+      diagnostic('INOX_C_NULLISH', 'nullish coalescing is not supported by the current C++ backend slice', expression.loc)
     )
 
     return {
@@ -5563,7 +5563,7 @@ function emitFormattedOutputValue(
     context,
     diagnostic(
       cUnsupportedExpressionCode(valueType),
-      'this formatted library call argument is not supported by the current C backend slice',
+      'this formatted library call argument is not supported by the current C++ backend slice',
       expression.loc
     )
   )
@@ -6467,7 +6467,7 @@ function emitReference(expression: AnyNode, context: CFunctionContext): string {
     context,
     diagnostic(
       'INOX_C_ASSIGNMENT_TARGET',
-      'this assignment target is not supported by the current C backend slice',
+      'this assignment target is not supported by the current C++ backend slice',
       expression.loc
     )
   )
@@ -6713,7 +6713,7 @@ function emitPreparedThrowingAsyncFunctionAsyncResultCallExpression(
       context,
       diagnostic(
         'INOX_C_ASYNC',
-        'this async function call is not supported as a AsyncResult value in the current C backend slice',
+        'this async function call is not supported as a AsyncResult value in the current C++ backend slice',
         expression.loc
       )
     )
@@ -7009,7 +7009,7 @@ function emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContex
       context,
       diagnostic(
         'INOX_C_ASYNC',
-        'this awaited asyncResult expression is not supported by the current C backend slice',
+        'this awaited asyncResult expression is not supported by the current C++ backend slice',
         expression.loc
       )
     )
@@ -7323,7 +7323,7 @@ function emitCAsyncFunctionAwaitExpression(expression: AnyNode, context: CFuncti
       context,
       diagnostic(
         'INOX_C_ASYNC',
-        'this async function return value is not supported by the current C backend slice',
+        'this async function return value is not supported by the current C++ backend slice',
         expression.loc
       )
     )
@@ -7386,7 +7386,7 @@ function emitFunctionValueExpression(expression: AnyNode, context: CFunctionCont
       context,
       diagnostic(
         'INOX_C_FUNCTION_VALUE',
-        'capturing or unsupported inline callbacks are not supported by the current C backend slice; use a named function or a non-capturing inline callback with a supported signature',
+        'capturing or unsupported inline callbacks are not supported by the current C++ backend slice; use a named function or a non-capturing inline callback with a supported signature',
         expression.loc
       )
     )
@@ -7414,7 +7414,7 @@ function emitFunctionValueExpression(expression: AnyNode, context: CFunctionCont
 
   pushDiagnostic(
     context,
-    diagnostic('INOX_C_FUNCTION_VALUE', 'this function value is not supported by the current C backend slice', loc)
+    diagnostic('INOX_C_FUNCTION_VALUE', 'this function value is not supported by the current C++ backend slice', loc)
   )
 
   return '0'
@@ -7791,7 +7791,7 @@ function emitOptionalRuntimeCallbackCallExpression(expression: AnyNode, context:
       context,
       diagnostic(
         'INOX_C_OPTIONAL_CHAINING',
-        'optional calls currently require a nullable runtime callback value in the C backend',
+        'optional calls currently require a nullable runtime callback value in the C++ backend',
         expression.loc
       )
     )
@@ -7852,7 +7852,7 @@ function emitOptionalRuntimeCallbackCallValueExpression(
       context,
       diagnostic(
         'INOX_C_OPTIONAL_CHAINING',
-        'optional call results currently support nullable runtime callback results in the C backend',
+        'optional call results currently support nullable runtime callback results in the C++ backend',
         expression.loc
       )
     )

@@ -59,7 +59,7 @@ test('self-hosted AnyNode shape preserves function overload arrays', () => {
   assert.equal(compilerAnyNodeObjectFields.includes('functionOverloads'), false)
 })
 
-test('checker and C fallback agree on every AnyNode array field', () => {
+test('checker and C++ fallback agree on every AnyNode array field', () => {
   const shape = anyNodeObjectShape({ file: 'test.ts', line: 1, column: 1 })
 
   for (const name of compilerAnyNodeArrayFields) {
@@ -71,7 +71,7 @@ test('checker and C fallback agree on every AnyNode array field', () => {
   }
 })
 
-test('checker and C fallback agree on every AnyNode field name', () => {
+test('checker and C++ fallback agree on every AnyNode field name', () => {
   const shape = anyNodeObjectShape({ file: 'test.ts', line: 1, column: 1 })
   const names = [
     ...compilerAnyNodeStringFields,
@@ -90,7 +90,7 @@ test('checker and C fallback agree on every AnyNode field name', () => {
   }
 })
 
-test('checker and C fallback share syntax child fields and placeholder metadata', () => {
+test('checker and C++ fallback share syntax child fields and placeholder metadata', () => {
   const shape = anyNodeObjectShape({ file: 'test.ts', line: 1, column: 1 })
   const syntaxFields = ['test', 'alternate', 'finalizer']
 

@@ -184,7 +184,7 @@ function unsupportedSubstring(): LibraryOperationDescriptor {
     maxArgs: 2,
     argumentChecks: [numberArgument(), numberArgument()],
     diagnosticCode: 'INOX_C_UNSUPPORTED_EXPR',
-    diagnosticMessage: 'string.substring is not supported by the current C backend slice'
+    diagnosticMessage: 'string.substring is not supported by the current C++ backend slice'
   }
 }
 

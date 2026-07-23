@@ -47,7 +47,7 @@ function unsupportedOperation(name: string, kind: LibraryOperationKind): Library
     cExpression: null,
     diagnosticCode: 'INOX_NOT_IMPLEMENTED',
     diagnosticMessage:
-      `${libraryId} ${name} is not implemented by the current C backend: ${unsupportedReason(name)}`
+      `${libraryId} ${name} is not implemented by the current C++ backend: ${unsupportedReason(name)}`
   }
 }
 

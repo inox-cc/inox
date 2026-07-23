@@ -5,7 +5,7 @@ import { compileSourceToIr, emitTargetFromIr } from '../../compiler/core.ts'
 import { compilerLibraryNativeTypeForIntrinsic } from '../../compiler/extensions/library-set.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
-test('C backend восстанавливает native type пустого массива через intrinsic provider', () => {
+test('C++ backend восстанавливает native type пустого массива через intrinsic provider', () => {
   const compiled = compileSourceToIr(
     'function count(values: string[]): number { return values.length }\ncount([])\n',
     { libraries: defaultCompilerLibrarySet }

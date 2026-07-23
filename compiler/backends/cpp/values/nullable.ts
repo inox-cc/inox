@@ -935,7 +935,7 @@ export function emitCOptionalIndexValueExpression(
       context.diagnostics.push(
         diagnostic(
           'INOX_C_OPTIONAL_CHAINING',
-          'optional object index access for this field is not supported by the current C backend slice',
+          'optional object index access for this field is not supported by the current C++ backend slice',
           expression.loc
         )
       )
@@ -960,7 +960,7 @@ export function emitCOptionalIndexValueExpression(
   context.diagnostics.push(
     diagnostic(
       'INOX_C_OPTIONAL_CHAINING',
-      'optional index access is not supported by the current C backend slice',
+      'optional index access is not supported by the current C++ backend slice',
       expression.loc
     )
   )

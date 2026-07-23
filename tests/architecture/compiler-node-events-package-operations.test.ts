@@ -68,7 +68,7 @@ function assertDiagnosticOperation(
   assert.equal(operation.diagnosticCode, 'INOX_NOT_IMPLEMENTED')
   assert.equal(
     operation.diagnosticMessage,
-    `${libraryId} ${name} is not implemented by the current C backend: ${reason}`
+    `${libraryId} ${name} is not implemented by the current C++ backend: ${reason}`
   )
 }
 

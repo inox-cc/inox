@@ -1102,7 +1102,7 @@ export function emitNumberBooleanScalarVariableDeclaration(
       context,
       diagnostic(
         cUnsupportedExpressionCode(inferred),
-        'this expression is not supported by the current C backend slice',
+        'this expression is not supported by the current C++ backend slice',
         statement.loc
       )
     )
@@ -2205,7 +2205,7 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
       context,
       diagnostic(
         cUnsupportedVariableDeclarationCode(statement, inferred),
-        'this expression is not supported by the current C backend slice',
+        'this expression is not supported by the current C++ backend slice',
         statement.loc
       )
     )
@@ -2551,7 +2551,7 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
       context,
       diagnostic(
         'INOX_C_ASYNC',
-        'nested async try/catch state-machine lowering is not supported by the current C backend slice',
+        'nested async try/catch state-machine lowering is not supported by the current C++ backend slice',
         statement.loc
       )
     )
@@ -2799,7 +2799,7 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
   if ((target === null || typeof target === 'undefined') && !context.throwingFunction) {
     pushDiagnostic(
       context,
-      diagnostic('INOX_C_THROW', 'uncaught throw is not supported by the current C backend slice', statement.loc)
+      diagnostic('INOX_C_THROW', 'uncaught throw is not supported by the current C++ backend slice', statement.loc)
     )
     return []
   }
@@ -3922,7 +3922,7 @@ function emitAsyncResultReturnStatement(statement: StatementNode, context: CFunc
       context,
       diagnostic(
         'INOX_C_ASYNC',
-        'this AsyncResult return expression is not supported by the current C backend slice',
+        'this AsyncResult return expression is not supported by the current C++ backend slice',
         statement.loc
       )
     )

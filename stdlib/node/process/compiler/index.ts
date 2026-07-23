@@ -330,7 +330,7 @@ function unsupportedOperation(name: string, kind: LibraryOperationKind): Library
     runtimeRequirements: [],
     cExpression: null,
     diagnosticCode: 'INOX_NOT_IMPLEMENTED',
-    diagnosticMessage: `node:process ${name} is not implemented by the current C backend`
+    diagnosticMessage: `node:process ${name} is not implemented by the current C++ backend`
   }
 }
 

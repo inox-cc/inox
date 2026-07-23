@@ -7227,7 +7227,7 @@ class Checker {
       if (fieldType.valueType === 'function') {
         this.report(
           'INOX_NOT_IMPLEMENTED',
-          'object spread of function fields is not supported by the current C backend slice',
+          'object spread of function fields is not supported by the current C++ backend slice',
           property.loc
         )
         return null

@@ -115,7 +115,7 @@ function unsupportedOperation(name: string): LibraryOperationDescriptor {
     runtimeRequirements: [],
     cExpression: null,
     diagnosticCode: 'INOX_NOT_IMPLEMENTED',
-    diagnosticMessage: `node:child_process ${name} is not implemented by the current C backend`
+    diagnosticMessage: `node:child_process ${name} is not implemented by the current C++ backend`
   }
 }
 

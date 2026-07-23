@@ -55,7 +55,7 @@ export type CPreparedCallOptions = {
   prepareOut?: boolean
 }
 
-/** Opaque storage boundary that keeps recursive TypeRef out of large C context shapes. */
+/** Opaque storage boundary that keeps recursive TypeRef out of large C++ context shapes. */
 export type CTypeRef = object
 export type CTypeRefMap = Map<string, CTypeRef | null>
 

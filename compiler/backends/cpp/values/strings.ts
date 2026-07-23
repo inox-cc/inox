@@ -355,7 +355,7 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
   if (expression !== null && typeof expression !== 'undefined' && isCoalesceExpression(expression)) {
     pushStringDiagnostic(
       context,
-      diagnostic('INOX_C_NULLISH', 'nullish coalescing is not supported by the current C backend slice', expression.loc)
+      diagnostic('INOX_C_NULLISH', 'nullish coalescing is not supported by the current C++ backend slice', expression.loc)
     )
     return '""'
   }
@@ -372,7 +372,7 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
         context,
         diagnostic(
           'INOX_C_UNSUPPORTED_EXPR',
-          'object field access must be assigned before it can be used by the current C backend slice',
+          'object field access must be assigned before it can be used by the current C++ backend slice',
           expression.loc
         )
       )
@@ -385,7 +385,7 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
       context,
       diagnostic(
         'INOX_C_ASYNC',
-        'async/await is not supported by the current C backend slice',
+        'async/await is not supported by the current C++ backend slice',
         nodeLocation(expression)
       )
     )
@@ -397,7 +397,7 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
       context,
       diagnostic(
         'INOX_C_OPTIONAL_CHAINING',
-        'optional chaining is not supported by the current C backend slice',
+        'optional chaining is not supported by the current C++ backend slice',
         nodeLocation(expression)
       )
     )
@@ -408,7 +408,7 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
     context,
     diagnostic(
       'INOX_C_STRING_EXPR',
-      'this string expression is not supported by the current C backend slice',
+      'this string expression is not supported by the current C++ backend slice',
       nodeLocation(expression)
     )
   )
@@ -839,7 +839,7 @@ export function emitPreparedStringBytesOperand(
   if (expression === null || typeof expression === 'undefined') {
     pushStringDiagnostic(
       context,
-      diagnostic('INOX_C_STRING_EXPR', 'this string operand is not supported by the current C backend slice', null)
+      diagnostic('INOX_C_STRING_EXPR', 'this string operand is not supported by the current C++ backend slice', null)
     )
 
     return {
@@ -897,7 +897,7 @@ export function emitPreparedStringBytesOperand(
     context,
     diagnostic(
       'INOX_C_STRING_EXPR',
-      'this string operand is not supported by the current C backend slice',
+      'this string operand is not supported by the current C++ backend slice',
       nodeLocation(expression)
     )
   )

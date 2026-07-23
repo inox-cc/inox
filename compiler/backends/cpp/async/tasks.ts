@@ -3378,7 +3378,7 @@ function emitAsyncTaskAsyncResultChainCallbackContextForWrapper(
       context.diagnostics.push(
         diagnostic(
           'INOX_C_ASYNC',
-          'mutable async-result callback captures are outside the current C backend MVP; use const captures or move mutation outside the callback',
+          'mutable async-result callback captures are outside the current C++ backend MVP; use const captures or move mutation outside the callback',
           chainWrapper.expression.loc
         )
       )

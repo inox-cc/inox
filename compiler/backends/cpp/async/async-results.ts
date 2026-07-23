@@ -750,7 +750,7 @@ export function emitPreparedAsyncResultChainExpression(
     context.diagnostics.push(
       diagnostic(
         'INOX_C_ASYNC',
-        'this async-result chain receiver is not supported by the current C backend slice',
+        'this async-result chain receiver is not supported by the current C++ backend slice',
         expression.loc
       )
     )
@@ -1742,7 +1742,7 @@ function emitAsyncResultChainCallbackContext(
       context.diagnostics.push(
         diagnostic(
           'INOX_C_ASYNC',
-          'mutable async-result callback captures are outside the current C backend MVP; use const captures or move mutation outside the callback',
+          'mutable async-result callback captures are outside the current C++ backend MVP; use const captures or move mutation outside the callback',
           wrapper.expression.loc
         )
       )

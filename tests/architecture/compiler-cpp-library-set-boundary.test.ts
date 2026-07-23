@@ -8,7 +8,7 @@ import {
 } from '../../compiler/backends/cpp/types.ts'
 import type { CompilerLibrarySet } from '../../compiler/extensions/types.ts'
 
-test('C backend stores recursive library descriptors behind an opaque boundary', () => {
+test('C++ backend stores recursive library descriptors behind an opaque boundary', () => {
   const libraries: CompilerLibrarySet = {
     fingerprint: 'test',
     declarations: [],

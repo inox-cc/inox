@@ -2543,7 +2543,7 @@ function emitPreparedThrowingCallExpression(
     context.diagnostics.push(
       diagnostic(
         'INOX_C_THROW',
-        'uncaught throwing function calls must be inside try/catch in the current C backend slice',
+        'uncaught throwing function calls must be inside try/catch in the current C++ backend slice',
         expression.loc
       )
     )
@@ -2695,7 +2695,7 @@ export function emitCallee(callee: CValueNode, context: CFunctionContext): strin
   }
 
   context.diagnostics.push(
-    diagnostic('INOX_C_CALL_EXPR', 'this call expression is not supported by the current C backend slice', callee.loc)
+    diagnostic('INOX_C_CALL_EXPR', 'this call expression is not supported by the current C++ backend slice', callee.loc)
   )
   return '_'
 }
@@ -2707,7 +2707,7 @@ export function emitCExpression(
 ): string {
   if (isCoalesceExpression(expression)) {
     context.diagnostics.push(
-      diagnostic('INOX_C_NULLISH', 'nullish coalescing is not supported by the current C backend slice', expression.loc)
+      diagnostic('INOX_C_NULLISH', 'nullish coalescing is not supported by the current C++ backend slice', expression.loc)
     )
     return '0'
   }
@@ -2722,7 +2722,7 @@ export function emitCExpression(
     context.diagnostics.push(
       diagnostic(
         'INOX_C_FUNCTION_VALUE',
-        'function values are not supported by the current C backend slice',
+        'function values are not supported by the current C++ backend slice',
         expressionLocation(expression)
       )
     )
@@ -2733,7 +2733,7 @@ export function emitCExpression(
     context.diagnostics.push(
       diagnostic(
         'INOX_C_OPTIONAL_CHAINING',
-        'optional chaining is not supported by the current C backend slice',
+        'optional chaining is not supported by the current C++ backend slice',
         expressionLocation(expression)
       )
     )
@@ -2803,7 +2803,7 @@ export function emitPreparedNumberExpression(
     context.diagnostics.push(
       diagnostic(
         'INOX_C_NULLISH',
-        'nullable scalar values must be narrowed with ?? before scalar use in the current C backend slice',
+        'nullable scalar values must be narrowed with ?? before scalar use in the current C++ backend slice',
         expression.loc
       )
     )
@@ -2890,7 +2890,7 @@ export function emitPreparedNumberExpression(
       context.diagnostics.push(
         diagnostic(
           'INOX_C_NULLISH',
-          'nullish coalescing is not supported by the current C backend slice',
+          'nullish coalescing is not supported by the current C++ backend slice',
           expression.loc
         )
       )
@@ -3019,7 +3019,7 @@ export function emitPreparedNumberExpression(
       context.diagnostics.push(
         diagnostic(
           'INOX_C_STRING_EXPR',
-          'string binary expressions are not supported by the current C backend slice',
+          'string binary expressions are not supported by the current C++ backend slice',
           expression.loc
         )
       )
@@ -3173,7 +3173,7 @@ export function emitPreparedNumberExpression(
     context.diagnostics.push(
       diagnostic(
         'INOX_C_OPTIONAL_CHAINING',
-        'optional chaining is not supported by the current C backend slice',
+        'optional chaining is not supported by the current C++ backend slice',
         expressionLocation(expression)
       )
     )
@@ -3186,7 +3186,7 @@ export function emitPreparedNumberExpression(
   context.diagnostics.push(
     diagnostic(
       'INOX_C_NUMBER_EXPR',
-      'this number expression is not supported by the current C backend slice',
+      'this number expression is not supported by the current C++ backend slice',
       expressionLocation(expression)
     )
   )
@@ -5278,11 +5278,11 @@ function emitUnsupportedCValueExpression(
   deps: CValueExpressionDependencies
 ): PreparedExpression {
   const unsupportedType = deps.inferExpressionType(expression, context)
-  let unsupportedMessage = 'this object field expression is not supported by the current C backend slice'
+  let unsupportedMessage = 'this object field expression is not supported by the current C++ backend slice'
 
   if (unsupportedType === 'function') {
     unsupportedMessage =
-      'stored callback values need delayed closure lifetime support and are not supported by the current C backend slice'
+      'stored callback values need delayed closure lifetime support and are not supported by the current C++ backend slice'
   }
 
   context.diagnostics.push(

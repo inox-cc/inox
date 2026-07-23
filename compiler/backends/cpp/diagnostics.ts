@@ -20,7 +20,7 @@ export function reportCJsGlobalDiagnostic(diagnostics: Diagnostic[], loc: Source
   }
 
   diagnostics.push(
-    diagnostic('INOX_C_JS_GLOBAL', 'this JS global is not supported by the current C backend slice', loc)
+    diagnostic('INOX_C_JS_GLOBAL', 'this JS global is not supported by the current C++ backend slice', loc)
   )
 }
 

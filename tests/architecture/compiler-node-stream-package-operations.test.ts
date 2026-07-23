@@ -101,7 +101,7 @@ function defaultBinding(name: string): string {
 }
 
 function diagnosticMessage(name: string): string {
-  return `${libraryId} ${name} is not implemented by the current C backend: ${diagnosticReason(name)}`
+  return `${libraryId} ${name} is not implemented by the current C++ backend: ${diagnosticReason(name)}`
 }
 
 function diagnosticReason(name: string): string {

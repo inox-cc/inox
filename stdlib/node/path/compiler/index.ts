@@ -126,7 +126,7 @@ function unsupportedOperation(name: string, kind: 'call' | 'member-read'): Libra
     cExpression: null,
     constantValue: null,
     diagnosticCode: 'INOX_NOT_IMPLEMENTED',
-    diagnosticMessage: `node:path ${name} is not implemented by the current C backend`
+    diagnosticMessage: `node:path ${name} is not implemented by the current C++ backend`
   }
 }
 

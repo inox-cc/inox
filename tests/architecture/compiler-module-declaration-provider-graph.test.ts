@@ -18,7 +18,7 @@ const files = [
   }
 ]
 
-test('module graph and C planner consume declarations from the selected library provider', async () => {
+test('module graph and C++ planner consume declarations from the selected library provider', async () => {
   await assert.rejects(
     compileMemoryPackageToIrModules(entry, files, { libraries: emptyCompilerLibrarySet }),
     (error: unknown) =>

@@ -1475,10 +1475,10 @@ function isSupportedObjectFieldStorageType(valueType: string): boolean {
 
 function unsupportedObjectFieldStorageMessage(valueType: string): string {
   if (valueType === 'function') {
-    return 'stored callback object fields need delayed closure lifetime support and are not supported by the current C backend slice'
+    return 'stored callback object fields need delayed closure lifetime support and are not supported by the current C++ backend slice'
   }
 
-  return `object field type ${valueType} is not supported by the current C backend slice`
+  return `object field type ${valueType} is not supported by the current C++ backend slice`
 }
 
 function unsupportedObjectFieldValueExpression(

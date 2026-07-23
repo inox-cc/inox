@@ -96,6 +96,6 @@ function unsupportedOperation(name: string): LibraryOperationDescriptor {
     cExpression: null,
     constantValue: null,
     diagnosticCode: 'INOX_NOT_IMPLEMENTED',
-    diagnosticMessage: `node:os ${name} is not implemented by the current C backend`
+    diagnosticMessage: `node:os ${name} is not implemented by the current C++ backend`
   }
 }

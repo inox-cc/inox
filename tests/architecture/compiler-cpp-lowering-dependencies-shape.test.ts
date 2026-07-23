@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
-test('C contexts сохраняют dependency shape через generic boundary', () => {
+test('C++ contexts сохраняют dependency shape через generic boundary', () => {
   const contextSource = readFileSync(new URL('../../compiler/backends/cpp/context.ts', import.meta.url), 'utf8')
   const declarationsSource = readFileSync(new URL('../../compiler/backends/cpp/declarations.ts', import.meta.url), 'utf8')
   const indexSource = readFileSync(new URL('../../compiler/backends/cpp/index.ts', import.meta.url), 'utf8')

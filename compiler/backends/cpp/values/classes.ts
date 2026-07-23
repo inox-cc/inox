@@ -2211,7 +2211,7 @@ function collectClassConstructorAssignments(
       diagnostics.push(
         diagnostic(
           'INOX_C_CLASS',
-          `class ${classNode.name} constructor currently supports only local declarations, local assignments, if/for statements, this method calls and this.field assignments in the C backend`,
+          `class ${classNode.name} constructor currently supports only local declarations, local assignments, if/for statements, this method calls and this.field assignments in the C++ backend`,
           nodeLocOrFallback(statement, constructorMethod)
         )
       )
@@ -2585,7 +2585,7 @@ export function emitClassObjectVariableDeclaration(statement: AnyNode, context: 
   context.diagnostics.push(
     diagnostic(
       'INOX_C_CLASS',
-      'this class constructor is not supported by the current C backend slice',
+      'this class constructor is not supported by the current C++ backend slice',
       nodeLocOrFallback(init, statement)
     )
   )
@@ -2650,7 +2650,7 @@ export function emitCClassObjectValueExpression(
   context.diagnostics.push(
     diagnostic(
       'INOX_C_CLASS',
-      'this class constructor is not supported by the current C backend slice',
+      'this class constructor is not supported by the current C++ backend slice',
       nodeLocOrFallback(expression, null)
     )
   )

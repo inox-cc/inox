@@ -7,7 +7,7 @@ const targets = collectTypeScriptFiles('compiler/backends/cpp')
 const rawRootPattern =
   /\binox_promise\s*\*|\binox_promise_(?:new|retain|release|then|resolve|resolved|reject|rejected|chain)\s*\(/g
 
-test('portable C backend не содержит raw async-result roots', () => {
+test('portable C++ backend не содержит raw async-result roots', () => {
   assert.equal(rawRootCount("'inox_' + 'promise_retain('"), 1)
   assert.equal(rawRootCount("const role = 'promise'"), 0)
 

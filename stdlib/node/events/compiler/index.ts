@@ -56,7 +56,7 @@ function diagnosticOperation(
     runtimeRequirements: [],
     cExpression: null,
     diagnosticCode: 'INOX_NOT_IMPLEMENTED',
-    diagnosticMessage: `${libraryId} ${name} is not implemented by the current C backend: ${reason}`
+    diagnosticMessage: `${libraryId} ${name} is not implemented by the current C++ backend: ${reason}`
   }
 }
 

@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { compileSourceToIr, emitTargetFromIr } from '../../compiler/core.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
-test('C backend сохраняет nullable storage optional member при неполной metadata декларации', () => {
+test('C++ backend сохраняет nullable storage optional member при неполной metadata декларации', () => {
   const compiled = compileSourceToIr(`
     type Field = { text?: string | null }
 
