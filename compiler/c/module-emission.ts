@@ -470,8 +470,18 @@ export function emitCModuleSource(
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics)
 
   const lines: string[] = []
-  lines.push(`#include "${relativeCIncludePath(plan.sourcePath, plan.headerPath, options.host)}"`)
-  const headerIncludes = collectCModuleHeaderIncludeLines(plan, context, options.libraries, deps)
+  const headerDeclarations = collectCModuleHeaderDeclarationLines(plan, context, deps)
+  const headerIncludes = collectCModuleHeaderIncludeLines(
+    plan,
+    context,
+    options.libraries,
+    deps,
+    headerDeclarations
+  )
+
+  if (headerDeclarations.length > 0) {
+    lines.push(`#include "${relativeCIncludePath(plan.sourcePath, plan.headerPath, options.host)}"`)
+  }
 
   const imports = uniqueCModuleImports(plan.imports)
 
