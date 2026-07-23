@@ -889,6 +889,7 @@ export function emitPreparedCompilerLibraryCallExpression(
       lines,
       expression: applyCompilerLibraryValueAdapter(out, item.libraryCResultAdapter),
       cppType,
+      scalarType,
       nullable: item.nullable === true,
       owned: item.libraryOwned === true,
       runtimeTypeChecked: cppType !== 'inox::Value',
