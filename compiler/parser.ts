@@ -232,11 +232,14 @@ class Parser {
     const body: AnyNode[] = []
 
     while (!this.is('eof')) {
+      const inlineAnnotation = this.matchInlineAnnotation()
+
       if (this.matchValue(';')) {
+        this.reportUnsupportedInlinePlacement(inlineAnnotation)
         continue
       }
 
-      body.push(this.parseTopLevelItem())
+      body.push(this.parseTopLevelItem(inlineAnnotation))
     }
 
     throwDiagnostics(this.diagnostics)
@@ -247,9 +250,11 @@ class Parser {
     }
   }
 
-  parseTopLevelItem(): AnyNode {
+  parseTopLevelItem(inlineAnnotation: Token | null = null): AnyNode {
     if (this.matchKeyword('import')) {
-      return this.parseImportDeclaration(false)
+      const declaration = this.parseImportDeclaration(false)
+      this.reportUnsupportedInlinePlacement(inlineAnnotation)
+      return declaration
     }
 
     const exported = this.matchKeyword('export')
@@ -257,7 +262,10 @@ class Parser {
     const isAsync = this.matchKeyword('async')
 
     if (this.matchKeyword('function')) {
-      return this.parseFunctionDeclaration(exported, isAsync)
+      return this.applyInlineAnnotation(
+        this.parseFunctionDeclaration(exported, isAsync),
+        inlineAnnotation
+      )
     }
 
     if (isAsync) {
@@ -265,34 +273,47 @@ class Parser {
     }
 
     if (this.matchKeyword('class')) {
-      return this.parseClassDeclaration(exported)
+      const declaration = this.parseClassDeclaration(exported)
+      this.reportUnsupportedInlinePlacement(inlineAnnotation)
+      return declaration
     }
 
     if (exported && this.isValue('{')) {
-      return this.parseExportDeclaration(false)
+      const declaration = this.parseExportDeclaration(false)
+      this.reportUnsupportedInlinePlacement(inlineAnnotation)
+      return declaration
     }
 
     if (this.matchKeyword('type')) {
       if (exported && this.isValue('{')) {
-        return this.parseExportDeclaration(true)
+        const declaration = this.parseExportDeclaration(true)
+        this.reportUnsupportedInlinePlacement(inlineAnnotation)
+        return declaration
       }
 
-      return this.parseTypeAliasDeclaration(exported)
+      const declaration = this.parseTypeAliasDeclaration(exported)
+      this.reportUnsupportedInlinePlacement(inlineAnnotation)
+      return declaration
     }
 
     if (exported && this.matchKeyword('const')) {
-      return this.parseVariableDeclaration('const', true)
+      return this.applyInlineAnnotation(
+        this.parseVariableDeclaration('const', true),
+        inlineAnnotation
+      )
     }
 
     if (exported && this.matchKeyword('let')) {
-      return this.parseVariableDeclaration('let', true)
+      const declaration = this.parseVariableDeclaration('let', true)
+      this.reportUnsupportedInlinePlacement(inlineAnnotation)
+      return declaration
     }
 
     if (exported) {
       this.report('INOX_EXPECTED_EXPORT', 'expected exported function or variable declaration', null)
     }
 
-    return this.parseStatement()
+    return this.parseStatement(inlineAnnotation)
   }
 
   parseImportDeclaration(typeOnly: boolean): AnyNode {
@@ -750,7 +771,8 @@ class Parser {
     this.expectValue('{', 'INOX_EXPECTED_BLOCK', 'expected { after class name')
 
     while (!this.isValue('}') && !this.is('eof')) {
-      const member = this.parseClassMember()
+      const inlineAnnotation = this.matchInlineAnnotation()
+      const member = this.applyInlineAnnotation(this.parseClassMember(), inlineAnnotation)
 
       if (member.type === 'FieldDefinition') {
         fields.push(member)
@@ -960,7 +982,14 @@ class Parser {
     return body
   }
 
-  parseStatement(): AnyNode {
+  parseStatement(inlineAnnotation: Token | null = null): AnyNode {
+    const annotation = inlineAnnotation ?? this.matchInlineAnnotation()
+    const statement = this.parseStatementWithoutInlineAnnotation()
+
+    return this.applyInlineAnnotation(statement, annotation)
+  }
+
+  parseStatementWithoutInlineAnnotation(): AnyNode {
     if (this.isValue('{')) {
       return {
         type: 'BlockStatement',
@@ -1359,6 +1388,59 @@ class Parser {
     })
   }
 
+  matchInlineAnnotation(): Token | null {
+    let annotation: Token | null = null
+
+    while (this.is('annotation')) {
+      const token = this.advance()
+
+      if (token.value === 'inline' && annotation === null) {
+        annotation = token
+      }
+    }
+
+    return annotation
+  }
+
+  applyInlineAnnotation(node: AnyNode, annotation: Token | null): AnyNode {
+    if (annotation === null || typeof annotation === 'undefined') {
+      return node
+    }
+
+    if (node.type === 'FunctionDeclaration' || node.type === 'MethodDefinition') {
+      node.inline = true
+      node.inlineLoc = locFromToken(annotation)
+      return node
+    }
+
+    if (
+      node.type === 'VariableDeclaration' &&
+      node.kind === 'const' &&
+      node.init !== null &&
+      typeof node.init !== 'undefined' &&
+      node.init.type === 'ArrowFunctionExpression'
+    ) {
+      node.inline = true
+      node.inlineLoc = locFromToken(annotation)
+      return node
+    }
+
+    this.reportUnsupportedInlinePlacement(annotation)
+    return node
+  }
+
+  reportUnsupportedInlinePlacement(annotation: Token | null): void {
+    if (annotation === null || typeof annotation === 'undefined') {
+      return
+    }
+
+    this.report(
+      'INOX_INLINE_PLACEMENT',
+      '@inline is supported only on function declarations, methods, and const declarations with function or arrow initializers',
+      annotation
+    )
+  }
+
   parseExpression(): AnyNode {
     return this.parseAssignment()
   }
@@ -1426,6 +1508,39 @@ class Parser {
     const body = this.parseExpression()
 
     return createArrowFunction(start, isAsync, params, body, true)
+  }
+
+  parseFunctionExpression(start: Token): AnyNode {
+    let name: string | null = null
+
+    if (this.is('identifier')) {
+      name = this.advance().value
+    }
+
+    const params: AnyNode[] = []
+    this.expectValue('(', 'INOX_EXPECTED_PAREN', 'expected ( after function')
+
+    while (!this.isValue(')') && !this.is('eof')) {
+      params.push(this.parseRuntimeParam(true))
+
+      if (!this.matchValue(',')) {
+        break
+      }
+    }
+
+    this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after function parameters')
+    let declaredReturnType: string | null = null
+
+    if (this.matchValue(':')) {
+      declaredReturnType = this.parseTypeAnnotation(['{'], null)
+    }
+
+    const expression = createArrowFunction(start, false, params, this.parseBlock(), false)
+    expression.functionSyntax = true
+    expression.functionName = name
+    expression.declaredReturnType = declaredReturnType
+
+    return expression
   }
 
   parseArrowParameters(): AnyNode[] {
@@ -1879,6 +1994,10 @@ class Parser {
       const expression = this.parseExpression()
       this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after expression')
       return expression
+    }
+
+    if (this.matchKeyword('function')) {
+      return this.parseFunctionExpression(this.previous())
     }
 
     if (this.isValue('[')) {

@@ -37,6 +37,8 @@ type IrTopLevelNode = AnyNode & {
 type IrFunctionDeclarationFlags = {
   async: boolean
   exported: boolean
+  inline?: boolean
+  inlineLoc?: SourceLocation | null
   returnNullable: boolean
 }
 
@@ -389,6 +391,8 @@ function createFunctionDeclarationFromFlags(
   return {
     name,
     exported,
+    inline: item.inline === true,
+    inlineLoc: item.inlineLoc ?? null,
     async: usesTask,
     params,
     returnType,

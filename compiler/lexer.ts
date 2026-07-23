@@ -54,7 +54,7 @@ export function tokenize(source: string, options: TokenizeOptions): Token[] {
     }
 
     if (unit === '/' && lexerNextChar(state) === '*') {
-      skipBlockComment(state)
+      readBlockComment(state)
       continue
     }
 
@@ -497,7 +497,13 @@ function skipLineComment(state: LexerState): void {
   }
 }
 
-function skipBlockComment(state: LexerState): void {
+function readBlockComment(state: LexerState): void {
+  const startLine = state.line
+  const startColumn = state.column
+  const startIndex = state.index
+  const docComment = lexerCharAt(state.source, state.index + 2) === '*'
+  let value = ''
+
   advanceLexer(state, '/')
   advanceLexer(state, '*')
 
@@ -505,11 +511,51 @@ function skipBlockComment(state: LexerState): void {
     if (lexerCurrentChar(state) === '*' && lexerNextChar(state) === '/') {
       advanceLexer(state, '*')
       advanceLexer(state, '/')
+
+      if (docComment && blockCommentHasInlineTag(value)) {
+        state.tokens.push(makeToken('annotation', 'inline', startLine, startColumn, startIndex, state.file))
+      }
+
       return
     }
 
-    advanceLexer(state, lexerCurrentChar(state))
+    const unit = lexerCurrentChar(state)
+    value = value + unit
+    advanceLexer(state, unit)
   }
+}
+
+function blockCommentHasInlineTag(value: string): boolean {
+  const tag = '@inline'
+  let offset = 0
+
+  while (offset < value.length) {
+    const index = value.indexOf(tag, offset)
+
+    if (index === -1) {
+      return false
+    }
+
+    const before = index === 0 ? '' : value.slice(index - 1, index)
+    const afterIndex = index + tag.length
+    const after = afterIndex >= value.length ? '' : value.slice(afterIndex, afterIndex + 1)
+
+    if (inlineTagBoundary(before) && inlineTagBoundary(after)) {
+      return true
+    }
+
+    offset = index + tag.length
+  }
+
+  return false
+}
+
+function inlineTagBoundary(value: string): boolean {
+  if (value === '') {
+    return true
+  }
+
+  return value === ' ' || value === '\t' || value === '\r' || value === '\n' || value === '*'
 }
 
 function advanceLexer(state: LexerState, unit: string): void {

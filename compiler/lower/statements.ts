@@ -805,6 +805,8 @@ function createLoweredVariableDeclaration(
     type: 'VariableDeclaration',
     kind: statement.kind,
     exported: statement.exported,
+    inline: statement.inline === true,
+    inlineLoc: nullableNode(statement.inlineLoc),
     name: statement.name,
     loc: statement.loc,
     declaredType: statement.declaredType,

@@ -84,6 +84,8 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
       const lowered: AnyNode = {
         type: 'FunctionDeclaration',
         exported: item.exported,
+        inline: item.inline === true,
+        inlineLoc: nullableNode(item.inlineLoc),
         async: item.async,
         name: item.name,
         loc: item.loc,
@@ -261,6 +263,8 @@ function lowerClassMethod(method: AnyNode, context: LowerContext): AnyNode {
     type: 'MethodDefinition',
     name: method.name,
     loc: method.loc,
+    inline: method.inline === true,
+    inlineLoc: nullableNode(method.inlineLoc),
     typeParameters: method.typeParameters ?? [],
     params: lowerParamList(method.params, context),
     declaredReturnType: nullableString(method.declaredReturnType),

@@ -70,6 +70,8 @@ export type RuntimeTypeAlternative = {
 export type IrFunctionDeclaration = {
   name: string
   exported: boolean
+  inline?: boolean
+  inlineLoc?: SourceLocation | null
   async: boolean
   params: AnyNode[]
   declaredReturnType?: string | null
