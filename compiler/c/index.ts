@@ -5333,7 +5333,7 @@ function emitVariadicFormattedLibraryCallStatement(
 
   const format = joinStrings(parts, ' ')
 
-  lines.push(emitFormattedLibraryCallStatement(target, format, values))
+  pushAll(lines, emitFormattedLibraryCallStatement(target, format, values))
 
   return lines
 }
@@ -5454,12 +5454,26 @@ function isDirectRuntimeFormattedValueExpression(
   return isRuntimeLogValueType(valueType)
 }
 
-function emitFormattedLibraryCallStatement(target: string, format: string, values: string[]): string {
-  if (values.length === 0) {
-    return `${target}(${cStringLiteral(unescapeCPrintfFormatText(format))});`
+function emitFormattedLibraryCallStatement(target: string, format: string, values: string[]): string[] {
+  const argumentsList = [
+    cStringLiteral(values.length === 0 ? unescapeCPrintfFormatText(format) : format),
+    ...values
+  ]
+  const singleLine = `${target}(${joinStrings(argumentsList, ', ')});`
+
+  if (singleLine.length <= 100) {
+    return [singleLine]
   }
 
-  return `${target}(${cStringLiteral(format)}, ${joinStrings(values, ', ')});`
+  const lines = [`${target}(`]
+
+  for (let index = 0; index < argumentsList.length; index = index + 1) {
+    const suffix = index + 1 < argumentsList.length ? ',' : ''
+    lines.push(`  ${argumentsList[index]}${suffix}`)
+  }
+
+  lines.push(');')
+  return lines
 }
 
 function unescapeCPrintfFormatText(value: string): string {
