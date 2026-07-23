@@ -3,7 +3,9 @@ const generatedCJoinChunkSize = 65536
 
 export function formatGeneratedC(code: string, _assumeFilename: string): string {
   return spaceGeneratedCControlFlow(
-    wrapGeneratedCLongControlConditions(braceGeneratedCSingleLineControls(wrapGeneratedCFunctionHeads(code)))
+    wrapGeneratedCLongControlConditions(
+      braceGeneratedCSingleLineControls(wrapGeneratedCLongCallStatements(wrapGeneratedCFunctionHeads(code)))
+    )
   )
 }
 
@@ -42,6 +44,39 @@ function wrapGeneratedCFunctionHeads(code: string): string {
     } else {
       mapped.push(line)
     }
+  }
+
+  return joinGeneratedCLines(mapped, source.hasTrailingNewline)
+}
+
+function wrapGeneratedCLongCallStatements(code: string): string {
+  const source = splitGeneratedCLines(code)
+  const mapped: string[] = []
+
+  for (let index = 0; index < source.lines.length; index = index + 1) {
+    const line = source.lines[index]
+
+    if (line.length <= generatedCColumnLimit) {
+      mapped.push(line)
+      continue
+    }
+
+    const call = parseGeneratedCCallStatement(line)
+
+    if (call === null || call.args.length < 2) {
+      mapped.push(line)
+      continue
+    }
+
+    mapped.push(`${call.indent}${call.prefix}(`)
+
+    for (let argumentIndex = 0; argumentIndex < call.args.length; argumentIndex = argumentIndex + 1) {
+      const suffix = argumentIndex + 1 < call.args.length ? ',' : ''
+      mapped.push(`${call.indent}  ${call.args[argumentIndex]}${suffix}`)
+    }
+
+    const comment = call.comment === null ? '' : ` ${call.comment}`
+    mapped.push(`${call.indent});${comment}`)
   }
 
   return joinGeneratedCLines(mapped, source.hasTrailingNewline)
@@ -384,6 +419,13 @@ type GeneratedCFunctionHead = {
   suffix: string
 }
 
+type GeneratedCCallStatement = {
+  indent: string
+  prefix: string
+  args: string[]
+  comment: string | null
+}
+
 type GeneratedCLineComment = {
   statement: string
   comment: string | null
@@ -453,6 +495,52 @@ function parseGeneratedCFunctionHead(line: string): GeneratedCFunctionHead | nul
     prefix,
     params,
     suffix
+  }
+}
+
+function parseGeneratedCCallStatement(line: string): GeneratedCCallStatement | null {
+  const lineComment = splitGeneratedCLineComment(line)
+  const indent = generatedCLeadingWhitespace(lineComment.statement)
+  const statement = lineComment.statement.trim()
+
+  if (
+    statement === '' ||
+    generatedCStringStartsWithAt(statement, '#', 0) ||
+    isGeneratedCControlStart(statement) ||
+    !statement.endsWith(';')
+  ) {
+    return null
+  }
+
+  const closeParen = statement.length - 2
+
+  if (closeParen < 0 || statement[closeParen] !== ')') {
+    return null
+  }
+
+  const openParen = statement.indexOf('(')
+
+  if (openParen < 0 || findGeneratedCMatchingParen(statement, openParen) !== closeParen) {
+    return null
+  }
+
+  const prefix = statement.slice(0, openParen)
+
+  if (prefix === '' || prefix.endsWith(' ') || prefix.endsWith('=')) {
+    return null
+  }
+
+  const args = splitGeneratedCParameters(statement.slice(openParen + 1, closeParen))
+
+  if (args === null) {
+    return null
+  }
+
+  return {
+    indent,
+    prefix,
+    args,
+    comment: lineComment.comment
   }
 }
 
