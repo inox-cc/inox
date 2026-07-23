@@ -100,7 +100,7 @@ console.log(strNum, strBool, strNull, strTpl, numText, hexText)
   assert.match(source, /trimmed\.lastIndexOf\("i"\)/)
   assert.match(
     source,
-    /console\.log\("%.17g %.17g", static_cast<double>\(inox_library_result_\d+\), static_cast<double>\(inox_library_result_\d+\)\);/
+    /console\.log\("%.17g %.17g", inox_library_result_\d+, inox_library_result_\d+\);/
   )
   assert.doesNotMatch(source, /\(\(double\)trimmed\.indexOf/)
   assert.match(source, /auto parts = inox::String\("alpha,beta", 10\)\.split\(","\);/)

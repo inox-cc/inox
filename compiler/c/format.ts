@@ -514,13 +514,17 @@ function parseGeneratedCCallStatement(line: string): GeneratedCCallStatement | n
 
   const closeParen = statement.length - 2
 
-  if (closeParen < 0 || statement[closeParen] !== ')') {
+  if (closeParen < 0 || statement.slice(closeParen, closeParen + 1) !== ')') {
     return null
   }
 
   const openParen = statement.indexOf('(')
 
-  if (openParen < 0 || findGeneratedCMatchingParen(statement, openParen) !== closeParen) {
+  if (openParen < 0) {
+    return null
+  }
+
+  if ((findGeneratedCMatchingParen(statement, openParen) ?? -1) !== closeParen) {
     return null
   }
 

@@ -2461,7 +2461,12 @@ function emitPreparedObjectCallArgumentExpression(
 function nativeClassParamName(param: CFunctionParam, context: CFunctionContext): string | null {
   const className = param.className
 
-  if (className === null || typeof className === 'undefined') {
+  if (
+    className === null ||
+    typeof className === 'undefined' ||
+    param.nullable === true ||
+    param.ownership === 'weak'
+  ) {
     return null
   }
 

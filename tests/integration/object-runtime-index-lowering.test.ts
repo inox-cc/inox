@@ -53,7 +53,7 @@ for (const a of foo.v) {
   assert.doesNotMatch(source, /Array\(inox_(?:values|entries)_\d+\)\.get\(0\)/)
   assert.match(
     source,
-    /if \(\(inox_library_value_\d+\.tag != INOX_TAG_OBJECT && inox_library_value_\d+\.tag != INOX_TAG_CLASS_INSTANCE\)/
+    /if \(\s+\(inox_library_value_\d+\.tag != INOX_TAG_OBJECT && inox_library_value_\d+\.tag != INOX_TAG_CLASS_INSTANCE\)/
   )
   assert.doesNotMatch(source, /inox_object_values\(&inox_default_allocator, a, &inox_object_values_\d+\)/)
   assert.doesNotMatch(source, /inox_object_entries\(&inox_default_allocator, a, &inox_object_entries_\d+\)/)

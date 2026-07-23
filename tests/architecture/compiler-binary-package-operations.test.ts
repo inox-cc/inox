@@ -26,6 +26,7 @@ test('binary package operations compile only through discovered generic metadata
   assert.equal(bufferFrom.shape?.libraryTypeId, 'node:buffer#Buffer')
   assert.equal(indexWrite.libraryOperationId, 'node:buffer#Buffer#index-write')
   assert.equal(indexRead.libraryOperationId, 'node:buffer#Buffer#index-read')
+  assert.equal(indexRead.libraryCResultAdapter, 'static_cast<double>($value)')
   assert.equal(toString.libraryOperationId, 'node:buffer#Buffer#toString')
   assert.equal(uint8ArrayConstructor.libraryOperationId, 'global:binary#Uint8Array#construct')
   assert.equal(uint8ArrayConstructor.shape?.libraryTypeId, 'global:binary#Uint8Array')
