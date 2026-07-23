@@ -5,8 +5,8 @@ import { test } from 'node:test'
 import ts from 'typescript'
 
 const targets = [
-  { file: 'compiler/c/unit.ts', functionName: 'cUnitValueCType' },
-  { file: 'compiler/c/module-emission.ts', functionName: 'cModuleValueCType' }
+  { file: 'compiler/backends/cpp/unit.ts', functionName: 'cUnitValueCType' },
+  { file: 'compiler/backends/cpp/module-emission.ts', functionName: 'cModuleValueCType' }
 ]
 
 test('async-result C++ storage type не имеет raw fallback', () => {

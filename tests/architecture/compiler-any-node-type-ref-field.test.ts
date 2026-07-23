@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { compilerAnyNodeObjectFields } from '../../compiler/c/values/any-node-fields.ts'
+import { compilerAnyNodeObjectFields } from '../../compiler/backends/cpp/values/any-node-fields.ts'
 import { anyNodeObjectShape } from '../../compiler/checker/resolved-types.ts'
 import {
   compileMemoryPackageToCModules,

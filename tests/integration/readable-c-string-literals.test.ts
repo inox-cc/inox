@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
-import { cStringLiteral, escapeCPrintfFormatText } from '../../compiler/c/identifiers.ts'
+import { cStringLiteral, escapeCPrintfFormatText } from '../../compiler/backends/cpp/identifiers.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { defaultCompilerLibraryLiteralTypeInference, defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 

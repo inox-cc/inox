@@ -5,11 +5,11 @@ import { compilerAnyNodeSyntaxChildFields } from '../../compiler/any-node-fields
 import {
   compilerAnyNodeObjectFields,
   compilerAnyNodeUnknownFields
-} from '../../compiler/c/values/any-node-fields.ts'
+} from '../../compiler/backends/cpp/values/any-node-fields.ts'
 import {
   anyNodeLikeDeclaredObjectFieldValueType,
   anyNodeLikeObjectFieldDeclaredType
-} from '../../compiler/c/values/types.ts'
+} from '../../compiler/backends/cpp/values/types.ts'
 import { anyNodeObjectShape } from '../../compiler/checker/resolved-types.ts'
 
 test('AnyNode consequent stays generic across expression and switch case nodes', () => {

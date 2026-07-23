@@ -5,7 +5,7 @@ import {
   compilerAnyNodeBooleanFields,
   compilerAnyNodeObjectFields,
   compilerAnyNodeStringFields
-} from '../../compiler/c/values/any-node-fields.ts'
+} from '../../compiler/backends/cpp/values/any-node-fields.ts'
 import { anyNodeObjectShape } from '../../compiler/checker/resolved-types.ts'
 
 test('self-hosted AnyNode сохраняет metadata привязки ссылок и inline-деклараций', () => {

@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-const targets = collectTypeScriptFiles('compiler/c')
+const targets = collectTypeScriptFiles('compiler/backends/cpp')
 const rawRootPattern =
   /\binox_promise\s*\*|\binox_promise_(?:new|retain|release|then|resolve|resolved|reject|rejected|chain)\s*\(/g
 

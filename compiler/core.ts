@@ -1,8 +1,12 @@
 import { checkCCompileBudgets } from './budgets.ts'
-import type { CEmitOptions, CModuleEmitOptions, CModuleOutputFile } from './c/types.ts'
+import type {
+  CEmitOptions,
+  CModuleEmitOptions,
+  CModuleOutputFile
+} from './backends/cpp/types.ts'
 import { checkCProfileCapabilities } from './capabilities.ts'
 import { checkProgram } from './checker.ts'
-import { emitCBundleFromIrModules, emitCFromIr, emitCModuleFilesFromGraph } from './codegen-c.ts'
+import { emitCBundleFromIrModules, emitCFromIr, emitCModuleFilesFromGraph } from './codegen-cpp.ts'
 import type { CompilerHost } from './host.ts'
 import { resolveCompilerLibrarySet } from './extensions/library-set.ts'
 import { compilerLibraryOptionsFingerprint } from './extensions/library-options.ts'

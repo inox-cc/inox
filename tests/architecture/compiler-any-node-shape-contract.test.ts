@@ -9,10 +9,10 @@ import {
   compilerAnyNodeStringArrayFields,
   compilerAnyNodeStringFields,
   compilerAnyNodeUnknownFields
-} from '../../compiler/c/values/any-node-fields.ts'
-import { appendCompilerAnyNodeFallbackShapeFields } from '../../compiler/c/values/objects.ts'
-import type { CObjectShapeField } from '../../compiler/c/types.ts'
-import { anyNodeLikeDeclaredObjectFieldValueType } from '../../compiler/c/values/types.ts'
+} from '../../compiler/backends/cpp/values/any-node-fields.ts'
+import { appendCompilerAnyNodeFallbackShapeFields } from '../../compiler/backends/cpp/values/objects.ts'
+import type { CObjectShapeField } from '../../compiler/backends/cpp/types.ts'
+import { anyNodeLikeDeclaredObjectFieldValueType } from '../../compiler/backends/cpp/values/types.ts'
 import { anyNodeObjectShape } from '../../compiler/checker/resolved-types.ts'
 
 test('self-hosted AnyNode shape keeps nullable as an optional nullable boolean field', () => {

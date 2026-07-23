@@ -5,7 +5,7 @@ import { test } from 'node:test'
 const rawTaskResultSettlementPattern = /inox_promise_(?:resolve|reject)\(frame->promise/g
 
 test('async task result settlement не вызывает raw runtime из portable compiler', () => {
-  const source = foldAdjacentStringFragments(readFileSync('compiler/c/async/tasks.ts', 'utf8'))
+  const source = foldAdjacentStringFragments(readFileSync('compiler/backends/cpp/async/tasks.ts', 'utf8'))
   const violations = [...source.matchAll(rawTaskResultSettlementPattern)].map(
     (match) => `${lineNumber(source, match.index)}: ${match[0]}`
   )

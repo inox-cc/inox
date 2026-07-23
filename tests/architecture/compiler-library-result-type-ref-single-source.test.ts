@@ -10,8 +10,8 @@ const legacyFields = new Set(['resultShapeFields', 'resultTypeId', 'cppType', 'v
 const implementationFiles = [
   'compiler/extensions/library-set-builder.ts',
   'compiler/checker.ts',
-  'compiler/c/index.ts',
-  'compiler/c/values/statements.ts'
+  'compiler/backends/cpp/index.ts',
+  'compiler/backends/cpp/values/statements.ts'
 ]
 
 test('resultTypeRef остаётся единственным каналом semantic result type', async () => {

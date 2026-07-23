@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { formatGeneratedC } from '../../compiler/c/format.ts'
+import { formatGeneratedC } from '../../compiler/backends/cpp/format.ts'
 
 test('generated C++ переносит только длинные runtime guards и сохраняет короткие однострочными', () => {
   const longCondition =

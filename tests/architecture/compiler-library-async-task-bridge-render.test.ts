@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import {
   compilerLibraryIntrinsicNativeCAsyncTaskBridge,
   renderCompilerLibraryCAsyncTaskBridgeExpression
-} from '../../compiler/c/value-types.ts'
+} from '../../compiler/backends/cpp/value-types.ts'
 import { futureLibrarySet } from './helpers/compiler-future-library-fixtures.ts'
 
 test('native async-task bridge доступен через intrinsic provider и нейтрально рендерится', () => {

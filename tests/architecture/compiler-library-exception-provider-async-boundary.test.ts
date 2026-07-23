@@ -15,8 +15,8 @@ test('portable async lowering получает exception shape от выбран
   ])
   const source = "const detail = await Promise.reject(new Fault('boom')).catch((fault) => fault.detail)\n"
   const result = compileSource(source, { libraries, target: 'cc' })
-  const asyncSource = await readFile('compiler/c/async/async-results.ts', 'utf8')
-  const rejectionSource = await readFile('compiler/c/async/rejections.ts', 'utf8')
+  const asyncSource = await readFile('compiler/backends/cpp/async/async-results.ts', 'utf8')
+  const rejectionSource = await readFile('compiler/backends/cpp/async/rejections.ts', 'utf8')
   const metadataSource = await readFile('compiler/checker/expression-metadata.ts', 'utf8')
 
   assert.match(result.code, /inox::get\(fault, "detail"\)/)

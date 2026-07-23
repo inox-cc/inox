@@ -4,8 +4,8 @@ import { test } from 'node:test'
 import {
   emitFunctionPointerAdapterResultLines,
   functionPointerNativeReturnRuntimeValueExpression
-} from '../../compiler/c/async/callbacks.ts'
-import type { CFunctionType } from '../../compiler/c/types.ts'
+} from '../../compiler/backends/cpp/async/callbacks.ts'
+import type { CFunctionType } from '../../compiler/backends/cpp/types.ts'
 import { compileFileToCModuleTextsSync, compileSource } from '../../compiler/core.ts'
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
@@ -59,11 +59,11 @@ consume(dependencies)
   assert.match(source.code, /inox_adapter_callback_context_\d+->target = inox_objfn_dependencies_pick;/)
   assert.match(
     source.code,
-    /inox_objfn_dependencies_run\(inox_arg_0, inox_objfn_dependencies_run, inox_adapter_callback_\d+/
+    /inox_objfn_dependencies_run\(\s*inox_arg_0,\s*inox_objfn_dependencies_run,\s*inox_adapter_callback_\d+/
   )
   assert.doesNotMatch(
     source.code,
-    /inox_objfn_dependencies_run\(inox_arg_0, inox_objfn_dependencies_run, inox_objfn_dependencies_pick/
+    /inox_objfn_dependencies_run\(\s*inox_arg_0,\s*inox_objfn_dependencies_run,\s*inox_objfn_dependencies_pick/
   )
 })
 

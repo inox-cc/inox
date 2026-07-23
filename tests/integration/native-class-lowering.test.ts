@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 
 import { compileFileToCModuleTextsSync, compileSource } from '../../compiler/core.ts'
-import { cStringLiteral } from '../../compiler/c/identifiers.ts'
+import { cStringLiteral } from '../../compiler/backends/cpp/identifiers.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 

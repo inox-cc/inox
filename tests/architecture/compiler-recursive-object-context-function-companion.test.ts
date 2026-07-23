@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { isPlainFunctionPointerType } from '../../compiler/c/async/callbacks.ts'
-import type { CFunctionType } from '../../compiler/c/types.ts'
+import { isPlainFunctionPointerType } from '../../compiler/backends/cpp/async/callbacks.ts'
+import type { CFunctionType } from '../../compiler/backends/cpp/types.ts'
 
 test('resolved recursive compiler context preserves the established function companion ABI', () => {
   const functionType: CFunctionType = {

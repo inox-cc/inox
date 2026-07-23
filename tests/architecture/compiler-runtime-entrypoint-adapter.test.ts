@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { resolveCRuntimePreludeRequirements } from '../../compiler/c/runtime-plan.ts'
+import { resolveCRuntimePreludeRequirements } from '../../compiler/backends/cpp/runtime-plan.ts'
 import type {
   CompilerLibrarySet,
   RuntimeRequirementDescriptor

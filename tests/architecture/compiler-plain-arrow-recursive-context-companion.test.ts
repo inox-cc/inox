@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { emitPlainArrowCallbackWrapperHead } from '../../compiler/c/async/callbacks.ts'
-import type { CPlainArrowCallbackWrapper } from '../../compiler/c/types.ts'
+import { emitPlainArrowCallbackWrapperHead } from '../../compiler/backends/cpp/async/callbacks.ts'
+import type { CPlainArrowCallbackWrapper } from '../../compiler/backends/cpp/types.ts'
 
 test('plain arrow wrapper keeps recursive compiler context companion parameters', () => {
   const wrapper: CPlainArrowCallbackWrapper = {

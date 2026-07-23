@@ -111,7 +111,7 @@ function invoke(context: EmitContext, dependencies: RecursiveDependencies): stri
   assert.ok(source)
   assert.match(
     source.code,
-    /collect\(context, inox_objfn_context_first_alpha, inox_objfn_context_recursive_create, inox_objfn_context_recursive_run, dependencies, inox_objfn_dependencies_create, inox_objfn_dependencies_run\)/
+    /collect\(\s*context,\s*inox_objfn_context_first_alpha,\s*inox_objfn_context_recursive_create,\s*inox_objfn_context_recursive_run,\s*dependencies,\s*inox_objfn_dependencies_create,\s*inox_objfn_dependencies_run\s*\)/
   )
   assert.doesNotMatch(source.code, /inox_function_pointer_adapter_/)
 })

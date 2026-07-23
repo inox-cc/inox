@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
-import { emitReturnValueDeclarations } from '../../compiler/c/context.ts'
+import { emitReturnValueDeclarations } from '../../compiler/backends/cpp/context.ts'
 import { futureLibrarySet } from './helpers/compiler-future-library-fixtures.ts'
 
 test('async-result physical storage использует cppType выбранного provider-а', () => {

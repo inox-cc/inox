@@ -4,7 +4,7 @@
 // @stdout 1
 // @stdout 1
 
-import { formatGeneratedC } from '../../../compiler/c/format.ts'
+import { formatGeneratedC } from '../../../compiler/backends/cpp/format.ts'
 
 function generatedFunctionHead(index: number): string {
   return `inox_value generated_callback_wrapper_${index}(inox_value context, inox_value args, inox_value out, inox_value dep0, inox_value dep1, inox_value dep2, inox_value dep3) {`
