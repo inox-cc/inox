@@ -61,7 +61,16 @@ function braceGeneratedCSingleLineControls(code: string): string {
     }
 
     if (shouldKeepGeneratedCSingleLineControl(control)) {
-      mapped.push(line)
+      if (line.length <= generatedCColumnLimit) {
+        mapped.push(line)
+      } else {
+        mapped.push(`${control.indent}${control.keyword} (`)
+        pushGeneratedCLines(
+          mapped,
+          wrapGeneratedCCondition(control.condition.slice(1, control.condition.length - 1), control.indent)
+        )
+        mapped.push(`${control.indent}) ${control.statement}`)
+      }
       continue
     }
 
@@ -618,6 +627,18 @@ function parseGeneratedCControlBlockStart(line: string): GeneratedCControlBlockS
 }
 
 function wrapGeneratedCCondition(condition: string, indent: string): string[] {
+  const logicalParts = splitGeneratedCLogicalCondition(condition)
+
+  if (logicalParts.length > 1) {
+    const lines: string[] = []
+
+    for (let index = 0; index < logicalParts.length; index = index + 1) {
+      lines.push(`${indent}  ${logicalParts[index]}`)
+    }
+
+    return lines
+  }
+
   const call = parseGeneratedCCallCondition(condition)
 
   if (call !== null && typeof call !== 'undefined') {
@@ -641,6 +662,62 @@ function wrapGeneratedCCondition(condition: string, indent: string): string[] {
   }
 
   return [`${indent}  ${condition}`]
+}
+
+function splitGeneratedCLogicalCondition(condition: string): string[] {
+  const parts: string[] = []
+  let depth = 0
+  let start = 0
+  let quote: '"' | "'" | null = null
+  let escaped = false
+
+  for (let index = 0; index < condition.length; index = index + 1) {
+    const character = condition[index]
+
+    if (quote !== null && typeof quote !== 'undefined') {
+      if (escaped) {
+        escaped = false
+      } else if (character === '\\') {
+        escaped = true
+      } else if (character === quote) {
+        quote = null
+      }
+
+      continue
+    }
+
+    if (character === '"' || character === "'") {
+      quote = character
+      continue
+    }
+
+    if (character === '(' || character === '[' || character === '{') {
+      depth = depth + 1
+      continue
+    }
+
+    if (character === ')' || character === ']' || character === '}') {
+      depth = depth - 1
+      continue
+    }
+
+    if (
+      depth === 0 &&
+      ((character === '&' && condition[index + 1] === '&') ||
+        (character === '|' && condition[index + 1] === '|'))
+    ) {
+      parts.push(condition.slice(start, index + 2).trim())
+      start = index + 2
+      index = index + 1
+    }
+  }
+
+  if (parts.length === 0) {
+    return [condition]
+  }
+
+  parts.push(condition.slice(start).trim())
+  return parts
 }
 
 function parseGeneratedCCallCondition(condition: string): GeneratedCCallCondition | null {
