@@ -1541,7 +1541,9 @@ export function emitCUnit(
   const inlineMethodDefinitions: CClassInlineDefinitionMap = new Map()
 
   for (const classInfo of baseContext.classInfos.values()) {
-    if (!cClassUsesInlineDefinitions(classInfo)) {
+    const inClass = cClassUsesInlineDefinitions(classInfo) || classInfo.constructor?.inline === true
+
+    if (!inClass) {
       continue
     }
 
@@ -1558,7 +1560,9 @@ export function emitCUnit(
   }
 
   for (const classMethod of classMethods) {
-    if (!cClassUsesInlineDefinitions(classMethod.info)) {
+    const inClass = cClassUsesInlineDefinitions(classMethod.info) || classMethod.method.inline === true
+
+    if (!inClass) {
       continue
     }
 
@@ -1577,7 +1581,9 @@ export function emitCUnit(
       continue
     }
 
-    declarationLines.push(`${emitFunctionHead(item, baseContext)};`)
+    const prefix = item.inline === true ? 'inline ' : ''
+
+    declarationLines.push(`${prefix}${emitFunctionHead(item, baseContext)};`)
   }
 
   if (baseContext.classInfos.size > 0 && functionPrototypeNames.size > 0) {
@@ -1684,7 +1690,7 @@ export function emitCUnit(
   }
 
   for (const classInfo of baseContext.classInfos.values()) {
-    if (cClassUsesInlineDefinitions(classInfo)) {
+    if (cClassUsesInlineDefinitions(classInfo) || classInfo.constructor?.inline === true) {
       continue
     }
 
@@ -1693,7 +1699,7 @@ export function emitCUnit(
   }
 
   for (const classMethod of classMethods) {
-    if (cClassUsesInlineDefinitions(classMethod.info)) {
+    if (cClassUsesInlineDefinitions(classMethod.info) || classMethod.method.inline === true) {
       continue
     }
 
@@ -1750,7 +1756,13 @@ export function emitCUnit(
   }
 
   for (const item of functions) {
-    pushUnitLines(lines, emitFunctionDeclaration(item, baseContext, deps.declarationEmissionDependencies))
+    const definition = emitFunctionDeclaration(item, baseContext, deps.declarationEmissionDependencies)
+
+    if (item.inline === true && definition.length > 0) {
+      definition[0] = `inline ${definition[0]}`
+    }
+
+    pushUnitLines(lines, definition)
     lines.push('')
   }
 

@@ -12,7 +12,7 @@ export const increment = function (value: number): number {
 `)
   const declaration = compiled.hir.body[0]
 
+  assert.equal(declaration.type, 'FunctionDeclaration')
   assert.equal(declaration.inline, true)
-  assert.equal(declaration.init.functionSyntax, true)
-  assert.equal(declaration.init.returnType, 'number')
+  assert.equal(declaration.returnType, 'number')
 })

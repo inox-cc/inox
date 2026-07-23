@@ -271,6 +271,7 @@ export type CRuntimeArrowCapture = {
 export type CClassInfo = {
   name: string
   symbolName: string
+  imported?: boolean
   node: AnyNode
   constructor: AnyNode | null
   assignments: AnyNode[]

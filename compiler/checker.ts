@@ -814,6 +814,7 @@ class Checker {
             symbol.constructable = true
             symbol.className = specifier.className ?? null
             symbol.constructorParams = this.resolveImportedParams(specifier.constructorParams ?? [])
+            symbol.classMethods = specifier.classMethods ?? []
           }
 
           if (specifier.returnType !== null && typeof specifier.returnType !== 'undefined') {
@@ -6041,6 +6042,8 @@ class Checker {
 
     if (symbol.constructable) {
       this.checkImportedClassConstructorArguments(expression, symbol.constructorParams)
+      expression.className = symbol.className ?? constructorName
+      expression.shape = symbol.shape ?? null
       return 'object'
     }
 

@@ -70,6 +70,22 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
     ]
   }
 
+  if (
+    item.type === 'VariableDeclaration' &&
+    item.inline === true &&
+    item.kind === 'const' &&
+    item.init !== null &&
+    typeof item.init !== 'undefined' &&
+    item.init.type === 'ArrowFunctionExpression'
+  ) {
+    const loweredItems = lowerStatementList([item], context)
+    const lowered = loweredItems[0]
+
+    if (lowered !== null && typeof lowered !== 'undefined') {
+      return [inlineFunctionDeclarationFromVariable(lowered)]
+    }
+  }
+
   if (item.type === 'FunctionDeclaration') {
     const typeParameterState = pushLowerTypeParameters(item, context)
 
@@ -131,6 +147,47 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
   }
 
   return lowerStatementList([item], context)
+}
+
+function inlineFunctionDeclarationFromVariable(statement: AnyNode): AnyNode {
+  const expression = statement.init
+  const functionType = nullableNode(statement.functionType) ?? nullableNode(expression.functionType)
+  const returnType = resolvedValueType(
+    expression.returnType,
+    resolvedValueType(functionType?.returnType, 'void')
+  )
+  let body: AnyNode[] = []
+
+  if (expression.expressionBody === true) {
+    body = [
+      {
+        type: 'ReturnStatement',
+        argument: expression.body,
+        loc: expression.loc
+      }
+    ]
+  } else if (Array.isArray(expression.body)) {
+    body = expression.body
+  }
+
+  return {
+    type: 'FunctionDeclaration',
+    exported: statement.exported === true,
+    inline: true,
+    inlineLoc: nullableNode(statement.inlineLoc),
+    async: expression.async === true,
+    name: statement.name,
+    loc: statement.loc,
+    params: expression.params,
+    declaredReturnType: nullableString(expression.declaredReturnType),
+    returnType,
+    returnRuntimeTypeAlternatives: nullableNodeArray(expression.returnRuntimeTypeAlternatives),
+    returnTypeRef: nullableNode(expression.returnTypeRef),
+    returnNullable: expression.returnNullable === true,
+    returnAsyncResultValueType: nullableString(expression.returnAsyncResultValueType),
+    returnShape: nullableNode(expression.returnShape),
+    body
+  }
 }
 
 function cloneLowerTypeParameters(typeParameters: AnyNode[] | null | undefined): AnyNode[] {
@@ -423,6 +480,14 @@ function nullableString(value: string | null | undefined): string | null {
 }
 
 function nullableNode(value: AnyNode | null | undefined): AnyNode | null {
+  if (value !== null && typeof value !== 'undefined') {
+    return value
+  }
+
+  return null
+}
+
+function nullableNodeArray(value: AnyNode[] | null | undefined): AnyNode[] | null {
   if (value !== null && typeof value !== 'undefined') {
     return value
   }

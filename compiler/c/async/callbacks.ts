@@ -3229,8 +3229,11 @@ export function runtimeCallbackWrapperFor(
 }
 
 export function emitRuntimeCallbackWrapperHead(wrapper: CRuntimeCallbackWrapper): string {
+  const prefix =
+    wrapper.kind === 'arrow' && wrapper.expression.inline === true ? 'static inline inox_status ' : 'static inox_status '
+
   return (
-    'static inox_status ' +
+    prefix +
     wrapper.name +
     '(void* inox_context, const inox_value* args, size_t arg_count, inox_value* out)'
   )
@@ -3241,8 +3244,10 @@ export function isRuntimeCallbackWrapper(wrapper: CCallbackWrapper): boolean {
 }
 
 export function emitPlainArrowCallbackWrapperHead(wrapper: CPlainArrowCallbackWrapper): string {
+  const prefix = wrapper.expression.inline === true ? 'static inline ' : 'static '
+
   return (
-    'static ' +
+    prefix +
     emitFunctionPointerReturnType(wrapper.functionType) +
     ' ' +
     wrapper.name +

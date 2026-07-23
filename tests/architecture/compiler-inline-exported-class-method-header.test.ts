@@ -3,15 +3,14 @@ import { test } from 'node:test'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
-import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
-test('экспортируемый C++ class сохраняет declarations отдельно от definitions', () => {
+test('@inline method экспортируемого class определяется в .h, остальные методы остаются out-of-line', () => {
   const host = createMemoryCompilerHost(
     [
       {
         path: '/pkg/index.ts',
         source:
-          'export class Box { value: number; constructor(value: number) { this.value = value } read(): number { return this.value } }\nconst box = new Box(7)\nconsole.log(box.read())\n'
+          'export class Box { value: number; constructor(value: number) { this.value = value } /** @inline */ read(): number { return this.value } twice(): number { return this.value * 2 } }\nnew Box(7).read()\n'
       }
     ],
     { root: '/' }
@@ -19,7 +18,6 @@ test('экспортируемый C++ class сохраняет declarations о�
   const files = compileFileToCModuleTextsSync('/pkg/index.ts', {
     callMain: true,
     host,
-    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   })
   const source = files.find((file) => file.path === 'index.cc')
@@ -27,10 +25,8 @@ test('экспортируемый C++ class сохраняет declarations о�
 
   assert.ok(source)
   assert.ok(header)
-  assert.match(header.code, /class Box \{/)
-  assert.match(header.code, /Box\(double value\);/)
-  assert.match(header.code, /double read\(\);/)
+  assert.match(header.code, /class Box \{[\s\S]*double read\(\) \{[\s\S]*double twice\(\);/)
   assert.doesNotMatch(source.code, /class Box \{/)
-  assert.match(source.code, /Box::Box\(double value\)/)
-  assert.match(source.code, /double Box::read\(\)/)
+  assert.doesNotMatch(source.code, /Box::read/)
+  assert.match(source.code, /double Box::twice\(\)/)
 })

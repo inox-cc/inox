@@ -11,6 +11,8 @@ import {
   irClassMethodEffectName,
   mergeIrFunctionEffects
 } from '../ir.ts'
+import { collectRuntimeRequirements } from '../ir/features.ts'
+import { collectGlobalUsages } from '../ir/globals.ts'
 import { reexportImportAliasName } from '../modules/synthetic-imports.ts'
 import type {
   AnyNode,
@@ -18,7 +20,8 @@ import type {
   IrFunctionDeclaration,
   IrFunctionEffect,
   IrProgram,
-  IrRuntimeRequirement
+  IrRuntimeRequirement,
+  ProgramNode
 } from '../types.ts'
 import type { CallbackLoweringDependencies, FunctionPointerParamInfo } from './async/callbacks.ts'
 import {
@@ -479,7 +482,14 @@ export function emitCModuleSource(
 
   const lines: string[] = []
   const headerDeclarations = collectCModuleHeaderDeclarationLines(plan, context, deps)
-  const headerIncludes = collectCModuleHeaderIncludeLines(plan, context, options.libraries, deps, headerDeclarations)
+  const headerIncludes = collectCModuleHeaderIncludeLines(
+    plan,
+    context,
+    options.libraries,
+    deps,
+    headerDeclarations,
+    options.host
+  )
 
   if (headerDeclarations.length > 0) {
     lines.push(`#include "${relativeCIncludePath(plan.sourcePath, plan.headerPath, options.host)}"`)
@@ -496,7 +506,11 @@ export function emitCModuleSource(
     }
 
     if (importedModule.headerPath !== plan.headerPath) {
-      lines.push(`#include "${relativeCIncludePath(plan.sourcePath, importedModule.headerPath, options.host)}"`)
+      const includeLine = `#include "${relativeCIncludePath(plan.sourcePath, importedModule.headerPath, options.host)}"`
+
+      if (!cModuleLinesInclude(headerIncludes, includeLine)) {
+        lines.push(includeLine)
+      }
     }
   }
 
@@ -528,7 +542,13 @@ export function emitCModuleSource(
   const inlineMethodDefinitions: CClassInlineDefinitionMap = new Map()
 
   for (const classInfo of context.classInfos.values()) {
-    const inClass = cClassUsesInlineDefinitions(classInfo)
+    if (classInfo.imported === true) {
+      continue
+    }
+
+    const inClass =
+      cClassUsesInlineDefinitions(classInfo) ||
+      (classInfo.node.exported === true && classInfo.constructor?.inline === true)
     const definition = deps.emitClassConstructorDeclaration(
       classInfo,
       context,
@@ -552,7 +572,7 @@ export function emitCModuleSource(
     const item = cModuleClassMethodAt(classMethods, methodIndex)
     const info = item.info
     const method = item.method
-    const inClass = cClassUsesInlineDefinitions(info)
+    const inClass = cClassUsesInlineDefinitions(info) || (info.node.exported === true && method.inline === true)
     const definition = deps.emitClassMethodDeclaration(
       info,
       method,
@@ -605,6 +625,10 @@ export function emitCModuleSource(
   for (let functionIndex = 0; functionIndex < functions.length; functionIndex = functionIndex + 1) {
     const item = cModuleNodeAt(functions, functionIndex)
 
+    if (isCModuleExportedInlineFunction(plan, item.name)) {
+      continue
+    }
+
     pushCModuleLines(bodyLines, emitCModuleFunctionDeclaration(plan, item, context, deps))
     bodyLines.push('')
   }
@@ -627,7 +651,8 @@ export function emitCModuleSource(
       collectCModuleClassMethodPrototypes(context, deps),
       classDescriptorNames,
       inlineConstructorDefinitions,
-      inlineMethodDefinitions
+      inlineMethodDefinitions,
+      collectCModuleSourceClassNames(context)
     )
   )
   emitCModuleFunctionPointerRuntimeAdapterDefinitions(lines, context)
@@ -753,7 +778,14 @@ export function emitCModuleHeader(
 ): string {
   const context = createCModuleBaseContext(plan, diagnostics, deps, options.libraries)
   const declarationLines = collectCModuleHeaderDeclarationLines(plan, context, deps)
-  const includes = collectCModuleHeaderIncludeLines(plan, context, options.libraries, deps, declarationLines)
+  const includes = collectCModuleHeaderIncludeLines(
+    plan,
+    context,
+    options.libraries,
+    deps,
+    declarationLines,
+    options.host
+  )
   const lines: string[] = []
 
   lines.push(`#ifndef ${plan.headerGuard}`)
@@ -773,7 +805,7 @@ export function emitCModuleHeader(
   lines.push('')
   lines.push(`#endif`)
 
-  return joinCModuleLines(lines)
+  return filterUnusedCPreludeIncludes(joinCModuleLines(lines))
 }
 
 function collectCModuleHeaderDeclarationLines(
@@ -791,8 +823,9 @@ function collectCModuleHeaderDeclarationLines(
 
   for (let functionIndex = 0; functionIndex < exportedFunctions.length; functionIndex = functionIndex + 1) {
     const item = cModuleNodeAt(exportedFunctions, functionIndex)
+    const prefix = isCModuleInlineFunction(plan, item.name) ? 'inline ' : ''
 
-    lines.push(`${deps.emitFunctionHead(item, context)};`)
+    lines.push(`${prefix}${deps.emitFunctionHead(item, context)};`)
   }
 
   for (let valueIndex = 0; valueIndex < exportedValues.length; valueIndex = valueIndex + 1) {
@@ -801,7 +834,137 @@ function collectCModuleHeaderDeclarationLines(
     lines.push(`extern ${cModuleValueDeclarationCType(item, context)} ${item.symbolName};`)
   }
 
+  const classLines = collectCModuleHeaderClassDeclarationLines(plan, context, deps)
+
+  if (classLines.length > 0) {
+    if (lines.length > 0) {
+      lines.push('')
+    }
+
+    pushCModuleLines(lines, classLines)
+  }
+
+  for (let functionIndex = 0; functionIndex < exportedFunctions.length; functionIndex = functionIndex + 1) {
+    const item = cModuleNodeAt(exportedFunctions, functionIndex)
+
+    if (!isCModuleInlineFunction(plan, item.name)) {
+      continue
+    }
+
+    if (lines.length > 0) {
+      lines.push('')
+    }
+
+    pushCModuleLines(
+      lines,
+      prefixCModuleFunctionDeclaration(
+        deps.emitFunctionDeclaration(item, context, deps.declarationEmissionDependencies),
+        'inline '
+      )
+    )
+  }
+
   return lines
+}
+
+function collectCModuleHeaderClassDeclarationLines(
+  plan: CModulePlan,
+  context: CEmitContext,
+  deps: CModuleEmissionDependencies
+): string[] {
+  const includedClassNames = collectCModuleHeaderClassNames(context)
+
+  if (includedClassNames.size === 0) {
+    return []
+  }
+
+  const inlineConstructorDefinitions: CClassInlineDefinitionMap = new Map()
+  const inlineMethodDefinitions: CClassInlineDefinitionMap = new Map()
+  const classMethods = collectClassMethods(context)
+
+  for (const info of context.classInfos.values()) {
+    if (
+      !includedClassNames.has(info.name) ||
+      info.constructor === null ||
+      typeof info.constructor === 'undefined' ||
+      info.constructor.inline !== true
+    ) {
+      continue
+    }
+
+    const definition = deps.emitClassConstructorDeclaration(
+      info,
+      context,
+      deps.declarationEmissionDependencies,
+      true
+    )
+
+    if (definition.length > 0) {
+      inlineConstructorDefinitions.set(info.name, definition)
+    }
+  }
+
+  for (let methodIndex = 0; methodIndex < classMethods.length; methodIndex = methodIndex + 1) {
+    const item = cModuleClassMethodAt(classMethods, methodIndex)
+
+    if (!includedClassNames.has(item.info.name) || item.method.inline !== true) {
+      continue
+    }
+
+    inlineMethodDefinitions.set(
+      cClassInlineMethodDefinitionKey(item.info, item.method),
+      deps.emitClassMethodDeclaration(
+        item.info,
+        item.method,
+        context,
+        deps.declarationEmissionDependencies,
+        true
+      )
+    )
+  }
+
+  const lines = emitCNativeClassDeclarations(
+    context,
+    collectCModuleClassMethodPrototypes(context, deps),
+    collectCClassDescriptorNames([plan.ir], context.classInfos),
+    inlineConstructorDefinitions,
+    inlineMethodDefinitions,
+    includedClassNames
+  )
+
+  while (lines.length > 0 && lines[lines.length - 1] === '') {
+    lines.pop()
+  }
+
+  return lines
+}
+
+function collectCModuleHeaderClassNames(context: CEmitContext): Set<string> {
+  const names: Set<string> = new Set()
+
+  for (const info of context.classInfos.values()) {
+    if (info.imported !== true && cModuleClassIsHeaderVisible(info)) {
+      names.add(info.name)
+    }
+  }
+
+  return names
+}
+
+function collectCModuleSourceClassNames(context: CEmitContext): Set<string> {
+  const names: Set<string> = new Set()
+
+  for (const info of context.classInfos.values()) {
+    if (info.imported !== true && !cModuleClassIsHeaderVisible(info)) {
+      names.add(info.name)
+    }
+  }
+
+  return names
+}
+
+function cModuleClassIsHeaderVisible(info: CClassInfo): boolean {
+  return info.native && info.node.exported === true
 }
 
 function collectCModuleHeaderIncludeLines(
@@ -809,31 +972,192 @@ function collectCModuleHeaderIncludeLines(
   context: CEmitContext,
   libraries: CCompilerLibrarySet | null | undefined,
   deps: CModuleEmissionDependencies,
-  declarationLines: string[] = collectCModuleHeaderDeclarationLines(plan, context, deps)
+  declarationLines: string[],
+  host: CModuleEmitOptions['host']
 ): string[] {
   const runtimeRequirements: Set<IrRuntimeRequirement> = new Set()
   const includes: string[] = []
 
+  if (cModuleHasHeaderDefinition(plan, context)) {
+    const inlineProgram = collectCModuleInlineHeaderProgram(plan)
+    const imports = uniqueCModuleImports(plan.imports)
+
+    for (let importIndex = 0; importIndex < imports.length; importIndex = importIndex + 1) {
+      const item = cModuleImportPlanAt(imports, importIndex)
+      const importedModule = item.module
+
+      if (
+        importedModule === null ||
+        typeof importedModule === 'undefined' ||
+        importedModule.headerPath === plan.headerPath
+      ) {
+        continue
+      }
+
+      pushUniqueCModuleLine(
+        includes,
+        `#include "${relativeCIncludePath(plan.headerPath, importedModule.headerPath, host)}"`
+      )
+    }
+
+    const irPrograms = [plan.ir]
+    const requirements = collectRuntimeRequirements([], inlineProgram)
+
+    for (let index = 0; index < requirements.length; index = index + 1) {
+      runtimeRequirements.add(requirements[index])
+    }
+
+    const prelude = resolveCRuntimePreludeRequirements({
+      classDescriptorCount: cModuleDeclarationLinesReferenceName(declarationLines, 'inox_class_descriptor') ? 1 : 0,
+      cppValueRuntime: false,
+      globalUsages: collectGlobalUsages(inlineProgram),
+      hasRuntimeCallbackWrapper: false,
+      irPrograms,
+      libraries: resolveCCompilerLibrarySet(libraries),
+      runtimeRequirements,
+      signatureRuntimeTypes: new Set(),
+      throwingFunctionCount: context.throwingFunctions.size
+    })
+    const preludeIncludes = emitCPrelude(
+      prelude.needsRuntime,
+      false,
+      prelude.needsAsyncRuntime,
+      prelude.needsCallbackRuntime,
+      prelude.needsClassDescriptorRuntime,
+      prelude.needsCppValueRuntime,
+      prelude.needsStringHeader,
+      prelude.needsObjectRuntime,
+      prelude.libraryCPreludeIncludes
+    )
+
+    for (let index = 0; index < preludeIncludes.length; index = index + 1) {
+      const line = preludeIncludes[index]
+
+      if (line.startsWith('#include ')) {
+        pushUniqueCModuleLine(includes, line)
+      }
+    }
+  }
+
   addCModuleNativeDeclarationRuntimeRequirements(runtimeRequirements, declarationLines, libraries)
 
   if (cModuleHeaderDeclarationsNeedValue(declarationLines)) {
-    includes.push('#include "inox/value.h"')
+    pushUniqueCModuleLine(includes, '#include "inox/value.h"')
   }
 
   if (cModuleDeclarationLinesReferenceName(declarationLines, 'inox_loop')) {
-    includes.push('#include "inox/loop.h"')
+    pushUniqueCModuleLine(includes, '#include "inox/loop.h"')
   }
 
-  pushCModuleLines(
-    includes,
-    emitLibraryCPreludeIncludeLines(resolveLibraryRuntimeCPreludeIncludes(runtimeRequirements, libraries))
+  const libraryIncludes = emitLibraryCPreludeIncludeLines(
+    resolveLibraryRuntimeCPreludeIncludes(runtimeRequirements, libraries)
   )
 
-  return includes
+  for (let index = 0; index < libraryIncludes.length; index = index + 1) {
+    pushUniqueCModuleLine(includes, libraryIncludes[index])
+  }
+
+  return filterCModuleHeaderIncludeLines(includes, declarationLines)
+}
+
+function filterCModuleHeaderIncludeLines(includes: string[], declarationLines: string[]): string[] {
+  const combined: string[] = []
+
+  pushCModuleLines(combined, includes)
+  pushCModuleLines(combined, declarationLines)
+
+  const filtered = filterUnusedCPreludeIncludes(joinStrings(combined, '\n')).split('\n')
+  const result: string[] = []
+
+  for (let index = 0; index < filtered.length; index = index + 1) {
+    const line = filtered[index]
+
+    if (line.startsWith('#include ')) {
+      result.push(line)
+    }
+  }
+
+  return result
+}
+
+function collectCModuleInlineHeaderProgram(plan: CModulePlan): ProgramNode {
+  const body: AnyNode[] = []
+  const functions = collectCModuleExportedFunctions(plan)
+
+  for (let index = 0; index < functions.length; index = index + 1) {
+    const item = cModuleNodeAt(functions, index)
+
+    if (isCModuleInlineFunction(plan, item.name)) {
+      body.push(item)
+    }
+  }
+
+  const classes = collectIrTopLevelNodes(plan.ir, 'class')
+
+  for (let classIndex = 0; classIndex < classes.length; classIndex = classIndex + 1) {
+    const item = cModuleNodeAt(classes, classIndex)
+
+    if (item.exported !== true) {
+      continue
+    }
+
+    const methodNodes: AnyNode[] = []
+    for (let methodIndex = 0; methodIndex < item.methods.length; methodIndex = methodIndex + 1) {
+      const method = cModuleNodeAt(item.methods, methodIndex)
+
+      if (method.inline === true) {
+        methodNodes.push(method)
+      } else {
+        methodNodes.push({
+          ...method,
+          body: []
+        })
+      }
+    }
+
+    for (let fieldIndex = 0; fieldIndex < item.fields.length; fieldIndex = fieldIndex + 1) {
+      body.push(cModuleNodeAt(item.fields, fieldIndex))
+    }
+
+    for (let methodIndex = 0; methodIndex < methodNodes.length; methodIndex = methodIndex + 1) {
+      body.push(cModuleNodeAt(methodNodes, methodIndex))
+    }
+  }
+
+  return {
+    type: 'HirProgram',
+    body
+  }
+}
+
+function pushUniqueCModuleLine(lines: string[], line: string): void {
+  if (!cModuleLinesInclude(lines, line)) {
+    lines.push(line)
+  }
+}
+
+function cModuleLinesInclude(lines: string[], expected: string): boolean {
+  for (let index = 0; index < lines.length; index = index + 1) {
+    if (lines[index] === expected) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function cModuleHeaderDeclarationsNeedValue(lines: string[]): boolean {
-  const valueTypes = ['inox_value', 'inox_status', 'inox_number', 'inox_ref', 'inox_allocator']
+  const valueTypes = [
+    'inox_value',
+    'inox_status',
+    'inox_number',
+    'inox_ref',
+    'inox_allocator',
+    'inox_number_value',
+    'inox_boolean_value',
+    'inox_undefined_value',
+    'inox_null_value'
+  ]
 
   for (let index = 0; index < valueTypes.length; index = index + 1) {
     if (cModuleDeclarationLinesReferenceName(lines, valueTypes[index])) {
@@ -1202,7 +1526,9 @@ function emitCModuleFunctionPrototype(
     return `${head};`
   }
 
-  return `static ${head};`
+  const prefix = isCModuleInlineFunction(plan, statement.name) ? 'static inline ' : 'static '
+
+  return `${prefix}${head};`
 }
 
 function emitCModuleFunctionDeclaration(
@@ -1217,17 +1543,19 @@ function emitCModuleFunctionDeclaration(
     return lines
   }
 
-  return prefixCModuleFunctionDeclarationStatic(lines)
+  const prefix = isCModuleInlineFunction(plan, statement.name) ? 'static inline ' : 'static '
+
+  return prefixCModuleFunctionDeclaration(lines, prefix)
 }
 
-function prefixCModuleFunctionDeclarationStatic(lines: string[]): string[] {
+function prefixCModuleFunctionDeclaration(lines: string[], prefix: string): string[] {
   const prefixed: string[] = []
 
   for (let index = 0; index < lines.length; index = index + 1) {
     const line = lines[index]
 
     if (index === 0 && !line.startsWith('static ')) {
-      prefixed.push(`static ${line}`)
+      prefixed.push(`${prefix}${line}`)
       continue
     }
 
@@ -1235,6 +1563,58 @@ function prefixCModuleFunctionDeclarationStatic(lines: string[]): string[] {
   }
 
   return prefixed
+}
+
+function cModuleHasExportedInlineFunction(plan: CModulePlan): boolean {
+  for (
+    let declarationIndex = 0;
+    declarationIndex < plan.ir.functionDeclarations.length;
+    declarationIndex = declarationIndex + 1
+  ) {
+    const declaration = cModuleFunctionDeclarationAt(plan.ir.functionDeclarations, declarationIndex)
+
+    if (declaration.exported && declaration.inline === true) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function cModuleHasHeaderDefinition(plan: CModulePlan, context: CEmitContext): boolean {
+  return cModuleHasExportedInlineFunction(plan) || collectCModuleHeaderClassNames(context).size > 0
+}
+
+function isCModuleExportedInlineFunction(plan: CModulePlan, name: string): boolean {
+  for (
+    let declarationIndex = 0;
+    declarationIndex < plan.ir.functionDeclarations.length;
+    declarationIndex = declarationIndex + 1
+  ) {
+    const declaration = cModuleFunctionDeclarationAt(plan.ir.functionDeclarations, declarationIndex)
+
+    if (declaration.name === name) {
+      return declaration.exported && declaration.inline === true
+    }
+  }
+
+  return false
+}
+
+function isCModuleInlineFunction(plan: CModulePlan, name: string): boolean {
+  for (
+    let declarationIndex = 0;
+    declarationIndex < plan.ir.functionDeclarations.length;
+    declarationIndex = declarationIndex + 1
+  ) {
+    const declaration = cModuleFunctionDeclarationAt(plan.ir.functionDeclarations, declarationIndex)
+
+    if (declaration.name === name) {
+      return declaration.inline === true
+    }
+  }
+
+  return false
 }
 
 function isCModuleExportedFunction(plan: CModulePlan, name: string): boolean {
@@ -2077,6 +2457,7 @@ function createCModuleBaseContext(
   const classNodes = collectIrTopLevelNodes(ir, 'class')
 
   context.classInfos = createClassInfos(classNodes, diagnostics, plan.classSymbolNames)
+  registerImportedCModuleClassInfos(context, plan, diagnostics)
 
   registerCModuleValueDeclarations(context, plan)
   registerImportedCModuleValueDeclarations(context, plan)
@@ -2092,6 +2473,69 @@ function createCModuleBaseContext(
   context.asyncTaskWrappers = collectAsyncTaskWrappers(functionEntries, context, deps.asyncTaskLoweringDependencies)
 
   return context
+}
+
+function registerImportedCModuleClassInfos(
+  context: CEmitContext,
+  plan: CModulePlan,
+  diagnostics: Diagnostic[]
+): void {
+  for (let importIndex = 0; importIndex < plan.imports.length; importIndex = importIndex + 1) {
+    const item = cModuleImportPlanAt(plan.imports, importIndex)
+    const importedModule = item.module
+    const declaration = item.declaration
+
+    if (
+      importedModule === null ||
+      typeof importedModule === 'undefined' ||
+      declaration === null ||
+      typeof declaration === 'undefined'
+    ) {
+      continue
+    }
+
+    const importedClassNodes = collectIrTopLevelNodes(importedModule.ir, 'class')
+    const importedInfos = createClassInfos(importedClassNodes, diagnostics, importedModule.classSymbolNames)
+    const specifiers: AnyNode[] = declaration.specifiers ?? []
+
+    for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
+      const specifier = cModuleNodeAt(specifiers, specifierIndex)
+      const importedInfo = importedInfos.get(specifier.imported)
+
+      if (
+        specifier.typeOnly === true ||
+        importedInfo === null ||
+        typeof importedInfo === 'undefined' ||
+        importedInfo.node.exported !== true
+      ) {
+        continue
+      }
+
+      const names: string[] = [
+        specifier.imported,
+        specifier.local,
+        cModuleImportedBindingName(declaration, specifier)
+      ]
+
+      if (typeof specifier.className === 'string') {
+        names.push(specifier.className)
+      }
+
+      for (let nameIndex = 0; nameIndex < names.length; nameIndex = nameIndex + 1) {
+        const name = names[nameIndex]
+
+        if (name === '' || context.classInfos.has(name)) {
+          continue
+        }
+
+        context.classInfos.set(name, {
+          ...importedInfo,
+          name,
+          imported: true
+        })
+      }
+    }
+  }
 }
 
 function collectCModuleContextRuntimeTypes(context: CModuleRuntimeTypeContext): Set<string> {

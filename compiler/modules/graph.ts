@@ -922,9 +922,11 @@ function applyImportedDeclarationMetadata(specifier: AnyNode, declaration: AnyNo
 
   if (declaration.type === 'ClassDeclaration') {
     specifier.valueType = 'function'
-    specifier.className = declaration.name
+    specifier.className = specifier.local
     specifier.constructable = true
     specifier.constructorParams = importedClassConstructorParams(declaration)
+    specifier.classMethods = declaration.methods ?? []
+    specifier.shape = declaration.shape ?? null
     return
   }
 

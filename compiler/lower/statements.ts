@@ -801,6 +801,16 @@ function createLoweredVariableDeclaration(
   valueType: string,
   runtimeTypeAlternatives: LowerNode[] | null
 ): LowerNode {
+  if (
+    statement.inline === true &&
+    init !== null &&
+    typeof init !== 'undefined' &&
+    init.type === 'ArrowFunctionExpression'
+  ) {
+    init.inline = true
+    init.inlineLoc = nullableNode(statement.inlineLoc)
+  }
+
   const lowered: LowerNode = {
     type: 'VariableDeclaration',
     kind: statement.kind,

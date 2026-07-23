@@ -910,10 +910,17 @@ export function emitCNativeClassDeclarations(
   methodPrototypes: CClassMethodPrototypeMap,
   descriptorNames: CClassDescriptorNameSet,
   inlineConstructorDefinitions: CClassInlineDefinitionMap | null = null,
-  inlineMethodDefinitions: CClassInlineDefinitionMap | null = null
+  inlineMethodDefinitions: CClassInlineDefinitionMap | null = null,
+  includedClassNames: Set<string> | null = null
 ): string[] {
   const lines: string[] = []
-  const infos = orderCNativeClassInfos(context, methodPrototypes, inlineConstructorDefinitions, inlineMethodDefinitions)
+  const infos = orderCNativeClassInfos(
+    context,
+    methodPrototypes,
+    inlineConstructorDefinitions,
+    inlineMethodDefinitions,
+    includedClassNames
+  )
 
   for (const info of infos) {
     const typeName = emitCClassInfoTypeName(info)
@@ -975,16 +982,20 @@ export function emitCNativeClassDeclarations(
     const prototypes = methodPrototypes.get(info.name)
 
     if (prototypes !== null && typeof prototypes !== 'undefined') {
-      if (cClassUsesInlineDefinitions(info) && inlineMethodDefinitions !== null) {
+      if (inlineMethodDefinitions !== null) {
+        let prototypeIndex = 0
+
         for (const method of info.methods.values()) {
           const definition = inlineMethodDefinitions.get(cClassInlineMethodDefinitionKey(info, method))
 
-          if (definition === null || typeof definition === 'undefined') {
-            continue
+          if (definition !== null && typeof definition !== 'undefined') {
+            lines.push('')
+            pushIndentedCClassDefinition(lines, definition)
+          } else {
+            lines.push(`  ${prototypes[prototypeIndex]}`)
           }
 
-          lines.push('')
-          pushIndentedCClassDefinition(lines, definition)
+          prototypeIndex = prototypeIndex + 1
         }
       } else {
         for (const prototype of prototypes) {
@@ -1004,12 +1015,17 @@ function orderCNativeClassInfos(
   context: CEmitContext,
   methodPrototypes: CClassMethodPrototypeMap,
   inlineConstructorDefinitions: CClassInlineDefinitionMap | null,
-  inlineMethodDefinitions: CClassInlineDefinitionMap | null
+  inlineMethodDefinitions: CClassInlineDefinitionMap | null,
+  includedClassNames: Set<string> | null
 ): CClassInfo[] {
   const infos: CClassInfo[] = []
 
   for (const info of context.classInfos.values()) {
     if (!info.native) {
+      continue
+    }
+
+    if (includedClassNames !== null && !includedClassNames.has(info.name)) {
       continue
     }
 
@@ -1188,6 +1204,10 @@ export function emitCClassDescriptorDeclarationsForNames(
   const lines: string[] = []
 
   for (const info of context.classInfos.values()) {
+    if (info.imported === true) {
+      continue
+    }
+
     if (descriptorNames !== null && !descriptorNames.has(info.name)) {
       continue
     }
@@ -2128,6 +2148,10 @@ export function collectClassMethods(context: ClassEmitContext): CClassMethod[] {
   const classInfos = context.classInfos
 
   for (const info of classInfos.values()) {
+    if (info.imported === true) {
+      continue
+    }
+
     const methodList = classNodeArray(info.node.methods)
 
     for (const method of methodList) {

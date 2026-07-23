@@ -409,7 +409,8 @@ function reportUnsupportedCModuleImports(
       exported === null ||
       typeof exported === 'undefined' ||
       exported.type === 'FunctionDeclaration' ||
-      exported.type === 'VariableDeclaration'
+      exported.type === 'VariableDeclaration' ||
+      exported.type === 'ClassDeclaration'
     ) {
       continue
     }
@@ -417,7 +418,7 @@ function reportUnsupportedCModuleImports(
     diagnostics.push(
       diagnostic(
         'INOX_C_MODULE_IMPORT',
-        'modular C output currently supports importing exported functions and variables only',
+        'modular C output currently supports importing exported functions, variables and classes only',
         specifier.loc
       )
     )
