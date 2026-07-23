@@ -359,6 +359,7 @@ export function lowerParam(param: LowerNode, context: LowerContext): LowerNode {
     optional: param.optional === true,
     rest: param.rest === true,
     valueType: fallbackString(param.valueType, fallbackString(declared.valueType, 'unknown')),
+    className: nullableString(param.className),
     typeRef: nullableNode(param.typeRef) ?? declared.typeRef,
     runtimeTypeAlternatives: declared.runtimeTypeAlternatives,
     nullable: param.nullable === true || declared.nullable,

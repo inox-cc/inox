@@ -1242,6 +1242,7 @@ class Checker {
           const paramInfo = this.resolveParamType(param, declaredType)
           param.declaredType = declaredType
           param.valueType = paramInfo.valueType
+          param.className = this.declaredClassName(declaredType)
           param.typeRef = paramInfo.typeRef
           param.nullable =
             paramInfo.nullable ||
@@ -1266,6 +1267,7 @@ class Checker {
             {
               kind: 'param',
               mutable: true,
+              className: param.className,
               valueType: paramInfo.valueType,
               declaredType,
               typeRef: paramInfo.typeRef,

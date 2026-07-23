@@ -815,7 +815,7 @@ function collectCModuleHeaderDeclarationLines(
 ): string[] {
   const exportedFunctions = collectCModuleExportedFunctions(plan)
   const exportedValues = collectCModuleExportedValueDeclarations(plan)
-  const lines: string[] = []
+  let lines: string[] = []
 
   if (plan.initName !== null && typeof plan.initName !== 'undefined') {
     lines.push(`void ${plan.initName}();`)
@@ -837,6 +837,15 @@ function collectCModuleHeaderDeclarationLines(
   const classLines = collectCModuleHeaderClassDeclarationLines(plan, context, deps)
 
   if (classLines.length > 0) {
+    const forwardLines: string[] = []
+
+    emitCModuleNativeClassForwardDeclarations(forwardLines, context, lines)
+
+    if (forwardLines.length > 0) {
+      pushCModuleLines(forwardLines, lines)
+      lines = forwardLines
+    }
+
     if (lines.length > 0) {
       lines.push('')
     }

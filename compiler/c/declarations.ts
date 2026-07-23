@@ -92,6 +92,7 @@ import {
   emitCClassConstructorHead,
   emitCClassInfoMethodName,
   emitCClassInfoTypeName,
+  emitCClassTypeNameForClassName,
   registerClassObjectShape
 } from './values/classes.ts'
 import { isThrowingFunctionName } from './values/expressions.ts'
@@ -753,6 +754,12 @@ function emitObjectFunctionFieldParam(
 }
 
 function emitFunctionHeadParam(param: CFunctionParam, index: number, statement: CNode, context: CEmitContext): string {
+  const nativeClassDeclaration = emitNativeClassParamDeclaration(param, context)
+
+  if (nativeClassDeclaration !== null) {
+    return nativeClassDeclaration
+  }
+
   const libraryCppType = libraryNativeParamCppType(param, context)
 
   if (libraryCppType !== null) {
@@ -1253,6 +1260,12 @@ function isThrowingClassMethod(info: CClassInfo, method: CNode, context: CEmitCo
 }
 
 function emitClassMethodParam(param: CFunctionParam, index: number, method: CNode, context: CEmitContext): string {
+  const nativeClassDeclaration = emitNativeClassParamDeclaration(param, context)
+
+  if (nativeClassDeclaration !== null) {
+    return nativeClassDeclaration
+  }
+
   const libraryCppType = libraryNativeParamCppType(param, context)
 
   if (libraryCppType !== null) {
@@ -1613,10 +1626,15 @@ function isNativeClassParam(param: CFunctionParam, context: CFunctionContext): b
   return nativeClassParamName(param, context) !== null
 }
 
-function nativeClassParamName(param: CFunctionParam, context: CFunctionContext): string | null {
+function nativeClassParamName(param: CFunctionParam, context: CEmitContext): string | null {
   const className = param.className
 
-  if (className === null || typeof className === 'undefined') {
+  if (
+    className === null ||
+    typeof className === 'undefined' ||
+    param.nullable === true ||
+    param.ownership === 'weak'
+  ) {
     return null
   }
 
@@ -1627,6 +1645,16 @@ function nativeClassParamName(param: CFunctionParam, context: CFunctionContext):
   }
 
   return className
+}
+
+function emitNativeClassParamDeclaration(param: CFunctionParam, context: CEmitContext): string | null {
+  const className = nativeClassParamName(param, context)
+
+  if (className === null) {
+    return null
+  }
+
+  return `const ${emitCClassTypeNameForClassName(context, className)}& ${emitCLocalName(param.name)}`
 }
 
 function emitDefaultRuntimeParamPreludeForParam(
