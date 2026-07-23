@@ -1938,13 +1938,12 @@ double Array::unshift(const inox::Value& value) const {
 inox::String Array::join(inox::StringView separator) const {
   inox_value array = inox::Value::raw();
 
-  if (
-    inox_default_allocator.alloc == 0 ||
-    inox_default_allocator.free == 0 ||
-    array.tag != INOX_TAG_ARRAY ||
-    array.as.ref == 0 ||
-    (separator.bytes == 0 && separator.len != 0)
-  ) {
+  if (inox_default_allocator.alloc == 0 || inox_default_allocator.free == 0) {
+    inox::fatal("Array.join allocator invariant failed");
+  }
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0 || (separator.bytes == 0 && separator.len != 0)) {
+    inox_collection_throw("TypeError: Array.join receiver is invalid");
     return inox::String();
   }
 
@@ -1960,11 +1959,13 @@ inox::String Array::join(inox::StringView separator) const {
     inox_status status = inox_array_join_part(instance->items[index], buffer, sizeof(buffer), &bytes, &len);
 
     if (status != INOX_OK) {
+      inox_collection_throw("TypeError: Array.join element cannot be converted to string");
       return inox::String();
     }
 
     if (index > 0) {
       if (total_len > (size_t)-1 - separator_len) {
+        inox::throw_out_of_memory();
         return inox::String();
       }
 
@@ -1972,6 +1973,7 @@ inox::String Array::join(inox::StringView separator) const {
     }
 
     if (total_len > (size_t)-1 - len) {
+      inox::throw_out_of_memory();
       return inox::String();
     }
 
@@ -1979,12 +1981,19 @@ inox::String Array::join(inox::StringView separator) const {
   }
 
   if (total_len == 0) {
-    return inox::String("");
+    inox::String result("");
+
+    if (!result.valid()) {
+      inox::throw_out_of_memory();
+    }
+
+    return result;
   }
 
   char* joined = (char*)inox_default_allocator.alloc(inox_default_allocator.user, total_len, alignof(char));
 
   if (joined == 0) {
+    inox::throw_out_of_memory();
     return inox::String();
   }
 
@@ -1998,6 +2007,7 @@ inox::String Array::join(inox::StringView separator) const {
 
     if (status != INOX_OK) {
       inox_default_allocator.free(inox_default_allocator.user, joined, total_len, alignof(char));
+      inox_collection_throw("TypeError: Array.join element cannot be converted to string");
       return inox::String();
     }
 
@@ -2014,6 +2024,10 @@ inox::String Array::join(inox::StringView separator) const {
 
   inox::String result(joined, total_len);
   inox_default_allocator.free(inox_default_allocator.user, joined, total_len, alignof(char));
+
+  if (!result.valid()) {
+    inox::throw_out_of_memory();
+  }
 
   return result;
 }

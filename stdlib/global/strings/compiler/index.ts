@@ -25,22 +25,51 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   operations: [
     numberToString(),
     memberRead('length', 'codeUnitLength', numberTypeRef, 'static_cast<double>($value)'),
-    stringCall('charCodeAt', numberTypeRef, ['number'], [numberArgument()]),
+    stringCall('charCodeAt', numberTypeRef, ['number'], [numberArgument()], null),
     stringCall('concat', stringTypeRef, ['string-view'], [stringArgument()]),
-    stringCall('endsWith', booleanTypeRef, ['string-view'], [stringArgument()]),
-    stringCall('includes', booleanTypeRef, ['string-view', 'optional-number'], [stringArgument(), numberArgument()], 1),
-    stringCall('indexOf', numberTypeRef, ['string-view', 'optional-number'], [stringArgument(), numberArgument()], 1),
+    stringCall('endsWith', booleanTypeRef, ['string-view'], [stringArgument()], null),
+    stringCall(
+      'includes',
+      booleanTypeRef,
+      ['string-view', 'optional-number'],
+      [stringArgument(), numberArgument()],
+      null,
+      1
+    ),
+    stringCall(
+      'indexOf',
+      numberTypeRef,
+      ['string-view', 'optional-number'],
+      [stringArgument(), numberArgument()],
+      null,
+      1
+    ),
     stringCall(
       'lastIndexOf',
       numberTypeRef,
       ['string-view', 'optional-number'],
       [stringArgument(), numberArgument()],
+      null,
       1
     ),
-    stringCall('padStart', stringTypeRef, ['number', 'optional-string-view'], [numberArgument(), stringArgument()], 1),
-    stringCall('slice', stringTypeRef, ['number', 'optional-number'], [numberArgument(), numberArgument()], 1),
+    stringCall(
+      'padStart',
+      stringTypeRef,
+      ['number', 'optional-string-view'],
+      [numberArgument(), stringArgument()],
+      'thrown',
+      1
+    ),
+    stringCall(
+      'slice',
+      stringTypeRef,
+      ['number', 'optional-number'],
+      [numberArgument(), numberArgument()],
+      'thrown',
+      1
+    ),
     stringCall('split', arrayTypeRef(stringTypeRef), ['string-view'], [stringArgument()]),
-    stringCall('startsWith', booleanTypeRef, ['string-view'], [stringArgument()]),
+    stringCall('startsWith', booleanTypeRef, ['string-view'], [stringArgument()], null),
     stringCall('toUpperCase', stringTypeRef, [], []),
     stringCall('trim', stringTypeRef, [], []),
     stringCall('trimEnd', stringTypeRef, [], []),
@@ -84,6 +113,7 @@ function numberToString(): LibraryOperationDescriptor {
     cExpression: 'inox::String::fromNumber',
     cArgumentKinds: ['receiver-number'],
     cCallStyle: 'function',
+    cFailureMode: 'thrown',
     cResultMode: 'value',
     cResultMapping: stringResultMapping,
     resultTypeRef: stringTypeRef,
@@ -95,8 +125,7 @@ function numberToString(): LibraryOperationDescriptor {
         minArgs: 1,
         maxArgs: 1,
         cExpression: 'inox::String::fromNumberRadix',
-        cArgumentKinds: ['receiver-number', 'number'],
-        cArgumentAdapters: ['static_cast<int>($value)']
+        cArgumentKinds: ['receiver-number', 'number']
       }
     ]
   }
@@ -129,6 +158,7 @@ function stringCall(
   resultTypeRef: TypeRef,
   argumentKinds: LibraryCArgumentKind[],
   argumentChecks: LibraryArgumentCheckDescriptor[],
+  cFailureMode: LibraryOperationDescriptor['cFailureMode'] = 'thrown',
   minArgs: number = argumentChecks.length
 ): LibraryOperationDescriptor {
   const operation: LibraryOperationDescriptor = {
@@ -143,7 +173,7 @@ function stringCall(
     cArgumentKinds: ['receiver', ...argumentKinds],
     cReceiverAdapter: 'inox::String($bytes, $length)',
     cCallStyle: 'member',
-    cFailureMode: 'thrown',
+    cFailureMode,
     cResultMode: 'value',
     resultTypeRef,
     minArgs,
@@ -160,7 +190,7 @@ function stringCall(
 
 function stringIndexRead(): LibraryOperationDescriptor {
   return {
-    ...stringCall('slice', stringTypeRef, ['number', 'number'], [numberArgument()], 1),
+    ...stringCall('slice', stringTypeRef, ['number', 'number'], [numberArgument()], 'thrown', 1),
     bindingId: receiverBinding('*'),
     operationId: `${libraryId}#String#index-read`,
     kind: 'index-read',

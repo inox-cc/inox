@@ -1,4 +1,5 @@
 #include "inox/time.h"
+#include "inox/loop.h"
 #include "inox/string.h"
 #include "inox/time_bridge.h"
 
@@ -359,6 +360,25 @@ static inox_number inox_date_timezone_offset(inox_number value) {
   return (whole_ms - local_as_utc) / 60000.0;
 }
 
+static inox::String inox_date_result_or_oom(inox::String result) {
+  if (!result.valid()) {
+    inox::throw_out_of_memory();
+  }
+
+  return result;
+}
+
+static void inox_date_throw_range_error(const char* message) {
+  inox::String error(message);
+
+  if (!error.valid()) {
+    inox::throw_out_of_memory();
+    return;
+  }
+
+  inox::throw_value(error);
+}
+
 static inox::String inox_date_to_string(inox_number value, int kind) {
   static const char* weekdays[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
   static const char* months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
@@ -462,12 +482,37 @@ inox_number DateValue::getUTCMonth() const { return inox_date_part(value_, 1, tr
 inox_number DateValue::getUTCSeconds() const { return inox_date_part(value_, 6, true); }
 inox_number DateValue::valueOf() const { return value_; }
 
-inox::String DateValue::toDateString() const { return inox_date_to_string(value_, 3); }
-inox::String DateValue::toISOString() const { return inox_date_to_string(value_, 0); }
-inox::String DateValue::toJSON() const { return inox_date_to_string(value_, 0); }
-inox::String DateValue::toString() const { return inox_date_to_string(value_, 2); }
-inox::String DateValue::toTimeString() const { return inox_date_to_string(value_, 4); }
-inox::String DateValue::toUTCString() const { return inox_date_to_string(value_, 1); }
+inox::String DateValue::toDateString() const {
+  return inox_date_result_or_oom(inox_date_to_string(value_, 3));
+}
+
+inox::String DateValue::toISOString() const {
+  struct tm time_value;
+  int millisecond = 0;
+
+  if (!inox_date_time_struct(value_, 1, &time_value, &millisecond)) {
+    inox_date_throw_range_error("RangeError: Invalid time value");
+    return inox::String();
+  }
+
+  return inox_date_result_or_oom(inox_date_to_string(value_, 0));
+}
+
+inox::String DateValue::toJSON() const {
+  return inox_date_result_or_oom(inox_date_to_string(value_, 0));
+}
+
+inox::String DateValue::toString() const {
+  return inox_date_result_or_oom(inox_date_to_string(value_, 2));
+}
+
+inox::String DateValue::toTimeString() const {
+  return inox_date_result_or_oom(inox_date_to_string(value_, 4));
+}
+
+inox::String DateValue::toUTCString() const {
+  return inox_date_result_or_oom(inox_date_to_string(value_, 1));
+}
 
 DateValue DateObject::operator()() const { return DateValue(now()); }
 DateValue DateObject::operator()(inox_number value) const { return DateValue(value); }

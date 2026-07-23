@@ -25,6 +25,10 @@ const uint8ArrayTypeRef: NominalTypeRef = {
   traits: []
 }
 const numberTypeRef: PrimitiveTypeRef = primitiveTypeRef('number')
+const nullableNumberTypeRef: PrimitiveTypeRef = {
+  ...numberTypeRef,
+  nullable: true
+}
 const stringTypeRef: PrimitiveTypeRef = primitiveTypeRef('string')
 
 const operations: LibraryOperationDescriptor[] = [
@@ -138,7 +142,7 @@ function receiverMemberRead(
     cArgumentKinds: ['receiver'],
     cReceiverAdapter: 'Uint8Array($value)',
     cCallStyle: 'member',
-    cFailureMode: 'thrown',
+    cFailureMode: null,
     resultTypeRef
   }
 }
@@ -183,16 +187,16 @@ function receiverIndexRead(): LibraryOperationDescriptor {
     kind: 'index-read',
     runtimeRequirements: [runtimeRequirement],
     receiverTypeId: uint8ArrayTypeId,
-    cExpression: 'operator[]',
+    cExpression: 'get',
     cArgumentKinds: ['receiver', 'number'],
     cReceiverAdapter: 'Uint8Array($value)',
-    cCallStyle: 'index',
-    cFailureMode: 'thrown',
-    cResultAdapter: 'static_cast<double>($value)',
+    cCallStyle: 'member',
+    cFailureMode: null,
+    cResultMapping: { cppType: 'inox::Value', fields: [] },
     minArgs: 1,
     maxArgs: 1,
     argumentChecks: [numberArgument()],
-    resultTypeRef: numberTypeRef
+    resultTypeRef: nullableNumberTypeRef
   }
 }
 
@@ -204,12 +208,11 @@ function receiverIndexWrite(): LibraryOperationDescriptor {
     kind: 'index-write',
     runtimeRequirements: [runtimeRequirement],
     receiverTypeId: uint8ArrayTypeId,
-    cExpression: 'operator[]',
+    cExpression: 'set',
     cArgumentKinds: ['receiver', 'number', 'number'],
     cReceiverAdapter: 'Uint8Array($value)',
-    cCallStyle: 'index-assignment',
-    cFailureMode: 'thrown',
-    cResultAdapter: 'static_cast<double>($value)',
+    cCallStyle: 'member',
+    cFailureMode: null,
     minArgs: 2,
     maxArgs: 2,
     argumentChecks: [numberArgument(), numberArgument()],

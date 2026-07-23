@@ -352,6 +352,8 @@ inline void throw_value(const Value& value) {
   }
 }
 
+void throw_out_of_memory();
+
 inline Value take_exception() {
   Runtime* runtime = current_runtime_slot();
 

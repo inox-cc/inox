@@ -254,6 +254,7 @@ function dateReceiverCall(
     cExpression: name,
     cArgumentKinds: ['receiver'],
     cCallStyle: 'member',
+    cFailureMode: cResultMapping === null ? null : 'thrown',
     minArgs: 0,
     maxArgs: 0,
     argumentChecks: [],

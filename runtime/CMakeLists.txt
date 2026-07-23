@@ -114,6 +114,7 @@ set(INOX_RUNTIME_SOURCES
   "${INOX_RUNTIME_DIR}/src/core/callback_bridge.cc"
   "${INOX_RUNTIME_DIR}/src/core/class_descriptor.c"
   "${INOX_RUNTIME_DIR}/src/core/debug_bridge.cc"
+  "${INOX_RUNTIME_DIR}/src/core/exception.cc"
   "${INOX_RUNTIME_DIR}/src/core/main.cc"
   "${INOX_RUNTIME_DIR}/src/core/value.c"
   "${INOX_RUNTIME_DIR}/src/objects/object.cc"

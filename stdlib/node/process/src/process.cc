@@ -459,6 +459,13 @@ inox::Value process::memoryUsage() const {
 
   if (status != INOX_OK) {
     inox_release(value);
+
+    if (status == INOX_ERR_OOM) {
+      inox::throw_out_of_memory();
+    } else {
+      inox::fatal("process.memoryUsage native facade invariant failed");
+    }
+
     return inox::Value();
   }
 

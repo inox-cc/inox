@@ -39,6 +39,7 @@ const runtimeBaseSources = [
   'runtime/src/core/callback_bridge.cc',
   'runtime/src/core/class_descriptor.c',
   'runtime/src/core/debug_bridge.cc',
+  'runtime/src/core/exception.cc',
   'runtime/src/core/main.cc',
   'runtime/src/core/weak.c',
   'runtime/src/async/loop.c',

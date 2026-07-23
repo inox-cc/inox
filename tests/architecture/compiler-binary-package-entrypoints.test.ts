@@ -52,7 +52,7 @@ test('binary packages expose generic native types, operations and runtime requir
   assert.ok(uint8ArrayWrite)
   assert.deepEqual(uint8ArrayWrite.cArgumentKinds, ['receiver', 'number', 'number'])
   assert.equal(uint8ArrayWrite.cReceiverAdapter, 'Uint8Array($value)')
-  assert.equal(uint8ArrayWrite.cCallStyle, 'index-assignment')
+  assert.equal(uint8ArrayWrite.cCallStyle, 'member')
   assert.ok(bufferFrom)
   assert.equal(bufferFrom.bindingId, 'global:Buffer.from')
   assert.deepEqual(bufferFrom.bindingAliases, [
@@ -71,7 +71,7 @@ test('binary packages expose generic native types, operations and runtime requir
   assert.ok(bufferWrite)
   assert.deepEqual(bufferWrite.cArgumentKinds, ['receiver', 'number', 'number'])
   assert.equal(bufferWrite.cReceiverAdapter, 'Buffer($value)')
-  assert.equal(bufferWrite.cCallStyle, 'index-assignment')
+  assert.equal(bufferWrite.cCallStyle, 'member')
   assert.deepEqual(binary.compilerPackage.runtimeRequirements[0].cPreludeIncludes, ['inox/binary.h'])
   assert.deepEqual(buffer.compilerPackage.runtimeRequirements[0], {
     id: 'node:buffer',

@@ -30,7 +30,7 @@ private:
 
 public:
   static String fromNumber(double value);
-  static String fromNumberRadix(double value, int radix);
+  static String fromNumberRadix(double value, double radix);
   static String fromFormat(const char* format, ...);
   static String fromValue(const Value& value);
   static Value toNumber(StringView value);

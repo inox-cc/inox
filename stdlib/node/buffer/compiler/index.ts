@@ -26,6 +26,10 @@ const bufferTypeRef: NominalTypeRef = {
 }
 const booleanTypeRef: PrimitiveTypeRef = primitiveTypeRef('boolean')
 const numberTypeRef: PrimitiveTypeRef = primitiveTypeRef('number')
+const nullableNumberTypeRef: PrimitiveTypeRef = {
+  ...numberTypeRef,
+  nullable: true
+}
 const stringTypeRef: PrimitiveTypeRef = primitiveTypeRef('string')
 const stringCResultMapping: LibraryCResultMappingDescriptor = {
   cppType: 'inox::String',
@@ -35,7 +39,10 @@ const stringCResultMapping: LibraryCResultMappingDescriptor = {
 const operations: LibraryOperationDescriptor[] = [
   bufferFromOperation(),
   staticCall('alloc', ['number'], 'Buffer::alloc', bufferTypeRef, null, 1, 1, [numberArgument()]),
-  staticCall('isBuffer', ['value'], 'Buffer::isBuffer', booleanTypeRef, null, 1, 1, []),
+  {
+    ...staticCall('isBuffer', ['value'], 'Buffer::isBuffer', booleanTypeRef, null, 1, 1, []),
+    cFailureMode: null
+  },
   constantOperation(),
   receiverMemberRead('length', 'length', numberTypeRef, null),
   receiverIndexRead(),
@@ -180,7 +187,7 @@ function receiverMemberRead(
     cArgumentKinds: ['receiver'],
     cReceiverAdapter: 'Buffer($value)',
     cCallStyle: 'member',
-    cFailureMode: 'thrown',
+    cFailureMode: null,
     resultTypeRef,
     cResultMapping
   }
@@ -239,16 +246,16 @@ function receiverIndexRead(): LibraryOperationDescriptor {
     kind: 'index-read',
     runtimeRequirements: [runtimeRequirement],
     receiverTypeId: bufferTypeId,
-    cExpression: 'operator[]',
+    cExpression: 'get',
     cArgumentKinds: ['receiver', 'number'],
     cReceiverAdapter: 'Buffer($value)',
-    cCallStyle: 'index',
-    cFailureMode: 'thrown',
-    cResultAdapter: 'static_cast<double>($value)',
+    cCallStyle: 'member',
+    cFailureMode: null,
+    cResultMapping: { cppType: 'inox::Value', fields: [] },
     minArgs: 1,
     maxArgs: 1,
     argumentChecks: [numberArgument()],
-    resultTypeRef: numberTypeRef
+    resultTypeRef: nullableNumberTypeRef
   }
 }
 
@@ -260,12 +267,11 @@ function receiverIndexWrite(): LibraryOperationDescriptor {
     kind: 'index-write',
     runtimeRequirements: [runtimeRequirement],
     receiverTypeId: bufferTypeId,
-    cExpression: 'operator[]',
+    cExpression: 'set',
     cArgumentKinds: ['receiver', 'number', 'number'],
     cReceiverAdapter: 'Buffer($value)',
-    cCallStyle: 'index-assignment',
-    cFailureMode: 'thrown',
-    cResultAdapter: 'static_cast<double>($value)',
+    cCallStyle: 'member',
+    cFailureMode: null,
     minArgs: 2,
     maxArgs: 2,
     argumentChecks: [numberArgument(), numberArgument()],

@@ -92,7 +92,7 @@ console.log(strNum, strBool, strNull, strTpl, numText, hexText)
   assert.match(source, /trimmed\.endsWith\("lib"\)/)
   assert.match(
     source,
-    /console\.log\("%d %d %d", inox_library_result_\d+, inox_library_result_\d+, inox_library_result_\d+\);/
+    /console\.log\("%d %d %d", trimmed\.includes\("std"\), trimmed\.startsWith\("In"\), trimmed\.endsWith\("lib"\)\);/
   )
   assert.doesNotMatch(source, /trimmed\.includes\("std"\) \? 1 : 0/)
   assert.doesNotMatch(source, /\(\(double\)\(trimmed\.includes/)
@@ -100,7 +100,7 @@ console.log(strNum, strBool, strNull, strTpl, numText, hexText)
   assert.match(source, /trimmed\.lastIndexOf\("i"\)/)
   assert.match(
     source,
-    /console\.log\("%.17g %.17g", inox_library_result_\d+, inox_library_result_\d+\);/
+    /console\.log\("%.17g %.17g", trimmed\.indexOf\("o"\), trimmed\.lastIndexOf\("i"\)\);/
   )
   assert.doesNotMatch(source, /\(\(double\)trimmed\.indexOf/)
   assert.match(source, /auto parts = inox::String\("alpha,beta", 10\)\.split\(","\);/)
@@ -111,7 +111,7 @@ console.log(strNum, strBool, strNull, strTpl, numText, hexText)
   assert.match(source, /auto strNull = inox::String::fromValue\(inox::Value\(inox_null_value\(\)\)\);/)
   assert.match(source, /auto strTpl = inox::String::fromFormat\("value %.17g", static_cast<double>\(12\)\);/)
   assert.match(source, /auto numText = inox::String::fromNumber\(12\);/)
-  assert.match(source, /auto hexText = inox::String::fromNumberRadix\(255, static_cast<int>\(16\)\);/)
+  assert.match(source, /auto hexText = inox::String::fromNumberRadix\(255, 16\);/)
   assert.doesNotMatch(source, /inox::Value parts = inox::String\("alpha,beta"\)\.split\(","\);/)
   assert.doesNotMatch(source, /inox_array_join\(&inox_default_allocator, parts/)
   assert.doesNotMatch(source, /inox::String::from(?:Literal|Number|NumberRadix|Format|Value)\(&inox_default_allocator/)

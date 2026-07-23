@@ -413,6 +413,25 @@ inox::Value inox::String::toNumber(StringView value) {
 
 namespace inox {
 
+static String string_result_or_oom(String result) {
+  if (!result.valid()) {
+    throw_out_of_memory();
+  }
+
+  return result;
+}
+
+static void string_throw_range_error(const char* message) {
+  String error(message);
+
+  if (!error.valid()) {
+    throw_out_of_memory();
+    return;
+  }
+
+  throw_value(error);
+}
+
 static bool string_next_utf16_code_unit(
   StringView value,
   size_t* index,
@@ -540,26 +559,36 @@ String String::fromNumber(double value) {
   size_t len = 0;
 
   if (string_format_number(value, buffer, sizeof(buffer), &len) != INOX_OK) {
+    fatal("Number.toString formatting invariant failed");
+  }
+
+  return string_result_or_oom(String(buffer, len));
+}
+
+String String::fromNumberRadix(double value, double radix_value) {
+  if (!isfinite(radix_value)) {
+    string_throw_range_error("RangeError: radix must be between 2 and 36");
     return String();
   }
 
-  return String(buffer, len);
-}
+  const double truncated_radix = trunc(radix_value);
 
-String String::fromNumberRadix(double value, int radix) {
+  if (truncated_radix < 2 || truncated_radix > 36) {
+    string_throw_range_error("RangeError: radix must be between 2 and 36");
+    return String();
+  }
+
+  const int radix = (int)truncated_radix;
+
   if (radix == 10) {
     char buffer[64];
     size_t len = 0;
 
     if (string_format_number(value, buffer, sizeof(buffer), &len) != INOX_OK) {
-      return String();
+      fatal("Number.toString formatting invariant failed");
     }
 
-    return String(buffer, len);
-  }
-
-  if (radix < 2 || radix > 36) {
-    return String();
+    return string_result_or_oom(String(buffer, len));
   }
 
   if (value != value || isinf(value) || floor(value) != value) {
@@ -567,10 +596,10 @@ String String::fromNumberRadix(double value, int radix) {
     size_t len = 0;
 
     if (string_format_number(value, buffer, sizeof(buffer), &len) != INOX_OK) {
-      return String();
+      fatal("Number.toString formatting invariant failed");
     }
 
-    return String(buffer, len);
+    return string_result_or_oom(String(buffer, len));
   }
 
   const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
@@ -596,7 +625,7 @@ String String::fromNumberRadix(double value, int radix) {
     buffer[--index] = '-';
   }
 
-  return String(buffer + index, sizeof(buffer) - index - 1);
+  return string_result_or_oom(String(buffer + index, sizeof(buffer) - index - 1));
 }
 
 String String::fromFormat(const char* format, ...) {
@@ -760,6 +789,7 @@ String::operator StringView() const {
 
 String String::trim() const {
   if (!valid()) {
+    throw_out_of_memory();
     return String();
   }
 
@@ -767,11 +797,12 @@ String String::trim() const {
   size_t end = length();
   string_trim_span(bytes(), length(), &start, &end);
 
-  return String(bytes() + start, end - start);
+  return string_result_or_oom(String(bytes() + start, end - start));
 }
 
 String String::trimStart() const {
   if (!valid()) {
+    throw_out_of_memory();
     return String();
   }
 
@@ -780,14 +811,15 @@ String String::trimStart() const {
   string_trim_span(bytes(), length(), &start, &end);
 
   if (end == 0) {
-    return String("");
+    return string_result_or_oom(String(""));
   }
 
-  return String(bytes() + start, length() - start);
+  return string_result_or_oom(String(bytes() + start, length() - start));
 }
 
 String String::trimLeft() const {
   if (!valid()) {
+    throw_out_of_memory();
     return String();
   }
 
@@ -796,42 +828,46 @@ String String::trimLeft() const {
   string_trim_span(bytes(), length(), &start, &end);
 
   if (end == 0) {
-    return String("");
+    return string_result_or_oom(String(""));
   }
 
-  return String(bytes() + start, length() - start);
+  return string_result_or_oom(String(bytes() + start, length() - start));
 }
 
 String String::trimEnd() const {
   if (!valid()) {
+    throw_out_of_memory();
     return String();
   }
 
   size_t end = length();
   string_trim_span(bytes(), length(), 0, &end);
 
-  return String(bytes(), end);
+  return string_result_or_oom(String(bytes(), end));
 }
 
 String String::trimRight() const {
   if (!valid()) {
+    throw_out_of_memory();
     return String();
   }
 
   size_t end = length();
   string_trim_span(bytes(), length(), 0, &end);
 
-  return String(bytes(), end);
+  return string_result_or_oom(String(bytes(), end));
 }
 
 String String::toUpperCase() const {
   if (!valid()) {
+    throw_out_of_memory();
     return String();
   }
 
   String out(bytes(), length());
 
   if (!out.valid()) {
+    throw_out_of_memory();
     return String();
   }
 
@@ -852,6 +888,7 @@ String String::toUpperCase() const {
 
 String String::padStart(double target_len) const {
   if (!valid()) {
+    throw_out_of_memory();
     return String();
   }
 
@@ -877,6 +914,7 @@ String String::padStart(double target_len) const {
     const size_t take_len = string_code_unit_to_byte_offset_ceiling(pad.bytes, pad.len, take_units);
 
     if (take_len > ((size_t)-1) - pad_total_len) {
+      throw_out_of_memory();
       return String();
     }
 
@@ -885,6 +923,7 @@ String String::padStart(double target_len) const {
   }
 
   if (length() > ((size_t)-1) - pad_total_len) {
+    throw_out_of_memory();
     return String();
   }
 
@@ -892,6 +931,7 @@ String String::padStart(double target_len) const {
   inox_string* string = string_alloc_storage(&inox_default_allocator, len);
 
   if (string == 0) {
+    throw_out_of_memory();
     return String();
   }
 
@@ -927,6 +967,7 @@ String String::padStart(double target_len) const {
 
 String String::padStart(double target_len, StringView pad) const {
   if (!valid()) {
+    throw_out_of_memory();
     return String();
   }
 
@@ -951,6 +992,7 @@ String String::padStart(double target_len, StringView pad) const {
     const size_t take_len = string_code_unit_to_byte_offset_ceiling(pad.bytes, pad.len, take_units);
 
     if (take_len > ((size_t)-1) - pad_total_len) {
+      throw_out_of_memory();
       return String();
     }
 
@@ -959,6 +1001,7 @@ String String::padStart(double target_len, StringView pad) const {
   }
 
   if (length() > ((size_t)-1) - pad_total_len) {
+    throw_out_of_memory();
     return String();
   }
 
@@ -966,6 +1009,7 @@ String String::padStart(double target_len, StringView pad) const {
   inox_string* string = string_alloc_storage(&inox_default_allocator, len);
 
   if (string == 0) {
+    throw_out_of_memory();
     return String();
   }
 
@@ -1001,6 +1045,7 @@ String String::padStart(double target_len, StringView pad) const {
 
 String String::slice(double start) const {
   if (!valid()) {
+    throw_out_of_memory();
     return String();
   }
 
@@ -1008,11 +1053,12 @@ String String::slice(double start) const {
   size_t start_index = slice_index(start, code_unit_length);
   const size_t start_byte = string_code_unit_to_byte_offset_ceiling(bytes(), length(), start_index);
 
-  return String(bytes() + start_byte, length() - start_byte);
+  return string_result_or_oom(String(bytes() + start_byte, length() - start_byte));
 }
 
 String String::slice(double start, double end) const {
   if (!valid()) {
+    throw_out_of_memory();
     return String();
   }
 
@@ -1031,7 +1077,7 @@ String String::slice(double start, double end) const {
     end_byte = start_byte;
   }
 
-  return String(bytes() + start_byte, end_byte - start_byte);
+  return string_result_or_oom(String(bytes() + start_byte, end_byte - start_byte));
 }
 
 Array String::split(StringView separator) const {
@@ -1113,6 +1159,7 @@ Array String::split(StringView separator) const {
 
 String String::concat(StringView right) const {
   if (!valid() || length() > ((size_t)-1) - right.len) {
+    throw_out_of_memory();
     return String();
   }
 
@@ -1120,6 +1167,7 @@ String String::concat(StringView right) const {
   inox_string* string = string_alloc_storage(&inox_default_allocator, len);
 
   if (string == 0) {
+    throw_out_of_memory();
     return String();
   }
 

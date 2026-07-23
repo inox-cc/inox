@@ -8,7 +8,14 @@
 namespace {
 
 void throwBufferError(const char* message) {
-  inox::throw_value(inox::String(message));
+  inox::String error(message);
+
+  if (!error.valid()) {
+    inox::throw_out_of_memory();
+    return;
+  }
+
+  inox::throw_value(error);
 }
 
 bool isUtf8(inox::StringView encoding) {
@@ -62,8 +69,7 @@ Buffer Buffer::slice(double start) const {
 
 Buffer Buffer::slice(double start, double end) const {
   if (!valid()) {
-    throwBufferError("TypeError: Buffer.slice receiver is not a Buffer");
-    return Buffer();
+    inox::fatal("Buffer.slice native facade invariant failed");
   }
 
   return Buffer(view(start, end, true));
@@ -71,12 +77,17 @@ Buffer Buffer::slice(double start, double end) const {
 
 inox::String Buffer::toString() const {
   if (!valid()) {
-    throwBufferError("TypeError: Buffer.toString receiver is not a Buffer");
-    return inox::String();
+    inox::fatal("Buffer.toString native facade invariant failed");
   }
 
   const auto value = bytes();
-  return inox::String(reinterpret_cast<const char*>(value.data()), value.size());
+  inox::String result(reinterpret_cast<const char*>(value.data()), value.size());
+
+  if (!result.valid()) {
+    inox::throw_out_of_memory();
+  }
+
+  return result;
 }
 
 inox::String Buffer::toString(inox::StringView encoding) const {
@@ -118,7 +129,7 @@ Buffer Buffer::fromUtf8(inox::StringView value) {
 }
 
 bool Buffer::hasBufferIdentity(const inox::Value& value) {
-  return Uint8Array(value).isBufferValue();
+  return valueHasBufferIdentity(value);
 }
 
 Buffer BufferConstructor::alloc(double size) const {

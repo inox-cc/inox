@@ -3,7 +3,7 @@ export {};
 declare global {
   class Uint8Array {
     readonly length: number;
-    [index: number]: number;
+    [index: number]: number | undefined;
 
     constructor(length: number);
     constructor(values: number[]);

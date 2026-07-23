@@ -440,7 +440,7 @@ function receiverBooleanOperation(
     cArgumentKinds: ['receiver'],
     cReceiverAdapter: `${receiverName === 'Stats' ? 'FsStats' : 'FsDirent'}($value)`,
     cCallStyle: 'member',
-    cFailureMode: 'thrown',
+    cFailureMode: null,
     minArgs: 0,
     maxArgs: 0,
     argumentChecks: [],

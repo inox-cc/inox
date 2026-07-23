@@ -5674,7 +5674,11 @@ function isRuntimeValueLogExpression(expression: AnyNode, context: CFunctionCont
   if (expression.libraryCppType === 'inox::Value' || expression.libraryCppType === 'inox_value') {
     const valueType = inferExpressionType(expression, context)
 
-    return valueType === 'unknown' || isOpaqueRuntimeValueType(valueType)
+    return (
+      valueType === 'unknown' ||
+      isOpaqueRuntimeValueType(valueType) ||
+      (expression.nullable === true && isNullableScalarType(valueType))
+    )
   }
 
   if (isRuntimeValueLogReference(expression, context)) {

@@ -39,6 +39,8 @@ public:
   std::size_t length() const;
   std::span<const std::uint8_t> bytes() const;
   std::span<std::uint8_t> bytes();
+  inox::Value get(double index) const;
+  double set(double index, double value);
   Reference operator[](double index);
   double operator[](double index) const;
   Uint8Array slice(double start) const;
@@ -49,6 +51,7 @@ private:
   static Uint8Array allocate(double length, bool buffer);
   static Uint8Array copy(std::span<const std::uint8_t> values, bool buffer);
   static std::size_t maximumLength();
+  static bool valueHasBufferIdentity(const inox::Value& value);
   Uint8Array view(double start, double end, bool buffer) const;
   bool isBufferValue() const;
   double read(double index) const;

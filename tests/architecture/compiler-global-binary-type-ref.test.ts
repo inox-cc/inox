@@ -31,7 +31,7 @@ test('global:binary operations describe results only through TypeRef', async () 
 
   assert.deepEqual(operations[0]?.resultTypeRef, nominalUint8Array)
   assert.deepEqual(operations[1]?.resultTypeRef, primitiveTypeRef('number'))
-  assert.deepEqual(operations[2]?.resultTypeRef, primitiveTypeRef('number'))
+  assert.deepEqual(operations[2]?.resultTypeRef, nullablePrimitiveTypeRef('number'))
   assert.deepEqual(operations[3]?.resultTypeRef, primitiveTypeRef('number'))
   assert.deepEqual(operations[4]?.resultTypeRef, nominalUint8Array)
   assert.deepEqual(operations[5]?.resultTypeRef, primitiveTypeRef('string'))
@@ -55,5 +55,12 @@ function primitiveTypeRef(name: 'number' | 'string') {
     nullable: false,
     ownership: 'value',
     traits: []
+  }
+}
+
+function nullablePrimitiveTypeRef(name: 'number' | 'string') {
+  return {
+    ...primitiveTypeRef(name),
+    nullable: true
   }
 }

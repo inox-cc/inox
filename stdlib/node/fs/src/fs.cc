@@ -255,10 +255,15 @@ bool FsStats::isFile() const {
   inox_value value = inox_undefined_value();
 
   if (inox_object_get_known(raw(), INOX_FS_STATS_IS_FILE_INDEX, &value) != INOX_OK) {
-    return false;
+    inox::fatal("FsStats.isFile native facade invariant failed");
   }
 
-  const bool result = value.tag == INOX_TAG_BOOL && value.as.boolean;
+  if (value.tag != INOX_TAG_BOOL) {
+    inox_release(value);
+    inox::fatal("FsStats.isFile native facade invariant failed");
+  }
+
+  const bool result = value.as.boolean;
   inox_release(value);
 
   return result;
@@ -268,10 +273,15 @@ bool FsStats::isDirectory() const {
   inox_value value = inox_undefined_value();
 
   if (inox_object_get_known(raw(), INOX_FS_STATS_IS_DIRECTORY_INDEX, &value) != INOX_OK) {
-    return false;
+    inox::fatal("FsStats.isDirectory native facade invariant failed");
   }
 
-  const bool result = value.tag == INOX_TAG_BOOL && value.as.boolean;
+  if (value.tag != INOX_TAG_BOOL) {
+    inox_release(value);
+    inox::fatal("FsStats.isDirectory native facade invariant failed");
+  }
+
+  const bool result = value.as.boolean;
   inox_release(value);
 
   return result;
@@ -342,10 +352,15 @@ bool FsDirent::isFile() const {
   inox_value value = inox_undefined_value();
 
   if (inox_object_get_known(raw(), INOX_FS_DIRENT_IS_FILE_INDEX, &value) != INOX_OK) {
-    return false;
+    inox::fatal("FsDirent.isFile native facade invariant failed");
   }
 
-  const bool result = value.tag == INOX_TAG_BOOL && value.as.boolean;
+  if (value.tag != INOX_TAG_BOOL) {
+    inox_release(value);
+    inox::fatal("FsDirent.isFile native facade invariant failed");
+  }
+
+  const bool result = value.as.boolean;
   inox_release(value);
 
   return result;
@@ -355,10 +370,15 @@ bool FsDirent::isDirectory() const {
   inox_value value = inox_undefined_value();
 
   if (inox_object_get_known(raw(), INOX_FS_DIRENT_IS_DIRECTORY_INDEX, &value) != INOX_OK) {
-    return false;
+    inox::fatal("FsDirent.isDirectory native facade invariant failed");
   }
 
-  const bool result = value.tag == INOX_TAG_BOOL && value.as.boolean;
+  if (value.tag != INOX_TAG_BOOL) {
+    inox_release(value);
+    inox::fatal("FsDirent.isDirectory native facade invariant failed");
+  }
+
+  const bool result = value.as.boolean;
   inox_release(value);
 
   return result;

@@ -27,7 +27,22 @@ struct BytesStorage {
 };
 
 void throwBytesError(const char* message) {
-  inox::throw_value(inox::String(message));
+  inox::String error(message);
+
+  if (!error.valid()) {
+    inox::throw_out_of_memory();
+    return;
+  }
+
+  inox::throw_value(error);
+}
+
+inox::String stringResultOrOom(inox::String result) {
+  if (!result.valid()) {
+    inox::throw_out_of_memory();
+  }
+
+  return result;
 }
 
 void initializeRef(inox_ref& ref, inox_allocator* allocator, std::size_t size);
@@ -306,8 +321,7 @@ std::size_t Uint8Array::length() const {
   auto* value = storage(*this);
 
   if (value == nullptr) {
-    throwBytesError("TypeError: Uint8Array.length receiver is not a Uint8Array");
-    return 0;
+    inox::fatal("Uint8Array.length native facade invariant failed");
   }
 
   return value->length;
@@ -317,8 +331,7 @@ std::span<const std::uint8_t> Uint8Array::bytes() const {
   auto* value = storage(*this);
 
   if (value == nullptr) {
-    throwBytesError("TypeError: Uint8Array bytes receiver is not a Uint8Array");
-    return {};
+    inox::fatal("Uint8Array bytes native facade invariant failed");
   }
 
   return { storageBytes(value), value->length };
@@ -328,11 +341,31 @@ std::span<std::uint8_t> Uint8Array::bytes() {
   auto* value = storage(*this);
 
   if (value == nullptr) {
-    throwBytesError("TypeError: Uint8Array bytes receiver is not a Uint8Array");
-    return {};
+    inox::fatal("Uint8Array bytes native facade invariant failed");
   }
 
   return { storageBytes(value), value->length };
+}
+
+inox::Value Uint8Array::get(double index) const {
+  auto* value = storage(*this);
+
+  if (value == nullptr) {
+    inox::fatal("Uint8Array index native facade invariant failed");
+  }
+
+  std::size_t converted = 0;
+
+  if (!arrayIndex(index, value->length, converted)) {
+    return inox::Value();
+  }
+
+  return inox::Value(inox_number_value(storageBytes(value)[converted]));
+}
+
+double Uint8Array::set(double index, double value) {
+  write(index, value);
+  return value;
 }
 
 Uint8Array::Reference Uint8Array::operator[](double index) {
@@ -351,8 +384,7 @@ Uint8Array Uint8Array::slice(double start, double end) const {
   auto* value = storage(*this);
 
   if (value == nullptr) {
-    throwBytesError("TypeError: Uint8Array.slice receiver is not a Uint8Array");
-    return Uint8Array();
+    inox::fatal("Uint8Array.slice native facade invariant failed");
   }
 
   const std::size_t first = sliceIndex(start, value->length);
@@ -364,12 +396,8 @@ Uint8Array Uint8Array::slice(double start, double end) const {
 inox::String Uint8Array::toString() const {
   const auto values = bytes();
 
-  if (inox::thrown()) {
-    return inox::String();
-  }
-
   if (values.empty()) {
-    return inox::String("", 0);
+    return stringResultOrOom(inox::String("", 0));
   }
 
   std::size_t totalLength = 0;
@@ -382,7 +410,7 @@ inox::String Uint8Array::toString() const {
       totalLength > std::numeric_limits<std::size_t>::max() - commaLength ||
       totalLength + commaLength > std::numeric_limits<std::size_t>::max() - digitLength
     ) {
-      throwBytesError("TypeError: Uint8Array string allocation failed");
+      inox::throw_out_of_memory();
       return inox::String();
     }
 
@@ -393,7 +421,7 @@ inox::String Uint8Array::toString() const {
   auto* text = static_cast<char*>(allocator->alloc(allocator->user, totalLength, alignof(char)));
 
   if (text == nullptr) {
-    throwBytesError("TypeError: Uint8Array string allocation failed");
+    inox::throw_out_of_memory();
     return inox::String();
   }
 
@@ -409,7 +437,7 @@ inox::String Uint8Array::toString() const {
 
   inox::String result(text, totalLength);
   allocator->free(allocator->user, text, totalLength, alignof(char));
-  return result;
+  return stringResultOrOom(std::move(result));
 }
 
 Uint8Array Uint8Array::allocate(double length, bool buffer) {
@@ -423,7 +451,7 @@ Uint8Array Uint8Array::allocate(double length, bool buffer) {
   auto* value = allocateStorage(converted, buffer ? BytesKind::buffer : BytesKind::uint8Array);
 
   if (value == nullptr) {
-    throwBytesError("TypeError: byte array allocation failed");
+    inox::throw_out_of_memory();
     return Uint8Array();
   }
 
@@ -456,12 +484,16 @@ std::size_t Uint8Array::maximumLength() {
     : static_cast<std::size_t>(maxSafeInteger);
 }
 
+bool Uint8Array::valueHasBufferIdentity(const inox::Value& value) {
+  auto* bytes = storage(value);
+  return bytes != nullptr && bytes->kind == BytesKind::buffer;
+}
+
 Uint8Array Uint8Array::view(double start, double end, bool buffer) const {
   auto* source = storage(*this);
 
   if (source == nullptr) {
-    throwBytesError("TypeError: byte array slice receiver is invalid");
-    return Uint8Array();
+    inox::fatal("byte array view native facade invariant failed");
   }
 
   const std::size_t first = sliceIndex(start, source->length);
@@ -470,7 +502,7 @@ Uint8Array Uint8Array::view(double start, double end, bool buffer) const {
   auto* result = allocateView(source, first, count, buffer ? BytesKind::buffer : BytesKind::uint8Array);
 
   if (result == nullptr) {
-    throwBytesError("TypeError: byte array view allocation failed");
+    inox::throw_out_of_memory();
     return Uint8Array();
   }
 
@@ -478,28 +510,29 @@ Uint8Array Uint8Array::view(double start, double end, bool buffer) const {
 }
 
 bool Uint8Array::isBufferValue() const {
-  auto* value = storage(*this);
-  return value != nullptr && value->kind == BytesKind::buffer;
+  return valueHasBufferIdentity(*this);
 }
 
 double Uint8Array::read(double index) const {
-  auto* value = storage(*this);
-  std::size_t converted = 0;
+  inox::Value value = get(index);
 
-  if (value == nullptr || !arrayIndex(index, value->length, converted)) {
-    throwBytesError("TypeError: Uint8Array index is out of bounds");
+  if (inox::thrown() || value.tag != INOX_TAG_NUMBER) {
     return 0;
   }
 
-  return storageBytes(value)[converted];
+  return value.as.number;
 }
 
 void Uint8Array::write(double index, double value) {
   auto* target = storage(*this);
+
+  if (target == nullptr) {
+    inox::fatal("Uint8Array index native facade invariant failed");
+  }
+
   std::size_t converted = 0;
 
-  if (target == nullptr || !arrayIndex(index, target->length, converted)) {
-    throwBytesError("TypeError: Uint8Array index is out of bounds");
+  if (!arrayIndex(index, target->length, converted)) {
     return;
   }
 
