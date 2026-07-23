@@ -66,8 +66,8 @@ function assertNativeClassMethodOrder(source: string): void {
   const classMatch = /class [^\n]*Foo[^\n]*\{\n/.exec(source)
   const classIndex = classMatch !== null ? classMatch.index : -1
   const classEndIndex = source.indexOf('};', classIndex)
-  const constructorIndex = source.indexOf('Foo::Foo(')
-  const methodIndex = source.indexOf('void Foo::test()')
+  const constructorIndex = source.indexOf('Foo(', classIndex)
+  const methodIndex = source.indexOf('void test()', classIndex)
   const runPrototypeMatch = /\b(?:static )?[A-Za-z_][A-Za-z0-9_:*<>, ]* run\([^)]*\);/.exec(source)
   const runPrototypeIndex = runPrototypeMatch !== null ? runPrototypeMatch.index : -1
   const classForwardIndex = source.indexOf('class Foo;')
@@ -79,20 +79,17 @@ function assertNativeClassMethodOrder(source: string): void {
   assert.notEqual(classIndex, -1, 'missing Foo class declaration')
   assert.notEqual(classEndIndex, -1, 'missing Foo class declaration end')
   assert.notEqual(constructorIndex, -1, 'missing Foo constructor definition')
-  assert.notEqual(methodIndex, -1, 'missing Foo::test definition')
+  assert.notEqual(methodIndex, -1, 'missing inline Foo::test definition')
   assert.equal(classForwardIndex, -1, 'unneeded native class forward declaration should not be emitted')
   assert.equal(runPrototypeIndex, -1, 'unneeded run function prototype should not be emitted')
   assert.equal(flagIndex, -1, 'unhandled rejection state should live in runtime')
   assert.notEqual(runDefinitionIndex, -1, 'missing run function definition')
   assert.notEqual(mainIndex, -1, 'missing module main')
-  assert.ok(classIndex < constructorIndex, 'class declaration should precede constructor definition')
-  assert.equal(
-    source.slice(classEndIndex + 2, constructorIndex).trim(),
-    '',
-    'class declaration should stay directly next to constructor definition'
-  )
-  assert.ok(constructorIndex < methodIndex, 'constructor definition should stay with class method definitions')
-  assert.ok(methodIndex < runDefinitionIndex, 'function definitions should not split class method definitions')
+  assert.ok(classIndex < constructorIndex, 'class should contain its constructor definition')
+  assert.ok(constructorIndex < methodIndex, 'constructor definition should precede class method definitions')
+  assert.ok(methodIndex < classEndIndex, 'class should contain its method definitions')
+  assert.ok(classEndIndex < runDefinitionIndex, 'function definitions should not split the class definition')
+  assert.doesNotMatch(source, /Foo::Foo|Foo::test/)
   assert.ok(runDefinitionIndex < mainIndex, 'function definitions should stay before main')
 }
 

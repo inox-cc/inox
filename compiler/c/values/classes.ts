@@ -159,6 +159,15 @@ export type CNativeClassInstanceExpression = {
 
 export type CClassMethodPrototypeMap = Map<string, string[]>
 export type CClassDescriptorNameSet = Set<string>
+export type CClassInlineDefinitionMap = Map<string, string[]>
+
+export function cClassUsesInlineDefinitions(info: CClassInfo): boolean {
+  return info.native && info.node.exported !== true
+}
+
+export function cClassInlineMethodDefinitionKey(info: CClassInfo, method: AnyNode): string {
+  return `${info.name}:${method.name}`
+}
 
 function emitFallbackClassValueExpression(
   _expression: ClassExpressionNode,
@@ -285,9 +294,7 @@ function stringOrNull(value: string | null | undefined): string | null {
   return null
 }
 
-function classNodeOrNull(
-  value: AnyNode | AnyNode[] | null | undefined
-): AnyNode | null {
+function classNodeOrNull(value: AnyNode | AnyNode[] | null | undefined): AnyNode | null {
   if (value === null || typeof value === 'undefined' || Array.isArray(value)) {
     return null
   }
@@ -295,9 +302,7 @@ function classNodeOrNull(
   return value
 }
 
-function classNodeArray(
-  value: AnyNode | AnyNode[] | null | undefined
-): AnyNode[] {
+function classNodeArray(value: AnyNode | AnyNode[] | null | undefined): AnyNode[] {
   if (Array.isArray(value)) {
     return value
   }
@@ -540,12 +545,7 @@ function classFieldUsesNativeClassStorage(field: CObjectShapeField): boolean {
 function classFieldLibraryNativeCppType(field: CObjectShapeField): string | null {
   const typeRef = cTypeRefValue(field.typeRef)
 
-  if (
-    typeRef === null ||
-    typeRef.kind !== 'nominal' ||
-    typeRef.nullable ||
-    typeRef.ownership === 'weak'
-  ) {
+  if (typeRef === null || typeRef.kind !== 'nominal' || typeRef.nullable || typeRef.ownership === 'weak') {
     return null
   }
 
@@ -660,18 +660,10 @@ function emitCClassParamType(param: CFunctionParam, context: ClassPhysicalTypeCo
 }
 
 function classParamLibraryNativeCppType(param: CFunctionParam): string | null {
-  return libraryNativeBoundaryCppType(
-    param.valueType,
-    param.nullable === true,
-    param.optional === true,
-    param.shape
-  )
+  return libraryNativeBoundaryCppType(param.valueType, param.nullable === true, param.optional === true, param.shape)
 }
 
-function classParamPhysicalCppType(
-  param: CFunctionParam,
-  context: ClassPhysicalTypeContext
-): string | null {
+function classParamPhysicalCppType(param: CFunctionParam, context: ClassPhysicalTypeContext): string | null {
   const cppType = classParamLibraryNativeCppType(param)
 
   if (cppType !== null || param.valueType !== 'async-result') {
@@ -894,7 +886,8 @@ export function emitCClassConstructorPrototype(info: CClassInfo, context: ClassP
 export function emitCClassConstructorHead(
   info: CClassInfo,
   context: ClassPhysicalTypeContext,
-  fieldInitializers?: Map<string, string> | null
+  fieldInitializers?: Map<string, string> | null,
+  inClass: boolean = false
 ): string | null {
   const constructorMethod = info.constructor
 
@@ -907,21 +900,22 @@ export function emitCClassConstructorHead(
   const paramDeclarations = emitCClassParamDeclarations(params, context)
   const initializers = emitCClassConstructorInitializers(info, context, fieldInitializers)
 
-  return typeName + '::' + typeName + '(' + paramDeclarations + ')' + initializers
+  const name = inClass ? typeName : typeName + '::' + typeName
+
+  return name + '(' + paramDeclarations + ')' + initializers
 }
 
 export function emitCNativeClassDeclarations(
   context: CEmitContext,
   methodPrototypes: CClassMethodPrototypeMap,
-  descriptorNames: CClassDescriptorNameSet
+  descriptorNames: CClassDescriptorNameSet,
+  inlineConstructorDefinitions: CClassInlineDefinitionMap | null = null,
+  inlineMethodDefinitions: CClassInlineDefinitionMap | null = null
 ): string[] {
   const lines: string[] = []
+  const infos = orderCNativeClassInfos(context, methodPrototypes, inlineConstructorDefinitions, inlineMethodDefinitions)
 
-  for (const info of context.classInfos.values()) {
-    if (!info.native) {
-      continue
-    }
-
+  for (const info of infos) {
     const typeName = emitCClassInfoTypeName(info)
     const descriptorNeeded = descriptorNames.has(info.name)
 
@@ -943,7 +937,13 @@ export function emitCNativeClassDeclarations(
       }
 
       lines.push('  static const inox_class_descriptor inox_descriptor;')
-      lines.push(`  static inox_status inox_read_field(const ${typeName}& value, uint32_t index, inox_value* out);`)
+
+      if (cClassUsesInlineDefinitions(info)) {
+        pushIndentedCClassDefinition(lines, emitCClassDescriptorFieldReaderDeclaration(info, context, true))
+      } else {
+        lines.push(`  static inox_status inox_read_field(const ${typeName}& value, uint32_t index, inox_value* out);`)
+      }
+
       lines.push('')
     }
 
@@ -956,13 +956,18 @@ export function emitCNativeClassDeclarations(
     }
 
     const constructorPrototype = emitCClassConstructorPrototype(info, context)
+    const inlineConstructorDefinition = inlineConstructorDefinitions?.get(info.name)
 
     if (constructorPrototype !== null && typeof constructorPrototype !== 'undefined') {
       if (!classHasNoArgConstructor(info)) {
         lines.push(`  ${emitCClassDefaultConstructor(info, context)}`)
       }
 
-      lines.push(`  ${constructorPrototype}`)
+      if (inlineConstructorDefinition !== null && typeof inlineConstructorDefinition !== 'undefined') {
+        pushIndentedCClassDefinition(lines, inlineConstructorDefinition)
+      } else {
+        lines.push(`  ${constructorPrototype}`)
+      }
     } else {
       lines.push(`  ${emitCClassDefaultConstructor(info, context)}`)
     }
@@ -970,8 +975,21 @@ export function emitCNativeClassDeclarations(
     const prototypes = methodPrototypes.get(info.name)
 
     if (prototypes !== null && typeof prototypes !== 'undefined') {
-      for (const prototype of prototypes) {
-        lines.push(`  ${prototype}`)
+      if (cClassUsesInlineDefinitions(info) && inlineMethodDefinitions !== null) {
+        for (const method of info.methods.values()) {
+          const definition = inlineMethodDefinitions.get(cClassInlineMethodDefinitionKey(info, method))
+
+          if (definition === null || typeof definition === 'undefined') {
+            continue
+          }
+
+          lines.push('')
+          pushIndentedCClassDefinition(lines, definition)
+        }
+      } else {
+        for (const prototype of prototypes) {
+          lines.push(`  ${prototype}`)
+        }
       }
     }
 
@@ -980,6 +998,183 @@ export function emitCNativeClassDeclarations(
   }
 
   return lines
+}
+
+function orderCNativeClassInfos(
+  context: CEmitContext,
+  methodPrototypes: CClassMethodPrototypeMap,
+  inlineConstructorDefinitions: CClassInlineDefinitionMap | null,
+  inlineMethodDefinitions: CClassInlineDefinitionMap | null
+): CClassInfo[] {
+  const infos: CClassInfo[] = []
+
+  for (const info of context.classInfos.values()) {
+    if (!info.native) {
+      continue
+    }
+
+    infos.push(info)
+  }
+
+  const result: CClassInfo[] = []
+  const visiting: Set<string> = new Set()
+  const visited: Set<string> = new Set()
+
+  for (const info of infos) {
+    visitCNativeClassDefinition(
+      info,
+      infos,
+      context,
+      methodPrototypes,
+      inlineConstructorDefinitions,
+      inlineMethodDefinitions,
+      visiting,
+      visited,
+      result
+    )
+  }
+
+  return result
+}
+
+function collectCNativeClassDefinitionDependencyLines(
+  info: CClassInfo,
+  context: CEmitContext,
+  methodPrototypes: CClassMethodPrototypeMap,
+  inlineConstructorDefinitions: CClassInlineDefinitionMap | null,
+  inlineMethodDefinitions: CClassInlineDefinitionMap | null
+): string[] {
+  const lines: string[] = []
+
+  for (const field of info.fields) {
+    lines.push(emitCClassFieldType(field, context))
+  }
+
+  const constructorPrototype = emitCClassConstructorPrototype(info, context)
+
+  if (constructorPrototype !== null && typeof constructorPrototype !== 'undefined') {
+    lines.push(constructorPrototype)
+  }
+
+  const prototypes = methodPrototypes.get(info.name)
+
+  if (prototypes !== null && typeof prototypes !== 'undefined') {
+    pushAllLines(lines, prototypes)
+  }
+
+  const constructorDefinition = inlineConstructorDefinitions?.get(info.name)
+
+  if (constructorDefinition !== null && typeof constructorDefinition !== 'undefined') {
+    pushAllLines(lines, constructorDefinition)
+  }
+
+  if (inlineMethodDefinitions !== null) {
+    for (const method of info.methods.values()) {
+      const definition = inlineMethodDefinitions.get(cClassInlineMethodDefinitionKey(info, method))
+
+      if (definition === null || typeof definition === 'undefined') {
+        continue
+      }
+
+      pushAllLines(lines, definition)
+    }
+  }
+
+  return lines
+}
+
+function cLinesReferenceIdentifier(lines: string[], identifier: string): boolean {
+  for (const line of lines) {
+    let start = 0
+
+    while (start < line.length) {
+      const found = line.indexOf(identifier, start)
+
+      if (found === -1) {
+        break
+      }
+
+      const before = found === 0 ? '' : line[found - 1]
+      const afterIndex = found + identifier.length
+      const after = afterIndex >= line.length ? '' : line[afterIndex]
+
+      if (!isCIdentifierCharacter(before) && !isCIdentifierCharacter(after)) {
+        return true
+      }
+
+      start = found + identifier.length
+    }
+  }
+
+  return false
+}
+
+function isCIdentifierCharacter(value: string): boolean {
+  if (value.length !== 1) {
+    return false
+  }
+
+  return (
+    (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z') || (value >= '0' && value <= '9') || value === '_'
+  )
+}
+
+function visitCNativeClassDefinition(
+  info: CClassInfo,
+  infos: CClassInfo[],
+  context: CEmitContext,
+  methodPrototypes: CClassMethodPrototypeMap,
+  inlineConstructorDefinitions: CClassInlineDefinitionMap | null,
+  inlineMethodDefinitions: CClassInlineDefinitionMap | null,
+  visiting: Set<string>,
+  visited: Set<string>,
+  result: CClassInfo[]
+): void {
+  if (visited.has(info.name) || visiting.has(info.name)) {
+    return
+  }
+
+  visiting.add(info.name)
+  const dependencyLines = collectCNativeClassDefinitionDependencyLines(
+    info,
+    context,
+    methodPrototypes,
+    inlineConstructorDefinitions,
+    inlineMethodDefinitions
+  )
+
+  for (const dependency of infos) {
+    if (dependency.name === info.name) {
+      continue
+    }
+
+    if (!cLinesReferenceIdentifier(dependencyLines, emitCClassInfoTypeName(dependency))) {
+      continue
+    }
+
+    visitCNativeClassDefinition(
+      dependency,
+      infos,
+      context,
+      methodPrototypes,
+      inlineConstructorDefinitions,
+      inlineMethodDefinitions,
+      visiting,
+      visited,
+      result
+    )
+  }
+
+  visiting.delete(info.name)
+  visited.add(info.name)
+  result.push(info)
+}
+
+function pushIndentedCClassDefinition(lines: string[], definition: string[]): void {
+  for (let index = 0; index < definition.length; index = index + 1) {
+    const line = definition[index]
+    lines.push(line.length === 0 ? '' : `  ${line}`)
+  }
 }
 
 export function emitCClassDescriptorDeclarations(context: CEmitContext): string[] {
@@ -1030,16 +1225,24 @@ function emitCClassDescriptorDeclaration(info: CClassInfo, context: CEmitContext
     `const inox_class_descriptor ${typeName}::inox_descriptor = inox::class_descriptor<${typeName}>(${cStringLiteral(info.name)});`
   )
   lines.push('')
-  pushAllLines(lines, emitCClassDescriptorFieldReaderDeclaration(info, context))
+
+  if (!cClassUsesInlineDefinitions(info)) {
+    pushAllLines(lines, emitCClassDescriptorFieldReaderDeclaration(info, context, false))
+    lines.push('')
+  }
 
   return lines
 }
 
-function emitCClassDescriptorFieldReaderDeclaration(info: CClassInfo, context: CEmitContext): string[] {
+function emitCClassDescriptorFieldReaderDeclaration(
+  info: CClassInfo,
+  context: CEmitContext,
+  inClass: boolean
+): string[] {
   const typeName = emitCClassInfoTypeName(info)
-  const lines = [
-    `inox_status ${typeName}::inox_read_field(const ${typeName}& value, uint32_t index, inox_value* out) {`
-  ]
+  const functionName = inClass ? 'inox_read_field' : `${typeName}::inox_read_field`
+  const storage = inClass ? 'static ' : ''
+  const lines = [`${storage}inox_status ${functionName}(const ${typeName}& value, uint32_t index, inox_value* out) {`]
 
   lines.push('  if (out == nullptr) {')
   lines.push('    return INOX_ERR_TYPE;')
@@ -1059,7 +1262,6 @@ function emitCClassDescriptorFieldReaderDeclaration(info: CClassInfo, context: C
 
   lines.push('  return INOX_ERR_FIELD;')
   lines.push('}')
-  lines.push('')
 
   return lines
 }
@@ -1230,7 +1432,10 @@ export function createClassInfos(
   return infos
 }
 
-export function collectCClassDescriptorNames(programs: IrProgram[], classInfos: CClassInfoMap): CClassDescriptorNameSet {
+export function collectCClassDescriptorNames(
+  programs: IrProgram[],
+  classInfos: CClassInfoMap
+): CClassDescriptorNameSet {
   const names: CClassDescriptorNameSet = new Set()
 
   for (const program of programs) {
@@ -3046,9 +3251,10 @@ function emitKnownPreparedClassMethodCallExpression(
 
     if (alternativeValidExpressions !== null && alternativeValidExpressions.length > 0) {
       const valid = alternativeValidExpressions.join(' || ')
-      const mismatch = method.returnNullable === true
-        ? `${value}.tag != INOX_TAG_UNDEFINED && ${value}.tag != INOX_TAG_NULL && !(${valid})`
-        : `!(${valid})`
+      const mismatch =
+        method.returnNullable === true
+          ? `${value}.tag != INOX_TAG_UNDEFINED && ${value}.tag != INOX_TAG_NULL && !(${valid})`
+          : `!(${valid})`
 
       lines.push(emitRuntimeTypeCheck(mismatch, context))
     } else if (alternativeValidExpressions === null && method.returnNullable === true) {
@@ -3149,12 +3355,8 @@ function emitPreparedThrowingClassMethodCallExpression(
     lines,
     expression: result,
     cppType:
-      libraryNativeBoundaryCppType(
-        method.returnType,
-        method.returnNullable === true,
-        false,
-        method.returnShape
-      ) ?? undefined,
+      libraryNativeBoundaryCppType(method.returnType, method.returnNullable === true, false, method.returnShape) ??
+      undefined,
     valueType: method.returnType
   }
 }
@@ -3792,11 +3994,7 @@ export function emitNativeClassFieldAssignment(expression: AnyNode, context: Cla
 
     const valueClassName = cClassNameFromValueType(value.valueType)
 
-    if (
-      valueClassName !== null &&
-      typeof valueClassName !== 'undefined' &&
-      className === valueClassName
-    ) {
+    if (valueClassName !== null && typeof valueClassName !== 'undefined' && className === valueClassName) {
       lines.push(`${access.reference} = ${value.expression};`)
       return lines
     }

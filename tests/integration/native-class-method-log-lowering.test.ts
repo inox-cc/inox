@@ -25,14 +25,15 @@ f.test()
     libraries: defaultCompilerLibrarySet,
     target: 'cc'
   })
-  const method = generatedMethodBody(result.code, 'void Foo::test()')
+  const method = generatedMethodBody(result.code, 'void test()')
 
-  assert.match(result.code, /void test\(\);/)
-  assert.doesNotMatch(result.code, /inox_value test\(\);/)
+  assert.match(result.code, /void test\(\) \{/)
+  assert.doesNotMatch(result.code, /void test\(\);/)
+  assert.doesNotMatch(result.code, /Foo::test/)
   assert.match(method, /console\.log\("%s", this->name\);/)
   assert.doesNotMatch(method, /inox_string\* name/)
   assert.doesNotMatch(method, /this->name\.raw\(\)\.as\.ref/)
-  assert.doesNotMatch(method, /void Foo::test\(\) \{\n  \{/)
+  assert.doesNotMatch(method, /void test\(\) \{\n    \{/)
   assert.doesNotMatch(method, /inox_return/)
   assert.doesNotMatch(method, /cleanup:/)
   assert.doesNotMatch(method, /goto cleanup;/)
@@ -59,10 +60,9 @@ class Foo {
     target: 'cc'
   })
 
-  assert.match(result.code, /inox_value test\(double flag\);/)
-  assert.match(result.code, /inox_value Foo::test\(double flag\)/)
-  assert.doesNotMatch(result.code, /void test\(double flag\);/)
-  assert.doesNotMatch(result.code, /void Foo::test\(double flag\)/)
+  assert.match(result.code, /inox_value test\(double flag\) \{/)
+  assert.doesNotMatch(result.code, /inox_value test\(double flag\);/)
+  assert.doesNotMatch(result.code, /Foo::test/)
 }
 
 export function assertNativeClassExplicitUnknownReturnIsPreserved(): void {
@@ -79,10 +79,9 @@ class Foo {
     target: 'cc'
   })
 
-  assert.match(result.code, /inox_value test\(\);/)
-  assert.match(result.code, /inox_value Foo::test\(\)/)
-  assert.doesNotMatch(result.code, /void test\(\);/)
-  assert.doesNotMatch(result.code, /void Foo::test\(\)/)
+  assert.match(result.code, /inox_value test\(\) \{/)
+  assert.doesNotMatch(result.code, /inox_value test\(\);/)
+  assert.doesNotMatch(result.code, /Foo::test/)
 }
 
 function generatedMethodBody(source: string, signature: string): string {
@@ -90,9 +89,21 @@ function generatedMethodBody(source: string, signature: string): string {
 
   assert.notEqual(start, -1, `missing generated method ${signature}`)
 
-  const end = source.indexOf('\n\nint main', start)
+  let depth = 0
 
-  assert.notEqual(end, -1, `missing generated method end for ${signature}`)
+  for (let index = source.indexOf('{', start); index < source.length; index = index + 1) {
+    const value = source[index]
 
-  return source.slice(start, end)
+    if (value === '{') {
+      depth = depth + 1
+    } else if (value === '}') {
+      depth = depth - 1
+
+      if (depth === 0) {
+        return source.slice(start, index + 1)
+      }
+    }
+  }
+
+  assert.fail(`missing generated method end for ${signature}`)
 }

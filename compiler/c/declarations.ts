@@ -794,7 +794,8 @@ export function emitClassMethodDeclaration(
   info: CClassInfo,
   method: CNode,
   baseContext: CEmitContext,
-  deps: CDeclarationEmissionDependencies
+  deps: CDeclarationEmissionDependencies,
+  inClass: boolean = false
 ): string[] {
   const context: CDeclarationFunctionContext = createFunctionContext(
     baseContext,
@@ -833,7 +834,7 @@ export function emitClassMethodDeclaration(
 
   const needsCleanup = shouldEmitCleanupLabel(context)
 
-  lines.push(`${emitClassMethodHead(info, method, context)} {`)
+  lines.push(`${emitClassMethodHead(info, method, context, inClass)} {`)
   pushIndentedDeclarationLines(lines, emitThrowingFunctionPrelude(context))
   pushIndentedDeclarationLines(lines, emitReturnValueDeclarations(context))
   pushIndentedDeclarationLines(lines, emitStatusResultDeclarations(context))
@@ -885,7 +886,8 @@ export function emitClassMethodDeclaration(
 export function emitClassConstructorDeclaration(
   info: CClassInfo,
   baseContext: CEmitContext,
-  deps: CDeclarationEmissionDependencies
+  deps: CDeclarationEmissionDependencies,
+  inClass: boolean = false
 ): string[] {
   if (!info.native) {
     return []
@@ -898,7 +900,7 @@ export function emitClassConstructorDeclaration(
   }
 
   const initializerPlan = createNativeClassConstructorInitializerPlan(info, constructorMethod)
-  const head = emitCClassConstructorHead(info, baseContext, initializerPlan.initializers)
+  const head = emitCClassConstructorHead(info, baseContext, initializerPlan.initializers, inClass)
 
   if (head === null || typeof head === 'undefined') {
     return []
@@ -1158,13 +1160,20 @@ export function emitClassMethodPrototype(info: CClassInfo, method: CNode, contex
   )});`
 }
 
-export function emitClassMethodHead(info: CClassInfo, method: CNode, context: CEmitContext): string {
+export function emitClassMethodHead(
+  info: CClassInfo,
+  method: CNode,
+  context: CEmitContext,
+  inClass: boolean = false
+): string {
   if (!info.native) {
     return emitRuntimeClassMethodHead(info, method, context)
   }
 
   const params = emitClassMethodParams(info, method, context)
-  const name = `${emitCClassInfoTypeName(info)}::${emitCIdentifier(method.name)}`
+  const name = inClass
+    ? emitCIdentifier(method.name)
+    : `${emitCClassInfoTypeName(info)}::${emitCIdentifier(method.name)}`
 
   if (isThrowingClassMethod(info, method, context)) {
     return `inox_status ${name}(${joinDeclarationParams(params)})`

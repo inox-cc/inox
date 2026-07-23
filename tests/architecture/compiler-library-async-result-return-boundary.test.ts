@@ -19,7 +19,8 @@ host.read()
     { libraries: defaultCompilerLibrarySet, target: 'cc' }
   )
 
-  assert.match(result.code, /inox::Promise Host::read\(/)
+  assert.match(result.code, /inox::Promise read\(\) \{/)
+  assert.doesNotMatch(result.code, /Host::read/)
   assert.match(result.code, /inox::Promise inox_return\{\};/)
   assert.doesNotMatch(result.code, /inox_promise\* Host::read\(/)
 })

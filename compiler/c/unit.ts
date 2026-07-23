@@ -80,10 +80,7 @@ import { emitCompilerLibraryRuntimeInitializerDefinitions } from './library-init
 import { emitCPrelude, filterUnusedCPreludeIncludes } from './prelude.ts'
 import { collectCReferencedFunctionPrototypeNames } from './prototype-references.ts'
 import { resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
-import {
-  cObjectShapeFromMetadata,
-  cTypeRefMapValue
-} from './types.ts'
+import { cObjectShapeFromMetadata, cTypeRefMapValue } from './types.ts'
 import type {
   CClassMethod,
   CCompilerLibrarySet,
@@ -107,8 +104,14 @@ import {
   requireCompilerLibraryIntrinsicNativeCppType,
   resolveCCompilerLibrarySet
 } from './value-types.ts'
-import type { CClassMethodPrototypeMap, ClassLoweringDependencies } from './values/classes.ts'
+import type {
+  CClassInlineDefinitionMap,
+  CClassMethodPrototypeMap,
+  ClassLoweringDependencies
+} from './values/classes.ts'
 import {
+  cClassInlineMethodDefinitionKey,
+  cClassUsesInlineDefinitions,
   cClassNameFromValueType,
   cClassValueTypeName,
   classInfosUseCppValueRuntime,
@@ -364,11 +367,7 @@ function registerCUnitSyntheticImportNames(context: CEmitContext, programs: IrPr
   }
 }
 
-function emitCUnitValueDefinitions(
-  lines: string[],
-  values: CUnitValueDeclaration[],
-  context: CEmitContext
-): void {
+function emitCUnitValueDefinitions(lines: string[], values: CUnitValueDeclaration[], context: CEmitContext): void {
   if (values.length === 0) {
     return
   }
@@ -941,21 +940,11 @@ function emitCUnitFunctionPointerAdapterTargetArgs(
         defaultLines,
         cleanupLines
       )
-      args.push(
-        emitFunctionPointerNativeBoundaryArgument(
-          name,
-          value,
-          adapter.functionType,
-          targetFunctionType
-        )
-      )
+      args.push(emitFunctionPointerNativeBoundaryArgument(name, value, adapter.functionType, targetFunctionType))
       continue
     }
 
-    const moduleObjectFunctionField = cUnitFunctionPointerAdapterModuleObjectFieldArg(
-      name,
-      moduleObjectFunctionFields
-    )
+    const moduleObjectFunctionField = cUnitFunctionPointerAdapterModuleObjectFieldArg(name, moduleObjectFunctionFields)
 
     if (moduleObjectFunctionField !== null) {
       args.push(moduleObjectFunctionField)
@@ -1180,9 +1169,7 @@ function emitCUnitFunctionPointerAdapterDefaultParamValue(
       defaultLines.push('  if (inox::thrown()) {')
       defaultLines.push(`    return ${cUnitFunctionPointerAdapterDefaultReturnValue(adapterReturnType)};`)
       defaultLines.push('  }')
-      defaultLines.push(
-        `  inox_value ${name} = ${runtimeValueExpression.split('$value').join(arrayName)};`
-      )
+      defaultLines.push(`  inox_value ${name} = ${runtimeValueExpression.split('$value').join(arrayName)};`)
       defaultLines.push(`  inox_retain(${name});`)
       cleanupLines.push(`  inox_release(${name});`)
 
@@ -1479,11 +1466,7 @@ export function emitCUnit(
     options.libraries
   )
   baseContext.exceptionValueShape = cObjectShapeFromMetadata(
-    compilerLibraryIntrinsicResultCShape(
-      options.libraries,
-      'exception-value',
-      { line: 1, column: 1 }
-    )
+    compilerLibraryIntrinsicResultCShape(options.libraries, 'exception-value', { line: 1, column: 1 })
   )
   baseContext.runtimeEntryPath = entryPath
   baseContext.classInfos = createClassInfos(classes, diagnostics)
@@ -1554,6 +1537,40 @@ export function emitCUnit(
   }
   const declarationLines: string[] = []
   const functionPrototypeNames = collectCUnitNeededFunctionPrototypeNames(functions, classMethods, baseContext)
+  const inlineConstructorDefinitions: CClassInlineDefinitionMap = new Map()
+  const inlineMethodDefinitions: CClassInlineDefinitionMap = new Map()
+
+  for (const classInfo of baseContext.classInfos.values()) {
+    if (!cClassUsesInlineDefinitions(classInfo)) {
+      continue
+    }
+
+    const definition = emitClassConstructorDeclaration(
+      classInfo,
+      baseContext,
+      deps.declarationEmissionDependencies,
+      true
+    )
+
+    if (definition.length > 0) {
+      inlineConstructorDefinitions.set(classInfo.name, definition)
+    }
+  }
+
+  for (const classMethod of classMethods) {
+    if (!cClassUsesInlineDefinitions(classMethod.info)) {
+      continue
+    }
+
+    const definition = emitClassMethodDeclaration(
+      classMethod.info,
+      classMethod.method,
+      baseContext,
+      deps.declarationEmissionDependencies,
+      true
+    )
+    inlineMethodDefinitions.set(cClassInlineMethodDefinitionKey(classMethod.info, classMethod.method), definition)
+  }
 
   for (const item of functions) {
     if (!functionPrototypeNames.has(item.name)) {
@@ -1574,7 +1591,9 @@ export function emitCUnit(
     emitCNativeClassDeclarations(
       baseContext,
       collectCUnitClassMethodPrototypes(baseContext, deps),
-      classDescriptorNames
+      classDescriptorNames,
+      inlineConstructorDefinitions,
+      inlineMethodDefinitions
     )
   )
   const arrowCallbackWrappers: CRuntimeArrowCallbackWrapper[] = []
@@ -1665,14 +1684,19 @@ export function emitCUnit(
   }
 
   for (const classInfo of baseContext.classInfos.values()) {
-    pushUnitLines(
-      lines,
-      emitClassConstructorDeclaration(classInfo, baseContext, deps.declarationEmissionDependencies)
-    )
+    if (cClassUsesInlineDefinitions(classInfo)) {
+      continue
+    }
+
+    pushUnitLines(lines, emitClassConstructorDeclaration(classInfo, baseContext, deps.declarationEmissionDependencies))
     lines.push('')
   }
 
   for (const classMethod of classMethods) {
+    if (cClassUsesInlineDefinitions(classMethod.info)) {
+      continue
+    }
+
     pushUnitLines(
       lines,
       emitClassMethodDeclaration(

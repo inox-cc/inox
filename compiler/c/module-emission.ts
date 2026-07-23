@@ -115,8 +115,14 @@ import {
   requireCompilerLibraryIntrinsicNativeCppType,
   resolveCCompilerLibrarySet
 } from './value-types.ts'
-import type { CClassMethodPrototypeMap, ClassLoweringDependencies } from './values/classes.ts'
+import type {
+  CClassInlineDefinitionMap,
+  CClassMethodPrototypeMap,
+  ClassLoweringDependencies
+} from './values/classes.ts'
 import {
+  cClassInlineMethodDefinitionKey,
+  cClassUsesInlineDefinitions,
   cClassNameFromValueType,
   cClassValueTypeName,
   classInfosUseCppValueRuntime,
@@ -378,13 +384,15 @@ export type CModuleEmissionDependencies = {
   emitClassConstructorDeclaration(
     info: CClassInfo,
     baseContext: CEmitContext,
-    dependencies: CDeclarationEmissionDependencies
+    dependencies: CDeclarationEmissionDependencies,
+    inClass?: boolean
   ): string[]
   emitClassMethodDeclaration(
     info: CClassInfo,
     method: AnyNode,
     baseContext: CEmitContext,
-    dependencies: CDeclarationEmissionDependencies
+    dependencies: CDeclarationEmissionDependencies,
+    inClass?: boolean
   ): string[]
   emitClassMethodHead(info: CClassInfo, method: AnyNode, context: CEmitContext): string
   emitClassMethodPrototype(info: CClassInfo, method: AnyNode, context: CEmitContext): string
@@ -471,13 +479,7 @@ export function emitCModuleSource(
 
   const lines: string[] = []
   const headerDeclarations = collectCModuleHeaderDeclarationLines(plan, context, deps)
-  const headerIncludes = collectCModuleHeaderIncludeLines(
-    plan,
-    context,
-    options.libraries,
-    deps,
-    headerDeclarations
-  )
+  const headerIncludes = collectCModuleHeaderIncludeLines(plan, context, options.libraries, deps, headerDeclarations)
 
   if (headerDeclarations.length > 0) {
     lines.push(`#include "${relativeCIncludePath(plan.sourcePath, plan.headerPath, options.host)}"`)
@@ -522,12 +524,27 @@ export function emitCModuleSource(
   }
 
   const bodyLines: string[] = []
+  const inlineConstructorDefinitions: CClassInlineDefinitionMap = new Map()
+  const inlineMethodDefinitions: CClassInlineDefinitionMap = new Map()
 
   for (const classInfo of context.classInfos.values()) {
-    pushCModuleLines(
-      bodyLines,
-      deps.emitClassConstructorDeclaration(classInfo, context, deps.declarationEmissionDependencies)
+    const inClass = cClassUsesInlineDefinitions(classInfo)
+    const definition = deps.emitClassConstructorDeclaration(
+      classInfo,
+      context,
+      deps.declarationEmissionDependencies,
+      inClass
     )
+
+    if (inClass) {
+      if (definition.length > 0) {
+        inlineConstructorDefinitions.set(classInfo.name, definition)
+      }
+
+      continue
+    }
+
+    pushCModuleLines(bodyLines, definition)
     bodyLines.push('')
   }
 
@@ -535,11 +552,21 @@ export function emitCModuleSource(
     const item = cModuleClassMethodAt(classMethods, methodIndex)
     const info = item.info
     const method = item.method
-
-    pushCModuleLines(
-      bodyLines,
-      deps.emitClassMethodDeclaration(info, method, context, deps.declarationEmissionDependencies)
+    const inClass = cClassUsesInlineDefinitions(info)
+    const definition = deps.emitClassMethodDeclaration(
+      info,
+      method,
+      context,
+      deps.declarationEmissionDependencies,
+      inClass
     )
+
+    if (inClass) {
+      inlineMethodDefinitions.set(cClassInlineMethodDefinitionKey(info, method), definition)
+      continue
+    }
+
+    pushCModuleLines(bodyLines, definition)
     bodyLines.push('')
   }
 
@@ -595,7 +622,13 @@ export function emitCModuleSource(
   emitCModuleValueFunctionFieldDefinitions(lines, moduleValues, context)
   pushCModuleLines(
     lines,
-    emitCNativeClassDeclarations(context, collectCModuleClassMethodPrototypes(context, deps), classDescriptorNames)
+    emitCNativeClassDeclarations(
+      context,
+      collectCModuleClassMethodPrototypes(context, deps),
+      classDescriptorNames,
+      inlineConstructorDefinitions,
+      inlineMethodDefinitions
+    )
   )
   emitCModuleFunctionPointerRuntimeAdapterDefinitions(lines, context)
   emitCModuleFunctionPointerAdapterDefinitions(lines, context)
