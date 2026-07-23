@@ -310,7 +310,12 @@ function visitModuleGraphFile(
       const importedProgram = moduleProgramForImports(importedModule)
 
       if (importedProgram !== null) {
-        applyImportedDeclarationMetadata(specifier, exported, importedProgram)
+        applyImportedDeclarationMetadata(
+          specifier,
+          exported,
+          importedProgram,
+          importedModule.external !== true
+        )
       }
 
       if (importedProgram !== null) {
@@ -820,7 +825,7 @@ function prepareLibraryRuntimeImportDeclarations(
       continue
     }
 
-    applyImportedDeclarationMetadata(specifier, exported, importedProgram)
+    applyImportedDeclarationMetadata(specifier, exported, importedProgram, false)
 
     if (exported.type !== 'FunctionDeclaration' && exported.type !== 'ClassDeclaration') {
       continue
@@ -913,7 +918,12 @@ function appendSyntheticDeclarations(program: ProgramNode, declarations: AnyNode
   }
 }
 
-function applyImportedDeclarationMetadata(specifier: AnyNode, declaration: AnyNode, program: ProgramNode): void {
+function applyImportedDeclarationMetadata(
+  specifier: AnyNode,
+  declaration: AnyNode,
+  program: ProgramNode,
+  useLocalClassBindingName: boolean
+): void {
   if (declaration.type === 'FunctionDeclaration') {
     applyImportedFunctionDeclarationMetadata(specifier, declaration)
     specifier.functionOverloads = findExportedFunctionDeclarations(program, declaration.name)
@@ -922,7 +932,7 @@ function applyImportedDeclarationMetadata(specifier: AnyNode, declaration: AnyNo
 
   if (declaration.type === 'ClassDeclaration') {
     specifier.valueType = 'function'
-    specifier.className = specifier.local
+    specifier.className = useLocalClassBindingName ? specifier.local : declaration.name
     specifier.constructable = true
     specifier.constructorParams = importedClassConstructorParams(declaration)
     specifier.classMethods = declaration.methods ?? []
