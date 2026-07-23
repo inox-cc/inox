@@ -691,6 +691,8 @@ function cloneReferenceExpression(
     functionType,
     shape,
     className,
+    bindingKind: nullableString(expression.bindingKind),
+    bindingLoc: nullableNode(expression.bindingLoc),
     loc
   }
   const result = copyRuntimeMetadata(target, expression)
@@ -975,6 +977,9 @@ function cloneArrowFunctionExpression(
     {
       type: 'ArrowFunctionExpression',
       async: expression.async === true,
+      functionSyntax: expression.functionSyntax === true,
+      functionName: nullableString(expression.functionName),
+      declaredReturnType: nullableString(expression.declaredReturnType),
       params: lowerExpressionNodeArrayOrEmpty(expression.params),
       body,
       expressionBody: expression.expressionBody === true && !hasBindingDeclarations,

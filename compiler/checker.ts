@@ -464,7 +464,125 @@ class Checker {
       this.checkTopLevelItem(item)
     }
 
+    this.checkInlineDeclarationDependencies()
     throwDiagnostics(this.diagnostics)
+  }
+
+  checkInlineDeclarationDependencies(): void {
+    const privateBindings = new Map<SourceLocation, string>()
+
+    for (let index = 0; index < this.program.body.length; index = index + 1) {
+      const item = checkerNodeAt(this.program.body, index)
+
+      if (
+        item.exported !== true &&
+        (item.type === 'FunctionDeclaration' ||
+          item.type === 'VariableDeclaration' ||
+          item.type === 'ClassDeclaration')
+      ) {
+        privateBindings.set(nodeSourceLocation(item), item.name)
+      }
+    }
+
+    for (let index = 0; index < this.program.body.length; index = index + 1) {
+      const item = checkerNodeAt(this.program.body, index)
+
+      if (item.exported !== true) {
+        continue
+      }
+
+      if (item.type === 'FunctionDeclaration' && item.inline === true) {
+        this.checkInlineDeclarationReferences(item.name, item, privateBindings)
+        continue
+      }
+
+      if (item.type === 'VariableDeclaration' && item.inline === true) {
+        this.checkInlineDeclarationReferences(item.name, item.init, privateBindings)
+        continue
+      }
+
+      if (item.type !== 'ClassDeclaration') {
+        continue
+      }
+
+      for (let methodIndex = 0; methodIndex < item.methods.length; methodIndex = methodIndex + 1) {
+        const method = checkerNodeAt(item.methods, methodIndex)
+
+        if (method.inline === true) {
+          this.checkInlineDeclarationReferences(`${item.name}.${method.name}`, method, privateBindings)
+        }
+      }
+    }
+  }
+
+  checkInlineDeclarationReferences(
+    declarationName: string,
+    node: AnyNode | AnyNode[] | null | undefined,
+    privateBindings: Map<SourceLocation, string>
+  ): void {
+    if (node === null || typeof node === 'undefined') {
+      return
+    }
+
+    if (Array.isArray(node)) {
+      for (let index = 0; index < node.length; index = index + 1) {
+        this.checkInlineDeclarationReferences(declarationName, node[index], privateBindings)
+      }
+
+      return
+    }
+
+    if (node.type === 'Reference') {
+      const bindingLoc = node.bindingLoc
+
+      if (
+        bindingLoc !== null &&
+        typeof bindingLoc === 'object' &&
+        node.bindingKind !== 'global' &&
+        node.bindingKind !== 'import'
+      ) {
+        const privateName = privateBindings.get(bindingLoc as SourceLocation)
+
+        if (privateName !== null && typeof privateName !== 'undefined') {
+          this.report(
+            'INOX_INLINE_PRIVATE_REFERENCE',
+            `exported @inline declaration ${declarationName} cannot reference private module binding ${privateName}`,
+            node.loc
+          )
+        }
+      }
+    }
+
+    this.checkInlineDeclarationReferences(declarationName, node.body, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.params, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.fields, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.methods, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.init, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.condition, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.consequent, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.alternate, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.test, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.update, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.iterable, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.discriminant, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.cases, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.block, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.handler, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.finalizer, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.argument, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.args, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.callee, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.object, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.index, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.target, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.value, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.left, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.right, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.elements, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.properties, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.expression, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.expressions, privateBindings)
+    this.checkInlineDeclarationReferences(declarationName, node.defaultValue, privateBindings)
   }
 
   collectLibraryGlobalDeclarations(): void {
@@ -1894,6 +2012,8 @@ class Checker {
       expression.shape = null
       expression.className = null
       expression.libraryIntrinsicRole = null
+      expression.bindingKind = null
+      expression.bindingLoc = null
 
       if (isUndefinedValue) {
         expression.nullable = true
@@ -1903,6 +2023,8 @@ class Checker {
       if (symbol !== null && typeof symbol !== 'undefined') {
         const narrowedTypeRef = this.narrowedTypeRefs.get(path[0]) ?? null
         const nullableNarrowed = this.narrowedNullableNames.has(path[0])
+        expression.bindingKind = symbol.kind
+        expression.bindingLoc = symbol.loc ?? null
         valueType = this.narrowedValueTypes.get(path[0]) ?? symbol.valueType
         expression.nullable = symbol.nullable === true && !nullableNarrowed
         expression.valueType = valueType
@@ -6211,6 +6333,26 @@ class Checker {
     }
 
     expression.valueType = 'function'
+
+    if (
+      (functionType === null || typeof functionType === 'undefined') &&
+      expression.functionSyntax === true &&
+      typeof expression.declaredReturnType === 'string'
+    ) {
+      const returnInfo = this.resolveDeclaredType(expression.declaredReturnType, expression.loc)
+
+      functionType = {
+        kind: 'function',
+        resolved: true,
+        params: this.resolveParams(expression.params),
+        returnType: returnInfo.valueType,
+        declaredReturnType: expression.declaredReturnType,
+        returnTypeRef: returnInfo.typeRef,
+        returnNullable: returnInfo.nullable,
+        returnAsyncResultValueType: returnInfo.asyncResultValueType,
+        returnShape: returnInfo.shape
+      }
+    }
 
     if (functionType !== null && typeof functionType !== 'undefined' && functionType.resolved !== true) {
       functionType =
