@@ -57,6 +57,7 @@ export const compilerAnyNodeStringFields: readonly string[] = [
 
 export const compilerAnyNodeBooleanFields: readonly string[] = [
   'async',
+  'constructable',
   'default',
   'exported',
   'expressionBody',
@@ -81,6 +82,8 @@ export const compilerAnyNodeArrayFields: readonly string[] = [
   'baseTypes',
   'bindingElements',
   'cases',
+  'classMethods',
+  'constructorParams',
   'elements',
   'expressions',
   'libraryCapabilities',
