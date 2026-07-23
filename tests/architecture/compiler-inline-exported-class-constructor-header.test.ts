@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
+import { compileFileToCppModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 
 test('@inline constructor экспортируемого class определяется в .h', () => {
@@ -15,7 +15,7 @@ test('@inline constructor экспортируемого class определя�
     ],
     { root: '/' }
   )
-  const files = compileFileToCModuleTextsSync('/pkg/index.ts', {
+  const files = compileFileToCppModuleTextsSync('/pkg/index.ts', {
     callMain: true,
     host,
     sourceRoot: '/pkg'

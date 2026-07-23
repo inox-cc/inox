@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { compileFileToCModuleTextsSync, compileSourceToIr } from '../../compiler/core.ts'
+import { compileFileToCppModuleTextsSync, compileSourceToIr } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
@@ -30,7 +30,7 @@ useResult()
     ],
     { root: '/' }
   )
-  const files = compileFileToCModuleTextsSync('/pkg/index.ts', {
+  const files = compileFileToCppModuleTextsSync('/pkg/index.ts', {
     callMain: false,
     host,
     libraries: defaultCompilerLibrarySet,
@@ -73,7 +73,7 @@ usesRuntimeType({})
     ],
     { root: '/' }
   )
-  const files = compileFileToCModuleTextsSync('/pkg/index.ts', {
+  const files = compileFileToCppModuleTextsSync('/pkg/index.ts', {
     callMain: false,
     host,
     libraries: defaultCompilerLibrarySet,
@@ -107,7 +107,7 @@ containsValue(null)
     ],
     { root: '/' }
   )
-  const files = compileFileToCModuleTextsSync('/pkg/index.ts', {
+  const files = compileFileToCppModuleTextsSync('/pkg/index.ts', {
     callMain: false,
     host,
     libraries: defaultCompilerLibrarySet,
@@ -138,7 +138,7 @@ containsValue(null)
     ],
     { root: '/' }
   )
-  const files = compileFileToCModuleTextsSync('/pkg/index.ts', {
+  const files = compileFileToCppModuleTextsSync('/pkg/index.ts', {
     callMain: false,
     host,
     libraries: defaultCompilerLibrarySet,

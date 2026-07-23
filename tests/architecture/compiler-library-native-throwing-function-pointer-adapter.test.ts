@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
+import { compileFileToCppModuleTextsSync } from '../../compiler/core.ts'
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
@@ -28,7 +28,7 @@ consume(dependencies)
     ],
     { root: '/' }
   )
-  const files = compileFileToCModuleTextsSync('/pkg/index.ts', {
+  const files = compileFileToCppModuleTextsSync('/pkg/index.ts', {
     callMain: false,
     host,
     libraries: createCompilerLibrarySet([bridgeLibrary()]),

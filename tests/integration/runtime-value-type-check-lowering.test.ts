@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 
-import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
+import { compileFileToCppModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { defaultCompilerLibraryLiteralTypeInference, defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
@@ -46,7 +46,7 @@ for (const a of foo.v) {
       root: '/'
     }
   )
-  const files = compileFileToCModuleTextsSync(
+  const files = compileFileToCppModuleTextsSync(
     '/pkg/src/index.ts',
     {
       callMain: true,

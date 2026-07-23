@@ -47,7 +47,7 @@ function programAt(values: IrProgram[], index: number): IrProgram {
   return values[index]
 }
 
-export function checkCProfileCapabilities(programs: IrProgram[], options: CompileOptions): void {
+export function checkCppProfileCapabilities(programs: IrProgram[], options: CompileOptions): void {
   if (options.profile !== 'embedded') {
     return
   }

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import {
-  compileMemoryPackageToCModules,
+  compileMemoryPackageToCppModules,
   compileMemoryPackageToIrModules
 } from '../../compiler/core.ts'
 import { CompileError } from '../../compiler/diagnostics.ts'
@@ -26,7 +26,7 @@ test('module graph and C planner consume declarations from the selected library 
       error.diagnostics[0].code === 'INOX_UNSUPPORTED_IMPORT_SOURCE'
   )
 
-  const result = await compileMemoryPackageToCModules(entry, files, {
+  const result = await compileMemoryPackageToCppModules(entry, files, {
     libraries: fixtureLibraries(),
     sourceRoot: '/project'
   })

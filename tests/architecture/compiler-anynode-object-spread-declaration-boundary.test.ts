@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { compileMemoryPackageToCModules, compileMemoryPackageToIrModules } from '../../compiler/core.ts'
+import { compileMemoryPackageToCppModules, compileMemoryPackageToIrModules } from '../../compiler/core.ts'
 import { emitModuleDeclarationContract } from '../../compiler/modules/declarations.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
@@ -28,7 +28,7 @@ test('AnyNode object spread keeps fallback fields across a declaration boundary'
   const declarationPath = '/project/types.d.ts'
   const declarationSource = emitModuleDeclarationContract(resolvedProgram)
 
-  const result = await compileMemoryPackageToCModules(
+  const result = await compileMemoryPackageToCppModules(
     sourcePath,
     [
       {

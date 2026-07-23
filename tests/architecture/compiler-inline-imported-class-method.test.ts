@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
+import { compileFileToCppModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 
 test('modular C++ импортирует exported class с @inline method через generated header', () => {
@@ -20,7 +20,7 @@ test('modular C++ импортирует exported class с @inline method чер
     ],
     { root: '/' }
   )
-  const files = compileFileToCModuleTextsSync('/pkg/index.ts', {
+  const files = compileFileToCppModuleTextsSync('/pkg/index.ts', {
     callMain: true,
     host,
     sourceRoot: '/pkg'

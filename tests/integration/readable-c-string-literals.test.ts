@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 
-import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
+import { compileFileToCppModuleTextsSync } from '../../compiler/core.ts'
 import { cStringLiteral, escapeCPrintfFormatText } from '../../compiler/backends/cpp/identifiers.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { defaultCompilerLibraryLiteralTypeInference, defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
@@ -35,7 +35,7 @@ console.log('label', text)
       root: '/'
     }
   )
-  const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
+  const files = compileFileToCppModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
     libraries: defaultCompilerLibrarySet,
@@ -74,7 +74,7 @@ console.error('bad', user)
       root: '/'
     }
   )
-  const runtimeValueFiles = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
+  const runtimeValueFiles = compileFileToCppModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host: runtimeValueHost,
     libraries: defaultCompilerLibrarySet,
@@ -119,7 +119,7 @@ f.test()
       root: '/'
     }
   )
-  const entryLocalFiles = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
+  const entryLocalFiles = compileFileToCppModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host: entryLocalHost,
     libraries: defaultCompilerLibrarySet,
@@ -151,7 +151,7 @@ console.log(read())
       root: '/'
     }
   )
-  const nestedReferenceFiles = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
+  const nestedReferenceFiles = compileFileToCppModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host: nestedReferenceHost,
     libraries: defaultCompilerLibrarySet,
@@ -176,7 +176,7 @@ console.log(data.v)
       root: '/'
     }
   )
-  const jsonLocalFiles = compileFileToCModuleTextsSync(
+  const jsonLocalFiles = compileFileToCppModuleTextsSync(
     '/pkg/src/index.ts',
     {
       callMain: true,
@@ -208,7 +208,7 @@ console.log(response.status)
       root: '/'
     }
   )
-  const fetchFiles = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
+  const fetchFiles = compileFileToCppModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host: fetchHost,
     libraries: defaultCompilerLibrarySet,
@@ -233,7 +233,7 @@ console.log(process.argv[1])
       root: '/'
     }
   )
-  const processEntryFiles = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
+  const processEntryFiles = compileFileToCppModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host: processEntryHost,
     libraries: defaultCompilerLibrarySet,

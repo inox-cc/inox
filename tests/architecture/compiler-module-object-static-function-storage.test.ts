@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
+import { compileFileToCppModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
@@ -19,7 +19,7 @@ test('module object stores a named function with optional parameters as a static
     ],
     { root: '/' }
   )
-  const files = compileFileToCModuleTextsSync('/pkg/index.ts', {
+  const files = compileFileToCppModuleTextsSync('/pkg/index.ts', {
     callMain: false,
     host,
     libraries: defaultCompilerLibrarySet,

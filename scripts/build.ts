@@ -1,6 +1,6 @@
 import { chmod, copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, posix, relative, resolve } from 'node:path'
-import { compileMemoryPackageToCModules, compileMemoryPackageToIrModules } from '../compiler/compiler.ts'
+import { compileMemoryPackageToCppModules, compileMemoryPackageToIrModules } from '../compiler/compiler.ts'
 import { compilerLibraryHasModuleDeclaration } from '../compiler/extensions/library-set.ts'
 import {
   collectIrFunctionEffectsWithExternalEffects,
@@ -294,7 +294,7 @@ async function compileCompilerModule(
   const contractFiles = declarationContractSourceFiles(declarationContracts, file.path)
   const declarationImports = declarationImportOptions(declarationContracts, file.path)
 
-  const result = await compileMemoryPackageToCModules(file.path, [file, ...contractFiles, ...stdlibDeclarationFiles], {
+  const result = await compileMemoryPackageToCppModules(file.path, [file, ...contractFiles, ...stdlibDeclarationFiles], {
     callMain,
     declarationImports,
     libraries: bootstrapLibraries,

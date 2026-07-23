@@ -2,7 +2,7 @@ import type { CompilerHost } from '../../host.ts'
 import type { CompilerLibraryOptionValue, CompilerLibrarySet, TypeRef } from '../../extensions/types.ts'
 import type { AnyNode, IrProgram, ModuleRecord, ObjectShapeInfo } from '../../types.ts'
 
-export type CEmitOptions = {
+export type CppEmitOptions = {
   libraries?: CCompilerLibrarySet
   libraryOptions?: CompilerLibraryOptionValue[]
 }
@@ -416,14 +416,14 @@ export type CAsyncResultConstructorHandler = {
   asyncResult: string
 }
 
-export type CModuleOutputFile = {
+export type CppModuleOutputFile = {
   kind: 'declaration' | 'header' | 'source'
   path: string
   sourcePath: string
   code: string
 }
 
-export type CModuleEmitOptions = CEmitOptions & {
+export type CppModuleEmitOptions = CppEmitOptions & {
   callMain?: boolean
   host: CompilerHost
   sourceRoot?: string

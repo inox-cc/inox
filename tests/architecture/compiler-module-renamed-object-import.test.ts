@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
+import { compileFileToCppModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
@@ -19,7 +19,7 @@ test('split modules инициализируют переименованный 
     ],
     { root: '/' }
   )
-  const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
+  const files = compileFileToCppModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
     libraries: defaultCompilerLibrarySet,

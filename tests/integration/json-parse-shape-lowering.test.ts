@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
+import { compileFileToCppModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { rootDir } from '../../scripts/lib/repo-root.ts'
 import { runCommand } from '../../scripts/lib/run-command.ts'
@@ -29,7 +29,7 @@ console.log(Object.entries(foo.v)[0][0])
       root: '/'
     }
   )
-  const files = compileFileToCModuleTextsSync(
+  const files = compileFileToCppModuleTextsSync(
     '/pkg/src/index.ts',
     {
       callMain: true,
@@ -70,7 +70,7 @@ try {
       root: '/'
     }
   )
-  const files = compileFileToCModuleTextsSync(
+  const files = compileFileToCppModuleTextsSync(
     '/pkg/src/index.ts',
     {
       callMain: true,

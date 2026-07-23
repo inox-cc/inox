@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { compileFileSync, compileFileToCModuleTextsSync } from './compiler.ts'
-import type { CModuleCompileOptions } from './core.ts'
+import { compileFileSync, compileFileToCppModuleTextsSync } from './compiler.ts'
+import type { CppModuleCompileOptions } from './core.ts'
 import { formatDiagnostics } from './diagnostics.ts'
 import { compilerLibraryOptionForCliAlias, parseCompilerLibraryOptionCliValue } from './extensions/library-options.ts'
 import type {
@@ -238,12 +238,12 @@ function compileOptions(plan: CliPlan, libraries: CompilerLibrarySet): CompileOp
   return options
 }
 
-function cModuleCompileOptions(
+function cppModuleCompileOptions(
   plan: CliPlan,
   libraries: CompilerLibrarySet,
   environment: CliEnvironment
-): CModuleCompileOptions {
-  const options: CModuleCompileOptions = {
+): CppModuleCompileOptions {
+  const options: CppModuleCompileOptions = {
     target: 'cc',
     callMain: plan.entryMode,
     libraries,
@@ -255,7 +255,7 @@ function cModuleCompileOptions(
   return options
 }
 
-function writeBundledC(
+function writeBundledCpp(
   plan: CliPlan,
   libraries: CompilerLibrarySet,
   environment: CliEnvironment,
@@ -269,16 +269,16 @@ function writeBundledC(
   environment.log(output)
 }
 
-function writeCModules(
+function writeCppModules(
   plan: CliPlan,
   libraries: CompilerLibrarySet,
   environment: CliEnvironment,
   libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null
 ): void {
   const outDir = outputDir(plan)
-  const files = compileFileToCModuleTextsSync(
+  const files = compileFileToCppModuleTextsSync(
     plan.input,
-    cModuleCompileOptions(plan, libraries, environment),
+    cppModuleCompileOptions(plan, libraries, environment),
     libraryLiteralTypeInference
   )
 
@@ -391,9 +391,9 @@ function executeCompilerCli(
     } else if (parsed.help) {
       environment.log(usage(libraries))
     } else if (parsed.plan !== null && parsed.plan.hasOutDir) {
-      writeCModules(parsed.plan, libraries, environment, libraryLiteralTypeInference)
+      writeCppModules(parsed.plan, libraries, environment, libraryLiteralTypeInference)
     } else if (parsed.plan !== null) {
-      writeBundledC(parsed.plan, libraries, environment, libraryLiteralTypeInference)
+      writeBundledCpp(parsed.plan, libraries, environment, libraryLiteralTypeInference)
     }
 
     return true

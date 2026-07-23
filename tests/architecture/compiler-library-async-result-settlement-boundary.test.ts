@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { compileFileToCModulesSync } from '../../compiler/core.ts'
+import { compileFileToCppModulesSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import type { ModuleDeclarationImport } from '../../compiler/types.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
@@ -34,7 +34,7 @@ export function forward(fail: boolean): Promise<string> {
     ],
     { root: '/' }
   )
-  const providerResult = compileFileToCModulesSync('/pkg/provider.ts', {
+  const providerResult = compileFileToCppModulesSync('/pkg/provider.ts', {
     callMain: false,
     host,
     libraries: defaultCompilerLibrarySet,
@@ -52,7 +52,7 @@ export function forward(fail: boolean): Promise<string> {
     }
   }
 
-  const result = compileFileToCModulesSync('/pkg/consumer.ts', {
+  const result = compileFileToCppModulesSync('/pkg/consumer.ts', {
     callMain: false,
     declarationImports,
     host,

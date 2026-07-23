@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
+import { compileFileToCppModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
@@ -21,7 +21,7 @@ export function has(value: string): boolean {
     ],
     { root: '/' }
   )
-  const files = compileFileToCModuleTextsSync('/main.ts', {
+  const files = compileFileToCppModuleTextsSync('/main.ts', {
     host,
     libraries: defaultCompilerLibrarySet,
     sourceRoot: '/'

@@ -6,7 +6,7 @@ import {
   functionPointerNativeReturnRuntimeValueExpression
 } from '../../compiler/backends/cpp/async/callbacks.ts'
 import type { CFunctionType } from '../../compiler/backends/cpp/types.ts'
-import { compileFileToCModuleTextsSync, compileSource } from '../../compiler/core.ts'
+import { compileFileToCppModuleTextsSync, compileSource } from '../../compiler/core.ts'
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
@@ -46,7 +46,7 @@ consume(dependencies)
     ],
     { root: '/' }
   )
-  const files = compileFileToCModuleTextsSync('/pkg/index.ts', {
+  const files = compileFileToCppModuleTextsSync('/pkg/index.ts', {
     callMain: false,
     host,
     libraries: defaultCompilerLibrarySet,
@@ -87,7 +87,7 @@ consume(dependencies)
     ],
     { root: '/' }
   )
-  const files = compileFileToCModuleTextsSync('/pkg/index.ts', {
+  const files = compileFileToCppModuleTextsSync('/pkg/index.ts', {
     callMain: false,
     host,
     libraries: defaultCompilerLibrarySet,

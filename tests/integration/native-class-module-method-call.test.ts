@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 
-import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
+import { compileFileToCppModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
@@ -36,7 +36,7 @@ f.test()
       root: '/'
     }
   )
-  const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
+  const files = compileFileToCppModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
     libraries: defaultCompilerLibrarySet,

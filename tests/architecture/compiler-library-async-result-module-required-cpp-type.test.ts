@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
+import { compileFileToCppModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { futureLibrarySet } from './helpers/compiler-future-library-fixtures.ts'
 
@@ -10,7 +10,7 @@ test('module emission использует только native type валиди
     [{ path: '/pkg/index.ts', source: 'export const task = Future.succeed(1)\n' }],
     { root: '/' }
   )
-  const files = compileFileToCModuleTextsSync('/pkg/index.ts', {
+  const files = compileFileToCppModuleTextsSync('/pkg/index.ts', {
     callMain: false,
     host,
     libraries: futureLibrarySet('FixtureFuture'),

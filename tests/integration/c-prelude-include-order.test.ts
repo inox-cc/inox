@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 
-import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
+import { compileFileToCppModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { defaultCompilerLibraryLiteralTypeInference, defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
@@ -25,7 +25,7 @@ console.log(label)
       root: '/'
     }
   )
-  const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
+  const files = compileFileToCppModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
     libraries: defaultCompilerLibrarySet,
@@ -56,7 +56,7 @@ console.log(values.length)
       root: '/'
     }
   )
-  const arrayFiles = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
+  const arrayFiles = compileFileToCppModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host: arrayHost,
     libraries: defaultCompilerLibrarySet,
@@ -83,7 +83,7 @@ console.log(values.includes(2))
       root: '/'
     }
   )
-  const includesFiles = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
+  const includesFiles = compileFileToCppModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host: includesHost,
     libraries: defaultCompilerLibrarySet,
@@ -114,7 +114,7 @@ for (const a of foo.v) {
       root: '/'
     }
   )
-  const facadeFiles = compileFileToCModuleTextsSync(
+  const facadeFiles = compileFileToCppModuleTextsSync(
     '/pkg/src/index.ts',
     {
       callMain: true,

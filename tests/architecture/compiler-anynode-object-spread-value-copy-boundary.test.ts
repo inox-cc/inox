@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { compileMemoryPackageToCModules, compileMemoryPackageToIrModules } from '../../compiler/core.ts'
+import { compileMemoryPackageToCppModules, compileMemoryPackageToIrModules } from '../../compiler/core.ts'
 import { emitModuleDeclarationContract } from '../../compiler/modules/declarations.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
@@ -17,7 +17,7 @@ test('AnyNode object spread copies fallback values across a declaration boundary
 
   assert.ok(declarationProgram)
   const declarationPath = '/project/types.d.ts'
-  const result = await compileMemoryPackageToCModules(
+  const result = await compileMemoryPackageToCppModules(
     '/project/copy.ts',
     [
       {

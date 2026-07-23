@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { compilerAnyNodeObjectFields } from '../../compiler/backends/cpp/values/any-node-fields.ts'
 import { anyNodeObjectShape } from '../../compiler/checker/resolved-types.ts'
 import {
-  compileMemoryPackageToCModules,
+  compileMemoryPackageToCppModules,
   compileMemoryPackageToIrModules,
   compileSource,
   compileSourceToIr
@@ -73,7 +73,7 @@ function namesDiffer(specifier: AnyNode): boolean {
 })
 
 test('imported object preserves nested AnyNode array element TypeRef', async () => {
-  const result = await compileMemoryPackageToCModules(
+  const result = await compileMemoryPackageToCppModules(
     '/project/main.ts',
     [
       {

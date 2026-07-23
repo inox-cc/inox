@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 
-import { compileFileToCModulesSync } from '../../compiler/core.ts'
+import { compileFileToCppModulesSync } from '../../compiler/core.ts'
 import { tokenize } from '../../compiler/lexer.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import {
@@ -82,7 +82,7 @@ checker.checkOperation({
   )
 
   assert.doesNotThrow(() =>
-    compileFileToCModulesSync('/pkg/index.ts', {
+    compileFileToCppModulesSync('/pkg/index.ts', {
       callMain: true,
       declarationImports: [{ sourcePath: '/pkg/types.ts', declarationSource }],
       host,

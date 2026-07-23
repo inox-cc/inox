@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
+import { compileFileToCppModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { collectStdlibNativeIncludeArgs } from '../../scripts/lib/stdlib-native-files.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
@@ -43,7 +43,7 @@ createServer((request, response) => {
       root: '/'
     }
   )
-  const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
+  const files = compileFileToCppModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
     libraries: defaultCompilerLibrarySet,

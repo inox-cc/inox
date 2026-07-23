@@ -112,8 +112,8 @@ import {
   emitCModuleHeader as emitCModuleHeaderWithDependencies,
   emitCModuleSource as emitCModuleSourceWithDependencies
 } from './module-emission.ts'
-import type { CModuleFileEmitters } from './modules.ts'
-import { emitCModuleFilesFromGraph as emitCModuleFilesFromGraphWithEmitters } from './modules.ts'
+import type { CppModuleFileEmitters } from './modules.ts'
+import { emitCppModuleFilesFromGraph as emitCppModuleFilesFromGraphWithEmitters } from './modules.ts'
 import {
   compilerLibraryRuntimeCallbackArgumentInfo,
   compilerLibraryStringConstantValue,
@@ -134,13 +134,13 @@ import {
 import { cUnsupportedExpressionCode, isCoalesceExpression } from './syntax.ts'
 import type {
   CAsyncTaskWrapper,
-  CEmitOptions,
+  CppEmitOptions,
   CFunctionParam,
   CFunctionType,
   CKnownObjectField,
   CKnownObjectIndexField,
-  CModuleEmitOptions,
-  CModuleOutputFile,
+  CppModuleEmitOptions,
+  CppModuleOutputFile,
   CModulePlan,
   CObjectAccessorReturnPath,
   CObjectShape,
@@ -294,7 +294,7 @@ import {
   inferExpressionType as inferExpressionTypeWithDependencies,
   type CExpressionTypeDependencies
 } from './values/types.ts'
-export type { CModuleOutputFile } from './types.ts'
+export type { CppModuleOutputFile } from './types.ts'
 
 type CEmitContext = CEmitContextWithDependencies<
   AsyncTaskLoweringDependencies,
@@ -1005,7 +1005,7 @@ const cModuleEmissionDependencies = {
   stringLoweringDependencies
 }
 
-export function emitCFromIr(ir: IrProgram, options: CEmitOptions = {}): string {
+export function emitCppFromIr(ir: IrProgram, options: CppEmitOptions = {}): string {
   const irPrograms = [ir]
   const entryIrPrograms = [ir]
   const unit = emitCUnit(irPrograms, options, entryIrPrograms, null)
@@ -1013,10 +1013,10 @@ export function emitCFromIr(ir: IrProgram, options: CEmitOptions = {}): string {
   return formatGeneratedC(unit, 'inox.generated.c')
 }
 
-export function emitCBundleFromIrModules(
+export function emitCppBundleFromIrModules(
   irModules: IrModuleRecord[],
   entry: string,
-  options: CEmitOptions = {}
+  options: CppEmitOptions = {}
 ): string {
   const irPrograms = collectIrPrograms(irModules)
   let entryIndex = -1
@@ -1049,19 +1049,19 @@ export function emitCBundleFromIrModules(
   return code
 }
 
-export function emitCModuleFilesFromGraph(graph: ModuleGraph, options: CModuleEmitOptions): CModuleOutputFile[] {
-  const emitters: CModuleFileEmitters = {
+export function emitCppModuleFilesFromGraph(graph: ModuleGraph, options: CppModuleEmitOptions): CppModuleOutputFile[] {
+  const emitters: CppModuleFileEmitters = {
     emitHeader: emitCModuleHeaderForGraph,
     emitSource: emitCModuleSourceForGraph
   }
 
-  return emitCModuleFilesFromGraphWithEmitters(graph, options, emitters)
+  return emitCppModuleFilesFromGraphWithEmitters(graph, options, emitters)
 }
 
 function emitCModuleHeaderForGraph(
   plan: CModulePlan,
   plans: CModulePlan[],
-  emitOptions: CModuleEmitOptions,
+  emitOptions: CppModuleEmitOptions,
   diagnostics: Diagnostic[]
 ): string {
   return emitCModuleHeaderWithDependencies(plan, plans, emitOptions, diagnostics, cModuleEmissionDependencies)
@@ -1070,7 +1070,7 @@ function emitCModuleHeaderForGraph(
 function emitCModuleSourceForGraph(
   plan: CModulePlan,
   plans: CModulePlan[],
-  emitOptions: CModuleEmitOptions,
+  emitOptions: CppModuleEmitOptions,
   diagnostics: Diagnostic[]
 ): string {
   return emitCModuleSourceWithDependencies(plan, plans, emitOptions, diagnostics, cModuleEmissionDependencies)
@@ -1078,7 +1078,7 @@ function emitCModuleSourceForGraph(
 
 function emitCUnit(
   irPrograms: IrProgram[],
-  options: CEmitOptions,
+  options: CppEmitOptions,
   entryIrPrograms: IrProgram[],
   entryPath: string | null
 ): string {

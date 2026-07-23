@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
+import { compileFileToCppModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
@@ -40,7 +40,7 @@ export function metadataKind(node: AnyNode): string {
     ],
     { root: '/' }
   )
-  const files = compileFileToCModuleTextsSync('/pkg/consumer.ts', {
+  const files = compileFileToCppModuleTextsSync('/pkg/consumer.ts', {
     callMain: false,
     host,
     libraries: defaultCompilerLibrarySet,

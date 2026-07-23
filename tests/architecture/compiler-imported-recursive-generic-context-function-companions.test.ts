@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { compileFileToCModulesSync } from '../../compiler/core.ts'
+import { compileFileToCppModulesSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { emitModuleDeclarationContract } from '../../compiler/modules/declarations.ts'
 
@@ -51,7 +51,7 @@ function invoke(context: EmitContext, dependencies: RecursiveDependencies): stri
     ],
     { root: '/' }
   )
-  const providerResult = compileFileToCModulesSync('/pkg/provider.ts', {
+  const providerResult = compileFileToCppModulesSync('/pkg/provider.ts', {
     callMain: false,
     host: providerHost,
     sourceRoot: '/pkg'
@@ -73,7 +73,7 @@ function invoke(context: EmitContext, dependencies: RecursiveDependencies): stri
     ],
     { root: '/' }
   )
-  const facadeResult = compileFileToCModulesSync('/pkg/facade.ts', {
+  const facadeResult = compileFileToCppModulesSync('/pkg/facade.ts', {
     callMain: false,
     declarationImports: [
       { sourcePath: '/pkg/provider.ts', declarationPath: '/pkg/provider.d.ts' },
@@ -96,7 +96,7 @@ function invoke(context: EmitContext, dependencies: RecursiveDependencies): stri
     ],
     { root: '/' }
   )
-  const result = compileFileToCModulesSync('/pkg/index.ts', {
+  const result = compileFileToCppModulesSync('/pkg/index.ts', {
     callMain: false,
     declarationImports: [
       { sourcePath: '/pkg/provider.ts', declarationPath: '/pkg/provider.d.ts' },

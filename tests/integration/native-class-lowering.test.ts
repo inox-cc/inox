@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 
-import { compileFileToCModuleTextsSync, compileSource } from '../../compiler/core.ts'
+import { compileFileToCppModuleTextsSync, compileSource } from '../../compiler/core.ts'
 import { cStringLiteral } from '../../compiler/backends/cpp/identifiers.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
@@ -485,7 +485,7 @@ export function label(): string {
       root: '/'
     }
   )
-  const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
+  const files = compileFileToCppModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
     libraries: defaultCompilerLibrarySet,

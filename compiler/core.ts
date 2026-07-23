@@ -1,12 +1,12 @@
-import { checkCCompileBudgets } from './budgets.ts'
+import { checkCppCompileBudgets } from './budgets.ts'
 import type {
-  CEmitOptions,
-  CModuleEmitOptions,
-  CModuleOutputFile
+  CppEmitOptions,
+  CppModuleEmitOptions,
+  CppModuleOutputFile
 } from './backends/cpp/types.ts'
-import { checkCProfileCapabilities } from './capabilities.ts'
+import { checkCppProfileCapabilities } from './capabilities.ts'
 import { checkProgram } from './checker.ts'
-import { emitCBundleFromIrModules, emitCFromIr, emitCModuleFilesFromGraph } from './codegen-cpp.ts'
+import { emitCppBundleFromIrModules, emitCppFromIr, emitCppModuleFilesFromGraph } from './codegen-cpp.ts'
 import type { CompilerHost } from './host.ts'
 import { resolveCompilerLibrarySet } from './extensions/library-set.ts'
 import { compilerLibraryOptionsFingerprint } from './extensions/library-options.ts'
@@ -34,7 +34,7 @@ import type {
   SourceCompileResult
 } from './types.ts'
 
-export type CModuleCompileOptions = {
+export type CppModuleCompileOptions = {
   target?: CompileTarget
   callMain?: boolean
   budgets?: RuntimeBudgets
@@ -59,7 +59,7 @@ export type MemoryCompileOptions = {
   root?: string
 }
 
-export type MemoryCModuleCompileOptions = {
+export type MemoryCppModuleCompileOptions = {
   target?: CompileTarget
   callMain?: boolean
   budgets?: RuntimeBudgets
@@ -72,13 +72,13 @@ export type MemoryCModuleCompileOptions = {
   sourceRoot?: string
 }
 
-export type CModuleCompileResult = {
+export type CppModuleCompileResult = {
   target: 'cc'
   graph: ModuleGraph
-  files: CModuleOutputFile[]
+  files: CppModuleOutputFile[]
 }
 
-export type CModuleTextFile = {
+export type CppModuleTextFile = {
   path: string
   code: string
 }
@@ -103,7 +103,7 @@ export function compileSource(
 ): SourceCompileResult {
   const compiled = compileSourceToIr(source, options, libraryLiteralTypeInference)
 
-  runCStaticChecks([compiled.ir], options)
+  runCppStaticChecks([compiled.ir], options)
 
   return {
     target: compiled.target,
@@ -147,9 +147,9 @@ export function emitTargetFromIr(target: CompileTarget, ir: IrProgram, options: 
   assertIrLibrarySetFingerprint(ir, options)
 
   if (target === 'cc') {
-    const emitOptions: CEmitOptions = options
+    const emitOptions: CppEmitOptions = options
 
-    return emitCFromIr(ir, emitOptions)
+    return emitCppFromIr(ir, emitOptions)
   }
 
   throw new Error(`Unsupported target ${target}`)
@@ -195,8 +195,8 @@ function emitFileCompileResult(compiled: GraphIrCompileResult, options: CompileO
     irModules.push(module.ir)
   }
 
-  runCStaticChecks(irModules, options)
-  const code = emitCBundleFromIrModules(compiled.irModules, compiled.graph.entry, options)
+  runCppStaticChecks(irModules, options)
+  const code = emitCppBundleFromIrModules(compiled.irModules, compiled.graph.entry, options)
 
   return {
     target: compiled.target,
@@ -206,35 +206,35 @@ function emitFileCompileResult(compiled: GraphIrCompileResult, options: CompileO
   }
 }
 
-export async function compileFileToCModules(
+export async function compileFileToCppModules(
   entry: string,
-  options: CModuleCompileOptions = {},
+  options: CppModuleCompileOptions = {},
   libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
-): Promise<CModuleCompileResult> {
-  return compileFileToCModulesSync(entry, options, libraryLiteralTypeInference)
+): Promise<CppModuleCompileResult> {
+  return compileFileToCppModulesSync(entry, options, libraryLiteralTypeInference)
 }
 
-export function compileFileToCModulesSync(
+export function compileFileToCppModulesSync(
   entry: string,
-  options: CModuleCompileOptions = {},
+  options: CppModuleCompileOptions = {},
   libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
-): CModuleCompileResult {
+): CppModuleCompileResult {
   if (options.host === null || typeof options.host === 'undefined') {
-    throw new Error('compileFileToCModules requires a compiler host')
+    throw new Error('compileFileToCppModules requires a compiler host')
   }
 
-  return compileFileToCModulesWithHostSync(entry, options, options.host, libraryLiteralTypeInference)
+  return compileFileToCppModulesWithHostSync(entry, options, options.host, libraryLiteralTypeInference)
 }
 
-export function compileFileToCModulesWithHostSync(
+export function compileFileToCppModulesWithHostSync(
   entry: string,
-  options: CModuleCompileOptions,
+  options: CppModuleCompileOptions,
   host: CompilerHost,
   libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
-): CModuleCompileResult {
+): CppModuleCompileResult {
   const compiled = compileGraphToIrModulesWithHostSync(
     entry,
-    cModuleOptionsWithHostAndTarget(options, host, 'cc'),
+    cppModuleOptionsWithHostAndTarget(options, host, 'cc'),
     host,
     libraryLiteralTypeInference
   )
@@ -246,9 +246,9 @@ export function compileFileToCModulesWithHostSync(
     irModules.push(module.ir)
   }
 
-  runCStaticChecks(irModules, options)
+  runCppStaticChecks(irModules, options)
 
-  const emitOptions: CModuleEmitOptions = {
+  const emitOptions: CppModuleEmitOptions = {
     callMain: options.callMain,
     host,
     libraries: options.libraries,
@@ -259,31 +259,31 @@ export function compileFileToCModulesWithHostSync(
   return {
     target: 'cc',
     graph: compiled.graph,
-    files: emitCModuleFilesFromGraph(compiled.graph, emitOptions)
+    files: emitCppModuleFilesFromGraph(compiled.graph, emitOptions)
   }
 }
 
-export function compileFileToCModuleTextsSync(
+export function compileFileToCppModuleTextsSync(
   entry: string,
-  options: CModuleCompileOptions = {},
+  options: CppModuleCompileOptions = {},
   libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
-): CModuleTextFile[] {
+): CppModuleTextFile[] {
   if (options.host === null || typeof options.host === 'undefined') {
-    throw new Error('compileFileToCModuleTexts requires a compiler host')
+    throw new Error('compileFileToCppModuleTexts requires a compiler host')
   }
 
-  return compileFileToCModuleTextsWithHostSync(entry, options, options.host, libraryLiteralTypeInference)
+  return compileFileToCppModuleTextsWithHostSync(entry, options, options.host, libraryLiteralTypeInference)
 }
 
-export function compileFileToCModuleTextsWithHostSync(
+export function compileFileToCppModuleTextsWithHostSync(
   entry: string,
-  options: CModuleCompileOptions,
+  options: CppModuleCompileOptions,
   host: CompilerHost,
   libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
-): CModuleTextFile[] {
+): CppModuleTextFile[] {
   const compiled = compileGraphToIrModulesWithHostSync(
     entry,
-    cModuleOptionsWithHostAndTarget(options, host, 'cc'),
+    cppModuleOptionsWithHostAndTarget(options, host, 'cc'),
     host,
     libraryLiteralTypeInference
   )
@@ -295,17 +295,17 @@ export function compileFileToCModuleTextsWithHostSync(
     irModules.push(module.ir)
   }
 
-  runCStaticChecks(irModules, options)
+  runCppStaticChecks(irModules, options)
 
-  const emitOptions: CModuleEmitOptions = {
+  const emitOptions: CppModuleEmitOptions = {
     callMain: options.callMain,
     host,
     libraries: options.libraries,
     libraryOptions: options.libraryOptions,
     sourceRoot: options.sourceRoot
   }
-  const files: CModuleTextFile[] = emitCModuleFilesFromGraph(compiled.graph, emitOptions)
-  const texts: CModuleTextFile[] = []
+  const files: CppModuleTextFile[] = emitCppModuleFilesFromGraph(compiled.graph, emitOptions)
+  const texts: CppModuleTextFile[] = []
 
   for (let fileIndex = 0; fileIndex < files.length; fileIndex = fileIndex + 1) {
     const file = files[fileIndex]
@@ -330,15 +330,15 @@ export async function compileMemoryPackageToIrModules(
   return compileGraphToIrModules(entry, memoryCompileOptions(options, host), libraryLiteralTypeInference)
 }
 
-export async function compileMemoryPackageToCModules(
+export async function compileMemoryPackageToCppModules(
   entry: string,
   files: MemoryCompilerSourceFile[],
-  options: MemoryCModuleCompileOptions = {},
+  options: MemoryCppModuleCompileOptions = {},
   libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
-): Promise<CModuleCompileResult> {
+): Promise<CppModuleCompileResult> {
   const host = createMemoryCompilerHost(files, { root: options.root })
 
-  return compileFileToCModules(entry, memoryCModuleCompileOptions(options, host), libraryLiteralTypeInference)
+  return compileFileToCppModules(entry, memoryCppModuleCompileOptions(options, host), libraryLiteralTypeInference)
 }
 
 export async function compileGraphToIrModules(
@@ -383,13 +383,13 @@ export function compileGraphToIrModulesWithHostSync(
   }
 }
 
-export function runCStaticChecks(irs: IrProgram[], options: CompileOptions = {}): void {
+export function runCppStaticChecks(irs: IrProgram[], options: CompileOptions = {}): void {
   for (let index = 0; index < irs.length; index = index + 1) {
     assertIrLibrarySetFingerprint(irs[index], options)
   }
 
-  checkCProfileCapabilities(irs, options)
-  checkCCompileBudgets(irs, options)
+  checkCppProfileCapabilities(irs, options)
+  checkCppCompileBudgets(irs, options)
 }
 
 function resolveCompileTarget(options: CompileOptions): CompileTarget {
@@ -438,8 +438,8 @@ function compileOptionsWithHostAndTarget(
   }
 }
 
-function cModuleOptionsWithHostAndTarget(
-  options: CModuleCompileOptions,
+function cppModuleOptionsWithHostAndTarget(
+  options: CppModuleCompileOptions,
   host: CompilerHost,
   target: CompileTarget
 ): CompileOptions {
@@ -470,7 +470,7 @@ function memoryCompileOptions(options: MemoryCompileOptions, host: any): Compile
   }
 }
 
-function memoryCModuleCompileOptions(options: MemoryCModuleCompileOptions, host: any): CModuleCompileOptions {
+function memoryCppModuleCompileOptions(options: MemoryCppModuleCompileOptions, host: any): CppModuleCompileOptions {
   const base = memoryCompileOptions(options, host)
 
   return {

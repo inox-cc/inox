@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 
-import { compileFileToCModulesSync } from '../../compiler/core.ts'
+import { compileFileToCppModulesSync } from '../../compiler/core.ts'
 import type { CompilerHost } from '../../compiler/host.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
@@ -30,7 +30,7 @@ function assertDeclarationImportDoesNotReadSourceBody(): void {
   )
   const host = createReadGuardCompilerHost(baseHost, '/pkg/src/lib.ts')
 
-  const result = compileFileToCModulesSync('/pkg/src/index.ts', {
+  const result = compileFileToCppModulesSync('/pkg/src/index.ts', {
     callMain: true,
     declarationImports: [
       {
@@ -71,7 +71,7 @@ console.log(value.b.ok)
     }
   )
 
-  const result = compileFileToCModulesSync('/pkg/src/index.ts', {
+  const result = compileFileToCppModulesSync('/pkg/src/index.ts', {
     callMain: true,
     declarationImports: [
       {
@@ -125,7 +125,7 @@ export type A = {
     }
   )
 
-  const result = compileFileToCModulesSync('/pkg/src/index.ts', {
+  const result = compileFileToCppModulesSync('/pkg/src/index.ts', {
     callMain: false,
     declarationImports: [
       {

@@ -10,7 +10,7 @@ import { emitModuleDeclarationContractResult } from '../../modules/declarations.
 import type { AnyNode, Diagnostic, IrProgram, ModuleGraph, ModuleRecord } from '../../types.ts'
 import { formatGeneratedC } from './format.ts'
 import { emitCFunctionName, emitCIdentifier } from './identifiers.ts'
-import type { CModuleEmitOptions, CModuleImportPlan, CModuleOutputFile, CModulePlan } from './types.ts'
+import type { CppModuleEmitOptions, CModuleImportPlan, CppModuleOutputFile, CModulePlan } from './types.ts'
 import { cOptionalCompilerLibrarySetValue } from './types.ts'
 
 const cModuleSourceExtensions = ['', '.ts', '.js']
@@ -23,24 +23,24 @@ type CModulePathSet = Set<string>
 type NullableCModulePath = string | null
 type NullableCModulePlan = CModulePlan | null
 
-export type CModuleFileEmitters = {
+export type CppModuleFileEmitters = {
   emitHeader(
     plan: CModulePlan,
     plans: CModulePlan[],
-    options: CModuleEmitOptions,
+    options: CppModuleEmitOptions,
     diagnostics: Diagnostic[]
   ): string
-  emitSource(plan: CModulePlan, plans: CModulePlan[], options: CModuleEmitOptions, diagnostics: Diagnostic[]): string
+  emitSource(plan: CModulePlan, plans: CModulePlan[], options: CppModuleEmitOptions, diagnostics: Diagnostic[]): string
 }
 
-export function emitCModuleFilesFromGraph(
+export function emitCppModuleFilesFromGraph(
   graph: ModuleGraph,
-  options: CModuleEmitOptions,
-  emitters: CModuleFileEmitters
-): CModuleOutputFile[] {
+  options: CppModuleEmitOptions,
+  emitters: CppModuleFileEmitters
+): CppModuleOutputFile[] {
   const diagnostics: Diagnostic[] = []
   const plans = createCModulePlans(graph, options, diagnostics)
-  const files: CModuleOutputFile[] = []
+  const files: CppModuleOutputFile[] = []
 
   for (let planIndex = 0; planIndex < plans.length; planIndex = planIndex + 1) {
     const plan = plans[planIndex]
@@ -57,7 +57,7 @@ export function emitCModuleFilesFromGraph(
   return files
 }
 
-function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, diagnostics: Diagnostic[]): CModulePlan[] {
+function createCModulePlans(graph: ModuleGraph, options: CppModuleEmitOptions, diagnostics: Diagnostic[]): CModulePlan[] {
   const modulePaths: CModulePathSet = new Set()
   const modulePathList: string[] = []
   const host = options.host
@@ -290,7 +290,7 @@ function collectCModuleImportDeclarations(record: ModuleRecord): CModuleNode[] {
   return declarations
 }
 
-function cModulePlanIr(record: ModuleRecord, options: CModuleEmitOptions): IrProgram | null {
+function cModulePlanIr(record: ModuleRecord, options: CppModuleEmitOptions): IrProgram | null {
   if (record.ir !== null && typeof record.ir !== 'undefined') {
     return record.ir
   }
@@ -331,7 +331,7 @@ function cModulePlanIr(record: ModuleRecord, options: CModuleEmitOptions): IrPro
   return null
 }
 
-function pushCModuleOutputFiles(target: CModuleOutputFile[], source: CModuleOutputFile[]): void {
+function pushCModuleOutputFiles(target: CppModuleOutputFile[], source: CppModuleOutputFile[]): void {
   for (let index = 0; index < source.length; index = index + 1) {
     target.push(source[index])
   }
@@ -340,11 +340,11 @@ function pushCModuleOutputFiles(target: CModuleOutputFile[], source: CModuleOutp
 function emitCModuleFiles(
   plan: CModulePlan,
   plans: CModulePlan[],
-  options: CModuleEmitOptions,
+  options: CppModuleEmitOptions,
   diagnostics: Diagnostic[],
-  emitters: CModuleFileEmitters
-): CModuleOutputFile[] {
-  const files: CModuleOutputFile[] = []
+  emitters: CppModuleFileEmitters
+): CppModuleOutputFile[] {
+  const files: CppModuleOutputFile[] = []
 
   files.push({
     kind: 'source',

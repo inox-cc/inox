@@ -7,7 +7,7 @@ type RequiredRuntimeBudgets = {
   maxRuntimeRequirements: number
 }
 
-export function checkCCompileBudgets(programs: IrProgram[], options: CompileOptions): void {
+export function checkCppCompileBudgets(programs: IrProgram[], options: CompileOptions): void {
   const budgets = options.budgets
   const diagnostics: Diagnostic[] = []
 
@@ -15,13 +15,13 @@ export function checkCCompileBudgets(programs: IrProgram[], options: CompileOpti
     const features = collectIrFeatureRequirements(programs)
     const runtimeRequirements = collectIrRuntimeRequirements(programs)
 
-    checkRequiredCCompileBudgets(features, runtimeRequirements, budgets as RequiredRuntimeBudgets, diagnostics)
+    checkRequiredCppCompileBudgets(features, runtimeRequirements, budgets as RequiredRuntimeBudgets, diagnostics)
   }
 
   throwDiagnostics(diagnostics)
 }
 
-function checkRequiredCCompileBudgets(
+function checkRequiredCppCompileBudgets(
   features: IrFeature[],
   runtimeRequirements: IrRuntimeRequirement[],
   budgetLimits: RequiredRuntimeBudgets,
@@ -34,7 +34,7 @@ function checkRequiredCCompileBudgets(
     diagnostics.push(
       diagnostic(
         'INOX_BUDGET',
-        `C target uses ${features.length} IR features (${features.join(', ')}), exceeding maxFeatures budget ${maxFeatures}`
+        `C++ target uses ${features.length} IR features (${features.join(', ')}), exceeding maxFeatures budget ${maxFeatures}`
       )
     )
   }
@@ -43,7 +43,7 @@ function checkRequiredCCompileBudgets(
     diagnostics.push(
       diagnostic(
         'INOX_BUDGET',
-        `C target uses ${runtimeRequirements.length} runtime requirements (${runtimeRequirements.join(', ')}), exceeding maxRuntimeRequirements budget ${maxRuntimeRequirements}`
+        `C++ target uses ${runtimeRequirements.length} runtime requirements (${runtimeRequirements.join(', ')}), exceeding maxRuntimeRequirements budget ${maxRuntimeRequirements}`
       )
     )
   }

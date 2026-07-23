@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 
-import { compileFileToCModulesSync } from '../../compiler/core.ts'
+import { compileFileToCppModulesSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
@@ -53,7 +53,7 @@ function readValue(context: LocalContext): string | null {
   )
 
   assert.doesNotThrow(() =>
-    compileFileToCModulesSync('/pkg/src/index.ts', {
+    compileFileToCppModulesSync('/pkg/src/index.ts', {
       callMain: true,
       declarationImports: [
         {
@@ -97,7 +97,7 @@ function assertModuleDeclarationImportSkipsExternalEmission(): void {
     }
   )
 
-  const result = compileFileToCModulesSync('/pkg/src/index.ts', {
+  const result = compileFileToCppModulesSync('/pkg/src/index.ts', {
     callMain: true,
     declarationImports: [
       {
@@ -147,7 +147,7 @@ console.log(useContext(context))
     }
   )
 
-  const result = compileFileToCModulesSync('/pkg/src/index.ts', {
+  const result = compileFileToCppModulesSync('/pkg/src/index.ts', {
     callMain: true,
     declarationImports: [
       {
@@ -194,7 +194,7 @@ console.log(user.name)
     }
   )
 
-  const result = compileFileToCModulesSync('/pkg/src/index.ts', {
+  const result = compileFileToCppModulesSync('/pkg/src/index.ts', {
     callMain: true,
     declarationImports: [
       {
@@ -237,7 +237,7 @@ console.log(formatUser({
     }
   )
 
-  const result = compileFileToCModulesSync('/pkg/src/index.ts', {
+  const result = compileFileToCppModulesSync('/pkg/src/index.ts', {
     callMain: true,
     declarationImports: [
       {
@@ -286,7 +286,7 @@ console.log(user.name)
     }
   )
 
-  const result = compileFileToCModulesSync('/pkg/src/index.ts', {
+  const result = compileFileToCppModulesSync('/pkg/src/index.ts', {
     callMain: true,
     declarationImports: [
       {
@@ -347,7 +347,7 @@ function assertModuleDeclarationFunctionEffectsPath(): void {
     }
   )
 
-  const result = compileFileToCModulesSync('/pkg/src/index.ts', {
+  const result = compileFileToCppModulesSync('/pkg/src/index.ts', {
     callMain: true,
     declarationImports: [
       {
@@ -383,7 +383,7 @@ function assertModuleDeclarationUnsupportedReexportDiagnostic(): void {
 
   assert.throws(
     () =>
-      compileFileToCModulesSync('/pkg/src/index.ts', {
+      compileFileToCppModulesSync('/pkg/src/index.ts', {
         callMain: true,
         declarationImports: [
           {
@@ -422,7 +422,7 @@ function assertModuleDeclarationTypeReexport(): void {
     }
   )
 
-  const result = compileFileToCModulesSync('/pkg/src/facade.ts', {
+  const result = compileFileToCppModulesSync('/pkg/src/facade.ts', {
     callMain: false,
     host,
     libraries: defaultCompilerLibrarySet,

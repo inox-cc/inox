@@ -1,13 +1,13 @@
-import type { CModuleCompileOptions, CModuleCompileResult, CModuleTextFile, GraphIrCompileResult } from './core.ts'
+import type { CppModuleCompileOptions, CppModuleCompileResult, CppModuleTextFile, GraphIrCompileResult } from './core.ts'
 import {
   compileFile as compileFileCore,
   compileFileSync as compileFileSyncCore,
   compileFileWithHostSync as compileFileWithHostSyncCore,
-  compileFileToCModuleTextsSync as compileFileToCModuleTextsSyncCore,
-  compileFileToCModuleTextsWithHostSync as compileFileToCModuleTextsWithHostSyncCore,
-  compileFileToCModules as compileFileToCModulesCore,
-  compileFileToCModulesSync as compileFileToCModulesSyncCore,
-  compileFileToCModulesWithHostSync as compileFileToCModulesWithHostSyncCore,
+  compileFileToCppModuleTextsSync as compileFileToCppModuleTextsSyncCore,
+  compileFileToCppModuleTextsWithHostSync as compileFileToCppModuleTextsWithHostSyncCore,
+  compileFileToCppModules as compileFileToCppModulesCore,
+  compileFileToCppModulesSync as compileFileToCppModulesSyncCore,
+  compileFileToCppModulesWithHostSync as compileFileToCppModulesWithHostSyncCore,
   compileGraphToIrModules as compileGraphToIrModulesCore,
   compileGraphToIrModulesSync as compileGraphToIrModulesSyncCore,
   compileGraphToIrModulesWithHostSync as compileGraphToIrModulesWithHostSyncCore
@@ -34,20 +34,20 @@ import type { CompileOptions, FileCompileResult } from './types.ts'
 import type { CompilerLibraryLiteralTypeInference } from './extensions/types.ts'
 
 export {
-  compileMemoryPackageToCModules,
+  compileMemoryPackageToCppModules,
   compileMemoryPackageToIrModules,
   compileSource,
   compileSourceToIr,
   emitTargetFromIr,
-  runCStaticChecks
+  runCppStaticChecks
 } from './core.ts'
 
 export type {
-  CModuleCompileOptions,
-  CModuleCompileResult,
-  CModuleTextFile,
+  CppModuleCompileOptions,
+  CppModuleCompileResult,
+  CppModuleTextFile,
   GraphIrCompileResult,
-  MemoryCModuleCompileOptions,
+  MemoryCppModuleCompileOptions,
   MemoryCompileOptions,
   SourceIrCompileResult
 } from './core.ts'
@@ -96,24 +96,24 @@ export function compileFileSync(
   )
 }
 
-export async function compileFileToCModules(
+export async function compileFileToCppModules(
   entry: string,
-  options: CModuleCompileOptions = {},
+  options: CppModuleCompileOptions = {},
   libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
-): Promise<CModuleCompileResult> {
-  return compileFileToCModulesCore(entry, cModuleOptionsWithNodeHost(options), libraryLiteralTypeInference)
+): Promise<CppModuleCompileResult> {
+  return compileFileToCppModulesCore(entry, cppModuleOptionsWithNodeHost(options), libraryLiteralTypeInference)
 }
 
-export function compileFileToCModulesSync(
+export function compileFileToCppModulesSync(
   entry: string,
-  options: CModuleCompileOptions = {},
+  options: CppModuleCompileOptions = {},
   libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
-): CModuleCompileResult {
+): CppModuleCompileResult {
   if (options.host !== null && typeof options.host !== 'undefined') {
-    return compileFileToCModulesSyncCore(entry, options, libraryLiteralTypeInference)
+    return compileFileToCppModulesSyncCore(entry, options, libraryLiteralTypeInference)
   }
 
-  return compileFileToCModulesWithHostSyncCore(
+  return compileFileToCppModulesWithHostSyncCore(
     entry,
     options,
     {
@@ -140,16 +140,16 @@ export function compileFileToCModulesSync(
   )
 }
 
-export function compileFileToCModuleTextsSync(
+export function compileFileToCppModuleTextsSync(
   entry: string,
-  options: CModuleCompileOptions = {},
+  options: CppModuleCompileOptions = {},
   libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null = null
-): CModuleTextFile[] {
+): CppModuleTextFile[] {
   if (options.host !== null && typeof options.host !== 'undefined') {
-    return compileFileToCModuleTextsSyncCore(entry, options, libraryLiteralTypeInference)
+    return compileFileToCppModuleTextsSyncCore(entry, options, libraryLiteralTypeInference)
   }
 
-  return compileFileToCModuleTextsWithHostSyncCore(
+  return compileFileToCppModuleTextsWithHostSyncCore(
     entry,
     options,
     {
@@ -236,7 +236,7 @@ function compileOptionsWithNodeHost(options: CompileOptions): CompileOptions {
   }
 }
 
-function cModuleOptionsWithNodeHost(options: CModuleCompileOptions): CModuleCompileOptions {
+function cppModuleOptionsWithNodeHost(options: CppModuleCompileOptions): CppModuleCompileOptions {
   if (options.host !== null && typeof options.host !== 'undefined') {
     return {
       target: options.target,

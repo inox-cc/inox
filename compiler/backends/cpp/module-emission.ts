@@ -98,7 +98,7 @@ import type {
   CFunctionParam,
   CFunctionPointerAdapter,
   CFunctionType,
-  CModuleEmitOptions,
+  CppModuleEmitOptions,
   CModuleImportPlan,
   CModulePlan,
   CObjectShape,
@@ -415,7 +415,7 @@ export type CModuleEmissionDependencies = {
 export function emitCModuleSource(
   plan: CModulePlan,
   plans: CModulePlan[],
-  options: CModuleEmitOptions,
+  options: CppModuleEmitOptions,
   diagnostics: Diagnostic[],
   deps: CModuleEmissionDependencies
 ): string {
@@ -772,7 +772,7 @@ function cModuleIdentifierChar(value: string): boolean {
 export function emitCModuleHeader(
   plan: CModulePlan,
   _plans: CModulePlan[],
-  options: CModuleEmitOptions,
+  options: CppModuleEmitOptions,
   diagnostics: Diagnostic[],
   deps: CModuleEmissionDependencies
 ): string {
@@ -982,7 +982,7 @@ function collectCModuleHeaderIncludeLines(
   libraries: CCompilerLibrarySet | null | undefined,
   deps: CModuleEmissionDependencies,
   declarationLines: string[],
-  host: CModuleEmitOptions['host']
+  host: CppModuleEmitOptions['host']
 ): string[] {
   const runtimeRequirements: Set<IrRuntimeRequirement> = new Set()
   const includes: string[] = []

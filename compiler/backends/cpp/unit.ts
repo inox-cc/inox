@@ -84,7 +84,7 @@ import { cObjectShapeFromMetadata, cTypeRefMapValue } from './types.ts'
 import type {
   CClassMethod,
   CCompilerLibrarySet,
-  CEmitOptions,
+  CppEmitOptions,
   CFunctionType,
   CFunctionPointerAdapter,
   CFunctionParam,
@@ -1436,7 +1436,7 @@ function stringSetFromArray(values: string[]): Set<string> {
 
 export function emitCUnit(
   irPrograms: IrProgram[],
-  options: CEmitOptions,
+  options: CppEmitOptions,
   entryIrPrograms: IrProgram[],
   entryPath: string | null,
   deps: CUnitDependencies
