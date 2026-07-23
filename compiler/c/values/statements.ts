@@ -2673,7 +2673,8 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
       popStringTarget(context.returnTargets)
     }
 
-    lines.push(`  } ${catchLabel}: {`)
+    lines.push('  }')
+    lines.push(`  ${catchLabel}: {`)
     if (statement.handler.param === null || typeof statement.handler.param === 'undefined') {
       lines.push('    inox::take_exception();')
     } else if (catchNeedsStringBinding) {
@@ -2789,13 +2790,6 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
 }
 
 function pushEndLabel(lines: string[], endLabel: string): void {
-  const previousLineIndex = lines.length - 1
-
-  if (previousLineIndex >= 0 && lines[previousLineIndex].trim() === '}') {
-    lines[previousLineIndex] = `${lines[previousLineIndex]} ${endLabel}:;`
-    return
-  }
-
   lines.push(`${endLabel}:;`)
 }
 
