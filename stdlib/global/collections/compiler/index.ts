@@ -117,11 +117,14 @@ const arrayOperations: LibraryOperationDescriptor[] = [
   arrayStaticCall('from', 'Array::from', arrayTypeRef(primitiveTypeRef('string')), ['string-view'], [
     { valueTypes: ['string'] }
   ]),
-  arrayStaticCall('isArray', 'Array::isArray', booleanTypeRef, ['runtime-value'], [], 1, 1, {
-    argumentIndex: 0,
-    trueTypeRef: arrayTypeRef(unknownTypeRef),
-    trueNonNullable: true
-  }),
+  {
+    ...arrayStaticCall('isArray', 'Array::isArray', booleanTypeRef, ['runtime-value'], [], 1, 1, {
+      argumentIndex: 0,
+      trueTypeRef: arrayTypeRef(unknownTypeRef),
+      trueNonNullable: true
+    }),
+    cFailureMode: null
+  },
   arrayMemberRead('length', numberTypeRef, 'static_cast<double>($value)'),
   arrayReceiverCall('includes', booleanTypeRef, ['runtime-value'], [{ valueTypes: [], typeRef: parameterTypeRef }]),
   arrayReceiverCall(
