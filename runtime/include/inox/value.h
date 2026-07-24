@@ -108,6 +108,7 @@ static inline bool inox_is_ref_value(inox_value value) {
 }
 
 bool inox_value_truthy(inox_value value);
+inox_number inox_nullable_number_value(inox_value value);
 
 static inline void inox_ref_init_weak(inox_ref* ref) {
 #ifdef INOX_ENABLE_WEAK

@@ -1,3 +1,5 @@
+#include <math.h>
+
 #ifdef INOX_DEBUG_MEMORY
 #include "inox/debug_bridge.h"
 #endif
@@ -25,6 +27,18 @@ bool inox_value_truthy(inox_value value) {
   }
 
   return value.as.ref != 0;
+}
+
+inox_number inox_nullable_number_value(inox_value value) {
+  if (value.tag == INOX_TAG_NUMBER) {
+    return value.as.number;
+  }
+
+  if (value.tag == INOX_TAG_NULL) {
+    return 0;
+  }
+
+  return NAN;
 }
 
 void inox_retain(inox_value value) {

@@ -22,7 +22,6 @@ const nominalResultIds = [
 const numberResultIds = [
   'node:buffer#constants.MAX_LENGTH',
   'node:buffer#Buffer#read:length',
-  'node:buffer#Buffer#index-read',
   'node:buffer#Buffer#index-write'
 ]
 
@@ -39,6 +38,8 @@ test('node:buffer operations describe results only through TypeRef', async () =>
   for (const operation of operations) {
     if (nominalResultIds.includes(operation.operationId)) {
       assert.deepEqual(operation.resultTypeRef, nominalBufferTypeRef())
+    } else if (operation.operationId === 'node:buffer#Buffer#index-read') {
+      assert.deepEqual(operation.resultTypeRef, nullablePrimitiveTypeRef('number'))
     } else if (numberResultIds.includes(operation.operationId)) {
       assert.deepEqual(operation.resultTypeRef, primitiveTypeRef('number'))
     } else if (operation.operationId === 'node:buffer#Buffer.isBuffer') {
@@ -80,5 +81,12 @@ function primitiveTypeRef(name: 'boolean' | 'number' | 'string') {
     nullable: false,
     ownership: 'value',
     traits: []
+  }
+}
+
+function nullablePrimitiveTypeRef(name: 'boolean' | 'number' | 'string') {
+  return {
+    ...primitiveTypeRef(name),
+    nullable: true
   }
 }

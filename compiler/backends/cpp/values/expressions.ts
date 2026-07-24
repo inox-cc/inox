@@ -2756,6 +2756,25 @@ export function emitPreparedNumberExpression(
   const libraryCall = deps.emitPreparedCompilerLibraryCallExpression(expression, context)
 
   if (libraryCall !== null && libraryCall.expression !== '') {
+    if (
+      expression.nullable === true &&
+      deps.inferExpressionType(expression, context) === 'number' &&
+      (libraryCall.cppType === 'inox::Value' || libraryCall.cppType === 'inox_value')
+    ) {
+      const value = nextCName(context, 'inox_nullable_scalar')
+      const lines: string[] = []
+
+      appendLines(lines, libraryCall.lines)
+      lines.push(`auto ${value} = ${libraryCall.expression};`)
+
+      return {
+        lines,
+        expression: `inox_nullable_number_value(${libraryCall.cppType === 'inox::Value' ? `${value}.raw()` : value})`,
+        scalarType: 'double',
+        valueType: 'number'
+      }
+    }
+
     return libraryCall
   }
 
