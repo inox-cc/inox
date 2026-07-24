@@ -50,6 +50,7 @@ type CompilerLibraryExpressionNode = AnyNode & {
   libraryCResultShapeFields?: string[] | null
   libraryCCallStyle?: string | null
   libraryCFailureMode?: string | null
+  libraryCPreservesPendingException?: boolean | null
   libraryCResultMode?: string | null
   libraryCReceiverAdapter?: string | null
   libraryCResultAdapter?: string | null
@@ -77,6 +78,11 @@ export type CompilerLibraryLoweringDependencies = {
   ): PreparedExpression | null
   emitPreparedClassMethodCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNumberExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitPreparedRuntimeValueArgumentExpression(
+    expression: AnyNode,
+    context: CFunctionContext,
+    preservePendingException: boolean
+  ): PreparedExpression
   emitPreparedStringBytesOperand(
     expression: AnyNode,
     context: CFunctionContext,
@@ -569,7 +575,11 @@ export function emitPreparedCompilerLibraryCallExpression(
       }
 
       if (prepared === null) {
-        prepared = dependencies.emitCValueExpression(sourceArgument, context)
+        prepared = dependencies.emitPreparedRuntimeValueArgumentExpression(
+          sourceArgument,
+          context,
+          item.libraryCFailureMode === 'thrown' && item.libraryCPreservesPendingException === true
+        )
         const classInstance = dependencies.emitPreparedClassInstanceRefValueExpression(prepared, context)
 
         if (classInstance !== null) {

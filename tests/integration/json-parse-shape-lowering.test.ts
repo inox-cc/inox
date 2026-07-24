@@ -43,10 +43,14 @@ console.log(Object.entries(foo.v)[0][0])
 
   assert.match(source, /auto foo = JSON\.parse\("\{\\"v\\":\[\{\\"1\\":2\},\{\\"3\\":4,\\"5\\":\\"text\\"\}\]\}"\);/)
   assert.match(source, /if \(inox::thrown\(\)\) return;/)
-  assert.match(source, /auto inox_value_\d+ = inox::get\(foo, "v"\);/)
-  assert.match(source, /auto inox_library_object_\d+ = Object\.entries\(Array\(inox_value_\d+\)\);/)
+  assert.match(
+    source,
+    /auto inox_library_object_\d+ = Object\.entries\(inox::get\(foo, "v"\)\);\n  if \(inox::thrown\(\)\) return;/
+  )
   assert.match(source, /auto inox_library_object_\d+ = inox_library_object_\d+\.get\(0\);/)
   assert.match(source, /auto inox_library_result_\d+ = Array\(inox_library_object_\d+\)\.get\(0\);/)
+  assert.doesNotMatch(source, /auto inox_value_\d+ = inox::get\(foo, "v"\);/)
+  assert.doesNotMatch(source, /Object\.entries\(Array\(inox_value_\d+\)\)/)
   assert.doesNotMatch(source, /inox_json_value_\d+ = inox_undefined_value\(\);\n\s+if \(\n\s+inox_json_parse/)
   assert.doesNotMatch(source, /JSON\.parse\(inox::StringView\("[^"]+", \d+\), foo\)/)
   assert.doesNotMatch(source, /inox_field_status_\d+ = inox_object_get\(foo, "v", 1,/)
@@ -137,10 +141,14 @@ export async function assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariable
       /auto foo = JSON\.parse\("\{\\"v\\":\[\{\\"1\\":2\},\{\\"3\\":4,\\"5\\":\\"блаблабла\\"\}\]\}"\);/
     )
     assert.match(source, /if \(inox::thrown\(\)\) goto cleanup;/)
-    assert.match(source, /auto inox_value_\d+ = inox::get\(foo, "v"\);/)
-    assert.match(source, /auto inox_library_object_\d+ = Object\.entries\(Array\(inox_value_\d+\)\);/)
+    assert.match(
+      source,
+      /auto inox_library_object_\d+ = Object\.entries\(inox::get\(foo, "v"\)\);\n    if \(inox::thrown\(\)\) goto cleanup;/
+    )
     assert.match(source, /auto inox_library_object_\d+ = inox_library_object_\d+\.get\(0\);/)
     assert.match(source, /auto inox_library_result_\d+ = Array\(inox_library_object_\d+\)\.get\(0\);/)
+    assert.doesNotMatch(source, /auto inox_value_\d+ = inox::get\(foo, "v"\);/)
+    assert.doesNotMatch(source, /Object\.entries\(Array\(inox_value_\d+\)\)/)
     assert.doesNotMatch(source, /inox::object_entry_at/)
     assert.doesNotMatch(source, /inox_json_value_\d+ = inox_undefined_value\(\);\n\s+if \(\n\s+inox_json_parse/)
     assert.doesNotMatch(source, /JSON\.parse\(inox::StringView\("[^"]+", \d+\), foo\)/)

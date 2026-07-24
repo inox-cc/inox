@@ -1947,6 +1947,8 @@ function compilerLibrarySetFingerprint(
           ':' +
           (item.cFailureMode ?? '') +
           ':' +
+          (item.cPreservesPendingException === true ? 'preserves-pending-exception' : '') +
+          ':' +
           (item.minArgs ?? '') +
           ':' +
           (item.maxArgs ?? '') +

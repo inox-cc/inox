@@ -967,6 +967,64 @@ export function emitPreparedObjectExpressionIndexValueExpression(
   return null
 }
 
+export function emitPreparedObjectFieldRuntimeValueExpression(
+  expression: AnyNode,
+  context: ObjectFunctionContext,
+  dependencies: ObjectExpressionFieldDependencies
+): PreparedExpression | null {
+  if (
+    expression.type === 'OptionalMemberExpression' ||
+    expression.type === 'OptionalIndexExpression' ||
+    isOptionalChainContinuationReceiver(expression.object)
+  ) {
+    return null
+  }
+
+  if (isMemberAccessExpression(expression)) {
+    const knownMember = resolveKnownObjectMember(expression, context)
+
+    if (knownMember !== null && typeof knownMember !== 'undefined') {
+      return emitPreparedKnownObjectFieldRuntimeValueExpression(
+        knownMember,
+        knownMember.key ?? expression.property,
+        context
+      )
+    }
+
+    const objectMember = resolveObjectExpressionMember(expression)
+
+    if (objectMember !== null && typeof objectMember !== 'undefined') {
+      return emitPreparedObjectExpressionFieldRuntimeValueExpression(
+        objectMember,
+        expression.object,
+        context,
+        dependencies
+      )
+    }
+  }
+
+  if (isIndexAccessExpression(expression)) {
+    const knownField = resolveKnownObjectIndex(expression, context)
+
+    if (knownField !== null && typeof knownField !== 'undefined') {
+      return emitPreparedKnownObjectFieldRuntimeValueExpression(knownField, knownField.key, context)
+    }
+
+    const objectField = resolveObjectExpressionIndex(expression)
+
+    if (objectField !== null && typeof objectField !== 'undefined') {
+      return emitPreparedObjectExpressionFieldRuntimeValueExpression(
+        objectField,
+        expression.object,
+        context,
+        dependencies
+      )
+    }
+  }
+
+  return null
+}
+
 export function emitPreparedDynamicObjectMemberValueExpression(
   expression: ObjectFieldNode,
   context: ObjectFunctionContext,
@@ -1166,6 +1224,26 @@ function emitPreparedKnownObjectFieldValueExpression(
   return preparedObjectFieldReadValue(field, temp, lines)
 }
 
+function emitPreparedKnownObjectFieldRuntimeValueExpression(
+  field: CKnownObjectField,
+  key: string,
+  context: ObjectFunctionContext
+): PreparedExpression | null {
+  if (!isManagedObjectFieldValueType(field.valueType)) {
+    return null
+  }
+
+  const object = emitObjectValueReference(field.objectName, context)
+
+  return {
+    lines: [],
+    expression: `inox::get(${object}, ${cStringLiteral(key)})`,
+    cppType: 'inox::Value',
+    nullable: objectFieldValueMayBeNullish(field),
+    valueType: field.valueType
+  }
+}
+
 function emitPreparedObjectExpressionFieldValueExpression(
   field: CObjectFieldInfo,
   expression: AnyNode,
@@ -1215,6 +1293,32 @@ function emitPreparedObjectExpressionFieldValueExpression(
   }
 
   return preparedObjectFieldReadValue(field, temp, lines)
+}
+
+function emitPreparedObjectExpressionFieldRuntimeValueExpression(
+  field: CObjectFieldInfo,
+  objectExpression: AnyNode,
+  context: ObjectFunctionContext,
+  dependencies: ObjectExpressionFieldDependencies
+): PreparedExpression | null {
+  if (
+    !isManagedObjectFieldValueType(field.valueType) ||
+    field.key === null ||
+    typeof field.key === 'undefined' ||
+    isOptionalChainContinuationReceiver(objectExpression)
+  ) {
+    return null
+  }
+
+  const object = dependencies.emitCValueExpression(objectExpression, context)
+
+  return {
+    lines: object.lines,
+    expression: `inox::get(${object.expression}, ${cStringLiteral(field.key)})`,
+    cppType: 'inox::Value',
+    nullable: objectFieldValueMayBeNullish(field),
+    valueType: field.valueType
+  }
 }
 
 function preparedObjectFieldReadValue(

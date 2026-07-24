@@ -5241,6 +5241,7 @@ class Checker {
     expression.libraryReceiverTypeId = operation.receiverTypeId ?? null
     expression.libraryCCallStyle = operation.cCallStyle ?? null
     expression.libraryCFailureMode = operation.cFailureMode ?? null
+    expression.libraryCPreservesPendingException = operation.cPreservesPendingException === true
   }
 
   compilerLibraryDefaultReceiverAdapter(operation: LibraryOperationDescriptor): string | null {

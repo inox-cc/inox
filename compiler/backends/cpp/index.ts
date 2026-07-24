@@ -231,6 +231,7 @@ import {
   emitObjectVariableDeclaration,
   emitPreparedDynamicObjectIndexValueExpression,
   emitPreparedDynamicObjectMemberValueExpression,
+  emitPreparedObjectFieldRuntimeValueExpression,
   emitPreparedKnownObjectIndexValueExpression,
   emitPreparedKnownObjectMemberValueExpression,
   emitPreparedObjectExpressionIndexValueExpression,
@@ -588,6 +589,7 @@ function emitPreparedIntrinsicStringConversionExpression(
     libraryCArgumentSources: variant?.cArgumentSources ?? operation.cArgumentSources,
     libraryCCallStyle: operation.cCallStyle,
     libraryCFailureMode: operation.cFailureMode,
+    libraryCPreservesPendingException: operation.cPreservesPendingException === true,
     libraryCReceiverAdapter: variant?.cReceiverAdapter ?? operation.cReceiverAdapter,
     libraryCResultAdapter: variant?.cResultAdapter ?? operation.cResultAdapter,
     libraryCResultMode: variant?.cResultMode ?? operation.cResultMode,
@@ -618,6 +620,7 @@ compilerLibraryLoweringDependencies = {
   emitPreparedClassMethodCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedClassMethodCallExpression(expression, context, {}),
   emitPreparedNumberExpression,
+  emitPreparedRuntimeValueArgumentExpression,
   emitPreparedStringBytesOperand,
   emitRuntimeCallbackValue,
   emitThrownCheckLines,
@@ -4200,6 +4203,22 @@ function emitObjectFieldValueExpression(
 
 function emitCValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   return emitCValueExpressionWithDependencies(expression, context, cValueExpressionDependencies)
+}
+
+function emitPreparedRuntimeValueArgumentExpression(
+  expression: AnyNode,
+  context: CFunctionContext,
+  preservePendingException: boolean
+): PreparedExpression {
+  if (preservePendingException && (isMemberAccessExpression(expression) || isIndexAccessExpression(expression))) {
+    const value = emitPreparedObjectFieldRuntimeValueExpression(expression, context, objectExpressionFieldDependencies)
+
+    if (value !== null) {
+      return value
+    }
+  }
+
+  return emitCValueExpression(expression, context)
 }
 
 function emitNullableScalarValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {

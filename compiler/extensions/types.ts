@@ -439,6 +439,7 @@ export type LibraryOperationDescriptor = {
   receiverTypeId?: LibraryObjectTypeId | null
   cCallStyle?: 'function' | 'member' | 'index' | 'index-assignment' | 'member-assignment' | null
   cFailureMode?: 'thrown' | 'invalid-result' | null
+  cPreservesPendingException?: boolean
   minArgs?: number | null
   maxArgs?: number | null
   argumentChecks?: LibraryArgumentCheckDescriptor[]

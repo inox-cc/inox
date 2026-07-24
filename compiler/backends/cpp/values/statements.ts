@@ -3423,6 +3423,7 @@ function materializeSynthesizedCompilerLibraryIndexOperation(
     operation.resultTypeRef?.kind !== 'parameter' && operation.resultTypeRef?.ownership === 'owned'
   expression.libraryCCallStyle = operation.cCallStyle ?? null
   expression.libraryCFailureMode = operation.cFailureMode ?? null
+  expression.libraryCPreservesPendingException = operation.cPreservesPendingException === true
 }
 
 function defaultLibraryReceiverAdapter(typeId: string, context: CFunctionContext): string | null {

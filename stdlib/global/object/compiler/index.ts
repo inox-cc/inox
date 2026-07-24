@@ -58,6 +58,7 @@ function objectOperation(name: string, resultTypeRef: TypeRef): LibraryOperation
     cExpression: `Object.${name}`,
     cArgumentKinds: ['runtime-value'],
     cFailureMode: 'thrown',
+    cPreservesPendingException: true,
     cResultMode: 'value',
     resultTypeRef,
     minArgs: 1,

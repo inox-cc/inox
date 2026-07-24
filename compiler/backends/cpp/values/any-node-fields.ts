@@ -69,6 +69,7 @@ export const compilerAnyNodeBooleanFields: readonly string[] = [
   'readonlyField',
   'resolved',
   'libraryOwned',
+  'libraryCPreservesPendingException',
   'returnNullable',
   'spread',
   'static',
