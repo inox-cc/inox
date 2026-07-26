@@ -2049,9 +2049,12 @@ ArrayIterator Array::values() const {
   return ArrayIterator(*this);
 }
 
-ArrayIterator::ArrayIterator() : owner_(), index_(0) {}
+ArrayIterator::ArrayIterator() : owner_(), index_(0), is_end_(false) {}
 
-ArrayIterator::ArrayIterator(const Array& value) : owner_(value), index_(0) {}
+ArrayIterator::ArrayIterator(const Array& value) : owner_(value), index_(0), is_end_(false) {}
+
+ArrayIterator::ArrayIterator(const Array& value, size_t index, bool is_end)
+    : owner_(value), index_(index), is_end_(is_end) {}
 
 ArrayIterationResult ArrayIterator::next() {
   Array value(owner_);
@@ -2066,4 +2069,39 @@ ArrayIterationResult ArrayIterator::next() {
   }
 
   return { false, inox::Value(instance->items[index_++]) };
+}
+
+ArrayIterator ArrayIterator::begin() const {
+  return *this;
+}
+
+ArrayIterator ArrayIterator::end() const {
+  Array value(owner_);
+  return ArrayIterator(value, 0, true);
+}
+
+inox::Value ArrayIterator::operator*() const {
+  Array value(owner_);
+  ArrayStorage* instance = array_data(value);
+
+  if (instance == 0 || index_ >= instance->length) {
+    inox::fatal("Array iterator dereference invariant failed");
+  }
+
+  return inox::Value(instance->items[index_]);
+}
+
+ArrayIterator& ArrayIterator::operator++() {
+  index_ += 1;
+  return *this;
+}
+
+bool ArrayIterator::operator!=(const ArrayIterator& other) const {
+  if (other.is_end_) {
+    Array value(owner_);
+    ArrayStorage* instance = array_data(value);
+    return instance != 0 && index_ < instance->length;
+  }
+
+  return is_end_ != other.is_end_ || index_ != other.index_;
 }

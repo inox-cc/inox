@@ -30,6 +30,9 @@ console.log(new Values([1, 2]).sum())
     { libraries: defaultCompilerLibrarySet, target: 'cc' }
   )
 
-  assert.match(result.code, /auto inox_library_iterator_\d+ = this->items\.values\(\);/)
+  assert.match(
+    result.code,
+    /auto (inox_library_range_\d+) = this->items\.values\(\);[\s\S]*for \(auto inox_library_value_\d+ : \1\) \{/
+  )
   assert.doesNotMatch(result.code, /inox::get\(inox_this, "items"\)/)
 })

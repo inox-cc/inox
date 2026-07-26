@@ -130,6 +130,7 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
         libraryCIteratorReceiverAdapter: nullableString(statement.libraryCIteratorReceiverAdapter),
         libraryCIteratorValueAdapter: nullableString(statement.libraryCIteratorValueAdapter),
         libraryCIteratorManagedValue: statement.libraryCIteratorManagedValue === true,
+        libraryCIteratorRangeBased: statement.libraryCIteratorRangeBased === true,
         libraryCIteratorPreservesPendingException: statement.libraryCIteratorPreservesPendingException === true,
         libraryCIteratorCreationFailureMode: nullableString(statement.libraryCIteratorCreationFailureMode),
         libraryCIteratorNextFailureMode: nullableString(statement.libraryCIteratorNextFailureMode),

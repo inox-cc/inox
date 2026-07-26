@@ -337,6 +337,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
         valueMember: 'value',
         receiverAdapter: 'Array($value)',
         managedValue: true,
+        rangeBased: true,
         preservesPendingException: true,
         creationFailureMode: 'thrown'
       }

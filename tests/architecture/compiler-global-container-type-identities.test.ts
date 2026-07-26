@@ -61,6 +61,7 @@ test('Array, Set и Promise принадлежат discoverable global packages 
         valueMember: 'value',
         receiverAdapter: 'Array($value)',
         managedValue: true,
+        rangeBased: true,
         preservesPendingException: true,
         creationFailureMode: 'thrown'
       }

@@ -143,6 +143,7 @@ export type LibraryNativeIterationDescriptor = {
   receiverAdapter?: string | null
   valueAdapter?: string | null
   managedValue?: boolean
+  rangeBased?: boolean
   preservesPendingException?: boolean
   creationFailureMode?: 'thrown' | null
   nextFailureMode?: 'thrown' | null

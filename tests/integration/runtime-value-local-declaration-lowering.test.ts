@@ -56,13 +56,10 @@ for (const a of foo.v) {
   assert.doesNotMatch(source, /\n  inox::Value e;/)
   assert.doesNotMatch(source, /inox::Value foo;\n\s+foo = inox_undefined_value\(\);/)
   assert.doesNotMatch(source, /JSON\.parse\(inox::StringView\("[^"]+", \d+\), foo\)/)
-  assert.match(source, /auto inox_library_iterator_\d+ = Array\(inox::get\(foo, "v"\)\)\.values\(\);/)
-  assert.match(source, /while \(true\) \{/)
   assert.match(
     source,
-    /auto (inox_library_step_\d+) = inox_library_iterator_\d+\.next\(\);\n    if \(\1\.done\) break;/
+    /auto (inox_library_range_\d+) = Array\(inox::get\(foo, "v"\)\)\.values\(\);\n  if \(inox::thrown\(\)\) return;\n\n  for \(auto a : \1\) \{/
   )
-  assert.match(source, /auto a = std::move\(inox_library_step_\d+\.value\);/)
   assert.doesNotMatch(source, /ArrayStorage|->items|inox_for_array_/)
   assert.match(source, /\n    auto b = Object\.values\(a\);\n    if \(inox::thrown\(\)\) return;/)
   assert.doesNotMatch(
@@ -93,9 +90,14 @@ for (const a of foo.v) {
   assert.doesNotMatch(source, /inox::adopt\(inox_(?:values|entries)_\d+\.release\(\)\)/)
   assert.doesNotMatch(source, /auto inox_value_\d+ = inox::get\(foo, "v"\);/)
   assert.doesNotMatch(source, /\.valid\(\)/)
+  assert.doesNotMatch(source, /while \(true\)/)
+  assert.doesNotMatch(source, /\.next\(\)/)
+  assert.doesNotMatch(source, /\.done/)
+  assert.doesNotMatch(source, /INOX_TAG_OBJECT|INOX_TAG_CLASS_INSTANCE/)
+  assert.doesNotMatch(source, /std::move/)
+  assert.doesNotMatch(source, /auto inox_library_step_\d+/)
   assert.doesNotMatch(source, /auto inox_library_value_\d+/)
   assert.doesNotMatch(source, /Object\.(?:values|entries)\(inox::Value\(a\)\)/)
-  assert.doesNotMatch(source, /\.next\(\);\n    if \(inox::thrown\(\)\) return;/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

@@ -21,10 +21,18 @@ public:
   explicit ArrayIterator(const Array& value);
 
   ArrayIterationResult next();
+  ArrayIterator begin() const;
+  ArrayIterator end() const;
+  inox::Value operator*() const;
+  ArrayIterator& operator++();
+  bool operator!=(const ArrayIterator& other) const;
 
 private:
+  ArrayIterator(const Array& value, size_t index, bool is_end);
+
   inox::Value owner_;
   size_t index_;
+  bool is_end_;
 };
 
 class Array : public inox::Value {

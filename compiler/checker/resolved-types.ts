@@ -249,6 +249,7 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('libraryCIteratorReceiverAdapter', 'string', null, true, loc),
       anyNodeField('libraryCIteratorValueAdapter', 'string', null, true, loc),
       anyNodeField('libraryCIteratorManagedValue', 'boolean', null, true, loc),
+      anyNodeField('libraryCIteratorRangeBased', 'boolean', null, true, loc),
       anyNodeField('libraryCIteratorCreationFailureMode', 'string', null, true, loc),
       anyNodeField('libraryCIteratorNextFailureMode', 'string', null, true, loc),
       anyNodeField('libraryCIteratorPreservesPendingException', 'boolean', null, false, loc),

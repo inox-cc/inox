@@ -106,6 +106,7 @@ type CCompilerLibraryIteration = {
   nextFailureMode: 'thrown' | null
   managedValue: boolean
   preservesPendingException: boolean
+  rangeBased: boolean
   receiverAdapter: string | null
   valueAdapter: string | null
   valueMember: string
@@ -2358,19 +2359,31 @@ function emitCompilerLibraryForOfStatement(statement: StatementNode, context: CF
     receiver = applyCompilerLibraryIterationAdapter(receiver, iteration.receiverAdapter)
   }
 
-  const iterator = nextCName(context, 'inox_library_iterator')
-  const step = nextCName(context, 'inox_library_step')
   const moveManagedValue =
     iteration.managedValue &&
     elementType === 'object' &&
     libraryNativeBoundaryCppType(elementType, statement.nullable === true, false, statement.shape) === null
-  const value = moveManagedValue ? '' : nextCName(context, 'inox_library_value')
+  const directRangeManagedValue =
+    iteration.rangeBased &&
+    moveManagedValue &&
+    (iteration.valueAdapter === null || iteration.valueAdapter.length === 0)
+  const range = iteration.rangeBased ? nextCName(context, 'inox_library_range') : ''
+  const iterator = iteration.rangeBased ? '' : nextCName(context, 'inox_library_iterator')
+  const step = iteration.rangeBased ? '' : nextCName(context, 'inox_library_step')
+  const value =
+    iteration.rangeBased && directRangeManagedValue ? '' : nextCName(context, 'inox_library_value')
   const breakTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_break'), throughFinally: false }
   const continueTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_continue'), throughFinally: false }
   const variableScope = pushVariableScope(context)
 
   try {
-    registerForOfElementMetadata(context, statement.name, elementType, statement, moveManagedValue)
+    registerForOfElementMetadata(
+      context,
+      statement.name,
+      elementType,
+      statement,
+      iteration.rangeBased ? directRangeManagedValue : moveManagedValue
+    )
     pushFlowTarget(context.breakTargets, breakTarget)
     pushFlowTarget(context.continueTargets, continueTarget)
     const body = emitScopedStatementBody(statement.body, context, [], [])
@@ -2379,6 +2392,49 @@ function emitCompilerLibraryForOfStatement(statement: StatementNode, context: CF
     const lines: string[] = []
 
     pushAllLines(lines, iterable.lines)
+
+    if (iteration.rangeBased) {
+      const rangeExpression =
+        iteration.iteratorMethod === null
+          ? receiver
+          : `${receiver}.${iteration.iteratorMethod}()`
+
+      lines.push(`auto ${range} = ${rangeExpression};`)
+
+      if (iteration.iteratorFailureMode === 'thrown') {
+        lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+      }
+
+      const rangeElement = directRangeManagedValue ? statement.name : value
+      lines.push(`for (auto ${rangeElement} : ${range}) {`)
+      const loopBody: string[] = []
+
+      if (!directRangeManagedValue) {
+        const adaptedValue = applyCompilerLibraryIterationAdapter(value, iteration.valueAdapter)
+        const elementValue = iteration.managedValue ? `${adaptedValue}.raw()` : adaptedValue
+        const element = emitForOfElementDeclaration(statement, elementValue, elementType, context)
+
+        pushAllLines(loopBody, element.lines)
+        loopBody.push(element.expression)
+      }
+
+      pushAllLines(loopBody, body)
+      const hasContinueLabel = shouldEmitFlowTargetLabel(continueTarget)
+      pushLoopBodyLines(lines, loopBody, '  ', hasContinueLabel)
+
+      if (hasContinueLabel) {
+        pushAllLines(lines, emitContinueTargetLabel(continueTarget.label, context))
+      }
+
+      lines.push('}')
+
+      if (shouldEmitFlowTargetLabel(breakTarget)) {
+        pushAllLines(lines, emitBreakTargetLabel(breakTarget.label, context))
+      }
+
+      return lines
+    }
+
     if (iteration.iteratorMethod === null) {
       lines.push(`auto ${iterator} = ${receiver};`)
     } else {
@@ -2452,6 +2508,7 @@ function resolveCompilerLibraryIteration(
       nextMethod,
       nextFailureMode: statement.libraryCIteratorNextFailureMode === 'thrown' ? 'thrown' : null,
       preservesPendingException: statement.libraryCIteratorPreservesPendingException === true,
+      rangeBased: statement.libraryCIteratorRangeBased === true,
       receiverAdapter: stringOrNull(statement.libraryCIteratorReceiverAdapter),
       valueAdapter: stringOrNull(statement.libraryCIteratorValueAdapter),
       valueMember
@@ -2478,6 +2535,7 @@ function resolveCompilerLibraryIteration(
     nextMethod: iteration.nextMethod,
     nextFailureMode: iteration.nextFailureMode === 'thrown' ? 'thrown' : null,
     preservesPendingException: iteration.preservesPendingException === true,
+    rangeBased: iteration.rangeBased === true,
     receiverAdapter: iteration.receiverAdapter ?? null,
     valueAdapter: iteration.valueAdapter ?? null,
     valueMember: iteration.valueMember

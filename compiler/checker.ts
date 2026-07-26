@@ -7684,6 +7684,7 @@ class Checker {
     statement.libraryCIteratorReceiverAdapter = iteration.receiverAdapter ?? null
     statement.libraryCIteratorValueAdapter = iteration.valueAdapter ?? null
     statement.libraryCIteratorManagedValue = iteration.managedValue === true
+    statement.libraryCIteratorRangeBased = iteration.rangeBased === true
     statement.libraryCIteratorPreservesPendingException = iteration.preservesPendingException === true
     statement.libraryCIteratorCreationFailureMode = iteration.creationFailureMode ?? null
     statement.libraryCIteratorNextFailureMode = iteration.nextFailureMode ?? null

@@ -922,6 +922,14 @@ function validateNativeTypeIteration(nativeType: LibraryNativeTypeDescriptor): v
     throw new Error(`native type ${nativeType.typeId} has invalid C++ iteration managed value flag`)
   }
 
+  if (typeof iteration.rangeBased !== 'undefined' && typeof iteration.rangeBased !== 'boolean') {
+    throw new Error(`native type ${nativeType.typeId} has invalid C++ range iteration flag`)
+  }
+
+  if (iteration.rangeBased === true && iteration.nextFailureMode === 'thrown') {
+    throw new Error(`native type ${nativeType.typeId} C++ range iteration cannot use nextFailureMode`)
+  }
+
   const failureModes = [
     ['creationFailureMode', iteration.creationFailureMode],
     ['nextFailureMode', iteration.nextFailureMode]
@@ -2178,6 +2186,7 @@ function nativeIterationFingerprint(nativeType: LibraryNativeTypeDescriptor): st
     iteration.receiverAdapter ?? '',
     iteration.valueAdapter ?? '',
     iteration.managedValue === true ? 'managed-value' : '',
+    iteration.rangeBased === true ? 'range-based' : '',
     iteration.preservesPendingException === true ? 'preserves-pending-exception' : '',
     iteration.creationFailureMode ?? '',
     iteration.nextFailureMode ?? ''
