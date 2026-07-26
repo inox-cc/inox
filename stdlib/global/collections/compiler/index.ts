@@ -336,8 +336,9 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
         doneMember: 'done',
         valueMember: 'value',
         receiverAdapter: 'Array($value)',
-        valueAdapter: '$value.raw()',
-        failureMode: 'thrown'
+        managedValue: true,
+        preservesPendingException: true,
+        creationFailureMode: 'thrown'
       }
     },
     {
@@ -363,7 +364,8 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
         valueMember: 'value',
         receiverAdapter: 'Map($value)',
         valueAdapter: '$value.raw()',
-        failureMode: 'thrown'
+        creationFailureMode: 'thrown',
+        nextFailureMode: 'thrown'
       }
     },
     mapIteratorNativeType(mapEntryIteratorNativeTypeId, [], mapEntryTypeRef()),
@@ -389,7 +391,8 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
         valueMember: 'value',
         receiverAdapter: 'Set($value)',
         valueAdapter: '$value.raw()',
-        failureMode: 'thrown'
+        creationFailureMode: 'thrown',
+        nextFailureMode: 'thrown'
       }
     }
   ],
@@ -721,7 +724,7 @@ function mapIteratorNativeType(typeId: string, typeParameters: string[], element
       doneMember: 'done',
       valueMember: 'value',
       valueAdapter: '$value.raw()',
-      failureMode: 'thrown' as const
+      nextFailureMode: 'thrown' as const
     }
   }
 }

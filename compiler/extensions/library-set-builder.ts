@@ -918,12 +918,30 @@ function validateNativeTypeIteration(nativeType: LibraryNativeTypeDescriptor): v
     throw new Error(`native type ${nativeType.typeId} C++ iteration value adapter requires $value`)
   }
 
+  if (typeof iteration.managedValue !== 'undefined' && typeof iteration.managedValue !== 'boolean') {
+    throw new Error(`native type ${nativeType.typeId} has invalid C++ iteration managed value flag`)
+  }
+
+  const failureModes = [
+    ['creationFailureMode', iteration.creationFailureMode],
+    ['nextFailureMode', iteration.nextFailureMode]
+  ]
+
+  for (let index = 0; index < failureModes.length; index = index + 1) {
+    const mode = failureModes[index][1]
+
+    if (mode !== null && typeof mode !== 'undefined' && mode !== 'thrown') {
+      throw new Error(`native type ${nativeType.typeId} has unknown C++ iteration ${failureModes[index][0]}`)
+    }
+  }
+
   if (
-    iteration.failureMode !== null &&
-    typeof iteration.failureMode !== 'undefined' &&
-    iteration.failureMode !== 'thrown'
+    iteration.preservesPendingException === true &&
+    (iteration.iteratorMethod === null || iteration.creationFailureMode !== 'thrown')
   ) {
-    throw new Error(`native type ${nativeType.typeId} has unknown C++ iteration failure mode`)
+    throw new Error(
+      `native type ${nativeType.typeId} preserves pending exceptions without a throwing iterator method`
+    )
   }
 
   const traits = nativeType.traits ?? []
@@ -2159,7 +2177,10 @@ function nativeIterationFingerprint(nativeType: LibraryNativeTypeDescriptor): st
     iteration.valueMember,
     iteration.receiverAdapter ?? '',
     iteration.valueAdapter ?? '',
-    iteration.failureMode ?? ''
+    iteration.managedValue === true ? 'managed-value' : '',
+    iteration.preservesPendingException === true ? 'preserves-pending-exception' : '',
+    iteration.creationFailureMode ?? '',
+    iteration.nextFailureMode ?? ''
   ]
     .map(fingerprintAtom)
     .join(',')

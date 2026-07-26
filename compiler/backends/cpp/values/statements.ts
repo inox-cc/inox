@@ -100,9 +100,12 @@ type CTypeofConditionNarrowing = {
 
 type CCompilerLibraryIteration = {
   doneMember: string
-  failureMode: 'thrown' | null
+  iteratorFailureMode: 'thrown' | null
   iteratorMethod: string | null
   nextMethod: string
+  nextFailureMode: 'thrown' | null
+  managedValue: boolean
+  preservesPendingException: boolean
   receiverAdapter: string | null
   valueAdapter: string | null
   valueMember: string
@@ -134,6 +137,11 @@ export type StatementLoweringDependencies = {
     shape?: CObjectShape | null
   ): PreparedExpression
   emitCValueExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression
+  emitPreparedRuntimeValueArgumentExpression(
+    expression: StatementNode,
+    context: CFunctionContext,
+    preservePendingException: boolean
+  ): PreparedExpression
   emitDynamicObjectMemberVariableDeclaration(
     statement: StatementNode,
     member: CKnownObjectIndexField,
@@ -1859,7 +1867,8 @@ function registerForOfElementMetadata(
   context: CFunctionContext,
   name: string,
   elementType: string,
-  statement: StatementNode
+  statement: StatementNode,
+  managedObjectCppValue: boolean
 ): void {
   context.variables.set(name, elementType)
 
@@ -1868,6 +1877,10 @@ function registerForOfElementMetadata(
   } else if (elementType === 'unknown') {
     context.localValueNames.add(name)
   } else if (elementType === 'object') {
+    if (managedObjectCppValue) {
+      context.localValueNames.add(name)
+    }
+
     registerObjectShape(context, name, statement.shape)
     registerForOfObjectElementDeclaredType(context, name, statement)
   }
@@ -1876,6 +1889,8 @@ function registerForOfElementMetadata(
 
   if (nativeCppType !== null) {
     context.cppValueTypes.set(name, nativeCppType)
+  } else if (managedObjectCppValue) {
+    context.cppValueTypes.set(name, 'inox::Value')
   }
 }
 
@@ -1900,7 +1915,8 @@ function emitForOfElementDeclaration(
   statement: StatementNode,
   value: string,
   elementType: string,
-  context: CFunctionContext
+  context: CFunctionContext,
+  moveManagedValue: boolean = false
 ): PreparedExpression {
   const name = statement.name
   let declaration = `double ${name} = ${value}.as.number;`
@@ -1933,9 +1949,12 @@ function emitForOfElementDeclaration(
     checks.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_BOOL`, context))
   } else if (isManagedRuntimeReturnType(elementType)) {
     const expectedTag = cRuntimeValueTag(elementType)
+    const runtimeValue = moveManagedValue ? `${value}.raw()` : value
 
-    declaration = `inox_value ${name} = ${value};`
-    pushAllLines(checks, emitRuntimeValueCheckLines(value, expectedTag, context))
+    declaration = moveManagedValue
+      ? `auto ${name} = std::move(${value});`
+      : `inox_value ${name} = ${value};`
+    pushAllLines(checks, emitRuntimeValueCheckLines(runtimeValue, expectedTag, context))
   } else {
     checks.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_NUMBER`, context))
   }
@@ -2325,7 +2344,9 @@ function emitCompilerLibraryForOfStatement(statement: StatementNode, context: CF
     return []
   }
 
-  const iterable = statementDeps(context).emitCValueExpression(statement.iterable, context)
+  const iterable = iteration.preservesPendingException
+    ? statementDeps(context).emitPreparedRuntimeValueArgumentExpression(statement.iterable, context, true)
+    : statementDeps(context).emitCValueExpression(statement.iterable, context)
   let receiver = iterable.expression
 
   if (
@@ -2339,43 +2360,58 @@ function emitCompilerLibraryForOfStatement(statement: StatementNode, context: CF
 
   const iterator = nextCName(context, 'inox_library_iterator')
   const step = nextCName(context, 'inox_library_step')
-  const value = nextCName(context, 'inox_library_value')
+  const moveManagedValue =
+    iteration.managedValue &&
+    elementType === 'object' &&
+    libraryNativeBoundaryCppType(elementType, statement.nullable === true, false, statement.shape) === null
+  const value = moveManagedValue ? '' : nextCName(context, 'inox_library_value')
   const breakTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_break'), throughFinally: false }
   const continueTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_continue'), throughFinally: false }
   const variableScope = pushVariableScope(context)
 
   try {
-    registerForOfElementMetadata(context, statement.name, elementType, statement)
+    registerForOfElementMetadata(context, statement.name, elementType, statement, moveManagedValue)
     pushFlowTarget(context.breakTargets, breakTarget)
     pushFlowTarget(context.continueTargets, continueTarget)
     const body = emitScopedStatementBody(statement.body, context, [], [])
     popFlowTarget(context.continueTargets)
     popFlowTarget(context.breakTargets)
-    const element = emitForOfElementDeclaration(statement, value, elementType, context)
     const lines: string[] = []
 
     pushAllLines(lines, iterable.lines)
     if (iteration.iteratorMethod === null) {
       lines.push(`auto ${iterator} = ${receiver};`)
     } else {
-      lines.push(`auto ${iterator} = (${receiver}).${iteration.iteratorMethod}();`)
+      lines.push(`auto ${iterator} = ${receiver}.${iteration.iteratorMethod}();`)
     }
 
-    if (iteration.failureMode === 'thrown') {
+    if (iteration.iteratorFailureMode === 'thrown') {
       lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
     }
 
     lines.push('while (true) {')
     const loopBody = [`auto ${step} = ${iterator}.${iteration.nextMethod}();`]
 
-    if (iteration.failureMode === 'thrown') {
+    if (iteration.nextFailureMode === 'thrown') {
       loopBody.push(emitRuntimeTypeCheck('inox::thrown()', context))
     }
 
     loopBody.push(`if (${step}.${iteration.doneMember}) break;`)
     const memberValue = `${step}.${iteration.valueMember}`
     const adaptedValue = applyCompilerLibraryIterationAdapter(memberValue, iteration.valueAdapter)
-    loopBody.push(`auto ${value} = ${adaptedValue};`)
+    const elementValue = moveManagedValue ? adaptedValue : value
+
+    if (!moveManagedValue) {
+      loopBody.push(`auto ${value} = ${adaptedValue};`)
+    }
+
+    const element = emitForOfElementDeclaration(
+      statement,
+      elementValue,
+      elementType,
+      context,
+      moveManagedValue
+    )
     pushAllLines(loopBody, element.lines)
     loopBody.push(element.expression)
     pushAllLines(loopBody, body)
@@ -2410,9 +2446,12 @@ function resolveCompilerLibraryIteration(
   if (iteratorMethod !== null && nextMethod !== null && doneMember !== null && valueMember !== null) {
     return {
       doneMember,
-      failureMode: statement.libraryCIteratorFailureMode === 'thrown' ? 'thrown' : null,
+      iteratorFailureMode: statement.libraryCIteratorCreationFailureMode === 'thrown' ? 'thrown' : null,
       iteratorMethod,
+      managedValue: statement.libraryCIteratorManagedValue === true,
       nextMethod,
+      nextFailureMode: statement.libraryCIteratorNextFailureMode === 'thrown' ? 'thrown' : null,
+      preservesPendingException: statement.libraryCIteratorPreservesPendingException === true,
       receiverAdapter: stringOrNull(statement.libraryCIteratorReceiverAdapter),
       valueAdapter: stringOrNull(statement.libraryCIteratorValueAdapter),
       valueMember
@@ -2433,9 +2472,12 @@ function resolveCompilerLibraryIteration(
 
   return {
     doneMember: iteration.doneMember,
-    failureMode: iteration.failureMode === 'thrown' ? 'thrown' : null,
+    iteratorFailureMode: iteration.creationFailureMode === 'thrown' ? 'thrown' : null,
     iteratorMethod: iteration.iteratorMethod,
+    managedValue: iteration.managedValue === true,
     nextMethod: iteration.nextMethod,
+    nextFailureMode: iteration.nextFailureMode === 'thrown' ? 'thrown' : null,
+    preservesPendingException: iteration.preservesPendingException === true,
     receiverAdapter: iteration.receiverAdapter ?? null,
     valueAdapter: iteration.valueAdapter ?? null,
     valueMember: iteration.valueMember

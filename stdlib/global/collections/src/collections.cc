@@ -2037,8 +2037,13 @@ bool Array::isArray(const inox::Value& value) {
 }
 
 ArrayIterator Array::values() const {
+  if (inox::thrown()) {
+    return ArrayIterator();
+  }
+
   if (!valid()) {
     inox_collection_throw("TypeError: Array.values receiver is not an Array");
+    return ArrayIterator();
   }
 
   return ArrayIterator(*this);
@@ -2053,8 +2058,7 @@ ArrayIterationResult ArrayIterator::next() {
   ArrayStorage* instance = array_data(value);
 
   if (instance == 0) {
-    inox_collection_throw("TypeError: Array iterator receiver is not an Array");
-    return { true, inox::Value() };
+    inox::fatal("Array iterator owner invariant failed");
   }
 
   if (index_ >= instance->length) {

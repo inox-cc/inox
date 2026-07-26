@@ -401,7 +401,8 @@ function sequenceLibrary(): CompilerLibraryDescriptor {
           doneMember: 'finished',
           valueMember: 'item',
           valueAdapter: '$value',
-          failureMode: 'thrown'
+          creationFailureMode: 'thrown',
+          nextFailureMode: 'thrown'
         }
       }
     ],

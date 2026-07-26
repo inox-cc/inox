@@ -142,7 +142,10 @@ export type LibraryNativeIterationDescriptor = {
   valueMember: string
   receiverAdapter?: string | null
   valueAdapter?: string | null
-  failureMode?: 'thrown' | null
+  managedValue?: boolean
+  preservesPendingException?: boolean
+  creationFailureMode?: 'thrown' | null
+  nextFailureMode?: 'thrown' | null
 }
 
 export type LibraryCAsyncTaskBridgeDescriptor = {

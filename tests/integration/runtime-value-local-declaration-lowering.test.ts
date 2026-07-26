@@ -56,12 +56,15 @@ for (const a of foo.v) {
   assert.doesNotMatch(source, /\n  inox::Value e;/)
   assert.doesNotMatch(source, /inox::Value foo;\n\s+foo = inox_undefined_value\(\);/)
   assert.doesNotMatch(source, /JSON\.parse\(inox::StringView\("[^"]+", \d+\), foo\)/)
-  assert.match(source, /auto inox_library_iterator_\d+ = \(Array\(inox_value_\d+\)\)\.values\(\);/)
+  assert.match(source, /auto inox_library_iterator_\d+ = Array\(inox::get\(foo, "v"\)\)\.values\(\);/)
   assert.match(source, /while \(true\) \{/)
-  assert.match(source, /auto inox_library_step_\d+ = inox_library_iterator_\d+\.next\(\);/)
-  assert.match(source, /inox_value a = inox_library_value_\d+;/)
+  assert.match(
+    source,
+    /auto (inox_library_step_\d+) = inox_library_iterator_\d+\.next\(\);\n    if \(\1\.done\) break;/
+  )
+  assert.match(source, /auto a = std::move\(inox_library_step_\d+\.value\);/)
   assert.doesNotMatch(source, /ArrayStorage|->items|inox_for_array_/)
-  assert.match(source, /\n    auto b = Object\.values\(inox::Value\(a\)\);\n    if \(inox::thrown\(\)\) return;/)
+  assert.match(source, /\n    auto b = Object\.values\(a\);\n    if \(inox::thrown\(\)\) return;/)
   assert.doesNotMatch(
     source,
     /auto inox_values_\d+ = Object\.values\(a\);\n    if \(inox::thrown\(\)\) return;\n    inox::Value b = inox_values_\d+;/
@@ -70,7 +73,7 @@ for (const a of foo.v) {
   assert.match(source, /auto c = inox_library_result_\d+;/)
   assert.doesNotMatch(source, /\n    inox::Value c = inox_object_value_\d+;/)
   assert.doesNotMatch(source, /inox::Value c = inox::adopt\(inox_object_value_\d+\.release\(\)\);/)
-  assert.match(source, /\n    auto d = Object\.entries\(inox::Value\(a\)\);\n    if \(inox::thrown\(\)\) return;/)
+  assert.match(source, /\n    auto d = Object\.entries\(a\);\n    if \(inox::thrown\(\)\) return;/)
   assert.doesNotMatch(
     source,
     /auto inox_entries_\d+ = Object\.entries\(a\);\n    if \(inox::thrown\(\)\) return;\n    inox::Value d = inox_entries_\d+;/
@@ -88,6 +91,11 @@ for (const a of foo.v) {
   assert.doesNotMatch(source, /inox_status inox_object_values_status_\d+/)
   assert.doesNotMatch(source, /inox_status inox_object_entries_status_\d+/)
   assert.doesNotMatch(source, /inox::adopt\(inox_(?:values|entries)_\d+\.release\(\)\)/)
+  assert.doesNotMatch(source, /auto inox_value_\d+ = inox::get\(foo, "v"\);/)
+  assert.doesNotMatch(source, /\.valid\(\)/)
+  assert.doesNotMatch(source, /auto inox_library_value_\d+/)
+  assert.doesNotMatch(source, /Object\.(?:values|entries)\(inox::Value\(a\)\)/)
+  assert.doesNotMatch(source, /\.next\(\);\n    if \(inox::thrown\(\)\) return;/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

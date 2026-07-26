@@ -409,6 +409,7 @@ const statementLoweringDependencies = {
   emitCExpression,
   emitCObjectLiteralValueExpression,
   emitCValueExpression,
+  emitPreparedRuntimeValueArgumentExpression,
   emitDynamicObjectMemberVariableDeclaration,
   emitDynamicObjectMemberAssignment,
   emitDynamicObjectFieldAssignment: (expression: CDynamicObjectFieldNode, context: CFunctionContext) =>
@@ -4211,6 +4212,12 @@ function emitPreparedRuntimeValueArgumentExpression(
   preservePendingException: boolean
 ): PreparedExpression {
   if (preservePendingException && (isMemberAccessExpression(expression) || isIndexAccessExpression(expression))) {
+    const nativeClassField = emitPreparedNativeClassFieldValueExpression(expression, context)
+
+    if (nativeClassField !== null && typeof nativeClassField !== 'undefined') {
+      return nativeClassField
+    }
+
     const value = emitPreparedObjectFieldRuntimeValueExpression(expression, context, objectExpressionFieldDependencies)
 
     if (value !== null) {

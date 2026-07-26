@@ -60,8 +60,9 @@ test('Array, Set и Promise принадлежат discoverable global packages 
         doneMember: 'done',
         valueMember: 'value',
         receiverAdapter: 'Array($value)',
-        valueAdapter: '$value.raw()',
-        failureMode: 'thrown'
+        managedValue: true,
+        preservesPendingException: true,
+        creationFailureMode: 'thrown'
       }
     }
   )
@@ -87,7 +88,8 @@ test('Array, Set и Promise принадлежат discoverable global packages 
         valueMember: 'value',
         receiverAdapter: 'Set($value)',
         valueAdapter: '$value.raw()',
-        failureMode: 'thrown'
+        creationFailureMode: 'thrown',
+        nextFailureMode: 'thrown'
       }
     }
   )

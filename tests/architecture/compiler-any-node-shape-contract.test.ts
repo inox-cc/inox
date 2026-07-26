@@ -82,11 +82,14 @@ test('checker and C++ fallback agree on every AnyNode field name', () => {
   ]
 
   for (const name of names) {
-    assert.equal(
-      shape.fields.filter((field) => field.name === name).length,
-      1,
-      `${name} must have exactly one checker shape field`
-    )
+    const fields = shape.fields.filter((field) => field.name === name)
+
+    assert.equal(fields.length, 1, `${name} must have exactly one checker shape field`)
+    if (compilerAnyNodeStringFields.includes(name)) {
+      assert.equal(fields[0]?.valueType, 'string', `${name} value type`)
+    } else if (compilerAnyNodeBooleanFields.includes(name)) {
+      assert.equal(fields[0]?.valueType, 'boolean', `${name} value type`)
+    }
   }
 })
 

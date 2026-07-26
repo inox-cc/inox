@@ -132,7 +132,8 @@ function fixtureLibrary(): CompilerLibraryDescriptor {
           doneMember: 'finished',
           valueMember: 'item',
           valueAdapter: '$value',
-          failureMode: 'thrown'
+          creationFailureMode: 'thrown',
+          nextFailureMode: 'thrown'
         }
       }
     ],

@@ -7683,7 +7683,10 @@ class Checker {
     statement.libraryCIteratorValueMember = iteration.valueMember
     statement.libraryCIteratorReceiverAdapter = iteration.receiverAdapter ?? null
     statement.libraryCIteratorValueAdapter = iteration.valueAdapter ?? null
-    statement.libraryCIteratorFailureMode = iteration.failureMode ?? null
+    statement.libraryCIteratorManagedValue = iteration.managedValue === true
+    statement.libraryCIteratorPreservesPendingException = iteration.preservesPendingException === true
+    statement.libraryCIteratorCreationFailureMode = iteration.creationFailureMode ?? null
+    statement.libraryCIteratorNextFailureMode = iteration.nextFailureMode ?? null
     statement.libraryRuntimeRequirements = nativeType.runtimeRequirements
   }
 
