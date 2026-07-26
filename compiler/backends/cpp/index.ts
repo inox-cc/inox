@@ -4211,6 +4211,16 @@ function emitPreparedRuntimeValueArgumentExpression(
   context: CFunctionContext,
   preservePendingException: boolean
 ): PreparedExpression {
+  if (preservePendingException) {
+    const libraryCall = emitPreparedCompilerLibraryCallExpression(expression, context, {
+      deferThrownCheck: true
+    })
+
+    if (libraryCall !== null) {
+      return libraryCall
+    }
+  }
+
   if (preservePendingException && (isMemberAccessExpression(expression) || isIndexAccessExpression(expression))) {
     const nativeClassField = emitPreparedNativeClassFieldValueExpression(expression, context)
 

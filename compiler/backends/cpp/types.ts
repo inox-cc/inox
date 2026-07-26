@@ -49,6 +49,7 @@ export type CPreparedCallArgs = {
 export type CPreparedCallOptions = {
   asValue?: boolean
   cppExpression?: boolean
+  deferThrownCheck?: boolean
   discard?: boolean
   out?: string
   owned?: boolean

@@ -46,6 +46,8 @@ test('global:collections владеет Array declarations, operations, iteratio
   assert.equal(result.ast.body[2].init.left.libraryCResultAdapter, 'static_cast<double>($value)')
   assert.equal(result.ir.body[2].init.left.libraryCResultAdapter, 'static_cast<double>($value)')
   assert.equal(result.ast.body[3].init.libraryOperationId, 'global:collections#Array#index-read')
+  assert.equal(result.ast.body[3].init.libraryCPreservesPendingException, true)
+  assert.equal(result.ir.body[3].init.libraryCPreservesPendingException, true)
   assert.equal(result.ast.body[4].expression.libraryOperationId, 'global:collections#Array#index-write')
   assert.equal(result.ir.body[5].libraryCIteratorNextMethod, 'next')
   assert.equal(result.ast.body[6].init.libraryOperationId, 'global:collections#Array.from')

@@ -41,9 +41,8 @@ for (const a of foo.v) {
   ) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /auto inox_library_object_\d+ = Object\.values\(a\);/)
-  assert.match(source, /auto inox_library_object_\d+ = Object\.entries\(a\);/)
-  assert.equal(source.match(/auto inox_library_(?:result|object)_\d+ = inox_library_object_\d+\.get\(0\);/g)?.length, 2)
+  assert.equal(source.match(/Object\.(?:values|entries)\(a\)\.get\(0\)/g)?.length, 2)
+  assert.doesNotMatch(source, /auto inox_library_object_\d+ = Object\.(?:values|entries)\(a\);/)
   assert.match(
     source,
     /auto (inox_library_range_\d+) = Array\(inox::get\(foo, "v"\)\)\.values\(\);\n  if \(inox::thrown\(\)\) return;\n\n  for \(auto a : \1\) \{/
@@ -60,6 +59,7 @@ for (const a of foo.v) {
   assert.doesNotMatch(source, /std::move/)
   assert.doesNotMatch(source, /auto inox_library_step_\d+/)
   assert.doesNotMatch(source, /auto inox_library_value_\d+/)
+  assert.doesNotMatch(source, /inox_library_object_\d+\.get\(0\)/)
   assert.doesNotMatch(source, /Object\.(?:values|entries)\(inox::Value\(a\)\)/)
   assert.doesNotMatch(source, /inox_object_values\(&inox_default_allocator, a, &inox_object_values_\d+\)/)
   assert.doesNotMatch(source, /inox_object_entries\(&inox_default_allocator, a, &inox_object_entries_\d+\)/)

@@ -338,7 +338,11 @@ export function emitPreparedCompilerLibraryCallExpression(
       const prepared =
         kind === 'receiver-number'
           ? dependencies.emitPreparedNumberExpression(receiver, context)
-          : dependencies.emitCValueExpression(receiver, context)
+          : dependencies.emitPreparedRuntimeValueArgumentExpression(
+              receiver,
+              context,
+              item.libraryCFailureMode === 'thrown' && item.libraryCPreservesPendingException === true
+            )
       pushLines(lines, prepared.lines)
       receiverExpression = prepared.expression
       receiverCppType = prepared.cppType ?? prepared.scalarType
@@ -855,6 +859,19 @@ export function emitPreparedCompilerLibraryCallExpression(
     }
   }
 
+  if (options?.deferThrownCheck === true && item.libraryCFailureMode === 'thrown') {
+    return {
+      lines,
+      expression: applyCompilerLibraryValueAdapter(callExpression, item.libraryCResultAdapter),
+      cppType: declaredCppType ?? undefined,
+      scalarType,
+      nullable: item.nullable === true,
+      runtimeTypeChecked: cppType !== 'inox::Value',
+      valueType: item.valueType ?? undefined,
+      owned: item.libraryOwned === true
+    }
+  }
+
   if (
     item.valueType === 'object' &&
     item.libraryCResultShapeFields !== null &&
@@ -872,7 +889,7 @@ export function emitPreparedCompilerLibraryCallExpression(
   }
 
   if (item.libraryCFailureMode !== null && typeof item.libraryCFailureMode !== 'undefined') {
-    const directOut = cppType === 'inox::String' ? options?.out : null
+    const directOut = cppType === 'inox::String' || cppType === 'inox::Value' ? options?.out : null
     const out = directOut ?? nextCName(context, 'inox_library_result')
     lines.push(`auto ${out} = ${callExpression};`)
     pushCompilerLibraryFailureCheck(lines, item.libraryCFailureMode, out, context, dependencies)

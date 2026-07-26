@@ -1485,6 +1485,10 @@ size_t Array::length() const {
 }
 
 inox::Value Array::get(size_t index) const {
+  if (inox::thrown()) {
+    return inox::Value();
+  }
+
   inox_value array = inox::Value::raw();
 
   if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {

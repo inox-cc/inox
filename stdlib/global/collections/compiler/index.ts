@@ -666,6 +666,7 @@ function arrayIndexRead(): LibraryOperationDescriptor {
     cArgumentKinds: ['receiver', 'number'],
     cCallStyle: 'member',
     cFailureMode: 'thrown',
+    cPreservesPendingException: true,
     cResultMode: 'value',
     resultTypeRef: parameterTypeRef,
     cResultMapping: { cppType: 'inox::Value', fields: [] },

@@ -19,4 +19,8 @@ test('global Array использует opaque JS-shaped C++ facade', async () =
   assert.match(source, /Array Array::create\(size_t len\)/)
   assert.match(source, /ArrayIterator ArrayIterator::begin\(\) const/)
   assert.match(source, /ArrayIterator ArrayIterator::end\(\) const/)
+  assert.match(
+    source,
+    /inox::Value Array::get\(size_t index\) const \{\s+if \(inox::thrown\(\)\) \{\s+return inox::Value\(\);/
+  )
 })
