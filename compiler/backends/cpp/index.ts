@@ -6928,6 +6928,12 @@ function emitPreparedAwaitAsyncResultExpression(
   expression: AnyNode,
   context: CFunctionContext
 ): PreparedExpression | null {
+  const immediateLibraryAsyncResult = emitPreparedImmediateAwaitLibraryAsyncResultExpression(expression, context)
+
+  if (immediateLibraryAsyncResult !== null) {
+    return immediateLibraryAsyncResult
+  }
+
   const asyncResultExpression = emitPreparedAsyncResultExpression(expression, context, asyncResultLoweringDependencies)
 
   if (asyncResultExpression !== null && typeof asyncResultExpression !== 'undefined') {
@@ -6947,6 +6953,39 @@ function emitPreparedAwaitAsyncResultExpression(
   }
 
   return null
+}
+
+function emitPreparedImmediateAwaitLibraryAsyncResultExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression | null {
+  if (!isCompilerLibraryAsyncResultExpression(expression)) {
+    return null
+  }
+
+  const asyncResult = emitPreparedCompilerLibraryCallExpression(expression, context, { owned: false })
+
+  if (asyncResult === null) {
+    return null
+  }
+
+  const source = nextCName(context, 'inox_await_source')
+  const lines: string[] = []
+
+  pushAll(lines, asyncResult.lines)
+  lines.push(`auto ${source} = ${asyncResult.expression};`)
+  lines.push(
+    emitRuntimeTypeCheck(
+      `!(${compilerLibraryIntrinsicAsyncResultCValidExpression(context.libraries, source)})`,
+      context
+    )
+  )
+
+  return {
+    ...asyncResult,
+    lines,
+    expression: source
+  }
 }
 
 function emitPreparedAwaitValueAsyncResultExpression(

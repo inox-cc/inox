@@ -3399,6 +3399,14 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return deps.emitArrayVariableDeclaration(statement, context)
   }
 
+  if (statement.init.type === 'AwaitExpression') {
+    const awaitValueDeclaration = deps.emitAwaitValueVariableDeclaration(statement, context)
+
+    if (awaitValueDeclaration !== null && typeof awaitValueDeclaration !== 'undefined') {
+      return awaitValueDeclaration
+    }
+  }
+
   const nativeShape = variableDeclarationNativeShape(statement, context)
 
   if (libraryNativeBoundaryCppType(statement.valueType, statement.nullable === true, false, nativeShape) !== null) {
@@ -3427,14 +3435,6 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
 
   if (statement.valueType === 'string' && deps.isDynamicRuntimeValueExpression(statement.init, context)) {
     return emitRuntimeStringVariableDeclaration(statement, statement.init, context)
-  }
-
-  if (statement.init.type === 'AwaitExpression') {
-    const awaitValueDeclaration = deps.emitAwaitValueVariableDeclaration(statement, context)
-
-    if (awaitValueDeclaration !== null && typeof awaitValueDeclaration !== 'undefined') {
-      return awaitValueDeclaration
-    }
   }
 
   if (statement.init.type === 'AwaitExpression' && deps.inferExpressionType(statement.init, context) === 'void') {

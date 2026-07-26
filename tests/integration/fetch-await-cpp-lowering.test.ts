@@ -55,33 +55,31 @@ await checkFetch()
   const checkFetch = functionSource(source, 'static void checkFetch() {')
 
   assert.doesNotMatch(source, /^static void checkFetch\(\);$/m)
-  assert.match(checkFetch, /static void checkFetch\(\) \{\n  inox::Promise inox_library_asyncResult_\d+;/)
-  assert.match(checkFetch, /\n  \{ \/\/ try_0\n/)
-  assert.doesNotMatch(checkFetch, /static void checkFetch\(\) \{\n\n  \{/)
+  assert.match(checkFetch, /static void checkFetch\(\) \{\n  \{ \/\/ try_0\n/)
   assert.doesNotMatch(checkFetch, /\n  \{\n    \{/)
   assert.match(
     checkFetch,
-    /inox_library_asyncResult_(\d+) = inox::fetch\("http:\/\/example.com\/"\);\n    if \(!\(inox_library_asyncResult_\1\.valid\(\)\)\) return;\n    auto (inox_await_\d+) = \(inox_library_asyncResult_\1\)\.awaitValue\(\);[\s\S]*?auto (inox_await_converted_\d+) = inox::FetchResponse\(\2\);\n    auto res = \3;/
+    /auto (inox_await_source_\d+) = inox::fetch\("http:\/\/example.com\/"\);\n    if \(!\(\1\.valid\(\)\)\) return;\n    auto (inox_await_value_\d+) = \(\1\)\.awaitValue\(\);\n    if \(inox::thrown\(\)\) goto catch_0;[\s\S]*?auto res = inox::FetchResponse\(\2\);/
   )
   assert.match(checkFetch, /console\.log\("Status %\.17g", static_cast<double>\(res\.status\)\);/)
   assert.match(
     checkFetch,
-    /inox_library_asyncResult_(\d+) = res\.text\(\);\n    if \(!\(inox_library_asyncResult_\1\.valid\(\)\)\) return;\n    auto inox_await_value_\d+ = \(inox_library_asyncResult_\1\)\.awaitValue\(\);[\s\S]*?auto txt = inox::String\(inox_await_value_\d+\);/
+    /auto (inox_await_source_\d+) = res\.text\(\);\n    if \(!\(\1\.valid\(\)\)\) return;\n    auto (inox_await_value_\d+) = \(\1\)\.awaitValue\(\);\n    if \(inox::thrown\(\)\) goto catch_0;\n    if \(\2\.tag != INOX_TAG_STRING \|\| \2\.as\.ref == 0\) return;\n    auto txt = inox::String\(\2\);/
   )
   assert.match(checkFetch, /auto inox_object_\d+ = inox::ObjectValue::create\(&inox_shape_value_\d+\);/)
   assert.match(checkFetch, /\.init\(0, inox::String\("POST", 4\)\);/)
   assert.match(checkFetch, /\.init\(0, inox::String\("text\/plain", 10\)\);/)
   assert.match(
     checkFetch,
-    /inox_library_asyncResult_(\d+) = inox::fetch\("http:\/\/example.com\/post", inox_object_\d+\);\n    if \(!\(inox_library_asyncResult_\1\.valid\(\)\)\) return;\n    auto (inox_await_\d+) = \(inox_library_asyncResult_\1\)\.awaitValue\(\);[\s\S]*?auto (inox_await_converted_\d+) = inox::FetchResponse\(\2\);\n    auto post = \3;/
+    /auto (inox_await_source_\d+) = inox::fetch\("http:\/\/example.com\/post", inox_object_\d+\);\n    if \(!\(\1\.valid\(\)\)\) return;\n    auto (inox_await_value_\d+) = \(\1\)\.awaitValue\(\);\n    if \(inox::thrown\(\)\) goto catch_0;[\s\S]*?auto post = inox::FetchResponse\(\2\);/
   )
   assert.match(
     checkFetch,
-    /auto (inox_await_\d+) = \(inox_library_asyncResult_\d+\)\.awaitValue\(\);\n\s+if \(inox::thrown\(\)\) goto catch_0;[\s\S]*?auto (inox_await_converted_\d+) = inox::FetchResponse\(\1\);\n\s+auto res = \2;\n\n\s+console\.log\("Status %\.17g", static_cast<double>\(res\.status\)\);/
+    /auto (inox_await_value_\d+) = \(inox_await_source_\d+\)\.awaitValue\(\);\n\s+if \(inox::thrown\(\)\) goto catch_0;[\s\S]*?auto res = inox::FetchResponse\(\1\);\n\n\s+console\.log\("Status %\.17g", static_cast<double>\(res\.status\)\);/
   )
   assert.match(
     checkFetch,
-    /auto inox_await_value_\d+ = \(inox_library_asyncResult_\d+\)\.awaitValue\(\);\n\s+if \(inox::thrown\(\)\) goto catch_0;[\s\S]*?auto txt = inox::String\(inox_await_value_\d+\);\n\n\s+console\.log\("Text %s", txt\);/
+    /auto (inox_await_value_\d+) = \(inox_await_source_\d+\)\.awaitValue\(\);\n\s+if \(inox::thrown\(\)\) goto catch_0;[\s\S]*?auto txt = inox::String\(\1\);\n\n\s+console\.log\("Text %s", txt\);/
   )
   assert.match(checkFetch, /auto error = inox::take_exception\(\);\n\s+console\.log\("#error:", error\);/)
   assert.doesNotMatch(checkFetch, /auto inox_error = inox::take_exception\(\);/)
@@ -102,6 +100,9 @@ await checkFetch()
   )
   assert.doesNotMatch(checkFetch, /inox::FetchResponse res =/)
   assert.doesNotMatch(checkFetch, /inox::String txt =/)
+  assert.doesNotMatch(checkFetch, /inox::Promise inox_library_asyncResult_\d+;/)
+  assert.doesNotMatch(checkFetch, /inox_library_asyncResult_\d+/)
+  assert.doesNotMatch(checkFetch, /inox_await_converted_\d+/)
   assert.doesNotMatch(checkFetch, /inox_await_result_\d+/)
   assert.doesNotMatch(checkFetch, /auto inox_res_\d+ = inox::await</)
   assert.doesNotMatch(checkFetch, /inox::await_value</)
