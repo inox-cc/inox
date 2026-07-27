@@ -912,9 +912,10 @@ export function emitPreparedCompilerLibraryCallExpression(
       }
     }
 
+    const resultExpression = applyCompilerLibraryValueAdapter(out, item.libraryCResultAdapter)
     const result: PreparedExpression = {
       lines,
-      expression: applyCompilerLibraryValueAdapter(out, item.libraryCResultAdapter),
+      expression: resultExpression,
       cppType,
       scalarType,
       nullable: item.nullable === true,
@@ -925,6 +926,8 @@ export function emitPreparedCompilerLibraryCallExpression(
 
     if (directOut !== null && typeof directOut !== 'undefined') {
       result.cppDeclaredName = directOut
+    } else if (resultExpression === out) {
+      result.cppMutableTemporary = true
     }
 
     return result

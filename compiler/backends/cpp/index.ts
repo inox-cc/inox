@@ -5294,9 +5294,22 @@ function emitCNullishCoalescingValueExpression(expression: AnyNode, context: CFu
     right = emitNullableScalarValueExpression(expression.right, context)
   }
 
-  const temp = nextCName(context, 'inox_value')
   const expectedTag =
     resultType === 'object' && libraryNativeCppType(expression.shape) !== null ? null : cRuntimeValueTag(resultType)
+  const inPlaceValue = emitInPlaceCppRaiiNullishCoalescingValueExpression(
+    expression,
+    left,
+    right,
+    resultType,
+    expectedTag,
+    context
+  )
+
+  if (inPlaceValue !== null) {
+    return inPlaceValue
+  }
+
+  const temp = nextCName(context, 'inox_value')
   const lines: string[] = []
   registerOwnedValue(context, temp)
 
@@ -5317,6 +5330,51 @@ function emitCNullishCoalescingValueExpression(expression: AnyNode, context: CFu
     lines,
     expression: temp,
     nullable: expression.nullable === true,
+    valueType: resultType
+  }
+}
+
+function emitInPlaceCppRaiiNullishCoalescingValueExpression(
+  expression: AnyNode,
+  left: PreparedExpression,
+  right: PreparedExpression,
+  resultType: string,
+  expectedTag: string | null,
+  context: CFunctionContext
+): PreparedExpression | null {
+  if (
+    left.cppType !== 'inox::Value' ||
+    left.cppMutableTemporary !== true ||
+    (right.cppType !== 'inox::Value' && right.cppType !== 'inox_value' && right.cppType !== 'inox::String')
+  ) {
+    return null
+  }
+
+  const lines: string[] = []
+
+  pushAll(lines, left.lines)
+  lines.push(`if (${left.expression}.tag == INOX_TAG_NULL || ${left.expression}.tag == INOX_TAG_UNDEFINED) {`)
+  pushIndented(lines, right.lines, '  ')
+  lines.push(`  ${left.expression} = ${right.expression};`)
+  pushIndented(lines, emitThrownCheckLines(context), '  ')
+  lines.push('}')
+
+  if (expression.nullable === true) {
+    pushAll(lines, emitRuntimeNullableValueCheck(left.expression, expectedTag, context))
+  } else {
+    const valueCheck = emitRuntimeValueCheck(left.expression, expectedTag, context)
+
+    if (valueCheck !== '') {
+      lines.push(valueCheck)
+    }
+  }
+
+  return {
+    lines,
+    expression: left.expression,
+    cppType: 'inox::Value',
+    nullable: expression.nullable === true,
+    runtimeTypeChecked: expectedTag !== null,
     valueType: resultType
   }
 }
@@ -5342,6 +5400,10 @@ function emitFormattedOutputRuntimeStringView(name: string): string {
 function emitFormattedOutputPreparedStringValue(value: PreparedExpression): string {
   if (value.cppType === 'inox::String') {
     return value.expression
+  }
+
+  if (value.cppType === 'inox::Value') {
+    return `inox::String(${value.expression})`
   }
 
   return `inox::String(inox::Value(${value.expression}))`

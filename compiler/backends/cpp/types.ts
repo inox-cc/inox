@@ -19,6 +19,7 @@ export type CPreparedExpression = {
   valueType?: string
   cppType?: string
   cppDeclaredName?: string
+  cppMutableTemporary?: boolean
 }
 
 export type CPreparedFunctionCompanion = {

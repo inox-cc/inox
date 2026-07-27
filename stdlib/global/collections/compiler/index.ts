@@ -127,14 +127,17 @@ const arrayOperations: LibraryOperationDescriptor[] = [
   },
   arrayMemberRead('length', numberTypeRef, 'static_cast<double>($value)'),
   arrayReceiverCall('includes', booleanTypeRef, ['runtime-value'], [{ valueTypes: [], typeRef: parameterTypeRef }]),
-  arrayReceiverCall(
-    'join',
-    primitiveTypeRef('string'),
-    ['optional-string-view'],
-    [{ valueTypes: ['string'] }],
-    { cppType: 'inox::String', fields: [] },
-    0
-  ),
+  {
+    ...arrayReceiverCall(
+      'join',
+      primitiveTypeRef('string'),
+      ['optional-string-view'],
+      [{ valueTypes: ['string'] }],
+      { cppType: 'inox::String', fields: [] },
+      0
+    ),
+    cPreservesPendingException: true
+  },
   arrayReceiverCall('pop', nullableParameterTypeRef(), [], [], { cppType: 'inox::Value', fields: [] }),
   {
     ...arrayReceiverCall('push', numberTypeRef, ['runtime-value'], [{ valueTypes: [], typeRef: parameterTypeRef }]),

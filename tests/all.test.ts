@@ -114,6 +114,8 @@ function shouldRunNativeCompilerIntegrationTests(
 
 async function runHostedIntegrationTests(): Promise<void> {
   const { assertArrayLowersToGlobalObject } = await import('./integration/array-global-object-lowering.test.ts')
+  const { assertArrayLogExpressionsReuseNativeTemporaries } =
+    await import('./integration/array-log-expression-lowering.test.ts')
   const { assertBuildCMakeConfigureIsQuiet } = await import('./integration/build-cmake-log-level.test.ts')
   const { assertBufferLowersToCppObject, assertBufferNativeFacadeHidesAllocatorOverloads } =
     await import('./integration/buffer-cpp-object-lowering.test.ts')
@@ -225,6 +227,10 @@ async function runHostedIntegrationTests(): Promise<void> {
 
     await t.test('array-global-object-lowering', () => {
       assertArrayLowersToGlobalObject()
+    })
+
+    await t.test('array-log-expression-lowering', () => {
+      assertArrayLogExpressionsReuseNativeTemporaries()
     })
 
     await t.test('c-prelude-include-order', () => {

@@ -1940,6 +1940,10 @@ double Array::unshift(const inox::Value& value) const {
 }
 
 inox::String Array::join(inox::StringView separator) const {
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
   inox_value array = inox::Value::raw();
 
   if (inox_default_allocator.alloc == 0 || inox_default_allocator.free == 0) {
