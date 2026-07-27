@@ -10,7 +10,7 @@ type GeneratedTextFile = {
   code: string
 }
 
-export function assertGeneratedLabelsHaveLeadingBlankOnly(): void {
+export function assertGeneratedCatchLabelStaysWithTryBlock(): void {
   const host = createMemoryCompilerHost(
     [
       {
@@ -39,8 +39,8 @@ console.log('after')
   const source = generatedTextFile(files, 'src/index.cc').code
 
   assert.match(source, /console\.log\("before"\);\n\n  \{ \/\/ try_\d+/)
-  assert.match(source, /goto end_\d+;\n\s+\}\n\s+catch_\d+: \{\n\s+auto inox_error = inox::take_exception\(\);/)
-  assert.doesNotMatch(source, /}[ \t]+catch_\d+:/)
+  assert.match(source, /goto end_\d+;\n\s+\} catch_\d+: \{\n\s+auto inox_error = inox::take_exception\(\);/)
+  assert.doesNotMatch(source, /\}\n\s+catch_\d+: \{/)
   assert.match(source, /\}\n\n  end_\d+:;/)
   assert.match(source, /end_\d+:;\n\n  console\.log\("after"\);/)
   assert.doesNotMatch(source, /end_\d+: ;/)
@@ -59,5 +59,5 @@ function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedT
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  assertGeneratedLabelsHaveLeadingBlankOnly()
+  assertGeneratedCatchLabelStaysWithTryBlock()
 }

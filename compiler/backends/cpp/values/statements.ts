@@ -2773,8 +2773,7 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
       popStringTarget(context.returnTargets)
     }
 
-    lines.push('  }')
-    lines.push(`  ${catchLabel}: {`)
+    lines.push(`  } ${catchLabel}: {`)
     if (statement.handler.param === null || typeof statement.handler.param === 'undefined') {
       lines.push('    inox::take_exception();')
     } else if (catchNeedsStringBinding) {
