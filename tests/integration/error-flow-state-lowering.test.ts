@@ -39,7 +39,7 @@ try {
 
   assert.match(
     source,
-    /\(void\)\(\(inox_async_result_\d+\)\.awaitValue\(\)\);/
+    /\(void\)\(inox_async_result_\d+\.awaitValue\(\)\);/
   )
   assert.doesNotMatch(source, /inox::await_value</)
   assert.match(

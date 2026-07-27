@@ -383,6 +383,16 @@ export function compilerLibraryIntrinsicNativeCAwaitExpression(
   )
 }
 
+export function compilerLibraryIntrinsicNativeCAwaitHandlesInvalidSource(
+  libraries: CCompilerLibrarySet,
+  role: IntrinsicRole
+): boolean {
+  return (
+    compilerLibraryNativeTypeForIntrinsic(cCompilerLibrarySetValue(libraries), role, 'construct')
+      ?.cAwaitHandlesInvalidSource === true
+  )
+}
+
 export function compilerLibraryIntrinsicNativeCAsyncTaskBridge(
   libraries: CCompilerLibrarySet,
   role: IntrinsicRole
@@ -555,6 +565,34 @@ export function compilerLibraryNativeRuntimeValueValidExpressionForTypeId(
   }
 
   return compilerLibraryNativeTypeForId(resolvedLibraries, typeId)?.cRuntimeValueValidExpression ?? null
+}
+
+export function compilerLibraryNativeValueAdapterFailureModeForTypeId(
+  libraries: CCompilerLibrarySet | null | undefined,
+  typeId: string | null | undefined
+): 'thrown' | null {
+  const resolvedLibraries = cOptionalCompilerLibrarySetValue(libraries)
+
+  if (resolvedLibraries === null || typeId === null || typeof typeId === 'undefined') {
+    return null
+  }
+
+  return compilerLibraryNativeTypeForId(resolvedLibraries, typeId)?.cValueAdapterFailureMode ?? null
+}
+
+export function compilerLibraryNativeValueAdapterPreservesPendingExceptionForTypeId(
+  libraries: CCompilerLibrarySet | null | undefined,
+  typeId: string | null | undefined
+): boolean {
+  const resolvedLibraries = cOptionalCompilerLibrarySetValue(libraries)
+
+  if (resolvedLibraries === null || typeId === null || typeof typeId === 'undefined') {
+    return false
+  }
+
+  return (
+    compilerLibraryNativeTypeForId(resolvedLibraries, typeId)?.cValueAdapterPreservesPendingException === true
+  )
 }
 
 export function applyCompilerLibraryIntrinsicNativeValueAdapter(

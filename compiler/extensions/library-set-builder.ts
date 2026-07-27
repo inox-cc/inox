@@ -770,6 +770,25 @@ function validateNativeTypeValueAdapter(nativeType: LibraryNativeTypeDescriptor)
   if (adapter !== null && typeof adapter !== 'undefined' && !adapter.includes('$value')) {
     throw new Error(`native type ${nativeType.typeId} C++ value adapter requires $value`)
   }
+
+  if (
+    (nativeType.cValueAdapterFailureMode !== null &&
+      typeof nativeType.cValueAdapterFailureMode !== 'undefined') ||
+    nativeType.cValueAdapterPreservesPendingException === true
+  ) {
+    if (adapter === null || typeof adapter === 'undefined' || adapter.length === 0) {
+      throw new Error(`native type ${nativeType.typeId} C++ value adapter contract requires cValueAdapter`)
+    }
+  }
+
+  if (
+    nativeType.cValueAdapterPreservesPendingException === true &&
+    nativeType.cValueAdapterFailureMode !== 'thrown'
+  ) {
+    throw new Error(
+      `native type ${nativeType.typeId} C++ value adapter preserves pending exceptions only with thrown failure mode`
+    )
+  }
 }
 
 function validateNativeTypeRuntimeValueExpression(nativeType: LibraryNativeTypeDescriptor): void {
@@ -793,6 +812,13 @@ function validateNativeTypeAwaitExpression(nativeType: LibraryNativeTypeDescript
 
   if (typeof expression === 'string' && !expression.includes('$value')) {
     throw new Error(`native type ${nativeType.typeId} C++ await expression requires $value`)
+  }
+
+  if (
+    nativeType.cAwaitHandlesInvalidSource === true &&
+    (typeof expression !== 'string' || expression.length === 0)
+  ) {
+    throw new Error(`native type ${nativeType.typeId} C++ await invalid-source contract requires cAwaitExpression`)
   }
 }
 
@@ -2062,12 +2088,18 @@ function compilerLibrarySetFingerprint(
           sortedStrings(item.runtimeRequirements).join(',') +
           ':value-adapter=' +
           (item.cValueAdapter ?? '') +
+          ':value-adapter-failure=' +
+          (item.cValueAdapterFailureMode ?? '') +
+          ':value-adapter-preserves-pending-exception=' +
+          (item.cValueAdapterPreservesPendingException === true ? '1' : '') +
           ':runtime-value-expression=' +
           (item.cRuntimeValueExpression ?? '') +
           ':runtime-value-valid-expression=' +
           (item.cRuntimeValueValidExpression ?? '') +
           ':await-expression=' +
           (item.cAwaitExpression ?? '') +
+          ':await-handles-invalid-source=' +
+          (item.cAwaitHandlesInvalidSource === true ? '1' : '') +
           ':async-task-bridge=' +
           nativeAsyncTaskBridgeFingerprint(item) +
           ':parameters=' +

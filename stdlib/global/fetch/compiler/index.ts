@@ -124,6 +124,9 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       declarationNames: ['Response'],
       valueType: 'object',
       cppType: 'inox::FetchResponse',
+      cValueAdapter: 'inox::FetchResponse($value)',
+      cValueAdapterFailureMode: 'thrown',
+      cValueAdapterPreservesPendingException: true,
       baseTypeIds: [],
       runtimeRequirements,
       fields: responseFields

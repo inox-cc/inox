@@ -36,6 +36,14 @@ test('global Promise использует package-local declarations-only C++ fa
   assert.match(source, /inox_status Promise::fulfill\(Value value\) const/)
   assert.match(source, /inox_status Promise::rejectWith\(Value error\) const/)
   assert.match(source, /Value Promise::awaitValue\(\) const/)
+  assert.match(
+    source,
+    /Value Promise::awaitValue\(\) const \{\n  if \(thrown\(\)\) \{\n    return \{\};\n  \}\n\n  if \(!valid\(\)\) \{\n    throw_value\(Value\(\)\);\n    return \{\};\n  \}/
+  )
+  assert.match(
+    source,
+    /if \(status != INOX_OK\) \{\n    if \(!thrown\(\)\) \{\n      throw_value\(Value\(\)\);\n    \}\n\n    return \{\};\n  \}/
+  )
   assert.match(source, /Promise PromiseRuntimeBridge::adopt\(inox_promise\* promise\)/)
   assert.doesNotMatch(source, /Promise Promise::adopt\(/)
   assert.doesNotMatch(runtimeHeader, /class Promise\s*\{/)

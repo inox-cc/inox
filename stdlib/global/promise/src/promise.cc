@@ -136,12 +136,24 @@ inox_status Promise::observe(
 }
 
 Value Promise::awaitValue() const {
+  if (thrown()) {
+    return {};
+  }
+
+  if (!valid()) {
+    throw_value(Value());
+    return {};
+  }
+
   Value value;
   inox_promise_state state = INOX_PROMISE_PENDING;
   const inox_status status = inox_promise_await(loop(), rawPromise(promise_), true, value.out(), &state);
 
   if (status != INOX_OK) {
-    throw_value(Value());
+    if (!thrown()) {
+      throw_value(Value());
+    }
+
     return {};
   }
 

@@ -161,6 +161,7 @@ const nativeDescriptorKeys = new Set([
   'cAsyncFulfillExpression',
   'cAsyncRejectExpression',
   'cAwaitExpression',
+  'cAwaitHandlesInvalidSource',
   'cClassFormatExpression',
   'cEntrypointAdapter',
   'cFunction',
@@ -177,6 +178,8 @@ const nativeDescriptorKeys = new Set([
   'cType',
   'cValidExpression',
   'cValueAdapter',
+  'cValueAdapterFailureMode',
+  'cValueAdapterPreservesPendingException',
   'createExpression'
 ])
 const optionValueDescriptorKeys = new Set([

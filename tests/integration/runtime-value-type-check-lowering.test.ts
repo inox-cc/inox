@@ -61,15 +61,16 @@ for (const a of foo.v) {
 
   assert.match(
     source,
-    /auto (inox_await_source_\d+) = inox::fetch\("http:\/\/example.com\/"\);\n\s+if \(!\(\1\.valid\(\)\)\) return;\n\s+auto (inox_await_value_\d+) = \(\1\)\.awaitValue\(\);[\s\S]*auto res = inox::FetchResponse\(\2\);/
+    /auto res = inox::FetchResponse\(inox::fetch\("http:\/\/example.com\/"\)\.awaitValue\(\)\);\n\s+if \(inox::thrown\(\)\) goto catch_\d+;/
   )
   assert.match(
     source,
-    /auto (inox_await_source_\d+) = res\.text\(\);\n\s+if \(!\(\1\.valid\(\)\)\) return;\n\s+auto (inox_await_value_\d+) = \(\1\)\.awaitValue\(\);[\s\S]*auto txt = inox::String\(\2\);/
+    /auto (inox_await_value_\d+) = res\.text\(\)\.awaitValue\(\);[\s\S]*auto txt = inox::String\(\1\);/
   )
   assert.doesNotMatch(source, /inox::await_value</)
   assert.doesNotMatch(source, /inox_library_asyncResult_\d+/)
   assert.doesNotMatch(source, /inox_await_converted_\d+/)
+  assert.doesNotMatch(source, /inox_await_source_\d+/)
   assert.match(source, /if \(inox::thrown\(\)\) goto catch_\d+;/)
   assert.doesNotMatch(source, /inox_await_result_\d+/)
   assert.doesNotMatch(source, /inox_res_\d+\.value\(\)\.valid\(\)/)

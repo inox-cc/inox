@@ -162,18 +162,23 @@ import {
   cIterableElementDeclaredName,
   cIterableElementFunctionType,
   cRuntimeValueTag,
+  applyLibraryNativeValueAdapter,
   compilerLibraryIntrinsicAsyncResultCExpression,
   compilerLibraryIntrinsicAsyncResultCValidExpression,
   compilerLibraryIntrinsicNativeCAwaitExpression,
+  compilerLibraryIntrinsicNativeCAwaitHandlesInvalidSource,
   compilerLibraryIntrinsicNativeCppType,
   compilerLibraryIntrinsicSequenceMaterialization,
   compilerLibraryNativeRuntimeValueValidExpressionForTypeRef,
+  compilerLibraryNativeValueAdapterFailureModeForTypeId,
+  compilerLibraryNativeValueAdapterPreservesPendingExceptionForTypeId,
   requireCompilerLibraryAsyncResultCppType,
   isManagedRuntimeReturnType,
   isNullableScalarType,
   isOpaqueRuntimeValueType,
   isRuntimeNullableType,
   libraryNativeCppType,
+  libraryNativeValueAdapter,
   resolveCCompilerLibrarySet
 } from './value-types.ts'
 import type { ClassLoweringDependencies } from './values/classes.ts'
@@ -6969,6 +6974,10 @@ function emitPreparedImmediateAwaitLibraryAsyncResultExpression(
     return null
   }
 
+  if (compilerLibraryIntrinsicNativeCAwaitHandlesInvalidSource(context.libraries, 'async-result')) {
+    return asyncResult
+  }
+
   const source = nextCName(context, 'inox_await_source')
   const lines: string[] = []
 
@@ -7033,9 +7042,6 @@ function emitAwaitValueVariableDeclaration(statement: AnyNode, context: CFunctio
 
   const name = emitCIdentifier(statement.name)
   const valueTag = cRuntimeValueTag(valueType)
-  const valueCheckNeeded = emitRuntimeValueCheck('inox_await_value', valueTag, context) !== ''
-  const rawValue = nextCName(context, 'inox_await_value')
-  const valueInfo = resolveAwaitResultCppValueInfo(expression, rawValue, valueType, valueTag, valueCheckNeeded, context)
   const awaitExpression = emitAsyncResultAwaitExpression(expression.argument, preparedAsyncResult.expression, context)
 
   if (awaitExpression === null) {
@@ -7043,27 +7049,52 @@ function emitAwaitValueVariableDeclaration(statement: AnyNode, context: CFunctio
   }
 
   const lines: string[] = []
+  const adapter = resolveAwaitNativeValueAdapterInfo(expression, awaitExpression, context)
+  let cppType = 'inox::Value'
 
   pushAll(lines, preparedAsyncResult.lines)
-  lines.push(`auto ${rawValue} = ${awaitExpression};`)
-  pushAll(lines, emitThrownCheckLines(context))
 
-  if (valueInfo.valueCheck !== '') {
-    lines.push(valueInfo.valueCheck)
+  if (
+    adapter !== null &&
+    adapter.failureMode === 'thrown' &&
+    adapter.preservesPendingException
+  ) {
+    lines.push(`auto ${name} = ${adapter.valueExpression};`)
+    pushAll(lines, emitThrownCheckLines(context))
+    cppType = adapter.cppType
+  } else {
+    const valueCheckNeeded = emitRuntimeValueCheck('inox_await_value', valueTag, context) !== ''
+    const rawValue = nextCName(context, 'inox_await_value')
+    const valueInfo = resolveAwaitResultCppValueInfo(
+      expression,
+      rawValue,
+      valueType,
+      valueTag,
+      valueCheckNeeded,
+      context
+    )
+
+    lines.push(`auto ${rawValue} = ${awaitExpression};`)
+    pushAll(lines, emitThrownCheckLines(context))
+
+    if (valueInfo.valueCheck !== '') {
+      lines.push(valueInfo.valueCheck)
+    }
+
+    lines.push(`auto ${name} = ${valueInfo.valueExpression};`)
+    cppType = valueInfo.cppType
   }
-
-  lines.push(`auto ${name} = ${valueInfo.valueExpression};`)
 
   lines.push('')
 
-  if (valueInfo.cppType === 'inox::String') {
+  if (cppType === 'inox::String') {
     context.variables.set(statement.name, 'string')
     context.cppStringValues.add(statement.name)
   } else {
     registerRuntimeValueMetadata(statement.name, valueType, statement, expression, context)
 
-    if (valueInfo.cppType !== 'inox::Value') {
-      context.cppValueTypes.set(statement.name, valueInfo.cppType)
+    if (cppType !== 'inox::Value') {
+      context.cppValueTypes.set(statement.name, cppType)
     }
   }
 
@@ -7146,16 +7177,6 @@ function emitPreparedAwaitResultExpression(
   rejectionValueType: string,
   context: CFunctionContext
 ): PreparedExpression {
-  const result = nextCName(context, 'inox_await')
-  const valueExpression = result
-  const valueInfo = resolveAwaitResultCppValueInfo(
-    expression,
-    valueExpression,
-    valueType,
-    valueTag,
-    valueCheckNeeded,
-    context
-  )
   const awaitExpression = emitAsyncResultAwaitExpression(expression.argument, preparedAsyncResult.expression, context)
   const lines: string[] = []
 
@@ -7177,6 +7198,39 @@ function emitPreparedAwaitResultExpression(
       valueType: 'unknown'
     }
   }
+
+  const adapter = resolveAwaitNativeValueAdapterInfo(expression, awaitExpression, context)
+
+  if (
+    adapter !== null &&
+    adapter.failureMode === 'thrown' &&
+    adapter.preservesPendingException
+  ) {
+    const converted = nextCName(context, 'inox_await')
+
+    lines.push(`auto ${converted} = ${adapter.valueExpression};`)
+    pushAll(lines, emitAwaitResultRejectedAsyncResultLines(converted, rejectionValueType, context))
+
+    return {
+      lines,
+      expression: converted,
+      cppDeclaredName: converted,
+      cppType: adapter.cppType,
+      owned: false,
+      runtimeTypeChecked: true,
+      valueType
+    }
+  }
+
+  const result = nextCName(context, 'inox_await')
+  const valueInfo = resolveAwaitResultCppValueInfo(
+    expression,
+    result,
+    valueType,
+    valueTag,
+    valueCheckNeeded,
+    context
+  )
 
   lines.push(`auto ${result} = ${awaitExpression};`)
   pushAll(lines, emitAwaitResultRejectedAsyncResultLines(result, rejectionValueType, context))
@@ -7218,6 +7272,44 @@ type AwaitResultCppValueInfo = {
   valueExpression: string
 }
 
+type AwaitNativeValueAdapterInfo = {
+  cppType: string
+  failureMode: 'thrown' | null
+  preservesPendingException: boolean
+  valueExpression: string
+}
+
+function resolveAwaitNativeValueAdapterInfo(
+  expression: AnyNode,
+  valueExpression: string,
+  context: CFunctionContext
+): AwaitNativeValueAdapterInfo | null {
+  const shape = expression.shape ?? expression.argument?.shape
+  const cppType = shape?.libraryCppType
+  const typeId = shape?.libraryTypeId
+  const adapter = libraryNativeValueAdapter(shape)
+  const asyncResultCppType = compilerLibraryIntrinsicNativeCppType(context.libraries, 'async-result')
+
+  if (
+    cppType === null ||
+    typeof cppType === 'undefined' ||
+    cppType === asyncResultCppType ||
+    adapter === null
+  ) {
+    return null
+  }
+
+  return {
+    cppType,
+    failureMode: compilerLibraryNativeValueAdapterFailureModeForTypeId(context.libraries, typeId),
+    preservesPendingException: compilerLibraryNativeValueAdapterPreservesPendingExceptionForTypeId(
+      context.libraries,
+      typeId
+    ),
+    valueExpression: applyLibraryNativeValueAdapter(valueExpression, adapter)
+  }
+}
+
 function resolveAwaitResultCppValueInfo(
   expression: AnyNode,
   valueExpression: string,
@@ -7251,6 +7343,7 @@ function resolveAwaitResultCppValueInfo(
   const asyncResultCppType = compilerLibraryIntrinsicNativeCppType(context.libraries, 'async-result')
 
   if (libraryCppType !== null && typeof libraryCppType !== 'undefined' && libraryCppType !== asyncResultCppType) {
+    const adapter = libraryNativeValueAdapter(shape)
     const valueCheck =
       nativeValidExpression === null
         ? emitRuntimeValueCheck(valueExpression, valueTag, context)
@@ -7260,7 +7353,10 @@ function resolveAwaitResultCppValueInfo(
       cppType: libraryCppType,
       runtimeTypeChecked: true,
       valueCheck,
-      valueExpression: `${libraryCppType}(${valueExpression})`
+      valueExpression:
+        adapter === null
+          ? `${libraryCppType}(${valueExpression})`
+          : applyLibraryNativeValueAdapter(valueExpression, adapter)
     }
   }
 
@@ -7296,7 +7392,7 @@ function emitAsyncResultAwaitExpression(
     return null
   }
 
-  return template.split('$value').join(`(${value})`)
+  return template.split('$value').join(value)
 }
 
 function emitAwaitResultRejectedAsyncResultLines(

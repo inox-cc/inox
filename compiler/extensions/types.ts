@@ -185,9 +185,12 @@ export type LibraryNativeTypeDescriptor = {
   baseTypeIds: LibraryNativeTypeId[]
   runtimeRequirements: RuntimeRequirementId[]
   cValueAdapter?: string | null
+  cValueAdapterFailureMode?: 'thrown' | null
+  cValueAdapterPreservesPendingException?: boolean
   cRuntimeValueExpression?: string | null
   cRuntimeValueValidExpression?: string | null
   cAwaitExpression?: string | null
+  cAwaitHandlesInvalidSource?: boolean
   cAsyncTaskBridge?: LibraryCAsyncTaskBridgeDescriptor | null
   typeParameters?: string[]
   traits?: TypeTraitRef[]

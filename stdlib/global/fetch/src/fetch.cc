@@ -2108,6 +2108,10 @@ FetchResponse::FetchResponse()
 
 FetchResponse::FetchResponse(Value value)
   : value_(std::move(value)), status(0), ok(false), url(), statusText(), redirected(false), headers() {
+  if (thrown()) {
+    return;
+  }
+
   if (!fetch_is_object(value_.raw())) {
     throw_value(Value());
     return;
