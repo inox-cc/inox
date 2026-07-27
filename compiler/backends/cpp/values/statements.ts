@@ -4420,8 +4420,6 @@ export function emitReturnCleanupStatement(context: CFunctionContext): string {
   }
 
   if (context.cleanupEnabled) {
-    context.usedCleanupGoto = true
-
     return 'goto cleanup;'
   }
 

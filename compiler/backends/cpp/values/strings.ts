@@ -53,7 +53,6 @@ type StringCContext = {
   statusReturn: boolean
   stringLoweringDependencies?: StringLoweringDependencies
   throwingFunction: boolean
-  usedCleanupGoto: boolean
   variables?: Map<string, string>
   [key: string]: any
 }

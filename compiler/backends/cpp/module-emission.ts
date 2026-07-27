@@ -79,6 +79,7 @@ import {
   emitOwnedValueDeclarations,
   emitReturnFlowDeclarations,
   emitReturnValueDeclarations,
+  replaceCleanupGotosWithReturn,
   shouldEmitCleanupLabel
 } from './context.ts'
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
@@ -3437,9 +3438,10 @@ function emitCModuleInitFunction(
   pushIndentedCModuleLines(lines, emitErrorChannelDeclarations(context))
   pushIndentedCModuleLines(lines, emitBoxedValueDeclarations(context))
   pushIndentedCModuleLines(lines, emitEventLoopInit(context))
-  pushScopedCModuleBody(lines, bodyLines)
+  const needsCleanup = shouldEmitCleanupLabel(context)
+  pushScopedCModuleBody(lines, needsCleanup ? bodyLines : replaceCleanupGotosWithReturn(bodyLines, 'return;'))
 
-  if (shouldEmitCleanupLabel(context)) {
+  if (needsCleanup) {
     lines.push('cleanup:')
     pushIndentedCModuleLines(lines, emitOwnedValueCleanup(context))
     pushIndentedCModuleLines(lines, emitOwnedAsyncResultCleanup(context))

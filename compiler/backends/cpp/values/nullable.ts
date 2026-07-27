@@ -67,7 +67,6 @@ type NullableFunctionContext = {
   runtimeCallbacks: CStringSet
   statusReturn: boolean
   throwingFunction: boolean
-  usedCleanupGoto: boolean
   variables: CStringMap
 }
 

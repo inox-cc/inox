@@ -7,7 +7,6 @@ type RuntimeValueCheckContext = {
   failureStatementUsed?: boolean
   statusReturn: boolean
   throwingFunction: boolean
-  usedCleanupGoto: boolean
 }
 
 export function runtimeObjectLikeTagMatchCondition(name: string): string {

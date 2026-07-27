@@ -81,7 +81,6 @@ type ObjectFunctionContext = ObjectShapeContext &
     returnType?: string
     statusReturn: boolean
     throwingFunction: boolean
-    usedCleanupGoto: boolean
   }
 
 type ObjectFieldNode = AnyNode

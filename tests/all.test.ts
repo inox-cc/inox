@@ -215,6 +215,7 @@ async function runHostedIntegrationTests(): Promise<void> {
     await import('./integration/throwing-error-transfer-lowering.test.ts')
   const { assertUrlRuntimeUsesStringFacade, assertUrlSearchParamsLowersStringLiteralsDirectly } =
     await import('./integration/url-cpp-object-lowering.test.ts')
+  const { assertRaiiFunctionsUseDirectReturns } = await import('./integration/raii-exit-lowering.test.ts')
 
   await test('compiler integration checks', async (t) => {
     await t.test('no-example-dependencies', async () => {
@@ -476,6 +477,10 @@ async function runHostedIntegrationTests(): Promise<void> {
     await t.test('runtime-value-core-dependencies', async () => {
       await assertRuntimeValueCoreDoesNotReferenceFeatureDisposers()
     })
+
+    await t.test('raii-exit-lowering', () => {
+      assertRaiiFunctionsUseDirectReturns()
+    })
   })
 }
 
@@ -483,6 +488,8 @@ async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<
   const { assertCliEntryModuleMain } = await import('./integration/cli-entry-module-main.test.ts')
   const { assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariableTarget } =
     await import('./integration/json-parse-shape-lowering.test.ts')
+  const { assertNativeRaiiFunctionsUseDirectReturns } =
+    await import('./integration/raii-exit-lowering.test.ts')
   const { assertNativeInoxDefaultOutput, assertNativeInoxHelp, assertNativeInoxRuntimeSmoke } =
     await import('./integration/native-inox-help.test.ts')
   const { assertNativeInoxModuleGraph } = await import('./integration/native-inox-module-graph.test.ts')
@@ -498,6 +505,10 @@ async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<
 
     await t.test('native-json-parse-unicode-shape-lowering', async () => {
       await assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariableTarget(compilerPath)
+    })
+
+    await t.test('native-raii-cleanup-lowering', async () => {
+      await assertNativeRaiiFunctionsUseDirectReturns(compilerPath)
     })
 
     await t.test('native-inox-help', async () => {

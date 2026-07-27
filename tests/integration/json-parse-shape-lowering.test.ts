@@ -139,10 +139,10 @@ export async function assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariable
       source,
       /auto foo = JSON\.parse\("\{\\"v\\":\[\{\\"1\\":2\},\{\\"3\\":4,\\"5\\":\\"блаблабла\\"\}\]\}"\);/
     )
-    assert.match(source, /if \(inox::thrown\(\)\) goto cleanup;/)
+    assert.match(source, /if \(inox::thrown\(\)\) return;/)
     assert.match(
       source,
-      /auto inox_library_result_\d+ = Array\(Object\.entries\(inox::get\(foo, "v"\)\)\.get\(0\)\)\.get\(0\);\n    if \(inox::thrown\(\)\) goto cleanup;/
+      /auto inox_library_result_\d+ = Array\(Object\.entries\(inox::get\(foo, "v"\)\)\.get\(0\)\)\.get\(0\);\n  if \(inox::thrown\(\)\) return;/
     )
     assert.doesNotMatch(source, /auto inox_library_object_\d+/)
     assert.doesNotMatch(source, /auto inox_value_\d+ = inox::get\(foo, "v"\);/)

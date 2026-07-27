@@ -167,7 +167,6 @@ export type CFailureContext = {
   returnType?: string
   statusReturn: boolean
   throwingFunction: boolean
-  usedCleanupGoto: boolean
 }
 
 export type CNameContext = {
@@ -178,7 +177,6 @@ export type CEventLoopContext = {
   eventLoopUsed: boolean
   explicitEventLoop?: boolean | null
   externalEventLoop: boolean
-  usedCleanupGoto: boolean
 }
 
 export type COwnedValueContext = {
@@ -290,7 +288,6 @@ export type CFunctionContextWithDependencies<
   runtimeValueStorageNames: CStringSet
   statusReturn: boolean
   throwingFunction: boolean
-  usedCleanupGoto: boolean
   usedRuntimeCallbackCleanupGoto?: boolean
   variables: CStringMap
 }
@@ -438,7 +435,6 @@ export function createFunctionContext<
     runtimeValueStorageNames: cloneCStringSet(baseContext.moduleRuntimeValueNames),
     statusReturn: false,
     throwingFunction: false,
-    usedCleanupGoto: false,
     variables: cloneCStringMap(baseContext.moduleValueTypes),
     returnNullable: returnNullable,
     returnType: returnType
@@ -462,7 +458,6 @@ export function emitFailureStatement(context: CFailureContext): string {
   }
 
   if (context.throwingFunction && context.cleanupEnabled) {
-    context.usedCleanupGoto = true
     return 'do { inox_status_result = INOX_ERR_TYPE; goto cleanup; } while (0);'
   }
 
@@ -471,7 +466,6 @@ export function emitFailureStatement(context: CFailureContext): string {
   }
 
   if (context.cleanupEnabled) {
-    context.usedCleanupGoto = true
     return 'goto cleanup;'
   }
 
@@ -517,7 +511,6 @@ export function registerOwnedAsyncResult(
 
 export function registerEventLoop(context: CEventLoopContext): void {
   context.eventLoopUsed = true
-  context.usedCleanupGoto = true
 }
 
 export function registerBoxedValue(context: CBoxedValueContext, name: string, valueType: string = 'number'): void {
@@ -618,12 +611,35 @@ export function shouldEmitCleanupLabel(context: CFunctionContext): boolean {
     return false
   }
 
+  if (context.throwingFunction) {
+    return true
+  }
+
   return (
-    context.throwingFunction ||
-    context.returnType !== 'void' ||
-    (context.returnType === 'void' &&
-      (context.ownedValues.length > 0 || context.boxedValues.length > 0 || context.usedCleanupGoto))
+    emitOwnedValueCleanup(context).length > 0 ||
+    emitOwnedAsyncResultCleanup(context).length > 0 ||
+    emitEventLoopCleanup(context).length > 0 ||
+    emitBoxedValueCleanup(context).length > 0
   )
+}
+
+export function replaceCleanupGotosWithReturn(lines: string[], returnStatement: string): string[] {
+  const result: string[] = []
+  const conditionalSuffix = ' goto cleanup;'
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+
+    if (trimmed === 'goto cleanup;') {
+      result.push(`${line.slice(0, line.length - line.trimStart().length)}${returnStatement}`)
+    } else if (line.endsWith(conditionalSuffix)) {
+      result.push(`${line.slice(0, line.length - conditionalSuffix.length)} ${returnStatement}`)
+    } else {
+      result.push(line)
+    }
+  }
+
+  return result
 }
 
 export function emitReturnValueDeclarations(context: CReturnValueDeclarationContext): string[] {

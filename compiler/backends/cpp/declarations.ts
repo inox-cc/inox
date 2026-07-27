@@ -42,6 +42,7 @@ import {
   nextCName,
   registerBoxedValue,
   registerOwnedValue,
+  replaceCleanupGotosWithReturn,
   shouldEmitCleanupLabel
 } from './context.ts'
 import {
@@ -366,25 +367,16 @@ export function emitFunctionDeclaration(
     pushIndentedDeclarationLines(lines, emitEventLoopCleanup(context))
     pushIndentedDeclarationLines(lines, emitBoxedValueCleanup(context))
     pushIndentedDeclarationLines(lines, emitCleanupReturn(context))
-  } else if (context.returnType !== 'void') {
-    let returnValue = '0'
-    const libraryCppType = libraryNativeBoundaryCppType(
-      context.returnType,
-      context.returnNullable === true,
-      false,
-      context.returnShape
-    )
-
-    if (libraryCppType !== null) {
-      returnValue = `${libraryCppType}{}`
-    } else if (isThrowingFunctionRuntimeOut(context)) {
-      returnValue = 'inox_undefined_value()'
-    }
-
-    pushDeclarationLines(lines, bodyLines)
-    lines.push(`  return ${returnValue};`)
   } else {
-    pushDeclarationLines(lines, bodyLines)
+    const returnStatement = context.returnType === 'void' ? 'return;' : 'return inox_return;'
+    const directReturnBody = replaceCleanupGotosWithReturn(bodyLines, returnStatement)
+
+    if (context.returnType !== 'void') {
+      pushScopedDeclarationBody(lines, directReturnBody)
+      lines.push('  return inox_return;')
+    } else {
+      pushDeclarationLines(lines, directReturnBody)
+    }
   }
 
   lines.push('}')
@@ -863,26 +855,16 @@ export function emitClassMethodDeclaration(
     pushIndentedDeclarationLines(lines, emitEventLoopCleanup(context))
     pushIndentedDeclarationLines(lines, emitBoxedValueCleanup(context))
     pushIndentedDeclarationLines(lines, emitCleanupReturn(context))
-  } else if (context.returnType !== 'void') {
-    pushDeclarationLines(lines, bodyLines)
-
-    let returnValue = '0'
-    const libraryCppType = libraryNativeBoundaryCppType(
-      context.returnType,
-      context.returnNullable === true,
-      false,
-      context.returnShape
-    )
-
-    if (libraryCppType !== null) {
-      returnValue = `${libraryCppType}{}`
-    } else if (isThrowingFunctionRuntimeOut(context)) {
-      returnValue = 'inox_undefined_value()'
-    }
-
-    lines.push(`  return ${returnValue};`)
   } else {
-    pushDeclarationLines(lines, bodyLines)
+    const returnStatement = context.returnType === 'void' ? 'return;' : 'return inox_return;'
+    const directReturnBody = replaceCleanupGotosWithReturn(bodyLines, returnStatement)
+
+    if (context.returnType !== 'void') {
+      pushScopedDeclarationBody(lines, directReturnBody)
+      lines.push('  return inox_return;')
+    } else {
+      pushDeclarationLines(lines, directReturnBody)
+    }
   }
 
   lines.push('}')
@@ -1094,7 +1076,7 @@ function emitNativeClassConstructorDeclaration(
     pushIndentedDeclarationLines(lines, emitBoxedValueCleanup(context))
     pushIndentedDeclarationLines(lines, emitCleanupReturn(context))
   } else {
-    pushDeclarationLines(lines, bodyLines)
+    pushDeclarationLines(lines, replaceCleanupGotosWithReturn(bodyLines, 'return;'))
   }
 
   lines.push('}')
