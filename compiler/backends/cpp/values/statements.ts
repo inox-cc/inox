@@ -2889,6 +2889,13 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
 }
 
 function pushEndLabel(lines: string[], endLabel: string): void {
+  const previousLineIndex = lines.length - 1
+
+  if (previousLineIndex >= 0 && lines[previousLineIndex] === '}') {
+    lines[previousLineIndex] = `} ${endLabel}:;`
+    return
+  }
+
   lines.push(`${endLabel}:;`)
 }
 

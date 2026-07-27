@@ -10,7 +10,7 @@ type GeneratedTextFile = {
   code: string
 }
 
-export function assertGeneratedCatchLabelStaysWithTryBlock(): void {
+export function assertGeneratedLabelsStayWithTryBlocks(): void {
   const host = createMemoryCompilerHost(
     [
       {
@@ -41,8 +41,8 @@ console.log('after')
   assert.match(source, /console\.log\("before"\);\n\n  \{ \/\/ try_\d+/)
   assert.match(source, /goto end_\d+;\n\s+\} catch_\d+: \{\n\s+auto inox_error = inox::take_exception\(\);/)
   assert.doesNotMatch(source, /\}\n\s+catch_\d+: \{/)
-  assert.match(source, /\}\n\n  end_\d+:;/)
-  assert.match(source, /end_\d+:;\n\n  console\.log\("after"\);/)
+  assert.match(source, /\} end_\d+:;\n\n  console\.log\("after"\);/)
+  assert.doesNotMatch(source, /\}\n(?:\s*\n)?\s+end_\d+:;/)
   assert.doesNotMatch(source, /end_\d+: ;/)
   assert.doesNotMatch(source, /end_\d+:\n\s+;/)
   assert.doesNotMatch(source, /else catch_\d+:/)
@@ -59,5 +59,5 @@ function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedT
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  assertGeneratedCatchLabelStaysWithTryBlock()
+  assertGeneratedLabelsStayWithTryBlocks()
 }

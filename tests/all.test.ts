@@ -130,7 +130,7 @@ async function runHostedIntegrationTests(): Promise<void> {
   } = await import('./integration/error-flow-state-lowering.test.ts')
   const { assertFetchAwaitUsesCppWrappers, assertFetchRuntimeFacadesUseCppObjects } =
     await import('./integration/fetch-await-cpp-lowering.test.ts')
-  const { assertGeneratedCatchLabelStaysWithTryBlock } =
+  const { assertGeneratedLabelsStayWithTryBlocks } =
     await import('./integration/generated-label-spacing.test.ts')
   const {
     assertAwaitFunctionUsesExternalLoopRuntime,
@@ -259,7 +259,7 @@ async function runHostedIntegrationTests(): Promise<void> {
     })
 
     await t.test('generated-label-spacing', () => {
-      assertGeneratedCatchLabelStaysWithTryBlock()
+      assertGeneratedLabelsStayWithTryBlocks()
     })
 
     await t.test('main-raii-lowering', () => {

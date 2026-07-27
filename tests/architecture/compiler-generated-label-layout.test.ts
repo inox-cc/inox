@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { compileSource } from '../../compiler/core.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
-test('generated C++ держит catch у закрывающей brace, а end label отдельно', () => {
+test('generated C++ держит catch и end labels у соответствующих закрывающих braces', () => {
   const result = compileSource(
     `
       try {
@@ -17,7 +17,7 @@ test('generated C++ держит catch у закрывающей brace, а end l
   )
 
   assert.match(result.code, /}[ \t]+catch_\d+: \{/)
-  assert.doesNotMatch(result.code, /}[ \t]+end_\d+:/)
+  assert.match(result.code, /}[ \t]+end_\d+:;/)
   assert.doesNotMatch(result.code, /}\n(?:[ \t]*\n)?[ \t]*catch_\d+: \{/)
-  assert.match(result.code, /}\n(?:[ \t]*\n)?[ \t]*end_\d+:;/)
+  assert.doesNotMatch(result.code, /}\n(?:[ \t]*\n)?[ \t]*end_\d+:;/)
 })
