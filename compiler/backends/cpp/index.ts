@@ -4103,17 +4103,15 @@ function knownObjectMemberKey(member: CKnownObjectField): string {
 }
 
 function emitArrayVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
-  const array = emitCArrayLiteralValueExpression(statement.init, context)
+  const moduleName = context.moduleValueNames.get(statement.name)
+  const name = moduleName ?? emitCIdentifier(statement.name)
+  const array = emitCArrayLiteralValueExpression(statement.init, context, {
+    declare: moduleName === null || typeof moduleName === 'undefined',
+    name
+  })
   const lines: string[] = [...array.lines]
   context.variables.set(statement.name, array.valueType ?? 'object')
   context.cppValueTypes.set(statement.name, array.cppType ?? compilerArrayLiteralCppType(statement.init, context))
-  const name = context.moduleValueNames.get(statement.name) ?? emitCIdentifier(statement.name)
-
-  if (context.moduleValueNames.has(statement.name)) {
-    lines.push(`${name} = ${array.expression};`)
-  } else {
-    lines.push(`auto ${name} = ${array.expression};`)
-  }
 
   return lines
 }
@@ -4607,8 +4605,17 @@ function emitNullableFunctionValueExpression(
   return emitRuntimeCallbackValue(expression, normalizeFunctionType(functionType), context)
 }
 
-function emitCArrayLiteralValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
-  const temp = nextCName(context, 'inox_array')
+type ArrayLiteralOutputTarget = {
+  declare: boolean
+  name: string
+}
+
+function emitCArrayLiteralValueExpression(
+  expression: AnyNode,
+  context: CFunctionContext,
+  outputTarget?: ArrayLiteralOutputTarget
+): PreparedExpression {
+  const temp = outputTarget?.name ?? nextCName(context, 'inox_array')
   const lines: string[] = []
   const arrayCppType = compilerArrayLiteralCppType(expression, context)
   const materialization = compilerLibraryIntrinsicSequenceMaterialization(context.libraries, 'array-literal')
@@ -4638,7 +4645,9 @@ function emitCArrayLiteralValueExpression(expression: AnyNode, context: CFunctio
     value: ''
   })
 
-  lines.push(`${arrayCppType} ${temp} = ${createExpression};`)
+  const target = outputTarget?.declare === true ? `auto ${temp}` : outputTarget?.name ?? `${arrayCppType} ${temp}`
+
+  lines.push(`${target} = ${createExpression};`)
   pushAll(lines, emitThrownCheckLines(context))
 
   for (let index = 0; index < expression.elements.length; index++) {
