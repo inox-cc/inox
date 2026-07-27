@@ -161,6 +161,7 @@ import type { CUnitDependencies } from './unit.ts'
 import {
   cIterableElementDeclaredName,
   cIterableElementFunctionType,
+  cRuntimeValueAdapterInfo,
   cRuntimeValueTag,
   applyLibraryNativeValueAdapter,
   compilerLibraryIntrinsicAsyncResultCExpression,
@@ -170,8 +171,6 @@ import {
   compilerLibraryIntrinsicNativeCppType,
   compilerLibraryIntrinsicSequenceMaterialization,
   compilerLibraryNativeRuntimeValueValidExpressionForTypeRef,
-  compilerLibraryNativeValueAdapterFailureModeForTypeId,
-  compilerLibraryNativeValueAdapterPreservesPendingExceptionForTypeId,
   requireCompilerLibraryAsyncResultCppType,
   isManagedRuntimeReturnType,
   isNullableScalarType,
@@ -181,6 +180,7 @@ import {
   libraryNativeValueAdapter,
   resolveCCompilerLibrarySet
 } from './value-types.ts'
+import type { CRuntimeValueAdapterInfo } from './value-types.ts'
 import type { ClassLoweringDependencies } from './values/classes.ts'
 import {
   cClassNameFromValueType,
@@ -7049,7 +7049,7 @@ function emitAwaitValueVariableDeclaration(statement: AnyNode, context: CFunctio
   }
 
   const lines: string[] = []
-  const adapter = resolveAwaitNativeValueAdapterInfo(expression, awaitExpression, context)
+  const adapter = resolveAwaitValueAdapterInfo(expression, awaitExpression, valueType, context)
   let cppType = 'inox::Value'
 
   pushAll(lines, preparedAsyncResult.lines)
@@ -7199,7 +7199,7 @@ function emitPreparedAwaitResultExpression(
     }
   }
 
-  const adapter = resolveAwaitNativeValueAdapterInfo(expression, awaitExpression, context)
+  const adapter = resolveAwaitValueAdapterInfo(expression, awaitExpression, valueType, context)
 
   if (
     adapter !== null &&
@@ -7272,42 +7272,21 @@ type AwaitResultCppValueInfo = {
   valueExpression: string
 }
 
-type AwaitNativeValueAdapterInfo = {
-  cppType: string
-  failureMode: 'thrown' | null
-  preservesPendingException: boolean
-  valueExpression: string
-}
-
-function resolveAwaitNativeValueAdapterInfo(
+function resolveAwaitValueAdapterInfo(
   expression: AnyNode,
   valueExpression: string,
+  valueType: string,
   context: CFunctionContext
-): AwaitNativeValueAdapterInfo | null {
+): CRuntimeValueAdapterInfo | null {
   const shape = expression.shape ?? expression.argument?.shape
-  const cppType = shape?.libraryCppType
-  const typeId = shape?.libraryTypeId
-  const adapter = libraryNativeValueAdapter(shape)
+  const adapter = cRuntimeValueAdapterInfo(valueType, shape, valueExpression, context.libraries)
   const asyncResultCppType = compilerLibraryIntrinsicNativeCppType(context.libraries, 'async-result')
 
-  if (
-    cppType === null ||
-    typeof cppType === 'undefined' ||
-    cppType === asyncResultCppType ||
-    adapter === null
-  ) {
+  if (adapter === null || adapter.cppType === asyncResultCppType) {
     return null
   }
 
-  return {
-    cppType,
-    failureMode: compilerLibraryNativeValueAdapterFailureModeForTypeId(context.libraries, typeId),
-    preservesPendingException: compilerLibraryNativeValueAdapterPreservesPendingExceptionForTypeId(
-      context.libraries,
-      typeId
-    ),
-    valueExpression: applyLibraryNativeValueAdapter(valueExpression, adapter)
-  }
+  return adapter
 }
 
 function resolveAwaitResultCppValueInfo(

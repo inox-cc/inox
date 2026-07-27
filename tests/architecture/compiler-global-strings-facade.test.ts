@@ -20,4 +20,12 @@ test('primitive string facade остаётся declarations-only runtime boundar
   assert.match(source, /Array String::split\(StringView separator\) const/)
   assert.match(source, /bool String::includes\(StringView search\) const/)
   assert.match(source, /double String::charCodeAt\(double offset\) const/)
+  assert.match(
+    source,
+    /String::String\(const Value& value\) : Value\(value\) \{\n  if \(thrown\(\)\) \{\n    return;\n  \}\n\n  if \(!valid\(\)\) \{\n    throw_value\(Value\(\)\);\n  \}\n\}/
+  )
+  assert.match(
+    source,
+    /String::String\(Value&& value\) : Value\(std::move\(value\)\) \{\n  if \(thrown\(\)\) \{\n    return;\n  \}\n\n  if \(!valid\(\)\) \{\n    throw_value\(Value\(\)\);\n  \}\n\}/
+  )
 })

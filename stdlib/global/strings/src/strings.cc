@@ -736,9 +736,25 @@ String::String(const char* bytes, size_t len) : Value(make(bytes, len)) {}
 
 String::String(StringView view) : Value(make(view.bytes, view.len)) {}
 
-String::String(const Value& value) : Value(value) {}
+String::String(const Value& value) : Value(value) {
+  if (thrown()) {
+    return;
+  }
 
-String::String(Value&& value) : Value(std::move(value)) {}
+  if (!valid()) {
+    throw_value(Value());
+  }
+}
+
+String::String(Value&& value) : Value(std::move(value)) {
+  if (thrown()) {
+    return;
+  }
+
+  if (!valid()) {
+    throw_value(Value());
+  }
+}
 
 bool String::valid() const {
   inox_value value = raw();

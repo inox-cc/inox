@@ -65,12 +65,13 @@ for (const a of foo.v) {
   )
   assert.match(
     source,
-    /auto (inox_await_value_\d+) = res\.text\(\)\.awaitValue\(\);[\s\S]*auto txt = inox::String\(\1\);/
+    /auto txt = inox::String\(res\.text\(\)\.awaitValue\(\)\);\n\s+if \(inox::thrown\(\)\) goto catch_\d+;/
   )
   assert.doesNotMatch(source, /inox::await_value</)
   assert.doesNotMatch(source, /inox_library_asyncResult_\d+/)
   assert.doesNotMatch(source, /inox_await_converted_\d+/)
   assert.doesNotMatch(source, /inox_await_source_\d+/)
+  assert.doesNotMatch(source, /inox_await_value_\d+/)
   assert.match(source, /if \(inox::thrown\(\)\) goto catch_\d+;/)
   assert.doesNotMatch(source, /inox_await_result_\d+/)
   assert.doesNotMatch(source, /inox_res_\d+\.value\(\)\.valid\(\)/)

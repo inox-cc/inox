@@ -34,10 +34,10 @@ await Promise.resolve('done')
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /auto inox_await_\d+ = inox_async_result_\d+\.awaitValue\(\);/)
+  assert.match(source, /auto value = inox::String\(inox_async_result_\d+\.awaitValue\(\)\);/)
   assert.match(source, /if \(inox::thrown\(\)\) return;/)
-  assert.match(source, /auto value = inox::String\(inox_await_\d+\);/)
-  assert.match(source, /inox_async_result_\d+\.awaitValue\(\);/)
+  assert.match(source, /\(void\)\(inox::String\(inox_async_result_\d+\.awaitValue\(\)\)\);/)
+  assert.doesNotMatch(source, /auto inox_await_\d+ =/)
   assert.doesNotMatch(source, /inox::await_value</)
   assert.doesNotMatch(source, /inox_promise_await/)
   assert.doesNotMatch(source, /inox_promise_state/)

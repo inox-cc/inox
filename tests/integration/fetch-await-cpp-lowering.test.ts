@@ -64,7 +64,7 @@ await checkFetch()
   assert.match(checkFetch, /console\.log\("Status %\.17g", static_cast<double>\(res\.status\)\);/)
   assert.match(
     checkFetch,
-    /auto (inox_await_value_\d+) = res\.text\(\)\.awaitValue\(\);\n    if \(inox::thrown\(\)\) goto catch_0;\n    if \(\1\.tag != INOX_TAG_STRING \|\| \1\.as\.ref == 0\) return;\n    auto txt = inox::String\(\1\);/
+    /auto txt = inox::String\(res\.text\(\)\.awaitValue\(\)\);\n    if \(inox::thrown\(\)\) goto catch_0;/
   )
   assert.match(checkFetch, /auto inox_object_\d+ = inox::ObjectValue::create\(&inox_shape_value_\d+\);/)
   assert.match(checkFetch, /\.init\(0, inox::String\("POST", 4\)\);/)
@@ -75,7 +75,7 @@ await checkFetch()
   )
   assert.match(
     checkFetch,
-    /auto (inox_await_value_\d+) = res\.text\(\)\.awaitValue\(\);\n\s+if \(inox::thrown\(\)\) goto catch_0;[\s\S]*?auto txt = inox::String\(\1\);\n\n\s+console\.log\("Text %s", txt\);/
+    /auto txt = inox::String\(res\.text\(\)\.awaitValue\(\)\);\n\s+if \(inox::thrown\(\)\) goto catch_0;\n\n\s+console\.log\("Text %s", txt\);/
   )
   assert.match(checkFetch, /auto error = inox::take_exception\(\);\n\s+console\.log\("#error:", error\);/)
   assert.doesNotMatch(checkFetch, /auto inox_error = inox::take_exception\(\);/)
@@ -100,6 +100,7 @@ await checkFetch()
   assert.doesNotMatch(checkFetch, /inox_library_asyncResult_\d+/)
   assert.doesNotMatch(checkFetch, /inox_await_converted_\d+/)
   assert.doesNotMatch(checkFetch, /inox_await_source_\d+/)
+  assert.doesNotMatch(checkFetch, /inox_await_value_\d+/)
   assert.doesNotMatch(checkFetch, /auto inox_await_value_\d+ = inox::fetch/)
   assert.doesNotMatch(checkFetch, /inox_await_result_\d+/)
   assert.doesNotMatch(checkFetch, /auto inox_res_\d+ = inox::await</)

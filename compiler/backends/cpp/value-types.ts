@@ -40,6 +40,13 @@ type CLibraryNativeShape = {
 
 export type CValueTypeInput = string | null | undefined
 
+export type CRuntimeValueAdapterInfo = {
+  cppType: string
+  failureMode: 'thrown' | null
+  preservesPendingException: boolean
+  valueExpression: string
+}
+
 export type CReturnTypeContext = {
   returnNullable: boolean
   returnType: string
@@ -331,6 +338,40 @@ export function applyLibraryNativeValueAdapter(value: string, adapter: string | 
   }
 
   return adapter.split('$value').join(value)
+}
+
+export function cRuntimeValueAdapterInfo(
+  valueType: CValueTypeInput,
+  shape: CLibraryNativeShape | null | undefined,
+  valueExpression: string,
+  libraries: CCompilerLibrarySet
+): CRuntimeValueAdapterInfo | null {
+  if (valueType === 'string') {
+    return {
+      cppType: 'inox::String',
+      failureMode: 'thrown',
+      preservesPendingException: true,
+      valueExpression: `inox::String(${valueExpression})`
+    }
+  }
+
+  const cppType = libraryNativeCppType(shape)
+  const adapter = libraryNativeValueAdapter(shape)
+  const typeId = shape?.libraryTypeId
+
+  if (cppType === null || adapter === null) {
+    return null
+  }
+
+  return {
+    cppType,
+    failureMode: compilerLibraryNativeValueAdapterFailureModeForTypeId(libraries, typeId),
+    preservesPendingException: compilerLibraryNativeValueAdapterPreservesPendingExceptionForTypeId(
+      libraries,
+      typeId
+    ),
+    valueExpression: applyLibraryNativeValueAdapter(valueExpression, adapter)
+  }
 }
 
 export function compilerLibraryIntrinsicNativeCppType(
