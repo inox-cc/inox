@@ -5353,6 +5353,26 @@ function emitInPlaceCppRaiiNullishCoalescingValueExpression(
   const lines: string[] = []
 
   pushAll(lines, left.lines)
+
+  if (resultType === 'string' && right.cppType === 'inox::String' && right.lines.length === 0) {
+    const result = nextCName(context, 'inox_string')
+
+    lines.push(
+      `auto ${result} = ${left.expression}.isNullish() ? ${right.expression} : ` +
+        `inox::String(std::move(${left.expression}));`
+    )
+    pushAll(lines, emitThrownCheckLines(context))
+
+    return {
+      lines,
+      expression: result,
+      cppType: 'inox::String',
+      nullable: false,
+      runtimeTypeChecked: true,
+      valueType: 'string'
+    }
+  }
+
   lines.push(`if (${left.expression}.tag == INOX_TAG_NULL || ${left.expression}.tag == INOX_TAG_UNDEFINED) {`)
   pushIndented(lines, right.lines, '  ')
   lines.push(`  ${left.expression} = ${right.expression};`)

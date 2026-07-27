@@ -201,6 +201,10 @@ public:
     return value_;
   }
 
+  bool isNullish() const {
+    return value_.tag == INOX_TAG_NULL || value_.tag == INOX_TAG_UNDEFINED;
+  }
+
   operator inox_value() const {
     return value_;
   }

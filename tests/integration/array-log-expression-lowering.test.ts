@@ -35,10 +35,11 @@ console.log('array includes', names.includes('Grace'), names.slice(1, 3).join('/
   assert.doesNotMatch(source, /auto inox_library_object_\d+ = names\.slice\(1, 3\);/)
   assert.match(
     source,
-    /if \(inox_library_result_\d+\.tag == INOX_TAG_NULL \|\| inox_library_result_\d+\.tag == INOX_TAG_UNDEFINED\) \{\n\s+inox_library_result_\d+ = inox::String\("none", 4\);/
+    /auto inox_string_\d+ = inox_library_result_\d+\.isNullish\(\) \? inox::String\("none", 4\) : inox::String\(std::move\(inox_library_result_\d+\)\);/
   )
   assert.doesNotMatch(source, /inox_value_\d+ = inox_undefined_value\(\);/)
-  assert.match(source, /inox::String\(inox_library_result_\d+\)/)
+  assert.doesNotMatch(source, /INOX_TAG_NULL|INOX_TAG_UNDEFINED/)
+  assert.match(source, /inox_string_\d+/)
   assert.doesNotMatch(source, /inox::String\(inox::Value\(inox_library_result_\d+\)\)/)
 }
 
