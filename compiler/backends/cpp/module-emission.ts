@@ -902,12 +902,7 @@ function collectCModuleHeaderClassDeclarationLines(
       continue
     }
 
-    const definition = deps.emitClassConstructorDeclaration(
-      info,
-      context,
-      deps.declarationEmissionDependencies,
-      true
-    )
+    const definition = deps.emitClassConstructorDeclaration(info, context, deps.declarationEmissionDependencies, true)
 
     if (definition.length > 0) {
       inlineConstructorDefinitions.set(info.name, definition)
@@ -923,13 +918,7 @@ function collectCModuleHeaderClassDeclarationLines(
 
     inlineMethodDefinitions.set(
       cClassInlineMethodDefinitionKey(item.info, item.method),
-      deps.emitClassMethodDeclaration(
-        item.info,
-        item.method,
-        context,
-        deps.declarationEmissionDependencies,
-        true
-      )
+      deps.emitClassMethodDeclaration(item.info, item.method, context, deps.declarationEmissionDependencies, true)
     )
   }
 
@@ -2485,11 +2474,7 @@ function createCModuleBaseContext(
   return context
 }
 
-function registerImportedCModuleClassInfos(
-  context: CEmitContext,
-  plan: CModulePlan,
-  diagnostics: Diagnostic[]
-): void {
+function registerImportedCModuleClassInfos(context: CEmitContext, plan: CModulePlan, diagnostics: Diagnostic[]): void {
   for (let importIndex = 0; importIndex < plan.imports.length; importIndex = importIndex + 1) {
     const item = cModuleImportPlanAt(plan.imports, importIndex)
     const importedModule = item.module
@@ -2521,11 +2506,7 @@ function registerImportedCModuleClassInfos(
         continue
       }
 
-      const names: string[] = [
-        specifier.imported,
-        specifier.local,
-        cModuleImportedBindingName(declaration, specifier)
-      ]
+      const names: string[] = [specifier.imported, specifier.local, cModuleImportedBindingName(declaration, specifier)]
 
       if (typeof specifier.className === 'string') {
         names.push(specifier.className)
@@ -2703,6 +2684,7 @@ function registerImportedCModuleValueDeclarations(context: CEmitContext, plan: C
           context.moduleValueNames.set(syntheticName, emitCModuleValueName(importedModule, specifier.imported))
           const valueType = cModuleValueType(exported)
           context.moduleValueTypes.set(syntheticName, valueType)
+          registerImportedCModuleValueCppType(context, syntheticName, exported)
 
           if (
             valueType === 'unknown' ||
@@ -2720,6 +2702,7 @@ function registerImportedCModuleValueDeclarations(context: CEmitContext, plan: C
         context.moduleValueNames.set(localName, emitCModuleValueName(importedModule, specifier.imported))
         const valueType = cModuleValueType(exported)
         context.moduleValueTypes.set(localName, valueType)
+        registerImportedCModuleValueCppType(context, localName, exported)
 
         if (
           valueType === 'unknown' ||
@@ -2730,6 +2713,14 @@ function registerImportedCModuleValueDeclarations(context: CEmitContext, plan: C
         }
       }
     }
+  }
+}
+
+function registerImportedCModuleValueCppType(context: CEmitContext, name: string, exported: CModuleNode): void {
+  const cppType = cModuleValueLibraryCppType(exported)
+
+  if (cppType !== null) {
+    context.moduleValueCppTypes.set(name, cppType)
   }
 }
 

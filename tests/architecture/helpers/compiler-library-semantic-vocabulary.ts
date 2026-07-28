@@ -112,11 +112,7 @@ const universalNativeValues = new Set([
   'std::string',
   'void'
 ])
-const commonDiagnosticCodes = new Set([
-  'INOX_C_UNSUPPORTED_EXPR',
-  'INOX_NOT_IMPLEMENTED',
-  'INOX_TYPE_MISMATCH'
-])
+const commonDiagnosticCodes = new Set(['INOX_C_UNSUPPORTED_EXPR', 'INOX_NOT_IMPLEMENTED', 'INOX_TYPE_MISMATCH'])
 const universalDescriptorKeys = new Set([
   'asyncResultOperation',
   'callbackLifetime',
@@ -148,15 +144,18 @@ const identityDescriptorKeys = new Set([
   'objectTypeIds',
   'operationId',
   'optionId',
+  'cArgumentAdapterTypeIds',
   'receiverTypeId',
   'resultTypeId',
   'runtimeRequirement',
   'runtimeRequirements',
+  'appendSpreadValueTypeId',
   'typeId'
 ])
 const nativeDescriptorKeys = new Set([
   'appendElementExpression',
   'appendSpreadExpression',
+  'appendSpreadValueAdapter',
   'cArgumentAdapters',
   'cAsyncFulfillExpression',
   'cAsyncRejectExpression',
@@ -182,13 +181,7 @@ const nativeDescriptorKeys = new Set([
   'cValueAdapterPreservesPendingException',
   'createExpression'
 ])
-const optionValueDescriptorKeys = new Set([
-  'allowedValues',
-  'defaultValue',
-  'prefixes',
-  'stringLiterals',
-  'values'
-])
+const optionValueDescriptorKeys = new Set(['allowedValues', 'defaultValue', 'prefixes', 'stringLiterals', 'values'])
 const semanticMetadataPropertyNames = new Set([
   'bindingId',
   'capability',
@@ -376,7 +369,9 @@ function declarationName(node: ReturnType<typeof asRootDeclaration>): string | n
   return name.text === 'global' ? null : name.text
 }
 
-function asRootDeclaration(node: ts.Node):
+function asRootDeclaration(
+  node: ts.Node
+):
   | ts.ClassDeclaration
   | ts.EnumDeclaration
   | ts.FunctionDeclaration
@@ -394,12 +389,7 @@ function asRootDeclaration(node: ts.Node):
 
 function isMemberDeclaration(
   node: ts.Node
-): node is
-  | ts.EnumMember
-  | ts.MethodDeclaration
-  | ts.MethodSignature
-  | ts.PropertyDeclaration
-  | ts.PropertySignature {
+): node is ts.EnumMember | ts.MethodDeclaration | ts.MethodSignature | ts.PropertyDeclaration | ts.PropertySignature {
   return (
     ts.isEnumMember(node) ||
     ts.isMethodDeclaration(node) ||
@@ -527,13 +517,7 @@ function addDescriptorString(
 }
 
 function descriptorPathContainsApiShape(path: string[]): boolean {
-  const shapeKeys = new Set([
-    'fields',
-    'objectLiteralFields',
-    'objectMethods',
-    'resultShapeFields',
-    'shapeFields'
-  ])
+  const shapeKeys = new Set(['fields', 'objectLiteralFields', 'objectMethods', 'resultShapeFields', 'shapeFields'])
 
   for (const key of path) {
     if (shapeKeys.has(key)) {
@@ -575,10 +559,7 @@ function uniqueVocabulary(entries: CompilerSemanticVocabularyEntry[]): CompilerS
   return Array.from(unique.values()).sort(compareVocabulary)
 }
 
-function compareVocabulary(
-  left: CompilerSemanticVocabularyEntry,
-  right: CompilerSemanticVocabularyEntry
-): number {
+function compareVocabulary(left: CompilerSemanticVocabularyEntry, right: CompilerSemanticVocabularyEntry): number {
   return (
     left.token.localeCompare(right.token) ||
     left.owner.localeCompare(right.owner) ||
@@ -654,9 +635,7 @@ function visitCompilerSource(
     checkIdentifier(node, sourceFile, file, exact, phrases, tails, seen)
   }
 
-  ts.forEachChild(node, (child) =>
-    visitCompilerSource(child, sourceFile, file, exact, substring, phrases, tails, seen)
-  )
+  ts.forEachChild(node, (child) => visitCompilerSource(child, sourceFile, file, exact, substring, phrases, tails, seen))
 }
 
 function checkTextNode(
@@ -725,10 +704,7 @@ function checkIdentifier(
 
       const exactIdentifier = node.text === phrase.entry.token
 
-      if (
-        exactIdentifier &&
-        phrase.entry.token.slice(0, 1) === phrase.entry.token.slice(0, 1).toLowerCase()
-      ) {
+      if (exactIdentifier && phrase.entry.token.slice(0, 1) === phrase.entry.token.slice(0, 1).toLowerCase()) {
         continue
       }
 
@@ -747,8 +723,7 @@ function checkIdentifier(
 
 function isDedicatedIdentifierUse(words: string[], phrase: VocabularyPhrase): boolean {
   const lowerCaseSingleWord =
-    phrase.words.length === 1 &&
-    phrase.entry.token.slice(0, 1) === phrase.entry.token.slice(0, 1).toLowerCase()
+    phrase.words.length === 1 && phrase.entry.token.slice(0, 1) === phrase.entry.token.slice(0, 1).toLowerCase()
 
   if (!lowerCaseSingleWord) {
     return containsDedicatedIdentifierMarker(words)
@@ -995,9 +970,7 @@ function isFixedSemanticProperty(node: ts.Identifier): boolean {
 
   const receiver = parent.expression.getText().toLowerCase()
 
-  return (
-    receiver.endsWith('capabilities')
-  )
+  return receiver.endsWith('capabilities')
 }
 
 function isAllowedHostImport(
@@ -1011,10 +984,7 @@ function isAllowedHostImport(
     return false
   }
 
-  if (
-    (!ts.isImportDeclaration(parent) && !ts.isExportDeclaration(parent)) ||
-    parent.moduleSpecifier !== node
-  ) {
+  if ((!ts.isImportDeclaration(parent) && !ts.isExportDeclaration(parent)) || parent.moduleSpecifier !== node) {
     return false
   }
 
@@ -1100,12 +1070,7 @@ function enclosingTypeAlias(node: ts.Node): ts.TypeAliasDeclaration | null {
 function isTextLikeNode(
   node: ts.Node
 ): node is ts.StringLiteralLike | ts.TemplateHead | ts.TemplateMiddle | ts.TemplateTail {
-  return (
-    ts.isStringLiteralLike(node) ||
-    ts.isTemplateHead(node) ||
-    ts.isTemplateMiddle(node) ||
-    ts.isTemplateTail(node)
-  )
+  return ts.isStringLiteralLike(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)
 }
 
 function textNodeContext(node: ts.Node): string {

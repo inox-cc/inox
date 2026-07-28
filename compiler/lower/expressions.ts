@@ -254,10 +254,7 @@ function lowerTypeAssertionExpression(
   return applyResolvedTypeAssertion(lowered, declaredType, declared)
 }
 
-function requiresRuntimeScalarTypeAssertion(
-  expression: LowerExpressionNode,
-  declared: LowerResolvedType
-): boolean {
+function requiresRuntimeScalarTypeAssertion(expression: LowerExpressionNode, declared: LowerResolvedType): boolean {
   if (declared.valueType !== 'number' && declared.valueType !== 'boolean') {
     return false
   }
@@ -448,6 +445,7 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
   }
 
   copyStringMetadataArray(target, source, 'libraryCArgumentAdapters')
+  copyStringMetadataArray(target, source, 'libraryCArgumentAdapterTypeIds')
   copyStringMetadataArray(target, source, 'libraryCArgumentKinds')
   copyStringMetadataArray(target, source, 'libraryCArgumentMethodNames')
   copyStringMetadataArray(target, source, 'libraryCResultShapeFields')

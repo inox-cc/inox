@@ -132,8 +132,7 @@ async function runHostedIntegrationTests(): Promise<void> {
   } = await import('./integration/error-flow-state-lowering.test.ts')
   const { assertFetchAwaitUsesCppWrappers, assertFetchRuntimeFacadesUseCppObjects } =
     await import('./integration/fetch-await-cpp-lowering.test.ts')
-  const { assertGeneratedLabelsStayWithTryBlocks } =
-    await import('./integration/generated-label-spacing.test.ts')
+  const { assertGeneratedLabelsStayWithTryBlocks } = await import('./integration/generated-label-spacing.test.ts')
   const {
     assertAwaitFunctionUsesExternalLoopRuntime,
     assertGeneratedMainDoesNotCollideWithUserMain,
@@ -198,6 +197,12 @@ async function runHostedIntegrationTests(): Promise<void> {
     await import('./integration/runtime-value-type-check-lowering.test.ts')
   const { assertNativeResultsInitializeVariablesDirectly } =
     await import('./integration/direct-native-variable-lowering.test.ts')
+  const { assertNativeArraySpreadUsesPreparedFacade } =
+    await import('./integration/native-array-spread-lowering.test.ts')
+  const { assertNativeBytesKeepCppFunctionBoundaries } =
+    await import('./integration/native-bytes-function-boundary-lowering.test.ts')
+  const { assertNativeTimerHandleArgumentStaysDirect } =
+    await import('./integration/native-timer-handle-argument-lowering.test.ts')
   const {
     assertNativeClassArrayRuntimeFieldLowering,
     assertNativeClassDefinitionsPrecedeModuleValues,
@@ -472,6 +477,18 @@ async function runHostedIntegrationTests(): Promise<void> {
       assertNativeResultsInitializeVariablesDirectly()
     })
 
+    await t.test('native-array-spread-lowering', () => {
+      assertNativeArraySpreadUsesPreparedFacade()
+    })
+
+    await t.test('native-bytes-function-boundary-lowering', () => {
+      assertNativeBytesKeepCppFunctionBoundaries()
+    })
+
+    await t.test('native-timer-handle-argument-lowering', () => {
+      assertNativeTimerHandleArgumentStaysDirect()
+    })
+
     await t.test('runtime-value-local-declaration-lowering', () => {
       assertRuntimeValueDeclarationsStayLocal()
     })
@@ -494,10 +511,15 @@ async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<
   const { assertCliEntryModuleMain } = await import('./integration/cli-entry-module-main.test.ts')
   const { assertNativeCompilerUsesDirectNativeInitializers } =
     await import('./integration/direct-native-variable-lowering.test.ts')
+  const { assertNativeCompilerArraySpreadUsesPreparedFacade } =
+    await import('./integration/native-array-spread-lowering.test.ts')
+  const { assertNativeCompilerBytesKeepCppFunctionBoundaries } =
+    await import('./integration/native-bytes-function-boundary-lowering.test.ts')
+  const { assertNativeCompilerTimerHandleArgumentStaysDirect } =
+    await import('./integration/native-timer-handle-argument-lowering.test.ts')
   const { assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariableTarget } =
     await import('./integration/json-parse-shape-lowering.test.ts')
-  const { assertNativeRaiiFunctionsUseDirectReturns } =
-    await import('./integration/raii-exit-lowering.test.ts')
+  const { assertNativeRaiiFunctionsUseDirectReturns } = await import('./integration/raii-exit-lowering.test.ts')
   const { assertNativeInoxDefaultOutput, assertNativeInoxHelp, assertNativeInoxRuntimeSmoke } =
     await import('./integration/native-inox-help.test.ts')
   const { assertNativeInoxModuleGraph } = await import('./integration/native-inox-module-graph.test.ts')
@@ -513,6 +535,18 @@ async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<
 
     await t.test('native-direct-variable-lowering', async () => {
       await assertNativeCompilerUsesDirectNativeInitializers(compilerPath)
+    })
+
+    await t.test('native-array-spread-lowering', async () => {
+      await assertNativeCompilerArraySpreadUsesPreparedFacade(compilerPath)
+    })
+
+    await t.test('native-bytes-function-boundary-lowering', async () => {
+      await assertNativeCompilerBytesKeepCppFunctionBoundaries(compilerPath)
+    })
+
+    await t.test('native-timer-handle-argument-lowering', async () => {
+      await assertNativeCompilerTimerHandleArgumentStaysDirect(compilerPath)
     })
 
     await t.test('native-json-parse-unicode-shape-lowering', async () => {

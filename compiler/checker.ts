@@ -476,9 +476,7 @@ class Checker {
 
       if (
         item.exported !== true &&
-        (item.type === 'FunctionDeclaration' ||
-          item.type === 'VariableDeclaration' ||
-          item.type === 'ClassDeclaration')
+        (item.type === 'FunctionDeclaration' || item.type === 'VariableDeclaration' || item.type === 'ClassDeclaration')
       ) {
         privateBindings.set(nodeSourceLocation(item), item.name)
       }
@@ -3836,9 +3834,7 @@ class Checker {
     this.checkCompilerLibraryOptionConstraints(expression, operation)
     this.applyCompilerLibraryResultInference(expression, operation, variant, contextualResult)
 
-    return typeof expression.valueType === 'string'
-      ? (expression.valueType as ValueType)
-      : (declaredType ?? 'unknown')
+    return typeof expression.valueType === 'string' ? (expression.valueType as ValueType) : (declaredType ?? 'unknown')
   }
 
   applyCompilerLibraryResultInference(
@@ -5202,6 +5198,12 @@ class Checker {
       expression.libraryCArgumentAdapters = cArgumentAdapters
     }
 
+    const cArgumentAdapterTypeIds = variant?.cArgumentAdapterTypeIds ?? operation.cArgumentAdapterTypeIds
+
+    if (cArgumentAdapterTypeIds !== null && typeof cArgumentAdapterTypeIds !== 'undefined') {
+      expression.libraryCArgumentAdapterTypeIds = cArgumentAdapterTypeIds
+    }
+
     const cArgumentMethodNames = variant?.cArgumentMethodNames ?? operation.cArgumentMethodNames
 
     if (cArgumentMethodNames !== null && typeof cArgumentMethodNames !== 'undefined') {
@@ -6132,9 +6134,7 @@ class Checker {
 
     this.checkCompilerLibraryOptionConstraints(expression, operation)
 
-    return typeof expression.valueType === 'string'
-      ? (expression.valueType as ValueType)
-      : (declaredType ?? 'object')
+    return typeof expression.valueType === 'string' ? (expression.valueType as ValueType) : (declaredType ?? 'object')
   }
 
   checkImportedClassConstructorArguments(expression: AnyNode, rawParams: AnyNode[] | null | undefined): void {

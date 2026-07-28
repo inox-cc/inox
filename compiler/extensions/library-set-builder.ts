@@ -192,7 +192,7 @@ function validateCompilerLibrarySet(
   validateUniqueOperationIds(operations)
   validateUniqueIntrinsicRoles(intrinsicBindings)
   validateIntrinsicOperationBindings(intrinsicBindings, operations)
-  validateSequenceMaterializationIntrinsic(intrinsicBindings, operations)
+  validateSequenceMaterializationIntrinsic(intrinsicBindings, operations, nativeTypes)
   validateAsyncResultIntrinsicNativeType(intrinsicBindings, operations, nativeTypes)
 }
 
@@ -324,11 +324,7 @@ function validateRuntimeOptionConstraints(
     const constraints = requirement.optionConstraints ?? []
 
     for (let constraintIndex = 0; constraintIndex < constraints.length; constraintIndex = constraintIndex + 1) {
-      validateRuntimeOptionConstraint(
-        `runtime requirement ${requirement.id}`,
-        constraints[constraintIndex],
-        options
-      )
+      validateRuntimeOptionConstraint(`runtime requirement ${requirement.id}`, constraints[constraintIndex], options)
     }
   }
 
@@ -772,8 +768,7 @@ function validateNativeTypeValueAdapter(nativeType: LibraryNativeTypeDescriptor)
   }
 
   if (
-    (nativeType.cValueAdapterFailureMode !== null &&
-      typeof nativeType.cValueAdapterFailureMode !== 'undefined') ||
+    (nativeType.cValueAdapterFailureMode !== null && typeof nativeType.cValueAdapterFailureMode !== 'undefined') ||
     nativeType.cValueAdapterPreservesPendingException === true
   ) {
     if (adapter === null || typeof adapter === 'undefined' || adapter.length === 0) {
@@ -781,10 +776,7 @@ function validateNativeTypeValueAdapter(nativeType: LibraryNativeTypeDescriptor)
     }
   }
 
-  if (
-    nativeType.cValueAdapterPreservesPendingException === true &&
-    nativeType.cValueAdapterFailureMode !== 'thrown'
-  ) {
+  if (nativeType.cValueAdapterPreservesPendingException === true && nativeType.cValueAdapterFailureMode !== 'thrown') {
     throw new Error(
       `native type ${nativeType.typeId} C++ value adapter preserves pending exceptions only with thrown failure mode`
     )
@@ -814,10 +806,7 @@ function validateNativeTypeAwaitExpression(nativeType: LibraryNativeTypeDescript
     throw new Error(`native type ${nativeType.typeId} C++ await expression requires $value`)
   }
 
-  if (
-    nativeType.cAwaitHandlesInvalidSource === true &&
-    (typeof expression !== 'string' || expression.length === 0)
-  ) {
+  if (nativeType.cAwaitHandlesInvalidSource === true && (typeof expression !== 'string' || expression.length === 0)) {
     throw new Error(`native type ${nativeType.typeId} C++ await invalid-source contract requires cAwaitExpression`)
   }
 }
@@ -973,9 +962,7 @@ function validateNativeTypeIteration(nativeType: LibraryNativeTypeDescriptor): v
     iteration.preservesPendingException === true &&
     (iteration.iteratorMethod === null || iteration.creationFailureMode !== 'thrown')
   ) {
-    throw new Error(
-      `native type ${nativeType.typeId} preserves pending exceptions without a throwing iterator method`
-    )
+    throw new Error(`native type ${nativeType.typeId} preserves pending exceptions without a throwing iterator method`)
   }
 
   const traits = nativeType.traits ?? []
@@ -1024,6 +1011,12 @@ function validateOperationTypeRefs(
     const operationTypeRef = operation.resultTypeRef
 
     validateOperationArgumentNarrowing(operation, nativeTypes, typeParameters)
+    validateOperationArgumentAdapterTypeIds(
+      `operation ${operation.operationId}`,
+      operation.cArgumentAdapters,
+      operation.cArgumentAdapterTypeIds,
+      nativeTypes
+    )
 
     if (operationTypeRef !== null && typeof operationTypeRef !== 'undefined') {
       validateTypeRef(`operation ${operation.operationId} result`, operationTypeRef, nativeTypes, typeParameters)
@@ -1045,6 +1038,12 @@ function validateOperationTypeRefs(
         variant.argumentChecks,
         nativeTypes,
         typeParameters
+      )
+      validateOperationArgumentAdapterTypeIds(
+        `operation ${operation.operationId} variant ${variantIndex}`,
+        variant.cArgumentAdapters ?? operation.cArgumentAdapters,
+        variant.cArgumentAdapterTypeIds ?? operation.cArgumentAdapterTypeIds,
+        nativeTypes
       )
       if (resultTypeRef === null || typeof resultTypeRef === 'undefined') {
         validateCResultMapping(
@@ -1073,6 +1072,37 @@ function validateOperationTypeRefs(
   }
 }
 
+function validateOperationArgumentAdapterTypeIds(
+  label: string,
+  adapters: string[] | null | undefined,
+  adapterTypeIds: string[] | null | undefined,
+  nativeTypes: LibraryNativeTypeDescriptor[]
+): void {
+  if (adapterTypeIds === null || typeof adapterTypeIds === 'undefined') {
+    return
+  }
+
+  if (adapters === null || typeof adapters === 'undefined' || adapterTypeIds.length > adapters.length) {
+    throw new Error(`${label} C++ argument adapter type ids require matching adapters`)
+  }
+
+  for (let index = 0; index < adapterTypeIds.length; index = index + 1) {
+    const typeId = adapterTypeIds[index]
+
+    if (typeId.length === 0) {
+      continue
+    }
+
+    if (adapters[index].length === 0 || !adapters[index].includes('$value')) {
+      throw new Error(`${label} C++ argument adapter ${index} type id requires a $value adapter`)
+    }
+
+    if (nativeTypeForValidation(nativeTypes, typeId) === null) {
+      throw new Error(`${label} C++ argument adapter ${index} references unknown native type ${typeId}`)
+    }
+  }
+}
+
 function validateOperationArgumentNarrowing(
   operation: LibraryOperationDescriptor,
   nativeTypes: LibraryNativeTypeDescriptor[],
@@ -1085,13 +1115,12 @@ function validateOperationArgumentNarrowing(
   }
 
   if (narrowing.argumentIndex < 0 || Math.floor(narrowing.argumentIndex) !== narrowing.argumentIndex) {
-    throw new Error(`operation ${operation.operationId} has invalid narrowing argument index ${narrowing.argumentIndex}`)
+    throw new Error(
+      `operation ${operation.operationId} has invalid narrowing argument index ${narrowing.argumentIndex}`
+    )
   }
 
-  if (
-    typeof operation.maxArgs === 'number' &&
-    narrowing.argumentIndex >= operation.maxArgs
-  ) {
+  if (typeof operation.maxArgs === 'number' && narrowing.argumentIndex >= operation.maxArgs) {
     throw new Error(`operation ${operation.operationId} narrows missing argument ${narrowing.argumentIndex}`)
   }
 
@@ -1101,11 +1130,21 @@ function validateOperationArgumentNarrowing(
   const falseTypeRef = narrowing.falseTypeRef
 
   if (trueTypeRef !== null && typeof trueTypeRef !== 'undefined') {
-    validateTypeRef(`operation ${operation.operationId} true argument narrowing`, trueTypeRef, nativeTypes, typeParameters)
+    validateTypeRef(
+      `operation ${operation.operationId} true argument narrowing`,
+      trueTypeRef,
+      nativeTypes,
+      typeParameters
+    )
   }
 
   if (falseTypeRef !== null && typeof falseTypeRef !== 'undefined') {
-    validateTypeRef(`operation ${operation.operationId} false argument narrowing`, falseTypeRef, nativeTypes, typeParameters)
+    validateTypeRef(
+      `operation ${operation.operationId} false argument narrowing`,
+      falseTypeRef,
+      nativeTypes,
+      typeParameters
+    )
   }
 
   if (
@@ -1166,11 +1205,7 @@ function validateOperationTypeParameterSource(
 
   const argumentIndex = source.argumentIndex
 
-  if (
-    typeof argumentIndex !== 'number' ||
-    argumentIndex < 0 ||
-    Math.floor(argumentIndex) !== argumentIndex
-  ) {
+  if (typeof argumentIndex !== 'number' || argumentIndex < 0 || Math.floor(argumentIndex) !== argumentIndex) {
     throw new Error(
       `operation ${operationId} type parameter ${parameterName} has invalid source argument index ${argumentIndex}`
     )
@@ -1677,7 +1712,8 @@ function validateIntrinsicOperationBindings(
 
 function validateSequenceMaterializationIntrinsic(
   bindings: IntrinsicRoleBinding[],
-  operations: LibraryOperationDescriptor[]
+  operations: LibraryOperationDescriptor[],
+  nativeTypes: LibraryNativeTypeDescriptor[]
 ): void {
   for (let bindingIndex = 0; bindingIndex < bindings.length; bindingIndex = bindingIndex + 1) {
     const binding = bindings[bindingIndex]
@@ -1728,6 +1764,25 @@ function validateSequenceMaterializationIntrinsic(
       materialization.appendSpreadExpression,
       ['$target', '$value']
     )
+
+    const spreadAdapter = materialization.appendSpreadValueAdapter
+    const spreadTypeId = materialization.appendSpreadValueTypeId
+
+    if (typeof spreadAdapter === 'string' && spreadAdapter.length > 0 && !spreadAdapter.includes('$value')) {
+      throw new Error(`operation ${provider.operationId} C++ sequence append spread value adapter requires $value`)
+    }
+
+    if (typeof spreadTypeId === 'string' && spreadTypeId.length > 0) {
+      if (typeof spreadAdapter !== 'string' || spreadAdapter.length === 0) {
+        throw new Error(`operation ${provider.operationId} C++ sequence append spread value type requires an adapter`)
+      }
+
+      if (nativeTypeForValidation(nativeTypes, spreadTypeId) === null) {
+        throw new Error(
+          `operation ${provider.operationId} C++ sequence append spread references unknown native type ${spreadTypeId}`
+        )
+      }
+    }
   }
 }
 
@@ -1852,9 +1907,7 @@ function validateAsyncResultTaskOperations(
     }
 
     if (matches.length !== 1) {
-      throw new Error(
-        `Compiler library intrinsic provider async-result requires exactly one ${kind} C++ operation`
-      )
+      throw new Error(`Compiler library intrinsic provider async-result requires exactly one ${kind} C++ operation`)
     }
 
     const operation = matches[0]
@@ -1972,6 +2025,8 @@ function compilerLibrarySetFingerprint(
           (item.cArgumentKinds ?? []).join(',') +
           ':' +
           (item.cArgumentAdapters ?? []).join(',') +
+          ':' +
+          (item.cArgumentAdapterTypeIds ?? []).join(',') +
           ':' +
           (item.cArgumentMethodNames ?? []).join(',') +
           ':' +
@@ -2381,6 +2436,8 @@ function operationVariantsFingerprint(operation: LibraryOperationDescriptor): st
         ':' +
         (variant.cArgumentAdapters ?? []).join(',') +
         ':' +
+        (variant.cArgumentAdapterTypeIds ?? []).join(',') +
+        ':' +
         (variant.cArgumentMethodNames ?? []).join(',') +
         ':' +
         operationArgumentSourcesFingerprint(variant.cArgumentSources) +
@@ -2418,13 +2475,15 @@ function sequenceMaterializationFingerprint(operation: LibraryOperationDescripto
     ':' +
     materialization.appendSpreadExpression +
     ':' +
+    (materialization.appendSpreadValueAdapter ?? '') +
+    ':' +
+    (materialization.appendSpreadValueTypeId ?? '') +
+    ':' +
     materialization.failureMode
   )
 }
 
-function operationArgumentNarrowingFingerprint(
-  narrowing: LibraryOperationDescriptor['argumentNarrowing']
-): string {
+function operationArgumentNarrowingFingerprint(narrowing: LibraryOperationDescriptor['argumentNarrowing']): string {
   if (narrowing === null || typeof narrowing === 'undefined') {
     return ''
   }

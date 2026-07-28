@@ -28,6 +28,7 @@ export function has(value: string): boolean {
   })
   const source = files.find((file) => file.path === 'main.cc')?.code ?? ''
 
-  assert.match(source, /Array\([^\n]+\)\.includes\(/)
+  assert.match(source, /inox_mod_[^\n]+_values\.includes\(/)
+  assert.doesNotMatch(source, /Array\([^\n]+\)\.includes\(/)
   assert.doesNotMatch(source, /inox::String\([^\n]+\)\.includes\(/)
 })

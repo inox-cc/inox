@@ -103,7 +103,9 @@ const arrayIntrinsicOperation: LibraryOperationDescriptor = {
   cSequenceMaterialization: {
     createExpression: 'Array::create(0)',
     appendElementExpression: '$target.push($value)',
-    appendSpreadExpression: '$target.appendAll(Array($value))',
+    appendSpreadExpression: '$target.appendAll($value)',
+    appendSpreadValueAdapter: 'Array($value)',
+    appendSpreadValueTypeId: arrayNativeTypeId,
     failureMode: 'thrown'
   },
   typeParameters: [{ name: 'T', sources: [{ source: 'contextual-type-argument', argumentIndex: 0 }] }],
@@ -114,9 +116,13 @@ const arrayIntrinsicOperation: LibraryOperationDescriptor = {
 }
 
 const arrayOperations: LibraryOperationDescriptor[] = [
-  arrayStaticCall('from', 'Array::from', arrayTypeRef(primitiveTypeRef('string')), ['string-view'], [
-    { valueTypes: ['string'] }
-  ]),
+  arrayStaticCall(
+    'from',
+    'Array::from',
+    arrayTypeRef(primitiveTypeRef('string')),
+    ['string-view'],
+    [{ valueTypes: ['string'] }]
+  ),
   {
     ...arrayStaticCall('isArray', 'Array::isArray', booleanTypeRef, ['runtime-value'], [], 1, 1, {
       argumentIndex: 0,
@@ -152,33 +158,16 @@ const arrayOperations: LibraryOperationDescriptor[] = [
     null,
     0
   ),
-  arrayCallbackReceiverCall(
-    'filter',
-    arrayTypeRef(parameterTypeRef),
-    arrayPredicateParameters(),
-    'boolean'
-  ),
-  arrayCallbackReceiverCall(
-    'find',
-    nullableParameterTypeRef(),
-    arrayPredicateParameters(),
-    'boolean',
-    { cppType: 'inox::Value', fields: [] }
-  ),
-  arrayCallbackReceiverCall(
-    'map',
-    arrayTypeRef(mappedParameterTypeRef),
-    arrayPredicateParameters(),
-    null,
-    null,
-    [
-      ...arrayTypeParameters(),
-      { name: 'U', sources: [{ source: 'argument-function-return', argumentIndex: 0 }] }
-    ]
-  ),
-  arrayCallbackReceiverCall('some', booleanTypeRef, [
-    ...arrayPredicateParameters()
-  ], 'boolean'),
+  arrayCallbackReceiverCall('filter', arrayTypeRef(parameterTypeRef), arrayPredicateParameters(), 'boolean'),
+  arrayCallbackReceiverCall('find', nullableParameterTypeRef(), arrayPredicateParameters(), 'boolean', {
+    cppType: 'inox::Value',
+    fields: []
+  }),
+  arrayCallbackReceiverCall('map', arrayTypeRef(mappedParameterTypeRef), arrayPredicateParameters(), null, null, [
+    ...arrayTypeParameters(),
+    { name: 'U', sources: [{ source: 'argument-function-return', argumentIndex: 0 }] }
+  ]),
+  arrayCallbackReceiverCall('some', booleanTypeRef, [...arrayPredicateParameters()], 'boolean'),
   arraySortOperation(),
   arrayReceiverCall('unshift', numberTypeRef, ['runtime-value'], [{ valueTypes: [], typeRef: parameterTypeRef }]),
   arrayIndexRead(),
@@ -626,10 +615,7 @@ function arrayReduceOperation(): LibraryOperationDescriptor {
     kind: 'call',
     runtimeRequirements: [arrayRuntimeRequirement, arrayCallbackRuntimeRequirement],
     receiverTypeId: arrayNativeTypeId,
-    typeParameters: [
-      ...arrayTypeParameters(),
-      { name: 'U', sources: [{ source: 'argument-type', argumentIndex: 1 }] }
-    ],
+    typeParameters: [...arrayTypeParameters(), { name: 'U', sources: [{ source: 'argument-type', argumentIndex: 1 }] }],
     cExpression: 'reduce',
     cArgumentKinds: ['receiver', 'runtime-callback', 'runtime-value'],
     cCallStyle: 'member',

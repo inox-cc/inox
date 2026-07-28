@@ -122,6 +122,7 @@ function clearOperation(
     cExpression: `timers.${name}`,
     cArgumentKinds: ['value'],
     cArgumentAdapters: [`${handleName}(inox::Value($value))`],
+    cArgumentAdapterTypeIds: [typeId],
     minArgs: 1,
     maxArgs: 1,
     argumentChecks: [{ valueTypes: ['object'], objectTypeIds: [typeId] }],

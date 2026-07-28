@@ -19,6 +19,7 @@ const operations: LibraryOperationDescriptor[] = [
     cExpression: 'crypto.getRandomValues',
     cArgumentKinds: ['value'],
     cArgumentAdapters: ['Uint8Array($value)'],
+    cArgumentAdapterTypeIds: [uint8ArrayTypeId],
     cResultMode: 'value',
     resultTypeRef: {
       kind: 'nominal',

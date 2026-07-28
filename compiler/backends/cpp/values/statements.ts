@@ -1952,9 +1952,7 @@ function emitForOfElementDeclaration(
     const expectedTag = cRuntimeValueTag(elementType)
     const runtimeValue = moveManagedValue ? `${value}.raw()` : value
 
-    declaration = moveManagedValue
-      ? `auto ${name} = std::move(${value});`
-      : `inox_value ${name} = ${value};`
+    declaration = moveManagedValue ? `auto ${name} = std::move(${value});` : `inox_value ${name} = ${value};`
     pushAllLines(checks, emitRuntimeValueCheckLines(runtimeValue, expectedTag, context))
   } else {
     checks.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_NUMBER`, context))
@@ -2364,14 +2362,11 @@ function emitCompilerLibraryForOfStatement(statement: StatementNode, context: CF
     elementType === 'object' &&
     libraryNativeBoundaryCppType(elementType, statement.nullable === true, false, statement.shape) === null
   const directRangeManagedValue =
-    iteration.rangeBased &&
-    moveManagedValue &&
-    (iteration.valueAdapter === null || iteration.valueAdapter.length === 0)
+    iteration.rangeBased && moveManagedValue && (iteration.valueAdapter === null || iteration.valueAdapter.length === 0)
   const range = iteration.rangeBased ? nextCName(context, 'inox_library_range') : ''
   const iterator = iteration.rangeBased ? '' : nextCName(context, 'inox_library_iterator')
   const step = iteration.rangeBased ? '' : nextCName(context, 'inox_library_step')
-  const value =
-    iteration.rangeBased && directRangeManagedValue ? '' : nextCName(context, 'inox_library_value')
+  const value = iteration.rangeBased && directRangeManagedValue ? '' : nextCName(context, 'inox_library_value')
   const breakTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_break'), throughFinally: false }
   const continueTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_continue'), throughFinally: false }
   const variableScope = pushVariableScope(context)
@@ -2394,10 +2389,7 @@ function emitCompilerLibraryForOfStatement(statement: StatementNode, context: CF
     pushAllLines(lines, iterable.lines)
 
     if (iteration.rangeBased) {
-      const rangeExpression =
-        iteration.iteratorMethod === null
-          ? receiver
-          : `${receiver}.${iteration.iteratorMethod}()`
+      const rangeExpression = iteration.iteratorMethod === null ? receiver : `${receiver}.${iteration.iteratorMethod}()`
 
       lines.push(`auto ${range} = ${rangeExpression};`)
 
@@ -2461,13 +2453,7 @@ function emitCompilerLibraryForOfStatement(statement: StatementNode, context: CF
       loopBody.push(`auto ${value} = ${adaptedValue};`)
     }
 
-    const element = emitForOfElementDeclaration(
-      statement,
-      elementValue,
-      elementType,
-      context,
-      moveManagedValue
-    )
+    const element = emitForOfElementDeclaration(statement, elementValue, elementType, context, moveManagedValue)
     pushAllLines(loopBody, element.lines)
     loopBody.push(element.expression)
     pushAllLines(loopBody, body)
@@ -3518,6 +3504,7 @@ function materializeSynthesizedCompilerLibraryIndexOperation(
   expression.libraryCExpression = operation.cExpression ?? null
   expression.libraryCArgumentKinds = operation.cArgumentKinds ?? null
   expression.libraryCArgumentAdapters = operation.cArgumentAdapters ?? null
+  expression.libraryCArgumentAdapterTypeIds = operation.cArgumentAdapterTypeIds ?? null
   expression.libraryCArgumentMethodNames = operation.cArgumentMethodNames ?? null
   expression.libraryCArgumentSources = operation.cArgumentSources ?? null
   expression.libraryCResultMode = operation.cResultMode ?? null

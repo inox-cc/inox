@@ -199,12 +199,7 @@ export type LibraryNativeTypeDescriptor = {
 }
 
 export type LibraryOperationKind = 'call' | 'construct' | 'member-read' | 'member-write' | 'index-read' | 'index-write'
-export type LibraryAsyncResultOperationKind =
-  | 'create'
-  | 'fulfill'
-  | 'reject'
-  | 'map-fulfilled'
-  | 'map-rejected'
+export type LibraryAsyncResultOperationKind = 'create' | 'fulfill' | 'reject' | 'map-fulfilled' | 'map-rejected'
 
 export type LibraryCArgumentKind =
   | 'receiver'
@@ -390,6 +385,7 @@ export type LibraryOperationVariantDescriptor = {
   cClassFormatExpression?: string | null
   cArgumentKinds?: LibraryCArgumentKind[]
   cArgumentAdapters?: string[]
+  cArgumentAdapterTypeIds?: LibraryObjectTypeId[]
   cArgumentMethodNames?: string[]
   cArgumentSources?: Array<LibraryCArgumentSourceDescriptor | null>
   cReceiverAdapter?: string | null
@@ -405,6 +401,8 @@ export type LibraryCSequenceMaterializationDescriptor = {
   createExpression: string
   appendElementExpression: string
   appendSpreadExpression: string
+  appendSpreadValueAdapter?: string | null
+  appendSpreadValueTypeId?: LibraryObjectTypeId | null
   failureMode: 'thrown'
 }
 
@@ -435,6 +433,7 @@ export type LibraryOperationDescriptor = {
   cClassFormatExpression?: string | null
   cArgumentKinds?: LibraryCArgumentKind[]
   cArgumentAdapters?: string[]
+  cArgumentAdapterTypeIds?: LibraryObjectTypeId[]
   cArgumentMethodNames?: string[]
   cArgumentSources?: Array<LibraryCArgumentSourceDescriptor | null>
   cReceiverAdapter?: string | null

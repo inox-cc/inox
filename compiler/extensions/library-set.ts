@@ -94,6 +94,43 @@ export function compilerLibraryNativeTypeIsAssignable(
   return false
 }
 
+export function compilerLibraryNativeCppTypeIsAssignableToTypeId(
+  libraries: CompilerLibrarySet,
+  sourceCppType: string | null | undefined,
+  targetTypeId: string | null | undefined
+): boolean {
+  if (
+    sourceCppType === null ||
+    typeof sourceCppType === 'undefined' ||
+    targetTypeId === null ||
+    typeof targetTypeId === 'undefined' ||
+    targetTypeId.length === 0
+  ) {
+    return false
+  }
+
+  const targetType = compilerLibraryNativeTypeForId(libraries, targetTypeId)
+
+  if (targetType === null) {
+    return false
+  }
+
+  if (sourceCppType === targetType.cppType) {
+    return true
+  }
+
+  for (const sourceType of libraries.nativeTypes) {
+    if (
+      sourceType.cppType === sourceCppType &&
+      compilerLibraryNativeTypeIsAssignable(libraries, sourceType.typeId, targetTypeId)
+    ) {
+      return true
+    }
+  }
+
+  return false
+}
+
 export function compilerLibraryNativeTypeForId(
   libraries: CompilerLibrarySet,
   typeId: string
@@ -345,8 +382,7 @@ function compilerLibraryOperationForUnknownReceiver(
       continue
     }
 
-    const receiverBinding =
-      memberName.length === 0 ? `${receiverTypeId}.*` : `${receiverTypeId}.${memberName}`
+    const receiverBinding = memberName.length === 0 ? `${receiverTypeId}.*` : `${receiverTypeId}.${memberName}`
 
     if (!operationHasBinding(operation, receiverBinding)) {
       continue

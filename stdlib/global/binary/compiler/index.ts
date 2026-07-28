@@ -36,17 +36,10 @@ const operations: LibraryOperationDescriptor[] = [
   receiverMemberRead('length', 'length', numberTypeRef),
   receiverIndexRead(),
   receiverIndexWrite(),
-  receiverCall(
-    'slice',
-    ['receiver', 'number', 'optional-number'],
-    'slice',
-    uint8ArrayTypeRef,
-    null,
-    'value',
-    1,
-    2,
-    [numberArgument(), numberArgument()]
-  ),
+  receiverCall('slice', ['receiver', 'number', 'optional-number'], 'slice', uint8ArrayTypeRef, null, 'value', 1, 2, [
+    numberArgument(),
+    numberArgument()
+  ]),
   receiverCall(
     'toString',
     ['receiver'],
@@ -71,7 +64,10 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       valueType: 'bytes',
       cppType: 'Uint8Array',
       baseTypeIds: [],
-      runtimeRequirements: [runtimeRequirement]
+      runtimeRequirements: [runtimeRequirement],
+      cValueAdapter: 'Uint8Array($value)',
+      cRuntimeValueExpression: '$value.raw()',
+      cRuntimeValueValidExpression: 'Uint8Array(inox::Value($value)).valid()'
     }
   ],
   operations,
@@ -103,10 +99,7 @@ function uint8ArrayConstructor(): LibraryOperationDescriptor {
         arrayElementValueTypes: ['number']
       }
     ],
-    variants: [
-      constructorVariant('number', ['number']),
-      constructorVariant('object', ['value'])
-    ],
+    variants: [constructorVariant('number', ['number']), constructorVariant('object', ['value'])],
     resultTypeRef: uint8ArrayTypeRef
   }
 }
@@ -126,11 +119,7 @@ function constructorVariant(
   }
 }
 
-function receiverMemberRead(
-  name: string,
-  cExpression: string,
-  resultTypeRef: TypeRef
-): LibraryOperationDescriptor {
+function receiverMemberRead(name: string, cExpression: string, resultTypeRef: TypeRef): LibraryOperationDescriptor {
   return {
     libraryId,
     bindingId: receiverBinding(name),

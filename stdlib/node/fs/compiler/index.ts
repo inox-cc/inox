@@ -21,6 +21,7 @@ const runtimeRequirement = libraryId
 const statsTypeId = `${libraryId}#Stats`
 const direntTypeId = `${libraryId}#Dirent`
 const bufferTypeId = 'node:buffer#Buffer'
+const uint8ArrayTypeId = 'global:binary#Uint8Array'
 const errorTypeId = 'global:error#Error'
 const statsTypeRef = nominalTypeRef(statsTypeId)
 const direntTypeRef = nominalTypeRef(direntTypeId)
@@ -271,7 +272,8 @@ function writeOperation(name: string, promise: boolean, ownerLibraryId: string):
         ...variant(name, promise, 2, 3, ['string-view', 'value'], fsResultTypeRef(promise, voidTypeRef)),
         argumentIndex: 1,
         argumentValueTypes: ['bytes'],
-        cArgumentAdapters: ['', 'Uint8Array($value)']
+        cArgumentAdapters: ['', 'Uint8Array($value)'],
+        cArgumentAdapterTypeIds: ['', uint8ArrayTypeId]
       }
     ]
   )

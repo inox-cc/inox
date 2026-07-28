@@ -38,6 +38,7 @@ test('global:crypto владеет getRandomValues operation, runtime requiremen
   assert.equal(operation.cExpression, 'crypto.getRandomValues')
   assert.deepEqual(operation.cArgumentKinds, ['value'])
   assert.deepEqual(operation.cArgumentAdapters, ['Uint8Array($value)'])
+  assert.deepEqual(operation.cArgumentAdapterTypeIds, ['global:binary#Uint8Array'])
   assert.deepEqual(globalCrypto.compilerPackage.runtimeRequirements, [
     {
       id: 'global:crypto',
@@ -62,6 +63,7 @@ test('global:crypto владеет getRandomValues operation, runtime requiremen
   assert.deepEqual(call.libraryRuntimeRequirements, ['global:crypto'])
   assert.deepEqual(call.libraryCapabilities, ['entropy'])
   assert.deepEqual(call.libraryCArgumentAdapters, ['Uint8Array($value)'])
+  assert.deepEqual(call.libraryCArgumentAdapterTypeIds, ['global:binary#Uint8Array'])
   assert.ok(result.ir.runtimeRequirements.includes('global:crypto'))
   assert.match(result.code, /#include "inox\/crypto\.h"/)
   assert.match(result.code, /crypto\.getRandomValues\(bytes\)/)

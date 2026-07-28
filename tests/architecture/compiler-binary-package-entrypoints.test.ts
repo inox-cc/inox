@@ -23,7 +23,10 @@ test('binary packages expose generic native types, operations and runtime requir
       valueType: 'bytes',
       cppType: 'Uint8Array',
       baseTypeIds: [],
-      runtimeRequirements: ['global:binary']
+      runtimeRequirements: ['global:binary'],
+      cValueAdapter: 'Uint8Array($value)',
+      cRuntimeValueExpression: '$value.raw()',
+      cRuntimeValueValidExpression: 'Uint8Array(inox::Value($value)).valid()'
     }
   ])
   assert.deepEqual(buffer.compilerPackage.dependencies, ['global:binary'])
@@ -35,7 +38,10 @@ test('binary packages expose generic native types, operations and runtime requir
       valueType: 'bytes',
       cppType: 'Buffer',
       baseTypeIds: ['global:binary#Uint8Array'],
-      runtimeRequirements: ['global:binary', 'node:buffer']
+      runtimeRequirements: ['global:binary', 'node:buffer'],
+      cValueAdapter: 'Buffer($value)',
+      cRuntimeValueExpression: '$value.raw()',
+      cRuntimeValueValidExpression: 'Buffer(inox::Value($value)).valid()'
     }
   ])
 

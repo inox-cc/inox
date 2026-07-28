@@ -13,6 +13,7 @@ const runtimeRequirement = libraryId
 const serverTypeId = `${libraryId}#Server`
 const requestTypeId = `${libraryId}#IncomingMessage`
 const responseTypeId = `${libraryId}#ServerResponse`
+const uint8ArrayTypeId = 'global:binary#Uint8Array'
 const runtimeRequirements = [runtimeRequirement]
 const stringTypeRef = primitiveTypeRef('string')
 const numberTypeRef = primitiveTypeRef('number')
@@ -89,8 +90,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
           optionId: 'target:runtime#loop-backend',
           allowedValues: ['libuv'],
           diagnosticCode: 'INOX_NOT_IMPLEMENTED',
-          diagnosticMessage:
-            'node:http is not implemented for C without libuv; select --loop-backend libuv'
+          diagnosticMessage: 'node:http is not implemented for C without libuv; select --loop-backend libuv'
         }
       ]
     }
@@ -368,6 +368,7 @@ type VariantOptions = {
   argumentValueTypes?: string[]
   stringLiterals?: string[]
   cArgumentAdapters?: string[]
+  cArgumentAdapterTypeIds?: string[]
   cArgumentSources?: Array<{ argumentIndex: number } | null>
   cResultMode?: 'value' | 'borrowed'
   callbackLifetime?: 'call' | 'event-loop'
@@ -390,7 +391,8 @@ function bodyVariant(valueType: 'string' | 'bytes'): LibraryOperationVariantDesc
     argumentIndex: 0,
     argumentValueTypes: [valueType],
     argumentChecks: [{ valueTypes: [valueType] }],
-    cArgumentAdapters: valueType === 'bytes' ? ['Uint8Array($value)'] : []
+    cArgumentAdapters: valueType === 'bytes' ? ['Uint8Array($value)'] : [],
+    cArgumentAdapterTypeIds: valueType === 'bytes' ? [uint8ArrayTypeId] : []
   })
 }
 
@@ -409,6 +411,7 @@ function operationVariant(
     stringLiterals: options.stringLiterals,
     cArgumentKinds,
     cArgumentAdapters: options.cArgumentAdapters,
+    cArgumentAdapterTypeIds: options.cArgumentAdapterTypeIds,
     cArgumentSources: options.cArgumentSources,
     cResultMode: options.cResultMode,
     callbackLifetime: options.callbackLifetime

@@ -1,5 +1,5 @@
 import type { AnyNode } from '../../types.ts'
-import { compilerLibraryNativeTypeIsAssignable } from '../../extensions/library-set.ts'
+import { compilerLibraryNativeCppTypeIsAssignableToTypeId } from '../../extensions/library-set.ts'
 import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
 import {
   emitPrepareOwnedValueWrite,
@@ -47,6 +47,7 @@ type CompilerLibraryExpressionNode = AnyNode & {
   libraryAsyncResultOperation?: string | null
   libraryCExpression?: string | null
   libraryCArgumentAdapters?: string[] | null
+  libraryCArgumentAdapterTypeIds?: string[] | null
   libraryCArgumentKinds?: string[] | null
   libraryCArgumentMethodNames?: string[] | null
   libraryCArgumentSources?: Array<CompilerLibraryCArgumentSource | null> | null
@@ -729,7 +730,13 @@ export function emitPreparedCompilerLibraryCallExpression(
 
   let callTarget = target
 
-  applyCompilerLibraryArgumentAdapters(argumentsList, argumentCppTypes, item.libraryCArgumentAdapters, context)
+  applyCompilerLibraryArgumentAdapters(
+    argumentsList,
+    argumentCppTypes,
+    item.libraryCArgumentAdapters,
+    item.libraryCArgumentAdapterTypeIds,
+    context
+  )
   if (
     receiverCppType === null ||
     typeof receiverCppType === 'undefined' ||
@@ -1300,6 +1307,7 @@ function applyCompilerLibraryArgumentAdapters(
   argumentsList: string[],
   argumentCppTypes: Map<number, string>,
   adapters: string[] | null | undefined,
+  adapterTypeIds: string[] | null | undefined,
   context: CFunctionContext
 ): void {
   if (adapters === null || typeof adapters === 'undefined') {
@@ -1311,10 +1319,16 @@ function applyCompilerLibraryArgumentAdapters(
 
     if (adapter.length > 0) {
       const argumentCppType = argumentCppTypes.get(index)
+      const adapterTypeId = adapterTypeIds?.[index]
 
       if (
         typeof argumentCppType === 'string' &&
-        compilerLibraryArgumentAdapterIsRedundant(adapter, argumentCppType, context)
+        typeof adapterTypeId === 'string' &&
+        compilerLibraryNativeCppTypeIsAssignableToTypeId(
+          cCompilerLibrarySetValue(context.libraries),
+          argumentCppType,
+          adapterTypeId
+        )
       ) {
         continue
       }
@@ -1322,44 +1336,6 @@ function applyCompilerLibraryArgumentAdapters(
       argumentsList[index] = adapter.split('$value').join(argumentsList[index])
     }
   }
-}
-
-function compilerLibraryArgumentAdapterIsRedundant(
-  adapter: string,
-  argumentCppType: string,
-  context: CFunctionContext
-): boolean {
-  const suffix = '($value)'
-
-  if (!adapter.endsWith(suffix)) {
-    return false
-  }
-
-  const targetCppType = adapter.slice(0, adapter.length - suffix.length)
-
-  if (targetCppType === argumentCppType) {
-    return true
-  }
-
-  const libraries = cCompilerLibrarySetValue(context.libraries)
-  const nativeTypes = libraries.nativeTypes
-
-  for (const sourceType of nativeTypes) {
-    if (sourceType.cppType !== argumentCppType) {
-      continue
-    }
-
-    for (const targetType of nativeTypes) {
-      if (
-        targetType.cppType === targetCppType &&
-        compilerLibraryNativeTypeIsAssignable(libraries, sourceType.typeId, targetType.typeId)
-      ) {
-        return true
-      }
-    }
-  }
-
-  return false
 }
 
 function emitCompilerLibraryStringArray(

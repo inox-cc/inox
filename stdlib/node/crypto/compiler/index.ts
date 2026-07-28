@@ -114,8 +114,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
           optionId: 'target:runtime#loop-backend',
           allowedValues: ['libuv'],
           diagnosticCode: 'INOX_NOT_IMPLEMENTED',
-          diagnosticMessage:
-            'node:crypto is not implemented for C without libuv; select --loop-backend libuv'
+          diagnosticMessage: 'node:crypto is not implemented for C without libuv; select --loop-backend libuv'
         }
       ]
     },
@@ -174,6 +173,7 @@ function moduleCall(
     cExpression: `crypto.${name}`,
     cArgumentKinds,
     cArgumentAdapters,
+    cArgumentAdapterTypeIds: cArgumentAdapters.map((adapter) => (adapter.length > 0 ? uint8ArrayTypeId : '')),
     cResultMode: options.cResultMode ?? null,
     cResultMapping: options.cResultMapping ?? null,
     resultTypeRef: options.resultTypeRef,

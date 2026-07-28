@@ -18,8 +18,9 @@ function report(bytes: Uint8Array): void {
     }
   )
 
-  assert.match(result.code, /Uint8Array\(bytes\)\.set\(0, 7\);/)
-  assert.match(result.code, /Uint8Array\(bytes\)\.length\(\)/)
-  assert.match(result.code, /Uint8Array\(bytes\)\.get\(0\)/)
+  assert.match(result.code, /bytes\.set\(0, 7\);/)
+  assert.match(result.code, /bytes\.length\(\)/)
+  assert.match(result.code, /bytes\.get\(0\)/)
+  assert.doesNotMatch(result.code, /Uint8Array\(bytes\)/)
   assert.doesNotMatch(result.code, /if \(inox::thrown\(\)\) return;/)
 })

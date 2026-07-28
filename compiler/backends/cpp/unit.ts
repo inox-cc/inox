@@ -362,6 +362,12 @@ function registerCUnitSyntheticImportNames(context: CEmitContext, programs: IrPr
         if (valueType !== null && typeof valueType !== 'undefined') {
           context.moduleValueTypes.set(syntheticName, valueType)
         }
+
+        const cppType = context.moduleValueCppTypes.get(specifier.imported)
+
+        if (cppType !== null && typeof cppType !== 'undefined') {
+          context.moduleValueCppTypes.set(syntheticName, cppType)
+        }
       }
     }
   }

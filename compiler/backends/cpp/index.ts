@@ -12,7 +12,10 @@ import type {
   ModuleGraph,
   SourceLocation
 } from '../../types.ts'
-import { compilerLibraryOperationForIntrinsic } from '../../extensions/library-set.ts'
+import {
+  compilerLibraryNativeCppTypeIsAssignableToTypeId,
+  compilerLibraryOperationForIntrinsic
+} from '../../extensions/library-set.ts'
 
 import type { CallbackLoweringDependencies, RuntimeCallbackArgumentInfo } from './async/callbacks.ts'
 import {
@@ -591,6 +594,7 @@ function emitPreparedIntrinsicStringConversionExpression(
     libraryCExpression: cExpression,
     libraryCArgumentKinds: variant?.cArgumentKinds ?? operation.cArgumentKinds,
     libraryCArgumentAdapters: variant?.cArgumentAdapters ?? operation.cArgumentAdapters,
+    libraryCArgumentAdapterTypeIds: variant?.cArgumentAdapterTypeIds ?? operation.cArgumentAdapterTypeIds,
     libraryCArgumentMethodNames: variant?.cArgumentMethodNames ?? operation.cArgumentMethodNames,
     libraryCArgumentSources: variant?.cArgumentSources ?? operation.cArgumentSources,
     libraryCCallStyle: operation.cCallStyle,
@@ -4645,7 +4649,7 @@ function emitCArrayLiteralValueExpression(
     value: ''
   })
 
-  const target = outputTarget?.declare === true ? `auto ${temp}` : outputTarget?.name ?? `${arrayCppType} ${temp}`
+  const target = outputTarget?.declare === true ? `auto ${temp}` : (outputTarget?.name ?? `${arrayCppType} ${temp}`)
 
   lines.push(`${target} = ${createExpression};`)
   pushAll(lines, emitThrownCheckLines(context))
@@ -4655,15 +4659,29 @@ function emitCArrayLiteralValueExpression(
 
     if (element.type === 'SpreadElement') {
       const spread = emitCValueExpression(element.argument, context)
+      const spreadAdapter = materialization.appendSpreadValueAdapter
+      let spreadExpression = spread.expression
 
       pushAll(lines, spread.lines)
+
+      if (
+        typeof spreadAdapter === 'string' &&
+        !compilerLibraryNativeCppTypeIsAssignableToTypeId(
+          cCompilerLibrarySetValue(context.libraries),
+          spread.cppType,
+          materialization.appendSpreadValueTypeId
+        )
+      ) {
+        spreadExpression = spreadAdapter.split('$value').join(spreadExpression)
+      }
+
       lines.push(
         `${renderSequenceMaterializationExpression(materialization.appendSpreadExpression, {
           count: `${expression.elements.length}`,
           cppType: arrayCppType,
           index: `${index}`,
           target: temp,
-          value: spread.expression
+          value: spreadExpression
         })};`
       )
       pushAll(lines, emitThrownCheckLines(context))
@@ -5273,7 +5291,11 @@ function emitCNullishCoalescingValueExpression(expression: AnyNode, context: CFu
   if (!canLowerCNullishCoalescingExpression(expression, context)) {
     pushDiagnostic(
       context,
-      diagnostic('INOX_C_NULLISH', 'nullish coalescing is not supported by the current C++ backend slice', expression.loc)
+      diagnostic(
+        'INOX_C_NULLISH',
+        'nullish coalescing is not supported by the current C++ backend slice',
+        expression.loc
+      )
     )
 
     return {
@@ -5587,10 +5609,7 @@ function isDirectRuntimeFormattedValueExpression(
 }
 
 function emitFormattedLibraryCallStatement(target: string, format: string, values: string[]): string[] {
-  const argumentsList = [
-    cStringLiteral(values.length === 0 ? unescapeCPrintfFormatText(format) : format),
-    ...values
-  ]
+  const argumentsList = [cStringLiteral(values.length === 0 ? unescapeCPrintfFormatText(format) : format), ...values]
   const singleLine = `${target}(${joinStrings(argumentsList, ', ')});`
 
   if (singleLine.length <= 100) {
@@ -7145,11 +7164,7 @@ function emitAwaitValueVariableDeclaration(statement: AnyNode, context: CFunctio
 
   pushAll(lines, preparedAsyncResult.lines)
 
-  if (
-    adapter !== null &&
-    adapter.failureMode === 'thrown' &&
-    adapter.preservesPendingException
-  ) {
+  if (adapter !== null && adapter.failureMode === 'thrown' && adapter.preservesPendingException) {
     lines.push(`auto ${name} = ${adapter.valueExpression};`)
     pushAll(lines, emitThrownCheckLines(context))
     cppType = adapter.cppType
@@ -7292,11 +7307,7 @@ function emitPreparedAwaitResultExpression(
 
   const adapter = resolveAwaitValueAdapterInfo(expression, awaitExpression, valueType, context)
 
-  if (
-    adapter !== null &&
-    adapter.failureMode === 'thrown' &&
-    adapter.preservesPendingException
-  ) {
+  if (adapter !== null && adapter.failureMode === 'thrown' && adapter.preservesPendingException) {
     const converted = nextCName(context, 'inox_await')
 
     lines.push(`auto ${converted} = ${adapter.valueExpression};`)
@@ -7314,14 +7325,7 @@ function emitPreparedAwaitResultExpression(
   }
 
   const result = nextCName(context, 'inox_await')
-  const valueInfo = resolveAwaitResultCppValueInfo(
-    expression,
-    result,
-    valueType,
-    valueTag,
-    valueCheckNeeded,
-    context
-  )
+  const valueInfo = resolveAwaitResultCppValueInfo(expression, result, valueType, valueTag, valueCheckNeeded, context)
 
   lines.push(`auto ${result} = ${awaitExpression};`)
   pushAll(lines, emitAwaitResultRejectedAsyncResultLines(result, rejectionValueType, context))

@@ -28,6 +28,7 @@ test('node:crypto проходит через generic variants, adapters и nomi
   assert.equal(bytes.libraryOperationId, 'node:crypto#randomBytes')
   assert.equal(filled.libraryOperationId, 'node:crypto#randomFillSync')
   assert.deepEqual(filled.libraryCArgumentAdapters, ['Uint8Array($value)'])
+  assert.deepEqual(filled.libraryCArgumentAdapterTypeIds, ['global:binary#Uint8Array'])
   assert.equal(hex.valueType, 'string')
   assert.equal(hex.libraryCppType, 'inox::String')
   assert.equal(raw.valueType, 'bytes')
