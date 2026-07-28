@@ -1467,19 +1467,21 @@ function emitRuntimeParamPreludeForParam(
   )
 
   if (nativeValidExpression !== null) {
-    const valid = nativeValidExpression.split('$value').join(localName)
+    const runtimeValueName = emitRuntimeParamValueName(statement, param, index, context)
+    const valid = nativeValidExpression.split('$value').join(runtimeValueName)
     const mismatch =
       param.nullable === true || param.optional === true
-        ? `${localName}.tag != INOX_TAG_NULL && ${localName}.tag != INOX_TAG_UNDEFINED && !(${valid})`
+        ? `${runtimeValueName}.tag != INOX_TAG_NULL && ${runtimeValueName}.tag != INOX_TAG_UNDEFINED && !(${valid})`
         : `!(${valid})`
 
     lines.push(emitRuntimeTypeCheck(mismatch, context))
     return lines
   }
 
+  const alternativeRuntimeValueName = emitRuntimeParamValueName(statement, param, index, context)
   const alternativeValidExpressions = runtimeTypeAlternativeValidExpressions(
     param.runtimeTypeAlternatives,
-    localName,
+    alternativeRuntimeValueName,
     context.libraries
   )
 
@@ -1488,7 +1490,7 @@ function emitRuntimeParamPreludeForParam(
       const valid = alternativeValidExpressions.join(' || ')
       const mismatch =
         param.nullable === true || param.optional === true
-          ? `${localName}.tag != INOX_TAG_NULL && ${localName}.tag != INOX_TAG_UNDEFINED && !(${valid})`
+          ? `${alternativeRuntimeValueName}.tag != INOX_TAG_NULL && ${alternativeRuntimeValueName}.tag != INOX_TAG_UNDEFINED && !(${valid})`
           : `!(${valid})`
 
       lines.push(emitRuntimeTypeCheck(mismatch, context))
@@ -1583,6 +1585,27 @@ function emitRuntimeParamPreludeForParam(
   }
 
   return lines
+}
+
+function emitRuntimeParamValueName(
+  statement: CNode,
+  param: CFunctionParam,
+  index: number,
+  context: CFunctionContext
+): string {
+  if (isBoxedScalarParam(param)) {
+    return emitCScalarParamName(param.name)
+  }
+
+  if (param.valueType === 'string') {
+    return emitCStringParamName(param.name)
+  }
+
+  if (param.valueType === 'object' && isBoxedFunctionParam(param, index, statement, context)) {
+    return emitCObjectParamName(param.name)
+  }
+
+  return emitCLocalName(param.name)
 }
 
 function libraryNativeParamCppType(param: CFunctionParam, context: CEmitContext): string | null {

@@ -235,6 +235,8 @@ async function runHostedIntegrationTests(): Promise<void> {
     await import('./integration/module-compile-time-const-lowering.test.ts')
   const { assertNativeClassDefaultConstructorIsOnlyEmittedWhenNeeded } =
     await import('./integration/native-class-default-constructor-lowering.test.ts')
+  const { assertImportedUnionParamChecksPhysicalRuntimeName } =
+    await import('./integration/imported-union-param-runtime-name-lowering.test.ts')
   const { assertUrlRuntimeUsesStringFacade, assertUrlSearchParamsLowersRecordLiteralsDirectly } =
     await import('./integration/url-cpp-object-lowering.test.ts')
   const { assertRaiiFunctionsUseDirectReturns } = await import('./integration/raii-exit-lowering.test.ts')
@@ -497,6 +499,10 @@ async function runHostedIntegrationTests(): Promise<void> {
 
     await t.test('native-class-default-constructor-lowering', () => {
       assertNativeClassDefaultConstructorIsOnlyEmittedWhenNeeded()
+    })
+
+    await t.test('imported-union-param-runtime-name-lowering', () => {
+      assertImportedUnionParamChecksPhysicalRuntimeName()
     })
 
     await t.test('url-cpp-object-lowering', () => {
