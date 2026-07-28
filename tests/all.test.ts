@@ -196,6 +196,8 @@ async function runHostedIntegrationTests(): Promise<void> {
     await import('./integration/runtime-value-uninitialized-raii-lowering.test.ts')
   const { assertRuntimeValueDeclarationsReuseTypedHelperContracts } =
     await import('./integration/runtime-value-type-check-lowering.test.ts')
+  const { assertNativeResultsInitializeVariablesDirectly } =
+    await import('./integration/direct-native-variable-lowering.test.ts')
   const {
     assertNativeClassArrayRuntimeFieldLowering,
     assertNativeClassDefinitionsPrecedeModuleValues,
@@ -466,6 +468,10 @@ async function runHostedIntegrationTests(): Promise<void> {
       assertRuntimeValueDeclarationsReuseTypedHelperContracts()
     })
 
+    await t.test('direct-native-variable-lowering', () => {
+      assertNativeResultsInitializeVariablesDirectly()
+    })
+
     await t.test('runtime-value-local-declaration-lowering', () => {
       assertRuntimeValueDeclarationsStayLocal()
     })
@@ -486,6 +492,8 @@ async function runHostedIntegrationTests(): Promise<void> {
 
 async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<void> {
   const { assertCliEntryModuleMain } = await import('./integration/cli-entry-module-main.test.ts')
+  const { assertNativeCompilerUsesDirectNativeInitializers } =
+    await import('./integration/direct-native-variable-lowering.test.ts')
   const { assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariableTarget } =
     await import('./integration/json-parse-shape-lowering.test.ts')
   const { assertNativeRaiiFunctionsUseDirectReturns } =
@@ -501,6 +509,10 @@ async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<
   await test('native compiler integration checks', async (t) => {
     await t.test('cli-entry-module-main', async () => {
       await assertCliEntryModuleMain(compilerPath)
+    })
+
+    await t.test('native-direct-variable-lowering', async () => {
+      await assertNativeCompilerUsesDirectNativeInitializers(compilerPath)
     })
 
     await t.test('native-json-parse-unicode-shape-lowering', async () => {

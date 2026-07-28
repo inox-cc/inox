@@ -24,7 +24,8 @@ import type { StatementLoweringDependencies } from './values/statements.ts'
 import type { StringLoweringDependencies } from './values/strings.ts'
 import {
   compilerLibraryIntrinsicAsyncResultCValidExpression,
-  compilerLibraryNativeRuntimeValueExpressionForId
+  compilerLibraryNativeRuntimeValueExpressionForId,
+  isManagedRuntimeReturnType
 } from './value-types.ts'
 
 type CFunctionContext = CFunctionContextWithDependencies<
@@ -889,7 +890,7 @@ export function emitPreparedCompilerLibraryCallExpression(
   }
 
   if (item.libraryCFailureMode !== null && typeof item.libraryCFailureMode !== 'undefined') {
-    const directOut = cppType === 'inox::String' || cppType === 'inox::Value' ? options?.out : null
+    const directOut = compilerLibraryDirectResultOut(item, cppType, options)
     const out = directOut ?? nextCName(context, 'inox_library_result')
     lines.push(`auto ${out} = ${callExpression};`)
     pushCompilerLibraryFailureCheck(lines, item.libraryCFailureMode, out, context, dependencies)
@@ -943,6 +944,39 @@ export function emitPreparedCompilerLibraryCallExpression(
     valueType: item.valueType ?? undefined,
     owned: item.libraryOwned === true
   }
+}
+
+function compilerLibraryDirectResultOut(
+  item: CompilerLibraryExpressionNode,
+  cppType: string,
+  options: PreparedCallOptions | null | undefined
+): string | null {
+  const requestedOut = options?.out
+
+  if (requestedOut === null || typeof requestedOut === 'undefined') {
+    return null
+  }
+
+  const directlyDeclaredType =
+    cppType === 'inox::String' || cppType === 'inox::Value' || isManagedRuntimeReturnType(item.valueType)
+
+  if (!directlyDeclaredType) {
+    return null
+  }
+
+  if (
+    cppType === 'inox::Value' &&
+    item.nullable !== true &&
+    (item.valueType === 'number' || item.valueType === 'boolean')
+  ) {
+    return null
+  }
+
+  if (applyCompilerLibraryValueAdapter(requestedOut, item.libraryCResultAdapter) !== requestedOut) {
+    return null
+  }
+
+  return requestedOut
 }
 
 function emitDiscardedCompilerLibraryCall(
