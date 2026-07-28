@@ -137,6 +137,7 @@ export type CEmitContextWithDependencies<
   jsGlobalRoots: CStringSet
   libraries: CCompilerLibrarySet
   runtimeInitializerDefinitions: string[]
+  moduleCompileTimeValueInitializers: CStringMap
   moduleValueNames: CStringMap
   moduleValueCppTypes: CStringMap
   moduleRuntimeValueNames: CStringSet
@@ -378,6 +379,7 @@ export function createFunctionContext<
     jsGlobalRoots: baseContext.jsGlobalRoots,
     libraries: baseContext.libraries,
     runtimeInitializerDefinitions: baseContext.runtimeInitializerDefinitions,
+    moduleCompileTimeValueInitializers: baseContext.moduleCompileTimeValueInitializers,
     moduleValueNames: baseContext.moduleValueNames,
     moduleValueCppTypes: baseContext.moduleValueCppTypes,
     moduleRuntimeValueNames: baseContext.moduleRuntimeValueNames,

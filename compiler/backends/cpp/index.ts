@@ -1300,6 +1300,7 @@ function createBaseContext(
     jsGlobalRoots,
     libraries: resolveCCompilerLibrarySet(libraries),
     runtimeInitializerDefinitions: [],
+    moduleCompileTimeValueInitializers: new Map(),
     moduleValueNames: new Map(),
     moduleValueCppTypes: new Map(),
     moduleRuntimeValueNames: new Set(),
@@ -2651,6 +2652,10 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
   const moduleValueType = context.moduleValueTypes.get(statement.name) ?? inferred
 
   context.variables.set(statement.name, inferred)
+
+  if (context.moduleCompileTimeValueInitializers.has(statement.name)) {
+    return []
+  }
 
   if (statement.nullable === true && isRuntimeNullableType(inferred)) {
     return emitModuleNullableRuntimeValueAssignment(statement, name, inferred, context)

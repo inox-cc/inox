@@ -159,7 +159,8 @@ console.log(read())
   }) as GeneratedTextFile[]
   const nestedReferenceSource = generatedTextFile(nestedReferenceFiles, 'src/index.cc').code
 
-  assert.match(nestedReferenceSource, /static double seed = 0;/)
+  assert.match(nestedReferenceSource, /static const double seed = 7;/)
+  assert.doesNotMatch(nestedReferenceSource, /\n  seed = 7;/)
   assert.match(nestedReferenceSource, /inox_return = seed;/)
 
   const jsonLocalHost = createMemoryCompilerHost(

@@ -157,6 +157,7 @@ type CFunctionContext = CFunctionContextWithDependencies<
 >
 
 type CModuleValueDeclaration = {
+  compileTimeInitializer?: string | null
   cppType?: string | null
   declaredType?: string | null
   exported: boolean
@@ -2634,6 +2635,10 @@ function registerCModuleValueDeclarations(context: CEmitContext, plan: CModulePl
     context.moduleValueNames.set(item.name, item.symbolName)
     context.moduleValueTypes.set(item.name, item.valueType)
 
+    if (item.compileTimeInitializer !== null && typeof item.compileTimeInitializer !== 'undefined') {
+      context.moduleCompileTimeValueInitializers.set(item.name, item.compileTimeInitializer)
+    }
+
     if (cModuleValueDeclarationCType(item, context) === 'inox_value') {
       context.moduleRuntimeValueNames.add(item.name)
     }
@@ -2754,6 +2759,7 @@ function collectCModuleValueDeclarations(plan: CModulePlan, context?: CEmitConte
     const valueType = cModuleValueType(item, context)
 
     values.push({
+      compileTimeInitializer: cModuleValueCompileTimeInitializer(item),
       cppType: cModuleValueLibraryCppType(item),
       declaredType: item.declaredType ?? item.inferredDeclaredType ?? null,
       exported: item.exported === true,
@@ -2786,6 +2792,28 @@ function cModuleValueLibraryCppType(node: AnyNode): string | null {
   const nullable = node.nullable === true || node.init?.nullable === true
 
   return libraryCppValueStorageType(nullable, shape)
+}
+
+function cModuleValueCompileTimeInitializer(node: AnyNode): string | null {
+  if (node.exported === true || node.kind !== 'const') {
+    return null
+  }
+
+  const init = node.init
+
+  if (init === null || typeof init === 'undefined') {
+    return null
+  }
+
+  if (init.type === 'NumberLiteral') {
+    return init.value
+  }
+
+  if (init.type === 'BooleanLiteral') {
+    return init.value === true ? 'true' : 'false'
+  }
+
+  return null
 }
 
 function collectCModuleStaticValueDeclarations(plan: CModulePlan, context: CEmitContext): CModuleValueDeclaration[] {
@@ -3041,15 +3069,20 @@ function emitCModuleValueDefinitions(lines: string[], values: CModuleValueDeclar
     const cType = cModuleValueDeclarationCType(item, context)
     const initializer = cModuleValueDeclarationGlobalInitializer(item)
     let prefix = ''
+    let constPrefix = ''
 
     if (item.exported !== true) {
       prefix = 'static '
     }
 
+    if (item.compileTimeInitializer !== null && typeof item.compileTimeInitializer !== 'undefined') {
+      constPrefix = 'const '
+    }
+
     if (initializer === '') {
-      lines.push(`${prefix}${cType} ${item.symbolName};`)
+      lines.push(`${prefix}${constPrefix}${cType} ${item.symbolName};`)
     } else {
-      lines.push(`${prefix}${cType} ${item.symbolName} = ${initializer};`)
+      lines.push(`${prefix}${constPrefix}${cType} ${item.symbolName} = ${initializer};`)
     }
   }
 
@@ -3393,6 +3426,10 @@ function cModuleValueGlobalInitializer(valueType: string): string {
 }
 
 function cModuleValueDeclarationGlobalInitializer(item: CModuleValueDeclaration): string {
+  if (item.compileTimeInitializer !== null && typeof item.compileTimeInitializer !== 'undefined') {
+    return item.compileTimeInitializer
+  }
+
   if (item.cppType !== null && typeof item.cppType !== 'undefined') {
     return ''
   }
