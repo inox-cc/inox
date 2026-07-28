@@ -145,6 +145,7 @@ export type CEmitContextWithDependencies<
   moduleValueTypes: CStringMap
   nextId: number
   nullableLoweringDependencies: NullableDependencies
+  pendingExceptionFunctions: CStringSet
   runtimeEntryPath: string | null
   runtimeEntrypointAdapter: RuntimeEntrypointAdapterDescriptor | null
   asyncResultChainArrowWrappers: Map<AnyNode, CAsyncResultChainWrapper>
@@ -385,6 +386,7 @@ export function createFunctionContext<
     moduleValueTypes: baseContext.moduleValueTypes,
     nextId: baseContext.nextId,
     nullableLoweringDependencies: baseContext.nullableLoweringDependencies,
+    pendingExceptionFunctions: baseContext.pendingExceptionFunctions,
     runtimeEntryPath: baseContext.runtimeEntryPath,
     runtimeEntrypointAdapter: baseContext.runtimeEntrypointAdapter,
     asyncResultChainArrowWrappers: baseContext.asyncResultChainArrowWrappers,

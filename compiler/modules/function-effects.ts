@@ -15,6 +15,7 @@ export function emitModuleFunctionEffectsContract(functionEffects: IrFunctionEff
 
   for (const effect of functionEffects) {
     effects.push({
+      mayLeavePendingException: effect.mayLeavePendingException === true,
       name: effect.name,
       throws: effect.throws,
       throwValueTypes: effect.throwValueTypes.slice()
@@ -108,6 +109,7 @@ function parseFunctionEffect(value: unknown, file: string | null, diagnostics: D
   }
 
   const record = value as UnknownRecord
+  const mayLeavePendingException = record.mayLeavePendingException
   const name = record.name
   const throws = record.throws
   const throwValueTypes = record.throwValueTypes
@@ -119,6 +121,16 @@ function parseFunctionEffect(value: unknown, file: string | null, diagnostics: D
 
   if (typeof throws !== 'boolean') {
     diagnostics.push(moduleFunctionEffectsDiagnostic(`function effect ${name} expects boolean throws`, file))
+    return null
+  }
+
+  if (typeof mayLeavePendingException !== 'undefined' && typeof mayLeavePendingException !== 'boolean') {
+    diagnostics.push(
+      moduleFunctionEffectsDiagnostic(
+        `function effect ${name} expects boolean mayLeavePendingException`,
+        file
+      )
+    )
     return null
   }
 
@@ -141,6 +153,7 @@ function parseFunctionEffect(value: unknown, file: string | null, diagnostics: D
   }
 
   return {
+    mayLeavePendingException: mayLeavePendingException === true,
     name,
     throws,
     throwValueTypes: types

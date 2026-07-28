@@ -55,6 +55,7 @@ export type IrRuntimeRequirement = string
 export type IrThrowValueType = 'exception-object' | 'other' | 'string'
 
 export type IrFunctionEffect = {
+  mayLeavePendingException?: boolean
   name: string
   throws: boolean
   throwValueTypes: IrThrowValueType[]

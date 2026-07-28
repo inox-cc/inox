@@ -3883,6 +3883,7 @@ function cloneImportedCModuleFunctionDeclaration(
 
 function cloneImportedCModuleFunctionEffect(effect: IrFunctionEffect, name: string): IrFunctionEffect {
   return {
+    mayLeavePendingException: effect.mayLeavePendingException === true,
     name,
     throws: effect.throws,
     throwValueTypes: effect.throwValueTypes

@@ -2123,6 +2123,20 @@ export function emitPreparedCallExpression(
 
   appendCallReturnFunctionCompanionArgs(args, returnFunctionCompanions)
 
+  if (isPendingExceptionFunctionCallee(expression.callee, context)) {
+    return withFunctionCallReturnMetadata(
+      expression,
+      emitPreparedPendingExceptionCallExpression(
+        expression,
+        args,
+        lines,
+        returnFunctionCompanions,
+        context
+      ),
+      context
+    )
+  }
+
   if (deps.isAsyncResultReturningFunctionCallee(expression.callee, context)) {
     registerEventLoop(context)
 
@@ -2160,6 +2174,37 @@ export function emitPreparedCallExpression(
     },
     context
   )
+}
+
+function emitPreparedPendingExceptionCallExpression(
+  expression: CValueNode,
+  args: string[],
+  preparedLines: string[],
+  returnFunctionCompanions: CPreparedFunctionCompanion[],
+  context: CFunctionContext
+): PreparedExpression {
+  const name = stringValueAt(expression.callee.path, 0)
+  const returnInfo = resolveCFunctionCallReturnInfo(name, context)
+  const call = `${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')})`
+  const lines: string[] = []
+  let result = ''
+
+  appendLines(lines, preparedLines)
+
+  if (returnInfo.returnType === 'void') {
+    lines.push(`${call};`)
+  } else {
+    result = nextCName(context, 'inox_call_result')
+    lines.push(`auto ${result} = ${call};`)
+  }
+
+  appendLines(lines, emitRuntimeThrownCheckLines(context))
+
+  return {
+    lines,
+    expression: result,
+    functionCompanions: returnFunctionCompanions
+  }
 }
 
 function prepareCallReturnFunctionCompanions(
@@ -2659,6 +2704,14 @@ export function isThrowingFunctionCallee(callee: CValueNode, context: CEmitConte
   const name = stringValueAt(callee.path, 0)
 
   return isThrowingFunctionName(name, context)
+}
+
+function isPendingExceptionFunctionCallee(callee: CValueNode, context: CEmitContext): boolean {
+  if (callee.type !== 'Reference' || callee.path.length !== 1) {
+    return false
+  }
+
+  return context.pendingExceptionFunctions.has(stringValueAt(callee.path, 0))
 }
 
 export function isThrowingFunctionName(name: string, context: CEmitContext): boolean {

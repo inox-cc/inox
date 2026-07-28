@@ -121,6 +121,7 @@ type ClassFunctionContext = CFailureContext &
     moduleValueNames: Map<string, string>
     moduleValueTypes: Map<string, string>
     objectShapes: Map<string, CObjectShapeField[]>
+    pendingExceptionFunctions: Set<string>
     runtimeStringValues: Map<string, string>
     throwingFunctions: Set<string>
     variables: Map<string, string>
@@ -3206,6 +3207,7 @@ function emitKnownPreparedClassMethodCallExpression(
   }
 
   const callExpression = emitClassMethodCallExpression(call, method, prepared, context)
+  const leavesPendingException = isPendingExceptionClassMethod(call.info, method, context)
   const returnCppType = libraryNativeBoundaryCppType(
     method.returnType,
     method.returnNullable === true,
@@ -3224,6 +3226,8 @@ function emitKnownPreparedClassMethodCallExpression(
 
     if (options.out !== null && typeof options.out !== 'undefined') {
       out = options.out
+    } else if (leavesPendingException) {
+      out = nextCName(context, 'inox_async_result')
     }
 
     registerOwnedAsyncResult(context, out, asyncResultValueType, 'unknown')
@@ -3240,6 +3244,9 @@ function emitKnownPreparedClassMethodCallExpression(
     const lines: string[] = []
     pushAllLines(lines, callLines)
     lines.push(`${out} = ${callExpression};`)
+    if (leavesPendingException) {
+      pushAllLines(lines, emitClassPendingExceptionCheck(context))
+    }
 
     return {
       lines,
@@ -3250,6 +3257,21 @@ function emitKnownPreparedClassMethodCallExpression(
   }
 
   if (method.returnType === 'object' && returnCppType !== null) {
+    if (leavesPendingException) {
+      const result = nextCName(context, 'inox_method_result')
+      const lines: string[] = []
+      pushAllLines(lines, callLines)
+      lines.push(`auto ${result} = ${callExpression};`)
+      pushAllLines(lines, emitClassPendingExceptionCheck(context))
+
+      return {
+        lines,
+        expression: result,
+        cppType: returnCppType,
+        valueType: 'object'
+      }
+    }
+
     return {
       lines: callLines,
       expression: callExpression,
@@ -3265,6 +3287,9 @@ function emitKnownPreparedClassMethodCallExpression(
     const lines: string[] = []
     pushAllLines(lines, callLines)
     lines.push(`${value} = ${callExpression};`)
+    if (leavesPendingException) {
+      pushAllLines(lines, emitClassPendingExceptionCheck(context))
+    }
 
     const alternativeValidExpressions = runtimeTypeAlternativeValidExpressions(
       method.returnRuntimeTypeAlternatives,
@@ -3294,14 +3319,53 @@ function emitKnownPreparedClassMethodCallExpression(
 
   let expressionText = callExpression
 
-  if (method.returnType === 'void') {
-    expressionText = `${callExpression}`
+  if (leavesPendingException) {
+    const lines: string[] = []
+    pushAllLines(lines, callLines)
+
+    if (method.returnType === 'void') {
+      lines.push(`${callExpression};`)
+      expressionText = ''
+    } else {
+      expressionText = nextCName(context, 'inox_method_result')
+      lines.push(`auto ${expressionText} = ${callExpression};`)
+    }
+
+    pushAllLines(lines, emitClassPendingExceptionCheck(context))
+
+    return {
+      lines,
+      expression: expressionText
+    }
   }
 
   return {
     lines: callLines,
     expression: expressionText
   }
+}
+
+function emitClassPendingExceptionCheck(context: ClassFunctionContext): string[] {
+  const target = currentClassErrorTarget(context)
+
+  if (target !== null) {
+    return [`if (inox::thrown()) goto ${target};`]
+  }
+
+  if (!context.throwingFunction) {
+    return [`if (inox::thrown()) ${emitFailureStatement(context)}`]
+  }
+
+  registerClassMethodErrorChannel(context)
+
+  return [
+    'if (inox::thrown()) {',
+    '  inox_error = inox::take_exception();',
+    '  inox_error_active = 1;',
+    '  inox_status_result = INOX_ERR_THROW;',
+    '  goto cleanup;',
+    '}'
+  ]
 }
 
 function emitPreparedThrowingClassMethodCallExpression(
@@ -3436,6 +3500,14 @@ function isThrowingClassMethod(info: CClassInfo, method: AnyNode, context: Class
 
   const methodEffectName = irClassMethodEffectName(info.name, method.name)
   return throwingFunctions.has(methodEffectName)
+}
+
+function isPendingExceptionClassMethod(
+  info: CClassInfo,
+  method: AnyNode,
+  context: ClassFunctionContext
+): boolean {
+  return context.pendingExceptionFunctions.has(irClassMethodEffectName(info.name, method.name))
 }
 
 function emitClassMethodCallExpression(

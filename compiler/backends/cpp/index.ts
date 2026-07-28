@@ -361,6 +361,7 @@ type RuntimeLogGetSource =
 
 type CThrowingFunctionInfo = {
   functionThrowValueTypes: Map<string, IrThrowValueType[]>
+  pendingExceptionFunctions: CNameSet
   throwingFunctions: CNameSet
 }
 
@@ -1143,6 +1144,7 @@ function createThrowingFunctionInfo(
   functionEffects: IrFunctionEffect[]
 ): CThrowingFunctionInfo {
   const functionThrowValueTypes: Map<string, IrThrowValueType[]> = new Map()
+  const pendingExceptionFunctions: CNameSet = new Set()
   const throwingFunctions: CNameSet = new Set()
 
   for (const item of functionDeclarations) {
@@ -1156,6 +1158,10 @@ function createThrowingFunctionInfo(
 
     functionThrowValueTypes.set(effect.name, effect.throwValueTypes)
 
+    if (effect.name !== 'main' && effect.mayLeavePendingException === true) {
+      pendingExceptionFunctions.add(effect.name)
+    }
+
     if (effect.name !== 'main' && effect.throws) {
       throwingFunctions.add(effect.name)
     }
@@ -1163,6 +1169,7 @@ function createThrowingFunctionInfo(
 
   return {
     functionThrowValueTypes,
+    pendingExceptionFunctions,
     throwingFunctions
   }
 }
@@ -1270,6 +1277,7 @@ function createBaseContext(
     statementLoweringDependencies,
     classLoweringDependencies,
     nullableLoweringDependencies,
+    pendingExceptionFunctions: throwing.pendingExceptionFunctions,
     stringLoweringDependencies,
     diagnostics,
     exceptionValueShape: null,
@@ -7573,7 +7581,9 @@ function emitCAsyncFunctionAwaitExpression(expression: AnyNode, context: CFuncti
     const lines: string[] = []
 
     pushAll(lines, call.lines)
-    lines.push(`${call.expression};`)
+    if (call.expression !== '') {
+      lines.push(`${call.expression};`)
+    }
 
     return {
       lines,

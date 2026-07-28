@@ -1,13 +1,15 @@
 import type { AnyNode, IrFunctionEffect, IrThrowValueType, IrTopLevelItem } from '../types.ts'
 import { collectIrTopLevelNodes } from './top-level.ts'
 
-type ThrowValueTypeMap = Map<string, IrThrowValueType[]>
+type EffectThrowValueType = IrThrowValueType | 'pending-exception'
+type ThrowValueTypeMap = Map<string, EffectThrowValueType[]>
+type PublicThrowValueTypeMap = Map<string, IrThrowValueType[]>
 type StringMap = Map<string, string>
 type StringSet = Set<string>
 
 export type IrLocalThrowValueTypeOptions = {
   exceptionValueNames?: StringSet | null
-  functionThrowValueTypes?: ThrowValueTypeMap | null
+  functionThrowValueTypes?: PublicThrowValueTypeMap | null
 }
 
 type EffectChildNode = AnyNode
@@ -47,6 +49,7 @@ type EffectNode = EffectChildNode & {
   init?: EffectChildNode | null
   iterable?: EffectChildNode | null
   left?: EffectChildNode | null
+  libraryCFailureMode?: string | null
   methods?: EffectChildList
   name?: string | null
   object?: EffectChildNode | null
@@ -64,7 +67,7 @@ type EffectNode = EffectChildNode & {
 
 type NodeList = EffectChildList
 type MaybeNode = EffectNode | null | undefined
-type ThrowValueTypeSet = Set<IrThrowValueType>
+type ThrowValueTypeSet = Set<EffectThrowValueType>
 type FunctionEffectProgram = {
   body: NodeList
   topLevelItems: IrTopLevelItem[]
@@ -186,7 +189,7 @@ export function collectIrLocalThrowValueTypes(
     false,
     false
   )
-  const result = uniqueThrowValueTypes(types)
+  const result = publicThrowValueTypes(types, true)
 
   return result
 }
@@ -205,7 +208,7 @@ function collectFunctionEffects(
     const effect = externalEffects[index]
     externalFunctionNames.add(effect.name)
     functionNames.add(effect.name)
-    functionThrowValueTypes.set(effect.name, normalizedEffectThrowValueTypes(effect))
+    functionThrowValueTypes.set(effect.name, normalizedEffectValueTypes(effect))
   }
 
   for (let index = 0; index < functions.length; index = index + 1) {
@@ -259,9 +262,11 @@ function collectFunctionEffects(
   for (let index = 0; index < functions.length; index = index + 1) {
     const item: EffectNode = functions[index]
     const name = nodeName(item)
-    const throwValueTypes = functionThrowValueTypes.get(name) ?? []
+    const effectValueTypes = functionThrowValueTypes.get(name) ?? []
+    const throwValueTypes = publicThrowValueTypes(effectValueTypes, false)
 
     effects.push({
+      mayLeavePendingException: throwValueTypesInclude(effectValueTypes, 'pending-exception'),
       name,
       throws: throwValueTypes.length > 0,
       throwValueTypes
@@ -279,8 +284,8 @@ function collectEscapingThrowValueTypesFromStatements(
   classInstanceTypes: StringMap,
   includeClassMethods: boolean,
   hasErrorTarget: boolean
-): IrThrowValueType[] {
-  const types: IrThrowValueType[] = []
+): EffectThrowValueType[] {
+  const types: EffectThrowValueType[] = []
 
   for (let index = 0; index < statements.length; index = index + 1) {
     const statement = statements[index]
@@ -309,8 +314,8 @@ function collectEscapingThrowValueTypesFromStatement(
   classInstanceTypes: StringMap,
   includeClassMethods: boolean,
   hasErrorTarget: boolean
-): IrThrowValueType[] {
-  const types: IrThrowValueType[] = []
+): EffectThrowValueType[] {
+  const types: EffectThrowValueType[] = []
 
   if (statement === null || typeof statement === 'undefined') {
     return types
@@ -685,11 +690,15 @@ function collectEscapingThrowValueTypesFromExpression(
   classInstanceTypes: StringMap,
   includeClassMethods: boolean,
   hasErrorTarget: boolean
-): IrThrowValueType[] {
-  const types: IrThrowValueType[] = []
+): EffectThrowValueType[] {
+  const types: EffectThrowValueType[] = []
 
   if (expression === null || typeof expression === 'undefined') {
     return types
+  }
+
+  if (!hasErrorTarget && expression.libraryCFailureMode === 'thrown') {
+    types.push('pending-exception')
   }
 
   if (expression.type === 'CallExpression') {
@@ -1148,7 +1157,7 @@ function createThrowValueTypeSet(): ThrowValueTypeSet {
   return result
 }
 
-function cloneFunctionThrowValueTypeMap(input: ThrowValueTypeMap | null | undefined): ThrowValueTypeMap {
+function cloneFunctionThrowValueTypeMap(input: PublicThrowValueTypeMap | null | undefined): ThrowValueTypeMap {
   if (input === null || typeof input === 'undefined') {
     return createFunctionThrowValueTypeMap()
   }
@@ -1190,7 +1199,7 @@ function pushNodes(target: NodeList, values: NodeList): void {
 }
 
 function pushExpressionListThrowValueTypes(
-  target: IrThrowValueType[],
+  target: EffectThrowValueType[],
   expressions: NodeList,
   functionThrowValueTypes: ThrowValueTypeMap,
   functionNames: StringSet,
@@ -1216,7 +1225,7 @@ function pushExpressionListThrowValueTypes(
   }
 }
 
-function pushThrowValueTypes(target: IrThrowValueType[], values: IrThrowValueType[]): void {
+function pushThrowValueTypes(target: EffectThrowValueType[], values: EffectThrowValueType[]): void {
   for (let index = 0; index < values.length; index = index + 1) {
     const value = values[index]
 
@@ -1226,9 +1235,9 @@ function pushThrowValueTypes(target: IrThrowValueType[], values: IrThrowValueTyp
   }
 }
 
-function uniqueThrowValueTypes(types: IrThrowValueType[]): IrThrowValueType[] {
+function uniqueThrowValueTypes(types: EffectThrowValueType[]): EffectThrowValueType[] {
   const seen = createThrowValueTypeSet()
-  const result: IrThrowValueType[] = []
+  const result: EffectThrowValueType[] = []
 
   for (let index = 0; index < types.length; index = index + 1) {
     const throwType = types[index]
@@ -1241,7 +1250,7 @@ function uniqueThrowValueTypes(types: IrThrowValueType[]): IrThrowValueType[] {
   return result
 }
 
-function sameThrowValueTypes(left: IrThrowValueType[], right: IrThrowValueType[]): boolean {
+function sameThrowValueTypes(left: EffectThrowValueType[], right: EffectThrowValueType[]): boolean {
   if (left.length !== right.length) {
     return false
   }
@@ -1257,7 +1266,7 @@ function sameThrowValueTypes(left: IrThrowValueType[], right: IrThrowValueType[]
   return true
 }
 
-function throwValueTypesInclude(values: IrThrowValueType[], item: IrThrowValueType): boolean {
+function throwValueTypesInclude(values: EffectThrowValueType[], item: EffectThrowValueType): boolean {
   for (let index = 0; index < values.length; index = index + 1) {
     if (values[index] === item) {
       return true
@@ -1274,9 +1283,15 @@ function pushMergedIrFunctionEffect(target: IrFunctionEffect[], effect: IrFuncti
     const existing = target[index]
 
     if (existing.name === effect.name) {
-      const throwValueTypes = uniqueThrowValueTypes(existing.throwValueTypes)
-      pushThrowValueTypes(throwValueTypes, effectThrowValueTypes)
+      const throwValueTypes = publicThrowValueTypes(existing.throwValueTypes, false)
+
+      for (const valueType of effectThrowValueTypes) {
+        pushPublicThrowValueType(throwValueTypes, valueType)
+      }
+
       target[index] = {
+        mayLeavePendingException:
+          existing.mayLeavePendingException === true || effect.mayLeavePendingException === true,
         name: existing.name,
         throws: existing.throws || effect.throws || throwValueTypes.length > 0,
         throwValueTypes
@@ -1286,6 +1301,7 @@ function pushMergedIrFunctionEffect(target: IrFunctionEffect[], effect: IrFuncti
   }
 
   target.push({
+    mayLeavePendingException: effect.mayLeavePendingException === true,
     name: effect.name,
     throws: effect.throws,
     throwValueTypes: effectThrowValueTypes
@@ -1298,7 +1314,43 @@ function normalizedEffectThrowValueTypes(effect: IrFunctionEffect): IrThrowValue
     return throwValueTypes
   }
 
-  const result = uniqueThrowValueTypes(effect.throwValueTypes)
+  const result = publicThrowValueTypes(effect.throwValueTypes, false)
 
   return result
+}
+
+function normalizedEffectValueTypes(effect: IrFunctionEffect): EffectThrowValueType[] {
+  const types: EffectThrowValueType[] = normalizedEffectThrowValueTypes(effect)
+
+  if (effect.mayLeavePendingException === true) {
+    types.push('pending-exception')
+  }
+
+  return types
+}
+
+function publicThrowValueTypes(
+  effectValueTypes: EffectThrowValueType[],
+  pendingAsOther: boolean
+): IrThrowValueType[] {
+  const types: IrThrowValueType[] = []
+
+  for (const valueType of effectValueTypes) {
+    if (valueType === 'pending-exception') {
+      if (pendingAsOther) {
+        pushPublicThrowValueType(types, 'other')
+      }
+      continue
+    }
+
+    pushPublicThrowValueType(types, valueType)
+  }
+
+  return types
+}
+
+function pushPublicThrowValueType(types: IrThrowValueType[], valueType: IrThrowValueType): void {
+  if (!types.includes(valueType)) {
+    types.push(valueType)
+  }
 }

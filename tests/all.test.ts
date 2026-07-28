@@ -225,6 +225,10 @@ async function runHostedIntegrationTests(): Promise<void> {
     await import('./integration/runtime-value-core-dependencies.test.ts')
   const { assertThrowingErrorTransferUsesValueRelease } =
     await import('./integration/throwing-error-transfer-lowering.test.ts')
+  const { assertLibraryPendingExceptionsPropagateThroughFunctions } =
+    await import('./integration/library-pending-exception-function-call-lowering.test.ts')
+  const { assertLibraryPendingExceptionsPropagateThroughMethods } =
+    await import('./integration/library-pending-exception-method-call-lowering.test.ts')
   const { assertUrlRuntimeUsesStringFacade, assertUrlSearchParamsLowersRecordLiteralsDirectly } =
     await import('./integration/url-cpp-object-lowering.test.ts')
   const { assertRaiiFunctionsUseDirectReturns } = await import('./integration/raii-exit-lowering.test.ts')
@@ -467,6 +471,14 @@ async function runHostedIntegrationTests(): Promise<void> {
 
     await t.test('throwing-error-transfer-lowering', () => {
       assertThrowingErrorTransferUsesValueRelease()
+    })
+
+    await t.test('library-pending-exception-function-call-lowering', () => {
+      assertLibraryPendingExceptionsPropagateThroughFunctions()
+    })
+
+    await t.test('library-pending-exception-method-call-lowering', () => {
+      assertLibraryPendingExceptionsPropagateThroughMethods()
     })
 
     await t.test('url-cpp-object-lowering', () => {
