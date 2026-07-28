@@ -116,6 +116,8 @@ async function runHostedIntegrationTests(): Promise<void> {
   const { assertArrayLowersToGlobalObject } = await import('./integration/array-global-object-lowering.test.ts')
   const { assertArrayLogExpressionsInlinePreservingCalls } =
     await import('./integration/array-log-expression-lowering.test.ts')
+  const { assertArrayLiteralValuesDoNotExpandAsMaterializationPlaceholders } =
+    await import('./integration/array-literal-template-placeholder-lowering.test.ts')
   const { assertBuildCMakeConfigureIsQuiet } = await import('./integration/build-cmake-log-level.test.ts')
   const { assertBufferLowersToCppObject, assertBufferNativeFacadeHidesAllocatorOverloads } =
     await import('./integration/buffer-cpp-object-lowering.test.ts')
@@ -256,6 +258,9 @@ async function runHostedIntegrationTests(): Promise<void> {
 
     await t.test('array-log-expression-lowering', () => {
       assertArrayLogExpressionsInlinePreservingCalls()
+    })
+    await t.test('array-literal-template-placeholder-lowering', () => {
+      assertArrayLiteralValuesDoNotExpandAsMaterializationPlaceholders()
     })
 
     await t.test('c-prelude-include-order', () => {

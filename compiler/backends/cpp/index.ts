@@ -4791,19 +4791,35 @@ function renderSequenceMaterializationExpression(
   expression: string,
   values: { count: string; cppType: string; index: string; target: string; value: string; values?: string }
 ): string {
-  return expression
-    .split('$count')
-    .join(values.count)
-    .split('$cppType')
-    .join(values.cppType)
-    .split('$index')
-    .join(values.index)
-    .split('$target')
-    .join(values.target)
-    .split('$values')
-    .join(values.values ?? '')
-    .split('$value')
-    .join(values.value)
+  let rendered = ''
+  let index = 0
+
+  while (index < expression.length) {
+    if (expression.slice(index, index + 8) === '$cppType') {
+      rendered = rendered + values.cppType
+      index = index + 8
+    } else if (expression.slice(index, index + 7) === '$target') {
+      rendered = rendered + values.target
+      index = index + 7
+    } else if (expression.slice(index, index + 7) === '$values') {
+      rendered = rendered + (values.values ?? '')
+      index = index + 7
+    } else if (expression.slice(index, index + 6) === '$count') {
+      rendered = rendered + values.count
+      index = index + 6
+    } else if (expression.slice(index, index + 6) === '$index') {
+      rendered = rendered + values.index
+      index = index + 6
+    } else if (expression.slice(index, index + 6) === '$value') {
+      rendered = rendered + values.value
+      index = index + 6
+    } else {
+      rendered = rendered + expression.slice(index, index + 1)
+      index = index + 1
+    }
+  }
+
+  return rendered
 }
 
 function compilerArrayLiteralCanUseDirectMaterialization(expression: AnyNode): boolean {
