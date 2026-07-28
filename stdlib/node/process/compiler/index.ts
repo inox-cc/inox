@@ -27,27 +27,27 @@ const stringTypeRef = primitiveTypeRef('string')
 const numberTypeRef = primitiveTypeRef('number')
 const voidTypeRef = primitiveTypeRef('void')
 const stringResultMapping = cResultMapping('inox::String')
-const valueResultMapping = cResultMapping('inox::Value')
 
-const versionsFields: LibraryResultShapeFieldDescriptor[] = [resultField('node', 'string')]
+const versionsFields: LibraryResultShapeFieldDescriptor[] = [resultField('node', 'string', 'node', 'inox::String')]
+const argvFields: LibraryResultShapeFieldDescriptor[] = [resultField('length', 'number', 'length', 'double')]
 const processFields: LibraryResultShapeFieldDescriptor[] = [
-  resultField('version', 'string'),
-  {
-    name: 'versions',
-    valueType: 'object',
-    readonly: true,
-    resultTypeId: versionsTypeId,
-    resultShapeFields: versionsFields,
-    cppType: 'inox::Value'
-  }
+  resultField('arch', 'string', 'arch', 'inox::String'),
+  objectResultField('argv', argvTypeId, 'ProcessArgv', 'argv', argvFields),
+  resultField('argv0', 'string', 'argv0', 'inox::String'),
+  objectResultField('env', envTypeId, 'ProcessEnv', 'env'),
+  resultField('execPath', 'string', 'execPath', 'inox::String'),
+  { name: 'exitCode', valueType: 'number', readonly: false, cMember: 'exitCode', cppType: 'double' },
+  resultField('pid', 'number', 'pid', 'double'),
+  resultField('platform', 'string', 'platform', 'inox::String'),
+  resultField('version', 'string', 'version', 'inox::String'),
+  objectResultField('versions', versionsTypeId, 'ProcessVersions', 'versions', versionsFields)
 ]
-const argvFields: LibraryResultShapeFieldDescriptor[] = [resultField('length', 'number')]
 const memoryUsageFields: LibraryResultShapeFieldDescriptor[] = [
-  resultField('rss', 'number'),
-  resultField('heapTotal', 'number'),
-  resultField('heapUsed', 'number'),
-  resultField('external', 'number'),
-  resultField('arrayBuffers', 'number')
+  resultField('rss', 'number', 'rss', 'double'),
+  resultField('heapTotal', 'number', 'heapTotal', 'double'),
+  resultField('heapUsed', 'number', 'heapUsed', 'double'),
+  resultField('external', 'number', 'external', 'double'),
+  resultField('arrayBuffers', 'number', 'arrayBuffers', 'double')
 ]
 
 const operations: LibraryOperationDescriptor[] = [
@@ -68,16 +68,9 @@ const operations: LibraryOperationDescriptor[] = [
     cResultMapping: stringResultMapping
   }),
   callOperation('exit', ['optional-number'], 'process.exit', voidTypeRef, 0, 1, [numberArgument()]),
-  callOperation(
-    'hrtime',
-    ['optional-argument'],
-    'process.hrtime',
-    arrayTypeRef(numberTypeRef),
-    0,
-    1,
-    [arrayArgument()],
-    { cResultMapping: valueResultMapping }
-  ),
+  callOperation('hrtime', ['optional-argument'], 'process.hrtime', arrayTypeRef(numberTypeRef), 0, 1, [
+    arrayArgument()
+  ]),
   callOperation('memoryUsage', [], 'process.memoryUsage', nominalTypeRef(memoryUsageTypeId), 0, 0, [], {
     cFailureMode: 'thrown'
   }),
@@ -142,10 +135,6 @@ const operations: LibraryOperationDescriptor[] = [
     resultTypeRef: stringTypeRef,
     cResultMapping: stringResultMapping
   },
-  receiverMemberRead(processTypeId, 'version', stringTypeRef, stringResultMapping),
-  receiverMemberRead(processTypeId, 'versions', nominalTypeRef(versionsTypeId)),
-  receiverMemberRead(versionsTypeId, 'node', stringTypeRef, stringResultMapping),
-  receiverMemberRead(argvTypeId, 'length', numberTypeRef),
   ...unsupportedMethods().map((name) => unsupportedOperation(name, 'call')),
   ...unsupportedProperties().map((name) => unsupportedOperation(name, 'member-read'))
 ]
@@ -154,11 +143,11 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
   dependencies: [collectionsLibraryId],
   nativeTypes: [
-    nativeType(processTypeId, ['ProcessModule'], 'inox::Value', processFields),
-    nativeType(argvTypeId, ['ProcessArgv'], 'process_argv', argvFields),
-    nativeType(envTypeId, ['ProcessEnv'], 'process_env', []),
-    nativeType(versionsTypeId, ['ProcessVersions'], 'inox::Value', versionsFields),
-    nativeType(memoryUsageTypeId, ['ProcessMemoryUsage'], 'inox::Value', memoryUsageFields)
+    nativeType(processTypeId, ['ProcessModule', 'Process'], 'Process', processFields),
+    nativeType(argvTypeId, ['ProcessArgv'], 'ProcessArgv', argvFields),
+    nativeType(envTypeId, ['ProcessEnv'], 'ProcessEnv', []),
+    nativeType(versionsTypeId, ['ProcessVersions'], 'ProcessVersions', versionsFields),
+    nativeType(memoryUsageTypeId, ['ProcessMemoryUsage'], 'ProcessMemoryUsage', memoryUsageFields)
   ],
   operations,
   intrinsicBindings: [],
@@ -258,25 +247,6 @@ function objectRead(
   }
 }
 
-function receiverMemberRead(
-  receiverTypeId: string,
-  name: string,
-  resultTypeRef: TypeRef,
-  cResultMapping?: LibraryCResultMappingDescriptor
-): LibraryOperationDescriptor {
-  return {
-    libraryId,
-    bindingId: receiverBinding(receiverTypeId, name),
-    operationId: `${receiverTypeId}#read:${name}`,
-    kind: 'member-read',
-    runtimeRequirements: [runtimeRequirement],
-    receiverTypeId,
-    cExpression: null,
-    resultTypeRef,
-    cResultMapping
-  }
-}
-
 function nativeType(
   typeId: string,
   declarationNames: string[],
@@ -334,8 +304,31 @@ function unsupportedOperation(name: string, kind: LibraryOperationKind): Library
   }
 }
 
-function resultField(name: string, valueType: string): LibraryResultShapeFieldDescriptor {
-  return { name, valueType, readonly: true }
+function resultField(
+  name: string,
+  valueType: string,
+  cMember: string,
+  cppType: string
+): LibraryResultShapeFieldDescriptor {
+  return { name, valueType, readonly: true, cMember, cppType }
+}
+
+function objectResultField(
+  name: string,
+  resultTypeId: string,
+  cppType: string,
+  cMember: string,
+  resultShapeFields: LibraryResultShapeFieldDescriptor[] = []
+): LibraryResultShapeFieldDescriptor {
+  return {
+    name,
+    valueType: 'object',
+    readonly: true,
+    cMember,
+    resultTypeId,
+    resultShapeFields,
+    cppType
+  }
 }
 
 function numberArgument(): LibraryArgumentCheckDescriptor {

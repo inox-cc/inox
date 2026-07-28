@@ -38,12 +38,9 @@ test('native await и value adapter contracts валидируются и вхо
     /native type fixture#Value C\+\+ await invalid-source contract requires cAwaitExpression/
   )
 
-  const incompatibleFailureMode = nativeType()
-  incompatibleFailureMode.cValueAdapterFailureMode = null
-  assert.throws(
-    () => createCompilerLibrarySet([fixtureLibrary(incompatibleFailureMode)]),
-    /native type fixture#Value C\+\+ value adapter preserves pending exceptions only with thrown failure mode/
-  )
+  const nonThrowingPreservingAdapter = nativeType()
+  nonThrowingPreservingAdapter.cValueAdapterFailureMode = null
+  assert.notEqual(createCompilerLibrarySet([fixtureLibrary(nonThrowingPreservingAdapter)]).fingerprint, baseline)
 })
 
 function nativeType(): LibraryNativeTypeDescriptor {

@@ -74,7 +74,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       cppType: 'DgramRemoteInfo',
       baseTypeIds: [addressTypeId],
       runtimeRequirements: [runtimeRequirement],
-      fields: [{ name: 'size', valueType: 'number', readonly: true }]
+      fields: [{ name: 'size', valueType: 'number', readonly: true, cMember: 'size' }]
     }
   ],
   operations,
@@ -90,8 +90,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
           optionId: 'target:runtime#loop-backend',
           allowedValues: ['libuv'],
           diagnosticCode: 'INOX_NOT_IMPLEMENTED',
-          diagnosticMessage:
-            'node:dgram is not implemented for C without libuv; select --loop-backend libuv'
+          diagnosticMessage: 'node:dgram is not implemented for C without libuv; select --loop-backend libuv'
         }
       ]
     }

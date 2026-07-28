@@ -1,21 +1,13 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { compileSource } from '../../compiler/core.ts'
-import {
-  createCompilerLibrarySetWithConsole,
-  fixtureNominalTypeRef
-} from './helpers/compiler-library-fixtures.ts'
+import { createCompilerLibrarySetWithConsole, fixtureNominalTypeRef } from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
-test('native library type fields stay runtime-backed without cMember metadata', () => {
-  const result = compileSource(
-    'const entry = bridge.open()\nconsole.log(entry.size)\n',
-    { libraries: createCompilerLibrarySetWithConsole([bridgeLibrary()]), target: 'cc' }
-  )
-
-  assert.match(result.code, /inox::get\(entry, "size"\)/)
-  assert.doesNotMatch(result.code, /console\.log\("%.17g", \(\(double\)entry\.size\)\)/)
+test('native library type fields require an explicit C++ access path', () => {
+  assert.throws(() => createCompilerLibrarySetWithConsole([bridgeLibrary()]), {
+    message: 'native type field bridge#Entry.size requires exactly one C++ cMember or cGetter'
+  })
 })
 
 function bridgeLibrary(): CompilerLibraryDescriptor {

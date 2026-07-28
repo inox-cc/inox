@@ -1137,6 +1137,7 @@ function libraryNativeTypeField(field: LibraryResultShapeFieldDescriptor, loc: S
     readonly: field.readonly,
     nullable: field.nullable ?? false,
     libraryCMember: field.cMember ?? null,
+    libraryCGetter: field.cGetter ?? null,
     libraryCppType: field.cppType ?? null,
     loc
   }
@@ -1157,6 +1158,7 @@ function libraryNativeTypeField(field: LibraryResultShapeFieldDescriptor, loc: S
         readonly: nestedField.readonly,
         nullable: nestedField.nullable ?? false,
         libraryCMember: nestedField.cMember ?? null,
+        libraryCGetter: nestedField.cGetter ?? null,
         libraryCppType: nestedField.cppType ?? null,
         loc
       })

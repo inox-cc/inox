@@ -1,9 +1,6 @@
 import { diagnostic } from '../../../diagnostics.ts'
 import type { AnyNode, Diagnostic } from '../../../types.ts'
-import {
-  isPlainObjectFunctionField,
-  isRuntimeFunctionType
-} from '../async/callbacks.ts'
+import { isPlainObjectFunctionField, isRuntimeFunctionType } from '../async/callbacks.ts'
 import {
   emitFailureStatement,
   emitRuntimeTypeCheck,
@@ -481,6 +478,7 @@ function normalizedObjectShapeField(field: CObjectShapeField): CObjectShapeField
     valueType: field.valueType,
     asyncResultValueType: field.asyncResultValueType,
     libraryCMember: field.libraryCMember,
+    libraryCGetter: field.libraryCGetter,
     libraryCppType: field.libraryCppType,
     functionTypeOwnership: field.functionTypeOwnership,
     shape: field.shape,
@@ -1318,11 +1316,7 @@ function emitPreparedObjectExpressionFieldRuntimeValueExpression(
   }
 }
 
-function preparedObjectFieldReadValue(
-  field: CObjectFieldInfo,
-  value: string,
-  lines: string[]
-): PreparedExpression {
+function preparedObjectFieldReadValue(field: CObjectFieldInfo, value: string, lines: string[]): PreparedExpression {
   const nativeCppType = libraryNativeBoundaryCppType(
     field.valueType,
     field.nullable === true,
@@ -1871,7 +1865,7 @@ function refineObjectFunctionFieldNativeBoundaryMetadata(
     sourceType === null ||
     typeof sourceType === 'undefined' ||
     targetType.returnType !== sourceType.returnType ||
-    targetType.returnNullable === true !== (sourceType.returnNullable === true) ||
+    (targetType.returnNullable === true) !== (sourceType.returnNullable === true) ||
     targetType.params.length !== sourceType.params.length
   ) {
     return
@@ -2063,10 +2057,7 @@ function emitDynamicObjectFieldValueCheck(
 
   const valid = validExpression.split('$value').join(value)
   return [
-    emitRuntimeTypeCheck(
-      `${value}.tag != INOX_TAG_UNDEFINED && ${value}.tag != INOX_TAG_NULL && !(${valid})`,
-      context
-    )
+    emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_UNDEFINED && ${value}.tag != INOX_TAG_NULL && !(${valid})`, context)
   ]
 }
 
@@ -2379,10 +2370,7 @@ function shouldUseObjectPropertyStringMetadata(
   return target === null || typeof target === 'undefined' || target === 'unknown'
 }
 
-function objectPropertyDeclaredType(
-  value: ObjectFieldNode,
-  context: ObjectFunctionContext
-): string | null | undefined {
+function objectPropertyDeclaredType(value: ObjectFieldNode, context: ObjectFunctionContext): string | null | undefined {
   const libraries = context.libraries
 
   if (libraries !== null && typeof libraries !== 'undefined') {

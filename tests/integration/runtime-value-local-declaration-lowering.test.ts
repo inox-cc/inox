@@ -75,7 +75,7 @@ for (const a of foo.v) {
     source,
     /auto inox_entries_\d+ = Object\.entries\(a\);\n    if \(inox::thrown\(\)\) return;\n    inox::Value d = inox_entries_\d+;/
   )
-  assert.match(source, /auto e = Object\.entries\(a\)\.get\(0\);\n    if \(inox::thrown\(\)\) return;/)
+  assert.match(source, /auto e = Array\(Object\.entries\(a\)\.get\(0\)\);\n    if \(inox::thrown\(\)\) return;/)
   assert.doesNotMatch(source, /inox_library_object_\d+\.get\(0\)/)
   assert.doesNotMatch(
     source,

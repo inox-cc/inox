@@ -21,6 +21,13 @@ public:
   static URL from(const inox::Value& input, const inox::Value& base, bool has_base, const inox_shape* shape);
 
   bool valid() const;
+  inox::String href() const;
+  inox::String protocol() const;
+  inox::String hostname() const;
+  inox::String port() const;
+  inox::String pathname() const;
+  inox::String search() const;
+  inox::String hash() const;
   void setPathname(const inox::Value& value);
   void setSearch(const inox::Value& value);
   void setHash(const inox::Value& value);

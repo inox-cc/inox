@@ -18,6 +18,9 @@ export function assertProcessRuntimeValueExpressionsUseConsoleObjects(): void {
         source: `
 console.log(process.versions)
 console.log(process)
+const proc = process
+const usage = process.memoryUsage()
+console.log(proc.version, proc.versions.node, proc.argv.length, usage.rss)
 `
       }
     ],
@@ -35,6 +38,12 @@ console.log(process)
 
   assert.match(source, /console\.log\(process\.versions\);/)
   assert.match(source, /console\.log\(process\);/)
+  assert.match(source, /proc\.version/)
+  assert.match(source, /proc\.versions\.node/)
+  assert.match(source, /proc\.argv\.length/)
+  assert.match(source, /usage\.rss/)
+  assert.doesNotMatch(source, /inox::get\(proc,/)
+  assert.doesNotMatch(source, /inox::get\(usage,/)
   assert.doesNotMatch(source, /process\.versions\.value\(\);\n  if \(inox::thrown\(\)\) return/)
   assert.doesNotMatch(source, /process\.value\(\);\n  if \(inox::thrown\(\)\) return/)
 }

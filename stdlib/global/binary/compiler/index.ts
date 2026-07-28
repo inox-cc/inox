@@ -66,6 +66,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       baseTypeIds: [],
       runtimeRequirements: [runtimeRequirement],
       cValueAdapter: 'Uint8Array($value)',
+      cValueAdapterFailureMode: 'thrown',
       cRuntimeValueExpression: '$value.raw()',
       cRuntimeValueValidExpression: 'Uint8Array(inox::Value($value)).valid()'
     }

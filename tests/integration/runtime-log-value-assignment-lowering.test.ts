@@ -58,9 +58,10 @@ export async function assertNativeCompilerRuntimeLogValuesUseDirectRaiiAssignmen
 }
 
 function assertDirectRaiiAssignment(source: string): void {
-  assert.match(source, /inox::Value inox_log_value_\d+;/)
-  assert.match(source, /inox_log_value_\d+ = inox::get\(page, "hostname"\);/)
-  assert.doesNotMatch(source, /inox_log_value_\d+ = inox_undefined_value\(\);/)
+  assert.match(source, /console\.log\("%s", page\.hostname\(\)\);/)
+  assert.doesNotMatch(source, /inox_log_value_\d+/)
+  assert.doesNotMatch(source, /inox::get\(page, "hostname"\)/)
+  assert.doesNotMatch(source, /INOX_TAG_STRING/)
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

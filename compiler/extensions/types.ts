@@ -278,6 +278,7 @@ export type LibraryResultShapeFieldDescriptor = {
   readonly: boolean
   nullable?: boolean
   cMember?: string | null
+  cGetter?: string | null
   resultTypeId?: LibraryObjectTypeId | null
   resultShapeFields?: LibraryNestedResultShapeFieldDescriptor[]
   cppType?: string | null
@@ -289,6 +290,7 @@ export type LibraryNestedResultShapeFieldDescriptor = {
   readonly: boolean
   nullable?: boolean
   cMember?: string | null
+  cGetter?: string | null
   resultTypeId?: LibraryObjectTypeId | null
   cppType?: string | null
 }

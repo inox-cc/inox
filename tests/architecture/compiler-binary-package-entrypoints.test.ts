@@ -25,6 +25,7 @@ test('binary packages expose generic native types, operations and runtime requir
       baseTypeIds: [],
       runtimeRequirements: ['global:binary'],
       cValueAdapter: 'Uint8Array($value)',
+      cValueAdapterFailureMode: 'thrown',
       cRuntimeValueExpression: '$value.raw()',
       cRuntimeValueValidExpression: 'Uint8Array(inox::Value($value)).valid()'
     }
@@ -40,6 +41,7 @@ test('binary packages expose generic native types, operations and runtime requir
       baseTypeIds: ['global:binary#Uint8Array'],
       runtimeRequirements: ['global:binary', 'node:buffer'],
       cValueAdapter: 'Buffer($value)',
+      cValueAdapterFailureMode: 'thrown',
       cRuntimeValueExpression: '$value.raw()',
       cRuntimeValueValidExpression: 'Buffer(inox::Value($value)).valid()'
     }

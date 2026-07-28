@@ -97,6 +97,9 @@ public:
   explicit FsStats(inox::Value&& value);
 
   bool valid() const;
+  double size() const;
+  double mode() const;
+  double mtimeMs() const;
   bool isFile() const;
   bool isDirectory() const;
 };
@@ -107,6 +110,7 @@ public:
   explicit FsDirent(const inox::Value& value);
   explicit FsDirent(inox::Value&& value);
 
+  inox::String name() const;
   bool isFile() const;
   bool isDirectory() const;
 };

@@ -46,7 +46,7 @@ function fixtureLibrary(): CompilerLibraryDescriptor {
         cppType: 'FixtureItem',
         baseTypeIds: [],
         runtimeRequirements: [],
-        fields: [{ name: 'name', valueType: 'string', readonly: true }]
+        fields: [{ name: 'name', valueType: 'string', readonly: true, cMember: 'name' }]
       }
     ],
     operations: [

@@ -20,6 +20,7 @@ function read(values: NativeBox[]): void {
 
   assert.equal(declaration.typeRef?.kind, 'nominal')
   assert.equal(declaration.typeRef?.typeId, 'fixture:native#NativeBox')
+  assert.match(result.code, /auto value = FixtureNativeBox\(inox_library_raw_result_\d+\);/)
   assert.doesNotMatch(result.code, /INOX_TAG_OBJECT/)
 })
 

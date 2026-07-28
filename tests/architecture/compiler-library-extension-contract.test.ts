@@ -23,10 +23,7 @@ test('global operations resolve from package-owned binding paths', () => {
   const libraries = librarySet([root, nested, alias])
 
   assert.equal(compilerLibraryOperationForGlobal(libraries, ['host'], 'member-read'), root)
-  assert.equal(
-    compilerLibraryOperationForGlobal(libraries, ['host', 'release', 'name'], 'member-read'),
-    nested
-  )
+  assert.equal(compilerLibraryOperationForGlobal(libraries, ['host', 'release', 'name'], 'member-read'), nested)
   assert.equal(compilerLibraryOperationForGlobal(libraries, ['host', 'refresh'], 'call'), alias)
   assert.equal(compilerLibraryOperationForGlobal(libraries, [], 'member-read'), null)
   assert.equal(compilerLibraryOperationForGlobal(libraries, ['host'], 'call'), null)
@@ -44,18 +41,12 @@ test('receiver operations prefer exact bindings and fall back to wildcard bindin
   }
   const libraries = librarySet([wildcard, exact])
 
-  assert.equal(
-    compilerLibraryOperationForReceiver(libraries, 'platform:record', 'size', 'member-read'),
-    exact
-  )
+  assert.equal(compilerLibraryOperationForReceiver(libraries, 'platform:record', 'size', 'member-read'), exact)
   assert.equal(
     compilerLibraryOperationForReceiver(libraries, 'platform:record', 'dynamicName', 'member-read'),
     wildcard
   )
-  assert.equal(
-    compilerLibraryOperationForReceiver(libraries, 'platform:record', 'dynamicName', 'member-write'),
-    null
-  )
+  assert.equal(compilerLibraryOperationForReceiver(libraries, 'platform:record', 'dynamicName', 'member-write'), null)
 })
 
 test('library fingerprint covers recursive result and entrypoint adapter metadata', () => {
@@ -72,12 +63,8 @@ test('library fingerprint covers recursive result and entrypoint adapter metadat
   const changedGenericResult = createCompilerLibrarySet([
     fingerprintLibrary({ genericResultType: 'number' })
   ]).fingerprint
-  const changedCallContract = createCompilerLibrarySet([
-    fingerprintLibrary({ assignmentCall: true })
-  ]).fingerprint
-  const changedEntrypoint = createCompilerLibrarySet([
-    fingerprintLibrary({ acceptsEntryPath: false })
-  ]).fingerprint
+  const changedCallContract = createCompilerLibrarySet([fingerprintLibrary({ assignmentCall: true })]).fingerprint
+  const changedEntrypoint = createCompilerLibrarySet([fingerprintLibrary({ acceptsEntryPath: false })]).fingerprint
 
   assert.notEqual(changedNestedType, baseline)
   assert.notEqual(changedNestedCppType, baseline)
@@ -117,7 +104,8 @@ function fingerprintLibrary(options: FingerprintLibraryOptions = {}): CompilerLi
           {
             name: options.nestedFieldName ?? 'name',
             valueType: 'string',
-            readonly: true
+            readonly: true,
+            cMember: options.nestedFieldName ?? 'name'
           }
         ]
       }
@@ -125,9 +113,10 @@ function fingerprintLibrary(options: FingerprintLibraryOptions = {}): CompilerLi
     operations: [
       {
         ...operation('global:host.values', 'call'),
-        cArgumentKinds: options.assignmentCall === true
-          ? ['receiver', 'optional-argument']
-          : ['member-name-string-view', 'optional-argument'],
+        cArgumentKinds:
+          options.assignmentCall === true
+            ? ['receiver', 'optional-argument']
+            : ['member-name-string-view', 'optional-argument'],
         cCallStyle: options.assignmentCall === true ? 'member-assignment' : 'index',
         resultTypeRef: {
           kind: 'object',

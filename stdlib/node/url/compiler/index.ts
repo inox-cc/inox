@@ -94,7 +94,6 @@ const operations: LibraryOperationDescriptor[] = [
     stringArgument()
   ]),
   receiverCall(searchParamsTypeId, 'toString', ['receiver'], 'toString', stringTypeRef, stringCResultMapping, []),
-  ...urlFields.map((field) => receiverMemberRead(urlTypeId, field)),
   receiverMemberWrite(urlTypeId, 'pathname', 'setPathname'),
   receiverMemberWrite(urlTypeId, 'search', 'setSearch'),
   receiverMemberWrite(urlTypeId, 'hash', 'setHash'),
@@ -230,23 +229,6 @@ function receiverCall(
   }
 }
 
-function receiverMemberRead(
-  receiverTypeId: string,
-  field: LibraryResultShapeFieldDescriptor
-): LibraryOperationDescriptor {
-  return {
-    libraryId,
-    bindingId: receiverBinding(receiverTypeId, field.name),
-    operationId: `${receiverTypeId}#read:${field.name}`,
-    kind: 'member-read',
-    runtimeRequirements,
-    receiverTypeId,
-    cExpression: null,
-    resultTypeRef: stringTypeRef,
-    cResultMapping: stringCResultMapping
-  }
-}
-
 function receiverMemberWrite(receiverTypeId: string, field: string, cExpression: string): LibraryOperationDescriptor {
   return {
     libraryId,
@@ -282,7 +264,13 @@ function unsupportedOperation(name: string): LibraryOperationDescriptor {
 }
 
 function stringField(name: string, readonly: boolean): LibraryResultShapeFieldDescriptor {
-  return { name, valueType: 'string', readonly }
+  return {
+    name,
+    valueType: 'string',
+    readonly,
+    cGetter: name,
+    cppType: 'inox::String'
+  }
 }
 
 function nominalTypeRef(typeId: string): TypeRef {

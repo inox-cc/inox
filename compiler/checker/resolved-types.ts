@@ -355,6 +355,7 @@ export function cloneObjectShapeField(field: AnyNode): AnyNode {
     className: field.className ?? null,
     shape: field.shape ?? null,
     libraryCMember: field.libraryCMember ?? null,
+    libraryCGetter: field.libraryCGetter ?? null,
     libraryCppType: field.libraryCppType ?? null
   }
 }

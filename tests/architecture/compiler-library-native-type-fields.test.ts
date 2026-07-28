@@ -38,10 +38,7 @@ test('native type fields come only from library metadata', () => {
   const fields = nativeTypes[0].fields ?? []
   fields[0].readonly = false
 
-  assert.notEqual(
-    nativeFieldLibrarySet(changed).fingerprint,
-    nativeFieldLibrarySet(nativeFieldLibrary()).fingerprint
-  )
+  assert.notEqual(nativeFieldLibrarySet(changed).fingerprint, nativeFieldLibrarySet(nativeFieldLibrary()).fingerprint)
 })
 
 function nativeFieldLibrary(): CompilerLibraryDescriptor {
@@ -59,8 +56,8 @@ function nativeFieldLibrary(): CompilerLibraryDescriptor {
         baseTypeIds: [],
         runtimeRequirements: [],
         fields: [
-          { name: 'name', valueType: 'string', readonly: true },
-          { name: 'size', valueType: 'number', readonly: true }
+          { name: 'name', valueType: 'string', readonly: true, cMember: 'name' },
+          { name: 'size', valueType: 'number', readonly: true, cMember: 'size' }
         ]
       }
     ],

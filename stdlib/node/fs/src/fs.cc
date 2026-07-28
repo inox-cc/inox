@@ -245,10 +245,54 @@ FsStats::FsStats(const inox::Value& value) : inox::Value(value) {}
 
 FsStats::FsStats(inox::Value&& value) : inox::Value(std::move(value)) {}
 
+static inox::Value inox_fs_read_facade_field(
+  const inox::Value& object,
+  uint32_t field_index,
+  const char* invariant_message
+) {
+  inox::Value field;
+
+  if (inox_object_get_known(object, field_index, field.out()) != INOX_OK) {
+    inox::fatal(invariant_message);
+  }
+
+  return field;
+}
+
+static double inox_fs_read_number_field(
+  const inox::Value& object,
+  uint32_t field_index,
+  const char* invariant_message
+) {
+  inox::Value field = inox_fs_read_facade_field(object, field_index, invariant_message);
+
+  if (field.tag != INOX_TAG_NUMBER) {
+    inox::fatal(invariant_message);
+  }
+
+  return field.as.number;
+}
+
 bool FsStats::valid() const {
   inox_value value = raw();
 
   return (value.tag == INOX_TAG_OBJECT || value.tag == INOX_TAG_CLASS_INSTANCE) && value.as.ref != 0;
+}
+
+double FsStats::size() const {
+  return inox_fs_read_number_field(*this, INOX_FS_STATS_SIZE_INDEX, "FsStats.size native facade invariant failed");
+}
+
+double FsStats::mode() const {
+  return inox_fs_read_number_field(*this, INOX_FS_STATS_MODE_INDEX, "FsStats.mode native facade invariant failed");
+}
+
+double FsStats::mtimeMs() const {
+  return inox_fs_read_number_field(
+    *this,
+    INOX_FS_STATS_MTIME_MS_INDEX,
+    "FsStats.mtimeMs native facade invariant failed"
+  );
 }
 
 bool FsStats::isFile() const {
@@ -347,6 +391,20 @@ FsDirent::FsDirent() : inox::Value() {}
 FsDirent::FsDirent(const inox::Value& value) : inox::Value(value) {}
 
 FsDirent::FsDirent(inox::Value&& value) : inox::Value(std::move(value)) {}
+
+inox::String FsDirent::name() const {
+  inox::Value field = inox_fs_read_facade_field(
+    *this,
+    INOX_FS_DIRENT_NAME_INDEX,
+    "FsDirent.name native facade invariant failed"
+  );
+
+  if (field.tag != INOX_TAG_STRING || field.as.ref == 0) {
+    inox::fatal("FsDirent.name native facade invariant failed");
+  }
+
+  return inox::String(std::move(field));
+}
 
 bool FsDirent::isFile() const {
   inox_value value = inox_undefined_value();

@@ -749,6 +749,7 @@ function validateNativeTypes(nativeTypes: LibraryNativeTypeDescriptor[]): void {
     validateNativeTypeAwaitExpression(nativeType)
     validateNativeTypeAsyncTaskBridge(nativeType)
     validateNativeTypeIteration(nativeType)
+    validateNativeTypeFields(nativeType)
 
     for (let baseIndex = 0; baseIndex < nativeType.baseTypeIds.length; baseIndex = baseIndex + 1) {
       const baseTypeId = nativeType.baseTypeIds[baseIndex]
@@ -757,6 +758,41 @@ function validateNativeTypes(nativeTypes: LibraryNativeTypeDescriptor[]): void {
         throw new Error(`Missing compiler library native base type ${nativeType.typeId} -> ${baseTypeId}`)
       }
     }
+  }
+}
+
+function validateNativeTypeFields(nativeType: LibraryNativeTypeDescriptor): void {
+  const fields = nativeType.fields ?? []
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    const field = fields[index]
+
+    validateNativeTypeField(`${nativeType.typeId}.${field.name}`, field)
+    const nestedFields = field.resultShapeFields ?? []
+
+    for (let nestedIndex = 0; nestedIndex < nestedFields.length; nestedIndex = nestedIndex + 1) {
+      const nestedField = nestedFields[nestedIndex]
+
+      validateNativeTypeField(`${nativeType.typeId}.${field.name}.${nestedField.name}`, nestedField)
+    }
+  }
+}
+
+function validateNativeTypeField(
+  label: string,
+  field: LibraryResultShapeFieldDescriptor | LibraryNestedResultShapeFieldDescriptor
+): void {
+  if (field.valueType === 'function') {
+    return
+  }
+
+  const cMember = field.cMember
+  const cGetter = field.cGetter
+  const hasMember = typeof cMember === 'string' && cMember.length > 0
+  const hasGetter = typeof cGetter === 'string' && cGetter.length > 0
+
+  if (hasMember === hasGetter) {
+    throw new Error(`native type field ${label} requires exactly one C++ cMember or cGetter`)
   }
 }
 
@@ -774,12 +810,6 @@ function validateNativeTypeValueAdapter(nativeType: LibraryNativeTypeDescriptor)
     if (adapter === null || typeof adapter === 'undefined' || adapter.length === 0) {
       throw new Error(`native type ${nativeType.typeId} C++ value adapter contract requires cValueAdapter`)
     }
-  }
-
-  if (nativeType.cValueAdapterPreservesPendingException === true && nativeType.cValueAdapterFailureMode !== 'thrown') {
-    throw new Error(
-      `native type ${nativeType.typeId} C++ value adapter preserves pending exceptions only with thrown failure mode`
-    )
   }
 }
 
@@ -2758,7 +2788,7 @@ function resultShapeFieldsFingerprint(fields: LibraryResultShapeFieldDescriptor[
     rows.push(
       `${field.name}=${field.valueType}:${field.readonly ? 'readonly' : 'mutable'}:` +
         `${field.nullable ? 'nullable' : 'required'}:` +
-        `${field.cMember ?? ''}:${field.resultTypeId ?? ''}:${field.cppType ?? ''}:` +
+        `${field.cMember ?? ''}:${field.cGetter ?? ''}:${field.resultTypeId ?? ''}:${field.cppType ?? ''}:` +
         (nestedFields === null || typeof nestedFields === 'undefined'
           ? ''
           : `{${nestedResultShapeFieldsFingerprint(nestedFields)}}`)
@@ -2776,7 +2806,7 @@ function nestedResultShapeFieldsFingerprint(fields: LibraryNestedResultShapeFiel
     rows.push(
       `${field.name}=${field.valueType}:${field.readonly ? 'readonly' : 'mutable'}:` +
         `${field.nullable ? 'nullable' : 'required'}:` +
-        `${field.cMember ?? ''}:${field.resultTypeId ?? ''}:${field.cppType ?? ''}`
+        `${field.cMember ?? ''}:${field.cGetter ?? ''}:${field.resultTypeId ?? ''}:${field.cppType ?? ''}`
     )
   }
 

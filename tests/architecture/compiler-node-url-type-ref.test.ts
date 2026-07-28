@@ -11,13 +11,13 @@ import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-di
 const stringTypeRef = primitiveTypeRef('string')
 const stringCResultMapping = cResultMapping('inox::String')
 const urlFields = [
-  { name: 'href', valueType: 'string', readonly: true },
-  { name: 'protocol', valueType: 'string', readonly: true },
-  { name: 'hostname', valueType: 'string', readonly: true },
-  { name: 'port', valueType: 'string', readonly: true },
-  { name: 'pathname', valueType: 'string', readonly: false },
-  { name: 'search', valueType: 'string', readonly: false },
-  { name: 'hash', valueType: 'string', readonly: false }
+  stringField('href', true),
+  stringField('protocol', true),
+  stringField('hostname', true),
+  stringField('port', true),
+  stringField('pathname', false),
+  stringField('search', false),
+  stringField('hash', false)
 ]
 const expectedResults = [
   result('node:url#fileURLToPath', stringTypeRef, stringCResultMapping),
@@ -30,7 +30,6 @@ const expectedResults = [
   result('node:url#URLSearchParams#has', primitiveTypeRef('boolean')),
   result('node:url#URLSearchParams#set', primitiveTypeRef('void')),
   result('node:url#URLSearchParams#toString', stringTypeRef, stringCResultMapping),
-  ...urlFields.map((field) => result(`node:url#URL#read:${field.name}`, stringTypeRef, stringCResultMapping)),
   result('node:url#URL#write:pathname', stringTypeRef, cResultMapping('void')),
   result('node:url#URL#write:search', stringTypeRef, cResultMapping('void')),
   result('node:url#URL#write:hash', stringTypeRef, cResultMapping('void'))
@@ -109,6 +108,10 @@ function primitiveTypeRef(name: 'boolean' | 'string' | 'void', nullable = false)
 
 function cResultMapping(cppType: string): LibraryCResultMappingDescriptor {
   return { cppType, fields: [] }
+}
+
+function stringField(name: string, readonly: boolean) {
+  return { name, valueType: 'string', readonly, cGetter: name, cppType: 'inox::String' }
 }
 
 function assertLegacyResultMetadataIsAbsent(value: LibraryOperationDescriptor): void {

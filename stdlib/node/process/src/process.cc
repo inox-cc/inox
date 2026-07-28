@@ -259,15 +259,15 @@ process_exit_code_property& process_exit_code_property::operator=(double code) {
   return *this;
 }
 
-process_argv::process_argv() : length(process_number_reader::argvLength) {}
+ProcessArgv::ProcessArgv() : length(process_number_reader::argvLength) {}
 
-inox::String process_argv::operator[](int index) const {
+inox::String ProcessArgv::operator[](int index) const {
   inox::StringView value = process_argv_value_at(index);
 
   return inox::String(value);
 }
 
-inox::String process_env::operator[](inox::StringView name) const {
+inox::String ProcessEnv::operator[](inox::StringView name) const {
   if (name.bytes == 0) {
     return inox::String();
   }
@@ -290,7 +290,7 @@ inox::String process_env::operator[](inox::StringView name) const {
   return out;
 }
 
-void process_versions::init() {
+void ProcessVersions::init() {
   node = inox::String(INOX_PACKAGE_VERSION);
   inox::Value object;
 
@@ -312,9 +312,12 @@ void process_versions::init() {
   static_cast<inox::Value&>(*this) = std::move(object);
 }
 
-process::process() : pid(process_number_reader::pid) {}
+ProcessMemoryUsage::ProcessMemoryUsage()
+    : inox::Value(), rss(0), heapTotal(0), heapUsed(0), external(0), arrayBuffers(0) {}
 
-void process::init() {
+Process::Process() : pid(process_number_reader::pid) {}
+
+void Process::init() {
   arch = inox::String(process_arch_name());
   argv0 = argv[0];
   execPath = argv[0];
@@ -346,7 +349,7 @@ void process::init() {
   static_cast<inox::Value&>(*this) = std::move(object);
 }
 
-inox::String process::cwd() const {
+inox::String Process::cwd() const {
   char cwd[4096];
 
   if (getcwd(cwd, sizeof(cwd)) == 0) {
@@ -356,22 +359,22 @@ inox::String process::cwd() const {
   return inox::String(cwd);
 }
 
-void process::exit(int code) const {
+void Process::exit(int code) const {
   ::exit(code);
 }
 
-inox::Value process::hrtime() const {
+Array Process::hrtime() const {
   int64_t seconds = 0;
   int64_t nanoseconds = 0;
 
   if (process_now(&seconds, &nanoseconds) != INOX_OK) {
-    return inox::Value();
+    return Array();
   }
 
   Array result = Array::create(2);
 
   if (inox::thrown() || !result.valid()) {
-    return inox::Value();
+    return Array();
   }
 
   result.set(0, inox_number_value((inox_number)seconds));
@@ -381,18 +384,18 @@ inox::Value process::hrtime() const {
   }
 
   if (inox::thrown()) {
-    return inox::Value();
+    return Array();
   }
 
-  return inox::adopt(result.release());
+  return result;
 }
 
-inox::Value process::hrtime(const inox::Value& previous) const {
+Array Process::hrtime(const inox::Value& previous) const {
   int64_t seconds = 0;
   int64_t nanoseconds = 0;
 
   if (process_now(&seconds, &nanoseconds) != INOX_OK) {
-    return inox::Value();
+    return Array();
   }
 
   int64_t previous_seconds = 0;
@@ -402,7 +405,7 @@ inox::Value process::hrtime(const inox::Value& previous) const {
     process_hrtime_component(previous.raw(), 0, &previous_seconds) != INOX_OK ||
     process_hrtime_component(previous.raw(), 1, &previous_nanoseconds) != INOX_OK
   ) {
-    return inox::Value();
+    return Array();
   }
 
   seconds -= previous_seconds;
@@ -416,7 +419,7 @@ inox::Value process::hrtime(const inox::Value& previous) const {
   Array result = Array::create(2);
 
   if (inox::thrown() || !result.valid()) {
-    return inox::Value();
+    return Array();
   }
 
   result.set(0, inox_number_value((inox_number)seconds));
@@ -426,35 +429,37 @@ inox::Value process::hrtime(const inox::Value& previous) const {
   }
 
   if (inox::thrown()) {
-    return inox::Value();
+    return Array();
   }
 
-  return inox::adopt(result.release());
+  return result;
 }
 
-inox::Value process::memoryUsage() const {
+ProcessMemoryUsage Process::memoryUsage() const {
+  ProcessMemoryUsage result;
+  result.rss = process_rss_bytes();
   inox_value value = inox_undefined_value();
 
   inox_status status = inox_object_new(&inox_default_allocator, &process_memory_usage_shape, &value);
 
   if (status == INOX_OK) {
-    status = inox_object_init_known(value, 0, inox_number_value(process_rss_bytes()));
+    status = inox_object_init_known(value, 0, inox_number_value(result.rss));
   }
 
   if (status == INOX_OK) {
-    status = inox_object_init_known(value, 1, inox_number_value(0));
+    status = inox_object_init_known(value, 1, inox_number_value(result.heapTotal));
   }
 
   if (status == INOX_OK) {
-    status = inox_object_init_known(value, 2, inox_number_value(0));
+    status = inox_object_init_known(value, 2, inox_number_value(result.heapUsed));
   }
 
   if (status == INOX_OK) {
-    status = inox_object_init_known(value, 3, inox_number_value(0));
+    status = inox_object_init_known(value, 3, inox_number_value(result.external));
   }
 
   if (status == INOX_OK) {
-    status = inox_object_init_known(value, 4, inox_number_value(0));
+    status = inox_object_init_known(value, 4, inox_number_value(result.arrayBuffers));
   }
 
   if (status != INOX_OK) {
@@ -466,13 +471,14 @@ inox::Value process::memoryUsage() const {
       inox::fatal("process.memoryUsage native facade invariant failed");
     }
 
-    return inox::Value();
+    return ProcessMemoryUsage();
   }
 
-  return inox::adopt(value);
+  static_cast<inox::Value&>(result) = inox::adopt(value);
+  return result;
 }
 
-class process process;
+Process process;
 
 static int process_return_code(int success_code) {
   return !inox_promise_has_unhandled_rejection() ? success_code : 1;

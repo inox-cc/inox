@@ -28,10 +28,10 @@ function fixtureLibrary(nullable: boolean): CompilerLibraryDescriptor {
         typeId: 'fixture#Error',
         declarationNames: ['FixtureError'],
         valueType: 'error',
-        cppType: 'inox::Value',
+        cppType: 'FixtureError',
         baseTypeIds: [],
         runtimeRequirements: [],
-        fields: [{ name: 'cause', valueType: 'object', nullable, readonly: true }]
+        fields: [{ name: 'cause', valueType: 'object', nullable, readonly: true, cMember: 'cause' }]
       }
     ],
     operations: [

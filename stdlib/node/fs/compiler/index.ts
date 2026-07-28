@@ -75,9 +75,9 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       baseTypeIds: [],
       runtimeRequirements: [runtimeRequirement],
       fields: [
-        { name: 'size', valueType: 'number', readonly: true },
-        { name: 'mode', valueType: 'number', readonly: true },
-        { name: 'mtimeMs', valueType: 'number', readonly: true }
+        { name: 'size', valueType: 'number', readonly: true, cGetter: 'size' },
+        { name: 'mode', valueType: 'number', readonly: true, cGetter: 'mode' },
+        { name: 'mtimeMs', valueType: 'number', readonly: true, cGetter: 'mtimeMs' }
       ]
     },
     {
@@ -89,7 +89,8 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       baseTypeIds: [],
       runtimeRequirements: [runtimeRequirement],
       cValueAdapter: 'FsDirent(inox::Value($value))',
-      fields: [{ name: 'name', valueType: 'string', readonly: true }]
+      cValueAdapterPreservesPendingException: true,
+      fields: [{ name: 'name', valueType: 'string', readonly: true, cGetter: 'name', cppType: 'inox::String' }]
     }
   ],
   operations,

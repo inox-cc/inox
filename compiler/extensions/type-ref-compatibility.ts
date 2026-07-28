@@ -106,10 +106,7 @@ export function typeRefTraitArgument(
   return null
 }
 
-export function typeRefDeclaredName(
-  typeRef: TypeRef | null | undefined,
-  libraries: CompilerLibrarySet
-): string | null {
+export function typeRefDeclaredName(typeRef: TypeRef | null | undefined, libraries: CompilerLibrarySet): string | null {
   if (typeRef === null || typeof typeRef === 'undefined' || typeRef.kind === 'parameter') {
     return null
   }
@@ -410,7 +407,10 @@ function commonTypeArgument(left: TypeRef, right: TypeRef): TypeRef {
   }
 }
 
-function commonTypeOwnership(left: ConcreteTypeRef['ownership'], right: ConcreteTypeRef['ownership']): ConcreteTypeRef['ownership'] {
+function commonTypeOwnership(
+  left: ConcreteTypeRef['ownership'],
+  right: ConcreteTypeRef['ownership']
+): ConcreteTypeRef['ownership'] {
   return left === right ? left : 'value'
 }
 
@@ -646,6 +646,7 @@ function baseTypeRefCompatibilityMetadata(
         asyncResultRejectionIntrinsicRole: fieldMetadata.asyncResultRejectionIntrinsicRole,
         shape: fieldMetadata.shape,
         libraryCMember: null,
+        libraryCGetter: null,
         libraryCppType: fieldMetadata.libraryCppType,
         loc
       })
@@ -799,6 +800,7 @@ function descriptorResultShapeField(field: LibraryResultShapeFieldDescriptor, lo
     readonly: field.readonly,
     nullable: field.nullable ?? false,
     libraryCMember: field.cMember ?? null,
+    libraryCGetter: field.cGetter ?? null,
     libraryCppType: field.cppType ?? null,
     loc
   }

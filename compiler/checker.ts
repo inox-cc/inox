@@ -5311,6 +5311,7 @@ class Checker {
       readonly: field.readonly,
       nullable: field.nullable ?? false,
       libraryCMember: field.cMember ?? null,
+      libraryCGetter: field.cGetter ?? null,
       libraryCppType: field.cppType ?? null,
       loc
     }

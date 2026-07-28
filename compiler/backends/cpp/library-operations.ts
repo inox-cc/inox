@@ -1,5 +1,8 @@
 import type { AnyNode } from '../../types.ts'
-import { compilerLibraryNativeCppTypeIsAssignableToTypeId } from '../../extensions/library-set.ts'
+import {
+  compilerLibraryNativeCppTypeIsAssignableToTypeId,
+  compilerLibraryNativeTypeForId
+} from '../../extensions/library-set.ts'
 import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
 import {
   emitRuntimeTypeCheck,
@@ -69,6 +72,13 @@ type CompilerLibraryExpressionNode = AnyNode & {
   libraryOwned?: boolean | null
   asyncResultRejectionValueType?: string | null
   asyncResultValueType?: string | null
+}
+
+type CompilerLibraryResultBoundary = {
+  adapter: string | null
+  cppType: string | null | undefined
+  failureMode: 'thrown' | null
+  preservesPendingException: boolean
 }
 
 type CompilerLibraryNativeFieldContext = {
@@ -179,16 +189,29 @@ export function emitPreparedCompilerLibraryNativeFieldExpression(
 
     objectCppType = preparedObject.cppType
     lines = preparedObject.lines
-    objectReference = `(${preparedObject.expression})`
+    objectReference =
+      expression.object.type === 'MemberExpression' ? preparedObject.expression : `(${preparedObject.expression})`
   }
 
   if (objectCppType === null || typeof objectCppType === 'undefined' || objectCppType === 'inox::Value') {
     return null
   }
 
+  const cMember = field.libraryCMember
+  const cGetter = field.libraryCGetter
+  let fieldExpression = ''
+
+  if (typeof cMember === 'string' && cMember !== '') {
+    fieldExpression = `${objectReference}.${emitCIdentifier(cMember)}`
+  } else if (typeof cGetter === 'string' && cGetter !== '') {
+    fieldExpression = `${objectReference}.${emitCIdentifier(cGetter)}()`
+  } else {
+    return null
+  }
+
   return {
     lines,
-    expression: `${objectReference}.${emitCIdentifier(field.libraryCMember)}`,
+    expression: fieldExpression,
     cppType: compilerLibraryNativeFieldCppType(field),
     runtimeTypeChecked: true,
     valueType: field.valueType
@@ -232,8 +255,11 @@ function compilerLibraryNativeField(
   }
 
   const cMember = field.libraryCMember
+  const cGetter = field.libraryCGetter
+  const hasMember = typeof cMember === 'string' && cMember !== ''
+  const hasGetter = typeof cGetter === 'string' && cGetter !== ''
 
-  if (typeof cMember !== 'string' || cMember === '') {
+  if (!hasMember && !hasGetter) {
     return null
   }
 
@@ -279,7 +305,9 @@ export function emitPreparedCompilerLibraryCallExpression(
   const target = item.libraryCExpression
   const argumentKinds = item.libraryCArgumentKinds
   const argumentSources = item.libraryCArgumentSources
-  const declaredCppType = item.libraryCppType
+  const resultBoundary = compilerLibraryResultBoundary(item, context)
+  const declaredCppType = resultBoundary.cppType
+  const resultAdapter = resultBoundary.adapter
   const scalarType = compilerLibraryScalarType(item.valueType)
   const cppType = declaredCppType ?? scalarType
 
@@ -825,7 +853,6 @@ export function emitPreparedCompilerLibraryCallExpression(
   if (optionalReceiverCondition !== null) {
     if (item.valueType === 'number' || item.valueType === 'boolean') {
       const out = nextCName(context, 'inox_library_optional_result')
-      const resultAdapter = item.libraryCResultAdapter
       const returnsRuntimeValue =
         (cppType === 'inox::Value' || cppType === 'inox_value') &&
         (resultAdapter === null || typeof resultAdapter === 'undefined' || resultAdapter === '')
@@ -922,10 +949,14 @@ export function emitPreparedCompilerLibraryCallExpression(
     }
   }
 
-  if (options?.deferThrownCheck === true && item.libraryCFailureMode === 'thrown') {
+  if (
+    options?.deferThrownCheck === true &&
+    item.libraryCFailureMode === 'thrown' &&
+    (resultBoundary.adapter === null || resultBoundary.preservesPendingException)
+  ) {
     return {
       lines,
-      expression: applyCompilerLibraryValueAdapter(callExpression, item.libraryCResultAdapter),
+      expression: applyCompilerLibraryValueAdapter(callExpression, resultAdapter),
       cppType: declaredCppType ?? undefined,
       scalarType,
       nullable: item.nullable === true,
@@ -947,12 +978,14 @@ export function emitPreparedCompilerLibraryCallExpression(
       options,
       lines,
       callExpression,
-      cppType
+      cppType,
+      item.libraryCppType,
+      resultBoundary
     )
   }
 
   if (item.libraryCFailureMode !== null && typeof item.libraryCFailureMode !== 'undefined') {
-    const directOut = compilerLibraryDirectResultOut(item, cppType, options)
+    const directOut = compilerLibraryDirectResultOut(item, cppType, options, resultAdapter)
     const out = directOut ?? nextCName(context, 'inox_library_result')
     lines.push(`auto ${out} = ${callExpression};`)
     pushCompilerLibraryFailureCheck(lines, item.libraryCFailureMode, out, context, dependencies)
@@ -975,7 +1008,7 @@ export function emitPreparedCompilerLibraryCallExpression(
       }
     }
 
-    const resultExpression = applyCompilerLibraryValueAdapter(out, item.libraryCResultAdapter)
+    const resultExpression = applyCompilerLibraryValueAdapter(out, resultAdapter)
     const result: PreparedExpression = {
       lines,
       expression: resultExpression,
@@ -998,7 +1031,7 @@ export function emitPreparedCompilerLibraryCallExpression(
 
   return {
     lines,
-    expression: applyCompilerLibraryValueAdapter(callExpression, item.libraryCResultAdapter),
+    expression: applyCompilerLibraryValueAdapter(callExpression, resultAdapter),
     cppType: declaredCppType ?? undefined,
     scalarType,
     nullable: item.nullable === true,
@@ -1011,7 +1044,8 @@ export function emitPreparedCompilerLibraryCallExpression(
 function compilerLibraryDirectResultOut(
   item: CompilerLibraryExpressionNode,
   cppType: string,
-  options: PreparedCallOptions | null | undefined
+  options: PreparedCallOptions | null | undefined,
+  resultAdapter: string | null
 ): string | null {
   const requestedOut = options?.out
 
@@ -1034,7 +1068,7 @@ function compilerLibraryDirectResultOut(
     return null
   }
 
-  if (applyCompilerLibraryValueAdapter(requestedOut, item.libraryCResultAdapter) !== requestedOut) {
+  if (applyCompilerLibraryValueAdapter(requestedOut, resultAdapter) !== requestedOut) {
     return null
   }
 
@@ -1273,6 +1307,68 @@ function compilerLibraryObjectField(argument: AnyNode | null | undefined, fieldN
   return null
 }
 
+function compilerLibraryResultBoundary(
+  item: CompilerLibraryExpressionNode,
+  context: CFunctionContext
+): CompilerLibraryResultBoundary {
+  const explicitAdapter = item.libraryCResultAdapter
+
+  if (explicitAdapter !== null && typeof explicitAdapter !== 'undefined' && explicitAdapter !== '') {
+    return {
+      adapter: explicitAdapter,
+      cppType: item.libraryCppType,
+      failureMode: null,
+      preservesPendingException: true
+    }
+  }
+
+  if (
+    item.libraryCResultMode === 'borrowed' ||
+    item.nullable === true ||
+    (item.libraryCppType !== 'inox::Value' && item.libraryCppType !== 'inox_value') ||
+    item.typeRef === null ||
+    typeof item.typeRef === 'undefined' ||
+    item.typeRef.kind !== 'nominal'
+  ) {
+    return {
+      adapter: null,
+      cppType: item.libraryCppType,
+      failureMode: null,
+      preservesPendingException: false
+    }
+  }
+
+  const nativeType = compilerLibraryNativeTypeForId(cCompilerLibrarySetValue(context.libraries), item.typeRef.typeId)
+  const adapter = nativeType?.cValueAdapter
+  const cppType = nativeType?.cppType
+
+  if (
+    nativeType === null ||
+    adapter === null ||
+    typeof adapter === 'undefined' ||
+    adapter === '' ||
+    cppType === null ||
+    typeof cppType === 'undefined' ||
+    cppType === '' ||
+    cppType === 'inox::Value' ||
+    cppType === 'inox_value'
+  ) {
+    return {
+      adapter: null,
+      cppType: item.libraryCppType,
+      failureMode: null,
+      preservesPendingException: false
+    }
+  }
+
+  return {
+    adapter,
+    cppType,
+    failureMode: nativeType.cValueAdapterFailureMode ?? null,
+    preservesPendingException: nativeType.cValueAdapterPreservesPendingException === true
+  }
+}
+
 function applyCompilerLibraryValueAdapter(value: string, adapter: string | null | undefined): string {
   if (value === '' || adapter === null || typeof adapter === 'undefined' || adapter === '') {
     return value
@@ -1292,8 +1388,30 @@ function emitPreparedCompilerLibraryObjectCall(
   options: PreparedCallOptions | null | undefined,
   lines: string[],
   callExpression: string,
-  cppType: string
+  cppType: string,
+  rawCppType: string | null | undefined,
+  resultBoundary: CompilerLibraryResultBoundary
 ): PreparedExpression {
+  const operationFailureMode = (expression as CompilerLibraryExpressionNode).libraryCFailureMode
+  let resultExpression = applyCompilerLibraryValueAdapter(callExpression, resultBoundary.adapter)
+  let failureMode = operationFailureMode
+
+  if (
+    resultBoundary.adapter !== null &&
+    operationFailureMode !== null &&
+    typeof operationFailureMode !== 'undefined' &&
+    !resultBoundary.preservesPendingException
+  ) {
+    const rawResult = nextCName(context, 'inox_library_raw_result')
+
+    lines.push(`auto ${rawResult} = ${callExpression};`)
+    pushCompilerLibraryFailureCheck(lines, operationFailureMode, rawResult, context, dependencies)
+    resultExpression = applyCompilerLibraryValueAdapter(rawResult, resultBoundary.adapter)
+    failureMode = resultBoundary.failureMode
+  } else if (resultBoundary.failureMode === 'thrown') {
+    failureMode = 'thrown'
+  }
+
   let out = nextCName(context, 'inox_library_object')
 
   if (
@@ -1306,17 +1424,11 @@ function emitPreparedCompilerLibraryObjectCall(
   }
 
   if ((expression as CompilerLibraryExpressionNode).libraryCResultMode === 'borrowed') {
-    lines.push(`auto& ${out} = ${callExpression};`)
+    lines.push(`auto& ${out} = ${resultExpression};`)
     context.variables.set(out, 'object')
     context.cppValueTypes.set(out, cppType)
     dependencies.registerObjectShape(context, out, expression.shape)
-    pushCompilerLibraryFailureCheck(
-      lines,
-      (expression as CompilerLibraryExpressionNode).libraryCFailureMode,
-      out,
-      context,
-      dependencies
-    )
+    pushCompilerLibraryFailureCheck(lines, failureMode, out, context, dependencies)
 
     return {
       lines,
@@ -1326,18 +1438,16 @@ function emitPreparedCompilerLibraryObjectCall(
     }
   }
 
-  if (cppType === 'inox::Value' && (expression as CompilerLibraryExpressionNode).libraryCResultMode === 'value') {
-    lines.push(`auto ${out} = ${callExpression};`)
+  if (
+    cppType === 'inox::Value' &&
+    rawCppType === 'inox::Value' &&
+    (expression as CompilerLibraryExpressionNode).libraryCResultMode === 'value'
+  ) {
+    lines.push(`auto ${out} = ${resultExpression};`)
     context.variables.set(out, 'object')
     context.cppValueTypes.set(out, cppType)
     dependencies.registerObjectShape(context, out, expression.shape)
-    pushCompilerLibraryFailureCheck(
-      lines,
-      (expression as CompilerLibraryExpressionNode).libraryCFailureMode,
-      out,
-      context,
-      dependencies
-    )
+    pushCompilerLibraryFailureCheck(lines, failureMode, out, context, dependencies)
 
     return {
       lines,
@@ -1348,7 +1458,7 @@ function emitPreparedCompilerLibraryObjectCall(
   }
 
   if (cppType !== 'inox::Value') {
-    lines.push(`auto ${out} = ${callExpression};`)
+    lines.push(`auto ${out} = ${resultExpression};`)
   }
 
   if (cppType === 'inox::Value' && (options === null || typeof options === 'undefined' || options.owned !== false)) {
@@ -1360,16 +1470,10 @@ function emitPreparedCompilerLibraryObjectCall(
   dependencies.registerObjectShape(context, out, expression.shape)
 
   if (cppType === 'inox::Value') {
-    lines.push(`${out} = ${callExpression};`)
+    lines.push(`${out} = ${resultExpression};`)
   }
 
-  pushCompilerLibraryFailureCheck(
-    lines,
-    (expression as CompilerLibraryExpressionNode).libraryCFailureMode,
-    out,
-    context,
-    dependencies
-  )
+  pushCompilerLibraryFailureCheck(lines, failureMode, out, context, dependencies)
 
   return {
     lines,

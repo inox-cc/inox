@@ -32,7 +32,10 @@ test('entrypoint package node:process владеет global/import operations и
     ownership: 'value',
     traits: []
   })
-  assert.equal(processType?.fields?.[1].resultTypeId, 'node:process#ProcessVersions')
+  assert.equal(
+    processType?.fields?.find((field) => field.name === 'versions')?.resultTypeId,
+    'node:process#ProcessVersions'
+  )
   assert.deepEqual(hrtime?.resultTypeRef, {
     kind: 'nominal',
     typeId: 'global:collections#Array',

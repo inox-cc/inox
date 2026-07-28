@@ -35,16 +35,12 @@ const expectedResults = new Map<string, [TypeRef, LibraryCResultMappingDescripto
   ['node:process#read:versions.node', [stringTypeRef, stringMapping]],
   ['node:process#cwd', [stringTypeRef, stringMapping]],
   ['node:process#exit', [voidTypeRef, null]],
-  ['node:process#hrtime', [arrayTypeRef(numberTypeRef), cResultMapping('inox::Value')]],
+  ['node:process#hrtime', [arrayTypeRef(numberTypeRef), null]],
   ['node:process#memoryUsage', [nominalTypeRef(memoryUsageTypeId), null]],
   ['node:process#write:exitCode', [numberTypeRef, null]],
   [`${argvTypeId}#index-read`, [stringTypeRef, stringMapping]],
   [`${envTypeId}#member-read`, [stringTypeRef, stringMapping]],
-  [`${envTypeId}#index-read`, [stringTypeRef, stringMapping]],
-  [`${processTypeId}#read:version`, [stringTypeRef, stringMapping]],
-  [`${processTypeId}#read:versions`, [nominalTypeRef(versionsTypeId), null]],
-  [`${versionsTypeId}#read:node`, [stringTypeRef, stringMapping]],
-  [`${argvTypeId}#read:length`, [numberTypeRef, null]]
+  [`${envTypeId}#index-read`, [stringTypeRef, stringMapping]]
 ])
 
 test('node:process implemented results принадлежат TypeRef и package-owned identities', () => {
@@ -70,29 +66,31 @@ test('node:process implemented results принадлежат TypeRef и package
 })
 
 function expectedNativeTypes(): LibraryNativeTypeDescriptor[] {
-  const versionsFields = [resultField('node', 'string')]
+  const versionsFields = [resultField('node', 'string', 'node', 'inox::String')]
+  const argvFields = [resultField('length', 'number', 'length', 'double')]
 
   return [
-    nativeType(processTypeId, ['ProcessModule'], 'inox::Value', [
-      resultField('version', 'string'),
-      {
-        name: 'versions',
-        valueType: 'object',
-        readonly: true,
-        resultTypeId: versionsTypeId,
-        resultShapeFields: versionsFields,
-        cppType: 'inox::Value'
-      }
+    nativeType(processTypeId, ['ProcessModule', 'Process'], 'Process', [
+      resultField('arch', 'string', 'arch', 'inox::String'),
+      objectResultField('argv', argvTypeId, 'ProcessArgv', 'argv', argvFields),
+      resultField('argv0', 'string', 'argv0', 'inox::String'),
+      objectResultField('env', envTypeId, 'ProcessEnv', 'env'),
+      resultField('execPath', 'string', 'execPath', 'inox::String'),
+      { name: 'exitCode', valueType: 'number', readonly: false, cMember: 'exitCode', cppType: 'double' },
+      resultField('pid', 'number', 'pid', 'double'),
+      resultField('platform', 'string', 'platform', 'inox::String'),
+      resultField('version', 'string', 'version', 'inox::String'),
+      objectResultField('versions', versionsTypeId, 'ProcessVersions', 'versions', versionsFields)
     ]),
-    nativeType(argvTypeId, ['ProcessArgv'], 'process_argv', [resultField('length', 'number')]),
-    nativeType(envTypeId, ['ProcessEnv'], 'process_env', []),
-    nativeType(versionsTypeId, ['ProcessVersions'], 'inox::Value', versionsFields),
-    nativeType(memoryUsageTypeId, ['ProcessMemoryUsage'], 'inox::Value', [
-      resultField('rss', 'number'),
-      resultField('heapTotal', 'number'),
-      resultField('heapUsed', 'number'),
-      resultField('external', 'number'),
-      resultField('arrayBuffers', 'number')
+    nativeType(argvTypeId, ['ProcessArgv'], 'ProcessArgv', argvFields),
+    nativeType(envTypeId, ['ProcessEnv'], 'ProcessEnv', []),
+    nativeType(versionsTypeId, ['ProcessVersions'], 'ProcessVersions', versionsFields),
+    nativeType(memoryUsageTypeId, ['ProcessMemoryUsage'], 'ProcessMemoryUsage', [
+      resultField('rss', 'number', 'rss', 'double'),
+      resultField('heapTotal', 'number', 'heapTotal', 'double'),
+      resultField('heapUsed', 'number', 'heapUsed', 'double'),
+      resultField('external', 'number', 'external', 'double'),
+      resultField('arrayBuffers', 'number', 'arrayBuffers', 'double')
     ])
   ]
 }
@@ -115,8 +113,26 @@ function nativeType(
   }
 }
 
-function resultField(name: string, valueType: string) {
-  return { name, valueType, readonly: true }
+function resultField(name: string, valueType: string, cMember: string, cppType: string) {
+  return { name, valueType, readonly: true, cMember, cppType }
+}
+
+function objectResultField(
+  name: string,
+  resultTypeId: string,
+  cppType: string,
+  cMember: string,
+  resultShapeFields: ReturnType<typeof resultField>[] = []
+) {
+  return {
+    name,
+    valueType: 'object',
+    readonly: true,
+    cMember,
+    resultTypeId,
+    resultShapeFields,
+    cppType
+  }
 }
 
 function primitiveTypeRef(name: 'number' | 'string' | 'void'): TypeRef {

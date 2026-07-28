@@ -50,12 +50,13 @@ export function assertUrlSearchParamsLowersRecordLiteralsDirectly(): void {
       {
         path: '/pkg/src/index.ts',
         source: `
-import { URLSearchParams } from 'node:url'
+import { URL, URLSearchParams } from 'node:url'
 
 const params = new URLSearchParams({ q: 'smoke' })
+const page = new URL('https://example.com/path?q=smoke')
 params.set('q', 'inox')
 params.append('kind', 'simple')
-console.log(params.toString())
+console.log(params.toString(), page.hostname, page.pathname)
 `
       }
     ],
@@ -74,10 +75,13 @@ console.log(params.toString())
   assert.match(source, /auto params = URLSearchParams::from\(\{ \{ "q", "smoke" \} \}\);/)
   assert.match(source, /\.set\("q", "inox"\);/)
   assert.match(source, /\.append\("kind", "simple"\);/)
+  assert.match(source, /page\.hostname\(\)/)
+  assert.match(source, /page\.pathname\(\)/)
   assert.doesNotMatch(source, /inox_shape_value_/)
   assert.doesNotMatch(source, /inox::ObjectValue::create/)
   assert.doesNotMatch(source, /inox_object_new/)
   assert.doesNotMatch(source, /inox_object_init_known/)
+  assert.doesNotMatch(source, /inox::get\(page,/)
   assert.doesNotMatch(source, /URLSearchParams.*inox::StringView/)
   assert.doesNotMatch(source, /\.set\(inox::StringView/)
   assert.doesNotMatch(source, /\.append\(inox::StringView/)

@@ -148,6 +148,48 @@ bool URL::valid() const {
   return value.tag == INOX_TAG_OBJECT && value.as.ref != 0;
 }
 
+static inox::String inox_url_read_string_field(const inox::Value& value, uint32_t field_index) {
+  inox::Value field;
+
+  if (inox_object_get_known(value, field_index, field.out()) != INOX_OK) {
+    inox::fatal("URL field native facade invariant failed");
+  }
+
+  if (field.tag != INOX_TAG_STRING || field.as.ref == 0) {
+    inox::fatal("URL field native facade invariant failed");
+  }
+
+  return inox::String(std::move(field));
+}
+
+inox::String URL::href() const {
+  return inox_url_read_string_field(*this, INOX_URL_HREF_INDEX);
+}
+
+inox::String URL::protocol() const {
+  return inox_url_read_string_field(*this, INOX_URL_PROTOCOL_INDEX);
+}
+
+inox::String URL::hostname() const {
+  return inox_url_read_string_field(*this, INOX_URL_HOSTNAME_INDEX);
+}
+
+inox::String URL::port() const {
+  return inox_url_read_string_field(*this, INOX_URL_PORT_INDEX);
+}
+
+inox::String URL::pathname() const {
+  return inox_url_read_string_field(*this, INOX_URL_PATHNAME_INDEX);
+}
+
+inox::String URL::search() const {
+  return inox_url_read_string_field(*this, INOX_URL_SEARCH_INDEX);
+}
+
+inox::String URL::hash() const {
+  return inox_url_read_string_field(*this, INOX_URL_HASH_INDEX);
+}
+
 inox::String url::fileURLToPath(const inox::Value& value) const {
   inox_value raw_value = value.raw();
   const char* bytes = 0;

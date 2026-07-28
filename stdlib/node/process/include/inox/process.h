@@ -5,6 +5,7 @@
 
 #ifdef __cplusplus
 
+#include "inox/array.h"
 #include "inox/string.h"
 
 namespace inox {
@@ -36,57 +37,68 @@ public:
   process_exit_code_property& operator=(double code);
 };
 
-class process_argv {
+class ProcessArgv {
 public:
-  process_argv();
+  ProcessArgv();
 
   process_number_property length;
 
   inox::String operator[](int index) const;
 };
 
-class process_env {
+class ProcessEnv {
 public:
   inox::String operator[](inox::StringView name) const;
 };
 
-class process_versions : public inox::Value {
+class ProcessVersions : public inox::Value {
 private:
   void init();
-  friend class process;
+  friend class Process;
 
 public:
   inox::String node;
 };
 
-class process : public inox::Value {
+class ProcessMemoryUsage : public inox::Value {
+public:
+  ProcessMemoryUsage();
+
+  double rss;
+  double heapTotal;
+  double heapUsed;
+  double external;
+  double arrayBuffers;
+};
+
+class Process : public inox::Value {
 private:
   void init();
   friend int inox::process_main(int argc, char** argv, void (*app_main)(void));
   friend int inox::process_main(int argc, char** argv, inox::StringView entry_path, void (*app_main)(void));
 
 public:
-  process();
+  Process();
 
   inox::String arch;
-  process_argv argv;
+  ProcessArgv argv;
   inox::String argv0;
-  process_env env;
+  ProcessEnv env;
   inox::String execPath;
   process_exit_code_property exitCode;
   process_number_property pid;
   inox::String platform;
   inox::String version;
-  process_versions versions;
+  ProcessVersions versions;
 
   inox::String cwd() const;
   void exit(int code = 0) const;
-  inox::Value hrtime() const;
-  inox::Value hrtime(const inox::Value& previous) const;
-  inox::Value memoryUsage() const;
+  Array hrtime() const;
+  Array hrtime(const inox::Value& previous) const;
+  ProcessMemoryUsage memoryUsage() const;
 };
 
-extern process process;
+extern Process process;
 
 #endif
 
