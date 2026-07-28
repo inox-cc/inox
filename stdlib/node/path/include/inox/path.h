@@ -7,9 +7,15 @@
 #include "inox/value.h"
 
 #ifdef __cplusplus
+#include <initializer_list>
 
 class path {
 public:
+  struct FormatEntry {
+    inox::StringView name;
+    inox::StringView value;
+  };
+
   inox::String delimiter;
   inox::String sep;
   const path& posix;
@@ -19,6 +25,7 @@ public:
   inox::String dirname(inox::StringView value) const;
   inox::String extname(inox::StringView value) const;
   inox::String format(const inox::Value& path_object) const;
+  inox::String format(std::initializer_list<FormatEntry> entries) const;
   bool isAbsolute(inox::StringView value) const;
   inox::String join(const inox::StringView* values, size_t count) const;
   inox::String normalize(inox::StringView value) const;

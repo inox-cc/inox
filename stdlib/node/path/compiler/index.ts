@@ -42,7 +42,7 @@ const operations: LibraryOperationDescriptor[] = [
   ),
   callOperation('dirname', ['string-view'], stringTypeRef, stringCResultMapping),
   callOperation('extname', ['string-view'], stringTypeRef, stringCResultMapping),
-  callOperation('format', ['value'], stringTypeRef, stringCResultMapping),
+  callOperation('format', ['optional-string-record-or-value'], stringTypeRef, stringCResultMapping),
   callOperation('isAbsolute', ['string-view'], booleanTypeRef),
   callOperation('join', ['variadic-string-view-array', 'variadic-count'], stringTypeRef, stringCResultMapping),
   callOperation('normalize', ['string-view'], stringTypeRef, stringCResultMapping),

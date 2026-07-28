@@ -55,19 +55,23 @@ console.log(path.resolve('/tmp', 'file.txt'))
   assert.match(source, /const inox::StringView inox_library_args_\d+\[\] = \{ "\/tmp", "a", "\.\.", "b" \};/)
   assert.match(source, /path\.normalize\("\/tmp\/\.\.\/tmp\/file\.txt"\)/)
   assert.match(source, /path\.parse\("\/tmp\/file\.txt", &inox_shape_library_result_\d+\)/)
-  assert.match(source, /auto inox_object_\d+ = inox::ObjectValue::create\(&inox_shape_value_\d+\);/)
-  assert.match(source, /inox_object_\d+\.init\(0, inox::String\("\/tmp", 4\)\);/)
-  assert.match(source, /path\.format\(inox_object_\d+\)/)
+  assert.match(source, /path\.format\(\{ \{ "dir", "\/tmp" \}, \{ "name", "file" \}, \{ "ext", "\.txt" \} \}\)/)
   assert.match(source, /path\.relative\("\/tmp\/a", "\/tmp\/b"\)/)
   assert.match(source, /const inox::StringView inox_library_args_\d+\[\] = \{ "\/tmp", "file\.txt" \};/)
   assert.match(source, /path\.join\(inox_library_args_\d+, 4\)\);\n\s+if \(inox::thrown\(\)\) return;/)
-  assert.match(source, /path\.format\(inox_object_\d+\)\);\n\s+if \(inox::thrown\(\)\) return;/)
+  assert.match(
+    source,
+    /path\.format\(\{ \{ "dir", "\/tmp" \}, \{ "name", "file" \}, \{ "ext", "\.txt" \} \}\)\);\n\s+if \(inox::thrown\(\)\) return;/
+  )
+  assert.doesNotMatch(source, /inox_shape_value_/)
+  assert.doesNotMatch(source, /inox::ObjectValue::create/)
   assert.doesNotMatch(source, /inox_object_new/)
   assert.doesNotMatch(source, /inox_object_init_known/)
   assert.doesNotMatch(source, /const inox_value inox_library_args_\d+\[\]/)
 
   const header = readFileSync(resolve('stdlib/node/path/include/inox/path.h'), 'utf8')
   assert.match(header, /inox::String format\(const inox::Value& path_object\) const;/)
+  assert.match(header, /inox::String format\(std::initializer_list<FormatEntry> entries\) const;/)
   assert.doesNotMatch(header, /format\(inox_value path_object\)/)
 }
 

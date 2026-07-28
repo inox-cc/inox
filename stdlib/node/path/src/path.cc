@@ -11,6 +11,19 @@ struct PathSpan {
   size_t length;
 };
 
+struct PathFormatFields {
+  inox::StringView dir;
+  bool dir_present;
+  inox::StringView root;
+  bool root_present;
+  inox::StringView base;
+  bool base_present;
+  inox::StringView name;
+  bool name_present;
+  inox::StringView ext;
+  bool ext_present;
+};
+
 static inox_status inox_path_string(inox_value value, const char** bytes, size_t* len);
 static char* inox_path_alloc(inox_allocator* allocator, size_t len);
 static inox_status inox_path_copy(inox_allocator* allocator, const char* bytes, size_t len, char** out, size_t* out_len);
@@ -39,6 +52,8 @@ static inox_status inox_path_object_string(
   int* present,
   inox_value* value
 );
+static bool inox_path_string_view_equals(inox::StringView value, const char* expected, size_t expected_len);
+static inox::String inox_path_format_parts(inox_allocator* allocator, const PathFormatFields& fields);
 static void inox_path_throw(inox_status status, const char* message);
 
 path::path() : delimiter(":"), sep("/"), posix(*this) {}
@@ -248,31 +263,81 @@ inox::String path::format(const inox::Value& path_object) const {
     return inox::String();
   }
 
-  const char* file = base_present && base_len > 0 ? base : name;
-  size_t file_len = base_present && base_len > 0 ? base_len : name_len;
-  const int use_ext = !(base_present && base_len > 0) && ext_present && ext_len > 0;
-  const int needs_dot = use_ext && ext[0] != '.';
-  const char* parent = dir_present && dir_len > 0 ? dir : root;
-  size_t parent_len = dir_present && dir_len > 0 ? dir_len : root_len;
-  const int needs_slash = parent_len > 0 && file_len + (use_ext ? ext_len + (needs_dot ? 1 : 0) : 0) > 0 && parent[parent_len - 1] != '/';
-  const size_t out_len = parent_len + (needs_slash ? 1 : 0) + file_len + (use_ext ? ext_len + (needs_dot ? 1 : 0) : 0);
+  PathFormatFields fields = {
+    inox::StringView(dir, dir_len),
+    dir_present != 0,
+    inox::StringView(root, root_len),
+    root_present != 0,
+    inox::StringView(base, base_len),
+    base_present != 0,
+    inox::StringView(name, name_len),
+    name_present != 0,
+    inox::StringView(ext, ext_len),
+    ext_present != 0
+  };
+  inox::String formatted = inox_path_format_parts(allocator, fields);
+
+  inox_release(dir_value);
+  inox_release(root_value);
+  inox_release(base_value);
+  inox_release(name_value);
+  inox_release(ext_value);
+  return formatted;
+}
+
+inox::String path::format(std::initializer_list<FormatEntry> entries) const {
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
+  PathFormatFields fields = {};
+
+  for (const FormatEntry& entry : entries) {
+    if (inox_path_string_view_equals(entry.name, "dir", 3)) {
+      fields.dir = entry.value;
+      fields.dir_present = true;
+    } else if (inox_path_string_view_equals(entry.name, "root", 4)) {
+      fields.root = entry.value;
+      fields.root_present = true;
+    } else if (inox_path_string_view_equals(entry.name, "base", 4)) {
+      fields.base = entry.value;
+      fields.base_present = true;
+    } else if (inox_path_string_view_equals(entry.name, "name", 4)) {
+      fields.name = entry.value;
+      fields.name_present = true;
+    } else if (inox_path_string_view_equals(entry.name, "ext", 3)) {
+      fields.ext = entry.value;
+      fields.ext_present = true;
+    }
+  }
+
+  return inox_path_format_parts(&inox_default_allocator, fields);
+}
+
+static bool inox_path_string_view_equals(inox::StringView value, const char* expected, size_t expected_len) {
+  return value.len == expected_len && (expected_len == 0 || memcmp(value.bytes, expected, expected_len) == 0);
+}
+
+static inox::String inox_path_format_parts(inox_allocator* allocator, const PathFormatFields& fields) {
+  const inox::StringView file = fields.base_present && fields.base.len > 0 ? fields.base : fields.name;
+  const bool use_ext = !(fields.base_present && fields.base.len > 0) && fields.ext_present && fields.ext.len > 0;
+  const bool needs_dot = use_ext && fields.ext.bytes[0] != '.';
+  const inox::StringView parent = fields.dir_present && fields.dir.len > 0 ? fields.dir : fields.root;
+  const size_t suffix_len = use_ext ? fields.ext.len + (needs_dot ? 1 : 0) : 0;
+  const bool needs_slash = parent.len > 0 && file.len + suffix_len > 0 && parent.bytes[parent.len - 1] != '/';
+  const size_t out_len = parent.len + (needs_slash ? 1 : 0) + file.len + suffix_len;
   char* result = inox_path_alloc(allocator, out_len);
 
   if (result == 0) {
-    inox_release(dir_value);
-    inox_release(root_value);
-    inox_release(base_value);
-    inox_release(name_value);
-    inox_release(ext_value);
     inox_path_throw(INOX_ERR_OOM, "path.format failed");
     return inox::String();
   }
 
   size_t offset = 0;
 
-  if (parent_len > 0) {
-    memcpy(result + offset, parent, parent_len);
-    offset += parent_len;
+  if (parent.len > 0) {
+    memcpy(result + offset, parent.bytes, parent.len);
+    offset += parent.len;
   }
 
   if (needs_slash) {
@@ -280,9 +345,9 @@ inox::String path::format(const inox::Value& path_object) const {
     offset += 1;
   }
 
-  if (file_len > 0) {
-    memcpy(result + offset, file, file_len);
-    offset += file_len;
+  if (file.len > 0) {
+    memcpy(result + offset, file.bytes, file.len);
+    offset += file.len;
   }
 
   if (use_ext) {
@@ -291,15 +356,9 @@ inox::String path::format(const inox::Value& path_object) const {
       offset += 1;
     }
 
-    memcpy(result + offset, ext, ext_len);
-    offset += ext_len;
+    memcpy(result + offset, fields.ext.bytes, fields.ext.len);
+    offset += fields.ext.len;
   }
-
-  inox_release(dir_value);
-  inox_release(root_value);
-  inox_release(base_value);
-  inox_release(name_value);
-  inox_release(ext_value);
 
   inox::String formatted(result, offset);
   allocator->free(allocator->user, result, out_len + 1, alignof(char));
