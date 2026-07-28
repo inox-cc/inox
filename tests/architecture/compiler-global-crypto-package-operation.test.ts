@@ -64,7 +64,7 @@ test('global:crypto владеет getRandomValues operation, runtime requiremen
   assert.deepEqual(call.libraryCArgumentAdapters, ['Uint8Array($value)'])
   assert.ok(result.ir.runtimeRequirements.includes('global:crypto'))
   assert.match(result.code, /#include "inox\/crypto\.h"/)
-  assert.match(result.code, /crypto\.getRandomValues\(Uint8Array\(bytes\)\)/)
+  assert.match(result.code, /crypto\.getRandomValues\(bytes\)/)
 
   assert.throws(
     () =>

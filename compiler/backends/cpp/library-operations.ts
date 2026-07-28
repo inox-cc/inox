@@ -1,4 +1,5 @@
 import type { AnyNode } from '../../types.ts'
+import { compilerLibraryNativeTypeIsAssignable } from '../../extensions/library-set.ts'
 import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
 import {
   emitPrepareOwnedValueWrite,
@@ -18,6 +19,7 @@ import type {
   CPreparedExpression as PreparedExpression,
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from './types.ts'
+import { cCompilerLibrarySetValue } from './types.ts'
 import type { ClassLoweringDependencies } from './values/classes.ts'
 import type { NullableLoweringDependencies } from './values/nullable.ts'
 import type { StatementLoweringDependencies } from './values/statements.ts'
@@ -296,6 +298,7 @@ export function emitPreparedCompilerLibraryCallExpression(
 
   const lines: string[] = []
   const argumentsList: string[] = []
+  const argumentCppTypes: Map<number, string> = new Map()
   let sourceArgumentIndex = 0
   let optionalArgumentPresent = false
   let receiverExpression = ''
@@ -421,6 +424,7 @@ export function emitPreparedCompilerLibraryCallExpression(
         pushLines(lines, prepared.lines)
 
         if (prepared.cppType !== null && typeof prepared.cppType !== 'undefined') {
+          argumentCppTypes.set(argumentsList.length, prepared.cppType)
           argumentsList.push(prepared.expression)
         } else {
           argumentsList.push(`inox::Value(${prepared.expression})`)
@@ -554,6 +558,9 @@ export function emitPreparedCompilerLibraryCallExpression(
 
       const prepared = dependencies.emitCValueExpression(sourceArgument, context)
       pushLines(lines, prepared.lines)
+      if (typeof prepared.cppType === 'string') {
+        argumentCppTypes.set(argumentsList.length, prepared.cppType)
+      }
       argumentsList.push(prepared.expression)
       continue
     }
@@ -627,6 +634,9 @@ export function emitPreparedCompilerLibraryCallExpression(
         const prepared = dependencies.emitCValueExpression(sourceArguments[sourceArgumentIndex], context)
         pushLines(lines, prepared.lines)
         argumentExpression = prepared.expression
+        if (typeof prepared.cppType === 'string') {
+          argumentCppTypes.set(argumentsList.length, prepared.cppType)
+        }
         optionalArgumentPresent = true
       } else {
         optionalArgumentPresent = false
@@ -641,6 +651,9 @@ export function emitPreparedCompilerLibraryCallExpression(
       if (sourceArgumentIndex < sourceArguments.length) {
         const prepared = dependencies.emitCValueExpression(sourceArguments[sourceArgumentIndex], context)
         pushLines(lines, prepared.lines)
+        if (typeof prepared.cppType === 'string') {
+          argumentCppTypes.set(argumentsList.length, prepared.cppType)
+        }
         argumentsList.push(prepared.expression)
       }
 
@@ -716,7 +729,7 @@ export function emitPreparedCompilerLibraryCallExpression(
 
   let callTarget = target
 
-  applyCompilerLibraryArgumentAdapters(argumentsList, item.libraryCArgumentAdapters)
+  applyCompilerLibraryArgumentAdapters(argumentsList, argumentCppTypes, item.libraryCArgumentAdapters, context)
   if (
     receiverCppType === null ||
     typeof receiverCppType === 'undefined' ||
@@ -1283,7 +1296,12 @@ function emitPreparedCompilerLibraryObjectCall(
   }
 }
 
-function applyCompilerLibraryArgumentAdapters(argumentsList: string[], adapters: string[] | null | undefined): void {
+function applyCompilerLibraryArgumentAdapters(
+  argumentsList: string[],
+  argumentCppTypes: Map<number, string>,
+  adapters: string[] | null | undefined,
+  context: CFunctionContext
+): void {
   if (adapters === null || typeof adapters === 'undefined') {
     return
   }
@@ -1292,9 +1310,56 @@ function applyCompilerLibraryArgumentAdapters(argumentsList: string[], adapters:
     const adapter = adapters[index]
 
     if (adapter.length > 0) {
+      const argumentCppType = argumentCppTypes.get(index)
+
+      if (
+        typeof argumentCppType === 'string' &&
+        compilerLibraryArgumentAdapterIsRedundant(adapter, argumentCppType, context)
+      ) {
+        continue
+      }
+
       argumentsList[index] = adapter.split('$value').join(argumentsList[index])
     }
   }
+}
+
+function compilerLibraryArgumentAdapterIsRedundant(
+  adapter: string,
+  argumentCppType: string,
+  context: CFunctionContext
+): boolean {
+  const suffix = '($value)'
+
+  if (!adapter.endsWith(suffix)) {
+    return false
+  }
+
+  const targetCppType = adapter.slice(0, adapter.length - suffix.length)
+
+  if (targetCppType === argumentCppType) {
+    return true
+  }
+
+  const libraries = cCompilerLibrarySetValue(context.libraries)
+  const nativeTypes = libraries.nativeTypes
+
+  for (const sourceType of nativeTypes) {
+    if (sourceType.cppType !== argumentCppType) {
+      continue
+    }
+
+    for (const targetType of nativeTypes) {
+      if (
+        targetType.cppType === targetCppType &&
+        compilerLibraryNativeTypeIsAssignable(libraries, sourceType.typeId, targetType.typeId)
+      ) {
+        return true
+      }
+    }
+  }
+
+  return false
 }
 
 function emitCompilerLibraryStringArray(

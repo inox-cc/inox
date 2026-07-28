@@ -39,7 +39,7 @@ test('node:crypto проходит через generic variants, adapters и nomi
   assert.ok(result.ir.runtimeRequirements.includes('node:crypto'))
   assert.ok(result.ir.runtimeRequirements.includes('node:crypto:hash'))
   assert.match(result.code, /#include "inox\/crypto\.h"/)
-  assert.match(result.code, /crypto\.randomFillSync\(Uint8Array\(bytes\), 0, 4\)/)
+  assert.match(result.code, /crypto\.randomFillSync\(bytes, 0, 4\)/)
   assert.match(result.code, /crypto\.hash\("sha256", "payload"\)/)
   assert.match(result.code, /crypto\.hash\("sha256", "payload", "buffer"\)/)
   assert.match(result.code, /\.update\("payload", "utf8"\)/)

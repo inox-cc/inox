@@ -91,7 +91,8 @@ function assertDirectNativeInitializers(source: string): void {
   assert.match(source, /auto text = Buffer::from\("inox"\);/)
   assert.match(source, /auto allocated = Buffer::alloc\(2(?:\.0)?\);/)
   assert.match(source, /auto inox_random = Uint8Array\(4(?:\.0)?\);/)
-  assert.match(source, /auto same = crypto\.getRandomValues\(Uint8Array\(inox_random\)\);/)
+  assert.match(source, /auto same = crypto\.getRandomValues\(inox_random\);/)
+  assert.doesNotMatch(source, /crypto\.getRandomValues\(Uint8Array\(inox_random\)\)/)
   assert.match(source, /auto sliced = text\.slice\(1(?:\.0)?\);/)
   assert.match(source, /auto copied = values\.slice\(1(?:\.0)?\);/)
   assert.doesNotMatch(
