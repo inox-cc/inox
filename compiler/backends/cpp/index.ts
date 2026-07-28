@@ -4669,6 +4669,43 @@ function emitCArrayLiteralValueExpression(
     }
   }
 
+  const target = outputTarget?.declare === true ? `auto ${temp}` : (outputTarget?.name ?? `${arrayCppType} ${temp}`)
+  const literalExpression = materialization.literalExpression
+
+  if (
+    typeof literalExpression === 'string' &&
+    literalExpression.length > 0 &&
+    expression.elements.length > 0 &&
+    compilerArrayLiteralCanUseDirectMaterialization(expression)
+  ) {
+    const values: string[] = []
+
+    for (let index = 0; index < expression.elements.length; index = index + 1) {
+      const value = emitCValueExpression(expression.elements[index], context)
+      pushAll(lines, value.lines)
+      values.push(value.expression)
+    }
+
+    lines.push(
+      `${target} = ${renderSequenceMaterializationExpression(literalExpression, {
+        count: `${expression.elements.length}`,
+        cppType: arrayCppType,
+        index: '',
+        target: temp,
+        value: '',
+        values: joinStrings(values, ', ')
+      })};`
+    )
+    pushAll(lines, emitThrownCheckLines(context))
+
+    return {
+      lines,
+      expression: temp,
+      cppType: arrayCppType,
+      valueType: expression.valueType ?? 'unknown'
+    }
+  }
+
   const createExpression = renderSequenceMaterializationExpression(materialization.createExpression, {
     count: `${expression.elements.length}`,
     cppType: arrayCppType,
@@ -4676,8 +4713,6 @@ function emitCArrayLiteralValueExpression(
     target: '',
     value: ''
   })
-
-  const target = outputTarget?.declare === true ? `auto ${temp}` : (outputTarget?.name ?? `${arrayCppType} ${temp}`)
 
   lines.push(`${target} = ${createExpression};`)
   pushAll(lines, emitThrownCheckLines(context))
@@ -4749,7 +4784,7 @@ function emitCArrayLiteralValueExpression(
 
 function renderSequenceMaterializationExpression(
   expression: string,
-  values: { count: string; cppType: string; index: string; target: string; value: string }
+  values: { count: string; cppType: string; index: string; target: string; value: string; values?: string }
 ): string {
   return expression
     .split('$count')
@@ -4760,8 +4795,27 @@ function renderSequenceMaterializationExpression(
     .join(values.index)
     .split('$target')
     .join(values.target)
+    .split('$values')
+    .join(values.values ?? '')
     .split('$value')
     .join(values.value)
+}
+
+function compilerArrayLiteralCanUseDirectMaterialization(expression: AnyNode): boolean {
+  for (let index = 0; index < expression.elements.length; index = index + 1) {
+    const element = expression.elements[index]
+
+    if (
+      element.type !== 'StringLiteral' &&
+      element.type !== 'NumberLiteral' &&
+      element.type !== 'BooleanLiteral' &&
+      element.type !== 'NullLiteral'
+    ) {
+      return false
+    }
+  }
+
+  return true
 }
 
 function compilerArrayLiteralCppType(expression: AnyNode, context: CFunctionContext): string {

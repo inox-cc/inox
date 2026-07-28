@@ -402,6 +402,7 @@ export type LibraryOperationVariantDescriptor = {
 
 export type LibraryCSequenceMaterializationDescriptor = {
   createExpression: string
+  literalExpression?: string | null
   appendElementExpression: string
   appendSpreadExpression: string
   appendSpreadValueAdapter?: string | null

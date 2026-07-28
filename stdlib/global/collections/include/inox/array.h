@@ -7,6 +7,7 @@
 #include "inox/value.h"
 
 #ifdef __cplusplus
+#include <initializer_list>
 
 class Array;
 
@@ -47,6 +48,7 @@ public:
   using inox::Value::raw;
 
   static Array create(size_t len);
+  static Array from(std::initializer_list<inox::Value> values);
   static Array from(inox::StringView value);
   static bool isArray(const inox::Value& value);
 

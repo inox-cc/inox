@@ -47,6 +47,10 @@ test('global:collections владеет Array declarations, operations, iteratio
   )
   assert.equal(includesOperation?.cFailureMode, null)
   assert.equal(includesOperation?.cPreservesPendingException, true)
+  const literalOperation = collections.compilerPackage?.operations.find(
+    (operation) => operation.cSequenceMaterialization !== null && typeof operation.cSequenceMaterialization !== 'undefined'
+  )
+  assert.equal(literalOperation?.cSequenceMaterialization?.literalExpression, 'Array::from({ $values })')
   assert.equal(result.ast.body[2].init.left.libraryOperationId, 'global:collections#Array.length')
   assert.equal(result.ast.body[2].init.left.libraryCResultAdapter, 'static_cast<double>($value)')
   assert.equal(result.ir.body[2].init.left.libraryCResultAdapter, 'static_cast<double>($value)')
@@ -116,8 +120,8 @@ test('global:collections владеет Array declarations, operations, iteratio
   assert.equal(result.ast.body[12].init.libraryOperationId, 'global:collections#Array.sort')
   assert.equal(result.ast.body[13].init.libraryOperationId, 'global:collections#Array.reduce')
   assert.equal(result.ast.body[13].init.args[0].params[0].valueType, 'number')
-  assert.match(result.code, /Array::create\(0\)/)
-  assert.equal((result.code.match(/inox_array_\d+\.push\(/g) ?? []).length, 2)
+  assert.match(result.code, /Array::from\(\{ inox_number_value\(1\), inox_number_value\(2\) \}\)/)
+  assert.doesNotMatch(result.code, /inox_array_\d+\.push\(/)
   assert.match(result.code, /values\.push\(/)
   assert.match(result.code, /static_cast<double>\(inox_library_result_\d+\)/)
   assert.match(result.code, /values\.some\(/)

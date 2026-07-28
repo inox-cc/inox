@@ -1547,6 +1547,26 @@ Array Array::create(size_t len) {
   return Array(inox::adopt(inox_array_adopt_storage(array)));
 }
 
+Array Array::from(std::initializer_list<inox::Value> values) {
+  Array result = Array::create(values.size());
+
+  if (!result.valid() || inox::thrown()) {
+    return result;
+  }
+
+  ArrayStorage* array = array_data(result);
+  size_t index = 0;
+
+  for (const inox::Value& value : values) {
+    inox_value item = value.raw();
+    inox_retain(item);
+    array->items[index] = item;
+    index += 1;
+  }
+
+  return result;
+}
+
 Array Array::from(inox::StringView value) {
   Array result = Array::create(value.len);
 

@@ -179,7 +179,8 @@ const nativeDescriptorKeys = new Set([
   'cValueAdapter',
   'cValueAdapterFailureMode',
   'cValueAdapterPreservesPendingException',
-  'createExpression'
+  'createExpression',
+  'literalExpression'
 ])
 const optionValueDescriptorKeys = new Set(['allowedValues', 'defaultValue', 'prefixes', 'stringLiterals', 'values'])
 const semanticMetadataPropertyNames = new Set([

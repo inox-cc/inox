@@ -50,10 +50,10 @@ console.log(Array.isArray([1]))
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /auto values = Array::create\(0\);/)
-  assert.match(source, /values\.push\(inox_number_value\(1\)\);/)
-  assert.match(source, /values\.push\(inox_number_value\(2\)\);/)
-  assert.match(source, /values\.push\(inox_number_value\(3\)\);/)
+  assert.match(
+    source,
+    /auto values = Array::from\(\{ inox_number_value\(1\), inox_number_value\(2\), inox_number_value\(3\) \}\);/
+  )
   assert.doesNotMatch(source, /auto values = inox_array_\d+;/)
   assert.match(source, /values\.push\(inox::Value\(inox_number_value\(4\)\)\)/)
   assert.match(source, /values\.length\(\)/)

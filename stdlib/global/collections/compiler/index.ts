@@ -102,6 +102,7 @@ const arrayIntrinsicOperation: LibraryOperationDescriptor = {
   runtimeRequirements: [arrayRuntimeRequirement],
   cSequenceMaterialization: {
     createExpression: 'Array::create(0)',
+    literalExpression: 'Array::from({ $values })',
     appendElementExpression: '$target.push($value)',
     appendSpreadExpression: '$target.appendAll($value)',
     appendSpreadValueAdapter: 'Array($value)',

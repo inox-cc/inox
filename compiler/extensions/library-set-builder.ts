@@ -1782,6 +1782,12 @@ function validateSequenceMaterializationIntrinsic(
     }
 
     validateSequenceMaterializationExpression(provider.operationId, 'create', materialization.createExpression, [])
+    const literalExpression = materialization.literalExpression
+
+    if (typeof literalExpression === 'string' && literalExpression.length > 0) {
+      validateSequenceMaterializationExpression(provider.operationId, 'literal', literalExpression, ['$values'])
+    }
+
     validateSequenceMaterializationExpression(
       provider.operationId,
       'append element',
@@ -2500,6 +2506,8 @@ function sequenceMaterializationFingerprint(operation: LibraryOperationDescripto
 
   return (
     materialization.createExpression +
+    ':' +
+    (materialization.literalExpression ?? '') +
     ':' +
     materialization.appendElementExpression +
     ':' +
