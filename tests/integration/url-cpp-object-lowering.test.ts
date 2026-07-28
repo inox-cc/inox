@@ -73,6 +73,11 @@ console.log(params.toString(), page.hostname, page.pathname)
   const source = generatedTextFile(files, 'src/index.cc').code
 
   assert.match(source, /auto params = URLSearchParams::from\(\{ \{ "q", "smoke" \} \}\);/)
+  assert.match(
+    source,
+    /auto params = URLSearchParams::from\(\{ \{ "q", "smoke" \} \}\);\n\s+if \(inox::thrown\(\)\) return;/
+  )
+  assert.doesNotMatch(source, /if \(!params\.valid\(\)\) return;/)
   assert.match(source, /\.set\("q", "inox"\);/)
   assert.match(source, /\.append\("kind", "simple"\);/)
   assert.match(source, /page\.hostname\(\)/)

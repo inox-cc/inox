@@ -2,6 +2,7 @@
 
 #include <string.h>
 #include <unistd.h>
+#include "inox/loop.h"
 #include "inox/object.h"
 #include "inox/string.h"
 
@@ -38,11 +39,17 @@ static inox_status inox_path_object_string(
   int* present,
   inox_value* value
 );
+static void inox_path_throw(inox_status status, const char* message);
 
 path::path() : delimiter(":"), sep("/"), posix(*this) {}
 
 inox::String path::basename(inox::StringView path, inox::StringView suffix, bool has_suffix) const {
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
   if ((path.bytes == 0 && path.len != 0) || (suffix.bytes == 0 && suffix.len != 0)) {
+    inox_path_throw(INOX_ERR_TYPE, "TypeError: path.basename expects strings");
     return inox::String();
   }
 
@@ -70,7 +77,12 @@ inox::String path::basename(inox::StringView path, inox::StringView suffix, bool
 }
 
 inox::String path::dirname(inox::StringView path) const {
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
   if (path.bytes == 0 && path.len != 0) {
+    inox_path_throw(INOX_ERR_TYPE, "TypeError: path.dirname expects a string");
     return inox::String();
   }
 
@@ -99,7 +111,12 @@ inox::String path::dirname(inox::StringView path) const {
 }
 
 inox::String path::extname(inox::StringView path) const {
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
   if (path.bytes == 0 && path.len != 0) {
+    inox_path_throw(INOX_ERR_TYPE, "TypeError: path.extname expects a string");
     return inox::String();
   }
 
@@ -134,7 +151,12 @@ inox::String path::extname(inox::StringView path) const {
 }
 
 bool path::isAbsolute(inox::StringView path) const {
+  if (inox::thrown()) {
+    return false;
+  }
+
   if (path.bytes == 0 && path.len != 0) {
+    inox_path_throw(INOX_ERR_TYPE, "TypeError: path.isAbsolute expects a string");
     return false;
   }
 
@@ -142,12 +164,17 @@ bool path::isAbsolute(inox::StringView path) const {
 }
 
 inox::String path::join(const inox::StringView* paths, size_t path_count) const {
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
   inox_allocator* allocator = &inox_default_allocator;
   char* joined = 0;
   size_t joined_len = 0;
   inox_status status = inox_path_concat_values(allocator, paths, path_count, &joined, &joined_len);
 
   if (status != INOX_OK) {
+    inox_path_throw(status, "TypeError: path.join failed");
     return inox::String();
   }
 
@@ -158,6 +185,7 @@ inox::String path::join(const inox::StringView* paths, size_t path_count) const 
   allocator->free(allocator->user, joined, joined_len + 1, alignof(char));
 
   if (status != INOX_OK) {
+    inox_path_throw(status, "TypeError: path.join failed");
     return inox::String();
   }
 
@@ -167,6 +195,10 @@ inox::String path::join(const inox::StringView* paths, size_t path_count) const 
 }
 
 inox::String path::format(const inox::Value& path_object) const {
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
   inox_allocator* allocator = &inox_default_allocator;
   const char* dir = "";
   const char* root = "";
@@ -212,6 +244,7 @@ inox::String path::format(const inox::Value& path_object) const {
     inox_release(base_value);
     inox_release(name_value);
     inox_release(ext_value);
+    inox_path_throw(status, "TypeError: path.format expects string fields");
     return inox::String();
   }
 
@@ -231,6 +264,7 @@ inox::String path::format(const inox::Value& path_object) const {
     inox_release(base_value);
     inox_release(name_value);
     inox_release(ext_value);
+    inox_path_throw(INOX_ERR_OOM, "path.format failed");
     return inox::String();
   }
 
@@ -273,8 +307,13 @@ inox::String path::format(const inox::Value& path_object) const {
 }
 
 inox::String path::normalize(inox::StringView path) const {
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
   inox_allocator* allocator = &inox_default_allocator;
   if (path.bytes == 0 && path.len != 0) {
+    inox_path_throw(INOX_ERR_TYPE, "TypeError: path.normalize expects a string");
     return inox::String();
   }
 
@@ -284,6 +323,7 @@ inox::String path::normalize(inox::StringView path) const {
   inox_status status = inox_path_normalize_bytes(allocator, path.bytes == 0 ? "" : path.bytes, path.len, &normalized, &normalized_len);
 
   if (status != INOX_OK) {
+    inox_path_throw(status, "TypeError: path.normalize failed");
     return inox::String();
   }
 
@@ -293,12 +333,18 @@ inox::String path::normalize(inox::StringView path) const {
 }
 
 inox::Value path::parse(inox::StringView path, const inox_shape* shape) const {
+  if (inox::thrown()) {
+    return inox::Value();
+  }
+
   inox_allocator* allocator = &inox_default_allocator;
   if (path.bytes == 0 && path.len != 0) {
+    inox_path_throw(INOX_ERR_TYPE, "TypeError: path.parse expects a string");
     return inox::Value();
   }
 
   if (shape == 0) {
+    inox_path_throw(INOX_ERR_TYPE, "TypeError: path.parse result shape is missing");
     return inox::Value();
   }
 
@@ -306,6 +352,7 @@ inox::Value path::parse(inox::StringView path, const inox_shape* shape) const {
   inox_status status = inox_object_new(allocator, shape, &out);
 
   if (status != INOX_OK) {
+    inox_path_throw(status, "path.parse failed");
     return inox::Value();
   }
 
@@ -390,12 +437,17 @@ inox::Value path::parse(inox::StringView path, const inox_shape* shape) const {
   if (status != INOX_OK) {
     inox_release(out);
     out = inox_undefined_value();
+    inox_path_throw(status, "path.parse failed");
   }
 
   return status == INOX_OK ? inox::adopt(out) : inox::Value();
 }
 
 inox::String path::relative(inox::StringView from, inox::StringView to) const {
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
   inox_allocator* allocator = &inox_default_allocator;
   inox::StringView values[1];
   values[0] = from;
@@ -469,6 +521,7 @@ inox::String path::relative(inox::StringView from, inox::StringView to) const {
   char* result = inox_path_alloc(allocator, out_len);
 
   if (result == 0) {
+    inox_path_throw(INOX_ERR_OOM, "path.relative failed");
     return inox::String();
   }
 
@@ -501,6 +554,10 @@ inox::String path::relative(inox::StringView from, inox::StringView to) const {
 }
 
 inox::String path::resolve(const inox::StringView* paths, size_t path_count) const {
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
   inox_allocator* allocator = &inox_default_allocator;
   const char* start_bytes = 0;
   size_t start_len = 0;
@@ -511,6 +568,7 @@ inox::String path::resolve(const inox::StringView* paths, size_t path_count) con
     const inox::StringView path = paths[index - 1];
 
     if (path.bytes == 0 && path.len != 0) {
+      inox_path_throw(INOX_ERR_TYPE, "TypeError: path.resolve expects strings");
       return inox::String();
     }
 
@@ -527,6 +585,7 @@ inox::String path::resolve(const inox::StringView* paths, size_t path_count) con
 
   if (!found_absolute) {
     if (getcwd(cwd, sizeof(cwd)) == 0) {
+      inox_path_throw(INOX_ERR_TYPE, "path.resolve could not read the current directory");
       return inox::String();
     }
 
@@ -541,6 +600,7 @@ inox::String path::resolve(const inox::StringView* paths, size_t path_count) con
     const inox::StringView path = paths[index];
 
     if (path.bytes == 0 && path.len != 0) {
+      inox_path_throw(INOX_ERR_TYPE, "TypeError: path.resolve expects strings");
       return inox::String();
     }
 
@@ -552,6 +612,7 @@ inox::String path::resolve(const inox::StringView* paths, size_t path_count) con
   char* joined = inox_path_alloc(allocator, total);
 
   if (joined == 0) {
+    inox_path_throw(INOX_ERR_OOM, "path.resolve failed");
     return inox::String();
   }
 
@@ -564,6 +625,7 @@ inox::String path::resolve(const inox::StringView* paths, size_t path_count) con
 
     if (path.bytes == 0 && path.len != 0) {
       allocator->free(allocator->user, joined, total + 1, alignof(char));
+      inox_path_throw(INOX_ERR_TYPE, "TypeError: path.resolve expects strings");
       return inox::String();
     }
 
@@ -583,6 +645,7 @@ inox::String path::resolve(const inox::StringView* paths, size_t path_count) con
   allocator->free(allocator->user, joined, total + 1, alignof(char));
 
   if (status != INOX_OK) {
+    inox_path_throw(status, "path.resolve failed");
     return inox::String();
   }
 
@@ -601,6 +664,23 @@ static inox_status inox_path_string(inox_value value, const char** bytes, size_t
   *len = string->len;
 
   return INOX_OK;
+}
+
+static void inox_path_throw(inox_status status, const char* message) {
+  if (inox::thrown()) {
+    return;
+  }
+
+  if (status == INOX_ERR_OOM) {
+    inox::throw_out_of_memory();
+    return;
+  }
+
+  inox::String error(message == 0 ? "path operation failed" : message);
+
+  if (error.valid()) {
+    inox::throw_value(error);
+  }
 }
 
 class path path;

@@ -133,6 +133,10 @@ static int inox_url_should_escape_path_char(unsigned char value);
 static void inox_url_write_hex(char* out, unsigned char value);
 
 static void inox_url_throw_failed(const char* message) {
+  if (inox::thrown()) {
+    return;
+  }
+
   inox::throw_value(inox::String(message == 0 ? "URL operation failed" : message));
 }
 

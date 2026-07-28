@@ -17,6 +17,8 @@ test('entrypoint package node:path владеет operations и runtime plan', a
 
   assert.ok(join)
   assert.deepEqual(join.cArgumentKinds, ['variadic-string-view-array', 'variadic-count'])
+  assert.equal(join.cFailureMode, 'thrown')
+  assert.equal(join.cPreservesPendingException, true)
   assert.ok(join.bindingAliases?.includes('node:path#module:node:path:default.posix.join'))
   assert.equal(win32?.diagnosticCode, 'INOX_NOT_IMPLEMENTED')
   assert.deepEqual(pathPackage.compilerPackage.runtimeRequirements[0], {

@@ -194,7 +194,7 @@ function constructorOperation(
     cArgumentKinds,
     resultTypeRef,
     cCallStyle: 'function',
-    cFailureMode: name === 'URLSearchParams' ? 'invalid-result' : 'thrown',
+    cFailureMode: 'thrown',
     minArgs,
     maxArgs,
     argumentChecks

@@ -21,6 +21,7 @@ test('entrypoint package node:url владеет object operations и runtime pl
 
   assert.deepEqual(constructor?.cArgumentKinds, ['value', 'optional-value', 'argument-presence', 'result-shape'])
   assert.deepEqual(searchParamsConstructor?.cArgumentKinds, ['optional-string-record-or-value'])
+  assert.equal(searchParamsConstructor?.cFailureMode, 'thrown')
   assert.ok(constructor?.bindingAliases?.includes('node:url#module:node:url:default.URL'))
   assert.equal(get?.receiverTypeId, 'node:url#URLSearchParams')
   assert.equal(get?.cExpression, 'get')

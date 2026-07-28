@@ -84,6 +84,8 @@ function callOperation(
     runtimeRequirements: [runtimeRequirement],
     cExpression: `path.${name}`,
     cArgumentKinds,
+    cFailureMode: 'thrown',
+    cPreservesPendingException: true,
     resultTypeRef,
     cResultMapping,
     constantValue: null
