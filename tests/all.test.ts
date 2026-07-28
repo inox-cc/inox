@@ -195,6 +195,8 @@ async function runHostedIntegrationTests(): Promise<void> {
     await import('./integration/runtime-value-uninitialized-raii-lowering.test.ts')
   const { assertRuntimeValueDeclarationsReuseTypedHelperContracts } =
     await import('./integration/runtime-value-type-check-lowering.test.ts')
+  const { assertRuntimeLogValuesUseDirectRaiiAssignment } =
+    await import('./integration/runtime-log-value-assignment-lowering.test.ts')
   const { assertNativeResultsInitializeVariablesDirectly } =
     await import('./integration/direct-native-variable-lowering.test.ts')
   const { assertNativeArraySpreadUsesPreparedFacade } =
@@ -473,6 +475,10 @@ async function runHostedIntegrationTests(): Promise<void> {
       assertRuntimeValueDeclarationsReuseTypedHelperContracts()
     })
 
+    await t.test('runtime-log-value-assignment-lowering', () => {
+      assertRuntimeLogValuesUseDirectRaiiAssignment()
+    })
+
     await t.test('direct-native-variable-lowering', () => {
       assertNativeResultsInitializeVariablesDirectly()
     })
@@ -511,6 +517,8 @@ async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<
   const { assertCliEntryModuleMain } = await import('./integration/cli-entry-module-main.test.ts')
   const { assertNativeCompilerUsesDirectNativeInitializers } =
     await import('./integration/direct-native-variable-lowering.test.ts')
+  const { assertNativeCompilerRuntimeLogValuesUseDirectRaiiAssignment } =
+    await import('./integration/runtime-log-value-assignment-lowering.test.ts')
   const { assertNativeCompilerArraySpreadUsesPreparedFacade } =
     await import('./integration/native-array-spread-lowering.test.ts')
   const { assertNativeCompilerBytesKeepCppFunctionBoundaries } =
@@ -535,6 +543,10 @@ async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<
 
     await t.test('native-direct-variable-lowering', async () => {
       await assertNativeCompilerUsesDirectNativeInitializers(compilerPath)
+    })
+
+    await t.test('native-runtime-log-value-assignment-lowering', async () => {
+      await assertNativeCompilerRuntimeLogValuesUseDirectRaiiAssignment(compilerPath)
     })
 
     await t.test('native-array-spread-lowering', async () => {

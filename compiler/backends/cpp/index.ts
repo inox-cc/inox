@@ -6438,7 +6438,6 @@ function emitRuntimeStringLogValue(source: RuntimeLogGetSource, context: CFuncti
 
   registerOwnedValue(context, value)
 
-  pushAll(lines, emitPrepareOwnedValueWrite(value))
   pushAll(lines, emitRuntimeLogGetLines(source, value, context))
   lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
 
@@ -6466,7 +6465,6 @@ function emitRuntimeNumberLogValue(
     formattedValue = `static_cast<double>(${value}.as.boolean ? 1 : 0)`
   }
 
-  pushAll(lines, emitPrepareOwnedValueWrite(value))
   pushAll(lines, emitRuntimeLogGetLines(source, value, context))
   lines.push(emitRuntimeValueCheck(value, tag, context))
 
@@ -6483,7 +6481,6 @@ function emitRuntimeBooleanLogValue(source: RuntimeLogGetSource, context: CFunct
 
   registerOwnedValue(context, value)
 
-  pushAll(lines, emitPrepareOwnedValueWrite(value))
   pushAll(lines, emitRuntimeLogGetLines(source, value, context))
   lines.push(emitRuntimeValueCheck(value, 'INOX_TAG_BOOL', context))
 
