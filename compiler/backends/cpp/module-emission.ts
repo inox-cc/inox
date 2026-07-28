@@ -646,6 +646,11 @@ export function emitCModuleSource(
   emitCModuleNativeClassForwardDeclarations(lines, context, declarationLines)
   pushCModuleLines(lines, declarationLines)
   emitCModuleValueFunctionFieldDefinitions(lines, moduleValues, context)
+  const omittedSyntheticDefaultConstructors = collectCModuleOmittedSyntheticDefaultConstructors(
+    context,
+    classDescriptorNames,
+    moduleValues
+  )
   pushCModuleLines(
     lines,
     emitCNativeClassDeclarations(
@@ -654,7 +659,8 @@ export function emitCModuleSource(
       classDescriptorNames,
       inlineConstructorDefinitions,
       inlineMethodDefinitions,
-      collectCModuleSourceClassNames(context)
+      collectCModuleSourceClassNames(context),
+      omittedSyntheticDefaultConstructors
     )
   )
   emitCModuleFunctionPointerRuntimeAdapterDefinitions(lines, context)
@@ -662,6 +668,63 @@ export function emitCModuleSource(
   pushCModuleLines(lines, bodyLines)
 
   return filterUnusedCPreludeIncludes(joinCModuleLines(lines))
+}
+
+function collectCModuleOmittedSyntheticDefaultConstructors(
+  context: CEmitContext,
+  descriptorNames: Set<string>,
+  moduleValues: CModuleValueDeclaration[]
+): Set<string> {
+  const omitted: Set<string> = new Set()
+
+  for (const info of context.classInfos.values()) {
+    if (
+      info.imported === true ||
+      info.node.exported === true ||
+      descriptorNames.has(info.name) ||
+      info.constructor === null ||
+      typeof info.constructor === 'undefined' ||
+      info.constructor.params.length === 0
+    ) {
+      continue
+    }
+
+    const valueType = cClassValueTypeName(info.name)
+
+    if (cModuleValuesContainType(moduleValues, valueType)) {
+      continue
+    }
+
+    if (cModuleClassFieldsContainClass(context, info.name)) {
+      continue
+    }
+
+    omitted.add(info.name)
+  }
+
+  return omitted
+}
+
+function cModuleValuesContainType(values: CModuleValueDeclaration[], valueType: string): boolean {
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (values[index].valueType === valueType) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function cModuleClassFieldsContainClass(context: CEmitContext, className: string): boolean {
+  for (const info of context.classInfos.values()) {
+    for (const field of info.fields) {
+      if (field.className === className) {
+        return true
+      }
+    }
+  }
+
+  return false
 }
 
 function emitCModuleFunctionPointerRuntimeAdapterDefinitions(lines: string[], context: CEmitContext): void {

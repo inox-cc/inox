@@ -233,6 +233,8 @@ async function runHostedIntegrationTests(): Promise<void> {
     await import('./integration/collection-nonthrowing-query-lowering.test.ts')
   const { assertPureModuleConstsUseStaticInitializers } =
     await import('./integration/module-compile-time-const-lowering.test.ts')
+  const { assertNativeClassDefaultConstructorIsOnlyEmittedWhenNeeded } =
+    await import('./integration/native-class-default-constructor-lowering.test.ts')
   const { assertUrlRuntimeUsesStringFacade, assertUrlSearchParamsLowersRecordLiteralsDirectly } =
     await import('./integration/url-cpp-object-lowering.test.ts')
   const { assertRaiiFunctionsUseDirectReturns } = await import('./integration/raii-exit-lowering.test.ts')
@@ -491,6 +493,10 @@ async function runHostedIntegrationTests(): Promise<void> {
 
     await t.test('module-compile-time-const-lowering', () => {
       assertPureModuleConstsUseStaticInitializers()
+    })
+
+    await t.test('native-class-default-constructor-lowering', () => {
+      assertNativeClassDefaultConstructorIsOnlyEmittedWhenNeeded()
     })
 
     await t.test('url-cpp-object-lowering', () => {

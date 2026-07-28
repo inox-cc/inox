@@ -913,7 +913,8 @@ export function emitCNativeClassDeclarations(
   descriptorNames: CClassDescriptorNameSet,
   inlineConstructorDefinitions: CClassInlineDefinitionMap | null = null,
   inlineMethodDefinitions: CClassInlineDefinitionMap | null = null,
-  includedClassNames: Set<string> | null = null
+  includedClassNames: Set<string> | null = null,
+  omittedSyntheticDefaultConstructors: Set<string> | null = null
 ): string[] {
   const lines: string[] = []
   const infos = orderCNativeClassInfos(
@@ -968,7 +969,10 @@ export function emitCNativeClassDeclarations(
     const inlineConstructorDefinition = inlineConstructorDefinitions?.get(info.name)
 
     if (constructorPrototype !== null && typeof constructorPrototype !== 'undefined') {
-      if (!classHasNoArgConstructor(info)) {
+      if (
+        !classHasNoArgConstructor(info) &&
+        (omittedSyntheticDefaultConstructors === null || !omittedSyntheticDefaultConstructors.has(info.name))
+      ) {
         lines.push(`  ${emitCClassDefaultConstructor(info, context)}`)
       }
 

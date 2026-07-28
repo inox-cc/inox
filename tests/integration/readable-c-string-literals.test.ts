@@ -129,6 +129,7 @@ f.test()
 
   assert.match(entryLocalSource, /double v = 123;/)
   assert.match(entryLocalSource, /Foo f\{inox::String\("x", 1\)\};/)
+  assert.doesNotMatch(entryLocalSource, /Foo\(\)/)
   assert.doesNotMatch(entryLocalSource, /static double v/)
   assert.doesNotMatch(entryLocalSource, /static Foo f/)
 
