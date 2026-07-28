@@ -8,7 +8,6 @@ import type { AnyNode, SourceLocation } from '../../../types.ts'
 import { isRuntimeFunctionType, normalizeFunctionType } from '../async/callbacks.ts'
 import type { CFunctionContextWithDependencies } from '../context.ts'
 import {
-  emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
   emitStatusCheck,
   narrowNullableScalars,
@@ -2927,7 +2926,6 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
 
     registerOwnedValue(context, errorValue)
     pushAllLines(lines, value.lines)
-    pushAllLines(lines, emitPrepareOwnedValueWrite(errorValue))
     lines.push(`${errorValue} = ${value.expression};`)
 
     const typeCheck = throwableValueMismatchCondition(errorValue, valueType, isExceptionValue)
@@ -2955,7 +2953,6 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
 
   const lines: string[] = []
   pushAllLines(lines, value.lines)
-  pushAllLines(lines, emitPrepareOwnedValueWrite('inox_error'))
   lines.push(`inox_error = ${value.expression};`)
 
   const typeCheck = throwableValueMismatchCondition('inox_error', valueType, isExceptionValue)
@@ -3012,10 +3009,12 @@ function emitThrowableObjectValueExpression(value: PreparedExpression, context: 
 
   pushAllLines(lines, value.lines)
   registerOwnedValue(context, temp)
-  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
     emitStatusCheck(
-      `inox_class_instance_ref_copy(&inox_default_allocator, &${emitCClassDescriptorNameForClassName(context, className)}, &${value.expression}, &${temp})`,
+      `inox_class_instance_ref_copy(&inox_default_allocator, &${emitCClassDescriptorNameForClassName(
+        context,
+        className
+      )}, &${value.expression}, ${temp}.out())`,
       context
     )
   )

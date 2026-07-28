@@ -13,7 +13,6 @@ import type { CEmitContextWithDependencies, CFunctionContextWithDependencies } f
 import {
   cloneCStringSet,
   emitFailureStatement,
-  emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
   emitStatusCheck,
   nextCName,
@@ -1814,10 +1813,12 @@ function emitRuntimeObjectFunctionFieldCall(
   if (callee.fieldIndex !== -1) {
     calleeName = nextCName(context, 'inox_callback')
     registerOwnedValue(context, calleeName)
-    appendLines(lines, emitPrepareOwnedValueWrite(calleeName))
     lines.push(
       emitStatusCheck(
-        `inox_object_get_known(${deps.emitObjectValueReference(callee.objectName, context)}, ${callee.fieldIndex}, &${calleeName})`,
+        `inox_object_get_known(${deps.emitObjectValueReference(
+          callee.objectName,
+          context
+        )}, ${callee.fieldIndex}, ${calleeName}.out())`,
         context
       )
     )
@@ -1832,15 +1833,16 @@ function emitRuntimeObjectFunctionFieldCall(
 
   const out = nextCName(context, 'inox_callback_out')
   registerOwnedValue(context, out)
-  appendLines(lines, emitPrepareOwnedValueWrite(out))
 
   if (args.length === 0) {
-    lines.push(emitStatusCheck(`inox_callback_call(${calleeName}, 0, 0, &${out})`, context))
+    lines.push(emitStatusCheck(`inox_callback_call(${calleeName}, 0, 0, ${out}.out())`, context))
   } else {
     const argArray = nextCName(context, 'inox_callback_args')
 
     lines.push(`inox_value ${argArray}[] = { ${joinStrings(args, ', ')} };`)
-    lines.push(emitStatusCheck(`inox_callback_call(${calleeName}, ${argArray}, ${args.length}, &${out})`, context))
+    lines.push(
+      emitStatusCheck(`inox_callback_call(${calleeName}, ${argArray}, ${args.length}, ${out}.out())`, context)
+    )
   }
 
   return {
@@ -2554,8 +2556,6 @@ function emitPreparedThrowingCallExpression(
   } else {
     deps.registerErrorChannel(context)
   }
-  appendLines(lines, emitPrepareOwnedValueWrite('inox_error'))
-
   if (returnType !== 'void') {
     const returnCppType = libraryNativeBoundaryCppType(
       returnType,
@@ -2589,7 +2589,7 @@ function emitPreparedThrowingCallExpression(
 
   appendCallReturnFunctionCompanionArgs(callArgs, returnFunctionCompanions)
 
-  callArgs.push('&inox_error')
+  callArgs.push('inox_error.out()')
 
   const status = nextCName(context, 'inox_call_status')
 
@@ -3377,7 +3377,6 @@ function emitPreparedOptionalRuntimeObjectFieldValueExpression(
 
   registerOwnedValue(context, value)
   appendLines(lines, object.lines)
-  appendLines(lines, emitPrepareOwnedValueWrite(value))
   appendLines(lines, emitRuntimeObjectGetValueLines(object.expression, key, value, context))
 
   return {
@@ -4723,7 +4722,6 @@ function emitPreparedRuntimeNumberValue(
   registerOwnedValue(context, value)
   const lines: string[] = []
 
-  appendLines(lines, emitPrepareOwnedValueWrite(value))
   appendLines(lines, getLines)
 
   return {
@@ -5202,12 +5200,7 @@ export function emitCValueExpression(
     const lines: string[] = []
 
     appendLines(lines, call.lines)
-    appendLines(lines, emitPrepareOwnedValueWrite(temp))
     lines.push(`${temp} = ${call.expression};`)
-
-    if (isOwnedRuntimeValueName(call.expression, context)) {
-      lines.push(`inox_retain(${temp});`)
-    }
 
     if (nativeValidExpression !== null) {
       const valid = nativeValidExpression.split('$value').join(temp)
@@ -5356,14 +5349,10 @@ function emitCConditionalValueExpression(
   appendLines(lines, test.lines)
   lines.push(`if ${emitCConditionClause(test.expression)} {`)
   appendPrefixedLines(lines, consequent.lines, '  ')
-  appendPrefixedLines(lines, emitPrepareOwnedValueWrite(temp), '  ')
   lines.push(`  ${temp} = ${consequent.expression};`)
-  appendPrefixedLines(lines, retainConditionalBranchValueExpression(consequent.expression, context), '  ')
   lines.push('} else {')
   appendPrefixedLines(lines, alternate.lines, '  ')
-  appendPrefixedLines(lines, emitPrepareOwnedValueWrite(temp), '  ')
   lines.push(`  ${temp} = ${alternate.expression};`)
-  appendPrefixedLines(lines, retainConditionalBranchValueExpression(alternate.expression, context), '  ')
   lines.push('}')
 
   if (nativeValidExpression !== null) {
@@ -5417,14 +5406,6 @@ function nativeClassReferenceValueType(name: string, context: CFunctionContext):
   }
 
   return cClassValueTypeName(registeredClassName)
-}
-
-function retainConditionalBranchValueExpression(expression: string, context: CFunctionContext): string[] {
-  if (isOwnedRuntimeValueName(expression, context)) {
-    return [`inox_retain(${expression});`]
-  }
-
-  return []
 }
 
 function emitPreparedScalarRuntimeValueExpression(

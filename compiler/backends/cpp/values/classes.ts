@@ -19,7 +19,6 @@ import type {
 } from '../context.ts'
 import {
   emitFailureStatement,
-  emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
   emitStatusCheck,
   nextCName,
@@ -398,10 +397,12 @@ export function emitPreparedClassInstanceRefValueExpression(
   const lines: string[] = []
 
   registerOwnedValue(context, temp)
-  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
     emitStatusCheck(
-      `inox_class_instance_ref_copy(&inox_default_allocator, &${emitCClassDescriptorNameForClassName(context, className)}, &${value.expression}, &${temp})`,
+      `inox_class_instance_ref_copy(&inox_default_allocator, &${emitCClassDescriptorNameForClassName(
+        context,
+        className
+      )}, &${value.expression}, ${temp}.out())`,
       context
     )
   )
@@ -2680,8 +2681,7 @@ function emitCClassRuntimeObjectInitLines(
   lines.push(`  ${info.fields.length},`)
   lines.push(`  ${fieldsName}`)
   lines.push('};')
-  pushAllLines(lines, emitPrepareOwnedValueWrite(target))
-  lines.push(emitStatusCheck(`inox_object_new(&inox_default_allocator, &${shapeName}, &${target})`, context))
+  lines.push(emitStatusCheck(`inox_object_new(&inox_default_allocator, &${shapeName}, ${target}.out())`, context))
 
   const constructorArgs = mapClassConstructorArgs(expression, info)
 
@@ -3264,7 +3264,6 @@ function emitKnownPreparedClassMethodCallExpression(
     registerOwnedValue(context, value)
     const lines: string[] = []
     pushAllLines(lines, callLines)
-    pushAllLines(lines, emitPrepareOwnedValueWrite(value))
     lines.push(`${value} = ${callExpression};`)
 
     const alternativeValidExpressions = runtimeTypeAlternativeValidExpressions(
@@ -3334,8 +3333,6 @@ function emitPreparedThrowingClassMethodCallExpression(
   } else {
     registerClassMethodErrorChannel(context)
   }
-  pushAllLines(lines, emitPrepareOwnedValueWrite('inox_error'))
-
   if (method.returnType !== 'void') {
     result = nextCName(context, 'inox_method_result')
     const returnCppType = libraryNativeBoundaryCppType(
@@ -3360,7 +3357,7 @@ function emitPreparedThrowingClassMethodCallExpression(
     }
   }
 
-  callArgs.push('&inox_error')
+  callArgs.push('inox_error.out()')
 
   const status = nextCName(context, 'inox_method_status')
   let callExpression = `${call.objectExpression}${call.accessOperator}${emitCClassMethodIdentifier(method.name)}(${joinStrings(

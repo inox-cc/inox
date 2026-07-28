@@ -2,7 +2,6 @@ import type { AnyNode } from '../../types.ts'
 import { compilerLibraryNativeCppTypeIsAssignableToTypeId } from '../../extensions/library-set.ts'
 import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
 import {
-  emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
   nextCName,
   registerEventLoop,
@@ -1348,9 +1347,7 @@ function emitPreparedCompilerLibraryObjectCall(
     }
   }
 
-  if (cppType === 'inox::Value') {
-    pushLines(lines, emitPrepareOwnedValueWrite(out))
-  } else {
+  if (cppType !== 'inox::Value') {
     lines.push(`auto ${out} = ${callExpression};`)
   }
 

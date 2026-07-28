@@ -5,7 +5,6 @@ import {
   isRuntimeFunctionType
 } from '../async/callbacks.ts'
 import {
-  emitPrepareOwnedValueWrite,
   emitFailureStatement,
   emitRuntimeTypeCheck,
   emitStatusCheck,
@@ -1269,7 +1268,6 @@ function emitPreparedObjectExpressionFieldValueExpression(
   if (isOptionalChainContinuationReceiver(objectExpression)) {
     registerOwnedValue(context, temp)
     appendLines(lines, object.lines)
-    appendLines(lines, emitPrepareOwnedValueWrite(temp))
     lines.push(`if (${object.expression}.tag == INOX_TAG_NULL || ${object.expression}.tag == INOX_TAG_UNDEFINED) {`)
     lines.push(`  ${temp} = inox_null_value();`)
     lines.push('} else {')
@@ -1377,7 +1375,6 @@ function emitPreparedDynamicObjectFieldValueExpression(
   if (isOptionalChainContinuationReceiver(objectExpression)) {
     registerOwnedValue(context, temp)
     appendLines(lines, object.lines)
-    appendLines(lines, emitPrepareOwnedValueWrite(temp))
     lines.push(`if (${object.expression}.tag == INOX_TAG_NULL || ${object.expression}.tag == INOX_TAG_UNDEFINED) {`)
     lines.push(`  ${temp} = inox_null_value();`)
     lines.push('} else {')
@@ -1782,11 +1779,7 @@ function emitObjectShapeFunctionFieldVariableDeclaration(
       (source.pathName === null || typeof source.pathName === 'undefined')
     ) {
       registerOwnedValue(context, name)
-      const lines: string[] = []
-
-      appendLines(lines, emitPrepareOwnedValueWrite(name))
-      lines.push(`${name} = inox_null_value();`)
-      return lines
+      return [`${name} = inox_null_value();`]
     }
 
     return emitRuntimeObjectShapeFunctionFieldVariableDeclaration(name, field, source, value, context, dependencies)
@@ -1957,22 +1950,12 @@ function emitRuntimeObjectShapeFunctionFieldVariableDeclaration(
   }
 
   if (field.optional === true) {
-    const lines: string[] = []
-
-    appendLines(lines, emitPrepareOwnedValueWrite(name))
-    lines.push(`${name} = inox_null_value();`)
-
-    return lines
+    return [`${name} = inox_null_value();`]
   }
 
   context.diagnostics.push(diagnostic('INOX_MISSING_FIELD', `missing field ${field.name}`, source.loc))
 
-  const lines: string[] = []
-
-  appendLines(lines, emitPrepareOwnedValueWrite(name))
-  lines.push(`${name} = inox_undefined_value();`)
-
-  return lines
+  return []
 }
 
 function emitKnownObjectFieldValueCheck(

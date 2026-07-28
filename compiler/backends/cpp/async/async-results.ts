@@ -357,7 +357,6 @@ export function resolveCAsyncFunctionAwaitValueType(
 import { diagnostic } from '../../../diagnostics.ts'
 import { collectIrTopLevelNodeEntries } from '../../../ir.ts'
 import {
-  emitPrepareOwnedValueWrite,
   emitEventLoopReference,
   emitFailureStatement,
   emitRuntimeTypeCheck,
@@ -980,10 +979,12 @@ function emitPreparedAsyncResultRuntimeArgumentValue(
 
   appendLines(lines, value.lines)
   registerOwnedValue(context, temp)
-  appendLines(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
     emitStatusCheck(
-      `inox_class_instance_ref_copy(&inox_default_allocator, &${emitCClassDescriptorNameForClassName(context, className)}, &${value.expression}, &${temp})`,
+      `inox_class_instance_ref_copy(&inox_default_allocator, &${emitCClassDescriptorNameForClassName(
+        context,
+        className
+      )}, &${value.expression}, ${temp}.out())`,
       context
     )
   )

@@ -4,7 +4,6 @@ import type { AnyNode, Diagnostic } from '../../../types.ts'
 import {
   cloneCStringSet,
   emitFailureStatement,
-  emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
   nextCName,
   registerOwnedValue
@@ -775,12 +774,7 @@ export function emitNullableRuntimeValueVariableDeclaration(
   }
 
   if (statement.init === null || typeof statement.init === 'undefined' || statement.init.type === 'NullLiteral') {
-    const lines: string[] = []
-
-    appendLines(lines, emitPrepareOwnedValueWrite(statement.name))
-    lines.push(`${emitCIdentifier(statement.name)} = inox_null_value();`)
-
-    return lines
+    return [`${emitCIdentifier(statement.name)} = inox_null_value();`]
   }
 
   const value = emitNullableRuntimeValueInitializer(statement, valueType, context, deps)
@@ -891,7 +885,6 @@ function emitCOptionalDynamicObjectMemberValueExpression(
 
   registerOwnedValue(context, out)
   appendLines(lines, object.lines)
-  appendLines(lines, emitPrepareOwnedValueWrite(out))
   lines.push(`if (${object.expression}.tag != INOX_TAG_NULL && ${object.expression}.tag != INOX_TAG_UNDEFINED) {`)
   lines.push(`  ${out} = inox::get(${object.expression}, ${cStringLiteral(expression.property)});`)
   lines.push(`  ${emitRuntimeTypeCheck('inox::thrown()', context)}`)
@@ -993,10 +986,7 @@ function emitCOptionalObjectReadValueExpression(
   registerOwnedValue(context, temp)
 
   appendLines(lines, object.lines)
-  appendLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(`if (${object.expression}.tag == INOX_TAG_NULL || ${object.expression}.tag == INOX_TAG_UNDEFINED) {`)
-  lines.push(`  ${temp} = inox_undefined_value();`)
-  lines.push('} else {')
+  lines.push(`if (${object.expression}.tag != INOX_TAG_NULL && ${object.expression}.tag != INOX_TAG_UNDEFINED) {`)
   lines.push(`  ${typeCheck}`)
   appendPrefixedLines(lines, getLines, '  ')
 

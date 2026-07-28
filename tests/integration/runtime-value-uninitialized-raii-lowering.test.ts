@@ -49,7 +49,7 @@ console.log(bindingName(true))
   const source = generatedTextFile(files, 'src/index.cc').code
 
   assert.match(source, /inox::Value binding;/)
-  assert.match(source, /\n    binding = inox_undefined_value\(\);/)
+  assert.doesNotMatch(source, /\n    binding = inox_undefined_value\(\);/)
   assert.doesNotMatch(source, /inox_value binding = inox_undefined_value\(\);/)
 }
 

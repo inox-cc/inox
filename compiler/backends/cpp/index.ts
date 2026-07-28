@@ -2577,7 +2577,7 @@ function emitUninitializedScalarVariableDeclaration(statement: AnyNode, context:
 
   if (isManagedRuntimeReturnType(inferred) || isOpaqueRuntimeValueType(inferred)) {
     registerOwnedValue(context, statement.name)
-    return [`${emitCIdentifier(statement.name)} = inox_undefined_value();`]
+    return []
   }
 
   if (inferred === 'async-result') {
@@ -3134,7 +3134,7 @@ function emitModuleObjectFunctionFieldAssignmentsFromShape(
         }
       } else if (isRuntimeFunctionType(field.functionType)) {
         if (value === null || typeof value === 'undefined') {
-          pushAll(lines, emitUndefinedRuntimeCallbackValueInto(fieldName))
+          pushAll(lines, emitUndefinedRuntimeCallbackValueInto(fieldName, context))
         } else {
           pushAll(lines, emitRuntimeCallbackValueInto(value, field.functionType, fieldName, context))
         }
@@ -3340,7 +3340,7 @@ function emitModuleObjectFunctionFieldCopyAssignment(
     }
 
     if (isRuntimeFunctionType(targetField.functionType)) {
-      return emitUndefinedRuntimeCallbackValueInto(targetName)
+      return emitUndefinedRuntimeCallbackValueInto(targetName, context)
     }
 
     return []
@@ -3413,13 +3413,7 @@ function objectFunctionFieldSeenTypes(objectName: string, context: CFunctionCont
 }
 
 function emitRuntimeCallbackValueCopyInto(sourceName: string, out: string): string[] {
-  const lines: string[] = []
-
-  pushAll(lines, emitPrepareOwnedValueWrite(out))
-  lines.push(`${out} = ${sourceName};`)
-  lines.push(`inox_retain(${out});`)
-
-  return lines
+  return [`inox_retain(${sourceName});`, `inox_release(${out});`, `${out} = ${sourceName};`]
 }
 
 function emitAdaptedModuleFunctionPointerExpression(
@@ -3477,7 +3471,7 @@ function emitModuleObjectFunctionFieldDefaultAssignments(objectName: string, fie
       if (isPlainObjectFunctionField(field)) {
         lines.push(`${emitCObjectFunctionFieldName(objectName, field.name)} = 0;`)
       } else if (isRuntimeFunctionType(field.functionType)) {
-        pushAll(lines, emitUndefinedRuntimeCallbackValueInto(emitCObjectFunctionFieldName(objectName, field.name)))
+        pushAll(lines, emitUndefinedRawRuntimeCallbackValueInto(emitCObjectFunctionFieldName(objectName, field.name)))
       }
     } else if (
       field.valueType === 'object' &&
@@ -3594,8 +3588,6 @@ function emitNullableRuntimeValueAssignment(expression: AnyNode, context: CFunct
     lines.push(line)
   }
 
-  lines.push(`inox_retain(${temp});`)
-  lines.push(`inox_release(${reference});`)
   lines.push(`${reference} = ${temp};`)
 
   const narrowingLines: string[] = clearNullableScalarNarrowing(name, context)
@@ -3875,7 +3867,6 @@ function emitObjectMemberVariableDeclaration(
     runtimeValueExpression = `${temp}.as.boolean ? 1 : 0`
   }
 
-  pushAll(lines, emitPrepareOwnedValueWrite(temp))
   pushAll(lines, emitObjectMemberGetLines(objectName, key, temp, context))
   lines.push(`double ${emitCIdentifier(statement.name)} = ${runtimeValueExpression};`)
 
@@ -3894,7 +3885,6 @@ function emitObjectBytesMemberVariableDeclaration(
   registerOwnedValue(context, statement.name)
   const lines: string[] = []
 
-  pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
   pushAll(lines, emitObjectMemberGetLines(objectName, key, statement.name, context))
   lines.push(
     emitRuntimeTypeCheck(
@@ -3918,7 +3908,6 @@ function emitObjectObjectMemberVariableDeclaration(
   registerOwnedValue(context, statement.name)
   const lines: string[] = []
 
-  pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
   pushAll(lines, emitObjectMemberGetLines(objectName, key, statement.name, context))
 
   if (libraryNativeCppType(member.shape) === null) {
@@ -3957,7 +3946,6 @@ function emitObjectStringMemberVariableDeclaration(
 
   registerOwnedValue(context, temp)
 
-  pushAll(lines, emitPrepareOwnedValueWrite(temp))
   pushAll(lines, emitObjectMemberGetLines(objectName, key, temp, context))
   lines.push(emitRuntimeTypeCheck(`${temp}.tag != INOX_TAG_STRING || ${temp}.as.ref == 0`, context))
   lines.push(`inox_string* ${emitCIdentifier(statement.name)} = (inox_string*)${temp}.as.ref;`)
@@ -4421,12 +4409,7 @@ function emitPreparedNullableScalarRuntimeValueExpression(
     registerOwnedValue(context, temp)
 
     pushAll(lines, call.lines)
-    pushAll(lines, emitPrepareOwnedValueWrite(temp))
     lines.push(`${temp} = ${call.expression};`)
-
-    if (isOwnedRuntimeValueName(call.expression, context)) {
-      lines.push(`inox_retain(${temp});`)
-    }
 
     pushAll(lines, emitRuntimeNullableValueCheck(temp, expectedTag, context))
 
@@ -4483,15 +4466,12 @@ function emitPreparedNullableConditionalValueExpression(
 
   registerOwnedValue(context, temp)
   pushAll(lines, test.lines)
-  pushAll(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(`if ${emitCConditionClause(test.expression)} {`)
   pushIndented(lines, consequent.lines, '  ')
   lines.push(`  ${temp} = ${consequent.expression};`)
-  lines.push(`  inox_retain(${temp});`)
   lines.push('} else {')
   pushIndented(lines, alternate.lines, '  ')
   lines.push(`  ${temp} = ${alternate.expression};`)
-  lines.push(`  inox_retain(${temp});`)
   lines.push('}')
   pushAll(lines, emitRuntimeNullableValueCheck(temp, expectedTag, context))
 
@@ -5336,16 +5316,13 @@ function emitCNullishCoalescingValueExpression(expression: AnyNode, context: CFu
   registerOwnedValue(context, temp)
 
   pushAll(lines, left.lines)
-  pushAll(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(`if (${left.expression}.tag == INOX_TAG_NULL || ${left.expression}.tag == INOX_TAG_UNDEFINED) {`)
   pushIndented(lines, right.lines, '  ')
   lines.push(`  ${temp} = ${right.expression};`)
   pushIndented(lines, emitRuntimeNullableValueCheck(temp, expectedTag, context), '  ')
-  lines.push(`  inox_retain(${temp});`)
   lines.push('} else {')
   lines.push(`  ${temp} = ${left.expression};`)
   pushIndented(lines, emitRuntimeNullableValueCheck(temp, expectedTag, context), '  ')
-  lines.push(`  inox_retain(${temp});`)
   lines.push('}')
 
   return {
@@ -6535,10 +6512,8 @@ function emitRuntimeExceptionValue(expression: AnyNode, context: CFunctionContex
   registerOwnedValue(context, messageValue)
 
   pushAll(lines, object.lines)
-  pushAll(lines, emitPrepareOwnedValueWrite(nameValue))
-  pushAll(lines, emitPrepareOwnedValueWrite(messageValue))
-  lines.push(emitStatusCheck(`inox_object_get_known(${object.expression}, 0, &${nameValue})`, context))
-  lines.push(emitStatusCheck(`inox_object_get_known(${object.expression}, 1, &${messageValue})`, context))
+  lines.push(emitStatusCheck(`inox_object_get_known(${object.expression}, 0, ${nameValue}.out())`, context))
+  lines.push(emitStatusCheck(`inox_object_get_known(${object.expression}, 1, ${messageValue}.out())`, context))
   lines.push(emitRuntimeTypeCheck(`${nameValue}.tag != INOX_TAG_STRING || ${nameValue}.as.ref == 0`, context))
   lines.push(emitRuntimeTypeCheck(`${messageValue}.tag != INOX_TAG_STRING || ${messageValue}.as.ref == 0`, context))
   lines.push(`inox_string* ${nameString} = (inox_string*)${nameValue}.as.ref;`)
@@ -6758,7 +6733,6 @@ function emitPreparedAsyncFunctionAsyncResultCallExpression(
   pushAll(lines, call.lines)
 
   if (managedValue !== null && typeof managedValue !== 'undefined') {
-    pushAll(lines, emitPrepareOwnedValueWrite(managedValue))
     lines.push(`${managedValue} = ${call.expression};`)
 
     if (valueCheck !== '') {
@@ -6918,10 +6892,10 @@ function emitPreparedThrowingAsyncFunctionAsyncResultCallExpression(
   }
 
   if (result !== null && typeof result !== 'undefined') {
-    args.push(`&${result}`)
+    args.push(managedResult ? `${result}.out()` : `&${result}`)
   }
 
-  args.push('&inox_error')
+  args.push('inox_error.out()')
 
   if (options.owned !== false) {
     registerOwnedAsyncResult(context, out, valueType, rejectionValueType)
@@ -6933,9 +6907,7 @@ function emitPreparedThrowingAsyncFunctionAsyncResultCallExpression(
 
   const resultPreparationLines: string[] = []
   if (result !== null && typeof result !== 'undefined') {
-    if (managedResult) {
-      pushAll(resultPreparationLines, emitPrepareOwnedValueWrite(result))
-    } else {
+    if (!managedResult) {
       resultPreparationLines.push(`double ${result} = 0;`)
     }
   }
@@ -6973,7 +6945,6 @@ function emitPreparedThrowingAsyncFunctionAsyncResultCallExpression(
   const lines: string[] = []
 
   pushAll(lines, prepared.lines)
-  pushAll(lines, emitPrepareOwnedValueWrite('inox_error'))
   pushAll(lines, resultPreparationLines)
   lines.push(`inox_status ${status} = ${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')});`)
   lines.push(`if (${status} == INOX_ERR_THROW) {`)
@@ -7595,7 +7566,6 @@ function emitCAsyncFunctionAwaitExpression(expression: AnyNode, context: CFuncti
   const valueCheck = emitRuntimeValueCheck(value, valueTag, context)
 
   pushAll(lines, call.lines)
-  pushAll(lines, emitPrepareOwnedValueWrite(value))
   lines.push(`${value} = ${resultExpression};`)
 
   if (valueCheck !== '') {
@@ -7760,14 +7730,7 @@ function emitRuntimeCallbackValueInto(
     expression.path.length === 1 &&
     context.runtimeCallbacks.has(expression.path[0])
   ) {
-    const name = expression.path[0]
-    const lines: string[] = []
-
-    pushAll(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(`${out} = ${name};`)
-    lines.push(`inox_retain(${out});`)
-
-    return lines
+    return emitRuntimeCallbackReferenceValueInto(expression.path[0], out, context)
   }
 
   const objectField = objectFunctionFieldReference(expression, context)
@@ -7778,13 +7741,7 @@ function emitRuntimeCallbackValueInto(
     !context.classInstanceTypes.has(objectField.objectName) &&
     isRuntimeObjectFunctionField(objectField.field, objectFunctionFieldSeenTypes(objectField.objectName, context))
   ) {
-    const lines: string[] = []
-
-    pushAll(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(`${out} = ${objectField.name};`)
-    lines.push(`inox_retain(${out});`)
-
-    return lines
+    return emitRuntimeCallbackReferenceValueInto(objectField.name, out, context)
   }
 
   if (expression.type === 'ArrowFunctionExpression') {
@@ -7799,7 +7756,7 @@ function emitRuntimeCallbackValueInto(
           expression.loc
         )
       )
-      return emitUndefinedRuntimeCallbackValueInto(out)
+      return emitUndefinedRuntimeCallbackValueInto(out, context)
     }
 
     return emitRuntimeArrowCallbackValueInto(wrapper, out, context)
@@ -7816,7 +7773,7 @@ function emitRuntimeCallbackValueInto(
       context,
       diagnostic('INOX_C_FUNCTION_VALUE', 'runtime C callbacks currently require a named non-capturing function', loc)
     )
-    return emitUndefinedRuntimeCallbackValueInto(out)
+    return emitUndefinedRuntimeCallbackValueInto(out, context)
   }
 
   const functionName = expression.path[0]
@@ -7831,17 +7788,17 @@ function emitRuntimeCallbackValueInto(
         expression.loc
       )
     )
-    return emitUndefinedRuntimeCallbackValueInto(out)
+    return emitUndefinedRuntimeCallbackValueInto(out, context)
   }
 
   const callbackContext = '0'
 
   const lines: string[] = []
+  const target = prepareRuntimeCallbackOutTarget(out, context, lines)
 
-  pushAll(lines, emitPrepareOwnedValueWrite(out))
   lines.push(
     emitStatusCheck(
-      `inox_callback_new(&inox_default_allocator, ${wrapper.name}, ${callbackContext}, 0, &${out})`,
+      `inox_callback_new(&inox_default_allocator, ${wrapper.name}, ${callbackContext}, 0, ${target})`,
       context
     )
   )
@@ -7849,13 +7806,37 @@ function emitRuntimeCallbackValueInto(
   return lines
 }
 
-function emitUndefinedRuntimeCallbackValueInto(out: string): string[] {
-  const lines: string[] = []
+function emitUndefinedRuntimeCallbackValueInto(out: string, context: CFunctionContext): string[] {
+  if (context.ownedValues.includes(out)) {
+    return [`${out} = inox_undefined_value();`]
+  }
 
-  pushAll(lines, emitPrepareOwnedValueWrite(out))
-  lines.push(`${out} = inox_undefined_value();`)
+  return emitUndefinedRawRuntimeCallbackValueInto(out)
+}
 
-  return lines
+function emitUndefinedRawRuntimeCallbackValueInto(out: string): string[] {
+  return [`inox_release(${out});`, `${out} = inox_undefined_value();`]
+}
+
+function emitRuntimeCallbackReferenceValueInto(
+  source: string,
+  out: string,
+  context: CFunctionContext
+): string[] {
+  if (context.ownedValues.includes(out)) {
+    return [`${out} = ${source};`]
+  }
+
+  return [`inox_retain(${source});`, `inox_release(${out});`, `${out} = ${source};`]
+}
+
+function prepareRuntimeCallbackOutTarget(out: string, context: CFunctionContext, lines: string[]): string {
+  if (context.ownedValues.includes(out)) {
+    return `${out}.out()`
+  }
+
+  pushAll(lines, emitPrepareOwnedValueWrite(out, 'raw'))
+  return `&${out}`
 }
 
 function isSupportedRuntimeArrowCaptureValueType(valueType: string): boolean {
@@ -7871,8 +7852,7 @@ function emitRuntimeArrowCallbackValueInto(
 ): string[] {
   const lines: string[] = []
   const captures = callbackContextWrapperCaptures(wrapper)
-
-  pushAll(lines, emitPrepareOwnedValueWrite(out))
+  const target = prepareRuntimeCallbackOutTarget(out, context, lines)
 
   for (const capture of captures) {
     if (capture.mutable && !isSupportedMutableRuntimeArrowCapture(capture, context)) {
@@ -7899,7 +7879,7 @@ function emitRuntimeArrowCallbackValueInto(
   }
 
   if (!hasRuntimeArrowCallbackContext(wrapper)) {
-    lines.push(emitStatusCheck(`inox_callback_new(&inox_default_allocator, ${wrapper.name}, 0, 0, &${out})`, context))
+    lines.push(emitStatusCheck(`inox_callback_new(&inox_default_allocator, ${wrapper.name}, 0, 0, ${target})`, context))
     return lines
   }
 
@@ -7922,7 +7902,7 @@ function emitRuntimeArrowCallbackValueInto(
 
   const finalizerName = callbackContextWrapperFinalizerName(wrapper)
   lines.push(
-    `if (inox_callback_new(&inox_default_allocator, ${wrapper.name}, ${contextName}, ${finalizerName}, &${out}) != INOX_OK) {`
+    `if (inox_callback_new(&inox_default_allocator, ${wrapper.name}, ${contextName}, ${finalizerName}, ${target}) != INOX_OK) {`
   )
   lines.push(`  ${finalizerName}(${contextName});`)
   lines.push(`  ${emitFailureStatement(context)}`)
@@ -8012,15 +7992,14 @@ function emitRuntimeCallbackCall(
 
   const out = nextCName(context, 'inox_callback_out')
   registerOwnedValue(context, out)
-  pushAll(lines, emitPrepareOwnedValueWrite(out))
 
   if (args.length === 0) {
-    lines.push(emitStatusCheck(`inox_callback_call(${callee}, 0, 0, &${out})`, context))
+    lines.push(emitStatusCheck(`inox_callback_call(${callee}, 0, 0, ${out}.out())`, context))
   } else {
     const argArray = nextCName(context, 'inox_callback_args')
 
     lines.push(`inox_value ${argArray}[] = { ${joinStrings(args, ', ')} };`)
-    lines.push(emitStatusCheck(`inox_callback_call(${callee}, ${argArray}, ${args.length}, &${out})`, context))
+    lines.push(emitStatusCheck(`inox_callback_call(${callee}, ${argArray}, ${args.length}, ${out}.out())`, context))
   }
 
   return {
@@ -8061,14 +8040,13 @@ function emitOptionalRuntimeCallbackCallExpression(expression: AnyNode, context:
 
   const out = nextCName(context, 'inox_callback_out')
   registerOwnedValue(context, out)
-  pushIndented(lines, emitPrepareOwnedValueWrite(out), '  ')
 
   if (args.length === 0) {
-    const call = `inox_callback_call(${callee}, 0, 0, &${out})`
+    const call = `inox_callback_call(${callee}, 0, 0, ${out}.out())`
     lines.push(`  ${emitStatusCheck(call, context)}`)
   } else {
     const argArray = nextCName(context, 'inox_callback_args')
-    const call = `inox_callback_call(${callee}, ${argArray}, ${args.length}, &${out})`
+    const call = `inox_callback_call(${callee}, ${argArray}, ${args.length}, ${out}.out())`
 
     lines.push(`  inox_value ${argArray}[] = { ${joinStrings(args, ', ')} };`)
     lines.push(`  ${emitStatusCheck(call, context)}`)
@@ -8116,7 +8094,6 @@ function emitOptionalRuntimeCallbackCallValueExpression(
   const args: string[] = []
 
   registerOwnedValue(context, out)
-  pushAll(lines, emitPrepareOwnedValueWrite(out))
   lines.push(`${out} = inox_null_value();`)
   lines.push(`if (${callee}.tag != INOX_TAG_NULL) {`)
   lines.push(`  ${emitRuntimeTypeCheck(calleeTypeCheck, context)}`)
@@ -8128,14 +8105,12 @@ function emitOptionalRuntimeCallbackCallValueExpression(
     args.push(value.expression)
   }
 
-  pushIndented(lines, emitPrepareOwnedValueWrite(out), '  ')
-
   if (args.length === 0) {
-    const call = `inox_callback_call(${callee}, 0, 0, &${out})`
+    const call = `inox_callback_call(${callee}, 0, 0, ${out}.out())`
     lines.push(`  ${emitStatusCheck(call, context)}`)
   } else {
     const argArray = nextCName(context, 'inox_callback_args')
-    const call = `inox_callback_call(${callee}, ${argArray}, ${args.length}, &${out})`
+    const call = `inox_callback_call(${callee}, ${argArray}, ${args.length}, ${out}.out())`
 
     lines.push(`  inox_value ${argArray}[] = { ${joinStrings(args, ', ')} };`)
     lines.push(`  ${emitStatusCheck(call, context)}`)

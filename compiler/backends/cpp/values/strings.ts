@@ -6,7 +6,6 @@ import { nullableTypeNameFromTypeName } from '../../../type-names.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../../types.ts'
 import {
   emitFailureStatement,
-  emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
   nextCName,
   pushDiagnostic,
@@ -1241,7 +1240,6 @@ function emitPreparedKnownObjectStringBytesOperand(
 
   registerOwnedValue(context, value)
 
-  pushAllLines(lines, emitPrepareOwnedValueWrite(value))
   pushAllLines(lines, emitStringObjectGetValueLines(object, key, value, context))
   lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
   lines.push(`inox_string* ${string} = (inox_string*)${value}.as.ref;`)
@@ -1368,7 +1366,6 @@ function emitPreparedKnownOptionalObjectStringBytesOperand(
 
   registerOwnedValue(context, value)
 
-  pushAllLines(lines, emitPrepareOwnedValueWrite(value))
   pushAllLines(lines, emitStringObjectGetValueLines(object, key, value, context))
   lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
   lines.push(`inox_string* ${string} = (inox_string*)${value}.as.ref;`)
@@ -1468,7 +1465,6 @@ function emitPreparedRuntimeObjectFieldValueExpression(
 
   registerOwnedValue(context, value)
   pushAllLines(lines, object.lines)
-  pushAllLines(lines, emitPrepareOwnedValueWrite(value))
   pushAllLines(lines, emitStringObjectGetValueLines(object.expression, access.key, value, context))
 
   return {
@@ -2096,7 +2092,6 @@ function emitPreparedRuntimeObjectNameStringBytesOperand(
   const lines: string[] = []
 
   registerOwnedValue(context, value)
-  pushAllLines(lines, emitPrepareOwnedValueWrite(value))
   pushAllLines(lines, emitStringObjectGetValueLines(object, 'name', value, context))
   lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
   lines.push(`inox_string* ${string} = (inox_string*)${value}.as.ref;`)
