@@ -132,7 +132,11 @@ const arrayOperations: LibraryOperationDescriptor[] = [
     cFailureMode: null
   },
   arrayMemberRead('length', numberTypeRef, 'static_cast<double>($value)'),
-  arrayReceiverCall('includes', booleanTypeRef, ['runtime-value'], [{ valueTypes: [], typeRef: parameterTypeRef }]),
+  {
+    ...arrayReceiverCall('includes', booleanTypeRef, ['runtime-value'], [{ valueTypes: [], typeRef: parameterTypeRef }]),
+    cFailureMode: null,
+    cPreservesPendingException: true
+  },
   {
     ...arrayReceiverCall(
       'join',
@@ -211,7 +215,11 @@ const setOperations: LibraryOperationDescriptor[] = [
   setReceiverCall('add', 'add', setTypeRef(parameterTypeRef), true),
   setReceiverCall('clear', 'clear', voidTypeRef, false),
   setReceiverCall('delete', 'erase', booleanTypeRef, true),
-  setReceiverCall('has', 'has', booleanTypeRef, true),
+  {
+    ...setReceiverCall('has', 'has', booleanTypeRef, true),
+    cFailureMode: null,
+    cPreservesPendingException: true
+  },
   {
     libraryId,
     bindingId: `${setNativeTypeId}.size`,
@@ -222,7 +230,8 @@ const setOperations: LibraryOperationDescriptor[] = [
     cExpression: 'size',
     cArgumentKinds: ['receiver'],
     cCallStyle: 'member',
-    cFailureMode: 'thrown',
+    cFailureMode: null,
+    cPreservesPendingException: true,
     cResultAdapter: 'static_cast<double>($value)',
     resultTypeRef: numberTypeRef
   }
@@ -279,7 +288,11 @@ const mapOperations: LibraryOperationDescriptor[] = [
     ...mapReceiverCall('get', 'get', nullableValueParameterTypeRef, [keyParameterTypeRef]),
     cResultMapping: { cppType: 'inox::Value', fields: [] }
   },
-  mapReceiverCall('has', 'has', booleanTypeRef, [keyParameterTypeRef]),
+  {
+    ...mapReceiverCall('has', 'has', booleanTypeRef, [keyParameterTypeRef]),
+    cFailureMode: null,
+    cPreservesPendingException: true
+  },
   mapReceiverCall('keys', 'keys', mapIteratorTypeRef(mapKeyIteratorNativeTypeId, [keyParameterTypeRef]), []),
   mapReceiverCall('set', 'set', mapTypeRef(keyParameterTypeRef, valueParameterTypeRef), [
     keyParameterTypeRef,
@@ -295,7 +308,8 @@ const mapOperations: LibraryOperationDescriptor[] = [
     cExpression: 'size',
     cArgumentKinds: ['receiver'],
     cCallStyle: 'member',
-    cFailureMode: 'thrown',
+    cFailureMode: null,
+    cPreservesPendingException: true,
     cResultAdapter: 'static_cast<double>($value)',
     resultTypeRef: numberTypeRef
   },

@@ -476,11 +476,14 @@ inox::Value Map::get(const inox::Value& key) const {
 }
 
 bool Map::has(const inox::Value& key) const {
+  if (inox::thrown()) {
+    return false;
+  }
+
   MapStorage* instance = map_data(*this);
 
   if (instance == 0) {
-    inox_collection_throw("TypeError: Map.has receiver is not a Map");
-    return false;
+    inox::fatal("Map.has native facade invariant failed");
   }
 
   inox_value raw_key = key.raw();
@@ -488,8 +491,7 @@ bool Map::has(const inox::Value& key) const {
   bool hash_ok = inox_hash_value(raw_key, hash);
 
   if (!hash_ok) {
-    inox_collection_throw("TypeError: Map key is not hashable");
-    return false;
+    inox::fatal("Map.has key invariant failed");
   }
 
   size_t index = 0;
@@ -497,8 +499,7 @@ bool Map::has(const inox::Value& key) const {
   inox_status status = inox_map_find(instance, raw_key, hash, &index, &found);
 
   if (status != INOX_OK) {
-    inox_collection_throw("TypeError: Map lookup failed");
-    return false;
+    inox::fatal("Map.has lookup invariant failed");
   }
 
   return found;
@@ -563,11 +564,14 @@ Map Map::set(const inox::Value& key, const inox::Value& value) const {
 }
 
 size_t Map::size() const {
+  if (inox::thrown()) {
+    return 0;
+  }
+
   MapStorage* instance = map_data(*this);
 
   if (instance == 0) {
-    inox_collection_throw("TypeError: Map.size receiver is not a Map");
-    return 0;
+    inox::fatal("Map.size native facade invariant failed");
   }
 
   return instance->length;
@@ -1022,11 +1026,14 @@ static void inox_set_dispose_ref(inox_ref* ref) {
 }
 
 bool Set::has(const inox::Value& value) const {
+  if (inox::thrown()) {
+    return false;
+  }
+
   SetStorage* instance = set_data(*this);
 
   if (instance == 0) {
-    inox_collection_throw("TypeError: Set.has receiver is not a Set");
-    return false;
+    inox::fatal("Set.has native facade invariant failed");
   }
 
   inox_value raw_value = value.raw();
@@ -1034,8 +1041,7 @@ bool Set::has(const inox::Value& value) const {
   bool hash_ok = inox_hash_value(raw_value, hash);
 
   if (!hash_ok) {
-    inox_collection_throw("TypeError: Set value is not hashable");
-    return false;
+    inox::fatal("Set.has value invariant failed");
   }
 
   size_t index = 0;
@@ -1043,8 +1049,7 @@ bool Set::has(const inox::Value& value) const {
   inox_status status = inox_set_find(instance, raw_value, hash, &index, &found);
 
   if (status != INOX_OK) {
-    inox_collection_throw("TypeError: Set lookup failed");
-    return false;
+    inox::fatal("Set.has lookup invariant failed");
   }
 
   return found;
@@ -1089,11 +1094,14 @@ static inox::Value inox_set_create_value() {
 }
 
 size_t Set::size() const {
+  if (inox::thrown()) {
+    return 0;
+  }
+
   SetStorage* instance = set_data(*this);
 
   if (instance == 0) {
-    inox_collection_throw("TypeError: Set.size receiver is not a Set");
-    return 0;
+    inox::fatal("Set.size native facade invariant failed");
   }
 
   return instance->length;
@@ -1506,11 +1514,14 @@ inox::Value Array::get(size_t index) const {
 }
 
 bool Array::includes(const inox::Value& value) const {
+  if (inox::thrown()) {
+    return false;
+  }
+
   inox_value array = inox::Value::raw();
 
   if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
-    inox_collection_throw("TypeError: Array.includes receiver is not an Array");
-    return false;
+    inox::fatal("Array.includes native facade invariant failed");
   }
 
   ArrayStorage* instance = (ArrayStorage*)array.as.ref;

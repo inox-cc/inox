@@ -42,6 +42,11 @@ test('global:collections владеет Array declarations, operations, iteratio
 
   assert.equal(result.ast.body[0].init.typeRef?.typeId, 'global:collections#Array')
   assert.equal(result.ast.body[1].expression.libraryOperationId, 'global:collections#Array.push')
+  const includesOperation = collections.compilerPackage?.operations.find(
+    (operation) => operation.operationId === 'global:collections#Array.includes'
+  )
+  assert.equal(includesOperation?.cFailureMode, null)
+  assert.equal(includesOperation?.cPreservesPendingException, true)
   assert.equal(result.ast.body[2].init.left.libraryOperationId, 'global:collections#Array.length')
   assert.equal(result.ast.body[2].init.left.libraryCResultAdapter, 'static_cast<double>($value)')
   assert.equal(result.ir.body[2].init.left.libraryCResultAdapter, 'static_cast<double>($value)')
