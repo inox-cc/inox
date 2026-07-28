@@ -13,6 +13,7 @@ test('generated C++ не оборачивает scalar result adapter повто
     { libraries: defaultCompilerLibrarySet, target: 'cc' }
   )
 
-  assert.match(result.code, /static_cast<double>\(inox_library_result_\d+\)/)
+  assert.match(result.code, /static_cast<double>\(values\.size\(\)\)/)
+  assert.doesNotMatch(result.code, /auto inox_library_result_\d+ = values\.size\(\)/)
   assert.doesNotMatch(result.code, /static_cast<double>\(static_cast<double>\(/)
 })
