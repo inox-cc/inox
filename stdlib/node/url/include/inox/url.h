@@ -18,7 +18,7 @@ public:
 
   using inox::Value::operator=;
 
-  static URL from(const inox::Value& input, const inox::Value& base, bool has_base, const inox_shape* shape);
+  static URL from(const inox::Value& input, const inox::Value& base, bool has_base);
 
   bool valid() const;
   inox::String href() const;
@@ -65,7 +65,7 @@ public:
 class url {
 public:
   inox::String fileURLToPath(const inox::Value& value) const;
-  URL pathToFileURL(const inox::Value& path, const inox_shape* shape) const;
+  URL pathToFileURL(const inox::Value& path) const;
 };
 
 extern url url;

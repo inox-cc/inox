@@ -75,6 +75,7 @@ static inox_status inox_url_normalized_field_value(
   inox_value* out
 );
 static inox_status inox_url_rebuild_href(inox_allocator* allocator, inox_value url);
+static const inox_shape* inox_url_shape(void);
 static const inox_shape* inox_url_search_params_shape(void);
 static inox_status inox_url_search_params_store_query(inox_allocator* allocator, inox_value params, const char* bytes, size_t len);
 static inox_status inox_url_search_params_from_string(
@@ -258,7 +259,7 @@ inox::String url::fileURLToPath(const inox::Value& value) const {
   return out;
 }
 
-URL url::pathToFileURL(const inox::Value& path, const inox_shape* shape) const {
+URL url::pathToFileURL(const inox::Value& path) const {
   inox_value raw_path = path.raw();
   const char* bytes = 0;
   size_t len = 0;
@@ -284,7 +285,7 @@ URL url::pathToFileURL(const inox::Value& path, const inox_shape* shape) const {
   status = inox_url_parse(href, href_len, &parts);
 
   if (status == INOX_OK) {
-    status = inox_url_object_from_parts(&inox_default_allocator, shape, &parts, &out);
+    status = inox_url_object_from_parts(&inox_default_allocator, inox_url_shape(), &parts, &out);
   }
 
   inox_default_allocator.free(inox_default_allocator.user, href, href_len + 1, alignof(char));
@@ -297,7 +298,7 @@ URL url::pathToFileURL(const inox::Value& path, const inox_shape* shape) const {
   return URL(inox::adopt(out));
 }
 
-URL URL::from(const inox::Value& input, const inox::Value& base, bool has_base, const inox_shape* shape) {
+URL URL::from(const inox::Value& input, const inox::Value& base, bool has_base) {
   inox_value raw_input = input.raw();
   inox_value raw_base = base.raw();
   const char* input_bytes = 0;
@@ -315,7 +316,7 @@ URL URL::from(const inox::Value& input, const inox::Value& base, bool has_base, 
     status = inox_url_parse(input_bytes, input_len, &parts);
 
     if (status == INOX_OK) {
-      status = inox_url_object_from_parts(&inox_default_allocator, shape, &parts, &out);
+      status = inox_url_object_from_parts(&inox_default_allocator, inox_url_shape(), &parts, &out);
     }
 
     if (status != INOX_OK) {
@@ -367,7 +368,7 @@ URL URL::from(const inox::Value& input, const inox::Value& base, bool has_base, 
   status = inox_url_parse(href, href_len, &parts);
 
   if (status == INOX_OK) {
-    status = inox_url_object_from_parts(&inox_default_allocator, shape, &parts, &out);
+    status = inox_url_object_from_parts(&inox_default_allocator, inox_url_shape(), &parts, &out);
   }
 
   inox_default_allocator.free(inox_default_allocator.user, href, href_len + 1, alignof(char));
@@ -431,6 +432,24 @@ void URL::setHash(const inox::Value& value) {
 }
 
 class url url;
+
+static const inox_shape* inox_url_shape(void) {
+  static const inox_field_info fields[] = {
+    { "href", INOX_FIELD_READONLY },
+    { "protocol", INOX_FIELD_READONLY },
+    { "hostname", INOX_FIELD_READONLY },
+    { "port", INOX_FIELD_READONLY },
+    { "pathname", 0 },
+    { "search", 0 },
+    { "hash", 0 },
+  };
+  static const inox_shape shape = {
+    7,
+    fields
+  };
+
+  return &shape;
+}
 
 static const inox_shape* inox_url_search_params_shape(void) {
   static const inox_field_info fields[] = {

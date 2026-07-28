@@ -19,7 +19,7 @@ test('entrypoint package node:url владеет object operations и runtime pl
   const pathnameWrite = operations.find((operation) => operation.operationId === 'node:url#URL#write:pathname')
   const parse = operations.find((operation) => operation.operationId === 'node:url#parse')
 
-  assert.deepEqual(constructor?.cArgumentKinds, ['value', 'optional-value', 'argument-presence', 'result-shape'])
+  assert.deepEqual(constructor?.cArgumentKinds, ['value', 'optional-value', 'argument-presence'])
   assert.deepEqual(searchParamsConstructor?.cArgumentKinds, ['optional-string-record-or-value'])
   assert.equal(searchParamsConstructor?.cFailureMode, 'thrown')
   assert.ok(constructor?.bindingAliases?.includes('node:url#module:node:url:default.URL'))

@@ -41,7 +41,7 @@ const operations: LibraryOperationDescriptor[] = [
     resultTypeRef: stringTypeRef,
     cResultMapping: stringCResultMapping
   }),
-  moduleCall('pathToFileURL', ['value', 'result-shape'], 'url.pathToFileURL', {
+  moduleCall('pathToFileURL', ['value'], 'url.pathToFileURL', {
     minArgs: 1,
     maxArgs: 1,
     argumentChecks: [stringArgument()],
@@ -49,7 +49,7 @@ const operations: LibraryOperationDescriptor[] = [
   }),
   constructorOperation(
     'URL',
-    ['value', 'optional-value', 'argument-presence', 'result-shape'],
+    ['value', 'optional-value', 'argument-presence'],
     'URL::from',
     urlTypeRef,
     1,
