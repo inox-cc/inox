@@ -210,6 +210,7 @@ export type LibraryCArgumentKind =
   | 'optional-argument'
   | 'optional-number'
   | 'optional-value'
+  | 'optional-string-record-or-value'
   | 'argument-presence'
   | 'value'
   | 'runtime-value'

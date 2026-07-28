@@ -5,6 +5,8 @@
 #include "inox/value.h"
 
 #ifdef __cplusplus
+#include <initializer_list>
+
 #include "inox/string.h"
 #include "inox/string_view.h"
 
@@ -28,19 +30,21 @@ private:
 };
 
 class URLSearchParams : public inox::Value {
-private:
-  static inox::Value make(const inox::Value& init);
-  static inox::Value make(inox::StringView init);
-
 public:
+  struct Entry {
+    inox::StringView name;
+    inox::StringView value;
+  };
+
   URLSearchParams();
-  explicit URLSearchParams(inox::StringView init);
   explicit URLSearchParams(const inox::Value& value);
   explicit URLSearchParams(inox::Value&& value);
 
   using inox::Value::operator=;
 
   static URLSearchParams from(const inox::Value& init);
+  static URLSearchParams from(inox::StringView init);
+  static URLSearchParams from(std::initializer_list<Entry> init);
 
   bool valid() const;
   void append(inox::StringView name, inox::StringView value);

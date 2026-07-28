@@ -220,7 +220,7 @@ async function runHostedIntegrationTests(): Promise<void> {
     await import('./integration/runtime-value-core-dependencies.test.ts')
   const { assertThrowingErrorTransferUsesValueRelease } =
     await import('./integration/throwing-error-transfer-lowering.test.ts')
-  const { assertUrlRuntimeUsesStringFacade, assertUrlSearchParamsLowersStringLiteralsDirectly } =
+  const { assertUrlRuntimeUsesStringFacade, assertUrlSearchParamsLowersRecordLiteralsDirectly } =
     await import('./integration/url-cpp-object-lowering.test.ts')
   const { assertRaiiFunctionsUseDirectReturns } = await import('./integration/raii-exit-lowering.test.ts')
 
@@ -462,7 +462,7 @@ async function runHostedIntegrationTests(): Promise<void> {
 
     await t.test('url-cpp-object-lowering', () => {
       assertUrlRuntimeUsesStringFacade()
-      assertUrlSearchParamsLowersStringLiteralsDirectly()
+      assertUrlSearchParamsLowersRecordLiteralsDirectly()
     })
 
     await t.test('runtime-allocator-prelude', () => {

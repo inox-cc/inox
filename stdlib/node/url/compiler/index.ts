@@ -56,9 +56,15 @@ const operations: LibraryOperationDescriptor[] = [
     2,
     [stringArgument(), { valueTypes: ['string', 'object'], objectTypeIds: [urlTypeId] }]
   ),
-  constructorOperation('URLSearchParams', ['optional-value'], 'URLSearchParams::from', searchParamsTypeRef, 0, 1, [
-    { valueTypes: ['string', 'object'], objectFieldValueType: 'string' }
-  ]),
+  constructorOperation(
+    'URLSearchParams',
+    ['optional-string-record-or-value'],
+    'URLSearchParams::from',
+    searchParamsTypeRef,
+    0,
+    1,
+    [{ valueTypes: ['string', 'object'], objectFieldValueType: 'string' }]
+  ),
   receiverCall(
     searchParamsTypeId,
     'append',

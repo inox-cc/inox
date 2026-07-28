@@ -43,6 +43,12 @@ type CompilerLibraryCArgumentSource = {
   objectFieldName?: string
 }
 
+type CompilerLibraryObjectProperty = {
+  key: string
+  spread?: boolean
+  value: AnyNode
+}
+
 type CompilerLibraryExpressionNode = AnyNode & {
   libraryAsyncResultOperation?: string | null
   libraryCExpression?: string | null
@@ -648,6 +654,43 @@ export function emitPreparedCompilerLibraryCallExpression(
       continue
     }
 
+    if (kind === 'optional-string-record-or-value') {
+      let argumentExpression = 'inox_undefined_value()'
+
+      if (sourceArgumentIndex < sourceArguments.length) {
+        const sourceArgument = sourceArguments[sourceArgumentIndex]
+        const recordLiteral = emitCompilerLibraryStringRecordLiteral(sourceArgument, context, dependencies, lines)
+
+        if (recordLiteral !== null) {
+          argumentExpression = recordLiteral
+        } else if (dependencies.inferExpressionType(sourceArgument, context) === 'string') {
+          const prepared = dependencies.emitPreparedStringBytesOperand(
+            sourceArgument,
+            context,
+            'inox_library_record_string'
+          )
+          pushLines(lines, prepared.lines)
+          argumentExpression = emitCompilerLibraryStringArgument(prepared)
+        } else {
+          const prepared = dependencies.emitCValueExpression(sourceArgument, context)
+          pushLines(lines, prepared.lines)
+          argumentExpression = prepared.expression
+
+          if (typeof prepared.cppType === 'string') {
+            argumentCppTypes.set(argumentsList.length, prepared.cppType)
+          }
+        }
+
+        optionalArgumentPresent = true
+      } else {
+        optionalArgumentPresent = false
+      }
+
+      sourceArgumentIndex = sourceArgumentIndex + 1
+      argumentsList.push(argumentExpression)
+      continue
+    }
+
     if (kind === 'optional-argument') {
       if (sourceArgumentIndex < sourceArguments.length) {
         const prepared = dependencies.emitCValueExpression(sourceArguments[sourceArgumentIndex], context)
@@ -1122,11 +1165,47 @@ function compilerLibraryCArgumentKindConsumesSource(
     kind === 'runtime-value' ||
     kind === 'number' ||
     kind === 'optional-value' ||
+    kind === 'optional-string-record-or-value' ||
     kind === 'optional-argument' ||
     kind === 'optional-number' ||
     kind === 'string-view-array' ||
     kind === 'optional-string-view-array'
   )
+}
+
+function emitCompilerLibraryStringRecordLiteral(
+  argument: AnyNode,
+  context: CFunctionContext,
+  dependencies: CompilerLibraryLoweringDependencies,
+  lines: string[]
+): string | null {
+  if (argument.type !== 'ObjectLiteral') {
+    return null
+  }
+
+  const properties: CompilerLibraryObjectProperty[] = argument.properties
+  const keys: Set<string> = new Set()
+
+  for (let index = 0; index < properties.length; index = index + 1) {
+    const property = properties[index]
+
+    if (property.spread === true || keys.has(property.key)) {
+      return null
+    }
+
+    keys.add(property.key)
+  }
+
+  const entries: string[] = []
+
+  for (let index = 0; index < properties.length; index = index + 1) {
+    const property = properties[index]
+    const prepared = dependencies.emitPreparedStringBytesOperand(property.value, context, 'inox_library_record_value')
+    pushLines(lines, prepared.lines)
+    entries.push(`{ ${cStringLiteral(property.key)}, ${emitCompilerLibraryStringArgument(prepared)} }`)
+  }
+
+  return entries.length === 0 ? '{}' : `{ ${joinStrings(entries, ', ')} }`
 }
 
 function compilerLibraryZeroArgumentMethodCall(expression: AnyNode, methodName: string): AnyNode {

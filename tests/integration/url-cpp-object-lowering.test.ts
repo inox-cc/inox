@@ -24,6 +24,7 @@ export function assertUrlRuntimeUsesStringFacade(): void {
   assert.doesNotMatch(header, /static URL from\([^)]*inox_value/)
   assert.doesNotMatch(header, /void setField\([^)]*inox_value/)
   assert.doesNotMatch(header, /static URLSearchParams from\([^)]*inox_value/)
+  assert.doesNotMatch(header, /static inox::Value make\(/)
   assert.doesNotMatch(header, /URL\(inox_value/)
   assert.doesNotMatch(header, /URL\(inox::AdoptValue/)
   assert.doesNotMatch(header, /URLSearchParams\(inox_value/)
@@ -32,6 +33,7 @@ export function assertUrlRuntimeUsesStringFacade(): void {
   assert.doesNotMatch(source, /URL::from\([^)]*inox_value/)
   assert.doesNotMatch(source, /URL::setField\([^)]*inox_value/)
   assert.doesNotMatch(source, /URLSearchParams::(?:make|from)\([^)]*inox_value/)
+  assert.doesNotMatch(source, /URLSearchParams::make\(/)
   assert.doesNotMatch(source, /URL::URL\(inox_value/)
   assert.doesNotMatch(source, /URL::URL\(inox::AdoptValue/)
   assert.doesNotMatch(source, /URL\(inox::adopt_value/)
@@ -42,7 +44,7 @@ export function assertUrlRuntimeUsesStringFacade(): void {
   assert.doesNotMatch(source, /url::(?:fileURLToPath|pathToFileURL)\([^)]*inox_value/)
 }
 
-export function assertUrlSearchParamsLowersStringLiteralsDirectly(): void {
+export function assertUrlSearchParamsLowersRecordLiteralsDirectly(): void {
   const host = createMemoryCompilerHost(
     [
       {
@@ -69,10 +71,11 @@ console.log(params.toString())
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /auto inox_object_\d+ = inox::ObjectValue::create\(&inox_shape_value_\d+\);/)
-  assert.match(source, /inox_object_\d+\.init\(0, inox::String\("smoke", 5\)\);/)
+  assert.match(source, /auto params = URLSearchParams::from\(\{ \{ "q", "smoke" \} \}\);/)
   assert.match(source, /\.set\("q", "inox"\);/)
   assert.match(source, /\.append\("kind", "simple"\);/)
+  assert.doesNotMatch(source, /inox_shape_value_/)
+  assert.doesNotMatch(source, /inox::ObjectValue::create/)
   assert.doesNotMatch(source, /inox_object_new/)
   assert.doesNotMatch(source, /inox_object_init_known/)
   assert.doesNotMatch(source, /URLSearchParams.*inox::StringView/)
@@ -92,5 +95,5 @@ function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedT
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   assertUrlRuntimeUsesStringFacade()
-  assertUrlSearchParamsLowersStringLiteralsDirectly()
+  assertUrlSearchParamsLowersRecordLiteralsDirectly()
 }
