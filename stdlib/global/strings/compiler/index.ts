@@ -149,6 +149,7 @@ function memberRead(
     cReceiverAdapter: 'inox::String($bytes, $length)',
     cCallStyle: 'member',
     cResultAdapter,
+    cPreservesPendingException: true,
     resultTypeRef
   }
 }

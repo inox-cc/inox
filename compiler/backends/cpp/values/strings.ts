@@ -2033,6 +2033,16 @@ function emitPreparedRuntimeStringValueBytesOperand(
   pushAllLines(lines, value.lines)
 
   if (value.cppType === 'inox::String') {
+    if (value.pendingExceptionDeferred === true || value.cppMutableTemporary === true) {
+      return {
+        lines: value.lines,
+        bytes: `${value.expression}.bytes()`,
+        length: `${value.expression}.length()`,
+        cppExpression: value.expression,
+        cppType: 'inox::String'
+      }
+    }
+
     const string = nextCName(context, tempPrefix)
 
     lines.push(`auto ${string} = ${value.expression};`)

@@ -363,7 +363,20 @@ export function emitPreparedCompilerLibraryCallExpression(
         receiverAdapter.includes('$bytes') &&
         receiverAdapter.includes('$length')
       ) {
+        const preserveReceiverPendingException =
+          item.libraryCPreservesPendingException === true &&
+          (item.libraryCFailureMode === 'thrown' || options?.deferThrownCheck === true)
+
+        if (preserveReceiverPendingException) {
+          context.deferredThrownCheckDepth = context.deferredThrownCheckDepth + 1
+        }
+
         const prepared = dependencies.emitPreparedStringBytesOperand(receiver, context, 'inox_library_receiver')
+
+        if (preserveReceiverPendingException) {
+          context.deferredThrownCheckDepth = context.deferredThrownCheckDepth - 1
+        }
+
         pushLines(lines, prepared.lines)
         receiverExpression =
           prepared.cppType === 'inox::String' && typeof prepared.cppExpression === 'string'
@@ -962,7 +975,8 @@ export function emitPreparedCompilerLibraryCallExpression(
       nullable: item.nullable === true,
       runtimeTypeChecked: cppType !== 'inox::Value',
       valueType: item.valueType ?? undefined,
-      owned: item.libraryOwned === true
+      owned: item.libraryOwned === true,
+      pendingExceptionDeferred: true
     }
   }
 

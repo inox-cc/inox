@@ -247,6 +247,8 @@ export type CFunctionContextWithDependencies<
   continueTargets: CLoopFlowTarget[]
   cppStringValues: CStringSet
   cppValueTypes: CStringMap
+  deferredThrownCheckDepth: number
+  deferredThrownCheckCount: number
   errorChannelUsed: boolean
   exceptionValueNames: CStringSet
   errorTargets: string[]
@@ -402,6 +404,8 @@ export function createFunctionContext<
     cppValueTypes: cloneCStringMap(baseContext.moduleValueCppTypes),
     continueFlowUsed: false,
     continueTargets: [],
+    deferredThrownCheckDepth: 0,
+    deferredThrownCheckCount: 0,
     cleanupEnabled: true,
     errorChannelUsed: false,
     exceptionValueNames: new Set(),

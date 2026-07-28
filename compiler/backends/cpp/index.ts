@@ -729,12 +729,52 @@ function emitPreparedCompilerLibraryCallExpression(
     }
   }
 
-  return emitPreparedCompilerLibraryCallExpressionWithDependencies(
+  const inheritedDeferredCheck = context.deferredThrownCheckDepth > 0
+  const resultCppType = expression.libraryCppType ?? expression.shape?.libraryCppType
+  const directScalarResult =
+    (resultCppType === null || typeof resultCppType === 'undefined') &&
+    (expression.valueType === 'number' || expression.valueType === 'boolean')
+  const directNativeResult =
+    typeof resultCppType === 'string' && resultCppType !== 'inox::Value' && resultCppType !== 'inox_value'
+  const deferThisCall =
+    inheritedDeferredCheck &&
+    expression.libraryCPreservesPendingException === true &&
+    (directScalarResult || directNativeResult)
+  let loweringOptions = options
+
+  if (inheritedDeferredCheck) {
+    context.deferredThrownCheckDepth = context.deferredThrownCheckDepth - 1
+  }
+
+  if (deferThisCall && options?.deferThrownCheck !== true) {
+    if (options === null || typeof options === 'undefined') {
+      loweringOptions = {
+        deferThrownCheck: true
+      }
+    } else {
+      loweringOptions = {
+        ...options,
+        deferThrownCheck: true
+      }
+    }
+  }
+
+  const value = emitPreparedCompilerLibraryCallExpressionWithDependencies(
     expression,
     context,
     compilerLibraryLoweringDependencies,
-    options
+    loweringOptions
   )
+
+  if (value?.pendingExceptionDeferred === true) {
+    context.deferredThrownCheckCount = context.deferredThrownCheckCount + 1
+  }
+
+  if (inheritedDeferredCheck) {
+    context.deferredThrownCheckDepth = context.deferredThrownCheckDepth + 1
+  }
+
+  return value
 }
 
 function runtimeStringConstantValue(expression: AnyNode | null | undefined): string | null {
@@ -5453,18 +5493,27 @@ function emitVariadicFormattedLibraryCallStatement(
   const lines: string[] = []
   const parts: string[] = []
   const values: string[] = []
+  let pendingExceptionDeferred = false
 
   for (const arg of args) {
+    const deferredThrownCheckCount = context.deferredThrownCheckCount
+    context.deferredThrownCheckDepth = context.deferredThrownCheckDepth + 1
     const value = emitFormattedOutputValue(arg, context, classFormatExpression)
+    context.deferredThrownCheckDepth = context.deferredThrownCheckDepth - 1
 
     pushAll(lines, value.lines)
     parts.push(value.format)
     pushAll(values, value.values)
+    pendingExceptionDeferred = pendingExceptionDeferred || context.deferredThrownCheckCount > deferredThrownCheckCount
   }
 
   const format = joinStrings(parts, ' ')
 
   pushAll(lines, emitFormattedLibraryCallStatement(target, format, values))
+
+  if (pendingExceptionDeferred) {
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+  }
 
   return lines
 }

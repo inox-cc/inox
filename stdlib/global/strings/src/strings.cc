@@ -502,7 +502,7 @@ int compareStrings(StringView left, StringView right) {
 }
 
 Value String::make(const char* bytes, size_t len) {
-  if (bytes == nullptr) {
+  if (thrown() || bytes == nullptr) {
     return Value();
   }
 

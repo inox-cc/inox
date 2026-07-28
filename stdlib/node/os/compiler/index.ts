@@ -63,15 +63,14 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
 }
 
 function operation(name: string, kind: 'call' | 'member-read'): LibraryOperationDescriptor {
-  let cExpression = `os.${name}()`
+  const cExpression = `os.${name}`
   let constantValue: string | null = null
 
   if (kind === 'member-read') {
-    cExpression = `os.${name}`
     constantValue = '\n'
   }
 
-  return {
+  const descriptor: LibraryOperationDescriptor = {
     libraryId: nodeOsLibraryId,
     bindingId: `${nodeOsLibraryId}#module:${nodeOsLibraryId}:${name}`,
     bindingAliases: [`${nodeOsLibraryId}#module:${nodeOsLibraryId}:default.${name}`],
@@ -83,6 +82,14 @@ function operation(name: string, kind: 'call' | 'member-read'): LibraryOperation
     cResultMapping: stringCResultMapping,
     constantValue
   }
+
+  if (kind === 'call') {
+    descriptor.cArgumentKinds = []
+    descriptor.cFailureMode = 'thrown'
+    descriptor.cPreservesPendingException = true
+  }
+
+  return descriptor
 }
 
 function unsupportedOperation(name: string): LibraryOperationDescriptor {

@@ -114,7 +114,7 @@ function shouldRunNativeCompilerIntegrationTests(
 
 async function runHostedIntegrationTests(): Promise<void> {
   const { assertArrayLowersToGlobalObject } = await import('./integration/array-global-object-lowering.test.ts')
-  const { assertArrayLogExpressionsReuseNativeTemporaries } =
+  const { assertArrayLogExpressionsInlinePreservingCalls } =
     await import('./integration/array-log-expression-lowering.test.ts')
   const { assertBuildCMakeConfigureIsQuiet } = await import('./integration/build-cmake-log-level.test.ts')
   const { assertBufferLowersToCppObject, assertBufferNativeFacadeHidesAllocatorOverloads } =
@@ -159,6 +159,7 @@ async function runHostedIntegrationTests(): Promise<void> {
   const { assertObjectLowersToGlobalObject } = await import('./integration/object-global-object-lowering.test.ts')
   const { assertObjectRuntimeIndexUsesDirectHelpers } =
     await import('./integration/object-runtime-index-lowering.test.ts')
+  const { assertOsStringLengthsStayInline } = await import('./integration/os-string-length-inline-lowering.test.ts')
   const { assertJsonParseCatchUsesRaiiErrorReset, assertJsonParseLiteralShapeUsesDirectVariableTarget } =
     await import('./integration/json-parse-shape-lowering.test.ts')
   const { assertJsonLowersToGlobalObject } = await import('./integration/json-global-object-lowering.test.ts')
@@ -242,7 +243,7 @@ async function runHostedIntegrationTests(): Promise<void> {
     })
 
     await t.test('array-log-expression-lowering', () => {
-      assertArrayLogExpressionsReuseNativeTemporaries()
+      assertArrayLogExpressionsInlinePreservingCalls()
     })
 
     await t.test('c-prelude-include-order', () => {
@@ -339,6 +340,10 @@ async function runHostedIntegrationTests(): Promise<void> {
 
     await t.test('object-runtime-index-lowering', () => {
       assertObjectRuntimeIndexUsesDirectHelpers()
+    })
+
+    await t.test('os-string-length-inline-lowering', () => {
+      assertOsStringLengthsStayInline()
     })
 
     await t.test('class-super-diagnostic-uses-inheritance-code', () => {

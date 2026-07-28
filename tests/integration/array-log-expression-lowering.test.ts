@@ -10,7 +10,7 @@ type GeneratedTextFile = {
   code: string
 }
 
-export function assertArrayLogExpressionsReuseNativeTemporaries(): void {
+export function assertArrayLogExpressionsInlinePreservingCalls(): void {
   const host = createMemoryCompilerHost(
     [
       {
@@ -31,8 +31,10 @@ console.log('array includes', names.includes('Grace'), names.slice(1, 3).join('/
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /auto inox_library_result_\d+ = names\.slice\(1, 3\)\.join\("\/"\);/)
+  assert.match(source, /names\.slice\(1, 3\)\.join\("\/"\)/)
+  assert.doesNotMatch(source, /auto inox_library_result_\d+ = names\.slice\(1, 3\)\.join\("\/"\);/)
   assert.doesNotMatch(source, /auto inox_library_object_\d+ = names\.slice\(1, 3\);/)
+  assert.match(source, /console\.log\([\s\S]*\);\n  if \(inox::thrown\(\)\) return;/)
   assert.match(
     source,
     /auto inox_string_\d+ = inox_library_result_\d+\.isNullish\(\) \? inox::String\("none", 4\) : inox::String\(std::move\(inox_library_result_\d+\)\);/
@@ -54,5 +56,5 @@ function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedT
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  assertArrayLogExpressionsReuseNativeTemporaries()
+  assertArrayLogExpressionsInlinePreservingCalls()
 }

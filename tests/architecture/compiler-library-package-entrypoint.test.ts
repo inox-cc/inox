@@ -11,10 +11,15 @@ test('entrypoint package node:os добавляет generated operations и runt
   assert.ok(osPackage)
   assert.equal(osPackage.compilerEntrypoint, 'stdlib/node/os/compiler/index.ts')
   assert.ok(osPackage.compilerPackage)
-  const platform = osPackage.compilerPackage.operations.find((operation) => operation.operationId === 'node:os#platform')
+  const platform = osPackage.compilerPackage.operations.find(
+    (operation) => operation.operationId === 'node:os#platform'
+  )
 
   assert.ok(platform)
-  assert.equal(platform.cExpression, 'os.platform()')
+  assert.equal(platform.cExpression, 'os.platform')
+  assert.deepEqual(platform.cArgumentKinds, [])
+  assert.equal(platform.cFailureMode, 'thrown')
+  assert.equal(platform.cPreservesPendingException, true)
   assert.deepEqual(osPackage.compilerPackage.runtimeRequirements[0].cPreludeIncludes, ['inox/os.h'])
 
   const rendered = renderCompilerLibraryRegistry(discovered)
