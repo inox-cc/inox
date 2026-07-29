@@ -389,7 +389,7 @@ console.log(f.isPromise())
   assert.doesNotMatch(result.code, /f = Foo\(inox_value/)
 }
 
-export function assertNativeClassDefinitionsPrecedeModuleValues(): void {
+export function assertModuleCompileTimeValuesPrecedeNativeClassDefinitions(): void {
   const source = `
 class Foo {
   name: string
@@ -413,7 +413,7 @@ f.test()
     target: 'cc'
   })
   const methodIndex = result.code.indexOf('void test()')
-  const numberValueIndex = result.code.indexOf('static double v = 0;')
+  const numberValueIndex = result.code.indexOf('static const double v = 123;')
   const classValueIndex = result.code.indexOf('static Foo f;')
   const mainIndex = result.code.indexOf('int main()')
 
@@ -421,9 +421,9 @@ f.test()
   assert.notEqual(numberValueIndex, -1, 'missing number module value')
   assert.notEqual(classValueIndex, -1, 'missing class module value')
   assert.notEqual(mainIndex, -1, 'missing main')
-  assert.ok(methodIndex < numberValueIndex, 'class methods should be emitted before module values')
-  assert.ok(numberValueIndex < classValueIndex, 'module values should preserve declaration order')
-  assert.ok(classValueIndex < mainIndex, 'module values should be emitted before main')
+  assert.ok(numberValueIndex < methodIndex, 'compile-time module values should be visible to class methods')
+  assert.ok(methodIndex < classValueIndex, 'class methods should be emitted before runtime module values')
+  assert.ok(classValueIndex < mainIndex, 'runtime module values should be emitted before main')
 }
 
 export function assertNativeClassModuleUniqueSymbols(): void {

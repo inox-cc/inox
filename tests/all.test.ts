@@ -212,7 +212,7 @@ async function runHostedIntegrationTests(): Promise<void> {
     await import('./integration/native-timer-handle-argument-lowering.test.ts')
   const {
     assertNativeClassArrayRuntimeFieldLowering,
-    assertNativeClassDefinitionsPrecedeModuleValues,
+    assertModuleCompileTimeValuesPrecedeNativeClassDefinitions,
     assertNativeClassFieldAliasLowering,
     assertNativeClassFieldRestoreFromObjectLowering,
     assertNativeClassLowering,
@@ -419,8 +419,8 @@ async function runHostedIntegrationTests(): Promise<void> {
       assertNativeClassStringLiteralConstructorUsesCppValue()
     })
 
-    await t.test('native-class-definitions-precede-module-values', () => {
-      assertNativeClassDefinitionsPrecedeModuleValues()
+    await t.test('module-compile-time-values-precede-native-class-definitions', () => {
+      assertModuleCompileTimeValuesPrecedeNativeClassDefinitions()
     })
 
     await t.test('native-class-module-unique-symbols', () => {

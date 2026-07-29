@@ -419,11 +419,11 @@ function cUnitValueCompileTimeInitializer(node: AnyNode): string | null {
     return null
   }
 
-  if (init.type === 'NumberLiteral') {
+  if (init.type === 'NumberLiteral' && node.valueType === 'number') {
     return init.value
   }
 
-  if (init.type === 'BooleanLiteral') {
+  if (init.type === 'BooleanLiteral' && node.valueType === 'boolean') {
     return init.value === true ? 'true' : 'false'
   }
 
