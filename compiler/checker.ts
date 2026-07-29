@@ -39,7 +39,8 @@ import {
   instantiateLibraryOperationTypeRef,
   type LibraryOperationTypeRefContext
 } from './extensions/operation-type-refs.ts'
-import { instantiateNativeTypeRef } from './extensions/type-ref-substitution.ts'
+import { instantiateNativeTypeRef, substituteTypeRef } from './extensions/type-ref-substitution.ts'
+import type { TypeRefSubstitution } from './extensions/type-ref-substitution.ts'
 import {
   parseCompilerLibraryGlobalDeclarations,
   type ParsedCompilerLibraryGlobalDeclaration
@@ -6200,10 +6201,13 @@ class Checker {
   }
 
   inferFunctionDeclarationReturn(declaration: AnyNode): void {
+    const unannotatedAsync =
+      declaration.async === true &&
+      (declaration.declaredReturnType === null || typeof declaration.declaredReturnType === 'undefined')
+
     if (
-      declaration.async === true ||
       (declaration.declaredReturnType !== null && typeof declaration.declaredReturnType !== 'undefined') ||
-      declaration.returnType !== 'unknown' ||
+      (!unannotatedAsync && declaration.returnType !== 'unknown') ||
       this.inferringFunctionReturns.has(declaration.name)
     ) {
       return
@@ -6271,34 +6275,73 @@ class Checker {
     symbol: SymbolInfo,
     candidates: InferredFunctionReturnCandidate[]
   ): void {
-    if (candidates.length === 0) {
-      declaration.returnType = 'void'
-      symbol.returnType = 'void'
+    if (declaration.async === true) {
+      const libraries = resolveCompilerLibrarySet(this.options.libraries)
+      const fulfilledCandidates = inferredAsyncFulfilledCandidates(
+        candidates,
+        libraries,
+        nodeSourceLocation(declaration)
+      )
+      this.applyInferredAsyncFunctionReturn(
+        declaration,
+        symbol,
+        commonInferredFunctionReturn(fulfilledCandidates),
+        libraries
+      )
       return
     }
 
-    const valueTypes: ValueType[] = []
+    const inferred = commonInferredFunctionReturn(candidates)
 
-    for (let index = 0; index < candidates.length; index = index + 1) {
-      valueTypes.push(candidates[index].valueType)
-    }
+    declaration.returnType = inferred.valueType
+    declaration.returnNullable = inferred.nullable
+    declaration.returnAsyncResultValueType = inferred.asyncResultValueType
+    declaration.returnShape = inferred.shape
+    declaration.returnTypeRef = inferred.typeRef
 
-    const returnType = commonValueType(valueTypes)
-    const returnTypeRef = commonInferredFunctionReturnTypeRef(candidates)
-    const returnShape =
-      returnType === 'object' && returnTypeRef === null ? commonResolvedObjectShape(candidates) : null
-
-    declaration.returnType = returnType
-    declaration.returnNullable = inferredFunctionReturnCanBeNull(candidates)
-    declaration.returnAsyncResultValueType = commonInferredFunctionReturnAsyncResultValueType(candidates)
-    declaration.returnShape = returnShape
-    declaration.returnTypeRef = returnTypeRef
-
-    symbol.returnType = returnType
-    symbol.returnTypeRef = returnTypeRef
+    symbol.returnType = inferred.valueType
+    symbol.returnTypeRef = inferred.typeRef
     symbol.returnNullable = declaration.returnNullable === true
     symbol.returnAsyncResultValueType = declaration.returnAsyncResultValueType
-    symbol.returnShape = returnShape
+    symbol.returnShape = inferred.shape
+  }
+
+  applyInferredAsyncFunctionReturn(
+    declaration: AnyNode,
+    symbol: SymbolInfo,
+    fulfilled: InferredFunctionReturnCandidate,
+    libraries: CompilerLibrarySet
+  ): void {
+    const operation = compilerLibraryOperationForIntrinsic(libraries, 'async-result', 'construct')
+    const resultTypeRef =
+      operation === null ? null : inferredAsyncResultTypeRef(operation, fulfilled)
+
+    if (resultTypeRef === null) {
+      declaration.returnType = 'async-result'
+      declaration.returnNullable = false
+      declaration.returnAsyncResultValueType = fulfilled.valueType
+      declaration.returnShape = null
+      declaration.returnTypeRef = null
+      symbol.returnType = 'async-result'
+      symbol.returnTypeRef = null
+      symbol.returnNullable = false
+      symbol.returnAsyncResultValueType = fulfilled.valueType
+      symbol.returnShape = null
+      return
+    }
+
+    const metadata = typeRefCompatibilityMetadata(resultTypeRef, libraries, nodeSourceLocation(declaration))
+
+    declaration.returnType = typeRefDeclaredName(resultTypeRef, libraries) ?? metadata.valueType
+    declaration.returnNullable = metadata.nullable
+    declaration.returnAsyncResultValueType = fulfilled.valueType
+    declaration.returnShape = metadata.shape
+    declaration.returnTypeRef = resultTypeRef
+    symbol.returnType = metadata.valueType
+    symbol.returnTypeRef = resultTypeRef
+    symbol.returnNullable = metadata.nullable
+    symbol.returnAsyncResultValueType = fulfilled.valueType
+    symbol.returnShape = metadata.shape
   }
 
   checkVariableInitializer(
@@ -9057,6 +9100,137 @@ class Checker {
     const diagnostics = this.diagnostics
     diagnostics.push(item)
   }
+}
+
+function commonInferredFunctionReturn(
+  candidates: InferredFunctionReturnCandidate[]
+): InferredFunctionReturnCandidate {
+  if (candidates.length === 0) {
+    return {
+      valueType: 'void',
+      nullable: false,
+      typeRef: null,
+      functionType: null,
+      shape: null,
+      asyncResultValueType: null
+    }
+  }
+
+  const valueTypes: ValueType[] = []
+
+  for (let index = 0; index < candidates.length; index = index + 1) {
+    valueTypes.push(candidates[index].valueType)
+  }
+
+  const valueType = commonValueType(valueTypes)
+  const typeRef = commonInferredFunctionReturnTypeRef(candidates)
+
+  return {
+    valueType,
+    nullable: inferredFunctionReturnCanBeNull(candidates),
+    typeRef,
+    functionType: candidates[0].functionType,
+    shape: valueType === 'object' && typeRef === null ? commonResolvedObjectShape(candidates) : null,
+    asyncResultValueType: commonInferredFunctionReturnAsyncResultValueType(candidates)
+  }
+}
+
+function inferredAsyncResultTypeRef(
+  operation: LibraryOperationDescriptor,
+  fulfilled: InferredFunctionReturnCandidate
+): TypeRef | null {
+  const resultTypeRef = operation.resultTypeRef
+
+  if (resultTypeRef === null || typeof resultTypeRef === 'undefined') {
+    return null
+  }
+
+  const fulfilledTypeRef = typeRefFromResolvedTypeInContext(fulfilled)
+  const substitutions: TypeRefSubstitution[] = []
+  const parameters = operation.typeParameters ?? []
+  let fulfilledParameterName: string | null = null
+
+  for (let parameterIndex = 0; parameterIndex < parameters.length; parameterIndex = parameterIndex + 1) {
+    const sources = parameters[parameterIndex].sources
+
+    for (let sourceIndex = 0; sourceIndex < sources.length; sourceIndex = sourceIndex + 1) {
+      const source = sources[sourceIndex]
+
+      if (source.source === 'contextual-type-argument' && (source.argumentIndex ?? -1) === 0) {
+        fulfilledParameterName = parameters[parameterIndex].name
+        break
+      }
+    }
+
+    if (fulfilledParameterName !== null) {
+      break
+    }
+  }
+
+  if (fulfilledParameterName === null) {
+    return null
+  }
+
+  for (let index = 0; index < parameters.length; index = index + 1) {
+    substitutions.push({
+      name: parameters[index].name,
+      typeRef:
+        parameters[index].name === fulfilledParameterName
+          ? fulfilledTypeRef
+          : {
+              kind: 'unknown',
+              nullable: false,
+              ownership: 'value',
+              traits: []
+            }
+    })
+  }
+
+  return substituteTypeRef(resultTypeRef, substitutions)
+}
+
+function inferredAsyncFulfilledCandidates(
+  candidates: InferredFunctionReturnCandidate[],
+  libraries: CompilerLibrarySet,
+  loc: SourceLocation
+): InferredFunctionReturnCandidate[] {
+  const result: InferredFunctionReturnCandidate[] = []
+
+  for (let index = 0; index < candidates.length; index = index + 1) {
+    const candidate = candidates[index]
+
+    if (candidate.valueType !== 'async-result') {
+      result.push(candidate)
+      continue
+    }
+
+    const fulfilledTypeRef = typeRefTraitArgument(candidate.typeRef, 'awaitable', 0, libraries)
+
+    if (fulfilledTypeRef !== null) {
+      const metadata = typeRefCompatibilityMetadata(fulfilledTypeRef, libraries, loc)
+
+      result.push({
+        valueType: metadata.valueType,
+        nullable: metadata.nullable,
+        typeRef: fulfilledTypeRef,
+        functionType: null,
+        shape: metadata.shape,
+        asyncResultValueType: metadata.asyncResultValueType
+      })
+      continue
+    }
+
+    result.push({
+      valueType: candidate.asyncResultValueType ?? 'unknown',
+      nullable: false,
+      typeRef: null,
+      functionType: null,
+      shape: null,
+      asyncResultValueType: null
+    })
+  }
+
+  return result
 }
 
 function commonInferredFunctionReturnTypeRef(candidates: InferredFunctionReturnCandidate[]): TypeRef | null {

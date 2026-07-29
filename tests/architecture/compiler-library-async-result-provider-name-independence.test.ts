@@ -11,7 +11,7 @@ import {
 test('async-result lowering не зависит от исходных имён методов provider-а', () => {
   const result = compileSource(
     `
-async function work(): Future<number> {
+async function work() {
   const value = await Future.succeed(1).map((item) => item + 1)
   return value
 }
