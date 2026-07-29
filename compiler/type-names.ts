@@ -13,6 +13,12 @@ export type GenericTypeApplication = {
   args: string[]
 }
 
+export type InlineObjectTypeField = {
+  name: string
+  optional: boolean
+  typeName: string
+}
+
 export function arrayElementTypeNameFromTypeName(name: string): string | null {
   return genericTypeInner(name, 'array')
 }
@@ -200,6 +206,12 @@ export function normalizeTypeName(name: string): string {
     return normalizeUnionTypeNames(args)
   }
 
+  const inlineObjectFields = inlineObjectTypeFieldsFromTypeName(name)
+
+  if (inlineObjectFields !== null) {
+    return normalizedInlineObjectTypeName(inlineObjectFields)
+  }
+
   if (name.endsWith('[]')) {
     return `array<${normalizeTypeName(name.slice(0, -2))}>`
   }
@@ -271,6 +283,49 @@ export function normalizeTypeName(name: string): string {
   }
 
   return 'unknown'
+}
+
+export function inlineObjectTypeFieldsFromTypeName(name: string): InlineObjectTypeField[] | null {
+  if (!name.startsWith('{') || !name.endsWith('}')) {
+    return null
+  }
+
+  const sourceFields = splitInlineObjectFields(name.slice(1, -1))
+  const fields: InlineObjectTypeField[] = []
+
+  if (sourceFields === null) {
+    return null
+  }
+
+  for (const sourceField of sourceFields) {
+    const colon = topLevelTypeDelimiterIndex(sourceField, ':')
+
+    if (colon <= 0 || colon >= sourceField.length - 1) {
+      return null
+    }
+
+    const rawFieldName = sourceField.slice(0, colon)
+    const optional = rawFieldName.endsWith('?')
+    let fieldNameEnd = rawFieldName.length
+
+    if (optional) {
+      fieldNameEnd = fieldNameEnd - 1
+    }
+
+    const fieldName = rawFieldName.slice(0, fieldNameEnd)
+
+    if (!isIdentifierTypeName(fieldName)) {
+      return null
+    }
+
+    fields.push({
+      name: fieldName,
+      optional,
+      typeName: normalizeTypeName(sourceField.slice(colon + 1))
+    })
+  }
+
+  return fields
 }
 
 export function indexedAccessTypeNameFromTypeName(name: string): IndexedAccessTypeName | null {
@@ -478,6 +533,16 @@ function joinStrings(values: string[], separator: string): string {
   }
 
   return result
+}
+
+function normalizedInlineObjectTypeName(fields: InlineObjectTypeField[]): string {
+  const parts: string[] = []
+
+  for (const field of fields) {
+    parts.push(`${field.name}${field.optional ? '?' : ''}:${field.typeName}`)
+  }
+
+  return `{${joinStrings(parts, ';')}}`
 }
 
 function isAbsentTypeName(name: string): boolean {
@@ -698,7 +763,10 @@ function knownGenericTypeInner(name: string, wrapper: string): string {
 
 function splitDelimitedTypeArgs(value: string, delimiter: string): string[] {
   const args: string[] = []
-  let depth = 0
+  let angleDepth = 0
+  let braceDepth = 0
+  let bracketDepth = 0
+  let parenDepth = 0
   let start = 0
 
   let index = 0
@@ -707,10 +775,28 @@ function splitDelimitedTypeArgs(value: string, delimiter: string): string[] {
     const unit = value.slice(index, index + 1)
 
     if (unit === '<') {
-      depth = depth + 1
+      angleDepth = angleDepth + 1
     } else if (unit === '>') {
-      depth = depth - 1
-    } else if (unit === delimiter && depth === 0) {
+      angleDepth = angleDepth - 1
+    } else if (unit === '{') {
+      braceDepth = braceDepth + 1
+    } else if (unit === '}') {
+      braceDepth = braceDepth - 1
+    } else if (unit === '[') {
+      bracketDepth = bracketDepth + 1
+    } else if (unit === ']') {
+      bracketDepth = bracketDepth - 1
+    } else if (unit === '(') {
+      parenDepth = parenDepth + 1
+    } else if (unit === ')') {
+      parenDepth = parenDepth - 1
+    } else if (
+      unit === delimiter &&
+      angleDepth === 0 &&
+      braceDepth === 0 &&
+      bracketDepth === 0 &&
+      parenDepth === 0
+    ) {
       args.push(value.slice(start, index))
       start = index + 1
     }
@@ -721,6 +807,112 @@ function splitDelimitedTypeArgs(value: string, delimiter: string): string[] {
   args.push(value.slice(start))
 
   return trimNonEmptyStrings(args)
+}
+
+function splitInlineObjectFields(value: string): string[] | null {
+  if (value.length === 0) {
+    return []
+  }
+
+  const fields: string[] = []
+  let angleDepth = 0
+  let braceDepth = 0
+  let bracketDepth = 0
+  let parenDepth = 0
+  let start = 0
+
+  for (let index = 0; index < value.length; index = index + 1) {
+    const unit = value.slice(index, index + 1)
+
+    if (unit === '<') {
+      angleDepth = angleDepth + 1
+    } else if (unit === '>') {
+      angleDepth = angleDepth - 1
+    } else if (unit === '{') {
+      braceDepth = braceDepth + 1
+    } else if (unit === '}') {
+      braceDepth = braceDepth - 1
+    } else if (unit === '[') {
+      bracketDepth = bracketDepth + 1
+    } else if (unit === ']') {
+      bracketDepth = bracketDepth - 1
+    } else if (unit === '(') {
+      parenDepth = parenDepth + 1
+    } else if (unit === ')') {
+      parenDepth = parenDepth - 1
+    } else if (
+      (unit === ',' || unit === ';') &&
+      angleDepth === 0 &&
+      braceDepth === 0 &&
+      bracketDepth === 0 &&
+      parenDepth === 0
+    ) {
+      const field = value.slice(start, index)
+
+      if (field.length > 0) {
+        fields.push(field)
+      }
+
+      start = index + 1
+    }
+
+    if (angleDepth < 0 || braceDepth < 0 || bracketDepth < 0 || parenDepth < 0) {
+      return null
+    }
+  }
+
+  if (angleDepth !== 0 || braceDepth !== 0 || bracketDepth !== 0 || parenDepth !== 0) {
+    return null
+  }
+
+  const last = value.slice(start)
+
+  if (last.length > 0) {
+    fields.push(last)
+  }
+
+  return fields
+}
+
+function topLevelTypeDelimiterIndex(value: string, delimiter: string): number {
+  let angleDepth = 0
+  let braceDepth = 0
+  let bracketDepth = 0
+  let parenDepth = 0
+
+  for (let index = 0; index < value.length; index = index + 1) {
+    const unit = value.slice(index, index + 1)
+
+    if (
+      unit === delimiter &&
+      angleDepth === 0 &&
+      braceDepth === 0 &&
+      bracketDepth === 0 &&
+      parenDepth === 0
+    ) {
+      return index
+    }
+
+    if (unit === '<') {
+      angleDepth = angleDepth + 1
+    } else if (unit === '>') {
+      angleDepth = angleDepth - 1
+    } else if (unit === '{') {
+      braceDepth = braceDepth + 1
+    } else if (unit === '}') {
+      braceDepth = braceDepth - 1
+    } else if (unit === '[') {
+      bracketDepth = bracketDepth + 1
+    } else if (unit === ']') {
+      bracketDepth = bracketDepth - 1
+    } else if (unit === '(') {
+      parenDepth = parenDepth + 1
+    } else if (unit === ')') {
+      parenDepth = parenDepth - 1
+    }
+  }
+
+  return -1
 }
 
 function trimNonEmptyStrings(values: string[]): string[] {

@@ -1,16 +1,19 @@
 import { diagnostic } from '../diagnostics.ts'
 import {
   arrayElementTypeNameFromKnownTypeName,
+  genericTypeApplicationFromTypeName,
+  inlineObjectTypeFieldsFromTypeName,
+  indexedAccessTypeNameFromTypeName,
   isArrayTypeName,
   isBuiltinValueType,
-  genericTypeApplicationFromTypeName,
-  indexedAccessTypeNameFromTypeName,
   isNullableTypeName,
   nullableTypeNameFromKnownTypeName,
   recordTypeNamesFromTypeName,
   typeNameDependencyNames,
-  unionTypeNamesFromTypeName
+  unionTypeNamesFromTypeName,
+  weakTypeNameFromTypeName
 } from '../type-names.ts'
+import type { InlineObjectTypeField } from '../type-names.ts'
 import type {
   AnyNode,
   Diagnostic,
@@ -115,6 +118,12 @@ export function resolveDeclaredType(
 
   if (name === 'AnyNode') {
     return resolveAnyNodeDeclaredType(context, loc)
+  }
+
+  const inlineObjectFields = inlineObjectTypeFieldsFromTypeName(name)
+
+  if (inlineObjectFields !== null) {
+    return resolveInlineObjectDeclaredType(context, inlineObjectFields, loc)
   }
 
   const rootResolution = context.resolvingDeclaredTypes.size === 0
@@ -414,6 +423,42 @@ export function resolveDeclaredType(
   context.diagnostics.push(diagnostic('INOX_UNKNOWN_TYPE', `unknown type ${name}`, loc))
 
   return unresolvedTypeInfo()
+}
+
+function resolveInlineObjectDeclaredType(
+  context: DeclaredTypeResolverContext,
+  inlineFields: InlineObjectTypeField[],
+  loc: SourceLocation
+): ResolvedTypeInfo {
+  const fields: AnyNode[] = []
+
+  for (const inlineField of inlineFields) {
+    const weakTarget = weakTypeNameFromTypeName(inlineField.typeName)
+    const declaredType = weakTarget ?? inlineField.typeName
+
+    fields.push({
+      name: inlineField.name,
+      optional: inlineField.optional,
+      readonly: false,
+      ownership: weakTarget === null ? 'strong' : 'weak',
+      weakLoc: null,
+      declaredType,
+      valueType: declaredType,
+      loc
+    })
+  }
+
+  const info = unresolvedTypeInfo()
+  info.valueType = 'object'
+  info.shape = resolveObjectShape(context, {
+    kind: 'object',
+    baseTypes: [],
+    dynamic: false,
+    dynamicField: null,
+    fields
+  })
+
+  return info
 }
 
 function recursiveDeclaredValueType(

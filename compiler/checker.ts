@@ -5905,10 +5905,11 @@ class Checker {
       return null
     }
 
-    let elementTypeRef = this.compilerLibraryUnknownTypeRef()
+    let elementTypeRef: TypeRef | null = null
 
     for (let index = 0; index < expression.elements.length; index = index + 1) {
       const element = checkerNodeAt(expression.elements, index)
+      let candidateTypeRef: TypeRef | null = null
 
       if (element.type === 'SpreadElement') {
         const spreadTypeRef = this.compilerLibraryExpressionTypeRef(element.argument)
@@ -5918,19 +5919,27 @@ class Checker {
 
           for (let traitIndex = 0; traitIndex < traits.length; traitIndex = traitIndex + 1) {
             if (traits[traitIndex].traitId === 'iterable' && traits[traitIndex].args.length > 0) {
-              elementTypeRef = traits[traitIndex].args[0]
+              candidateTypeRef = traits[traitIndex].args[0]
               break
             }
           }
         }
       } else {
-        elementTypeRef = this.compilerLibraryExpressionTypeRef(element)
+        candidateTypeRef = this.compilerLibraryExpressionTypeRef(element)
       }
 
-      break
+      if (candidateTypeRef === null) {
+        candidateTypeRef = this.compilerLibraryUnknownTypeRef()
+      }
+
+      if (elementTypeRef === null) {
+        elementTypeRef = candidateTypeRef
+      } else {
+        elementTypeRef = commonTypeRef(elementTypeRef, candidateTypeRef) ?? this.compilerLibraryUnknownTypeRef()
+      }
     }
 
-    return instantiateNativeTypeRef(providerType, [elementTypeRef])
+    return instantiateNativeTypeRef(providerType, [elementTypeRef ?? this.compilerLibraryUnknownTypeRef()])
   }
 
   compilerLibraryArrayResultTypeRef(elementTypeRef: TypeRef): TypeRef | null {
