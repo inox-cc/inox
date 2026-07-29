@@ -2803,7 +2803,10 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
     return emitModuleRuntimeScalarValueAssignment(statement, name, initializerType, context)
   }
 
-  const value = emitCValueExpression(statement.init, context)
+  const value =
+    statement.init.type === 'ObjectLiteral'
+      ? emitCObjectLiteralValueExpression(statement.init, context, statement.shape)
+      : emitCValueExpression(statement.init, context)
   const lines: string[] = []
 
   context.moduleValueTypes.set(statement.name, inferred)
