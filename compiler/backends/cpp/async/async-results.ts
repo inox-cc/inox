@@ -84,7 +84,6 @@ type AsyncResultFunctionContext = AsyncResultEmitContext & {
   runtimeCallbackReturnType?: string
   runtimeStrings: AsyncResultStringSet
   statusReturn: boolean
-  throwingFunction: boolean
   usedRuntimeCallbackCleanupGoto?: boolean
   variables: AsyncResultStringMap
 }

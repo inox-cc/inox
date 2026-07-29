@@ -168,7 +168,6 @@ export type CFailureContext = {
   returnShape?: CObjectShape | null
   returnType?: string
   statusReturn: boolean
-  throwingFunction: boolean
 }
 
 export type CNameContext = {
@@ -260,8 +259,6 @@ export type CFunctionContextWithDependencies<
   externalEventLoop: boolean
   failureStatement?: string | null
   failureStatementUsed?: boolean
-  functionErrorOut: string | null
-  functionReturnOut: string | null
   returnFunctionCompanions: CPreparedFunctionCompanion[]
   functionTypes: CFunctionTypeMap
   localValueNames: CStringSet
@@ -291,7 +288,6 @@ export type CFunctionContextWithDependencies<
   runtimeStrings: CStringSet
   runtimeValueStorageNames: CStringSet
   statusReturn: boolean
-  throwingFunction: boolean
   usedRuntimeCallbackCleanupGoto?: boolean
   variables: CStringMap
 }
@@ -415,8 +411,6 @@ export function createFunctionContext<
     exceptionValueNames: new Set(),
     errorTargets: [],
     errorTargetActiveFlags: [],
-    functionErrorOut: null,
-    functionReturnOut: null,
     returnFunctionCompanions: [],
     functionTypes: new Map(),
     localValueNames: new Set(),
@@ -442,7 +436,6 @@ export function createFunctionContext<
     runtimeStrings: new Set(),
     runtimeValueStorageNames: cloneCStringSet(baseContext.moduleRuntimeValueNames),
     statusReturn: false,
-    throwingFunction: false,
     variables: cloneCStringMap(baseContext.moduleValueTypes),
     returnNullable: returnNullable,
     returnType: returnType
@@ -463,10 +456,6 @@ export function emitFailureStatement(context: CFailureContext): string {
   if (failureStatement !== null && typeof failureStatement !== 'undefined') {
     context.failureStatementUsed = true
     return failureStatement
-  }
-
-  if (context.throwingFunction && context.cleanupEnabled) {
-    return 'do { inox_status_result = INOX_ERR_TYPE; goto cleanup; } while (0);'
   }
 
   if (context.statusReturn) {
@@ -569,11 +558,6 @@ type CReturnValueDeclarationContext = {
   returnType?: string | null
 }
 
-type CStatusResultDeclarationContext = {
-  cleanupEnabled?: boolean | null
-  throwingFunction?: boolean | null
-}
-
 type CLoopFlowDeclarationContext = {
   breakFlowUsed?: boolean | null
   cleanupEnabled?: boolean | null
@@ -617,10 +601,6 @@ type CBoxedValueDeclarationContext = {
 export function shouldEmitCleanupLabel(context: CFunctionContext): boolean {
   if (!context.cleanupEnabled) {
     return false
-  }
-
-  if (context.throwingFunction) {
-    return true
   }
 
   return (
@@ -693,14 +673,6 @@ export function emitReturnValueDeclarations(context: CReturnValueDeclarationCont
 export function emitMainReturnValueDeclarations(context: CReturnValueDeclarationContext): string[] {
   if (context.returnFlowUsed === true) {
     return emitReturnValueDeclarations(context)
-  }
-
-  return []
-}
-
-export function emitStatusResultDeclarations(context: CStatusResultDeclarationContext): string[] {
-  if (context.throwingFunction) {
-    return ['inox_status inox_status_result = INOX_OK;']
   }
 
   return []
@@ -876,10 +848,6 @@ export function isRuntimeBoxedValueType(valueType: string | null | undefined): b
 }
 
 export function emitCleanupReturn(context: CFunctionContext): string[] {
-  if (context.throwingFunction) {
-    return emitThrowingFunctionCleanupReturn(context)
-  }
-
   if (isManagedRuntimeReturnType(context.returnType)) {
     return ['return inox_return;']
   }
@@ -889,26 +857,6 @@ export function emitCleanupReturn(context: CFunctionContext): string[] {
   }
 
   return ['return;']
-}
-
-export function emitThrowingFunctionErrorTransfer(context: CFunctionContext): string[] {
-  if (!context.throwingFunction) {
-    return []
-  }
-
-  return ['if (inox_error_active) {', `  *${context.functionErrorOut} = inox_error.release();`, '}']
-}
-
-export function emitThrowingFunctionCleanupReturn(context: CFunctionContext): string[] {
-  const lines: string[] = ['if (inox_status_result != INOX_OK) return inox_status_result;']
-
-  if (context.returnType !== 'void') {
-    lines.push(`*${context.functionReturnOut} = inox_return;`)
-  }
-
-  lines.push('return INOX_OK;')
-
-  return lines
 }
 
 export function nextCName(context: CNameContext, prefix: string): string {

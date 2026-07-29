@@ -203,15 +203,6 @@ function currentRuntimeErrorTarget(context: CFunctionContext): string {
   return context.errorTargets[context.errorTargets.length - 1]
 }
 
-function registerRuntimeErrorChannel(context: CFunctionContext): void {
-  context.errorChannelUsed = true
-  registerRuntimeErrorValue(context)
-}
-
-function registerRuntimeErrorValue(context: CFunctionContext): void {
-  registerOwnedValue(context, 'inox_error')
-}
-
 function emitRuntimeThrownCheckLines(context: CFunctionContext): string[] {
   const target = currentRuntimeErrorTarget(context)
 
@@ -219,20 +210,7 @@ function emitRuntimeThrownCheckLines(context: CFunctionContext): string[] {
     return [`if (inox::thrown()) goto ${target};`]
   }
 
-  if (!context.throwingFunction) {
-    return [`if (inox::thrown()) ${emitFailureStatement(context)}`]
-  }
-
-  registerRuntimeErrorChannel(context)
-
-  return [
-    'if (inox::thrown()) {',
-    '  inox_error = inox::take_exception();',
-    '  inox_error_active = 1;',
-    '  inox_status_result = INOX_ERR_THROW;',
-    '  goto cleanup;',
-    '}'
-  ]
+  return [`if (inox::thrown()) ${emitFailureStatement(context)}`]
 }
 
 function emitRuntimeObjectGetValueLines(
@@ -2018,8 +1996,6 @@ export type CCallExpressionDependencies = {
   isExternalEventLoopFunctionCallee(callee: CValueNode, context: CFunctionContext): boolean
   isNullableFunctionType(valueType: string | null | undefined, nullable: boolean | null | undefined): boolean
   isAsyncResultReturningFunctionCallee(callee: CValueNode, context: CFunctionContext): boolean
-  registerErrorChannel(context: CFunctionContext): void
-  registerErrorValue(context: CFunctionContext): void
   resolveFunctionValueType(expression: CValueNode, context: CFunctionContext): CFunctionType | null
   resolveFunctionParams(callee: CValueNode, context: CFunctionContext): CFunctionParam[] | null
   resolveRuntimeCallbackCalleeType(callee: CValueNode, context: CFunctionContext): CFunctionType | null
@@ -2105,21 +2081,6 @@ export function emitPreparedCallExpression(
   const lines = prepared.lines
   const args = prepared.args
   const returnFunctionCompanions = prepareCallReturnFunctionCompanions(expression, lines, context)
-
-  if (isThrowingFunctionCallee(expression.callee, context)) {
-    return withFunctionCallReturnMetadata(
-      expression,
-      emitPreparedThrowingCallExpression(
-        expression,
-        args,
-        lines,
-        returnFunctionCompanions,
-        context,
-        deps
-      ),
-      context
-    )
-  }
 
   appendCallReturnFunctionCompanionArgs(args, returnFunctionCompanions)
 
@@ -2561,93 +2522,6 @@ function emitDefaultOptionalArg(param: CFunctionParam): string {
   return '0'
 }
 
-function emitPreparedThrowingCallExpression(
-  expression: CValueNode,
-  args: string[],
-  preparedLines: string[],
-  returnFunctionCompanions: CPreparedFunctionCompanion[],
-  context: CFunctionContext,
-  deps: CCallExpressionDependencies
-): PreparedExpression {
-  const name = stringValueAt(expression.callee.path, 0)
-  const returnInfo = resolveCFunctionCallReturnInfo(name, context)
-  const returnType = returnInfo.returnType
-  const returnNullable = returnInfo.returnNullable
-  const callArgs: string[] = []
-  const lines: string[] = []
-  let result = ''
-
-  if (deps.isExternalEventLoopFunctionCallee(expression.callee, context)) {
-    registerEventLoop(context)
-  }
-
-  appendLines(callArgs, args)
-  appendLines(lines, preparedLines)
-
-  const target = deps.currentErrorTarget(context.errorTargets)
-
-  if (target === '' && !context.throwingFunction) {
-    context.diagnostics.push(
-      diagnostic(
-        'INOX_C_THROW',
-        'uncaught throwing function calls must be inside try/catch in the current C++ backend slice',
-        expression.loc
-      )
-    )
-  }
-
-  if (target !== '') {
-    deps.registerErrorValue(context)
-  } else {
-    deps.registerErrorChannel(context)
-  }
-  if (returnType !== 'void') {
-    const returnCppType = libraryNativeBoundaryCppType(
-      returnType,
-      returnNullable,
-      false,
-      context.functionReturnShapes.get(name)
-    )
-
-    if (
-      (returnCppType === null && returnType === 'unknown') ||
-      (returnCppType === null && isManagedRuntimeReturnType(returnType)) ||
-      (returnCppType === null && isOpaqueRuntimeValueType(returnType)) ||
-      (returnCppType === null && returnNullable && isNullableScalarType(returnType))
-    ) {
-      result = nextCName(context, 'inox_call_result')
-      lines.push(`inox_value ${result} = inox_undefined_value();`)
-    } else if (returnCppType !== null) {
-      result = nextCName(context, 'inox_call_result')
-      lines.push(`${returnCppType} ${result}{};`)
-    } else {
-      result = nextCName(context, 'inox_call_result')
-      lines.push(`double ${result} = 0;`)
-    }
-
-    if (returnCppType !== null) {
-      callArgs.push(`std::addressof(${result})`)
-    } else {
-      callArgs.push(`&${result}`)
-    }
-  }
-
-  appendCallReturnFunctionCompanionArgs(callArgs, returnFunctionCompanions)
-
-  callArgs.push('inox_error.out()')
-
-  const status = nextCName(context, 'inox_call_status')
-
-  lines.push(`inox_status ${status} = ${emitCallee(expression.callee, context)}(${joinStrings(callArgs, ', ')});`)
-  appendLines(lines, emitThrowingCallStatusCheck(status, target, context))
-
-  return {
-    lines,
-    expression: result,
-    functionCompanions: returnFunctionCompanions
-  }
-}
-
 function resolveCFunctionCallReturnInfo(name: string, context: CFunctionContext): CFunctionCallReturnInfo {
   const configuredReturnType = context.functionReturnTypes.get(name)
   let returnType = 'void'
@@ -2674,26 +2548,6 @@ function resolveCFunctionCallReturnInfo(name: string, context: CFunctionContext)
     returnType,
     returnNullable: cBooleanValueIsTrue(context.functionReturnNullables.get(name))
   }
-}
-
-function emitThrowingCallStatusCheck(status: string, target: string, context: CFunctionContext): string[] {
-  const lines = [`if (${status} == INOX_ERR_THROW) {`]
-
-  if (target !== '') {
-    lines.push('  inox::throw_value(inox_error);')
-    lines.push(`  goto ${target};`)
-  } else if (context.throwingFunction) {
-    lines.push('  inox_error_active = 1;')
-    lines.push('  inox_status_result = INOX_ERR_THROW;')
-    lines.push('  goto cleanup;')
-  } else {
-    lines.push(`  ${emitFailureStatement(context)}`)
-  }
-
-  lines.push('}')
-  lines.push(`if (${status} != INOX_OK) ${emitFailureStatement(context)}`)
-
-  return lines
 }
 
 export function isThrowingFunctionCallee(callee: CValueNode, context: CEmitContext): boolean {

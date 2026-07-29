@@ -3613,33 +3613,16 @@ function emitThrowingRuntimeCallbackTargetCall(
   callArgs: string[]
 ): string[] {
   const lines: string[] = []
-  const args: string[] = []
-
-  for (const arg of callArgs) {
-    args.push(arg)
-  }
-
   const resultType = throwingRuntimeCallbackTargetResultType(wrapper.functionType)
+  const call = `${functionName}(${joinStrings(callArgs, ', ')})`
 
   if (resultType !== 'void') {
-    lines.push(`  ${resultType} inox_callback_result = ${runtimeCallbackTargetDefaultResult(resultType)};`)
-    args.push('&inox_callback_result')
+    lines.push(`  ${resultType} inox_callback_result = ${call};`)
+  } else {
+    lines.push(`  ${call};`)
   }
 
-  lines.push('  inox_value inox_callback_error = inox_undefined_value();')
-  args.push('&inox_callback_error')
-  lines.push(`  inox_status inox_callback_status = ${functionName}(${joinStrings(args, ', ')});`)
-  lines.push('  if (inox_callback_status != INOX_OK) {')
-  lines.push('    if (inox_callback_status == INOX_ERR_THROW) inox::throw_value(inox_callback_error);')
-  lines.push('    inox_release(inox_callback_error);')
-
-  if (resultType === 'inox_value') {
-    lines.push('    inox_release(inox_callback_result);')
-  }
-
-  lines.push('    return inox_callback_status;')
-  lines.push('  }')
-  lines.push('  inox_release(inox_callback_error);')
+  lines.push('  if (inox::thrown()) return INOX_ERR_THROW;')
   pushLines(lines, emitThrowingRuntimeCallbackResult(wrapper.functionType, resultType))
   lines.push('  return INOX_OK;')
 
@@ -3656,14 +3639,6 @@ function throwingRuntimeCallbackTargetResultType(functionType: CFunctionType): s
   }
 
   return emitCType(functionType.returnType)
-}
-
-function runtimeCallbackTargetDefaultResult(resultType: string): string {
-  if (resultType === 'inox_value') {
-    return 'inox_undefined_value()'
-  }
-
-  return '0'
 }
 
 function emitThrowingRuntimeCallbackResult(functionType: CFunctionType, resultType: string): string[] {

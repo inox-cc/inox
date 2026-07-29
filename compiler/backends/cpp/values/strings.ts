@@ -51,7 +51,6 @@ type StringCContext = {
   runtimeValueStorageNames?: Set<string>
   statusReturn: boolean
   stringLoweringDependencies?: StringLoweringDependencies
-  throwingFunction: boolean
   variables?: Map<string, string>
   [key: string]: any
 }
@@ -222,41 +221,16 @@ function registerStringErrorChannel(context: StringCContext): void {
 function emitStringThrownCheckLines(context: StringCContext): string[] {
   const target = currentStringErrorTarget(context)
 
-  if (target === '' && !context.throwingFunction) {
+  if (target === '') {
     return [`if (inox::thrown()) ${emitFailureStatement(context)}`]
   }
 
-  const errorActiveNeeded =
-    currentStringErrorTargetRequiresActive(context) || (target === '' && context.throwingFunction)
-
-  if (errorActiveNeeded) {
-    registerStringErrorChannel(context)
-  } else if (target === '') {
-    registerStringErrorValue(context)
-  }
-
-  if (target !== '' && !errorActiveNeeded) {
+  if (!currentStringErrorTargetRequiresActive(context)) {
     return [`if (inox::thrown()) goto ${target};`]
   }
 
-  const lines: string[] = ['if (inox::thrown()) {']
-
-  if (target === '') {
-    lines.push('  inox_error = inox::take_exception();')
-  }
-  if (errorActiveNeeded) {
-    lines.push('  inox_error_active = 1;')
-  }
-  if (target === '') {
-    lines.push('  inox_status_result = INOX_ERR_THROW;')
-    lines.push('  goto cleanup;')
-  } else {
-    lines.push(`  goto ${target};`)
-  }
-
-  lines.push('}')
-
-  return lines
+  registerStringErrorChannel(context)
+  return ['if (inox::thrown()) {', '  inox_error_active = 1;', `  goto ${target};`, '}']
 }
 
 function emitStringObjectGetValueLines(object: string, key: string, value: string, context: StringCContext): string[] {

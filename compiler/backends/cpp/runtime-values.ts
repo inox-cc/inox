@@ -6,7 +6,6 @@ type RuntimeValueCheckContext = {
   failureStatement?: string | null
   failureStatementUsed?: boolean
   statusReturn: boolean
-  throwingFunction: boolean
 }
 
 export function runtimeObjectLikeTagMatchCondition(name: string): string {

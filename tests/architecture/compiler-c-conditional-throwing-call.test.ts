@@ -4,13 +4,15 @@ import { test } from 'node:test'
 import { compileSource } from '../../compiler/core.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
-test('conditional expression переносит throwing effects обеих веток', () => {
+test('conditional expression переносит pending exception effects обеих веток', () => {
   const result = compileSource(
     "function fail(): string { throw 'boom' }\n" +
       'function choose(flag: boolean): string { return flag ? fail() : fail() }\n',
     { libraries: defaultCompilerLibrarySet, target: 'cc' }
   )
 
-  assert.match(result.code, /inox_status choose\(/)
-  assert.equal(result.code.match(/if \(inox_call_status_\d+ == INOX_ERR_THROW\)/g)?.length, 2)
+  assert.match(result.code, /inox_value choose\(double flag\)/)
+  assert.equal(result.code.match(/if \(inox::thrown\(\)\) return inox_return;/g)?.length, 2)
+  assert.doesNotMatch(result.code, /\binox_status\b/)
+  assert.doesNotMatch(result.code, /\binox_error_out\b/)
 })

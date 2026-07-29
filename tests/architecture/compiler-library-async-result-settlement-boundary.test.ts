@@ -62,7 +62,11 @@ export function forward(fail: boolean): Promise<string> {
   const source = result.files.find((file) => file.path === 'consumer.cc')
 
   assert.ok(source)
+  assert.match(source.code, /inox_async_result_\d+ = inox_mod_provider_ts_[a-f0-9]+_load\(fail\);/)
+  assert.match(source.code, /if \(inox::thrown\(\)\) \{\s+inox_error = inox::take_exception\(\);/)
   assert.match(source.code, /inox::Promise::reject\(inox_error\)/)
   assert.match(source.code, /inox::Promise::resolve\(inox_async_result_\d+\)/)
+  assert.doesNotMatch(source.code, /\binox_async_status\b/)
+  assert.doesNotMatch(source.code, /\binox_error_out\b/)
   assert.doesNotMatch(source.code, /\binox_promise_(?:resolved|rejected)\b/)
 })

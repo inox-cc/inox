@@ -225,8 +225,8 @@ async function runHostedIntegrationTests(): Promise<void> {
   } = await import('./integration/native-class-lowering.test.ts')
   const { assertRuntimeValueCoreDoesNotReferenceFeatureDisposers } =
     await import('./integration/runtime-value-core-dependencies.test.ts')
-  const { assertThrowingErrorTransferUsesValueRelease } =
-    await import('./integration/throwing-error-transfer-lowering.test.ts')
+  const { assertThrowingUsesPendingExceptionChannel } =
+    await import('./integration/throwing-pending-exception-lowering.test.ts')
   const { assertLibraryPendingExceptionsPropagateThroughFunctions } =
     await import('./integration/library-pending-exception-function-call-lowering.test.ts')
   const { assertLibraryPendingExceptionsPropagateThroughMethods } =
@@ -482,8 +482,8 @@ async function runHostedIntegrationTests(): Promise<void> {
       await assertPromiseObserveFailureRetainsCallbackContext()
     })
 
-    await t.test('throwing-error-transfer-lowering', () => {
-      assertThrowingErrorTransferUsesValueRelease()
+    await t.test('throwing-pending-exception-lowering', () => {
+      assertThrowingUsesPendingExceptionChannel()
     })
 
     await t.test('library-pending-exception-function-call-lowering', () => {

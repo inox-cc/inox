@@ -41,9 +41,10 @@ export function consume(value: Bridge): Bridge {
   const consumer = files.find((file) => file.path === 'consumer.cc')
 
   assert.ok(consumer)
-  assert.match(consumer.code, /FixtureBridge inox_call_result_/)
-  assert.match(consumer.code, /std::addressof\(inox_call_result_/)
-  assert.doesNotMatch(consumer.code, /&inox_call_result_/)
+  assert.match(consumer.code, /auto inox_call_result_\d+ = inox_mod_source_ts_[a-f0-9]+_pass\(value\);/)
+  assert.match(consumer.code, /if \(inox::thrown\(\)\) return inox_return;/)
+  assert.doesNotMatch(consumer.code, /std::addressof\(inox_call_result_/)
+  assert.doesNotMatch(consumer.code, /\binox_status\b/)
   assert.doesNotMatch(consumer.code, /inox_value inox_call_result_/)
 })
 
@@ -81,9 +82,13 @@ export function consume(value: string): Set<string> {
   const consumer = files.find((file) => file.path === 'consumer.cc')
 
   assert.ok(consumer)
-  assert.match(consumer.code, /Set inox_call_result_/)
-  assert.match(consumer.code, /std::addressof\(inox_call_result_/)
-  assert.doesNotMatch(consumer.code, /&inox_call_result_/)
+  assert.match(
+    consumer.code,
+    /auto inox_call_result_\d+ = inox_mod_source_ts_[a-f0-9]+_collect\(inox_param_value\);/
+  )
+  assert.match(consumer.code, /if \(inox::thrown\(\)\) return inox_return;/)
+  assert.doesNotMatch(consumer.code, /std::addressof\(inox_call_result_/)
+  assert.doesNotMatch(consumer.code, /\binox_status\b/)
   assert.doesNotMatch(consumer.code, /inox_value inox_call_result_/)
 })
 

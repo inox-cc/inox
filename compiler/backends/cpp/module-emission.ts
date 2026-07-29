@@ -2014,37 +2014,29 @@ function emitThrowingFunctionPointerAdapterTargetCall(
   cleanupLines: string[]
 ): string[] {
   const lines: string[] = []
-  const callArgs: string[] = []
   const adapterReturnType = emitFunctionPointerReturnType(adapter.functionType)
   const returnType = emitFunctionPointerReturnType(targetFunctionType)
-
-  for (const arg of targetArgs) {
-    callArgs.push(arg)
-  }
+  const call = `${adapter.target}(${joinStrings(targetArgs, ', ')})`
 
   if (returnType !== 'void') {
-    lines.push(`${returnType} inox_adapter_result = ${cFunctionPointerAdapterDefaultReturnValue(returnType)};`)
-    callArgs.push('std::addressof(inox_adapter_result)')
+    lines.push(`  ${returnType} inox_adapter_result = ${call};`)
+  } else {
+    lines.push(`  ${call};`)
   }
 
-  lines.push('inox_value inox_adapter_error = inox_undefined_value();')
-  callArgs.push('&inox_adapter_error')
-  lines.push(`inox_status inox_adapter_status = ${adapter.target}(${joinStrings(callArgs, ', ')});`)
   pushCModuleLines(lines, cleanupLines)
-  lines.push('if (inox_adapter_status != INOX_OK) {')
-  lines.push('  inox_release(inox_adapter_error);')
+  lines.push('  if (inox::thrown()) {')
 
   if (adapterReturnType === 'void') {
-    lines.push('  return;')
+    lines.push('    return;')
   } else {
-    lines.push(`  return ${throwingFunctionPointerAdapterReturnExpression(adapterReturnType, returnType)};`)
+    lines.push(`    return ${cFunctionPointerAdapterDefaultReturnValue(adapterReturnType)};`)
   }
 
-  lines.push('}')
-  lines.push('inox_release(inox_adapter_error);')
+  lines.push('  }')
 
   if (adapterReturnType !== 'void') {
-    lines.push(`return ${throwingFunctionPointerAdapterReturnExpression(adapterReturnType, returnType)};`)
+    lines.push(`  return ${throwingFunctionPointerAdapterReturnExpression(adapterReturnType, returnType)};`)
   }
 
   return lines

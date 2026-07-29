@@ -95,7 +95,10 @@ function assertRaiiAssignments(source: string): void {
   assert.doesNotMatch(source, /inox_(?:nullable_conditional|value)_\d+ = inox_undefined_value\(\);/)
   assert.doesNotMatch(source, /inox_retain\(inox_(?:nullable_conditional|nullable_value|value)_\d+\);/)
   assert.doesNotMatch(source, /inox_release\(nullable\);/)
-  assert.match(source, /fail\(&inox_call_result_\d+, inox_error\.out\(\)\)/)
+  assert.match(source, /auto inox_call_result_\d+ = fail\(\);/)
+  assert.match(source, /if \(inox::thrown\(\)\) goto catch_\d+;/)
+  assert.doesNotMatch(source, /\binox_error_out\b/)
+  assert.doesNotMatch(source, /\binox_status\b/)
   assert.doesNotMatch(source, /inox_error = inox_undefined_value\(\);/)
 }
 

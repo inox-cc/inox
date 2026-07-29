@@ -6,7 +6,7 @@ import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 
-test('throwing function pointer adapter value-initializes an arbitrary library native result', () => {
+test('throwing function pointer adapter preserves pending exception and returns a fallback value', () => {
   const host = createMemoryCompilerHost(
     [
       {
@@ -37,10 +37,10 @@ consume(dependencies)
   const source = files.find((file) => file.path === 'index.cc')
 
   assert.ok(source)
-  assert.match(source.code, /FixtureBridge inox_adapter_result = \{\};/)
-  assert.match(source.code, /pass\(inox_arg_0, std::addressof\(inox_adapter_result\), &inox_adapter_error\)/)
-  assert.doesNotMatch(source.code, /FixtureBridge inox_adapter_result = 0;/)
-  assert.doesNotMatch(source.code, /pass\(inox_arg_0, &inox_adapter_result/)
+  assert.match(source.code, /FixtureBridge inox_adapter_result = pass\(inox_arg_0\);/)
+  assert.match(source.code, /if \(inox::thrown\(\)\) \{\s+return \{\};\s+\}/)
+  assert.doesNotMatch(source.code, /\binox_adapter_error\b/)
+  assert.doesNotMatch(source.code, /\binox_adapter_status\b/)
 })
 
 function bridgeLibrary(): CompilerLibraryDescriptor {

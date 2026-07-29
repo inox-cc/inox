@@ -37,8 +37,6 @@ import {
   emitReturnFlowDeclarations,
   emitReturnValueDeclarations,
   emitRuntimeTypeCheck,
-  emitStatusResultDeclarations,
-  emitThrowingFunctionErrorTransfer,
   nextCName,
   registerBoxedValue,
   registerOwnedValue,
@@ -75,11 +73,9 @@ import {
   emitCScalarParamName,
   emitCStringParamName,
   emitCType,
-  emitThrowingFunctionOutType,
   isBoxedScalarParam,
   isNullableScalarParam,
   isOpaqueRuntimeValueType,
-  isThrowingFunctionRuntimeOut,
   libraryNativeBoundaryCppType,
   libraryNativeCppType,
   requireCompilerLibraryAsyncResultCppType
@@ -96,11 +92,9 @@ import {
   emitCClassTypeNameForClassName,
   registerClassObjectShape
 } from './values/classes.ts'
-import { isThrowingFunctionName } from './values/expressions.ts'
 import type { NullableLoweringDependencies } from './values/nullable.ts'
 import { registerObjectShape } from './values/objects.ts'
 import type { StatementLoweringDependencies } from './values/statements.ts'
-import { registerErrorChannel } from './values/statements.ts'
 import type { StringLoweringDependencies } from './values/strings.ts'
 
 type CEmitContext = CEmitContextWithDependencies<
@@ -318,20 +312,13 @@ export function emitFunctionDeclaration(
   )
   context.returnLibraryNative = hasPhysicalNativeReturn(statement, context)
 
-  context.throwingFunction = isThrowingFunctionName(statement.name, context)
   context.externalEventLoop = functionTakesEventLoopParam(statement.name, context)
-  if (returnType === 'void' && !context.throwingFunction && context.externalEventLoop) {
+  if (returnType === 'void' && context.externalEventLoop) {
     context.cleanupEnabled = false
   }
-  context.functionReturnOut = 'inox_out'
-  context.functionErrorOut = 'inox_error_out'
 
   if (baseContext.asyncTaskWrappers.has(statement.name)) {
     return emitAsyncTaskFunctionStubDeclaration(statement, context, deps.asyncTaskLoweringDependencies)
-  }
-
-  if (context.throwingFunction) {
-    registerErrorChannel(context)
   }
 
   registerFunctionParamsInContext(statement, params, context)
@@ -345,10 +332,8 @@ export function emitFunctionDeclaration(
   const needsCleanup = shouldEmitCleanupLabel(context)
 
   lines.push(`${emitFunctionHead(statement, context)} {`)
-  pushIndentedDeclarationLines(lines, emitThrowingFunctionPrelude(context))
   pushIndentedDeclarationLines(lines, emitReturnValueDeclarations(context))
   pushIndentedDeclarationLines(lines, emitFunctionReturnCompanionPrelude(context.returnFunctionCompanions))
-  pushIndentedDeclarationLines(lines, emitStatusResultDeclarations(context))
   pushIndentedDeclarationLines(lines, emitLoopFlowDeclarations(context))
   pushIndentedDeclarationLines(lines, emitReturnFlowDeclarations(context))
   pushIndentedDeclarationLines(lines, emitEventLoopDeclarations(context))
@@ -361,7 +346,6 @@ export function emitFunctionDeclaration(
   if (needsCleanup) {
     pushScopedDeclarationBody(lines, bodyLines)
     lines.push('cleanup:')
-    pushIndentedDeclarationLines(lines, emitThrowingFunctionErrorTransfer(context))
     pushIndentedDeclarationLines(lines, emitOwnedValueCleanup(context))
     pushIndentedDeclarationLines(lines, emitOwnedAsyncResultCleanup(context))
     pushIndentedDeclarationLines(lines, emitEventLoopCleanup(context))
@@ -502,18 +486,6 @@ export function emitFunctionHead(statement: CNode, context: CEmitContext): strin
 
   if (functionTakesEventLoopParam(statement.name, context) && context.explicitEventLoop === true) {
     params.unshift('inox_loop* inox_loop')
-  }
-
-  if (isThrowingFunctionName(statement.name, context)) {
-    if (returnType !== 'void') {
-      params.push(`${emitThrowingFunctionOutType(returnType, returnNullable, returnShape)}* inox_out`)
-    }
-
-    pushFunctionReturnCompanionParams(params, returnCompanions)
-
-    params.push('inox_value* inox_error_out')
-
-    return `inox_status ${name}(${declarationParamList(params)})`
   }
 
   pushFunctionReturnCompanionParams(params, returnCompanions)
@@ -806,10 +778,7 @@ export function emitClassMethodDeclaration(
 
   context.returnShape = physicalReturnShape(method, method.returnShape, context)
   context.returnLibraryNative = hasPhysicalNativeReturn(method, context)
-  context.throwingFunction = isThrowingClassMethod(info, method, baseContext)
   context.externalEventLoop = functionTakesEventLoopParam(methodEffectName, baseContext)
-  context.functionReturnOut = 'inox_out'
-  context.functionErrorOut = 'inox_error_out'
 
   if (info.native) {
     context.variables.set('this', cClassValueTypeName(info.name))
@@ -819,9 +788,6 @@ export function emitClassMethodDeclaration(
   }
 
   context.classInstanceTypes.set('this', info.name)
-  if (context.throwingFunction) {
-    registerErrorChannel(context)
-  }
   registerFunctionParamsInContext(method, params, context)
 
   const bodyLines: string[] = []
@@ -834,9 +800,7 @@ export function emitClassMethodDeclaration(
   const needsCleanup = shouldEmitCleanupLabel(context)
 
   lines.push(`${emitClassMethodHead(info, method, context, inClass)} {`)
-  pushIndentedDeclarationLines(lines, emitThrowingFunctionPrelude(context))
   pushIndentedDeclarationLines(lines, emitReturnValueDeclarations(context))
-  pushIndentedDeclarationLines(lines, emitStatusResultDeclarations(context))
   pushIndentedDeclarationLines(lines, emitLoopFlowDeclarations(context))
   pushIndentedDeclarationLines(lines, emitReturnFlowDeclarations(context))
   pushIndentedDeclarationLines(lines, emitEventLoopDeclarations(context))
@@ -849,7 +813,6 @@ export function emitClassMethodDeclaration(
   if (needsCleanup) {
     pushScopedDeclarationBody(lines, bodyLines)
     lines.push('cleanup:')
-    pushIndentedDeclarationLines(lines, emitThrowingFunctionErrorTransfer(context))
     pushIndentedDeclarationLines(lines, emitOwnedValueCleanup(context))
     pushIndentedDeclarationLines(lines, emitOwnedAsyncResultCleanup(context))
     pushIndentedDeclarationLines(lines, emitEventLoopCleanup(context))
@@ -1035,10 +998,7 @@ function emitNativeClassConstructorDeclaration(
   const params: CFunctionParam[] = constructorMethod.params
 
   context.returnShape = null
-  context.throwingFunction = false
   context.externalEventLoop = false
-  context.functionReturnOut = null
-  context.functionErrorOut = null
   context.variables.set('this', cClassValueTypeName(info.name))
   context.classInstanceTypes.set('this', info.name)
   registerFunctionParamsInContext(constructorMethod, params, context)
@@ -1057,7 +1017,6 @@ function emitNativeClassConstructorDeclaration(
 
   lines.push(`${head} {`)
   pushIndentedDeclarationLines(lines, emitReturnValueDeclarations(context))
-  pushIndentedDeclarationLines(lines, emitStatusResultDeclarations(context))
   pushIndentedDeclarationLines(lines, emitLoopFlowDeclarations(context))
   pushIndentedDeclarationLines(lines, emitReturnFlowDeclarations(context))
   pushIndentedDeclarationLines(lines, emitEventLoopDeclarations(context))
@@ -1140,10 +1099,6 @@ export function emitClassMethodPrototype(info: CClassInfo, method: CNode, contex
 
   const params = emitClassMethodParams(info, method, context)
 
-  if (isThrowingClassMethod(info, method, context)) {
-    return `inox_status ${emitCIdentifier(method.name)}(${joinDeclarationParams(params)});`
-  }
-
   return `${emitCReturnType(method.returnType, method.returnNullable, physicalReturnShape(method, method.returnShape, context))} ${emitCIdentifier(method.name)}(${joinDeclarationParams(
     params
   )});`
@@ -1164,20 +1119,12 @@ export function emitClassMethodHead(
     ? emitCIdentifier(method.name)
     : `${emitCClassInfoTypeName(info)}::${emitCIdentifier(method.name)}`
 
-  if (isThrowingClassMethod(info, method, context)) {
-    return `inox_status ${name}(${joinDeclarationParams(params)})`
-  }
-
   return `${emitCReturnType(method.returnType, method.returnNullable, physicalReturnShape(method, method.returnShape, context))} ${name}(${joinDeclarationParams(params)})`
 }
 
 function emitRuntimeClassMethodHead(info: CClassInfo, method: CNode, context: CEmitContext): string {
   const params = emitRuntimeClassMethodParams(info, method, context)
   const name = emitCClassInfoMethodName(info, method.name)
-
-  if (isThrowingClassMethod(info, method, context)) {
-    return `static inox_status ${name}(${joinDeclarationParams(params)})`
-  }
 
   return `static ${emitCReturnType(method.returnType, method.returnNullable, physicalReturnShape(method, method.returnShape, context))} ${name}(${joinDeclarationParams(params)})`
 }
@@ -1197,16 +1144,6 @@ function emitRuntimeClassMethodParams(info: CClassInfo, method: CNode, context: 
     pushObjectFunctionFieldParams(params, method.params[index], context)
   }
 
-  if (isThrowingClassMethod(info, method, context)) {
-    if (method.returnType !== 'void') {
-      params.push(
-        `${emitThrowingFunctionOutType(method.returnType, method.returnNullable === true, physicalReturnShape(method, method.returnShape, context))}* inox_out`
-      )
-    }
-
-    params.push('inox_value* inox_error_out')
-  }
-
   return params
 }
 
@@ -1223,22 +1160,7 @@ function emitClassMethodParams(info: CClassInfo, method: CNode, context: CEmitCo
     pushObjectFunctionFieldParams(params, method.params[index], context)
   }
 
-  if (isThrowingClassMethod(info, method, context)) {
-    if (method.returnType !== 'void') {
-      params.push(
-        `${emitThrowingFunctionOutType(method.returnType, method.returnNullable === true, physicalReturnShape(method, method.returnShape, context))}* inox_out`
-      )
-    }
-
-    params.push('inox_value* inox_error_out')
-  }
-
   return params
-}
-
-function isThrowingClassMethod(info: CClassInfo, method: CNode, context: CEmitContext): boolean {
-  const methodEffectName = `${info.name}.${method.name}`
-  return isThrowingFunctionName(methodEffectName, context)
 }
 
 function emitClassMethodParam(param: CFunctionParam, index: number, method: CNode, context: CEmitContext): string {
@@ -1773,41 +1695,4 @@ function emitDefaultRuntimeParamPreludeForParam(
   }
 
   return []
-}
-
-function emitThrowingFunctionPrelude(context: CFunctionContext): string[] {
-  if (!context.throwingFunction) {
-    return []
-  }
-
-  const lines: string[] = []
-  let guard = `if (${context.functionErrorOut} == 0`
-
-  if (context.returnType !== 'void') {
-    guard = `${guard} || ${context.functionReturnOut} == 0`
-  }
-
-  lines.push(`${guard}) return INOX_ERR_TYPE;`)
-  lines.push(`*${context.functionErrorOut} = inox_undefined_value();`)
-
-  if (context.returnType !== 'void') {
-    let returnValue = '0'
-
-    const libraryCppType = libraryNativeBoundaryCppType(
-      context.returnType,
-      context.returnNullable === true,
-      false,
-      context.returnShape
-    )
-
-    if (libraryCppType !== null) {
-      returnValue = `${libraryCppType}{}`
-    } else if (isThrowingFunctionRuntimeOut(context)) {
-      returnValue = 'inox_undefined_value()'
-    }
-
-    lines.push(`*${context.functionReturnOut} = ${returnValue};`)
-  }
-
-  return lines
 }

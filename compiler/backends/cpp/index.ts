@@ -934,8 +934,6 @@ const cCallExpressionDependencies = {
   isExternalEventLoopFunctionCallee,
   isNullableFunctionType,
   isAsyncResultReturningFunctionCallee,
-  registerErrorChannel,
-  registerErrorValue,
   resolveFunctionValueType,
   resolveFunctionParams,
   resolveRuntimeCallbackCalleeType,
@@ -1158,7 +1156,7 @@ function createThrowingFunctionInfo(
 
     functionThrowValueTypes.set(effect.name, effect.throwValueTypes)
 
-    if (effect.name !== 'main' && effect.mayLeavePendingException === true) {
+    if (effect.name !== 'main' && (effect.mayLeavePendingException === true || effect.throws)) {
       pendingExceptionFunctions.add(effect.name)
     }
 
@@ -6987,7 +6985,7 @@ function emitPreparedThrowingAsyncFunctionAsyncResultCallExpression(
   const callParams = functionParamsOrEmpty(params)
 
   registerEventLoop(context)
-  registerErrorChannel(context)
+  registerErrorValue(context)
 
   let out = nextCName(context, 'inox_async_result')
 
@@ -7001,13 +6999,9 @@ function emitPreparedThrowingAsyncFunctionAsyncResultCallExpression(
     result = nextCName(context, 'inox_async_result')
   }
   const managedResult = result !== null && typeof result !== 'undefined' && isManagedRuntimeReturnType(valueType)
-  const status = nextCName(context, 'inox_async_status')
-  const args: string[] = []
   const rejectionValueType = resolveCFunctionRejectionValueType(expression.callee, context)
   let fulfilledValue = 'inox_undefined_value()'
   let valueCheck = ''
-
-  pushAll(args, prepared.args)
 
   if (result !== null && typeof result !== 'undefined') {
     if (valueType === 'boolean') {
@@ -7023,25 +7017,12 @@ function emitPreparedThrowingAsyncFunctionAsyncResultCallExpression(
     valueCheck = emitRuntimeValueCheck(result, cRuntimeValueTag(valueType), context)
   }
 
-  if (result !== null && typeof result !== 'undefined') {
-    args.push(managedResult ? `${result}.out()` : `&${result}`)
-  }
-
-  args.push('inox_error.out()')
-
   if (options.owned !== false) {
     registerOwnedAsyncResult(context, out, valueType, rejectionValueType)
   }
 
   if (managedResult && result !== null && typeof result !== 'undefined') {
     registerOwnedValue(context, result)
-  }
-
-  const resultPreparationLines: string[] = []
-  if (result !== null && typeof result !== 'undefined') {
-    if (!managedResult) {
-      resultPreparationLines.push(`double ${result} = 0;`)
-    }
   }
 
   const managedResultResetLines: string[] = []
@@ -7075,16 +7056,23 @@ function emitPreparedThrowingAsyncFunctionAsyncResultCallExpression(
   }
 
   const lines: string[] = []
+  const call = `${emitCallee(expression.callee, context)}(${joinStrings(prepared.args, ', ')})`
 
   pushAll(lines, prepared.lines)
-  pushAll(lines, resultPreparationLines)
-  lines.push(`inox_status ${status} = ${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')});`)
-  lines.push(`if (${status} == INOX_ERR_THROW) {`)
+  if (result === null || typeof result === 'undefined') {
+    lines.push(`${call};`)
+  } else if (managedResult) {
+    lines.push(`${result} = ${call};`)
+  } else {
+    lines.push(`auto ${result} = ${call};`)
+  }
+
+  lines.push('if (inox::thrown()) {')
+  lines.push('  inox_error = inox::take_exception();')
   lines.push(`  ${out} = ${rejectExpression}(inox_error);`)
   lines.push(`  ${emitAsyncResultRuntimeTypeCheck(out, context)}`)
   pushIndented(lines, emitPrepareOwnedValueWrite('inox_error'), '  ')
   lines.push('} else {')
-  lines.push(`  if (${status} != INOX_OK) ${emitFailureStatement(context)}`)
 
   if (valueCheck !== '') {
     lines.push(`  ${valueCheck}`)
@@ -7580,48 +7568,22 @@ function emitAwaitResultRejectedAsyncResultLines(
 function emitThrownCheckLines(context: CFunctionContext): string[] {
   const target = currentErrorTarget(context) ?? ''
 
-  if (target === '' && !context.throwingFunction) {
+  if (target === '') {
     return [`if (inox::thrown()) ${emitFailureStatement(context)}`]
   }
 
-  const errorActiveNeeded = currentErrorTargetRequiresActive(context) || (target === '' && context.throwingFunction)
-
-  if (errorActiveNeeded) {
-    registerErrorChannel(context)
-  } else if (target === '') {
-    registerErrorValue(context)
-  }
-
-  const lines: string[] = []
-
-  if (target !== '' && !errorActiveNeeded) {
+  if (!currentErrorTargetRequiresActive(context)) {
     return [`if (inox::thrown()) goto ${target};`]
   }
 
-  lines.push('if (inox::thrown()) {')
-  if (target === '') {
-    lines.push('  inox_error = inox::take_exception();')
-  }
-  if (errorActiveNeeded) {
-    lines.push('  inox_error_active = 1;')
-  }
-
-  if (target === '') {
-    lines.push('  inox_status_result = INOX_ERR_THROW;')
-    lines.push('  goto cleanup;')
-  } else {
-    lines.push(`  goto ${target};`)
-  }
-
-  lines.push('}')
-
-  return lines
+  registerErrorChannel(context)
+  return ['if (inox::thrown()) {', '  inox_error_active = 1;', `  goto ${target};`, '}']
 }
 
 function shouldAwaitReadRejectedAsyncResult(context: CFunctionContext): boolean {
   const target = currentErrorTarget(context) ?? ''
 
-  return target !== '' || context.throwingFunction
+  return target !== ''
 }
 
 function emitCAsyncFunctionAwaitExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null {

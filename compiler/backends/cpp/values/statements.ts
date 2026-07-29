@@ -2887,14 +2887,6 @@ function pushEndLabel(lines: string[], endLabel: string): void {
 export function emitThrowStatement(statement: StatementNode, context: CFunctionContext): string[] {
   const target = currentErrorTarget(context)
 
-  if ((target === null || typeof target === 'undefined') && !context.throwingFunction) {
-    pushDiagnostic(
-      context,
-      diagnostic('INOX_C_THROW', 'uncaught throw is not supported by the current C++ backend slice', statement.loc)
-    )
-    return []
-  }
-
   const isExceptionValue = isThrowableExceptionValueExpression(statement.argument, context)
   const valueType = throwableExpressionValueType(statement.argument, context, isExceptionValue)
 
@@ -2903,7 +2895,7 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
       context,
       diagnostic(
         'INOX_C_THROW',
-        'C throw currently supports only string values and package-provided exception objects in local try/catch regions',
+        'C throw currently supports only string values and package-provided exception objects',
         statement.loc
       )
     )
@@ -2915,54 +2907,24 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
     context
   )
 
-  if (target !== null && typeof target !== 'undefined') {
-    const errorActiveNeeded = currentErrorTargetRequiresActive(context)
-    const errorValue = nextCName(context, 'inox_throw_error')
-    const lines: string[] = []
-
-    if (errorActiveNeeded) {
-      registerErrorChannel(context)
-    }
-
-    registerOwnedValue(context, errorValue)
-    pushAllLines(lines, value.lines)
-    lines.push(`${errorValue} = ${value.expression};`)
-
-    const typeCheck = throwableValueMismatchCondition(errorValue, valueType, isExceptionValue)
-
-    lines.push(emitRuntimeTypeCheck(typeCheck, context))
-    pushPreparedRuntimeValueOwnershipLines(lines, errorValue, value)
-    lines.push(`inox::throw_value(${errorValue});`)
-
-    if (errorActiveNeeded) {
-      lines.push('inox_error_active = 1;')
-    }
-
-    lines.push(`goto ${target};`)
-
-    return lines
-  }
-
-  const errorActiveNeeded = context.throwingFunction
+  const errorActiveNeeded =
+    target !== null && typeof target !== 'undefined' && currentErrorTargetRequiresActive(context)
+  const errorValue = nextCName(context, 'inox_throw_error')
+  const lines: string[] = []
 
   if (errorActiveNeeded) {
     registerErrorChannel(context)
-  } else {
-    registerErrorValue(context)
   }
 
-  const lines: string[] = []
+  registerOwnedValue(context, errorValue)
   pushAllLines(lines, value.lines)
-  lines.push(`inox_error = ${value.expression};`)
+  lines.push(`${errorValue} = ${value.expression};`)
 
-  const typeCheck = throwableValueMismatchCondition('inox_error', valueType, isExceptionValue)
+  const typeCheck = throwableValueMismatchCondition(errorValue, valueType, isExceptionValue)
 
   lines.push(emitRuntimeTypeCheck(typeCheck, context))
-  pushPreparedRuntimeValueOwnershipLines(lines, 'inox_error', value)
-
-  if (target === null || typeof target === 'undefined') {
-    lines.push('inox_status_result = INOX_ERR_THROW;')
-  }
+  pushPreparedRuntimeValueOwnershipLines(lines, errorValue, value)
+  lines.push(`inox::throw_value(${errorValue});`)
 
   if (errorActiveNeeded) {
     lines.push('inox_error_active = 1;')

@@ -65,7 +65,6 @@ type NullableFunctionContext = {
   returnType?: string
   runtimeCallbacks: CStringSet
   statusReturn: boolean
-  throwingFunction: boolean
   variables: CStringMap
 }
 
@@ -131,41 +130,16 @@ function registerNullableErrorChannel(context: NullableFunctionContext): void {
 function emitNullableThrownCheckLines(context: NullableFunctionContext): string[] {
   const target = currentNullableErrorTarget(context)
 
-  if (target === '' && !context.throwingFunction) {
+  if (target === '') {
     return [`if (inox::thrown()) ${emitFailureStatement(context)}`]
   }
 
-  const errorActiveNeeded =
-    currentNullableErrorTargetRequiresActive(context) || (target === '' && context.throwingFunction)
-
-  if (errorActiveNeeded) {
-    registerNullableErrorChannel(context)
-  } else if (target === '') {
-    registerNullableErrorValue(context)
-  }
-
-  if (target !== '' && !errorActiveNeeded) {
+  if (!currentNullableErrorTargetRequiresActive(context)) {
     return [`if (inox::thrown()) goto ${target};`]
   }
 
-  const lines: string[] = ['if (inox::thrown()) {']
-
-  if (target === '') {
-    lines.push('  inox_error = inox::take_exception();')
-  }
-  if (errorActiveNeeded) {
-    lines.push('  inox_error_active = 1;')
-  }
-  if (target === '') {
-    lines.push('  inox_status_result = INOX_ERR_THROW;')
-    lines.push('  goto cleanup;')
-  } else {
-    lines.push(`  goto ${target};`)
-  }
-
-  lines.push('}')
-
-  return lines
+  registerNullableErrorChannel(context)
+  return ['if (inox::thrown()) {', '  inox_error_active = 1;', `  goto ${target};`, '}']
 }
 
 function emitNullableObjectGetValueLines(

@@ -47,11 +47,6 @@ export type CRuntimeValueAdapterInfo = {
   valueExpression: string
 }
 
-export type CReturnTypeContext = {
-  returnNullable: boolean
-  returnType: string
-}
-
 export type CNullableScalarParam = {
   defaultValue?: object | null
   nullable?: boolean
@@ -676,37 +671,6 @@ export function emitCReturnType(valueType: CValueTypeInput, nullable: boolean, s
   }
 
   return emitCType(valueType)
-}
-
-export function emitThrowingFunctionOutType(
-  valueType: CValueTypeInput,
-  nullable: boolean,
-  shape?: CLibraryNativeShape | null
-): string {
-  const libraryCppType = libraryNativeBoundaryCppType(valueType, nullable, false, shape)
-
-  if (libraryCppType !== null) {
-    return libraryCppType
-  }
-
-  if (nullable && isNullableScalarType(valueType)) {
-    return 'inox_value'
-  }
-
-  if (isManagedRuntimeReturnType(valueType)) {
-    return 'inox_value'
-  }
-
-  return emitCType(valueType)
-}
-
-export function isThrowingFunctionRuntimeOut(context: CReturnTypeContext): boolean {
-  return (
-    context.returnType === 'unknown' ||
-    isManagedRuntimeReturnType(context.returnType) ||
-    isOpaqueRuntimeValueType(context.returnType) ||
-    (context.returnNullable === true && isNullableScalarType(context.returnType))
-  )
 }
 
 export function cRuntimeValueTag(valueType: CValueTypeInput): CRuntimeValueTag {

@@ -3206,10 +3206,6 @@ function emitKnownPreparedClassMethodCallExpression(
   pushAllLines(callLines, call.objectLines)
   pushAllLines(callLines, prepared.lines)
 
-  if (isThrowingClassMethod(call.info, method, context)) {
-    return emitPreparedThrowingClassMethodCallExpression(call, method, callLines, prepared, context)
-  }
-
   const callExpression = emitClassMethodCallExpression(call, method, prepared, context)
   const leavesPendingException = isPendingExceptionClassMethod(call.info, method, context)
   const returnCppType = libraryNativeBoundaryCppType(
@@ -3356,128 +3352,7 @@ function emitClassPendingExceptionCheck(context: ClassFunctionContext): string[]
     return [`if (inox::thrown()) goto ${target};`]
   }
 
-  if (!context.throwingFunction) {
-    return [`if (inox::thrown()) ${emitFailureStatement(context)}`]
-  }
-
-  registerClassMethodErrorChannel(context)
-
-  return [
-    'if (inox::thrown()) {',
-    '  inox_error = inox::take_exception();',
-    '  inox_error_active = 1;',
-    '  inox_status_result = INOX_ERR_THROW;',
-    '  goto cleanup;',
-    '}'
-  ]
-}
-
-function emitPreparedThrowingClassMethodCallExpression(
-  call: ClassMethodCallInfo,
-  method: AnyNode,
-  callLines: string[],
-  prepared: PreparedCallArgs,
-  context: ClassFunctionContext
-): PreparedExpression {
-  const callArgs: string[] = []
-  const lines: string[] = []
-  let result = ''
-
-  if (classMethodTakesEventLoopParam(call.info, method, context)) {
-    registerEventLoop(context)
-  }
-
-  if (!call.native) {
-    callArgs.push(call.objectExpression)
-  }
-
-  for (const arg of prepared.args) {
-    callArgs.push(arg)
-  }
-
-  pushAllLines(lines, callLines)
-  if (currentClassErrorTarget(context) !== null) {
-    registerOwnedValue(context, 'inox_error')
-  } else {
-    registerClassMethodErrorChannel(context)
-  }
-  if (method.returnType !== 'void') {
-    result = nextCName(context, 'inox_method_result')
-    const returnCppType = libraryNativeBoundaryCppType(
-      method.returnType,
-      method.returnNullable === true,
-      false,
-      method.returnShape
-    )
-
-    if (returnCppType !== null) {
-      lines.push(`${returnCppType} ${result}{};`)
-    } else if (isThrowingClassMethodRuntimeOut(method)) {
-      lines.push(`inox_value ${result} = inox_undefined_value();`)
-    } else {
-      lines.push(`double ${result} = 0;`)
-    }
-
-    if (returnCppType !== null) {
-      callArgs.push(`std::addressof(${result})`)
-    } else {
-      callArgs.push(`&${result}`)
-    }
-  }
-
-  callArgs.push('inox_error.out()')
-
-  const status = nextCName(context, 'inox_method_status')
-  let callExpression = `${call.objectExpression}${call.accessOperator}${emitCClassMethodIdentifier(method.name)}(${joinStrings(
-    callArgs,
-    ', '
-  )})`
-
-  if (!call.native) {
-    callExpression = `${emitCClassInfoMethodName(call.info, method.name)}(${joinStrings(callArgs, ', ')})`
-  }
-
-  lines.push(`inox_status ${status} = ${callExpression};`)
-  pushAllLines(lines, emitThrowingClassMethodStatusCheck(status, context))
-
-  return {
-    lines,
-    expression: result,
-    cppType:
-      libraryNativeBoundaryCppType(method.returnType, method.returnNullable === true, false, method.returnShape) ??
-      undefined,
-    valueType: method.returnType
-  }
-}
-
-function isThrowingClassMethodRuntimeOut(method: AnyNode): boolean {
-  return (
-    method.returnType === 'unknown' ||
-    isManagedRuntimeReturnType(method.returnType) ||
-    isOpaqueRuntimeValueType(method.returnType) ||
-    (method.returnNullable === true && isNullableScalarType(method.returnType))
-  )
-}
-
-function emitThrowingClassMethodStatusCheck(status: string, context: ClassFunctionContext): string[] {
-  const target = currentClassErrorTarget(context)
-  const lines = [`if (${status} == INOX_ERR_THROW) {`]
-
-  if (target !== null && typeof target !== 'undefined') {
-    lines.push('  inox::throw_value(inox_error);')
-    lines.push(`  goto ${target};`)
-  } else if (context.throwingFunction) {
-    lines.push('  inox_error_active = 1;')
-    lines.push('  inox_status_result = INOX_ERR_THROW;')
-    lines.push('  goto cleanup;')
-  } else {
-    lines.push(`  ${emitFailureStatement(context)}`)
-  }
-
-  lines.push('}')
-  lines.push(`if (${status} != INOX_OK) ${emitFailureStatement(context)}`)
-
-  return lines
+  return [`if (inox::thrown()) ${emitFailureStatement(context)}`]
 }
 
 function currentClassErrorTarget(context: ClassFunctionContext): string | null {
@@ -3488,22 +3363,6 @@ function currentClassErrorTarget(context: ClassFunctionContext): string | null {
   }
 
   return targets[targets.length - 1]
-}
-
-function registerClassMethodErrorChannel(context: ClassFunctionContext): void {
-  context.errorChannelUsed = true
-  registerOwnedValue(context, 'inox_error')
-}
-
-function isThrowingClassMethod(info: CClassInfo, method: AnyNode, context: ClassFunctionContext): boolean {
-  const throwingFunctions = context.throwingFunctions
-
-  if (throwingFunctions === null || typeof throwingFunctions === 'undefined') {
-    return false
-  }
-
-  const methodEffectName = irClassMethodEffectName(info.name, method.name)
-  return throwingFunctions.has(methodEffectName)
 }
 
 function isPendingExceptionClassMethod(

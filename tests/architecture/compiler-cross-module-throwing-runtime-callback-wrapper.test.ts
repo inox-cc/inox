@@ -5,7 +5,7 @@ import { compileFileToCppModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
-test('runtime callback wrapper calls a throwing cross-module function through status ABI', () => {
+test('runtime callback wrapper converts pending exception to callback status', () => {
   const host = createMemoryCompilerHost(
     [
       {
@@ -40,11 +40,10 @@ export function implementation(value: object, label?: string): object | null {
   assert.ok(source)
   assert.match(
     source.code,
-    /inox_status inox_callback_status = inox_mod_implementation_ts_[a-f0-9]+_implementation\(\s*args\[0\],\s*args\[1\],\s*&inox_callback_result,\s*&inox_callback_error\s*\);/
+    /inox_value inox_callback_result = inox_mod_implementation_ts_[a-f0-9]+_implementation\(args\[0\], args\[1\]\);/
   )
-  assert.match(
-    source.code,
-    /if \(inox_callback_status == INOX_ERR_THROW\) \{\s+inox::throw_value\(inox_callback_error\);\s+\}/
-  )
-  assert.doesNotMatch(source.code, /\*out = inox_mod_implementation_ts_[a-f0-9]+_implementation\(/)
+  assert.match(source.code, /if \(inox::thrown\(\)\) return INOX_ERR_THROW;/)
+  assert.match(source.code, /\*out = inox_callback_result;/)
+  assert.doesNotMatch(source.code, /\binox_callback_error\b/)
+  assert.doesNotMatch(source.code, /\binox_callback_status\b/)
 })

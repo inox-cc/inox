@@ -76,7 +76,6 @@ type ObjectFunctionContext = ObjectShapeContext &
     ownedValues: string[]
     returnType?: string
     statusReturn: boolean
-    throwingFunction: boolean
   }
 
 type ObjectFieldNode = AnyNode
@@ -208,41 +207,16 @@ function registerObjectErrorChannel(context: ObjectFunctionContext): void {
 function emitObjectThrownCheckLines(context: ObjectFunctionContext): string[] {
   const target = currentObjectErrorTarget(context)
 
-  if (target === '' && !context.throwingFunction) {
+  if (target === '') {
     return [`if (inox::thrown()) ${emitFailureStatement(context)}`]
   }
 
-  const errorActiveNeeded =
-    currentObjectErrorTargetRequiresActive(context) || (target === '' && context.throwingFunction)
-
-  if (errorActiveNeeded) {
-    registerObjectErrorChannel(context)
-  } else if (target === '') {
-    registerObjectErrorValue(context)
-  }
-
-  if (target !== '' && !errorActiveNeeded) {
+  if (!currentObjectErrorTargetRequiresActive(context)) {
     return [`if (inox::thrown()) goto ${target};`]
   }
 
-  const lines: string[] = ['if (inox::thrown()) {']
-
-  if (target === '') {
-    lines.push('  inox_error = inox::take_exception();')
-  }
-  if (errorActiveNeeded) {
-    lines.push('  inox_error_active = 1;')
-  }
-  if (target === '') {
-    lines.push('  inox_status_result = INOX_ERR_THROW;')
-    lines.push('  goto cleanup;')
-  } else {
-    lines.push(`  goto ${target};`)
-  }
-
-  lines.push('}')
-
-  return lines
+  registerObjectErrorChannel(context)
+  return ['if (inox::thrown()) {', '  inox_error_active = 1;', `  goto ${target};`, '}']
 }
 
 function findObjectShapeFieldIndex(fields: CObjectShapeField[], key: string): number {
