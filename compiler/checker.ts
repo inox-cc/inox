@@ -1,4 +1,5 @@
 import {
+  commonValueType,
   inferBinaryExpressionType,
   isAssignableType,
   isEqualityComparableType,
@@ -125,7 +126,6 @@ import {
   isStatementExpressionNode,
   mergeShapeFields,
   paramForArgument,
-  resolveSingleReturnExpression,
   statementAlwaysExits,
   uniqueNames
 } from './checker/helpers.ts'
@@ -156,6 +156,7 @@ import {
   checkerNodeAt,
   cloneObjectShapeField,
   cloneStringSet,
+  commonResolvedObjectShape,
   conditionalExpressionValueType,
   deleteNullableNarrowingKey,
   firstPathSegment,
@@ -356,6 +357,8 @@ type CheckerLoopDepthState = {
   continueDepth: number
 }
 
+type InferredFunctionReturnCandidate = ResolvedTypeInfo
+
 export function checkProgram(
   program: ProgramNode,
   options: CompileOptions = {},
@@ -414,6 +417,7 @@ class Checker {
   retriedIncompleteDeclaredTypes: Set<string>
   functionDeclarations: Map<string, AnyNode>
   inferringFunctionReturns: Set<string>
+  inferredFunctionReturnCandidates: InferredFunctionReturnCandidate[] | null
   libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null
 
   constructor(
@@ -451,6 +455,7 @@ class Checker {
     this.retriedIncompleteDeclaredTypes = new Set()
     this.functionDeclarations = new Map()
     this.inferringFunctionReturns = new Set()
+    this.inferredFunctionReturnCandidates = null
     this.libraryLiteralTypeInference = libraryLiteralTypeInference
   }
 
@@ -1769,6 +1774,18 @@ class Checker {
 
       if (statement.argument !== null && typeof statement.argument !== 'undefined') {
         actual = this.checkExpression(statement.argument)
+      }
+
+      if (this.inferredFunctionReturnCandidates !== null) {
+        this.inferredFunctionReturnCandidates.push({
+          valueType: actual,
+          nullable: this.expressionCanBeNull(statement.argument),
+          typeRef: statement.argument?.typeRef ?? null,
+          functionType: statement.argument?.functionType ?? null,
+          shape: this.resolveExpressionShape(statement.argument),
+          asyncResultValueType: this.resolveExpressionAsyncResultValueType(statement.argument)
+        })
+        return
       }
 
       if (
@@ -6198,18 +6215,16 @@ class Checker {
       return
     }
 
-    const returnExpression = resolveSingleReturnExpression(declaration.body)
-
-    if (returnExpression === null) {
-      declaration.returnType = 'void'
-      symbol.returnType = 'void'
-      return
-    }
-
     const diagnosticsLength = this.diagnostics.length
     const scopeState = this.pushScope()
     const typeParameterState = this.pushFunctionTypeParameters(declaration)
+    const returnContextState = this.pushReturnContext('unknown', true, null)
+    const previousFunctionDepth = this.functionDepth
+    const previousCandidates = this.inferredFunctionReturnCandidates
+    const candidates: InferredFunctionReturnCandidate[] = []
     this.inferringFunctionReturns.add(declaration.name)
+    this.inferredFunctionReturnCandidates = candidates
+    this.functionDepth = this.functionDepth + 1
 
     try {
       for (let index = 0; index < declaration.params.length; index = index + 1) {
@@ -6235,29 +6250,55 @@ class Checker {
         )
       }
 
-      const returnType = this.checkExpression(returnExpression)
-      const returnShape = this.resolveExpressionShape(returnExpression)
-
-      declaration.returnType = returnType
-      declaration.returnNullable = this.expressionCanBeNull(returnExpression)
-      declaration.returnAsyncResultValueType = this.resolveExpressionAsyncResultValueType(returnExpression)
-      declaration.returnShape = returnShape
-      declaration.returnTypeRef = returnExpression.typeRef ?? null
-
-      symbol.returnType = returnType
-      symbol.returnTypeRef = declaration.returnTypeRef
-      symbol.returnNullable = declaration.returnNullable === true
-      symbol.returnAsyncResultValueType = declaration.returnAsyncResultValueType
-      symbol.returnShape = returnShape
+      this.checkStatements(declaration.body)
+      this.applyInferredFunctionReturn(declaration, symbol, candidates)
     } finally {
       while (this.diagnostics.length > diagnosticsLength) {
         this.diagnostics.pop()
       }
 
+      this.functionDepth = previousFunctionDepth
+      this.inferredFunctionReturnCandidates = previousCandidates
       this.inferringFunctionReturns.delete(declaration.name)
+      this.restoreReturnContext(returnContextState)
       this.restoreFunctionTypeParameters(typeParameterState)
       this.restoreScope(scopeState)
     }
+  }
+
+  applyInferredFunctionReturn(
+    declaration: AnyNode,
+    symbol: SymbolInfo,
+    candidates: InferredFunctionReturnCandidate[]
+  ): void {
+    if (candidates.length === 0) {
+      declaration.returnType = 'void'
+      symbol.returnType = 'void'
+      return
+    }
+
+    const valueTypes: ValueType[] = []
+
+    for (let index = 0; index < candidates.length; index = index + 1) {
+      valueTypes.push(candidates[index].valueType)
+    }
+
+    const returnType = commonValueType(valueTypes)
+    const returnTypeRef = commonInferredFunctionReturnTypeRef(candidates)
+    const returnShape =
+      returnType === 'object' && returnTypeRef === null ? commonResolvedObjectShape(candidates) : null
+
+    declaration.returnType = returnType
+    declaration.returnNullable = inferredFunctionReturnCanBeNull(candidates)
+    declaration.returnAsyncResultValueType = commonInferredFunctionReturnAsyncResultValueType(candidates)
+    declaration.returnShape = returnShape
+    declaration.returnTypeRef = returnTypeRef
+
+    symbol.returnType = returnType
+    symbol.returnTypeRef = returnTypeRef
+    symbol.returnNullable = declaration.returnNullable === true
+    symbol.returnAsyncResultValueType = declaration.returnAsyncResultValueType
+    symbol.returnShape = returnShape
   }
 
   checkVariableInitializer(
@@ -6382,6 +6423,8 @@ class Checker {
     }
 
     const scopeState = this.pushScope()
+    const previousInferredFunctionReturnCandidates = this.inferredFunctionReturnCandidates
+    this.inferredFunctionReturnCandidates = null
 
     try {
       if (
@@ -6592,6 +6635,7 @@ class Checker {
         }
       }
     } finally {
+      this.inferredFunctionReturnCandidates = previousInferredFunctionReturnCandidates
       this.restoreScope(scopeState)
     }
 
@@ -8668,7 +8712,25 @@ class Checker {
   }
 
   resolveFunctionDeclarationReturnType(item: AnyNode): ResolvedTypeInfo {
-    const resolved = this.resolveDeclaredType(item.returnType, item.loc)
+    const returnTypeRef = item.returnTypeRef
+    let resolved = this.resolveDeclaredType(item.returnType, item.loc)
+
+    if (returnTypeRef !== null && typeof returnTypeRef !== 'undefined') {
+      const metadata = typeRefCompatibilityMetadata(
+        returnTypeRef,
+        resolveCompilerLibrarySet(this.options.libraries),
+        nodeSourceLocation(item)
+      )
+
+      resolved = {
+        valueType: metadata.valueType,
+        nullable: metadata.nullable,
+        typeRef: returnTypeRef,
+        functionType: resolved.functionType,
+        shape: metadata.shape,
+        asyncResultValueType: metadata.asyncResultValueType
+      }
+    }
 
     if (item.returnShape !== null && typeof item.returnShape !== 'undefined') {
       resolved.valueType = 'object'
@@ -8995,6 +9057,60 @@ class Checker {
     const diagnostics = this.diagnostics
     diagnostics.push(item)
   }
+}
+
+function commonInferredFunctionReturnTypeRef(candidates: InferredFunctionReturnCandidate[]): TypeRef | null {
+  const first = candidates[0].typeRef
+
+  if (first === null) {
+    return null
+  }
+
+  let result: TypeRef | null = first
+
+  for (let index = 1; index < candidates.length; index = index + 1) {
+    const candidate = candidates[index].typeRef
+
+    if (candidate === null) {
+      return null
+    }
+
+    result = commonTypeRef(result, candidate)
+
+    if (result === null) {
+      return null
+    }
+  }
+
+  return result
+}
+
+function commonInferredFunctionReturnAsyncResultValueType(
+  candidates: InferredFunctionReturnCandidate[]
+): ValueType | null {
+  const valueTypes: ValueType[] = []
+
+  for (let index = 0; index < candidates.length; index = index + 1) {
+    const valueType = candidates[index].asyncResultValueType
+
+    if (valueType === null) {
+      return null
+    }
+
+    valueTypes.push(valueType)
+  }
+
+  return commonValueType(valueTypes)
+}
+
+function inferredFunctionReturnCanBeNull(candidates: InferredFunctionReturnCandidate[]): boolean {
+  for (let index = 0; index < candidates.length; index = index + 1) {
+    if (candidates[index].nullable || candidates[index].valueType === 'null') {
+      return true
+    }
+  }
+
+  return false
 }
 
 function compilerLibraryTypeRefsEqual(left: TypeRef, right: TypeRef): boolean {

@@ -277,19 +277,25 @@ export function commonTypeRef(left: TypeRef | null, right: TypeRef | null): Type
     }
   }
 
-  if (
-    left.kind === 'object' &&
-    right.kind === 'object' &&
-    typeof left.declaredName === 'string' &&
-    left.declaredName === right.declaredName
-  ) {
-    return commonNamedObjectTypeRef(left, right)
+  if (left.kind === 'object' && right.kind === 'object' && objectTypeRefsShareIdentity(left, right)) {
+    return commonObjectTypeRef(left, right)
   }
 
   return null
 }
 
-function commonNamedObjectTypeRef(left: ObjectTypeRef, right: ObjectTypeRef): ObjectTypeRef {
+function objectTypeRefsShareIdentity(left: ObjectTypeRef, right: ObjectTypeRef): boolean {
+  const leftName = left.declaredName
+  const rightName = right.declaredName
+
+  if (typeof leftName === 'string' || typeof rightName === 'string') {
+    return typeof leftName === 'string' && leftName === rightName
+  }
+
+  return true
+}
+
+function commonObjectTypeRef(left: ObjectTypeRef, right: ObjectTypeRef): ObjectTypeRef {
   if (objectTypeRefFieldNamesEqual(left.fields, right.fields)) {
     return {
       ...left,
