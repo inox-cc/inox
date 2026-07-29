@@ -132,7 +132,8 @@ export function compileSourceToIr(
   const ir = lowerHirToIr(
     hir,
     libraries.fingerprint,
-    compilerLibraryOptionsFingerprint(libraries, options.libraryOptions)
+    compilerLibraryOptionsFingerprint(libraries, options.libraryOptions),
+    libraries
   )
 
   return {

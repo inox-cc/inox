@@ -3,6 +3,7 @@ import { collectIrFeatures, collectRuntimeRequirements } from './ir/features.ts'
 import { collectGlobalUsages } from './ir/globals.ts'
 import { collectSyntaxFeatureUsages } from './ir/syntax-features.ts'
 import { collectFunctionDeclarations, collectTopLevelItems } from './ir/top-level.ts'
+import type { CompilerLibrarySet } from './extensions/types.ts'
 import type { IrProgram, ProgramNode } from './types.ts'
 
 export {
@@ -35,7 +36,8 @@ export type { IrFunctionNodeEntry, IrModuleRecord } from './ir/top-level.ts'
 export function lowerHirToIr(
   program: ProgramNode,
   librarySetFingerprint: string,
-  libraryOptionsFingerprint: string
+  libraryOptionsFingerprint: string,
+  libraries: CompilerLibrarySet
 ): IrProgram {
   const features = collectIrFeatures(program)
   const topLevelItems = collectTopLevelItems(program)
@@ -46,7 +48,7 @@ export function lowerHirToIr(
     librarySetFingerprint,
     libraryOptionsFingerprint,
     features,
-    runtimeRequirements: collectRuntimeRequirements(features, program),
+    runtimeRequirements: collectRuntimeRequirements(features, program, libraries),
     topLevelItems,
     functionDeclarations: collectFunctionDeclarations(program, topLevelItems),
     functionEffects: collectIrFunctionEffects([{ body: program.body, topLevelItems }]),

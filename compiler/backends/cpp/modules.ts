@@ -304,7 +304,8 @@ function cModulePlanIr(record: ModuleRecord, options: CppModuleEmitOptions): IrP
     const ir = lowerHirToIr(
       record.declarationProgram,
       libraries.fingerprint,
-      compilerLibraryOptionsFingerprint(libraries, options.libraryOptions)
+      compilerLibraryOptionsFingerprint(libraries, options.libraryOptions),
+      libraries
     )
     const externalFunctionEffects = record.externalFunctionEffects
 

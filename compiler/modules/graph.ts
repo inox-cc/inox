@@ -486,7 +486,8 @@ function visitModuleGraphFile(
   module.ir = lowerHirToIr(
     module.hir,
     libraries.fingerprint,
-    compilerLibraryOptionsFingerprint(libraries, context.options.libraryOptions)
+    compilerLibraryOptionsFingerprint(libraries, context.options.libraryOptions),
+    libraries
   )
   context.visiting.delete(path)
   context.order.push(module)
