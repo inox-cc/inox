@@ -1642,7 +1642,14 @@ class Checker {
       const declaredTypeRef =
         declared === null || typeof declared === 'undefined'
           ? null
-          : typeRefFromResolvedTypeInContext(declared, statement.declaredType ?? null)
+          : (declared.typeRef ??
+            (declared.valueType !== 'unknown' ||
+              declared.functionType !== null ||
+              declared.shape !== null ||
+              statement.declaredType === 'unknown' ||
+              statement.declaredType === 'any'
+              ? typeRefFromResolvedTypeInContext(declared, statement.declaredType ?? null)
+              : null))
 
       if (
         declaredTypeRef !== null &&
