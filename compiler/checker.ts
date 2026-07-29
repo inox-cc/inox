@@ -1555,13 +1555,14 @@ class Checker {
         }
       }
 
-      let nullable = false
+      let nullable = declared?.nullable === true
 
-      if (declared !== null && typeof declared !== 'undefined' && declared.nullable === true) {
-        nullable = true
-      }
-
-      if (statement.init !== null && typeof statement.init !== 'undefined' && statement.init.nullable === true) {
+      if (
+        (declared === null || typeof declared === 'undefined') &&
+        statement.init !== null &&
+        typeof statement.init !== 'undefined' &&
+        statement.init.nullable === true
+      ) {
         nullable = true
       }
 
@@ -1627,22 +1628,25 @@ class Checker {
       let className: string | null = null
       let libraryIntrinsicRole: IntrinsicRole | null = null
       let typeRef: TypeRef | null = null
+      const declaredTypeRef =
+        declared === null || typeof declared === 'undefined'
+          ? null
+          : typeRefFromResolvedTypeInContext(declared, statement.declaredType ?? null)
 
       if (
-        declared !== null &&
-        typeof declared !== 'undefined' &&
-        declared.typeRef !== null &&
-        typeof declared.typeRef !== 'undefined'
+        declaredTypeRef !== null &&
+        typeof declaredTypeRef !== 'undefined'
       ) {
-        typeRef = declared.typeRef
+        typeRef = declaredTypeRef
 
         if (
           statement.init !== null &&
           typeof statement.init !== 'undefined' &&
           statement.init.typeRef !== null &&
-          typeof statement.init.typeRef !== 'undefined'
+          typeof statement.init.typeRef !== 'undefined' &&
+          !isUnknownTypeRef(declaredTypeRef)
         ) {
-          typeRef = refineTypeRefUnknowns(declared.typeRef, statement.init.typeRef)
+          typeRef = refineTypeRefUnknowns(declaredTypeRef, statement.init.typeRef)
         }
       } else if (
         statement.init !== null &&
@@ -1653,7 +1657,14 @@ class Checker {
         typeRef = statement.init.typeRef
       }
 
-      if (statement.init !== null && typeof statement.init !== 'undefined' && typeRef !== null) {
+      if (
+        statement.init !== null &&
+        typeof statement.init !== 'undefined' &&
+        typeRef !== null &&
+        (statement.init.typeRef === null ||
+          typeof statement.init.typeRef === 'undefined' ||
+          !isUnknownTypeRef(declaredTypeRef))
+      ) {
         statement.init.typeRef = typeRef
       }
 
@@ -9164,6 +9175,10 @@ class Checker {
     const diagnostics = this.diagnostics
     diagnostics.push(item)
   }
+}
+
+function isUnknownTypeRef(typeRef: TypeRef | null | undefined): boolean {
+  return typeRef !== null && typeof typeRef !== 'undefined' && typeRef.kind === 'unknown'
 }
 
 function commonInferredFunctionReturn(

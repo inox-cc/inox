@@ -1198,10 +1198,11 @@ export function emitRuntimeValueVariableDeclaration(
   valueTypeOverride?: string | null,
   nativeShapeOverride?: CObjectShape | null
 ): string[] {
+  const explicitlyOpaque = isExplicitlyOpaqueVariableDeclaration(statement)
   let valueType = valueTypeOverride ?? statementDeps(context).inferExpressionType(expression, context)
   const statementValueType = statement.valueType
 
-  if (statement.declaredType === 'unknown') {
+  if (explicitlyOpaque) {
     valueType = 'unknown'
   }
 
@@ -1214,20 +1215,20 @@ export function emitRuntimeValueVariableDeclaration(
     valueType = statementValueType
   }
 
-  const nativeShape =
-    nativeShapeOverride ??
-    statement.shape ??
-    cTypeRefNativeShape(statement.typeRef, context.libraries) ??
-    cTypeRefNativeShape(expression.typeRef, context.libraries)
+  const nativeShape = explicitlyOpaque
+    ? null
+    : (nativeShapeOverride ??
+      statement.shape ??
+      cTypeRefNativeShape(statement.typeRef, context.libraries) ??
+      cTypeRefNativeShape(expression.typeRef, context.libraries))
   const nativeCppType = libraryNativeBoundaryCppType(valueType, statement.nullable === true, false, nativeShape)
   const expectedTag = valueType === 'object' && nativeCppType !== null ? null : cRuntimeValueTag(valueType)
   const runtimeTypeAlternatives = statement.runtimeTypeAlternatives ?? expression.runtimeTypeAlternatives
-  let nativeValidExpression = compilerLibraryNativeRuntimeValueValidExpressionForTypeRef(
-    context.libraries,
-    statement.typeRef
-  )
+  let nativeValidExpression = explicitlyOpaque
+    ? null
+    : compilerLibraryNativeRuntimeValueValidExpressionForTypeRef(context.libraries, statement.typeRef)
 
-  if (nativeValidExpression === null) {
+  if (!explicitlyOpaque && nativeValidExpression === null) {
     nativeValidExpression = compilerLibraryNativeRuntimeValueValidExpressionForTypeRef(
       context.libraries,
       expression.typeRef
@@ -1241,7 +1242,17 @@ export function emitRuntimeValueVariableDeclaration(
     }
   }
 
-  let value = statementDeps(context).emitCValueExpression(expression, context)
+  const emittedExpression: StatementNode = explicitlyOpaque
+    ? {
+        ...expression,
+        declaredType: 'unknown',
+        nullable: statement.nullable === true,
+        shape: null,
+        typeRef: statement.typeRef,
+        valueType: 'unknown'
+      }
+    : expression
+  let value = statementDeps(context).emitCValueExpression(emittedExpression, context)
 
   if (nativeCppType !== null && value.cppType !== nativeCppType) {
     const adapter = libraryNativeValueAdapter(nativeShape)
@@ -1560,6 +1571,10 @@ function anyNodeLikeObjectAccessDeclaredType(expression: StatementNode, context:
 }
 
 function variableDeclarationNativeShape(statement: StatementNode, context: CFunctionContext): CObjectShape | null {
+  if (isExplicitlyOpaqueVariableDeclaration(statement)) {
+    return null
+  }
+
   const declaredShape =
     statement.shape ??
     cTypeRefNativeShape(statement.typeRef, context.libraries) ??
@@ -1608,6 +1623,14 @@ function variableDeclarationNativeShape(statement: StatementNode, context: CFunc
     libraryCppType: nativeType.cppType,
     libraryTypeId: nativeType.typeId
   }
+}
+
+function isExplicitlyOpaqueVariableDeclaration(statement: StatementNode): boolean {
+  return statement.declaredType === 'unknown' || statement.declaredType === 'any'
+}
+
+function hasExplicitVariableType(statement: StatementNode): boolean {
+  return statement.declaredType !== null && typeof statement.declaredType !== 'undefined'
 }
 
 function objectAccessRootDeclaredType(expression: StatementNode): string | null {
@@ -2046,6 +2069,13 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
     statement.init.type === 'OptionalMemberExpression' ||
     statement.init.type === 'OptionalIndexExpression' ||
     statement.init.type === 'OptionalCallExpression'
+  const nativeShape = variableDeclarationNativeShape(statement, context)
+  const nativeCppType = libraryNativeBoundaryCppType(
+    statement.valueType,
+    statement.nullable === true,
+    false,
+    nativeShape
+  )
   let nullableValueType = 'unknown'
 
   if (
@@ -2059,7 +2089,10 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
   }
 
   if (
-    (statement.nullable === true || statement.init.nullable === true || optionalChain) &&
+    (statement.nullable === true ||
+      (!hasExplicitVariableType(statement) &&
+        nativeCppType === null &&
+        (statement.init.nullable === true || optionalChain))) &&
     isRuntimeNullableType(nullableValueType)
   ) {
     const lines = emitNullableRuntimeValueVariableDeclaration(statement, context)
@@ -2088,6 +2121,13 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
   if (statement.init !== null && typeof statement.init !== 'undefined' && statement.init.type === 'ArrayLiteral') {
     return {
       lines: deps.emitArrayVariableDeclaration(statement, context),
+      expression: ''
+    }
+  }
+
+  if (nativeCppType !== null) {
+    return {
+      lines: emitRuntimeValueVariableDeclaration(statement, statement.init, context, statement.valueType, nativeShape),
       expression: ''
     }
   }
@@ -3300,6 +3340,13 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     statement.init.type === 'OptionalMemberExpression' ||
     statement.init.type === 'OptionalIndexExpression' ||
     statement.init.type === 'OptionalCallExpression'
+  const nativeShape = variableDeclarationNativeShape(statement, context)
+  const nativeCppType = libraryNativeBoundaryCppType(
+    statement.valueType,
+    statement.nullable === true,
+    false,
+    nativeShape
+  )
   let nullableValueType = 'unknown'
 
   if (
@@ -3313,7 +3360,10 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
   }
 
   if (
-    (statement.nullable === true || statement.init.nullable === true || optionalChain) &&
+    (statement.nullable === true ||
+      (!hasExplicitVariableType(statement) &&
+        nativeCppType === null &&
+        (statement.init.nullable === true || optionalChain))) &&
     isRuntimeNullableType(nullableValueType)
   ) {
     const lines = emitNullableRuntimeValueVariableDeclaration(statement, context)
@@ -3360,9 +3410,7 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     }
   }
 
-  const nativeShape = variableDeclarationNativeShape(statement, context)
-
-  if (libraryNativeBoundaryCppType(statement.valueType, statement.nullable === true, false, nativeShape) !== null) {
+  if (nativeCppType !== null) {
     return emitRuntimeValueVariableDeclaration(statement, statement.init, context, statement.valueType, nativeShape)
   }
 
