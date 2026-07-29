@@ -11,9 +11,11 @@ test('catch binding повторно выбрасывает string и exception 
     { libraries: defaultCompilerLibrarySet, target: 'cc' }
   )
 
-  assert.match(result.code, /inox_status pass\(/)
+  assert.match(result.code, /void pass\(/)
+  assert.match(result.code, /auto error = inox::take_exception\(\);/)
   assert.match(
     result.code,
-    /tag != INOX_TAG_STRING && \(inox_error\.tag != INOX_TAG_OBJECT && inox_error\.tag != INOX_TAG_CLASS_INSTANCE\)/
+    /(inox_throw_error_\d+)\.tag != INOX_TAG_STRING && \(\1\.tag != INOX_TAG_OBJECT && \1\.tag != INOX_TAG_CLASS_INSTANCE\)/
   )
+  assert.match(result.code, /inox::throw_value\(inox_throw_error_\d+\);/)
 })

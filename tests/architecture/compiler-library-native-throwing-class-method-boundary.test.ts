@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { compileSource } from '../../compiler/core.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
-test('throwing class method uses the native result address', () => {
+test('throwing class method returns its native result through the pending exception boundary', () => {
   const result = compileSource(
     `
 class Reader {
@@ -25,7 +25,8 @@ function consume(values: Array<string>): Array<string> {
     }
   )
 
-  assert.match(result.code, /Array inox_method_result_/)
-  assert.match(result.code, /std::addressof\(inox_method_result_/)
-  assert.doesNotMatch(result.code, /&inox_method_result_/)
+  assert.match(result.code, /auto inox_method_result_\d+ = reader\.read\(values\);/)
+  assert.match(result.code, /if \(inox::thrown\(\)\) return inox_return;/)
+  assert.match(result.code, /inox_return = inox_method_result_\d+;/)
+  assert.doesNotMatch(result.code, /std::addressof\(inox_method_result_/)
 })

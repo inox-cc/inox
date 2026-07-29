@@ -2684,6 +2684,16 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
 
   if (
     libraryObject !== null &&
+    (libraryObject.scalarType === 'double' || libraryObject.scalarType === 'bool') &&
+    (context.moduleRuntimeValueNames.has(statement.name) ||
+      context.moduleValueCppTypes.get(statement.name) === 'inox::Value' ||
+      moduleValueType === 'unknown')
+  ) {
+    return emitPreparedModuleRuntimeScalarValueAssignment(statement, name, libraryObject, context)
+  }
+
+  if (
+    libraryObject !== null &&
     libraryObject.cppType !== null &&
     typeof libraryObject.cppType !== 'undefined' &&
     libraryObject.valueType !== null &&
@@ -2727,13 +2737,7 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
 
   if (inferred === 'number' || inferred === 'boolean') {
     if (context.moduleRuntimeValueNames.has(statement.name)) {
-      const value = emitCValueExpression(statement.init, context)
-      const lines: string[] = []
-
-      context.moduleValueTypes.set(statement.name, 'unknown')
-      pushAll(lines, value.lines)
-      pushModuleRuntimeValueAssignment(lines, name, value, context)
-      return lines
+      return emitModuleRuntimeScalarValueAssignment(statement, name, inferred, context)
     }
 
     const value = emitPreparedNumberExpression(statement.init, context)
@@ -2793,6 +2797,12 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
     return emitModuleFunctionValueAssignment(statement, name, context)
   }
 
+  const initializerType = inferExpressionType(statement.init, context)
+
+  if (inferred === 'unknown' && (initializerType === 'number' || initializerType === 'boolean')) {
+    return emitModuleRuntimeScalarValueAssignment(statement, name, initializerType, context)
+  }
+
   const value = emitCValueExpression(statement.init, context)
   const lines: string[] = []
 
@@ -2819,6 +2829,37 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
     lines.push(`inox_retain(${name});`)
   }
 
+  return lines
+}
+
+function emitModuleRuntimeScalarValueAssignment(
+  statement: AnyNode,
+  name: string,
+  valueType: 'number' | 'boolean',
+  context: CFunctionContext
+): string[] {
+  const value = emitPreparedNumberExpression(statement.init, context)
+  return emitPreparedModuleRuntimeScalarValueAssignment(statement, name, value, context, valueType)
+}
+
+function emitPreparedModuleRuntimeScalarValueAssignment(
+  statement: AnyNode,
+  name: string,
+  value: PreparedExpression,
+  context: CFunctionContext,
+  valueType?: 'number' | 'boolean'
+): string[] {
+  const scalarType = valueType ?? (value.scalarType === 'bool' ? 'boolean' : 'number')
+  const boxed =
+    scalarType === 'boolean'
+      ? `inox_bool_value((${value.expression}) != 0)`
+      : `inox_number_value(${value.expression})`
+  const lines: string[] = []
+
+  context.variables.set(statement.name, 'unknown')
+  context.moduleValueTypes.set(statement.name, 'unknown')
+  pushAll(lines, value.lines)
+  lines.push(`${name} = ${boxed};`)
   return lines
 }
 
