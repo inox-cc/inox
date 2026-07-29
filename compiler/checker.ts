@@ -140,7 +140,6 @@ import {
 } from './type-names.ts'
 import type {
   AnyNode,
-  ArrayBindingElement,
   CompileOptions,
   Diagnostic,
   ObjectShapeInfo,
@@ -276,11 +275,21 @@ function commonExpressionTypeRef(left: AnyNode, right: AnyNode): TypeRef | null 
   const leftTypeRef: TypeRef | null = left.typeRef ?? null
   const rightTypeRef: TypeRef | null = right.typeRef ?? null
 
-  if (leftTypeRef === null && nodeValueTypeOrUnknown(left) !== 'null' && left.nullable !== true) {
+  if (
+    leftTypeRef === null &&
+    left.type !== 'NullLiteral' &&
+    nodeValueTypeOrUnknown(left) !== 'null' &&
+    left.nullable !== true
+  ) {
     return null
   }
 
-  if (rightTypeRef === null && nodeValueTypeOrUnknown(right) !== 'null' && right.nullable !== true) {
+  if (
+    rightTypeRef === null &&
+    right.type !== 'NullLiteral' &&
+    nodeValueTypeOrUnknown(right) !== 'null' &&
+    right.nullable !== true
+  ) {
     return null
   }
 
@@ -5561,7 +5570,7 @@ class Checker {
   }
 
   declareArrowArrayBindingElements(param: AnyNode): void {
-    const bindingElements: ArrayBindingElement[] = param.bindingElements ?? []
+    const bindingElements = param.bindingElements ?? []
 
     if (bindingElements.length === 0) {
       return
@@ -7719,7 +7728,7 @@ class Checker {
       statement.nameLoc
     )
 
-    const bindingElements: ArrayBindingElement[] = statement.bindingElements ?? []
+    const bindingElements = statement.bindingElements ?? []
 
     for (const binding of bindingElements) {
       this.declare(
@@ -7801,7 +7810,7 @@ class Checker {
   }
 
   checkForOfBindingElements(statement: AnyNode, elementType: ValueType, elementTypeRef: TypeRef | null): void {
-    const bindingElements: ArrayBindingElement[] | null = statement.bindingElements ?? null
+    const bindingElements = statement.bindingElements ?? null
 
     if (bindingElements === null) {
       return

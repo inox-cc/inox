@@ -250,6 +250,14 @@ export function commonTypeRef(left: TypeRef | null, right: TypeRef | null): Type
     return left
   }
 
+  if (isNullTypeRef(left)) {
+    return nullableCommonTypeRef(right)
+  }
+
+  if (isNullTypeRef(right)) {
+    return nullableCommonTypeRef(left)
+  }
+
   if (left.kind === 'unknown' && right.kind !== 'parameter') {
     return commonUnknownTypeRef(left, right)
   }
@@ -282,6 +290,14 @@ export function commonTypeRef(left: TypeRef | null, right: TypeRef | null): Type
   }
 
   return null
+}
+
+function isNullTypeRef(typeRef: TypeRef): boolean {
+  return typeRef.kind === 'primitive' && typeRef.name === 'null'
+}
+
+function nullableCommonTypeRef(typeRef: TypeRef): TypeRef {
+  return { ...typeRef, nullable: true }
 }
 
 function objectTypeRefsShareIdentity(left: ObjectTypeRef, right: ObjectTypeRef): boolean {
