@@ -445,6 +445,8 @@ export function emitCModuleSource(
   const syntaxFeatures = collectIrSyntaxFeatureUsages(irPrograms)
   const signatureRuntimeTypes = collectCModuleContextRuntimeTypes(context)
   const moduleValues = collectCModuleStaticValueDeclarations(plan, context)
+  const compileTimeModuleValues = collectCModuleCompileTimeValueDeclarations(moduleValues)
+  const runtimeModuleValues = collectCModuleRuntimeValueDeclarations(moduleValues)
   addCModuleImplementationNativeRuntimeRequirements(runtimeRequirements, context, moduleValues, options.libraries)
   const classDescriptorNames = collectCClassDescriptorNames(irPrograms, context.classInfos)
   const prelude = resolveCRuntimePreludeRequirements({
@@ -594,7 +596,7 @@ export function emitCModuleSource(
 
   pushCModuleLines(bodyLines, emitCClassDescriptorDeclarationsForNames(context, classDescriptorNames))
   emitCModuleUnhandledRejectionFlagDefinition(bodyLines, context)
-  emitCModuleValueDefinitions(bodyLines, moduleValues, context)
+  emitCModuleValueDefinitions(bodyLines, runtimeModuleValues, context)
 
   for (const wrapper of context.asyncTaskWrappers.values()) {
     pushCModuleLines(bodyLines, emitAsyncTaskWrapperDeclaration(wrapper, context, deps.asyncTaskLoweringDependencies))
@@ -646,6 +648,7 @@ export function emitCModuleSource(
   emitCModuleNativeClassForwardDeclarations(lines, context, declarationLines)
   pushCModuleLines(lines, declarationLines)
   emitCModuleValueFunctionFieldDefinitions(lines, moduleValues, context)
+  emitCModuleValueDefinitions(lines, compileTimeModuleValues, context)
   const omittedSyntheticDefaultConstructors = collectCModuleOmittedSyntheticDefaultConstructors(
     context,
     classDescriptorNames,
@@ -2869,6 +2872,36 @@ function cModuleValueCompileTimeInitializer(node: AnyNode): string | null {
   }
 
   return null
+}
+
+function collectCModuleCompileTimeValueDeclarations(
+  values: CModuleValueDeclaration[]
+): CModuleValueDeclaration[] {
+  const result: CModuleValueDeclaration[] = []
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    const item = cModuleValueDeclarationAt(values, index)
+
+    if (item.compileTimeInitializer !== null && typeof item.compileTimeInitializer !== 'undefined') {
+      result.push(item)
+    }
+  }
+
+  return result
+}
+
+function collectCModuleRuntimeValueDeclarations(values: CModuleValueDeclaration[]): CModuleValueDeclaration[] {
+  const result: CModuleValueDeclaration[] = []
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    const item = cModuleValueDeclarationAt(values, index)
+
+    if (item.compileTimeInitializer === null || typeof item.compileTimeInitializer === 'undefined') {
+      result.push(item)
+    }
+  }
+
+  return result
 }
 
 function collectCModuleStaticValueDeclarations(plan: CModulePlan, context: CEmitContext): CModuleValueDeclaration[] {

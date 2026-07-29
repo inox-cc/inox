@@ -271,6 +271,8 @@ type CheckerObjectUnionAlternative = {
   shape: ObjectShapeInfo
 }
 
+const maxObjectSpreadUnionBranches = 256
+
 function commonExpressionTypeRef(left: AnyNode, right: AnyNode): TypeRef | null {
   const leftTypeRef: TypeRef | null = left.typeRef ?? null
   const rightTypeRef: TypeRef | null = right.typeRef ?? null
@@ -7129,12 +7131,14 @@ class Checker {
     }
 
     const properties: CheckerObjectPropertyNode[] = expression.properties
-    let sourceAlternatives: CheckerObjectUnionAlternative[] = []
+    const sourceAlternativesByProperty: Array<CheckerObjectUnionAlternative[] | null> = []
+    let unionSpreadCount = 0
 
     for (let index = 0; index < properties.length; index = index + 1) {
       const property = properties[index]
 
       if (property.spread !== true) {
+        sourceAlternativesByProperty.push(null)
         continue
       }
 
@@ -7142,17 +7146,15 @@ class Checker {
       const alternatives = this.resolveDeclaredObjectUnionAlternatives(sourceDeclaredType, property.loc)
 
       if (alternatives.length < 2) {
+        sourceAlternativesByProperty.push(null)
         continue
       }
 
-      if (sourceAlternatives.length > 0) {
-        return false
-      }
-
-      sourceAlternatives = alternatives
+      sourceAlternativesByProperty.push(alternatives)
+      unionSpreadCount = unionSpreadCount + 1
     }
 
-    if (sourceAlternatives.length === 0) {
+    if (unionSpreadCount === 0) {
       return false
     }
 
@@ -7164,13 +7166,85 @@ class Checker {
       return true
     }
 
-    for (let sourceIndex = 0; sourceIndex < sourceAlternatives.length; sourceIndex = sourceIndex + 1) {
-      const source = sourceAlternatives[sourceIndex]
-      const sourceShape = this.objectLiteralUnionSpreadBranchShape(source.shape, inferredShape, properties)
+    let sourceBranches: CheckerObjectUnionAlternative[] = [
+      {
+        name: '',
+        shape: {
+          kind: 'object',
+          dynamic: false,
+          fields: []
+        }
+      }
+    ]
+
+    for (let propertyIndex = 0; propertyIndex < properties.length; propertyIndex = propertyIndex + 1) {
+      const property = properties[propertyIndex]
+      const alternatives = sourceAlternativesByProperty[propertyIndex]
+
+      if (property.spread === true && alternatives !== null) {
+        if (sourceBranches.length * alternatives.length > maxObjectSpreadUnionBranches) {
+          this.report(
+            'INOX_TYPE_COMPLEXITY',
+            `object spread produces more than ${maxObjectSpreadUnionBranches} structural union branches`,
+            property.loc
+          )
+          return true
+        }
+
+        const nextBranches: CheckerObjectUnionAlternative[] = []
+
+        for (const sourceBranch of sourceBranches) {
+          for (const alternative of alternatives) {
+            nextBranches.push({
+              name: this.objectSpreadBranchName(sourceBranch.name, alternative.name),
+              shape: this.objectLiteralShapeWithSpread(sourceBranch.shape, alternative.shape)
+            })
+          }
+        }
+
+        sourceBranches = nextBranches
+        continue
+      }
+
+      if (property.spread === true) {
+        const spreadShape = this.objectSpreadShapeFromCheckedExpression(property.value, property.loc)
+
+        if (spreadShape === null) {
+          continue
+        }
+
+        for (let branchIndex = 0; branchIndex < sourceBranches.length; branchIndex = branchIndex + 1) {
+          const branch = sourceBranches[branchIndex]
+          branch.shape = this.objectLiteralShapeWithSpread(branch.shape, spreadShape)
+        }
+
+        continue
+      }
+
+      const field = this.findShapeField(inferredShape, property.key)
+
+      if (field === null) {
+        continue
+      }
+
+      const fieldShape: ObjectShapeInfo = {
+        kind: 'object',
+        dynamic: false,
+        fields: [field]
+      }
+
+      for (let branchIndex = 0; branchIndex < sourceBranches.length; branchIndex = branchIndex + 1) {
+        const branch = sourceBranches[branchIndex]
+        branch.shape = this.objectLiteralShapeWithSpread(branch.shape, fieldShape)
+      }
+    }
+
+    for (let sourceIndex = 0; sourceIndex < sourceBranches.length; sourceIndex = sourceIndex + 1) {
+      const source = sourceBranches[sourceIndex]
       let assignable = false
 
       for (let targetIndex = 0; targetIndex < targetAlternatives.length; targetIndex = targetIndex + 1) {
-        if (this.objectShapeIsAssignable(sourceShape, targetAlternatives[targetIndex].shape)) {
+        if (this.objectShapeIsAssignable(source.shape, targetAlternatives[targetIndex].shape)) {
           assignable = true
           break
         }
@@ -7188,36 +7262,30 @@ class Checker {
     return true
   }
 
-  objectLiteralUnionSpreadBranchShape(
-    sourceShape: ObjectShapeInfo,
-    inferredShape: ObjectShapeInfo,
-    properties: CheckerObjectPropertyNode[]
-  ): ObjectShapeInfo {
+  objectLiteralShapeWithSpread(sourceShape: ObjectShapeInfo, spreadShape: ObjectShapeInfo): ObjectShapeInfo {
     const fields: AnyNode[] = []
 
     for (let index = 0; index < sourceShape.fields.length; index = index + 1) {
       fields.push(sourceShape.fields[index])
     }
 
-    for (let index = 0; index < properties.length; index = index + 1) {
-      const property = properties[index]
-
-      if (property.spread === true) {
-        continue
-      }
-
-      const field = this.findShapeField(inferredShape, property.key)
-
-      if (field !== null) {
-        this.setObjectLiteralShapeField(fields, field)
-      }
+    for (let index = 0; index < spreadShape.fields.length; index = index + 1) {
+      this.setObjectLiteralShapeField(fields, spreadShape.fields[index])
     }
 
     return {
       kind: 'object',
-      dynamic: sourceShape.dynamic === true,
+      dynamic: sourceShape.dynamic === true || spreadShape.dynamic === true,
       fields
     }
+  }
+
+  objectSpreadBranchName(current: string, next: string): string {
+    if (current.length === 0) {
+      return next
+    }
+
+    return `${current} + ${next}`
   }
 
   objectShapeIsAssignable(actualShape: ObjectShapeInfo, expectedShape: ObjectShapeInfo): boolean {
@@ -7325,16 +7393,7 @@ class Checker {
     const spreadType = this.checkExpression(property.value)
 
     this.checkAssignableType(spreadType, 'object', property.loc, false, this.expressionCanBeNull(property.value))
-    let spreadShape = this.resolveExpressionShape(property.value)
-
-    if (spreadShape?.builtin === 'compiler.AnyNode' || this.isCompilerAnyNodeExpression(property.value)) {
-      const expandedShape = anyNodeObjectShape(property.loc)
-
-      if (spreadShape !== null && typeof spreadShape !== 'undefined') {
-        mergeShapeFields(expandedShape.fields, spreadShape.fields)
-      }
-      spreadShape = expandedShape
-    }
+    const spreadShape = this.objectSpreadShapeFromCheckedExpression(property.value, property.loc)
 
     if (
       spreadShape === null ||
@@ -7360,6 +7419,21 @@ class Checker {
         )
         return null
       }
+    }
+
+    return spreadShape
+  }
+
+  objectSpreadShapeFromCheckedExpression(expression: AnyNode, loc: SourceLocation): ObjectShapeInfo | null {
+    let spreadShape = this.resolveExpressionShape(expression)
+
+    if (spreadShape?.builtin === 'compiler.AnyNode' || this.isCompilerAnyNodeExpression(expression)) {
+      const expandedShape = anyNodeObjectShape(loc)
+
+      if (spreadShape !== null && typeof spreadShape !== 'undefined') {
+        mergeShapeFields(expandedShape.fields, spreadShape.fields)
+      }
+      spreadShape = expandedShape
     }
 
     return spreadShape

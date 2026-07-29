@@ -159,6 +159,7 @@ type CUnitFunctionNodeEntry = {
 }
 
 type CUnitValueDeclaration = {
+  compileTimeInitializer?: string | null
   cppType?: string | null
   declaredType?: string | null
   functionType?: CFunctionType | null
@@ -282,6 +283,7 @@ function collectCUnitValueDeclarations(programs: IrProgram[], context: CEmitCont
     const valueType = cUnitValueType(item, context)
 
     values.push({
+      compileTimeInitializer: cUnitValueCompileTimeInitializer(item),
       cppType: cUnitValueLibraryCppType(item),
       declaredType: item.declaredType ?? item.inferredDeclaredType ?? null,
       functionType: cUnitValueFunctionType(item),
@@ -300,6 +302,10 @@ function registerCUnitValueDeclarations(context: CEmitContext, values: CUnitValu
     const item = unitValueDeclarationAt(values, index)
     context.moduleValueNames.set(item.name, item.symbolName)
     context.moduleValueTypes.set(item.name, item.valueType)
+
+    if (item.compileTimeInitializer !== null && typeof item.compileTimeInitializer !== 'undefined') {
+      context.moduleCompileTimeValueInitializers.set(item.name, item.compileTimeInitializer)
+    }
 
     if (cUnitValueDeclarationCType(item, context) === 'inox_value') {
       context.moduleRuntimeValueNames.add(item.name)
@@ -389,15 +395,67 @@ function emitCUnitValueDefinitions(lines: string[], values: CUnitValueDeclaratio
 
     const cType = cUnitValueDeclarationCType(item, context)
     const initializer = cUnitValueDeclarationGlobalInitializer(item)
+    const constPrefix =
+      item.compileTimeInitializer !== null && typeof item.compileTimeInitializer !== 'undefined' ? 'const ' : ''
 
     if (initializer === '') {
-      lines.push(`static ${cType} ${item.symbolName};`)
+      lines.push(`static ${constPrefix}${cType} ${item.symbolName};`)
     } else {
-      lines.push(`static ${cType} ${item.symbolName} = ${initializer};`)
+      lines.push(`static ${constPrefix}${cType} ${item.symbolName} = ${initializer};`)
     }
   }
 
   lines.push('')
+}
+
+function cUnitValueCompileTimeInitializer(node: AnyNode): string | null {
+  if (node.kind !== 'const') {
+    return null
+  }
+
+  const init = node.init
+
+  if (init === null || typeof init === 'undefined') {
+    return null
+  }
+
+  if (init.type === 'NumberLiteral') {
+    return init.value
+  }
+
+  if (init.type === 'BooleanLiteral') {
+    return init.value === true ? 'true' : 'false'
+  }
+
+  return null
+}
+
+function collectCUnitCompileTimeValueDeclarations(values: CUnitValueDeclaration[]): CUnitValueDeclaration[] {
+  const result: CUnitValueDeclaration[] = []
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    const item = unitValueDeclarationAt(values, index)
+
+    if (item.compileTimeInitializer !== null && typeof item.compileTimeInitializer !== 'undefined') {
+      result.push(item)
+    }
+  }
+
+  return result
+}
+
+function collectCUnitRuntimeValueDeclarations(values: CUnitValueDeclaration[]): CUnitValueDeclaration[] {
+  const result: CUnitValueDeclaration[] = []
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    const item = unitValueDeclarationAt(values, index)
+
+    if (item.compileTimeInitializer === null || typeof item.compileTimeInitializer === 'undefined') {
+      result.push(item)
+    }
+  }
+
+  return result
 }
 
 function cUnitFunctionPointerDefinition(item: CUnitValueDeclaration): string | null {
@@ -742,6 +800,10 @@ function cUnitValueGlobalInitializer(valueType: string): string {
 }
 
 function cUnitValueDeclarationGlobalInitializer(item: CUnitValueDeclaration): string {
+  if (item.compileTimeInitializer !== null && typeof item.compileTimeInitializer !== 'undefined') {
+    return item.compileTimeInitializer
+  }
+
   if (item.cppType !== null && typeof item.cppType !== 'undefined') {
     return ''
   }
@@ -1478,6 +1540,8 @@ export function emitCUnit(
   baseContext.classInfos = createClassInfos(classes, diagnostics)
   const classDescriptorNames = collectCClassDescriptorNames(irPrograms, baseContext.classInfos)
   const valueDeclarations = collectCUnitValueDeclarations(irPrograms, baseContext)
+  const compileTimeValueDeclarations = collectCUnitCompileTimeValueDeclarations(valueDeclarations)
+  const runtimeValueDeclarations = collectCUnitRuntimeValueDeclarations(valueDeclarations)
   registerCUnitValueDeclarations(baseContext, valueDeclarations)
   registerCUnitSyntheticImportNames(baseContext, irPrograms)
   baseContext.externalEventLoopFunctions = deps.collectExternalEventLoopFunctions(functions)
@@ -1598,6 +1662,7 @@ export function emitCUnit(
 
   emitCUnitNativeClassForwardDeclarations(lines, baseContext, declarationLines)
   pushUnitLines(lines, declarationLines)
+  emitCUnitValueDefinitions(lines, compileTimeValueDeclarations, baseContext)
   pushUnitLines(
     lines,
     emitCNativeClassDeclarations(
@@ -1724,7 +1789,7 @@ export function emitCUnit(
   pushUnitLines(lines, emitCClassDescriptorDeclarationsForNames(baseContext, classDescriptorNames))
   emitCUnitValueFunctionFieldDefinitions(lines, valueDeclarations, baseContext)
   emitCUnitUnhandledRejectionFlagDefinition(lines, baseContext)
-  emitCUnitValueDefinitions(lines, valueDeclarations, baseContext)
+  emitCUnitValueDefinitions(lines, runtimeValueDeclarations, baseContext)
 
   if (asyncTaskWrappers.size > 0) {
     for (const wrapper of asyncTaskWrappers.values()) {
