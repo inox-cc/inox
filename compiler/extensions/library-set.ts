@@ -3,6 +3,7 @@ import type {
   IntrinsicRole,
   LibraryAsyncResultOperationKind,
   LibraryDeclarationDescriptor,
+  LibraryEffectiveReceiverOperationDescriptor,
   LibraryNativeTypeDescriptor,
   LibraryOperationDescriptor,
   LibraryOperationKind
@@ -13,6 +14,7 @@ export const emptyCompilerLibrarySet: CompilerLibrarySet = {
   declarations: [],
   nativeTypes: [],
   operations: [],
+  effectiveReceiverOperations: [],
   intrinsicBindings: [],
   runtimeRequirements: []
 }
@@ -348,6 +350,23 @@ export function compilerLibraryOperationForReceiver(
     return compilerLibraryOperationForUnknownReceiver(libraries, memberName, kind)
   }
 
+  const effective = libraries.effectiveReceiverOperations
+
+  if (effective !== null && typeof effective !== 'undefined') {
+    const exact = compilerLibraryEffectiveOperationForReceiver(
+      effective,
+      receiverTypeId,
+      memberName,
+      kind
+    )
+
+    if (exact !== null) {
+      return exact
+    }
+
+    return compilerLibraryEffectiveOperationForReceiver(effective, receiverTypeId, '*', kind)
+  }
+
   const exact = compilerLibraryOperationForReceiverBinding(
     libraries,
     receiverTypeId,
@@ -360,6 +379,27 @@ export function compilerLibraryOperationForReceiver(
   }
 
   return compilerLibraryOperationForReceiverBinding(libraries, receiverTypeId, `${receiverTypeId}.*`, kind)
+}
+
+function compilerLibraryEffectiveOperationForReceiver(
+  effective: LibraryEffectiveReceiverOperationDescriptor[],
+  receiverTypeId: string,
+  memberName: string,
+  kind: LibraryOperationKind
+): LibraryOperationDescriptor | null {
+  for (let index = 0; index < effective.length; index = index + 1) {
+    const entry = effective[index]
+
+    if (
+      entry.receiverTypeId === receiverTypeId &&
+      entry.memberName === memberName &&
+      entry.kind === kind
+    ) {
+      return entry.operation
+    }
+  }
+
+  return null
 }
 
 function compilerLibraryOperationForUnknownReceiver(

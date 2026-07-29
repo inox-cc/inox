@@ -461,6 +461,13 @@ export type LibraryOperationDescriptor = {
   argumentNarrowing?: LibraryArgumentNarrowingDescriptor | null
 }
 
+export type LibraryEffectiveReceiverOperationDescriptor = {
+  receiverTypeId: LibraryObjectTypeId
+  memberName: string
+  kind: LibraryOperationKind
+  operation: LibraryOperationDescriptor
+}
+
 export type IntrinsicRole =
   | 'array-literal'
   | 'async-result'
@@ -519,6 +526,7 @@ export type CompilerLibrarySet = {
   runtimeInitializers?: LibraryRuntimeInitializerDescriptor[]
   nativeTypes: LibraryNativeTypeDescriptor[]
   operations: LibraryOperationDescriptor[]
+  effectiveReceiverOperations?: LibraryEffectiveReceiverOperationDescriptor[]
   intrinsicBindings: IntrinsicRoleBinding[]
   runtimeRequirements: RuntimeRequirementDescriptor[]
 }

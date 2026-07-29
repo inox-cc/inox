@@ -10,6 +10,7 @@ import type {
   LibraryCValueMappingDescriptor,
   LibraryDeclarationDescriptor,
   LibraryCallbackParameterDescriptor,
+  LibraryEffectiveReceiverOperationDescriptor,
   LibraryNativeTypeDescriptor,
   LibraryObjectLiteralFieldDescriptor,
   LibraryOptionDescriptor,
@@ -17,6 +18,7 @@ import type {
   LibraryOptionScalar,
   LibraryNestedResultShapeFieldDescriptor,
   LibraryOperationDescriptor,
+  LibraryOperationKind,
   LibraryOperationVariantDescriptor,
   LibraryResultShapeFieldDescriptor,
   LibraryRuntimeInitializerArgumentDescriptor,
@@ -83,6 +85,7 @@ export function createCompilerLibrarySet(
     intrinsicBindings,
     runtimeRequirements
   )
+  const effectiveReceiverOperations = buildEffectiveReceiverOperations(nativeTypes, operations)
 
   return {
     fingerprint: compilerLibrarySetFingerprint(ordered, targetOptions),
@@ -91,9 +94,226 @@ export function createCompilerLibrarySet(
     runtimeInitializers,
     nativeTypes,
     operations,
+    effectiveReceiverOperations,
     intrinsicBindings,
     runtimeRequirements
   }
+}
+
+function buildEffectiveReceiverOperations(
+  nativeTypes: LibraryNativeTypeDescriptor[],
+  operations: LibraryOperationDescriptor[]
+): LibraryEffectiveReceiverOperationDescriptor[] {
+  const resolved: Map<string, LibraryEffectiveReceiverOperationDescriptor[]> = new Map()
+  const resolving: Set<string> = new Set()
+  const result: LibraryEffectiveReceiverOperationDescriptor[] = []
+
+  for (let index = 0; index < nativeTypes.length; index = index + 1) {
+    const entries = resolveEffectiveReceiverOperations(
+      nativeTypes[index].typeId,
+      nativeTypes,
+      operations,
+      resolved,
+      resolving
+    )
+
+    for (let entryIndex = 0; entryIndex < entries.length; entryIndex = entryIndex + 1) {
+      result.push(entries[entryIndex])
+    }
+  }
+
+  for (let index = 0; index < operations.length; index = index + 1) {
+    const receiverTypeId = operations[index].receiverTypeId
+
+    if (
+      receiverTypeId === null ||
+      typeof receiverTypeId === 'undefined' ||
+      nativeTypeDescriptorForId(nativeTypes, receiverTypeId) !== null
+    ) {
+      continue
+    }
+
+    appendOwnReceiverOperationEntries(result, receiverTypeId, operations[index])
+  }
+
+  validateUniqueEffectiveReceiverOperations(result)
+  return result
+}
+
+function resolveEffectiveReceiverOperations(
+  typeId: string,
+  nativeTypes: LibraryNativeTypeDescriptor[],
+  operations: LibraryOperationDescriptor[],
+  resolved: Map<string, LibraryEffectiveReceiverOperationDescriptor[]>,
+  resolving: Set<string>
+): LibraryEffectiveReceiverOperationDescriptor[] {
+  const cached = resolved.get(typeId)
+
+  if (cached !== null && typeof cached !== 'undefined') {
+    return cached
+  }
+
+  if (resolving.has(typeId)) {
+    throw new Error(`Compiler library native type inheritance cycle includes ${typeId}`)
+  }
+
+  const nativeType = nativeTypeDescriptorForId(nativeTypes, typeId)
+
+  if (nativeType === null) {
+    return []
+  }
+
+  resolving.add(typeId)
+  const own: LibraryEffectiveReceiverOperationDescriptor[] = []
+  const inherited: LibraryEffectiveReceiverOperationDescriptor[] = []
+
+  try {
+    for (let operationIndex = 0; operationIndex < operations.length; operationIndex = operationIndex + 1) {
+      const operation = operations[operationIndex]
+
+      if (operation.receiverTypeId === typeId) {
+        appendOwnReceiverOperationEntries(own, typeId, operation)
+      }
+    }
+
+    validateUniqueEffectiveReceiverOperations(own)
+
+    for (let baseIndex = 0; baseIndex < nativeType.baseTypeIds.length; baseIndex = baseIndex + 1) {
+      const baseEntries = resolveEffectiveReceiverOperations(
+        nativeType.baseTypeIds[baseIndex],
+        nativeTypes,
+        operations,
+        resolved,
+        resolving
+      )
+
+      for (let entryIndex = 0; entryIndex < baseEntries.length; entryIndex = entryIndex + 1) {
+        const baseEntry = baseEntries[entryIndex]
+
+        if (effectiveReceiverOperationForKey(own, baseEntry.memberName, baseEntry.kind) !== null) {
+          continue
+        }
+
+        const existing = effectiveReceiverOperationForKey(inherited, baseEntry.memberName, baseEntry.kind)
+
+        if (existing !== null && existing.operation.operationId !== baseEntry.operation.operationId) {
+          throw new Error(
+            `Ambiguous inherited compiler library receiver operation ${typeId}.${baseEntry.memberName} ` +
+              `${baseEntry.kind}: ${existing.operation.operationId}, ${baseEntry.operation.operationId}`
+          )
+        }
+
+        if (existing === null) {
+          inherited.push({
+            receiverTypeId: typeId,
+            memberName: baseEntry.memberName,
+            kind: baseEntry.kind,
+            operation: baseEntry.operation
+          })
+        }
+      }
+    }
+
+    for (let index = 0; index < own.length; index = index + 1) {
+      inherited.push(own[index])
+    }
+  } finally {
+    resolving.delete(typeId)
+  }
+
+  resolved.set(typeId, inherited)
+  return inherited
+}
+
+function appendOwnReceiverOperationEntries(
+  target: LibraryEffectiveReceiverOperationDescriptor[],
+  receiverTypeId: string,
+  operation: LibraryOperationDescriptor
+): void {
+  appendReceiverOperationBinding(target, receiverTypeId, operation, operation.bindingId)
+  const aliases = operation.bindingAliases ?? []
+
+  for (let index = 0; index < aliases.length; index = index + 1) {
+    appendReceiverOperationBinding(target, receiverTypeId, operation, aliases[index])
+  }
+}
+
+function appendReceiverOperationBinding(
+  target: LibraryEffectiveReceiverOperationDescriptor[],
+  receiverTypeId: string,
+  operation: LibraryOperationDescriptor,
+  bindingId: string
+): void {
+  const prefix = `${receiverTypeId}.`
+
+  if (!bindingId.startsWith(prefix)) {
+    return
+  }
+
+  const memberName = bindingId.slice(prefix.length)
+  const existing = effectiveReceiverOperationForKey(target, memberName, operation.kind)
+
+  if (existing !== null && existing.operation.operationId === operation.operationId) {
+    return
+  }
+
+  target.push({
+    receiverTypeId,
+    memberName,
+    kind: operation.kind,
+    operation
+  })
+}
+
+function validateUniqueEffectiveReceiverOperations(
+  entries: LibraryEffectiveReceiverOperationDescriptor[]
+): void {
+  for (let index = 0; index < entries.length; index = index + 1) {
+    const entry = entries[index]
+
+    for (let previousIndex = 0; previousIndex < index; previousIndex = previousIndex + 1) {
+      const previous = entries[previousIndex]
+
+      if (
+        previous.receiverTypeId === entry.receiverTypeId &&
+        previous.memberName === entry.memberName &&
+        previous.kind === entry.kind &&
+        previous.operation.operationId !== entry.operation.operationId
+      ) {
+        throw new Error(
+          `Duplicate compiler library receiver operation ${entry.receiverTypeId}.${entry.memberName} ` +
+            `${entry.kind}: ${previous.operation.operationId}, ${entry.operation.operationId}`
+        )
+      }
+    }
+  }
+}
+
+function effectiveReceiverOperationForKey(
+  entries: LibraryEffectiveReceiverOperationDescriptor[],
+  memberName: string,
+  kind: LibraryOperationKind
+): LibraryEffectiveReceiverOperationDescriptor | null {
+  for (let index = 0; index < entries.length; index = index + 1) {
+    if (entries[index].memberName === memberName && entries[index].kind === kind) {
+      return entries[index]
+    }
+  }
+
+  return null
+}
+
+function nativeTypeDescriptorForId(
+  nativeTypes: LibraryNativeTypeDescriptor[],
+  typeId: string
+): LibraryNativeTypeDescriptor | null {
+  for (let index = 0; index < nativeTypes.length; index = index + 1) {
+    if (nativeTypes[index].typeId === typeId) {
+      return nativeTypes[index]
+    }
+  }
+
+  return null
 }
 
 function orderCompilerLibraries(libraries: CompilerLibraryDescriptor[]): CompilerLibraryDescriptor[] {
