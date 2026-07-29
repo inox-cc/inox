@@ -419,6 +419,8 @@ class Checker {
   functionDeclarations: Map<string, AnyNode>
   inferringFunctionReturns: Set<string>
   inferredFunctionReturnCandidates: InferredFunctionReturnCandidate[] | null
+  topLevelConstDeclarations: Map<string, AnyNode>
+  resolvedTopLevelConstSymbols: Map<string, SymbolInfo>
   libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null
 
   constructor(
@@ -457,6 +459,8 @@ class Checker {
     this.functionDeclarations = new Map()
     this.inferringFunctionReturns = new Set()
     this.inferredFunctionReturnCandidates = null
+    this.topLevelConstDeclarations = new Map()
+    this.resolvedTopLevelConstSymbols = new Map()
     this.libraryLiteralTypeInference = libraryLiteralTypeInference
   }
 
@@ -777,6 +781,12 @@ class Checker {
         this.declareTypeAlias(item as TypeAliasDeclarationNode)
       } else if (item.type === 'ClassDeclaration') {
         this.classNames.add(item.name)
+      } else if (
+        item.type === 'VariableDeclaration' &&
+        item.kind === 'const' &&
+        !this.topLevelConstDeclarations.has(item.name)
+      ) {
+        this.topLevelConstDeclarations.set(item.name, item)
       }
     }
 
@@ -8667,12 +8677,66 @@ class Checker {
 
     let symbol = this.scope.resolve(root)
 
+    if (
+      this.functionDepth > 0 &&
+      (symbol === null || typeof symbol === 'undefined' || symbol.kind === 'global') &&
+      this.topLevelConstDeclarations.has(root)
+    ) {
+      const topLevelConst = this.resolveTopLevelConstSymbol(root)
+
+      if (topLevelConst !== null) {
+        symbol = topLevelConst
+      }
+    }
+
     if (symbol === null || typeof symbol === 'undefined') {
       this.report('INOX_UNKNOWN_NAME', `unknown name ${root}`, reference.loc)
       return null
     }
 
     return symbol
+  }
+
+  resolveTopLevelConstSymbol(name: string): SymbolInfo | null {
+    const cached = this.resolvedTopLevelConstSymbols.get(name)
+
+    if (cached !== null && typeof cached !== 'undefined') {
+      return cached
+    }
+
+    const declaration = this.topLevelConstDeclarations.get(name)
+
+    if (declaration === null || typeof declaration === 'undefined') {
+      return null
+    }
+
+    const provisional: SymbolInfo = {
+      kind: 'const',
+      mutable: false,
+      valueType: 'unknown',
+      nullable: false,
+      typeRef: null,
+      functionType: null,
+      shape: null,
+      loc: declaration.loc
+    }
+    this.resolvedTopLevelConstSymbols.set(name, provisional)
+
+    const scopeState = this.pushScope()
+
+    try {
+      this.checkStatement(declaration)
+      const resolved = this.scope.bindings.get(name)
+
+      if (resolved !== null && typeof resolved !== 'undefined') {
+        this.resolvedTopLevelConstSymbols.set(name, resolved)
+        return resolved
+      }
+    } finally {
+      this.restoreScope(scopeState)
+    }
+
+    return provisional
   }
 
   reportUnsupportedSuperReference(loc: SourceLocation): void {
