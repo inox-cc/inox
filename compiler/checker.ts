@@ -2179,19 +2179,19 @@ class Checker {
     }
 
     if (expression.type === 'MemberExpression') {
-      return this.checkMemberExpression(expression)
+      return this.applyExpressionFlowFact(expression, this.checkMemberExpression(expression))
     }
 
     if (expression.type === 'IndexExpression') {
-      return this.checkIndexExpression(expression)
+      return this.applyExpressionFlowFact(expression, this.checkIndexExpression(expression))
     }
 
     if (expression.type === 'OptionalMemberExpression') {
-      return this.checkOptionalMemberExpression(expression)
+      return this.applyExpressionFlowFact(expression, this.checkOptionalMemberExpression(expression))
     }
 
     if (expression.type === 'OptionalIndexExpression') {
-      return this.checkOptionalIndexExpression(expression)
+      return this.applyExpressionFlowFact(expression, this.checkOptionalIndexExpression(expression))
     }
 
     if (expression.type === 'OptionalCallExpression') {
@@ -8724,6 +8724,41 @@ class Checker {
     return null
   }
 
+  applyExpressionFlowFact(expression: AnyNode, fallbackValueType: ValueType): ValueType {
+    const path = nullableNarrowingKey(expression)
+
+    if (path === null) {
+      return fallbackValueType
+    }
+
+    const fact = this.flowFacts.get(path) ?? null
+
+    if (fact === null) {
+      return fallbackValueType
+    }
+
+    let valueType = fallbackValueType
+
+    if (fact.valueType !== null) {
+      valueType = fact.valueType
+      expression.valueType = valueType
+    }
+
+    if (fact.typeRef !== null) {
+      expression.typeRef = fact.typeRef
+    }
+
+    if (fact.nonNullable) {
+      expression.nullable = false
+
+      if (expression.typeRef !== null && typeof expression.typeRef !== 'undefined') {
+        expression.typeRef = nonNullableTypeRef(expression.typeRef)
+      }
+    }
+
+    return valueType
+  }
+
   nonNullableFlowFactNames(): Set<string> {
     const result: Set<string> = new Set()
 
@@ -9720,53 +9755,43 @@ function typeofValueType(value: string): ValueType | null {
 }
 
 function optionalChainNarrowingKeys(expression: AnyNode): string[] {
-  if (!containsOptionalMemberExpression(expression)) {
+  if (!containsOptionalAccessExpression(expression)) {
     return []
   }
 
   const names: string[] = []
-  appendMemberNarrowingKeys(expression, names)
+  appendOptionalAccessNarrowingKeys(expression, names)
   return uniqueNames(names)
 }
 
-function containsOptionalMemberExpression(expression: AnyNode): boolean {
-  if (expression.type === 'OptionalMemberExpression') {
+function containsOptionalAccessExpression(expression: AnyNode): boolean {
+  if (expression.type === 'OptionalMemberExpression' || expression.type === 'OptionalIndexExpression') {
     return true
   }
 
-  if (expression.type === 'MemberExpression') {
-    return containsOptionalMemberExpression(expression.object)
+  if (
+    expression.type === 'MemberExpression' ||
+    expression.type === 'IndexExpression'
+  ) {
+    return containsOptionalAccessExpression(expression.object)
   }
 
   return false
 }
 
-function appendMemberNarrowingKeys(expression: AnyNode, names: string[]): void {
-  const path = optionalChainMemberPath(expression)
+function appendOptionalAccessNarrowingKeys(expression: AnyNode, names: string[]): void {
+  const path = nullableNarrowingKey(expression)
 
-  if (path.length > 0) {
-    names.push(path.join('.'))
+  if (path !== null) {
+    names.push(path)
   }
 
-  if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
-    appendMemberNarrowingKeys(expression.object, names)
+  if (
+    expression.type === 'MemberExpression' ||
+    expression.type === 'OptionalMemberExpression' ||
+    expression.type === 'IndexExpression' ||
+    expression.type === 'OptionalIndexExpression'
+  ) {
+    appendOptionalAccessNarrowingKeys(expression.object, names)
   }
-}
-
-function optionalChainMemberPath(expression: AnyNode): string[] {
-  if (expression.type === 'Reference') {
-    return expression.path
-  }
-
-  if (expression.type !== 'MemberExpression' && expression.type !== 'OptionalMemberExpression') {
-    return []
-  }
-
-  const path = optionalChainMemberPath(expression.object)
-
-  if (path.length === 0) {
-    return []
-  }
-
-  return [...path, expression.property]
 }
