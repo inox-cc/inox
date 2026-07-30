@@ -79,7 +79,14 @@ export function insertImportSyntheticDeclarations(
             const existingIndex = declaredTypes.get(declaration.name)
 
             if (existingIndex !== null && typeof existingIndex !== 'undefined') {
-              if (isUnknownSyntheticTypeImport(body[existingIndex]) && !isUnknownSyntheticTypeImport(declaration)) {
+              const existing = body[existingIndex]
+
+              if (
+                existing !== null &&
+                typeof existing !== 'undefined' &&
+                isUnknownSyntheticTypeImport(existing) &&
+                !isUnknownSyntheticTypeImport(declaration)
+              ) {
                 body[existingIndex] = declaration
               }
 

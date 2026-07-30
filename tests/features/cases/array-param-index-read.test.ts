@@ -3,7 +3,11 @@
 // @stdout 2
 
 function second(values: number[]): number {
-  return values[1]
+  if (values.length > 1) {
+    return values[1]
+  }
+
+  return 0
 }
 
 console.log(second([1, 2]))

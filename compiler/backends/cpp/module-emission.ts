@@ -231,11 +231,11 @@ function pushCModuleClassMethodFunctionDeclarations(target: IrFunctionDeclaratio
     const classes = collectIrTopLevelNodes(program, 'class')
 
     for (let classIndex = 0; classIndex < classes.length; classIndex = classIndex + 1) {
-      const classNode = cModuleNodeAt(classes, classIndex)
+      const classNode = classes[classIndex]
       const methods: CModuleNode[] = classNode.methods
 
       for (let methodIndex = 0; methodIndex < methods.length; methodIndex = methodIndex + 1) {
-        const method = cModuleNodeAt(methods, methodIndex)
+        const method = methods[methodIndex]
 
         if (method.name === 'constructor') {
           continue
@@ -270,62 +270,11 @@ function cModuleNodeReturnType(node: CModuleNode): string {
   return 'unknown'
 }
 
-function cModuleClassMethodAt(values: CClassMethod[], index: number): CClassMethod {
-  return values[index]
-}
-
-function cModuleFunctionDeclarationAt(values: IrFunctionDeclaration[], index: number): IrFunctionDeclaration {
-  return values[index]
-}
-
-function cModuleFunctionEffectAt(values: IrFunctionEffect[], index: number): IrFunctionEffect {
-  return values[index]
-}
-
-function cModuleFunctionEntryAt(values: CModuleFunctionEntry[], index: number): CModuleFunctionEntry {
-  return values[index]
-}
-
-function cModuleFunctionParamAt(values: CFunctionParam[], index: number): CFunctionParam {
-  return values[index]
-}
-
-function cModuleImportPlanAt(values: CModuleImportPlan[], index: number): CModuleImportPlan {
-  return values[index]
-}
-
-function cModuleNodeAt(values: CModuleNode[], index: number): CModuleNode {
-  return values[index]
-}
-
-function cModuleValueDeclarationAt(values: CModuleValueDeclaration[], index: number): CModuleValueDeclaration {
-  return values[index]
-}
-
-function cModuleAsyncResultChainWrapperAt(values: CAsyncResultChainWrapper[], index: number): CAsyncResultChainWrapper {
-  return values[index]
-}
-
-function cModuleRuntimeArrowWrapperAt(
-  values: CRuntimeArrowCallbackWrapper[],
-  index: number
-): CRuntimeArrowCallbackWrapper {
-  return values[index]
-}
-
-function irRuntimeRequirementAt(values: IrRuntimeRequirement[], index: number): IrRuntimeRequirement {
-  return values[index]
-}
-
-function stringAt(values: string[], index: number): string {
-  return values[index]
-}
-
 function runtimeRequirementSetFromArray(values: IrRuntimeRequirement[]): Set<IrRuntimeRequirement> {
   const result: Set<IrRuntimeRequirement> = new Set()
 
   for (let index = 0; index < values.length; index = index + 1) {
-    result.add(irRuntimeRequirementAt(values, index))
+    result.add(values[index])
   }
 
   return result
@@ -335,7 +284,7 @@ function stringSetFromArray(values: string[]): Set<string> {
   const result: Set<string> = new Set()
 
   for (let index = 0; index < values.length; index = index + 1) {
-    result.add(stringAt(values, index))
+    result.add(values[index])
   }
 
   return result
@@ -463,7 +412,7 @@ export function emitCModuleSource(
   const classMethods = collectClassMethods(context)
 
   for (let entryIndex = 0; entryIndex < functionEntries.length; entryIndex = entryIndex + 1) {
-    const entry = cModuleFunctionEntryAt(functionEntries, entryIndex)
+    const entry = functionEntries[entryIndex]
 
     functions.push(entry.node)
   }
@@ -502,7 +451,7 @@ export function emitCModuleSource(
   const imports = uniqueCModuleImports(plan.imports)
 
   for (let importIndex = 0; importIndex < imports.length; importIndex = importIndex + 1) {
-    const item = cModuleImportPlanAt(imports, importIndex)
+    const item = imports[importIndex]
     const importedModule = item.module
 
     if (importedModule === null || typeof importedModule === 'undefined') {
@@ -573,7 +522,7 @@ export function emitCModuleSource(
   }
 
   for (let methodIndex = 0; methodIndex < classMethods.length; methodIndex = methodIndex + 1) {
-    const item = cModuleClassMethodAt(classMethods, methodIndex)
+    const item = classMethods[methodIndex]
     const info = item.info
     const method = item.method
     const inClass = cClassUsesInlineDefinitions(info) || (info.node.exported === true && method.inline === true)
@@ -627,7 +576,7 @@ export function emitCModuleSource(
   }
 
   for (let functionIndex = 0; functionIndex < functions.length; functionIndex = functionIndex + 1) {
-    const item = cModuleNodeAt(functions, functionIndex)
+    const item = functions[functionIndex]
 
     if (isCModuleExportedInlineFunction(plan, item.name)) {
       continue
@@ -890,14 +839,14 @@ function collectCModuleHeaderDeclarationLines(
   }
 
   for (let functionIndex = 0; functionIndex < exportedFunctions.length; functionIndex = functionIndex + 1) {
-    const item = cModuleNodeAt(exportedFunctions, functionIndex)
+    const item = exportedFunctions[functionIndex]
     const prefix = isCModuleInlineFunction(plan, item.name) ? 'inline ' : ''
 
     lines.push(`${prefix}${deps.emitFunctionHead(item, context)};`)
   }
 
   for (let valueIndex = 0; valueIndex < exportedValues.length; valueIndex = valueIndex + 1) {
-    const item = cModuleValueDeclarationAt(exportedValues, valueIndex)
+    const item = exportedValues[valueIndex]
 
     lines.push(`extern ${cModuleValueDeclarationCType(item, context)} ${item.symbolName};`)
   }
@@ -922,7 +871,7 @@ function collectCModuleHeaderDeclarationLines(
   }
 
   for (let functionIndex = 0; functionIndex < exportedFunctions.length; functionIndex = functionIndex + 1) {
-    const item = cModuleNodeAt(exportedFunctions, functionIndex)
+    const item = exportedFunctions[functionIndex]
 
     if (!isCModuleInlineFunction(plan, item.name)) {
       continue
@@ -977,7 +926,7 @@ function collectCModuleHeaderClassDeclarationLines(
   }
 
   for (let methodIndex = 0; methodIndex < classMethods.length; methodIndex = methodIndex + 1) {
-    const item = cModuleClassMethodAt(classMethods, methodIndex)
+    const item = classMethods[methodIndex]
 
     if (!includedClassNames.has(item.info.name) || item.method.inline !== true) {
       continue
@@ -1049,7 +998,7 @@ function collectCModuleHeaderIncludeLines(
     const imports = uniqueCModuleImports(plan.imports)
 
     for (let importIndex = 0; importIndex < imports.length; importIndex = importIndex + 1) {
-      const item = cModuleImportPlanAt(imports, importIndex)
+      const item = imports[importIndex]
       const importedModule = item.module
 
       if (
@@ -1151,7 +1100,7 @@ function collectCModuleInlineHeaderProgram(plan: CModulePlan): ProgramNode {
   const functions = collectCModuleExportedFunctions(plan)
 
   for (let index = 0; index < functions.length; index = index + 1) {
-    const item = cModuleNodeAt(functions, index)
+    const item = functions[index]
 
     if (isCModuleInlineFunction(plan, item.name)) {
       body.push(item)
@@ -1161,7 +1110,7 @@ function collectCModuleInlineHeaderProgram(plan: CModulePlan): ProgramNode {
   const classes = collectIrTopLevelNodes(plan.ir, 'class')
 
   for (let classIndex = 0; classIndex < classes.length; classIndex = classIndex + 1) {
-    const item = cModuleNodeAt(classes, classIndex)
+    const item = classes[classIndex]
 
     if (item.exported !== true) {
       continue
@@ -1169,7 +1118,7 @@ function collectCModuleInlineHeaderProgram(plan: CModulePlan): ProgramNode {
 
     const methodNodes: AnyNode[] = []
     for (let methodIndex = 0; methodIndex < item.methods.length; methodIndex = methodIndex + 1) {
-      const method = cModuleNodeAt(item.methods, methodIndex)
+      const method = item.methods[methodIndex]
 
       if (method.inline === true) {
         methodNodes.push(method)
@@ -1182,11 +1131,11 @@ function collectCModuleInlineHeaderProgram(plan: CModulePlan): ProgramNode {
     }
 
     for (let fieldIndex = 0; fieldIndex < item.fields.length; fieldIndex = fieldIndex + 1) {
-      body.push(cModuleNodeAt(item.fields, fieldIndex))
+      body.push(item.fields[fieldIndex])
     }
 
     for (let methodIndex = 0; methodIndex < methodNodes.length; methodIndex = methodIndex + 1) {
-      body.push(cModuleNodeAt(methodNodes, methodIndex))
+      body.push(methodNodes[methodIndex])
     }
   }
 
@@ -1420,14 +1369,14 @@ function emitCModuleDeclarations(
   }
 
   for (let wrapperIndex = 0; wrapperIndex < arrowCallbackWrappers.length; wrapperIndex = wrapperIndex + 1) {
-    const wrapper = cModuleRuntimeArrowWrapperAt(arrowCallbackWrappers, wrapperIndex)
+    const wrapper = arrowCallbackWrappers[wrapperIndex]
 
     pushCModuleLines(lines, emitRuntimeArrowCallbackContextType(wrapper))
     lines.push('')
   }
 
   for (let wrapperIndex = 0; wrapperIndex < asyncResultChainCallbackWrappers.length; wrapperIndex = wrapperIndex + 1) {
-    const wrapper = cModuleAsyncResultChainWrapperAt(asyncResultChainCallbackWrappers, wrapperIndex)
+    const wrapper = asyncResultChainCallbackWrappers[wrapperIndex]
 
     pushCModuleLines(lines, emitRuntimeArrowCallbackContextType(wrapper))
     lines.push('')
@@ -1437,7 +1386,7 @@ function emitCModuleDeclarations(
   let emittedClassMethodPrototype = false
 
   for (let functionIndex = 0; functionIndex < functions.length; functionIndex = functionIndex + 1) {
-    const item = cModuleNodeAt(functions, functionIndex)
+    const item = functions[functionIndex]
 
     if (!functionPrototypeNames.has(item.name)) {
       continue
@@ -1447,7 +1396,7 @@ function emitCModuleDeclarations(
   }
 
   for (let methodIndex = 0; methodIndex < classMethods.length; methodIndex = methodIndex + 1) {
-    const item = cModuleClassMethodAt(classMethods, methodIndex)
+    const item = classMethods[methodIndex]
 
     if (!item.info.native) {
       lines.push(deps.emitClassMethodPrototype(item.info, item.method, context))
@@ -1531,13 +1480,13 @@ function collectCModuleNeededFunctionPrototypeNames(
   }
 
   for (let index = 0; index < classMethods.length; index = index + 1) {
-    const method = cModuleClassMethodAt(classMethods, index)
+    const method = classMethods[index]
 
     collectCReferencedFunctionPrototypeNames(method.method, functionNames, prototypeNames)
   }
 
   for (let functionIndex = 0; functionIndex < functions.length; functionIndex = functionIndex + 1) {
-    const item = cModuleNodeAt(functions, functionIndex)
+    const item = functions[functionIndex]
     const referenced = new Set<string>()
 
     collectCReferencedFunctionPrototypeNames(item, functionNames, referenced)
@@ -1558,7 +1507,7 @@ function collectCModuleFunctionNames(functions: AnyNode[]): Set<string> {
   const names = new Set<string>()
 
   for (let index = 0; index < functions.length; index = index + 1) {
-    names.add(cModuleNodeAt(functions, index).name)
+    names.add(functions[index].name)
   }
 
   return names
@@ -1568,7 +1517,7 @@ function collectCModuleFunctionIndexes(functions: AnyNode[]): Map<string, number
   const indexes = new Map<string, number>()
 
   for (let index = 0; index < functions.length; index = index + 1) {
-    indexes.set(cModuleNodeAt(functions, index).name, index)
+    indexes.set(functions[index].name, index)
   }
 
   return indexes
@@ -1637,7 +1586,7 @@ function cModuleHasExportedInlineFunction(plan: CModulePlan): boolean {
     declarationIndex < plan.ir.functionDeclarations.length;
     declarationIndex = declarationIndex + 1
   ) {
-    const declaration = cModuleFunctionDeclarationAt(plan.ir.functionDeclarations, declarationIndex)
+    const declaration = plan.ir.functionDeclarations[declarationIndex]
 
     if (declaration.exported && declaration.inline === true) {
       return true
@@ -1657,7 +1606,7 @@ function isCModuleExportedInlineFunction(plan: CModulePlan, name: string): boole
     declarationIndex < plan.ir.functionDeclarations.length;
     declarationIndex = declarationIndex + 1
   ) {
-    const declaration = cModuleFunctionDeclarationAt(plan.ir.functionDeclarations, declarationIndex)
+    const declaration = plan.ir.functionDeclarations[declarationIndex]
 
     if (declaration.name === name) {
       return declaration.exported && declaration.inline === true
@@ -1673,7 +1622,7 @@ function isCModuleInlineFunction(plan: CModulePlan, name: string): boolean {
     declarationIndex < plan.ir.functionDeclarations.length;
     declarationIndex = declarationIndex + 1
   ) {
-    const declaration = cModuleFunctionDeclarationAt(plan.ir.functionDeclarations, declarationIndex)
+    const declaration = plan.ir.functionDeclarations[declarationIndex]
 
     if (declaration.name === name) {
       return declaration.inline === true
@@ -1689,7 +1638,7 @@ function isCModuleExportedFunction(plan: CModulePlan, name: string): boolean {
     declarationIndex < plan.ir.functionDeclarations.length;
     declarationIndex = declarationIndex + 1
   ) {
-    const declaration = cModuleFunctionDeclarationAt(plan.ir.functionDeclarations, declarationIndex)
+    const declaration = plan.ir.functionDeclarations[declarationIndex]
 
     if (declaration.name === name) {
       return declaration.exported
@@ -1846,13 +1795,19 @@ function runtimeFunctionPointerAdapterArgs(
   }
 
   for (let index = 0; index < targetFunctionType.params.length; index = index + 1) {
-    const targetParam = cModuleFunctionParamAt(targetFunctionType.params, index)
+    const targetParam = targetFunctionType.params[index]
     let value: string | null = null
     let sourceParam = targetParam
 
     if (index < adapter.functionType.params.length) {
+      const declaredSourceParam = adapter.functionType.params[index]
+
+      if (declaredSourceParam === null || typeof declaredSourceParam === 'undefined') {
+        continue
+      }
+
       value = `inox_arg_${index}`
-      sourceParam = cModuleFunctionParamAt(adapter.functionType.params, index)
+      sourceParam = declaredSourceParam
     } else {
       value = emitFunctionPointerAdapterDefaultTargetArg(`inox_arg_${index}`, adapter, targetFunctionType)
     }
@@ -2409,6 +2364,10 @@ function emitFunctionPointerAdapterDefaultTargetArg(
 
     const param = targetFunctionType.params[index]
 
+    if (param === null || typeof param === 'undefined') {
+      continue
+    }
+
     if (param.optional !== true && (param.defaultValue === null || typeof param.defaultValue === 'undefined')) {
       return null
     }
@@ -2475,7 +2434,7 @@ function createCModuleBaseContext(
   const jsGlobalRoots = stringSetFromArray(globalRoots)
 
   for (let entryIndex = 0; entryIndex < functionEntries.length; entryIndex = entryIndex + 1) {
-    const entry = cModuleFunctionEntryAt(functionEntries, entryIndex)
+    const entry = functionEntries[entryIndex]
 
     functions.push(entry.node)
   }
@@ -2485,7 +2444,7 @@ function createCModuleBaseContext(
     declarationIndex < importedDeclarations.length;
     declarationIndex = declarationIndex + 1
   ) {
-    const declaration = cModuleFunctionDeclarationAt(importedDeclarations, declarationIndex)
+    const declaration = importedDeclarations[declarationIndex]
 
     pushIrFunctionDeclaration(functionDeclarations, declaration)
   }
@@ -2498,7 +2457,7 @@ function createCModuleBaseContext(
   const functionEffects = mergeIrFunctionEffects(inferredFunctionEffects, storedFunctionEffects)
 
   for (let effectIndex = 0; effectIndex < importedEffects.length; effectIndex = effectIndex + 1) {
-    const effect = cModuleFunctionEffectAt(importedEffects, effectIndex)
+    const effect = importedEffects[effectIndex]
 
     pushIrFunctionEffect(functionEffects, effect)
   }
@@ -2535,7 +2494,7 @@ function createCModuleBaseContext(
 
 function registerImportedCModuleClassInfos(context: CEmitContext, plan: CModulePlan, diagnostics: Diagnostic[]): void {
   for (let importIndex = 0; importIndex < plan.imports.length; importIndex = importIndex + 1) {
-    const item = cModuleImportPlanAt(plan.imports, importIndex)
+    const item = plan.imports[importIndex]
     const importedModule = item.module
     const declaration = item.declaration
 
@@ -2553,7 +2512,7 @@ function registerImportedCModuleClassInfos(context: CEmitContext, plan: CModuleP
     const specifiers: AnyNode[] = declaration.specifiers ?? []
 
     for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
-      const specifier = cModuleNodeAt(specifiers, specifierIndex)
+      const specifier = specifiers[specifierIndex]
       const importedInfo = importedInfos.get(specifier.imported)
 
       if (
@@ -2601,7 +2560,7 @@ function collectCModuleContextRuntimeTypes(context: CModuleRuntimeTypeContext): 
 
   for (const params of context.functionParams.values()) {
     for (let paramIndex = 0; paramIndex < params.length; paramIndex = paramIndex + 1) {
-      const param = cModuleFunctionParamAt(params, paramIndex)
+      const param = params[paramIndex]
 
       collectCModuleFunctionParamRuntimeTypes(types, param, new Set())
     }
@@ -2689,7 +2648,7 @@ function registerCModuleValueDeclarations(context: CEmitContext, plan: CModulePl
   const values = collectCModuleStaticValueDeclarations(plan, context)
 
   for (let index = 0; index < values.length; index = index + 1) {
-    const item = cModuleValueDeclarationAt(values, index)
+    const item = values[index]
     context.moduleValueNames.set(item.name, item.symbolName)
     context.moduleValueTypes.set(item.name, item.valueType)
 
@@ -2709,7 +2668,7 @@ function registerCModuleValueDeclarations(context: CEmitContext, plan: CModulePl
 
 function registerImportedCModuleValueDeclarations(context: CEmitContext, plan: CModulePlan): void {
   for (let importIndex = 0; importIndex < plan.imports.length; importIndex = importIndex + 1) {
-    const item = cModuleImportPlanAt(plan.imports, importIndex)
+    const item = plan.imports[importIndex]
     const importedModule = item.module
 
     if (importedModule === null || typeof importedModule === 'undefined') {
@@ -2731,7 +2690,7 @@ function registerImportedCModuleValueDeclarations(context: CEmitContext, plan: C
     const specifiers: CModuleNode[] = specifiersValue
 
     for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
-      const specifier = cModuleNodeAt(specifiers, specifierIndex)
+      const specifier = specifiers[specifierIndex]
       const exported = importedModule.record.exports.get(specifier.imported)
 
       if (exported === null || typeof exported === 'undefined' || exported.type !== 'VariableDeclaration') {
@@ -2792,7 +2751,7 @@ function collectCModuleExportedValueDeclarations(plan: CModulePlan): CModuleValu
   const exported: CModuleValueDeclaration[] = []
 
   for (let index = 0; index < values.length; index = index + 1) {
-    const item = cModuleValueDeclarationAt(values, index)
+    const item = values[index]
 
     if (item.exported === true) {
       exported.push(item)
@@ -2808,7 +2767,7 @@ function collectCModuleValueDeclarations(plan: CModulePlan, context?: CEmitConte
   const statements = collectIrTopLevelNodes(ir, 'statement')
 
   for (let index = 0; index < statements.length; index = index + 1) {
-    const item = cModuleNodeAt(statements, index)
+    const item = statements[index]
 
     if (item.type !== 'VariableDeclaration') {
       continue
@@ -2880,7 +2839,7 @@ function collectCModuleCompileTimeValueDeclarations(
   const result: CModuleValueDeclaration[] = []
 
   for (let index = 0; index < values.length; index = index + 1) {
-    const item = cModuleValueDeclarationAt(values, index)
+    const item = values[index]
 
     if (item.compileTimeInitializer !== null && typeof item.compileTimeInitializer !== 'undefined') {
       result.push(item)
@@ -2894,7 +2853,7 @@ function collectCModuleRuntimeValueDeclarations(values: CModuleValueDeclaration[
   const result: CModuleValueDeclaration[] = []
 
   for (let index = 0; index < values.length; index = index + 1) {
-    const item = cModuleValueDeclarationAt(values, index)
+    const item = values[index]
 
     if (item.compileTimeInitializer === null || typeof item.compileTimeInitializer === 'undefined') {
       result.push(item)
@@ -2915,7 +2874,7 @@ function collectCModuleStaticValueDeclarations(plan: CModulePlan, context: CEmit
   const result: CModuleValueDeclaration[] = []
 
   for (let index = 0; index < values.length; index = index + 1) {
-    const item = cModuleValueDeclarationAt(values, index)
+    const item = values[index]
 
     if (shouldEmitCModuleStaticValueDeclaration(item, nestedReferences, context)) {
       result.push(item)
@@ -3146,7 +3105,7 @@ function emitCModuleValueDefinitions(lines: string[], values: CModuleValueDeclar
   }
 
   for (let index = 0; index < values.length; index = index + 1) {
-    const item = cModuleValueDeclarationAt(values, index)
+    const item = values[index]
     const functionPointerDefinition = cModuleFunctionPointerDefinition(item)
 
     if (functionPointerDefinition !== null && typeof functionPointerDefinition !== 'undefined') {
@@ -3204,7 +3163,7 @@ function emitCModuleValueFunctionFieldDefinitions(
   let emitted = false
 
   for (let index = 0; index < values.length; index = index + 1) {
-    const item = cModuleValueDeclarationAt(values, index)
+    const item = values[index]
     const fields = context.moduleObjectShapes.get(item.name)
 
     if (fields === null || typeof fields === 'undefined') {
@@ -3623,7 +3582,7 @@ function emitCModuleImportInitCalls(plan: CModulePlan): string[] {
   const calls: string[] = []
 
   for (let index = 0; index < plan.imports.length; index = index + 1) {
-    const item = cModuleImportPlanAt(plan.imports, index)
+    const item = plan.imports[index]
     const importedModule = item.module
 
     if (importedModule === null || typeof importedModule === 'undefined') {
@@ -3661,7 +3620,7 @@ function collectCModuleExternalEventLoopFunctionNames(
   const functions: AnyNode[] = []
 
   for (let index = 0; index < entries.length; index = index + 1) {
-    functions.push(cModuleFunctionEntryAt(entries, index).node)
+    functions.push(entries[index].node)
   }
 
   const names = deps.collectExternalEventLoopFunctions(functions, seedNames)
@@ -3681,7 +3640,7 @@ function collectCModuleImportedExternalEventLoopFunctionNames(
   const names: Set<string> = new Set()
 
   for (let importIndex = 0; importIndex < plan.imports.length; importIndex = importIndex + 1) {
-    const item = cModuleImportPlanAt(plan.imports, importIndex)
+    const item = plan.imports[importIndex]
     const importedModule = item.module
 
     if (importedModule === null || typeof importedModule === 'undefined') {
@@ -3704,7 +3663,7 @@ function collectCModuleImportedExternalEventLoopFunctionNames(
     const specifiers: CModuleNode[] = specifiersValue
 
     for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
-      const specifier = cModuleNodeAt(specifiers, specifierIndex)
+      const specifier = specifiers[specifierIndex]
 
       if (!importedNames.has(specifier.imported)) {
         continue
@@ -3727,7 +3686,7 @@ function collectCModuleFunctionNodeEntries(plan: CModulePlan, programs: IrProgra
   const filtered: CModuleFunctionNodeEntry[] = []
 
   for (let index = 0; index < entries.length; index = index + 1) {
-    const entry = cModuleFunctionEntryAt(entries, index)
+    const entry = entries[index]
 
     if (!isCModuleImportFunctionWrapper(plan, entry.node)) {
       filtered.push(entry)
@@ -3743,7 +3702,7 @@ function isCModuleImportFunctionWrapper(plan: CModulePlan, node: AnyNode): boole
   }
 
   for (let importIndex = 0; importIndex < plan.imports.length; importIndex = importIndex + 1) {
-    const item = cModuleImportPlanAt(plan.imports, importIndex)
+    const item = plan.imports[importIndex]
     const importDeclaration = item.declaration
 
     if (importDeclaration === null || typeof importDeclaration === 'undefined') {
@@ -3759,7 +3718,7 @@ function isCModuleImportFunctionWrapper(plan: CModulePlan, node: AnyNode): boole
     const specifiers: CModuleNode[] = specifiersValue
 
     for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
-      const specifier = cModuleNodeAt(specifiers, specifierIndex)
+      const specifier = specifiers[specifierIndex]
       const localName = cModuleImportedBindingName(importDeclaration, specifier)
 
       if (node.name === localName && isCModuleImportFunctionWrapperBody(node, specifier.imported)) {
@@ -3776,7 +3735,7 @@ function isCModuleImportFunctionWrapperBody(node: AnyNode, importedName: string)
     return false
   }
 
-  const statement = cModuleNodeAt(node.body, 0)
+  const statement = node.body[0]
   let expression: AnyNode | null = null
 
   if (statement.type === 'ReturnStatement') {
@@ -3817,7 +3776,7 @@ function collectCModuleExportedFunctions(plan: CModulePlan): AnyNode[] {
     declarationIndex < ir.functionDeclarations.length;
     declarationIndex = declarationIndex + 1
   ) {
-    const declaration = cModuleFunctionDeclarationAt(ir.functionDeclarations, declarationIndex)
+    const declaration = ir.functionDeclarations[declarationIndex]
 
     if (declaration.exported) {
       exportedNames.add(declaration.name)
@@ -3827,7 +3786,7 @@ function collectCModuleExportedFunctions(plan: CModulePlan): AnyNode[] {
   const nodes = collectIrTopLevelNodes(ir, 'function')
 
   for (let index = 0; index < nodes.length; index = index + 1) {
-    const item = cModuleNodeAt(nodes, index)
+    const item = nodes[index]
 
     if (exportedNames.has(item.name)) {
       functions.push(item)
@@ -3841,7 +3800,7 @@ function collectCModuleImportedFunctionDeclarations(plan: CModulePlan): IrFuncti
   const declarations: IrFunctionDeclaration[] = []
 
   for (let importIndex = 0; importIndex < plan.imports.length; importIndex = importIndex + 1) {
-    const item = cModuleImportPlanAt(plan.imports, importIndex)
+    const item = plan.imports[importIndex]
     const importedModule = item.module
 
     if (importedModule === null || typeof importedModule === 'undefined') {
@@ -3863,7 +3822,7 @@ function collectCModuleImportedFunctionDeclarations(plan: CModulePlan): IrFuncti
     const specifiers: CModuleNode[] = specifiersValue
 
     for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
-      const specifier = cModuleNodeAt(specifiers, specifierIndex)
+      const specifier = specifiers[specifierIndex]
       const declaration = findCModuleExportedFunctionDeclaration(
         importedModule.ir.functionDeclarations,
         specifier.imported
@@ -3911,7 +3870,7 @@ function collectCModulePlanFunctionEffectsWithVisited(
   const effects = mergeIrFunctionEffects(inferredEffects, storedEffects)
 
   for (let effectIndex = 0; effectIndex < importedEffects.length; effectIndex = effectIndex + 1) {
-    const effect = cModuleFunctionEffectAt(importedEffects, effectIndex)
+    const effect = importedEffects[effectIndex]
 
     pushIrFunctionEffect(effects, effect)
   }
@@ -3930,7 +3889,7 @@ function collectImportedCModuleFunctionEffectsWithVisited(
   const effects: IrFunctionEffect[] = []
 
   for (let importIndex = 0; importIndex < plan.imports.length; importIndex = importIndex + 1) {
-    const item = cModuleImportPlanAt(plan.imports, importIndex)
+    const item = plan.imports[importIndex]
     const importedModule = item.module
 
     if (importedModule === null || typeof importedModule === 'undefined') {
@@ -3952,11 +3911,11 @@ function collectImportedCModuleFunctionEffectsWithVisited(
     const specifiers: CModuleNode[] = specifiersValue
 
     for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
-      const specifier = cModuleNodeAt(specifiers, specifierIndex)
+      const specifier = specifiers[specifierIndex]
       const sourceEffects = collectCModulePlanFunctionEffectsWithVisited(importedModule, visiting, cache)
 
       for (let effectIndex = 0; effectIndex < sourceEffects.length; effectIndex = effectIndex + 1) {
-        const effect = cModuleFunctionEffectAt(sourceEffects, effectIndex)
+        const effect = sourceEffects[effectIndex]
         const effectName: string = effect.name
         const importedName: string = specifier.imported
 
@@ -3976,7 +3935,7 @@ function findCModuleExportedFunctionDeclaration(
   name: string
 ): IrFunctionDeclaration | null {
   for (let index = 0; index < declarations.length; index = index + 1) {
-    const declaration = cModuleFunctionDeclarationAt(declarations, index)
+    const declaration = declarations[index]
 
     if (declaration.name === name && declaration.exported) {
       return declaration
@@ -4021,7 +3980,7 @@ function createCModuleFunctionNames(plan: CModulePlan): Map<string, string> {
   const localFunctionNodes = collectIrTopLevelNodes(plan.ir, 'function')
 
   for (let functionIndex = 0; functionIndex < localFunctionNodes.length; functionIndex = functionIndex + 1) {
-    const node = cModuleNodeAt(localFunctionNodes, functionIndex)
+    const node = localFunctionNodes[functionIndex]
 
     if (!isCModuleImportFunctionWrapper(plan, node)) {
       localNames.add(node.name)
@@ -4033,13 +3992,13 @@ function createCModuleFunctionNames(plan: CModulePlan): Map<string, string> {
     declarationIndex < plan.ir.functionDeclarations.length;
     declarationIndex = declarationIndex + 1
   ) {
-    const declaration = cModuleFunctionDeclarationAt(plan.ir.functionDeclarations, declarationIndex)
+    const declaration = plan.ir.functionDeclarations[declarationIndex]
 
     names.set(declaration.name, emitCModuleFunctionName(plan, declaration.name))
   }
 
   for (let importIndex = 0; importIndex < plan.imports.length; importIndex = importIndex + 1) {
-    const item = cModuleImportPlanAt(plan.imports, importIndex)
+    const item = plan.imports[importIndex]
     const importedModule = item.module
 
     if (importedModule === null || typeof importedModule === 'undefined') {
@@ -4061,7 +4020,7 @@ function createCModuleFunctionNames(plan: CModulePlan): Map<string, string> {
     const specifiers: CModuleNode[] = specifiersValue
 
     for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
-      const specifier = cModuleNodeAt(specifiers, specifierIndex)
+      const specifier = specifiers[specifierIndex]
       const importedBindingName = cModuleImportedBindingName(importDeclaration, specifier)
       const importedFunctionName = emitCModuleFunctionName(importedModule, specifier.imported)
 

@@ -907,7 +907,7 @@ function currentCExpressionErrorTarget(errorTargets: string[]): string {
     return ''
   }
 
-  return errorTargets[errorTargets.length - 1]
+  return errorTargets[errorTargets.length - 1] ?? ''
 }
 
 const cCallExpressionDependencies = {
@@ -1088,7 +1088,7 @@ export function emitCppBundleFromIrModules(
       entryModules.push(module)
     }
   } else {
-    for (let index = 0; index <= entryIndex; index++) {
+    for (let index = 0; index <= entryIndex && index < irModules.length; index++) {
       entryModules.push(irModules[index])
     }
   }
@@ -1471,6 +1471,10 @@ function registerModuleObjectShape(
         existing.push(field)
       } else {
         const existingField = existing[index]
+
+        if (existingField === null || typeof existingField === 'undefined') {
+          continue
+        }
 
         if (field.functionStorage === 'pointer') {
           existingField.functionStorage = 'pointer'
@@ -2117,6 +2121,10 @@ function findObjectLiteralPropertyValue(expression: AnyNode, key: string): AnyNo
 
   for (let index = properties.length - 1; index >= 0; index = index - 1) {
     const property = properties[index]
+
+    if (property === null || typeof property === 'undefined') {
+      continue
+    }
 
     if (property.spread === true) {
       if (objectSpreadPropertyHasField(property, key)) {
@@ -3189,10 +3197,20 @@ function moduleObjectFunctionCompanionName(objectName: string, path: string[]): 
   let nestedName = objectName
 
   for (let index = 0; index + 1 < path.length; index = index + 1) {
-    nestedName = `${nestedName}_${path[index]}`
+    const segment = path[index]
+
+    if (segment !== null && typeof segment !== 'undefined') {
+      nestedName = `${nestedName}_${segment}`
+    }
   }
 
-  return emitCObjectFunctionFieldName(nestedName, path[path.length - 1])
+  const fieldName = path[path.length - 1]
+
+  if (fieldName === null || typeof fieldName === 'undefined') {
+    return null
+  }
+
+  return emitCObjectFunctionFieldName(nestedName, fieldName)
 }
 
 function emitModuleObjectFunctionFieldAssignmentsFromShape(
@@ -3640,6 +3658,11 @@ function emptyPreparedExpression(): PreparedExpression {
 function emitNullableRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): string[] {
   const path: string[] = expression.target.path
   const name = path[0]
+
+  if (name === null || typeof name === 'undefined') {
+    return []
+  }
+
   const targetType = context.variables.get(name)
   let value = emptyPreparedExpression()
 
@@ -3697,6 +3720,11 @@ function emitNullableRuntimeValueAssignment(expression: AnyNode, context: CFunct
 function emitBoxedRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): string[] {
   const path: string[] = expression.target.path
   const name = path[0]
+
+  if (name === null || typeof name === 'undefined') {
+    return []
+  }
+
   const reference = emitCIdentifier(name)
   const expected = context.variables.get(name)
   const value = emitCValueExpression(expression.value, context)
@@ -5122,6 +5150,10 @@ function preparedObjectSpreadForField(
   for (let index = properties.length - 1; index >= 0; index = index - 1) {
     const property = properties[index]
 
+    if (property === null || typeof property === 'undefined') {
+      continue
+    }
+
     if (property.spread !== true) {
       if (property.key === fieldName) {
         return null
@@ -5135,8 +5167,10 @@ function preparedObjectSpreadForField(
     }
 
     for (let spreadIndex = spreads.length - 1; spreadIndex >= 0; spreadIndex = spreadIndex - 1) {
-      if (spreads[spreadIndex].property === property) {
-        return spreads[spreadIndex]
+      const spread = spreads[spreadIndex]
+
+      if (spread !== null && typeof spread !== 'undefined' && spread.property === property) {
+        return spread
       }
     }
   }
@@ -6945,7 +6979,13 @@ function emitPreparedAsyncTaskAsyncResultCallExpression(
   }
 
   const path: string[] = expression.callee.path
-  const wrapper = context.asyncTaskWrappers.get(path[0])
+  const name = path[0]
+
+  if (name === null || typeof name === 'undefined') {
+    return null
+  }
+
+  const wrapper = context.asyncTaskWrappers.get(name)
 
   if (wrapper === null || typeof wrapper === 'undefined') {
     return null
@@ -7644,8 +7684,9 @@ function emitCAsyncFunctionAwaitExpression(expression: AnyNode, context: CFuncti
 
   if (callExpression.callee.type === 'Reference') {
     const path: string[] = callExpression.callee.path
+    const name = path[0]
 
-    if (context.asyncTaskWrappers.has(path[0])) {
+    if (name !== null && typeof name !== 'undefined' && context.asyncTaskWrappers.has(name)) {
       return null
     }
   }
@@ -8334,7 +8375,13 @@ function resolveObjectFunctionParamExpressionName(
     expression.callee.path.length === 1
   ) {
     const path: string[] = expression.callee.path
-    const accessor = context.objectAccessorReturnPaths.get(path[0])
+    const name = path[0]
+
+    if (name === null || typeof name === 'undefined') {
+      return null
+    }
+
+    const accessor = context.objectAccessorReturnPaths.get(name)
 
     if (accessor !== null && typeof accessor !== 'undefined') {
       const argument = functionParamArgumentAt(expression.args, accessor.paramIndex)
@@ -8374,7 +8421,13 @@ function objectFunctionParamFields(
 
   if (object.type === 'CallExpression' && object.callee.type === 'Reference' && object.callee.path.length === 1) {
     const path: string[] = object.callee.path
-    const shape = context.functionReturnShapes.get(path[0])
+    const name = path[0]
+
+    if (name === null || typeof name === 'undefined') {
+      return null
+    }
+
+    const shape = context.functionReturnShapes.get(name)
 
     if (
       shape !== null &&

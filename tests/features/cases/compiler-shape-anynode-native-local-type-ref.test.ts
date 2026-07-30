@@ -11,6 +11,11 @@ type Context = {
 
 function indexedName(contexts: Context[]): string {
   const nodes: AnyNode[] = contexts
+
+  if (nodes.length === 0) {
+    return 'missing'
+  }
+
   const node = nodes[0]
   const names: Map<string, string> = node.names
 

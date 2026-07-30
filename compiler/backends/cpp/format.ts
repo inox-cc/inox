@@ -975,7 +975,13 @@ function pushGeneratedCBlankLine(lines: string[]): void {
 function generatedCLeadingCommentGroupStart(lines: string[], index: number): number {
   let start = index
 
-  for (let cursor = index - 1; cursor >= 0 && isGeneratedCCommentOnlyLine(lines[cursor]); cursor = cursor - 1) {
+  for (let cursor = index - 1; cursor >= 0; cursor = cursor - 1) {
+    const line = lines[cursor]
+
+    if (line === null || typeof line === 'undefined' || !isGeneratedCCommentOnlyLine(line)) {
+      break
+    }
+
     start = cursor
   }
 
@@ -1057,7 +1063,13 @@ function findGeneratedCControlEnd(lines: string[], start: number): number | null
   let started = false
 
   for (let index = start; index < lines.length; index = index + 1) {
-    const braces = scanGeneratedCBraces(lines[index], state)
+    const line = lines[index]
+
+    if (line === null || typeof line === 'undefined') {
+      continue
+    }
+
+    const braces = scanGeneratedCBraces(line, state)
 
     if (braces.open > 0) {
       started = true

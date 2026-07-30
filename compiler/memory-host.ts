@@ -266,7 +266,11 @@ function relativePosixPath(fromPath: string, toPath: string): string {
   }
 
   for (let index = shared; index < toParts.length; index = index + 1) {
-    parts.push(toParts[index])
+    const part = toParts[index]
+
+    if (part !== null && typeof part !== 'undefined') {
+      parts.push(part)
+    }
   }
 
   return parts.join('/')

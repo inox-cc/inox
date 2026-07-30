@@ -21,6 +21,10 @@ function isExpectedName(context: AnyNode, name: string, value: string): boolean 
 }
 
 function resolveName(expression: AnyNode, context: AnyNode): string {
+  if (expression.path.length === 0) {
+    return 'missing'
+  }
+
   const name = expression.path[0]
   let value = ''
   const objectValue = stringForObject(context, name)

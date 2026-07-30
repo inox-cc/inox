@@ -13,4 +13,7 @@ const expression = 'ready'
 const metadata: object = { kind: 'fixture' }
 
 values.push({ path: [], expression, metadata })
-console.log(values[0].expression)
+
+if (values.length > 0) {
+  console.log(values[0].expression)
+}

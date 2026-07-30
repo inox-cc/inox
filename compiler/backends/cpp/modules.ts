@@ -608,7 +608,7 @@ function cModuleResolvedPathSegments(path: string, host: CModuleHost): string[] 
 function cModulePathPrefix(segments: string[], length: number, host: CModuleHost): string {
   const prefix: string[] = []
 
-  for (let index = 0; index < length; index = index + 1) {
+  for (let index = 0; index < length && index < segments.length; index = index + 1) {
     prefix.push(segments[index])
   }
 

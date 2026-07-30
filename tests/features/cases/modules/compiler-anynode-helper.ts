@@ -5,6 +5,6 @@ export type AnyNode = {
 
 export type CheckerNode = AnyNode
 
-export function checkerNodeAt(values: CheckerNode[], index: number): CheckerNode {
+export function checkerNodeAt(values: CheckerNode[], index: number): CheckerNode | null {
   return values[index]
 }

@@ -1,6 +1,5 @@
 import { findParamByName } from './helpers.ts'
 import {
-  checkerNodeAt,
   firstPathSegment,
   nodeValueTypeOrUnknown
 } from './resolved-types.ts'
@@ -22,7 +21,7 @@ export function collectClassConstructorFieldAssignments(constructorMethod: Nulla
   const assignments: AnyNode[] = []
 
   for (let index = 0; index < constructorMethod.body.length; index = index + 1) {
-    const statement = checkerNodeAt(constructorMethod.body, index)
+    const statement = constructorMethod.body[index]
 
     let assignment: NullableNode = null
 
@@ -58,7 +57,7 @@ export function collectClassConstructorFieldAssignments(constructorMethod: Nulla
 export function resolveClassConstructorFieldType(expression: AnyNode, constructorParams: AnyNode[]): ValueType {
   if (expression.type === 'Reference' && expression.path.length === 1) {
     const path: string[] = expression.path
-    const param = findParamByName(constructorParams, path[0])
+    const param = findParamByName(constructorParams, firstPathSegment(path))
 
     if (param !== null && typeof param !== 'undefined') {
       return nodeValueTypeOrUnknown(param)

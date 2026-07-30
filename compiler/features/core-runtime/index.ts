@@ -206,7 +206,7 @@ function arrayLiteralHasFunctionElement(node: CoreRuntimeNode): boolean {
   }
 
   for (let index = 0; index < elements.length; index = index + 1) {
-    const element = coreRuntimeNodeAt(elements, index)
+    const element = elements[index]
 
     if (element.valueType === 'function') {
       return true
@@ -233,7 +233,7 @@ function recordCallableSignatureFeatures(node: CoreRuntimeNode, features: CoreRu
   }
 
   for (let index = 0; index < params.length; index = index + 1) {
-    const param = coreRuntimeNodeAt(params, index)
+    const param = params[index]
 
     if (isRuntimeCallableParamValueType(param.valueType) || isRuntimeFunctionType(param.functionType)) {
       features.add('runtime-values')
@@ -284,7 +284,7 @@ function plainFunctionCallHasStringArgument(expression: CoreRuntimeNode): boolea
   }
 
   for (let index = 0; index < args.length; index = index + 1) {
-    const arg = coreRuntimeNodeAt(args, index)
+    const arg = args[index]
 
     if (arg.valueType === 'string') {
       return true
@@ -351,7 +351,7 @@ function isRuntimeFunctionType(functionType: CoreRuntimeFunctionType | null | un
   }
 
   for (let index = 0; index < params.length; index = index + 1) {
-    const param = coreRuntimeNodeAt(params, index)
+    const param = params[index]
 
     if (!isSupportedRuntimeFunctionParamValueType(param.valueType)) {
       return false
@@ -381,7 +381,7 @@ function isSupportedRuntimeCallbackType(functionType: CoreRuntimeFunctionType | 
   }
 
   for (let index = 0; index < params.length; index = index + 1) {
-    const param = coreRuntimeNodeAt(params, index)
+    const param = params[index]
 
     if (!isSupportedRuntimeFunctionParamValueType(param.valueType)) {
       return false
@@ -450,8 +450,4 @@ function simpleReferencePath(expression: CoreRuntimeNode | null | undefined): st
   }
 
   return path
-}
-
-function coreRuntimeNodeAt(nodes: CoreRuntimeRawNode[], index: number): CoreRuntimeRawNode {
-  return nodes[index]
 }

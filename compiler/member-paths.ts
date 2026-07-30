@@ -21,6 +21,10 @@ export function memberExpressionPath(expression: MemberPathNode | null | undefin
     }
   }
 
+  if (expression.type === 'ThisExpression') {
+    return ['this']
+  }
+
   if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
     const objectPath = memberExpressionPath(expression.object)
     const property = expression.property
@@ -53,6 +57,10 @@ export function expressionNarrowingPath(expression: MemberPathNode | null | unde
     }
 
     return null
+  }
+
+  if (expression.type === 'ThisExpression') {
+    return 'this'
   }
 
   if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {

@@ -58,6 +58,11 @@ class Checker {
     }
 
     const checks = operation.argumentChecks ?? []
+
+    if (checks.length === 0) {
+      return
+    }
+
     const fieldValueType = checks[0].objectFieldValueType
 
     if (fieldValueType === null || typeof fieldValueType === 'undefined') {

@@ -221,9 +221,10 @@ export function resolveDeclaredType(
   if (nativeType !== null) {
     const info = unresolvedTypeInfo()
     const fields: AnyNode[] = []
+    const nativeFields = nativeType.fields ?? []
 
-    for (let index = 0; index < (nativeType.fields ?? []).length; index = index + 1) {
-      fields.push(libraryNativeTypeField((nativeType.fields ?? [])[index], loc))
+    for (let index = 0; index < nativeFields.length; index = index + 1) {
+      fields.push(libraryNativeTypeField(nativeFields[index], loc))
     }
 
     info.valueType = nativeType.valueType as ValueType
@@ -576,8 +577,14 @@ function resolveGenericDeclaredType(
     const substitutions = new Map(context.typeSubstitutions)
 
     for (let index = 0; index < typeParameters.length; index = index + 1) {
-      substitutionNames.set(typeParameters[index].name, resolvedTypeSubstitutionName(context, argumentNames[index]))
-      substitutions.set(typeParameters[index].name, resolveDeclaredType(context, argumentNames[index], loc))
+      const argumentName = argumentNames[index]
+
+      if (argumentName === undefined) {
+        return unresolvedTypeInfo()
+      }
+
+      substitutionNames.set(typeParameters[index].name, resolvedTypeSubstitutionName(context, argumentName))
+      substitutions.set(typeParameters[index].name, resolveDeclaredType(context, argumentName, loc))
     }
 
     const child: DeclaredTypeResolverContext = {
@@ -1194,9 +1201,10 @@ function libraryNativeTypeField(field: LibraryResultShapeFieldDescriptor, loc: S
     (nestedTypeId !== null && typeof nestedTypeId !== 'undefined')
   ) {
     const fields: AnyNode[] = []
+    const sourceFields = nestedFields ?? []
 
-    for (let index = 0; index < (nestedFields ?? []).length; index = index + 1) {
-      const nestedField = (nestedFields ?? [])[index]
+    for (let index = 0; index < sourceFields.length; index = index + 1) {
+      const nestedField = sourceFields[index]
       fields.push({
         name: nestedField.name,
         valueType: nestedField.valueType,

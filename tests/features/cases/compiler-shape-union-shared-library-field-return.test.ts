@@ -22,4 +22,8 @@ function carrierTraits(carrier: Carrier): Trait[] {
   return carrier.traits
 }
 
-console.log(carrierTraits({ kind: 'left', traits: [{ name: 'shared' }] })[0].name)
+const traits = carrierTraits({ kind: 'left', traits: [{ name: 'shared' }] })
+
+if (traits.length > 0) {
+  console.log(traits[0].name)
+}

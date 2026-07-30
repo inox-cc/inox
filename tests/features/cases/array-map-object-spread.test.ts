@@ -17,4 +17,6 @@ function operation(field: Field): Operation {
 const fields: Field[] = [{ name: 'item' }]
 const operations: Operation[] = [...fields.map((field) => operation(field))]
 
-console.log(operations[0].id)
+if (operations.length > 0) {
+  console.log(operations[0].id)
+}

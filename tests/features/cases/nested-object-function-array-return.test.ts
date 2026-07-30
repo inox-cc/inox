@@ -11,7 +11,13 @@ type State = {
 }
 
 function firstLine(state: State): string {
-  return state.deps.lines()[0]
+  const lines = state.deps.lines()
+
+  if (lines.length > 0) {
+    return lines[0]
+  }
+
+  return ''
 }
 
 function run(deps: Dependencies): string {

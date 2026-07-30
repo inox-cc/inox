@@ -406,7 +406,13 @@ export function resolvedStringMetadata(
 }
 
 export function firstPathSegment(path: readonly string[]): string {
-  return path[0]
+  const first = path[0]
+
+  if (typeof first === 'string') {
+    return first
+  }
+
+  throw new Error('member path must not be empty')
 }
 
 export function nullableNarrowingKey(expression: AnyNode | null | undefined): string | null {
@@ -463,14 +469,6 @@ export function resolvedFunctionTypeMetadata(
   return null
 }
 
-export function stringAt(values: string[], index: number): string {
-  return values[index]
-}
-
-export function checkerNodeAt(values: CheckerNode[], index: number): CheckerNode {
-  return values[index]
-}
-
 export function nodeNameEquals(node: AnyNode, name: string): boolean {
   return node.name === name
 }
@@ -493,10 +491,6 @@ export function nodeDeclaredTypeOrValueType(node: AnyNode): string {
   }
 
   return nodeValueTypeOrUnknown(node)
-}
-
-export function optionalParamAt(values: OptionalParamInfo[], index: number): OptionalParamInfo {
-  return values[index]
 }
 
 export function isOptionalParam(param: OptionalParamInfo): boolean {
@@ -531,15 +525,11 @@ export function conditionalExpressionValueType(consequentType: ValueType, altern
   return 'unknown'
 }
 
-export function resolvedTypeInfoAt(values: ResolvedTypeInfo[], index: number): ResolvedTypeInfo {
-  return values[index]
-}
-
 export function stringSetFromArray(values: string[]): Set<string> {
   const result: Set<string> = new Set()
 
   for (let index = 0; index < values.length; index = index + 1) {
-    result.add(stringAt(values, index))
+    result.add(values[index])
   }
 
   return result
@@ -588,7 +578,7 @@ export function commonResolvedObjectShape(infos: ResolvedTypeInfo[]): ObjectShap
   const fields: AnyNode[] = []
 
   for (let infoIndex = 0; infoIndex < infos.length; infoIndex = infoIndex + 1) {
-    const info = resolvedTypeInfoAt(infos, infoIndex)
+    const info = infos[infoIndex]
     const shape = info.shape
 
     if (
@@ -633,7 +623,7 @@ export function commonResolvedObjectShapeField(name: string, infos: ResolvedType
   let missing = false
 
   for (let index = 0; index < infos.length; index = index + 1) {
-    const info = resolvedTypeInfoAt(infos, index)
+    const info = infos[index]
     const shape = info.shape
 
     if (shape === null || typeof shape === 'undefined') {
@@ -661,7 +651,7 @@ export function commonResolvedObjectShapeField(name: string, infos: ResolvedType
 
   const valueType = commonValueType(valueTypes)
 
-  if (valueTypes.length === 0) {
+  if (valueTypes.length === 0 || fields.length === 0) {
     return null
   }
 
@@ -713,6 +703,10 @@ export function commonResolvedObjectShapeFieldReadonly(fields: AnyNode[]): boole
 }
 
 export function commonResolvedObjectShapeFieldOwnership(fields: AnyNode[]): string | null {
+  if (fields.length === 0) {
+    return null
+  }
+
   const first = fields[0]
   let ownership: string | null = null
 
@@ -737,6 +731,10 @@ export function commonResolvedObjectShapeFieldOwnership(fields: AnyNode[]): stri
 }
 
 export function commonResolvedObjectShapeFieldDeclaredType(fields: AnyNode[]): string | null {
+  if (fields.length === 0) {
+    return null
+  }
+
   const first = fields[0]
   let declaredType: string | null = null
 
@@ -761,6 +759,10 @@ export function commonResolvedObjectShapeFieldDeclaredType(fields: AnyNode[]): s
 }
 
 export function commonResolvedObjectShapeFieldTypeRef(fields: AnyNode[]): TypeRef | null {
+  if (fields.length === 0) {
+    return null
+  }
+
   const first = fields[0]
   const typeRef: TypeRef | null = first.typeRef ?? null
 
@@ -796,6 +798,10 @@ export function commonResolvedObjectShapeFieldAsyncResultValueType(fields: AnyNo
 }
 
 export function commonResolvedObjectShapeFieldFunctionType(fields: AnyNode[]): FunctionTypeMetadata | null {
+  if (fields.length === 0) {
+    return null
+  }
+
   const first = fields[0]
   let functionType: FunctionTypeMetadata | null = null
 
@@ -820,6 +826,10 @@ export function commonResolvedObjectShapeFieldFunctionType(fields: AnyNode[]): F
 }
 
 export function commonResolvedObjectShapeFieldShape(fields: AnyNode[]): ObjectShapeInfo | null {
+  if (fields.length === 0) {
+    return null
+  }
+
   const first = fields[0]
   let shape: ObjectShapeInfo | null = null
 
@@ -858,7 +868,7 @@ export function commonResolvedOptionalValueType(
   const values: ValueType[] = []
 
   for (let index = 0; index < infos.length; index = index + 1) {
-    const info = resolvedTypeInfoAt(infos, index)
+    const info = infos[index]
     const value = resolvedTypeInfoValue(info, kind)
 
     if (value === null || typeof value === 'undefined') {
@@ -920,14 +930,20 @@ function typeRefsEqual(left: TypeRef, right: TypeRef): boolean {
       const leftField = left.fields[index]
       const rightField = right.fields[index]
 
-      if (
-        leftField.name !== rightField.name ||
-        leftField.readonly !== rightField.readonly ||
-        leftField.optional !== rightField.optional ||
-        !typeRefsEqual(leftField.typeRef, rightField.typeRef)
-      ) {
-        return false
+      if (rightField !== undefined) {
+        if (
+          leftField.name !== rightField.name ||
+          leftField.readonly !== rightField.readonly ||
+          leftField.optional !== rightField.optional ||
+          !typeRefsEqual(leftField.typeRef, rightField.typeRef)
+        ) {
+          return false
+        }
+
+        continue
       }
+
+      return false
     }
 
     if (left.dynamicField === null || typeof left.dynamicField === 'undefined') {
@@ -955,9 +971,17 @@ function typeRefListsEqual(left: TypeRef[], right: TypeRef[]): boolean {
   }
 
   for (let index = 0; index < left.length; index = index + 1) {
-    if (!typeRefsEqual(left[index], right[index])) {
-      return false
+    const rightTypeRef = right[index]
+
+    if (rightTypeRef !== undefined) {
+      if (!typeRefsEqual(left[index], rightTypeRef)) {
+        return false
+      }
+
+      continue
     }
+
+    return false
   }
 
   return true

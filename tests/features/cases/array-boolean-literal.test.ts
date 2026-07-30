@@ -3,4 +3,7 @@
 // @stdout 1
 
 const values = [true, false]
-console.log(values[0])
+
+if (values.length > 0) {
+  console.log(values[0])
+}

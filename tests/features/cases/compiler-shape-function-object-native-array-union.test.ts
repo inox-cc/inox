@@ -12,7 +12,11 @@ class Box {
 
 function first(value: Box | string[]): string {
   if (Array.isArray(value)) {
-    return value[0]
+    if (value.length > 0) {
+      return value[0]
+    }
+
+    return ''
   }
 
   return 'box'

@@ -235,6 +235,10 @@ function restoreLowerTypeParameters(state: LowerTypeParameterState[], context: L
   for (let index = state.length - 1; index >= 0; index = index - 1) {
     const item = state[index]
 
+    if (item === null || typeof item === 'undefined') {
+      continue
+    }
+
     if (item.previousType !== null) {
       context.types.set(item.name, item.previousType)
     } else {

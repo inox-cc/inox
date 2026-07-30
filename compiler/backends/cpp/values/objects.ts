@@ -182,7 +182,7 @@ function currentObjectErrorTarget(context: ObjectFunctionContext): string {
     return ''
   }
 
-  return targets[targets.length - 1]
+  return targets[targets.length - 1] ?? ''
 }
 
 function currentObjectErrorTargetRequiresActive(context: ObjectFunctionContext): boolean {
@@ -192,7 +192,7 @@ function currentObjectErrorTargetRequiresActive(context: ObjectFunctionContext):
     return false
   }
 
-  return flags[flags.length - 1]
+  return flags[flags.length - 1] ?? false
 }
 
 function registerObjectErrorValue(context: ObjectFunctionContext): void {
@@ -323,6 +323,10 @@ function objectShapeFieldAt(fields: CObjectShapeField[], expectedIndex: number):
 function findObjectProperty(properties: ObjectPropertyNode[], key: string): ObjectPropertyNode | null {
   for (let index = properties.length - 1; index >= 0; index = index - 1) {
     const property = properties[index]
+
+    if (property === null || typeof property === 'undefined') {
+      continue
+    }
 
     if (property.spread === true) {
       if (objectSpreadPropertyHasField(property, key)) {
@@ -568,6 +572,11 @@ function resolveKnownObjectReferenceMember(
   }
 
   const fieldName = expression.path[expression.path.length - 1]
+
+  if (fieldName === null || typeof fieldName === 'undefined') {
+    return null
+  }
+
   const objectName = referenceObjectPathName(expression.path)
   const fields = objectShapeFieldsForLookup(context, objectName)
 
@@ -593,8 +602,16 @@ function resolveKnownObjectReferenceMember(
 function referenceObjectPathName(path: string[]): string {
   let result = path[0]
 
+  if (result === null || typeof result === 'undefined') {
+    return ''
+  }
+
   for (let index = 1; index < path.length - 1; index = index + 1) {
-    result = `${result}_${path[index]}`
+    const segment = path[index]
+
+    if (segment !== null && typeof segment !== 'undefined') {
+      result = `${result}_${segment}`
+    }
   }
 
   return result
@@ -1450,7 +1467,12 @@ function isRuntimeValueReferenceExpression(expression: ObjectFieldNode, context:
   }
 
   const path: string[] = expression.path
-  const name: string = path[0]
+  const name = path[0]
+
+  if (name === null || typeof name === 'undefined') {
+    return false
+  }
+
   const valueType = context.variables.get(name) ?? ''
 
   if (valueType !== 'unknown' && valueType !== 'object' && !isOpaqueRuntimeValueType(valueType)) {
@@ -1848,7 +1870,11 @@ function refineObjectFunctionFieldNativeBoundaryMetadata(
   const params: CFunctionParam[] = []
   let changed = false
 
-  for (let index = 0; index < targetType.params.length; index = index + 1) {
+  for (
+    let index = 0;
+    index < targetType.params.length && index < sourceType.params.length;
+    index = index + 1
+  ) {
     const targetParam = targetType.params[index]
     const sourceParam = sourceType.params[index]
 
@@ -2247,6 +2273,10 @@ function preparedObjectVariableSpreadForField(
   for (let index = properties.length - 1; index >= 0; index = index - 1) {
     const property = properties[index]
 
+    if (property === null || typeof property === 'undefined') {
+      continue
+    }
+
     if (property.spread !== true) {
       if (property.key === fieldName) {
         return null
@@ -2260,8 +2290,10 @@ function preparedObjectVariableSpreadForField(
     }
 
     for (let spreadIndex = spreads.length - 1; spreadIndex >= 0; spreadIndex = spreadIndex - 1) {
-      if (spreads[spreadIndex].property === property) {
-        return spreads[spreadIndex]
+      const spread = spreads[spreadIndex]
+
+      if (spread !== null && typeof spread !== 'undefined' && spread.property === property) {
+        return spread
       }
     }
   }

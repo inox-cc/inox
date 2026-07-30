@@ -4,7 +4,7 @@
 
 import type { CompilerShapeDiagnostic } from './modules/compiler-shapes.ts'
 
-function firstDiagnostic(diagnostics: CompilerShapeDiagnostic[]): CompilerShapeDiagnostic {
+function firstDiagnostic(diagnostics: CompilerShapeDiagnostic[]): CompilerShapeDiagnostic | null {
   return diagnostics[0]
 }
 
@@ -16,4 +16,6 @@ const diagnostic = firstDiagnostic([
   }
 ])
 
-console.log(`${diagnostic.code} ${diagnostic.path.length}`)
+if (diagnostic !== null) {
+  console.log(`${diagnostic.code} ${diagnostic.path.length}`)
+}

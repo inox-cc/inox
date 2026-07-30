@@ -1957,11 +1957,17 @@ function nonEmptyTypeNameOrUnknown(value: string | null | undefined): string {
 }
 
 function tokenAt(tokens: Token[], position: number): Token {
-  if (position < 0 || position >= tokens.length) {
-    return tokens[tokens.length - 1]
+  const fallback = tokens[tokens.length - 1]
+
+  if (fallback === undefined) {
+    throw new Error('declaration token stream must contain eof')
   }
 
-  return tokens[position]
+  if (position < 0 || position >= tokens.length) {
+    return fallback
+  }
+
+  return tokens[position] ?? fallback
 }
 
 function tokenValue(tokens: Token[], position: number): string {

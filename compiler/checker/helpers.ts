@@ -2,10 +2,8 @@ import { typeRefIterableElementValueType } from '../extensions/type-ref-compatib
 import type { CompilerLibrarySet, TypeRef } from '../extensions/types.ts'
 import type { AnyNode, ValueType } from '../types.ts'
 import {
-  checkerNodeAt,
   isOptionalParam,
   nodeNameEquals,
-  optionalParamAt,
   stringSetFromArray
 } from './resolved-types.ts'
 import type { NullableNode, OptionalParamInfo } from './resolved-types.ts'
@@ -61,7 +59,7 @@ function requiredParamCount(params: OptionalParamInfo[]): number {
   let count = 0
 
   for (let index = 0; index < params.length; index = index + 1) {
-    const param = optionalParamAt(params, index)
+    const param = params[index]
 
     if (!isOptionalParam(param)) {
       count = count + 1
@@ -76,16 +74,22 @@ function hasRestParam(params: OptionalParamInfo[]): boolean {
     return false
   }
 
-  return optionalParamAt(params, params.length - 1).rest === true
+  const last = params[params.length - 1]
+
+  if (last === undefined) {
+    return false
+  }
+
+  return last.rest === true
 }
 
 export function paramForArgument(params: OptionalParamInfo[], index: number): OptionalParamInfo | null {
   if (index < params.length) {
-    return optionalParamAt(params, index)
+    return params[index] ?? null
   }
 
   if (hasRestParam(params)) {
-    return optionalParamAt(params, params.length - 1)
+    return params[params.length - 1] ?? null
   }
 
   return null
@@ -108,7 +112,7 @@ export function argumentParamValueType(param: OptionalParamInfo, libraries: Comp
 
 export function findClassConstructorMethod(statement: AnyNode): NullableNode {
   for (let index = 0; index < statement.methods.length; index = index + 1) {
-    const method = checkerNodeAt(statement.methods, index)
+    const method = statement.methods[index]
 
     if (nodeNameEquals(method, 'constructor')) {
       return method
@@ -120,7 +124,7 @@ export function findClassConstructorMethod(statement: AnyNode): NullableNode {
 
 export function findParamByName(params: AnyNode[], name: string): NullableNode {
   for (let index = 0; index < params.length; index = index + 1) {
-    const param = checkerNodeAt(params, index)
+    const param = params[index]
 
     if (nodeNameEquals(param, name)) {
       return param
@@ -165,7 +169,7 @@ export function statementAlwaysExits(statement: AnyNode): boolean {
 
 export function statementListAlwaysExits(statements: AnyNode[]): boolean {
   for (let index = 0; index < statements.length; index = index + 1) {
-    const statement = checkerNodeAt(statements, index)
+    const statement = statements[index]
 
     if (statementAlwaysExits(statement)) {
       return true
@@ -199,6 +203,10 @@ export function resolveTerminalReturnExpression(statements: AnyNode[]): AnyNode 
   }
 
   const statement = statements[statements.length - 1]
+
+  if (statement === undefined) {
+    return null
+  }
 
   if (statement.type !== 'ReturnStatement') {
     return null

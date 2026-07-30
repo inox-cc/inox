@@ -9,6 +9,10 @@ type CompilerNode = {
 type ExpressionNode = CompilerNode
 
 function propertyCount(expressions: ExpressionNode[]): number {
+  if (expressions.length === 0) {
+    return 0
+  }
+
   const expression = expressions[0]
   const properties: ExpressionNode[] = expression.properties
 

@@ -2,7 +2,7 @@
 // @expect pass
 // @stdout value
 
-function firstValue(values: string[]): string {
+function firstValue(values: string[]): string | null {
   return values[0]
 }
 

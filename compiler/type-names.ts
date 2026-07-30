@@ -486,7 +486,7 @@ function normalizeUnionTypeNames(unionArgs: string[]): string {
     }
   }
 
-  if (allStringsSame(normalized)) {
+  if (normalized.length > 0 && allStringsSame(normalized)) {
     return normalized[0]
   }
 

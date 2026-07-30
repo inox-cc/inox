@@ -20,4 +20,7 @@ const container: DynamicContainer = {
 }
 
 replaceChild(container, 0, { name: 'Replacement' })
-console.log(container.children[0].name)
+
+if (container.children.length > 0) {
+  console.log(container.children[0].name)
+}

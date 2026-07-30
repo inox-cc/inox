@@ -49,6 +49,10 @@ function shouldPreferReferenceMetadataType(
 }
 
 function referenceExpressionType(expression: ReferenceNode, context: TypeContext): string {
+  if (expression.path.length === 0) {
+    return 'number'
+  }
+
   const variableType = context.variables.get(expression.path[0])
   let metadataType: string | null = null
 

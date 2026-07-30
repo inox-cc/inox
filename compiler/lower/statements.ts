@@ -104,7 +104,10 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
     } finally {
       for (let index = bindingStates.length - 1; index >= 0; index = index - 1) {
         const binding = bindingStates[index]
-        restoreLowerVariable(context, binding.name, binding.state)
+
+        if (binding !== null && typeof binding !== 'undefined') {
+          restoreLowerVariable(context, binding.name, binding.state)
+        }
       }
 
       restoreLowerVariable(context, statement.name, variableState)
@@ -331,9 +334,10 @@ function lowerNodeArrayOrEmpty(value: unknown): LowerNode[] {
 
 function copyStringArray(values: string[] | null | undefined): string[] {
   const result: string[] = []
+  const source = values ?? []
 
-  for (let index = 0; index < (values ?? []).length; index = index + 1) {
-    result.push((values ?? [])[index])
+  for (let index = 0; index < source.length; index = index + 1) {
+    result.push(source[index])
   }
 
   return result
@@ -499,7 +503,11 @@ function mergeLowerParamFunctionType(preferred: LowerNode | null, fallback: Lowe
   }
 
   for (let index = preferredParams.length; index < fallbackParams.length; index = index + 1) {
-    params.push(fallbackParams[index])
+    const param = fallbackParams[index]
+
+    if (param !== null && typeof param !== 'undefined') {
+      params.push(param)
+    }
   }
 
   return {

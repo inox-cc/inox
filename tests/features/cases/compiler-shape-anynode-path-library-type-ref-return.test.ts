@@ -3,7 +3,11 @@
 // @stdout root
 
 function firstPathPart(path: string[]): string {
-  return path[0]
+  if (path.length > 0) {
+    return path[0]
+  }
+
+  return ''
 }
 
 function printCheckedPath(expression: AnyNode): void {

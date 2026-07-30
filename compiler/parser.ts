@@ -127,6 +127,10 @@ function scalarTypeLiteral(tokens: Token[], start: number, end: number): ScalarT
 
   const token = tokens[start]
 
+  if (token === undefined) {
+    return null
+  }
+
   if (token.type === 'string') {
     return token.value
   }
@@ -2562,11 +2566,23 @@ class Parser {
   }
 
   current(): Token {
-    return this.tokens[this.position]
+    const token = this.tokens[this.position]
+
+    if (token === undefined) {
+      throw new Error('parser token stream must contain eof')
+    }
+
+    return token
   }
 
   peek(offset: number): Token {
-    return this.tokens[Math.min(this.position + offset, this.tokens.length - 1)]
+    const token = this.tokens[Math.min(this.position + offset, this.tokens.length - 1)]
+
+    if (token === undefined) {
+      throw new Error('parser token stream must contain eof')
+    }
+
+    return token
   }
 
   advance(): Token {
@@ -2576,7 +2592,13 @@ class Parser {
   }
 
   previous(): Token {
-    return this.tokens[Math.max(0, this.position - 1)]
+    const token = this.tokens[Math.max(0, this.position - 1)]
+
+    if (token === undefined) {
+      throw new Error('parser token stream must contain eof')
+    }
+
+    return token
   }
 }
 

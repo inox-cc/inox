@@ -673,6 +673,11 @@ function commonJsonObjectField(name: string, elements: JsonParseLiteralTypeInfo[
   }
 
   const first = fields[0]
+
+  if (first === null || typeof first === 'undefined') {
+    throw new Error(`JSON object field ${name} has no source declaration`)
+  }
+
   const valueType = commonJsonValueType(valueTypes)
   const nullable = fields.length !== elements.length || fields.some((field) => field.nullable === true)
 

@@ -80,10 +80,6 @@ function nullableBooleanValueIsTrue(value: boolean | null | undefined): boolean 
   return false
 }
 
-function nullableStringAt(values: string[], index: number): string {
-  return values[index]
-}
-
 function joinNullablePath(values: string[], separator: string): string {
   let result = ''
 
@@ -105,7 +101,7 @@ function currentNullableErrorTarget(context: NullableFunctionContext): string {
     return ''
   }
 
-  return targets[targets.length - 1]
+  return targets[targets.length - 1] ?? ''
 }
 
 function currentNullableErrorTargetRequiresActive(context: NullableFunctionContext): boolean {
@@ -115,7 +111,7 @@ function currentNullableErrorTargetRequiresActive(context: NullableFunctionConte
     return false
   }
 
-  return flags[flags.length - 1]
+  return flags[flags.length - 1] ?? false
 }
 
 function registerNullableErrorValue(context: NullableFunctionContext): void {
@@ -617,7 +613,11 @@ export function isNarrowedNullableScalarReference(expression: AnyNode, context: 
     return false
   }
 
-  const name = nullableStringAt(expression.path, 0)
+  const name = expression.path[0]
+
+  if (name === null || typeof name === 'undefined') {
+    return false
+  }
 
   return (
     context.narrowedNullableScalars.has(name) &&
@@ -668,9 +668,9 @@ export function canLowerCScalarNullishCoalescingExpression(
 
 export function isNullableRuntimeExpression(expression: AnyNode, context: NullableFunctionContext): boolean {
   if (expression.type === 'Reference' && expression.path.length === 1) {
-    const name = nullableStringAt(expression.path, 0)
+    const name = expression.path[0]
 
-    return context.nullableVariables.has(name)
+    return name !== null && typeof name !== 'undefined' && context.nullableVariables.has(name)
   }
 
   if (
@@ -678,9 +678,13 @@ export function isNullableRuntimeExpression(expression: AnyNode, context: Nullab
     expression.callee.type === 'Reference' &&
     expression.callee.path.length === 1
   ) {
-    const name = nullableStringAt(expression.callee.path, 0)
+    const name = expression.callee.path[0]
 
-    return nullableBooleanValueIsTrue(context.functionReturnNullables.get(name))
+    return (
+      name !== null &&
+      typeof name !== 'undefined' &&
+      nullableBooleanValueIsTrue(context.functionReturnNullables.get(name))
+    )
   }
 
   if (expression.type === 'OptionalCallExpression') {

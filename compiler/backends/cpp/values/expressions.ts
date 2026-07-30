@@ -203,7 +203,7 @@ function currentRuntimeErrorTarget(context: CFunctionContext): string {
     return ''
   }
 
-  return context.errorTargets[context.errorTargets.length - 1]
+  return context.errorTargets[context.errorTargets.length - 1] ?? ''
 }
 
 function emitRuntimeThrownCheckLines(context: CFunctionContext): string[] {
@@ -573,10 +573,6 @@ function functionParamAt(params: CFunctionParam[], expectedIndex: number): CFunc
   return null
 }
 
-function stringValueAt(values: string[], index: number): string {
-  return values[index]
-}
-
 function objectExpressionName(expression: CValueNode, context: CFunctionContext): string | null {
   return objectExpressionPathName(expression, context)
 }
@@ -584,6 +580,11 @@ function objectExpressionName(expression: CValueNode, context: CFunctionContext)
 export function objectExpressionPathName(expression: CValueNode, context: CObjectPathContext): string | null {
   if (expression.type === 'Reference' && expression.path.length === 1) {
     const name = expression.path[0]
+
+    if (name === null || typeof name === 'undefined') {
+      return null
+    }
+
     const alias = context.objectAliases.get(name)
 
     if (alias !== null && typeof alias !== 'undefined') {
@@ -627,7 +628,13 @@ export function objectExpressionPathName(expression: CValueNode, context: CObjec
     expression.callee.path.length === 1
   ) {
     const path: string[] = expression.callee.path
-    const accessor = context.objectAccessorReturnPaths.get(path[0])
+    const root = path[0]
+
+    if (root === null || typeof root === 'undefined') {
+      return null
+    }
+
+    const accessor = context.objectAccessorReturnPaths.get(root)
 
     if (accessor !== null && typeof accessor !== 'undefined') {
       const argument = functionCallArgumentAt(expression.args, accessor.paramIndex)
@@ -1327,10 +1334,20 @@ export function emitObjectFunctionCompanionReference(
   let objectName = context.objectAliases.get(rootName) ?? rootName
 
   for (let index = 0; index + 1 < path.length; index = index + 1) {
-    objectName = `${objectName}_${path[index]}`
+    const segment = path[index]
+
+    if (segment !== null && typeof segment !== 'undefined') {
+      objectName = `${objectName}_${segment}`
+    }
   }
 
-  return emitObjectFunctionFieldArgumentName(objectName, path[path.length - 1], context)
+  const fieldName = path[path.length - 1]
+
+  if (fieldName === null || typeof fieldName === 'undefined') {
+    return null
+  }
+
+  return emitObjectFunctionFieldArgumentName(objectName, fieldName, context)
 }
 
 function emitDependencyObjectFunctionFieldArgumentName(
@@ -1838,7 +1855,13 @@ function objectFunctionReturnShape(object: CValueNode, context: CFunctionContext
   }
 
   const path: string[] = object.callee.path
-  const shape = context.functionReturnShapes.get(path[0])
+  const root = path[0]
+
+  if (root === null || typeof root === 'undefined') {
+    return null
+  }
+
+  const shape = context.functionReturnShapes.get(root)
 
   if (shape !== null && typeof shape !== 'undefined') {
     return shape
@@ -2147,7 +2170,12 @@ function emitPreparedPendingExceptionCallExpression(
   returnFunctionCompanions: CPreparedFunctionCompanion[],
   context: CFunctionContext
 ): PreparedExpression {
-  const name = stringValueAt(expression.callee.path, 0)
+  const name = expression.callee.path[0]
+
+  if (name === null || typeof name === 'undefined') {
+    throw new Error('pending exception callee name is missing')
+  }
+
   const returnInfo = resolveCFunctionCallReturnInfo(name, context)
   const call = `${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')})`
   const lines: string[] = []
@@ -2293,6 +2321,10 @@ export function emitPreparedCallArgs(
 
   for (let index = expression.args.length; index < params.length; index = index + 1) {
     const param = params[index]
+
+    if (param === null || typeof param === 'undefined') {
+      continue
+    }
 
     if (param.optional === true) {
       if (param.defaultValue !== null && typeof param.defaultValue !== 'undefined') {
@@ -2558,9 +2590,9 @@ export function isThrowingFunctionCallee(callee: CValueNode, context: CEmitConte
     return false
   }
 
-  const name = stringValueAt(callee.path, 0)
+  const name = callee.path[0]
 
-  return isThrowingFunctionName(name, context)
+  return name !== null && typeof name !== 'undefined' && isThrowingFunctionName(name, context)
 }
 
 function isPendingExceptionFunctionCallee(callee: CValueNode, context: CEmitContext): boolean {
@@ -2568,7 +2600,8 @@ function isPendingExceptionFunctionCallee(callee: CValueNode, context: CEmitCont
     return false
   }
 
-  return context.pendingExceptionFunctions.has(stringValueAt(callee.path, 0))
+  const name = callee.path[0]
+  return name !== null && typeof name !== 'undefined' && context.pendingExceptionFunctions.has(name)
 }
 
 export function isThrowingFunctionName(name: string, context: CEmitContext): boolean {
@@ -2583,7 +2616,11 @@ export function emitCallee(callee: CValueNode, context: CFunctionContext): strin
   }
 
   if (callee.type === 'Reference' && callee.path.length === 1) {
-    const name = stringValueAt(callee.path, 0)
+    const name = callee.path[0]
+
+    if (name === null || typeof name === 'undefined') {
+      return '_'
+    }
 
     if (isCJsGlobalRoot(name, context)) {
       reportCJsGlobalDiagnostic(context.diagnostics, callee.loc)
@@ -2712,7 +2749,15 @@ export function emitPreparedNumberExpression(
   }
 
   if (isNarrowedNullableScalarReference(expression, context)) {
-    const name = stringValueAt(expression.path, 0)
+    const name = expression.path[0]
+
+    if (name === null || typeof name === 'undefined') {
+      return {
+        lines: [],
+        expression: '0'
+      }
+    }
+
     const resolvedType = context.variables.get(name)
     let valueType = 'number'
 
@@ -3888,7 +3933,11 @@ function plainOptionalCallFunctionType(expression: CValueNode, context: CFunctio
     return null
   }
 
-  const name = stringValueAt(callee.path, 0)
+  const name = callee.path[0]
+
+  if (name === null || typeof name === 'undefined') {
+    return null
+  }
 
   if (context.nullableVariables.has(name) || context.runtimeCallbacks.has(name)) {
     return null
@@ -4504,7 +4553,11 @@ function runtimeValueReferenceName(expression: CValueNode, context: CFunctionCon
     return null
   }
 
-  const name = stringValueAt(expression.path, 0)
+  const name = expression.path[0]
+
+  if (name === null || typeof name === 'undefined') {
+    return null
+  }
   const valueType = context.variables.get(name)
 
   if (context.runtimeValueStorageNames.has(name)) {
@@ -5163,7 +5216,13 @@ function callExpressionReturnRuntimeTypeAlternatives(
   }
 
   if (expression.callee.type === 'Reference' && expression.callee.path.length === 1) {
-    return context.functionReturnRuntimeTypeAlternatives.get(expression.callee.path[0])
+    const name = expression.callee.path[0]
+
+    if (name !== null && typeof name !== 'undefined') {
+      return context.functionReturnRuntimeTypeAlternatives.get(name)
+    }
+
+    return null
   }
 
   const resolved = resolveObjectFunctionField(expression.callee, context)
@@ -5191,7 +5250,11 @@ function callExpressionReturnsNullableRuntimeValue(
   }
 
   const path = expression.callee.path
-  const name: string = path[0]
+  const name = path[0]
+
+  if (name === null || typeof name === 'undefined') {
+    return false
+  }
 
   return context.functionReturnNullables.get(name) === true
 }

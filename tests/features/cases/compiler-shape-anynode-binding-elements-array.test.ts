@@ -11,6 +11,11 @@ type ArrayBindingElement = {
 
 function firstBindingName(node: AnyNode): string {
   const bindingElements: ArrayBindingElement[] = node.bindingElements ?? []
+
+  if (bindingElements.length === 0) {
+    return ''
+  }
+
   return bindingElements[0].name
 }
 

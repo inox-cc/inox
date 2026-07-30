@@ -191,8 +191,14 @@ function insertOrderedRuntimeRequirementId(values: string[], value: string): voi
   values.push(value)
   let index = values.length - 1
 
-  while (index > 0 && values[index - 1] > value) {
-    values[index] = values[index - 1]
+  while (index > 0) {
+    const previous = values[index - 1]
+
+    if (previous === null || typeof previous === 'undefined' || previous <= value) {
+      break
+    }
+
+    values[index] = previous
     index = index - 1
   }
 

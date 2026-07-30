@@ -33,7 +33,9 @@ const lstat = fs.lstatSync(path)
 const real = fs.realpathSync(path)
 const link = fs.readlinkSync(path)
 const text = fs.readFileSync(path, 'utf8')
-console.log(entries, dirents[0].name, stats.size, stats.mode, stats.mtimeMs, stats.isFile(), lstat.isFile(), real, link, text)
+if (dirents.length > 0) {
+  console.log(entries, dirents[0].name, stats.size, stats.mode, stats.mtimeMs, stats.isFile(), lstat.isFile(), real, link, text)
+}
 fs.unlinkSync(path)
 await fs.promises.writeFile(asyncPath, 'async')
 await fs.promises.appendFile(asyncPath, '!')

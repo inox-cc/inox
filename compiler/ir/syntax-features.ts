@@ -21,28 +21,16 @@ export function collectIrSyntaxFeatureUsages(programs: SyntaxFeatureProgram[]): 
   const usages: IrSyntaxFeatureUsage[] = []
 
   for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
-    const program = syntaxFeatureProgramAt(programs, programIndex)
+    const program = programs[programIndex]
 
     for (let usageIndex = 0; usageIndex < program.syntaxFeatures.length; usageIndex = usageIndex + 1) {
-      const usage = syntaxFeatureUsageAt(program.syntaxFeatures, usageIndex)
+      const usage = program.syntaxFeatures[usageIndex]
 
       usages.push(usage)
     }
   }
 
   return usages
-}
-
-function syntaxFeatureProgramAt(programs: SyntaxFeatureProgram[], index: number): SyntaxFeatureProgram {
-  return programs[index]
-}
-
-function syntaxFeatureUsageAt(usages: IrSyntaxFeatureUsage[], index: number): IrSyntaxFeatureUsage {
-  return usages[index]
-}
-
-function syntaxFeatureArrayNodeAt(nodes: SyntaxFeatureRawNode[], index: number): SyntaxFeatureRawNode {
-  return nodes[index]
 }
 
 function visitSyntaxFeatureUsage(
@@ -52,7 +40,7 @@ function visitSyntaxFeatureUsage(
   if (node !== null && typeof node !== 'undefined') {
     if (Array.isArray(node)) {
       for (let index = 0; index < node.length; index = index + 1) {
-        const item = syntaxFeatureArrayNodeAt(node, index)
+        const item = node[index]
 
         visitSyntaxFeatureUsage(item, usages)
       }

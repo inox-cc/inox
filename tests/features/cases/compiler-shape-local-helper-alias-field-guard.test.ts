@@ -4,14 +4,14 @@
 
 import type { CompilerAnyNode } from './modules/compiler-anynode.ts'
 
-function nodeAt(values: CompilerAnyNode[], index: number): CompilerAnyNode {
+function nodeAt(values: CompilerAnyNode[], index: number): CompilerAnyNode | null {
   return values[index]
 }
 
 function printNodeKind(values: CompilerAnyNode[]): void {
   const node = nodeAt(values, 0)
 
-  if (node.type !== 'ArrowFunctionExpression') {
+  if (node === null || node.type !== 'ArrowFunctionExpression') {
     console.log('other')
     return
   }

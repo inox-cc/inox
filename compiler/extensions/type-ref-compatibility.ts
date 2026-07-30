@@ -274,7 +274,13 @@ export function commonTypeRef(left: TypeRef | null, right: TypeRef | null): Type
     const args: TypeRef[] = []
 
     for (let index = 0; index < left.args.length; index = index + 1) {
-      args.push(commonTypeArgument(left.args[index], right.args[index]))
+      const rightArgument = right.args[index]
+
+      if (rightArgument === undefined) {
+        return null
+      }
+
+      args.push(commonTypeArgument(left.args[index], rightArgument))
     }
 
     return {
@@ -342,6 +348,12 @@ function commonObjectTypeRef(left: ObjectTypeRef, right: ObjectTypeRef): ObjectT
     }
 
     const existing = fields[existingIndex]
+
+    if (existing === undefined) {
+      fields.push(field)
+      continue
+    }
+
     fields[existingIndex] = {
       name: existing.name,
       typeRef: commonNamedObjectFieldTypeRef(existing.typeRef, field.typeRef),
@@ -378,7 +390,13 @@ function objectTypeRefFieldNamesEqual(left: ObjectTypeRefField[], right: ObjectT
   }
 
   for (let index = 0; index < left.length; index = index + 1) {
-    if (left[index].name !== right[index].name) {
+    const rightField = right[index]
+
+    if (rightField === undefined) {
+      return false
+    }
+
+    if (left[index].name !== rightField.name) {
       return false
     }
   }
@@ -486,7 +504,13 @@ function typeRefListsEquivalent(left: TypeRef[], right: TypeRef[]): boolean {
   }
 
   for (let index = 0; index < left.length; index = index + 1) {
-    if (!typeRefsEquivalent(left[index], right[index])) {
+    const rightTypeRef = right[index]
+
+    if (rightTypeRef === undefined) {
+      return false
+    }
+
+    if (!typeRefsEquivalent(left[index], rightTypeRef)) {
       return false
     }
   }
@@ -575,7 +599,13 @@ function refineTypeRefList(contextual: TypeRef[], observed: TypeRef[]): TypeRef[
   const result: TypeRef[] = []
 
   for (let index = 0; index < contextual.length; index = index + 1) {
-    result.push(refineTypeRefUnknowns(contextual[index], observed[index]))
+    const observedTypeRef = observed[index]
+
+    if (observedTypeRef === undefined) {
+      result.push(contextual[index])
+    } else {
+      result.push(refineTypeRefUnknowns(contextual[index], observedTypeRef))
+    }
   }
 
   return result
@@ -624,9 +654,10 @@ function baseTypeRefCompatibilityMetadata(
       typeRef.ownership === 'owned'
     )
     const fields: AnyNode[] = []
+    const nativeFields = nativeType.fields ?? []
 
-    for (let index = 0; index < (nativeType.fields ?? []).length; index = index + 1) {
-      fields.push(descriptorResultShapeField((nativeType.fields ?? [])[index], loc))
+    for (let index = 0; index < nativeFields.length; index = index + 1) {
+      fields.push(descriptorResultShapeField(nativeFields[index], loc))
     }
 
     metadata.libraryCppType = nativeType.cppType
@@ -834,9 +865,10 @@ function descriptorResultShapeField(field: LibraryResultShapeFieldDescriptor, lo
     (nestedTypeId !== null && typeof nestedTypeId !== 'undefined')
   ) {
     const fields: AnyNode[] = []
+    const sourceFields = nestedFields ?? []
 
-    for (let index = 0; index < (nestedFields ?? []).length; index = index + 1) {
-      fields.push(descriptorResultShapeField((nestedFields ?? [])[index], loc))
+    for (let index = 0; index < sourceFields.length; index = index + 1) {
+      fields.push(descriptorResultShapeField(sourceFields[index], loc))
     }
 
     result.shape = {

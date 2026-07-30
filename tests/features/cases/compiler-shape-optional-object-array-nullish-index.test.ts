@@ -6,7 +6,12 @@ import type { CompilerShapeCompatibilityMetadata } from './modules/compiler-shap
 
 function firstFieldName(metadata: CompilerShapeCompatibilityMetadata): string {
   const fields = metadata.shape?.fields ?? []
-  return fields[0].name
+
+  if (fields.length > 0) {
+    return fields[0].name
+  }
+
+  return ''
 }
 
 console.log(firstFieldName({ shape: { fields: [{ name: 'first' }] } }))

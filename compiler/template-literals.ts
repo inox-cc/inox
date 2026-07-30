@@ -201,11 +201,11 @@ export function parseTemplatePlaceholderExpression(
     const compileError = compileErrorOrNull(error)
 
     if (compileError !== null && typeof compileError !== 'undefined') {
-      const first = compileError.diagnostics[0]
       let code = 'INOX_C_STRING_EXPR'
       let message = 'invalid template placeholder expression'
 
       if (compileError.diagnostics.length > 0) {
+        const first = compileError.diagnostics[0]
         code = first.code
         message = `invalid template placeholder expression: ${first.message}`
       }

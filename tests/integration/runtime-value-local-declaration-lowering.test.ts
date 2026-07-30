@@ -22,7 +22,12 @@ for (const a of foo.v) {
   const b = Object.values(a)
   const c = Object.values(a)[0]
   const d = Object.entries(a)
-  const e = Object.entries(a)[0]
+  const e = d[0]
+
+  if (e === undefined) {
+    continue
+  }
+
   console.log(foo, b, c, d, e)
 }
 `
@@ -61,21 +66,23 @@ for (const a of foo.v) {
     /auto (inox_library_range_\d+) = Array\(inox::get\(foo, "v"\)\)\.values\(\);\n  if \(inox::thrown\(\)\) return;\n\n  for \(auto a : \1\) \{/
   )
   assert.doesNotMatch(source, /ArrayStorage|->items|inox_for_array_/)
-  assert.match(source, /\n    auto b = Object\.values\(a\);\n    if \(inox::thrown\(\)\) return;/)
+  assert.match(source, /\n\s+auto b = Object\.values\(a\);\n\s+if \(inox::thrown\(\)\) return;/)
   assert.doesNotMatch(
     source,
     /auto inox_values_\d+ = Object\.values\(a\);\n    if \(inox::thrown\(\)\) return;\n    inox::Value b = inox_values_\d+;/
   )
-  assert.match(source, /auto c = Object\.values\(a\)\.get\(0\);\n    if \(inox::thrown\(\)\) return;/)
+  assert.match(source, /auto c = Object\.values\(a\)\.get\(0\);\n\s+if \(inox::thrown\(\)\) return;/)
   assert.doesNotMatch(source, /auto c = inox_library_result_\d+;/)
   assert.doesNotMatch(source, /\n    inox::Value c = inox_object_value_\d+;/)
   assert.doesNotMatch(source, /inox::Value c = inox::adopt\(inox_object_value_\d+\.release\(\)\);/)
-  assert.match(source, /\n    auto d = Object\.entries\(a\);\n    if \(inox::thrown\(\)\) return;/)
+  assert.match(source, /\n\s+auto d = Object\.entries\(a\);\n\s+if \(inox::thrown\(\)\) return;/)
   assert.doesNotMatch(
     source,
     /auto inox_entries_\d+ = Object\.entries\(a\);\n    if \(inox::thrown\(\)\) return;\n    inox::Value d = inox_entries_\d+;/
   )
-  assert.match(source, /auto e = Array\(Object\.entries\(a\)\.get\(0\)\);\n    if \(inox::thrown\(\)\) return;/)
+  assert.match(source, /auto e = d\.get\(0\);\n\s+if \(inox::thrown\(\)\) return;/)
+  assert.match(source, /if \(e\.tag == INOX_TAG_UNDEFINED\)/)
+  assert.doesNotMatch(source, /auto e = Array\(d\.get\(0\)\)/)
   assert.doesNotMatch(source, /inox_library_object_\d+\.get\(0\)/)
   assert.doesNotMatch(
     source,

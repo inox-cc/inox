@@ -102,7 +102,11 @@ function reportOwnershipCycle(
 
   if (cycleStart >= 0) {
     for (let index = cycleStart; index < path.length; index = index + 1) {
-      cycle.push(path[index])
+      const pathEdge = path[index]
+
+      if (pathEdge !== undefined) {
+        cycle.push(pathEdge)
+      }
     }
   }
 
@@ -115,6 +119,11 @@ function reportOwnershipCycle(
 
   reported.add(key)
   const firstCycleEdge = cycle[0]
+
+  if (firstCycleEdge === undefined) {
+    return
+  }
+
   const cycleText: string = formatOwnershipCycle(cycle)
 
   diagnostics.push(

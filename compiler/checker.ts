@@ -157,7 +157,6 @@ import type {
 import {
   anyNodeLocObjectShape,
   anyNodeObjectShape,
-  checkerNodeAt,
   cloneObjectShapeField,
   commonResolvedObjectShape,
   conditionalExpressionValueType,
@@ -272,6 +271,12 @@ type CheckerValueTypeNarrowing = {
 type CheckerValueTypeConditionNarrowing = {
   trueTypes: CheckerValueTypeNarrowing[]
   falseTypes: CheckerValueTypeNarrowing[]
+}
+
+type CheckerBoundedIndexAccess = {
+  indexName: string
+  receiverPath: string
+  upperBoundMember: string
 }
 
 type CheckerAliasNarrowingSnapshot = {
@@ -444,6 +449,7 @@ class Checker {
   incompleteDeclaredTypeDependencies: Map<string, Set<string>>
   incompleteDeclaredTypes: Set<string>
   flowFacts: Map<string, CheckerFlowFact>
+  boundedIndexAccesses: CheckerBoundedIndexAccess[]
   aliasMutationVersions: Map<string, number>
   aliasCallVersion: number
   resolvedDeclaredTypes: Map<string, ResolvedTypeInfo>
@@ -484,6 +490,7 @@ class Checker {
     this.incompleteDeclaredTypeDependencies = new Map()
     this.incompleteDeclaredTypes = new Set()
     this.flowFacts = new Map()
+    this.boundedIndexAccesses = []
     this.aliasMutationVersions = new Map()
     this.aliasCallVersion = 0
     this.resolvedDeclaredTypes = new Map()
@@ -502,7 +509,7 @@ class Checker {
     this.collectTopLevelDeclarations()
 
     for (let index = 0; index < this.program.body.length; index = index + 1) {
-      const item = checkerNodeAt(this.program.body, index)
+      const item = this.program.body[index]
 
       this.checkTopLevelItem(item)
     }
@@ -515,7 +522,7 @@ class Checker {
     const privateBindings = new Map<SourceLocation, string>()
 
     for (let index = 0; index < this.program.body.length; index = index + 1) {
-      const item = checkerNodeAt(this.program.body, index)
+      const item = this.program.body[index]
 
       if (
         item.exported !== true &&
@@ -526,7 +533,7 @@ class Checker {
     }
 
     for (let index = 0; index < this.program.body.length; index = index + 1) {
-      const item = checkerNodeAt(this.program.body, index)
+      const item = this.program.body[index]
 
       if (item.exported !== true) {
         continue
@@ -547,7 +554,7 @@ class Checker {
       }
 
       for (let methodIndex = 0; methodIndex < item.methods.length; methodIndex = methodIndex + 1) {
-        const method = checkerNodeAt(item.methods, methodIndex)
+        const method = item.methods[methodIndex]
 
         if (method.inline === true) {
           this.checkInlineDeclarationReferences(`${item.name}.${method.name}`, method, privateBindings)
@@ -645,7 +652,7 @@ class Checker {
       const declaration = parsed.declarations[declarationIndex]
 
       for (let itemIndex = 0; itemIndex < declaration.program.body.length; itemIndex = itemIndex + 1) {
-        const item = checkerNodeAt(declaration.program.body, itemIndex)
+        const item = declaration.program.body[itemIndex]
 
         if (item.type === 'TypeAliasDeclaration') {
           this.types.set(item.name, typeAliasInfoFromDeclaration(item as TypeAliasDeclarationNode))
@@ -687,7 +694,7 @@ class Checker {
 
   declareLibraryGlobalProgram(declaration: ParsedCompilerLibraryGlobalDeclaration): void {
     for (let index = 0; index < declaration.program.body.length; index = index + 1) {
-      const item = checkerNodeAt(declaration.program.body, index)
+      const item = declaration.program.body[index]
 
       if (item.type === 'FunctionDeclaration') {
         this.declareLibraryGlobalFunction(declaration.libraryId, item)
@@ -736,7 +743,7 @@ class Checker {
     const constructorMethods: AnyNode[] = []
 
     for (let index = 0; index < item.methods.length; index = index + 1) {
-      const method = checkerNodeAt(item.methods, index)
+      const method = item.methods[index]
 
       if (method.name === 'constructor') {
         constructorMethods.push(method)
@@ -808,7 +815,7 @@ class Checker {
 
   collectTopLevelDeclarations(): void {
     for (let index = 0; index < this.program.body.length; index = index + 1) {
-      const item = checkerNodeAt(this.program.body, index)
+      const item = this.program.body[index]
 
       if (item.type === 'TypeAliasDeclaration') {
         this.declareTypeAlias(item as TypeAliasDeclarationNode)
@@ -832,7 +839,7 @@ class Checker {
     throwDiagnostics(this.diagnostics)
 
     for (let index = 0; index < this.program.body.length; index = index + 1) {
-      const item = checkerNodeAt(this.program.body, index)
+      const item = this.program.body[index]
 
       if (item.type === 'ImportDeclaration') {
         if (item.typeOnly) {
@@ -840,7 +847,7 @@ class Checker {
         }
 
         for (let specifierIndex = 0; specifierIndex < item.specifiers.length; specifierIndex = specifierIndex + 1) {
-          const specifier = checkerNodeAt(item.specifiers, specifierIndex)
+          const specifier = item.specifiers[specifierIndex]
 
           if (specifier.typeOnly) {
             continue
@@ -1118,7 +1125,7 @@ class Checker {
       const resolvedFields: AnyNode[] = []
 
       for (let index = 0; index < statement.fields.length; index = index + 1) {
-        const field = checkerNodeAt(statement.fields, index)
+        const field = statement.fields[index]
         const resolvedField = this.resolveClassField(field)
 
         resolvedFields.push(resolvedField)
@@ -1138,7 +1145,7 @@ class Checker {
     const assignments = collectClassConstructorFieldAssignments(constructorMethod)
 
     for (let index = 0; index < assignments.length; index = index + 1) {
-      const assignment = checkerNodeAt(assignments, index)
+      const assignment = assignments[index]
 
       if (seen.has(assignment.field)) {
         continue
@@ -1284,7 +1291,7 @@ class Checker {
         this.functionDepth = this.functionDepth + 1
 
         for (let paramIndex = 0; paramIndex < item.params.length; paramIndex = paramIndex + 1) {
-          const param = checkerNodeAt(item.params, paramIndex)
+          const param = item.params[paramIndex]
           const declaredType = nodeDeclaredTypeOrValueType(param)
           const paramInfo = this.resolveParamType(param, declaredType)
           param.declaredType = declaredType
@@ -1357,7 +1364,7 @@ class Checker {
 
   checkStatements(statements: AnyNode[]): void {
     for (let index = 0; index < statements.length; index = index + 1) {
-      const statement = checkerNodeAt(statements, index)
+      const statement = statements[index]
 
       this.checkStatement(statement)
       this.applyStatementExitNarrowing(statement)
@@ -2105,7 +2112,7 @@ class Checker {
       }
 
       if (symbol !== null && typeof symbol !== 'undefined') {
-        const flowFact = this.flowFacts.get(path[0]) ?? null
+        const flowFact = this.flowFacts.get(firstPathSegment(path)) ?? null
         const narrowedTypeRef = flowFact?.typeRef ?? null
         const nullableNarrowed = flowFact?.nonNullable === true
         const valueTypeNarrowed = flowFact?.valueType !== null && typeof flowFact?.valueType !== 'undefined'
@@ -2239,7 +2246,7 @@ class Checker {
       const argTypes: ValueType[] = []
 
       for (let index = 0; index < expression.args.length; index = index + 1) {
-        const arg = checkerNodeAt(expression.args, index)
+        const arg = expression.args[index]
 
         argTypes.push(this.checkExpression(arg))
       }
@@ -2411,7 +2418,7 @@ class Checker {
 
     if (expression.type === 'ArrayLiteral') {
       for (let index = 0; index < expression.elements.length; index = index + 1) {
-        const element = checkerNodeAt(expression.elements, index)
+        const element = expression.elements[index]
 
         if (element.type === 'SpreadElement') {
           const argumentType = this.checkExpression(element.argument)
@@ -3373,6 +3380,7 @@ class Checker {
       const argInfos = [this.checkedCallArgInfo(expression.index, indexType)]
       this.checkCompilerLibrarySingleArgument(expression.index, indexType, libraryOperation, 0, expression, argInfos)
       this.applyCompilerLibraryOperation(expression, libraryOperation, null, null, argInfos)
+      this.applyBoundedIndexAccessRefinement(expression, libraryOperation)
       this.refineIndexedArrayElementDeclaredShape(expression, declaredType)
       this.preserveDynamicOperationResultShape(expression, receiverShape)
 
@@ -3560,6 +3568,45 @@ class Checker {
     }
 
     return valueType
+  }
+
+  applyBoundedIndexAccessRefinement(expression: AnyNode, operation: LibraryOperationDescriptor): void {
+    const bounds = operation.indexBounds
+
+    if (
+      bounds === null ||
+      typeof bounds === 'undefined' ||
+      expression.index.type !== 'Reference' ||
+      expression.index.path.length !== 1
+    ) {
+      return
+    }
+
+    const receiverPath = nullableNarrowingKey(expression.object)
+
+    if (receiverPath === null) {
+      return
+    }
+
+    const indexName = firstPathSegment(expression.index.path)
+
+    for (let index = 0; index < this.boundedIndexAccesses.length; index = index + 1) {
+      const access = this.boundedIndexAccesses[index]
+
+      if (
+        access.indexName === indexName &&
+        access.receiverPath === receiverPath &&
+        access.upperBoundMember === bounds.exclusiveUpperBoundMember
+      ) {
+        expression.nullable = false
+
+        if (expression.typeRef !== null && typeof expression.typeRef !== 'undefined') {
+          expression.typeRef = nonNullableTypeRef(expression.typeRef)
+        }
+
+        return
+      }
+    }
   }
 
   preserveDynamicOperationResultShape(expression: AnyNode, receiverShape: ObjectShapeInfo | null): void {
@@ -3811,7 +3858,7 @@ class Checker {
     }
 
     for (let index = 0; index < classMethods.length; index = index + 1) {
-      const method = checkerNodeAt(classMethods, index)
+      const method = classMethods[index]
 
       if (!nodeNameEquals(method, check.name)) {
         continue
@@ -3820,7 +3867,7 @@ class Checker {
       const params: OptionalParamInfo[] = []
 
       for (let paramIndex = 0; paramIndex < method.params.length; paramIndex = paramIndex + 1) {
-        const param = checkerNodeAt(method.params, paramIndex)
+        const param = method.params[paramIndex]
 
         params.push(this.resolveParam(param))
       }
@@ -3857,7 +3904,7 @@ class Checker {
     }
 
     for (let index = 0; index < classMethods.length; index = index + 1) {
-      const method = checkerNodeAt(classMethods, index)
+      const method = classMethods[index]
 
       if (nodeNameEquals(method, methodName)) {
         return true
@@ -4161,7 +4208,7 @@ class Checker {
     const overloads: SymbolInfo[] = []
 
     for (let index = 0; index < methods.length; index = index + 1) {
-      const method = checkerNodeAt(methods, index)
+      const method = methods[index]
 
       if (method.static === true && method.name === name) {
         overloads.push(this.importedFunctionDeclarationSymbol(method, nodeSourceLocation(method)))
@@ -4275,7 +4322,11 @@ class Checker {
 
     const state: CheckerTypeParameterState[] = []
 
-    for (let index = 0; index < typeParameters.length; index = index + 1) {
+    for (
+      let index = 0;
+      index < typeParameters.length && index < resolvedArguments.length;
+      index = index + 1
+    ) {
       const name: string = typeParameters[index].name
       state.push({
         name,
@@ -4427,7 +4478,11 @@ class Checker {
       }
     }
 
-    for (let index = 0; index < checks.length && index < argInfos.length; index = index + 1) {
+    for (
+      let index = 0;
+      index < checks.length && index < argInfos.length && index < expression.args.length;
+      index = index + 1
+    ) {
       const check = checks[index]
       const info = argInfos[index]
       const argument = expression.args[index]
@@ -4558,7 +4613,7 @@ class Checker {
 
       if (argument.type === 'ArrayLiteral' && arrayElementValueTypes.length > 0) {
         for (let elementIndex = 0; elementIndex < argument.elements.length; elementIndex = elementIndex + 1) {
-          const element = checkerNodeAt(argument.elements, elementIndex)
+          const element = argument.elements[elementIndex]
           const elementValueType = this.checkExpression(element)
 
           if (!arrayElementValueTypes.includes(elementValueType)) {
@@ -5481,9 +5536,10 @@ class Checker {
       (nestedTypeId !== null && typeof nestedTypeId !== 'undefined')
     ) {
       const fields: AnyNode[] = []
+      const declaredFields = nestedFields ?? []
 
-      for (let index = 0; index < (nestedFields ?? []).length; index = index + 1) {
-        fields.push(this.compilerLibraryResultShapeField((nestedFields ?? [])[index], loc))
+      for (let index = 0; index < declaredFields.length; index = index + 1) {
+        fields.push(this.compilerLibraryResultShapeField(declaredFields[index], loc))
       }
 
       result.shape = {
@@ -5517,7 +5573,7 @@ class Checker {
 
       if (classMethods !== null && typeof classMethods !== 'undefined') {
         for (let index = 0; index < classMethods.length; index = index + 1) {
-          const item = checkerNodeAt(classMethods, index)
+          const item = classMethods[index]
 
           if (nodeNameEquals(item, expression.callee.property)) {
             method = item
@@ -5547,7 +5603,7 @@ class Checker {
     const argTypes: ValueType[] = []
 
     for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
+      const arg = expression.args[index]
 
       argTypes.push(this.checkExpression(arg))
     }
@@ -5555,7 +5611,7 @@ class Checker {
     const params: AnyNode[] = []
 
     for (let index = 0; index < method.params.length; index = index + 1) {
-      const param = checkerNodeAt(method.params, index)
+      const param = method.params[index]
 
       params.push(this.resolveParam(param))
     }
@@ -5737,7 +5793,7 @@ class Checker {
     const argTypes: ValueType[] = []
 
     for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
+      const arg = expression.args[index]
 
       argTypes.push(this.checkExpression(arg))
     }
@@ -5750,7 +5806,7 @@ class Checker {
     const params = symbol?.params ?? []
 
     for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
+      const arg = expression.args[index]
       const param = paramForArgument(params, index)
       let valueType: ValueType | null = null
 
@@ -5830,9 +5886,10 @@ class Checker {
     const argumentFunctionReturnTypeRefs: TypeRef[] = []
     const argumentArrayLiteralColumns: TypeRef[][] = []
     const args: AnyNode[] = expression.args ?? []
+    const checkedArgInfos = argInfos ?? []
 
-    for (let index = 0; index < (argInfos ?? []).length; index = index + 1) {
-      argumentTypeRefs.push((argInfos ?? [])[index].typeRef)
+    for (let index = 0; index < checkedArgInfos.length; index = index + 1) {
+      argumentTypeRefs.push(checkedArgInfos[index].typeRef)
     }
 
     for (let index = 0; index < args.length; index = index + 1) {
@@ -5902,7 +5959,7 @@ class Checker {
     let width = -1
 
     for (let rowIndex = 0; rowIndex < expression.elements.length; rowIndex = rowIndex + 1) {
-      const row = checkerNodeAt(expression.elements, rowIndex)
+      const row = expression.elements[rowIndex]
 
       if (row.type !== 'ArrayLiteral') {
         return []
@@ -5915,7 +5972,7 @@ class Checker {
       }
 
       for (let elementIndex = 0; elementIndex < row.elements.length; elementIndex = elementIndex + 1) {
-        const element = checkerNodeAt(row.elements, elementIndex)
+        const element = row.elements[elementIndex]
 
         if (element.type === 'SpreadElement') {
           return []
@@ -5925,8 +5982,16 @@ class Checker {
 
         if (rowIndex === 0) {
           columns.push(typeRef)
-        } else if (!compilerLibraryTypeRefsEqual(columns[elementIndex], typeRef)) {
-          columns[elementIndex] = this.compilerLibraryUnknownTypeRef()
+        } else {
+          const columnTypeRef = columns[elementIndex]
+
+          if (columnTypeRef === null || typeof columnTypeRef === 'undefined') {
+            return []
+          }
+
+          if (!compilerLibraryTypeRefsEqual(columnTypeRef, typeRef)) {
+            columns[elementIndex] = this.compilerLibraryUnknownTypeRef()
+          }
         }
       }
     }
@@ -6018,7 +6083,7 @@ class Checker {
     let elementTypeRef: TypeRef | null = null
 
     for (let index = 0; index < expression.elements.length; index = index + 1) {
-      const element = checkerNodeAt(expression.elements, index)
+      const element = expression.elements[index]
       let candidateTypeRef: TypeRef | null = null
 
       if (element.type === 'SpreadElement') {
@@ -6173,7 +6238,7 @@ class Checker {
     const argInfos: CheckedCallArgInfo[] = []
 
     for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
+      const arg = expression.args[index]
       const argType = this.checkExpression(arg)
 
       argTypes.push(argType)
@@ -6236,14 +6301,21 @@ class Checker {
 
     for (let index = 0; index < constructorParams.length; index++) {
       const param = constructorParams[index]
+      const argument = index < expression.args.length ? expression.args[index] : null
 
-      if (index < argTypes.length) {
+      if (
+        index < argTypes.length &&
+        param !== null &&
+        typeof param !== 'undefined' &&
+        argument !== null &&
+        typeof argument !== 'undefined'
+      ) {
         this.checkAssignableType(
           argTypes[index],
           param.valueType,
-          expression.args[index].loc,
+          argument.loc,
           param.nullable === true,
-          this.expressionCanBeNull(expression.args[index])
+          this.expressionCanBeNull(argument)
         )
       }
     }
@@ -6310,7 +6382,13 @@ class Checker {
     let minimum = params.length
 
     for (let index = params.length - 1; index >= 0; index = index - 1) {
-      if (params[index].optional === true) {
+      const param = params[index]
+
+      if (param === null || typeof param === 'undefined') {
+        continue
+      }
+
+      if (param.optional === true) {
         minimum = index
       } else {
         break
@@ -6381,7 +6459,7 @@ class Checker {
 
     try {
       for (let index = 0; index < declaration.params.length; index = index + 1) {
-        const param = checkerNodeAt(declaration.params, index)
+        const param = declaration.params[index]
         const paramInfo = this.resolveParam(param)
         param.typeRef = paramInfo.typeRef
 
@@ -7041,7 +7119,7 @@ class Checker {
         )
 
         for (let index = 0; index < method.params.length; index = index + 1) {
-          const param = checkerNodeAt(method.params, index)
+          const param = method.params[index]
           const declaredType = nodeDeclaredTypeOrValueType(param)
           const paramInfo = this.resolveParam(param)
           param.declaredType = declaredType
@@ -7877,6 +7955,16 @@ class Checker {
       }
 
       const loopState = this.pushLoop()
+      const boundedIndexAccesses = this.resolveForBoundedIndexAccesses(statement)
+      const previousBoundedIndexAccesses = this.boundedIndexAccesses
+
+      if (boundedIndexAccesses.length > 0) {
+        this.boundedIndexAccesses = previousBoundedIndexAccesses.slice()
+
+        for (let index = 0; index < boundedIndexAccesses.length; index = index + 1) {
+          this.boundedIndexAccesses.push(boundedIndexAccesses[index])
+        }
+      }
 
       try {
         const narrowing = this.resolveNullableConditionNarrowing(statement.test)
@@ -7889,11 +7977,134 @@ class Checker {
           this.restoreNarrowedNullableNames(narrowingState)
         }
       } finally {
+        this.boundedIndexAccesses = previousBoundedIndexAccesses
         this.restoreLoopDepth(loopState)
       }
     } finally {
       this.restoreScope(scopeState)
     }
+  }
+
+  resolveForBoundedIndexAccesses(statement: AnyNode): CheckerBoundedIndexAccess[] {
+    const init = statement.init
+    const test = statement.test
+    const update = statement.update
+
+    if (
+      init === null ||
+      typeof init === 'undefined' ||
+      init.type !== 'VariableDeclaration' ||
+      init.kind !== 'let' ||
+      typeof init.name !== 'string' ||
+      init.init === null ||
+      typeof init.init === 'undefined' ||
+      init.init.type !== 'NumberLiteral' ||
+      typeof init.init.value !== 'string' ||
+      test === null ||
+      typeof test === 'undefined' ||
+      !this.forUpdateIncrementsBinding(update, init.name)
+    ) {
+      return []
+    }
+
+    const result: CheckerBoundedIndexAccess[] = []
+
+    const initialIndex = Number(init.init.value)
+
+    if (initialIndex === null) {
+      return []
+    }
+
+    this.appendForBoundedIndexAccesses(test, init.name, initialIndex, result)
+    return result
+  }
+
+  appendForBoundedIndexAccesses(
+    test: AnyNode,
+    indexName: string,
+    initialIndex: number,
+    result: CheckerBoundedIndexAccess[]
+  ): void {
+    if (test.type === 'BinaryExpression' && test.operator === '&&') {
+      this.appendForBoundedIndexAccesses(test.left, indexName, initialIndex, result)
+      this.appendForBoundedIndexAccesses(test.right, indexName, initialIndex, result)
+      return
+    }
+
+    if (
+      test.type !== 'BinaryExpression' ||
+      test.operator !== '<' ||
+      !this.referenceNamesBinding(test.left, indexName) ||
+      test.right.type !== 'MemberExpression'
+    ) {
+      return
+    }
+
+    const receiverPath = nullableNarrowingKey(test.right.object)
+    const operation = this.compilerLibraryReceiverOperation(test.right.object, '', 'index-read')
+    const bounds = operation?.indexBounds
+
+    if (
+      receiverPath === null ||
+      bounds === null ||
+      typeof bounds === 'undefined' ||
+      test.right.property !== bounds.exclusiveUpperBoundMember ||
+      initialIndex < bounds.minimumIndex
+    ) {
+      return
+    }
+
+    result.push({
+      indexName,
+      receiverPath,
+      upperBoundMember: bounds.exclusiveUpperBoundMember
+    })
+  }
+
+  forUpdateIncrementsBinding(expression: AnyNode | null | undefined, name: string): boolean {
+    if (expression === null || typeof expression === 'undefined') {
+      return false
+    }
+
+    if (
+      expression.type === 'UpdateExpression' &&
+      expression.operator === '++' &&
+      this.referenceNamesBinding(expression.argument, name)
+    ) {
+      return true
+    }
+
+    if (expression.type !== 'AssignmentExpression' || !this.referenceNamesBinding(expression.target, name)) {
+      return false
+    }
+
+    const value: AnyNode = expression.value
+
+    if (
+      value.type !== 'BinaryExpression' ||
+      value.operator !== '+' ||
+      !this.referenceNamesBinding(value.left, name)
+    ) {
+      return false
+    }
+
+    const increment: AnyNode = value.right
+
+    if (increment.type !== 'NumberLiteral' || increment.value !== '1') {
+      return false
+    }
+
+    return true
+  }
+
+  referenceNamesBinding(expression: AnyNode | null | undefined, name: string): boolean {
+    return (
+      expression !== null &&
+      typeof expression !== 'undefined' &&
+      expression.type === 'Reference' &&
+      expression.path.length === 1 &&
+      expression.path[0] === name
+    )
   }
 
   checkForOfStatement(statement: AnyNode): void {
@@ -8357,6 +8568,12 @@ class Checker {
       return typeofNarrowing
     }
 
+    const indexBoundsNarrowing = this.resolveIndexBoundsNullableNarrowing(expression)
+
+    if (indexBoundsNarrowing.trueNames.length > 0 || indexBoundsNarrowing.falseNames.length > 0) {
+      return indexBoundsNarrowing
+    }
+
     if (expression.operator !== '===' && expression.operator !== '!==') {
       return {
         trueNames: [],
@@ -8436,6 +8653,103 @@ class Checker {
     }
   }
 
+  resolveIndexBoundsNullableNarrowing(expression: AnyNode): NullableConditionNarrowing {
+    const empty: NullableConditionNarrowing = {
+      trueNames: [],
+      falseNames: []
+    }
+    let boundExpression = expression.left
+    let thresholdExpression = expression.right
+    let exclusive = expression.operator === '>'
+    let equality = false
+    let presentWhenTrue = true
+
+    if (expression.operator === '<' || expression.operator === '<=') {
+      boundExpression = expression.right
+      thresholdExpression = expression.left
+      exclusive = expression.operator === '<'
+    } else if (expression.operator === '===' || expression.operator === '!==') {
+      equality = true
+      presentWhenTrue = expression.operator === '!=='
+
+      if (expression.right.type === 'MemberExpression') {
+        boundExpression = expression.right
+        thresholdExpression = expression.left
+      }
+    } else if (expression.operator !== '>' && expression.operator !== '>=') {
+      return empty
+    }
+
+    if (
+      boundExpression.type !== 'MemberExpression' ||
+      thresholdExpression.type !== 'NumberLiteral' ||
+      typeof thresholdExpression.value !== 'string'
+    ) {
+      return empty
+    }
+
+    const receiverPath = nullableNarrowingKey(boundExpression.object)
+    const operation = this.compilerLibraryReceiverOperation(boundExpression.object, '', 'index-read')
+    const bounds = operation?.indexBounds
+    const threshold = Number(thresholdExpression.value)
+
+    if (
+      receiverPath === null ||
+      bounds === null ||
+      typeof bounds === 'undefined' ||
+      threshold === null ||
+      boundExpression.property !== bounds.exclusiveUpperBoundMember ||
+      threshold % 1 !== 0
+    ) {
+      return empty
+    }
+
+    if (equality) {
+      if (threshold < bounds.minimumIndex) {
+        return empty
+      }
+
+      if (threshold === bounds.minimumIndex) {
+        const path = `${receiverPath}[${bounds.minimumIndex}]`
+
+        if (presentWhenTrue) {
+          empty.trueNames.push(path)
+        } else {
+          empty.falseNames.push(path)
+        }
+
+        return empty
+      }
+
+      const maximumNarrowedIndexes = 64
+      const maximumIndex = bounds.minimumIndex + maximumNarrowedIndexes - 1
+      const lastIndex = threshold - 1 < maximumIndex ? threshold - 1 : maximumIndex
+      const target = presentWhenTrue ? empty.falseNames : empty.trueNames
+
+      for (let index = bounds.minimumIndex; index <= lastIndex; index = index + 1) {
+        target.push(`${receiverPath}[${index}]`)
+      }
+
+      return empty
+    }
+
+    const greatestPresentIndex = exclusive ? threshold : threshold - 1
+
+    if (greatestPresentIndex < bounds.minimumIndex) {
+      return empty
+    }
+
+    const maximumNarrowedIndexes = 64
+    const maximumIndex = bounds.minimumIndex + maximumNarrowedIndexes - 1
+    const lastIndex = greatestPresentIndex < maximumIndex ? greatestPresentIndex : maximumIndex
+
+    for (let index = bounds.minimumIndex; index <= lastIndex; index = index + 1) {
+      empty.trueNames.push(`${receiverPath}[${index}]`)
+    }
+
+    return empty
+  }
+
   resolveLibraryArgumentNullableNarrowing(expression: AnyNode): NullableConditionNarrowing {
     const empty: NullableConditionNarrowing = {
       trueNames: [],
@@ -8459,6 +8773,11 @@ class Checker {
     }
 
     const argument = expression.args[argumentIndex]
+
+    if (argument === null || typeof argument === 'undefined') {
+      return empty
+    }
+
     const key = nullableNarrowingKey(argument)
 
     if (key === null || argument.nullable !== true) {
@@ -8728,8 +9047,14 @@ class Checker {
       const expressionLoc = nodeSourceLocation(expression)
 
       if (trueTypeRef !== null) {
+        const argument = expression.args[argumentIndex]
+
+        if (argument === null || typeof argument === 'undefined') {
+          return receiverNarrowing
+        }
+
         const refinedTrueTypeRef = this.refineArgumentNarrowingTypeRef(
-          expression.args[argumentIndex],
+          argument,
           trueTypeRef,
           expressionLoc
         )
@@ -8755,8 +9080,14 @@ class Checker {
       }
 
       if (falseTypeRef !== null) {
+        const argument = expression.args[argumentIndex]
+
+        if (argument === null || typeof argument === 'undefined') {
+          return receiverNarrowing
+        }
+
         const refinedFalseTypeRef = this.refineArgumentNarrowingTypeRef(
-          expression.args[argumentIndex],
+          argument,
           falseTypeRef,
           expressionLoc
         )
@@ -9361,7 +9692,7 @@ class Checker {
 
   resolveReference(reference: AnyNode): SymbolInfo | null {
     const path: string[] = reference.path
-    const root = path[0]
+    const root = firstPathSegment(path)
 
     if (root === 'super') {
       this.reportUnsupportedSuperReference(nodeSourceLocation(reference))
@@ -9545,7 +9876,7 @@ class Checker {
     const typeParameters: AnyNode[] = item.typeParameters ?? []
 
     for (let index = 0; index < typeParameters.length; index = index + 1) {
-      const typeParameter = checkerNodeAt(typeParameters, index)
+      const typeParameter = typeParameters[index]
       const name: string = typeParameter.name
       const previousType = this.types.get(name) ?? null
       const previousResolvedType = this.resolvedDeclaredTypes.get(name) ?? null
@@ -9566,6 +9897,10 @@ class Checker {
   restoreFunctionTypeParameters(state: CheckerTypeParameterState[]): void {
     for (let index = state.length - 1; index >= 0; index = index - 1) {
       const item = state[index]
+
+      if (item === null || typeof item === 'undefined') {
+        continue
+      }
 
       if (item.previousType !== null) {
         this.types.set(item.name, item.previousType)
@@ -9977,7 +10312,13 @@ function inferredAsyncFulfilledCandidates(
 }
 
 function commonInferredFunctionReturnTypeRef(candidates: InferredFunctionReturnCandidate[]): TypeRef | null {
-  const first = candidates[0].typeRef
+  const firstCandidate = candidates[0]
+
+  if (firstCandidate === null || typeof firstCandidate === 'undefined') {
+    return null
+  }
+
+  const first = firstCandidate.typeRef
 
   if (first === null) {
     return null
@@ -10077,7 +10418,7 @@ function compilerLibraryTypeRefListsEqual(left: TypeRef[], right: TypeRef[]): bo
     return false
   }
 
-  for (let index = 0; index < left.length; index = index + 1) {
+  for (let index = 0; index < left.length && index < right.length; index = index + 1) {
     if (!compilerLibraryTypeRefsEqual(left[index], right[index])) {
       return false
     }
@@ -10095,7 +10436,8 @@ function compilerLibraryCallArgument(expression: AnyNode, index: number): AnyNod
     return null
   }
 
-  return expression.args[index]
+  const argument = expression.args[index]
+  return argument ?? null
 }
 
 function markObjectShapeDynamic(shape: ObjectShapeInfo | null | undefined): void {

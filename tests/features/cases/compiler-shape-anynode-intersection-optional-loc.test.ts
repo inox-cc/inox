@@ -15,6 +15,10 @@ type ProgramWithNodes = AnyNode & {
 }
 
 function locationLine(program: ProgramWithNodes): number {
+  if (program.body.length === 0) {
+    return 7
+  }
+
   const node: NodeWithOptionalLocation = program.body[0]
   const loc = node.loc
 

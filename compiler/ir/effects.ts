@@ -1130,11 +1130,7 @@ function singleStringPathName(path: string[] | null | undefined): string | null 
     return null
   }
 
-  return stringValueAt(path, 0)
-}
-
-function stringValueAt(values: string[], index: number): string {
-  return values[index]
+  return path[0]
 }
 
 function createFunctionThrowValueTypeMap(): ThrowValueTypeMap {

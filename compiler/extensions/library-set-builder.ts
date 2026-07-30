@@ -274,6 +274,10 @@ function validateUniqueEffectiveReceiverOperations(
     for (let previousIndex = 0; previousIndex < index; previousIndex = previousIndex + 1) {
       const previous = entries[previousIndex]
 
+      if (previous === null || typeof previous === 'undefined') {
+        continue
+      }
+
       if (
         previous.receiverTypeId === entry.receiverTypeId &&
         previous.memberName === entry.memberName &&
@@ -773,7 +777,13 @@ function validateRuntimeInitializerMappings(
     }
 
     for (let previousIndex = 0; previousIndex < index; previousIndex = previousIndex + 1) {
-      if (compilerLibraryOptionScalarsEqual(mappings[previousIndex].value, mapping.value)) {
+      const previous = mappings[previousIndex]
+
+      if (
+        previous !== null &&
+        typeof previous !== 'undefined' &&
+        compilerLibraryOptionScalarsEqual(previous.value, mapping.value)
+      ) {
         throw new Error(
           `runtime initializer ${initializer.initializerId} has duplicate C++ mapping for ` +
             compilerLibraryOptionScalarText(mapping.value)
@@ -1261,6 +1271,7 @@ function validateOperationTypeRefs(
     const operationTypeRef = operation.resultTypeRef
 
     validateOperationArgumentNarrowing(operation, nativeTypes, typeParameters)
+    validateOperationIndexBounds(operation)
     validateOperationArgumentAdapterTypeIds(
       `operation ${operation.operationId}`,
       operation.cArgumentAdapters,
@@ -1319,6 +1330,34 @@ function validateOperationTypeRefs(
         resultTypeRef
       )
     }
+  }
+}
+
+function validateOperationIndexBounds(operation: LibraryOperationDescriptor): void {
+  const bounds = operation.indexBounds
+
+  if (bounds === null || typeof bounds === 'undefined') {
+    return
+  }
+
+  if (operation.kind !== 'index-read') {
+    throw new Error(`operation ${operation.operationId} declares index bounds for ${operation.kind}`)
+  }
+
+  if (bounds.minimumIndex < 0 || Math.floor(bounds.minimumIndex) !== bounds.minimumIndex) {
+    throw new Error(`operation ${operation.operationId} has invalid minimum index ${bounds.minimumIndex}`)
+  }
+
+  if (bounds.exclusiveUpperBoundMember.length === 0) {
+    throw new Error(`operation ${operation.operationId} has an empty upper-bound member`)
+  }
+
+  if (
+    operation.resultTypeRef === null ||
+    typeof operation.resultTypeRef === 'undefined' ||
+    operation.resultTypeRef.nullable !== true
+  ) {
+    throw new Error(`operation ${operation.operationId} index bounds require a nullable result`)
   }
 }
 
@@ -2292,6 +2331,8 @@ function compilerLibrarySetFingerprint(
           ':' +
           operationArgumentNarrowingFingerprint(item.argumentNarrowing) +
           ':' +
+          operationIndexBoundsFingerprint(item.indexBounds) +
+          ':' +
           (item.cResultMode ?? '') +
           ':' +
           cResultMappingFingerprint(item.cResultMapping) +
@@ -2757,6 +2798,14 @@ function operationArgumentNarrowingFingerprint(narrowing: LibraryOperationDescri
   )
 }
 
+function operationIndexBoundsFingerprint(bounds: LibraryOperationDescriptor['indexBounds']): string {
+  if (bounds === null || typeof bounds === 'undefined') {
+    return ''
+  }
+
+  return `${bounds.minimumIndex}:${fingerprintAtom(bounds.exclusiveUpperBoundMember)}`
+}
+
 function typeRefFingerprintOrEmpty(typeRef: TypeRef | null | undefined): string {
   if (typeRef === null || typeof typeRef === 'undefined') {
     return ''
@@ -3123,8 +3172,14 @@ function insertSortedString(values: string[], value: string): void {
   values.push(value)
   let index = values.length - 1
 
-  while (index > 0 && values[index - 1] > value) {
-    values[index] = values[index - 1]
+  while (index > 0) {
+    const previous = values[index - 1]
+
+    if (previous === null || typeof previous === 'undefined' || previous <= value) {
+      break
+    }
+
+    values[index] = previous
     index = index - 1
   }
 

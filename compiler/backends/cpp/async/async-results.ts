@@ -439,10 +439,6 @@ type AsyncResultCallbackContext = {
   finalizer: string
 }
 
-function asyncResultNodeAt(values: AsyncResultNode[], index: number): AsyncResultNode {
-  return values[index]
-}
-
 function asyncResultNodeArray(
   value: AsyncResultNode | AsyncResultNode[] | null | undefined
 ): AsyncResultNode[] {
@@ -481,29 +477,6 @@ function asyncResultObjectShapeFields(
   }
 
   return []
-}
-
-function asyncResultProgramAt(values: IrProgram[], index: number): IrProgram {
-  return values[index]
-}
-
-function asyncResultCallbackScopeAt(values: CallbackScope[], index: number): CallbackScope {
-  return values[index]
-}
-
-function asyncResultHandlerSnapshotAt(
-  values: AsyncResultConstructorHandlerSnapshot[],
-  index: number
-): AsyncResultConstructorHandlerSnapshot {
-  return values[index]
-}
-
-function asyncResultRuntimeArrowCaptureAt(values: CRuntimeArrowCapture[], index: number): CRuntimeArrowCapture {
-  return values[index]
-}
-
-function asyncResultStringAt(values: string[], index: number): string {
-  return values[index]
 }
 
 function asyncResultReferenceName(expression: AsyncResultNode | null | undefined): string | null {
@@ -1195,7 +1168,7 @@ function appendCallbackScope(scopes: CallbackScope[], scope: CallbackScope): Cal
   const result: CallbackScope[] = []
 
   for (let index = 0; index < scopes.length; index = index + 1) {
-    const item = asyncResultCallbackScopeAt(scopes, index)
+    const item = scopes[index]
 
     result.push(item)
   }
@@ -1300,7 +1273,7 @@ function asyncResultCallbackParamByName(callback: AnyNode, name: string): AnyNod
   const params = asyncResultNodeArray(callback.params)
 
   for (let index = 0; index < params.length; index = index + 1) {
-    const param = asyncResultNodeAt(params, index)
+    const param = params[index]
 
     if (param.name === name) {
       return param
@@ -1318,7 +1291,7 @@ function asyncResultShapeFieldByName(shape: CObjectShape | null | undefined, nam
   const fields = asyncResultObjectShapeFields(shape.fields)
 
   for (let index = 0; index < fields.length; index = index + 1) {
-    const field = asyncResultObjectShapeFieldAt(fields, index)
+    const field = fields[index]
 
     if (field.name === name) {
       return field
@@ -1354,10 +1327,6 @@ function asyncResultCallbackReturnShape(callback: AnyNode): CObjectShape | null 
   }
 
   return null
-}
-
-function asyncResultObjectShapeFieldAt(fields: CObjectShapeField[], index: number): CObjectShapeField {
-  return fields[index]
 }
 
 function callbackParamValueType(param: AnyNode): string {
@@ -1400,7 +1369,11 @@ function asyncResultChainCallbackStatementsBeforeLast(statements: AsyncResultNod
   }
 
   for (let index = 0; index < statements.length - 1; index = index + 1) {
-    result.push(statements[index])
+    const statement = statements[index]
+
+    if (statement !== null && typeof statement !== 'undefined') {
+      result.push(statement)
+    }
   }
 
   return result
@@ -1432,7 +1405,7 @@ function allStraightLineAsyncResultCallbackStatements(statements: AsyncResultNod
   }
 
   for (let index = 0; index < statements.length; index = index + 1) {
-    const statement = asyncResultNodeAt(statements, index)
+    const statement = statements[index]
 
     if (!isStraightLineAsyncResultCallbackStatement(statement)) {
       return false
@@ -1448,7 +1421,7 @@ function allAsyncResultChainCallbackStatements(statements: AsyncResultNode[] | n
   }
 
   for (let index = 0; index < statements.length; index = index + 1) {
-    const statement = asyncResultNodeAt(statements, index)
+    const statement = statements[index]
 
     if (!isAsyncResultChainCallbackStatement(statement)) {
       return false
@@ -1500,7 +1473,7 @@ function restoreAsyncResultConstructorHandlers(
   snapshots: AsyncResultConstructorHandlerSnapshot[]
 ): void {
   for (let index = 0; index < snapshots.length; index = index + 1) {
-    const snapshot = asyncResultHandlerSnapshotAt(snapshots, index)
+    const snapshot = snapshots[index]
     const previous = snapshot.previous
 
     if (previous === null || typeof previous === 'undefined') {
@@ -1555,7 +1528,7 @@ function visitAsyncResultConstructorRejectionNode(
 
   if (Array.isArray(node)) {
     for (let index = 0; index < node.length; index = index + 1) {
-      const item = asyncResultNodeAt(node, index)
+      const item = node[index]
 
       visitAsyncResultConstructorRejectionNode(item, rejectName, types, context, dependencies)
     }
@@ -1565,7 +1538,11 @@ function visitAsyncResultConstructorRejectionNode(
   const current = node
 
   if (current.type === 'CallExpression' && asyncResultReferenceName(current.callee) === rejectName) {
-    types.push(dependencies.inferRejectedValueType(asyncResultNodeAt(current.args, 0), context))
+    const rejectedValue = current.args[0]
+
+    if (rejectedValue !== null && typeof rejectedValue !== 'undefined') {
+      types.push(dependencies.inferRejectedValueType(rejectedValue, context))
+    }
   }
 
   visitAsyncResultConstructorRejectionChildren(current, rejectName, types, context, dependencies)
@@ -1642,7 +1619,7 @@ function visitAsyncResultConstructorRejectionChildren(
 
   if (current.type === 'ObjectLiteral') {
     for (let index = 0; index < current.properties.length; index = index + 1) {
-      const property = asyncResultNodeAt(current.properties, index)
+      const property = current.properties[index]
 
       visitAsyncResultConstructorRejectionNode(property.value, rejectName, types, context, dependencies)
     }
@@ -1680,7 +1657,7 @@ function visitAsyncResultConstructorRejectionChildren(
     visitAsyncResultConstructorRejectionNode(current.discriminant, rejectName, types, context, dependencies)
 
     for (let index = 0; index < current.cases.length; index = index + 1) {
-      const item = asyncResultNodeAt(current.cases, index)
+      const item = current.cases[index]
 
       visitAsyncResultConstructorRejectionNode(item.test, rejectName, types, context, dependencies)
       visitAsyncResultConstructorRejectionNode(item.consequent, rejectName, types, context, dependencies)
@@ -1707,7 +1684,7 @@ function uniqueValueTypes(types: string[]): string {
   const first = types[0]
 
   for (let index = 0; index < types.length; index = index + 1) {
-    const valueType = asyncResultStringAt(types, index)
+    const valueType = types[index]
 
     if (valueType !== first) {
       return 'unknown'
@@ -1805,7 +1782,7 @@ export function collectAsyncResultChainWrappers(
   const wrappers: Map<string, CAsyncResultChainWrapper> = new Map()
 
   for (let irIndex = 0; irIndex < irPrograms.length; irIndex = irIndex + 1) {
-    const ir = asyncResultProgramAt(irPrograms, irIndex)
+    const ir = irPrograms[irIndex]
     const topLevelScope: CallbackScope = new Map()
     const entries: AsyncResultTopLevelNodeEntry[] = collectIrTopLevelNodeEntries(ir)
 
@@ -1818,7 +1795,7 @@ export function collectAsyncResultChainWrappers(
         const functionScopes: CallbackScope[] = [topLevelScope, scope]
 
         for (let statementIndex = 0; statementIndex < item.node.body.length; statementIndex = statementIndex + 1) {
-          const statement = asyncResultNodeAt(item.node.body, statementIndex)
+          const statement = item.node.body[statementIndex]
 
           visitAsyncResultChainStatement(statement, functionScopes, wrappers, context, deps)
         }
@@ -1837,7 +1814,7 @@ function declareAsyncResultCallbackBinding(scope: CallbackScope, name: string, i
 
 function declareAsyncResultCallbackParams(scope: CallbackScope, params: AnyNode[]): void {
   for (let index = 0; index < params.length; index = index + 1) {
-    const param = asyncResultNodeAt(params, index)
+    const param = params[index]
     const valueType = asyncResultNodeValueType(param)
 
     declareAsyncResultCallbackBinding(scope, param.name, {
@@ -1970,7 +1947,7 @@ function registerAsyncResultChainExpression(
   const key = `asyncResult-chain-arrow:${index}`
   const captures = collectArrowCaptures(callback, scopes, context, deps.callbackLoweringDependencies)
   for (let captureIndex = 0; captureIndex < captures.length; captureIndex = captureIndex + 1) {
-    const capture = asyncResultRuntimeArrowCaptureAt(captures, captureIndex)
+    const capture = captures[captureIndex]
     const declaration = capture.declaration
 
     if (
@@ -2024,7 +2001,13 @@ function visitAsyncResultChainStatement(
 
   if (statement.type === 'VariableDeclaration') {
     visitAsyncResultChainExpression(statement.init, scopes, wrappers, context, deps)
-    declareAsyncResultCallbackVariable(scopes[scopes.length - 1], statement, scopes)
+    const scope = scopes[scopes.length - 1]
+
+    if (scope === null || typeof scope === 'undefined') {
+      throw new Error('async result callback scope is missing')
+    }
+
+    declareAsyncResultCallbackVariable(scope, statement, scopes)
     return
   }
 
@@ -2043,7 +2026,7 @@ function visitAsyncResultChainStatement(
     const blockScopes = appendCallbackScope(scopes, scope)
 
     for (let index = 0; index < statement.body.length; index = index + 1) {
-      const item = asyncResultNodeAt(statement.body, index)
+      const item = statement.body[index]
 
       visitAsyncResultChainStatement(item, blockScopes, wrappers, context, deps)
     }
@@ -2099,7 +2082,7 @@ function visitAsyncResultChainStatement(
     visitAsyncResultChainExpression(statement.discriminant, scopes, wrappers, context, deps)
 
     for (let index = 0; index < statement.cases.length; index = index + 1) {
-      const item = asyncResultNodeAt(statement.cases, index)
+      const item = statement.cases[index]
       const consequent = asyncResultNodeArray(item.consequent)
 
       visitAsyncResultChainExpression(item.test, scopes, wrappers, context, deps)
@@ -2107,7 +2090,7 @@ function visitAsyncResultChainStatement(
       const caseScopes = appendCallbackScope(scopes, scope)
 
       for (let consequentIndex = 0; consequentIndex < consequent.length; consequentIndex = consequentIndex + 1) {
-        const caseStatement = asyncResultNodeAt(consequent, consequentIndex)
+        const caseStatement = consequent[consequentIndex]
 
         visitAsyncResultChainStatement(caseStatement, caseScopes, wrappers, context, deps)
       }
@@ -2142,7 +2125,7 @@ function visitAsyncResultChainExpression(
     visitAsyncResultChainExpression(expression.callee, scopes, wrappers, context, deps)
 
     for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = asyncResultNodeAt(expression.args, index)
+      const arg = expression.args[index]
 
       visitAsyncResultChainExpression(arg, scopes, wrappers, context, deps)
     }
@@ -2153,7 +2136,7 @@ function visitAsyncResultChainExpression(
     visitAsyncResultChainExpression(expression.callee, scopes, wrappers, context, deps)
 
     for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = asyncResultNodeAt(expression.args, index)
+      const arg = expression.args[index]
 
       visitAsyncResultChainExpression(arg, scopes, wrappers, context, deps)
     }
@@ -2194,7 +2177,7 @@ function visitAsyncResultChainExpression(
 
   if (expression.type === 'ArrayLiteral') {
     for (let index = 0; index < expression.elements.length; index = index + 1) {
-      const element = asyncResultNodeAt(expression.elements, index)
+      const element = expression.elements[index]
 
       visitAsyncResultChainExpression(element, scopes, wrappers, context, deps)
     }
@@ -2203,7 +2186,7 @@ function visitAsyncResultChainExpression(
 
   if (expression.type === 'ObjectLiteral') {
     for (let index = 0; index < expression.properties.length; index = index + 1) {
-      const property = asyncResultNodeAt(expression.properties, index)
+      const property = expression.properties[index]
 
       visitAsyncResultChainExpression(property.value, scopes, wrappers, context, deps)
     }
@@ -2495,7 +2478,7 @@ function isAsyncResultChainCallbackStatement(statement: AnyNode | null | undefin
 
 function isAsyncResultChainCallbackSwitchStatement(statement: AnyNode): boolean {
   for (let index = 0; index < statement.cases.length; index = index + 1) {
-    const item = asyncResultNodeAt(statement.cases, index)
+    const item = statement.cases[index]
 
     if (!allAsyncResultChainCallbackStatements(asyncResultNodeArray(item.consequent))) {
       return false

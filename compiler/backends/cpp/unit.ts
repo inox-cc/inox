@@ -195,15 +195,11 @@ function joinStrings(values: string[], separator: string): string {
   return result
 }
 
-function cUnitFunctionEntryAt(values: CUnitFunctionNodeEntry[], index: number): CUnitFunctionNodeEntry {
-  return values[index]
-}
-
 function collectUnitFunctionNodes(functionEntries: CUnitFunctionNodeEntry[]): AnyNode[] {
   const functions: AnyNode[] = []
 
   for (let index = 0; index < functionEntries.length; index = index + 1) {
-    const entry = cUnitFunctionEntryAt(functionEntries, index)
+    const entry = functionEntries[index]
 
     functions.push(entry.node)
   }
@@ -245,36 +241,12 @@ function joinCUnitLines(lines: string[]): string {
   return output
 }
 
-function unitRuntimeRequirementAt(values: IrRuntimeRequirement[], index: number): IrRuntimeRequirement {
-  return values[index]
-}
-
-function unitNodeAt(values: AnyNode[], index: number): AnyNode {
-  return values[index]
-}
-
-function unitStringAt(values: string[], index: number): string {
-  return values[index]
-}
-
-function unitFunctionParamAt(values: CFunctionParam[], index: number): CFunctionParam {
-  return values[index]
-}
-
-function unitValueDeclarationAt(values: CUnitValueDeclaration[], index: number): CUnitValueDeclaration {
-  return values[index]
-}
-
-function unitObjectShapeFieldAt(values: CObjectShapeField[], index: number): CObjectShapeField {
-  return values[index]
-}
-
 function collectCUnitValueDeclarations(programs: IrProgram[], context: CEmitContext): CUnitValueDeclaration[] {
   const values: CUnitValueDeclaration[] = []
   const statements = collectIrTopLevelNodesFromPrograms(programs, 'statement')
 
   for (let index = 0; index < statements.length; index = index + 1) {
-    const item = unitNodeAt(statements, index)
+    const item = statements[index]
 
     if (item.type !== 'VariableDeclaration') {
       continue
@@ -299,7 +271,7 @@ function collectCUnitValueDeclarations(programs: IrProgram[], context: CEmitCont
 
 function registerCUnitValueDeclarations(context: CEmitContext, values: CUnitValueDeclaration[]): void {
   for (let index = 0; index < values.length; index = index + 1) {
-    const item = unitValueDeclarationAt(values, index)
+    const item = values[index]
     context.moduleValueNames.set(item.name, item.symbolName)
     context.moduleValueTypes.set(item.name, item.valueType)
 
@@ -341,7 +313,7 @@ function registerCUnitSyntheticImportNames(context: CEmitContext, programs: IrPr
     const nodes = programs[programIndex].body
 
     for (let nodeIndex = 0; nodeIndex < nodes.length; nodeIndex = nodeIndex + 1) {
-      const node = unitNodeAt(nodes, nodeIndex)
+      const node = nodes[nodeIndex]
 
       if (node.type !== 'ImportDeclaration') {
         continue
@@ -354,7 +326,7 @@ function registerCUnitSyntheticImportNames(context: CEmitContext, programs: IrPr
       }
 
       for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
-        const specifier = unitNodeAt(specifiers, specifierIndex)
+        const specifier = specifiers[specifierIndex]
         const syntheticName = specifier.syntheticValueImportName
 
         if (syntheticName === null || typeof syntheticName === 'undefined' || typeof specifier.imported !== 'string') {
@@ -385,7 +357,7 @@ function emitCUnitValueDefinitions(lines: string[], values: CUnitValueDeclaratio
   }
 
   for (let index = 0; index < values.length; index = index + 1) {
-    const item = unitValueDeclarationAt(values, index)
+    const item = values[index]
     const functionPointerDefinition = cUnitFunctionPointerDefinition(item)
 
     if (functionPointerDefinition !== null && typeof functionPointerDefinition !== 'undefined') {
@@ -434,7 +406,7 @@ function collectCUnitCompileTimeValueDeclarations(values: CUnitValueDeclaration[
   const result: CUnitValueDeclaration[] = []
 
   for (let index = 0; index < values.length; index = index + 1) {
-    const item = unitValueDeclarationAt(values, index)
+    const item = values[index]
 
     if (item.compileTimeInitializer !== null && typeof item.compileTimeInitializer !== 'undefined') {
       result.push(item)
@@ -448,7 +420,7 @@ function collectCUnitRuntimeValueDeclarations(values: CUnitValueDeclaration[]): 
   const result: CUnitValueDeclaration[] = []
 
   for (let index = 0; index < values.length; index = index + 1) {
-    const item = unitValueDeclarationAt(values, index)
+    const item = values[index]
 
     if (item.compileTimeInitializer === null || typeof item.compileTimeInitializer === 'undefined') {
       result.push(item)
@@ -480,7 +452,7 @@ function emitCUnitValueFunctionFieldDefinitions(
   let emitted = false
 
   for (let index = 0; index < values.length; index = index + 1) {
-    const item = unitValueDeclarationAt(values, index)
+    const item = values[index]
     const fields = context.moduleObjectShapes.get(item.name)
 
     if (fields === null || typeof fields === 'undefined') {
@@ -541,7 +513,7 @@ function emitCUnitObjectFunctionFieldDefinitions(
   let emitted = false
 
   for (let index = 0; index < fields.length; index = index + 1) {
-    const field = unitObjectShapeFieldAt(fields, index)
+    const field = fields[index]
 
     if (field.valueType === 'function') {
       const name = emitCObjectFunctionFieldName(objectName, field.name)
@@ -824,7 +796,7 @@ function collectCUnitContextRuntimeTypes(context: CEmitContext): Set<string> {
 
   for (const params of context.functionParams.values()) {
     for (let paramIndex = 0; paramIndex < params.length; paramIndex = paramIndex + 1) {
-      const param = unitFunctionParamAt(params, paramIndex)
+      const param = params[paramIndex]
 
       collectCUnitFunctionParamRuntimeTypes(types, param, new Set())
     }
@@ -882,7 +854,7 @@ function collectCUnitObjectShapeRuntimeTypes(
   seen.add(fields)
 
   for (let index = 0; index < fields.length; index = index + 1) {
-    const field = unitObjectShapeFieldAt(fields, index)
+    const field = fields[index]
 
     addCUnitRuntimeType(types, field.valueType)
 
@@ -1192,7 +1164,11 @@ function emitCUnitFunctionPointerAdapterDefaultTargetArg(
       continue
     }
 
-    const param = unitFunctionParamAt(targetFunctionType.params, index)
+    const param = targetFunctionType.params[index]
+
+    if (param === null || typeof param === 'undefined') {
+      continue
+    }
 
     if (param.optional !== true && (param.defaultValue === null || typeof param.defaultValue === 'undefined')) {
       return null
@@ -1443,11 +1419,11 @@ function emitCUnitFunctionPointerAdapterHead(adapter: CFunctionPointerAdapter): 
 
 function pushCUnitClassMethodFunctionDeclarations(target: IrFunctionDeclaration[], classes: AnyNode[]): void {
   for (let classIndex = 0; classIndex < classes.length; classIndex = classIndex + 1) {
-    const classNode = unitNodeAt(classes, classIndex)
+    const classNode = classes[classIndex]
     const methods: AnyNode[] = classNode.methods
 
     for (let methodIndex = 0; methodIndex < methods.length; methodIndex = methodIndex + 1) {
-      const method = unitNodeAt(methods, methodIndex)
+      const method = methods[methodIndex]
 
       if (method.name === 'constructor') {
         continue
@@ -1486,7 +1462,7 @@ function runtimeRequirementSetFromArray(values: IrRuntimeRequirement[]): Set<IrR
   const result: Set<IrRuntimeRequirement> = new Set()
 
   for (let index = 0; index < values.length; index = index + 1) {
-    result.add(unitRuntimeRequirementAt(values, index))
+    result.add(values[index])
   }
 
   return result
@@ -1496,7 +1472,7 @@ function stringSetFromArray(values: string[]): Set<string> {
   const result: Set<string> = new Set()
 
   for (let index = 0; index < values.length; index = index + 1) {
-    result.add(unitStringAt(values, index))
+    result.add(values[index])
   }
 
   return result

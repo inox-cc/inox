@@ -213,6 +213,10 @@ function visitModuleGraphFile(
     const declarationIndex = importIndex
     importIndex = importIndex + 1
 
+    if (item === null || typeof item === 'undefined') {
+      continue
+    }
+
     if (compilerLibraryHasModuleDeclaration(context.libraries, item.source)) {
       prepareLibraryRuntimeImportDeclarations(context, item, declarationIndex, importTypeDeclarations)
       continue
@@ -898,9 +902,16 @@ function appendSyntheticDeclarations(program: ProgramNode, declarations: AnyNode
       const existingIndex = typeNames.get(declaration.name)
 
       if (existingIndex !== null && typeof existingIndex !== 'undefined') {
-        if (declaration.exported === true && body[existingIndex].type === 'TypeAliasDeclaration') {
-          body[existingIndex].exported = true
-          body[existingIndex].syntheticTypeImportSourceTypeOnly = false
+        const existing = body[existingIndex]
+
+        if (
+          existing !== null &&
+          typeof existing !== 'undefined' &&
+          declaration.exported === true &&
+          existing.type === 'TypeAliasDeclaration'
+        ) {
+          existing.exported = true
+          existing.syntheticTypeImportSourceTypeOnly = false
         }
 
         continue

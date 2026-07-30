@@ -420,6 +420,11 @@ export type LibraryArgumentNarrowingDescriptor = {
   falseNonNullable?: boolean
 }
 
+export type LibraryIndexBoundsDescriptor = {
+  minimumIndex: number
+  exclusiveUpperBoundMember: string
+}
+
 export type LibraryOperationDescriptor = {
   libraryId: LibraryId
   bindingId: LibraryBindingId
@@ -459,6 +464,7 @@ export type LibraryOperationDescriptor = {
   diagnosticMessage?: string | null
   callbackLifetime?: LibraryCallbackLifetime | null
   argumentNarrowing?: LibraryArgumentNarrowingDescriptor | null
+  indexBounds?: LibraryIndexBoundsDescriptor | null
 }
 
 export type LibraryEffectiveReceiverOperationDescriptor = {

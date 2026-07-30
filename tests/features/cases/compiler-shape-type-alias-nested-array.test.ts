@@ -26,5 +26,8 @@ function createDiagnostic(code: string): CompilerDiagnostic {
 }
 
 const diagnostics: CompilerDiagnostic[] = [createDiagnostic('INOX_OK')]
-const first = diagnostics[0]
-console.log(`${first.code} ${first.location.line} ${first.notes.length} ${first.hint ?? 'none'}`)
+
+if (diagnostics.length > 0) {
+  const first = diagnostics[0]
+  console.log(`${first.code} ${first.location.line} ${first.notes.length} ${first.hint ?? 'none'}`)
+}

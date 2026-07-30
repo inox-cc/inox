@@ -76,7 +76,7 @@ export function sortCompilerFeatures(features: Set<IrFeature>): IrFeature[] {
   const result: IrFeature[] = []
 
   for (let index = 0; index < compilerFeatureOrder.length; index = index + 1) {
-    const feature = compilerFeatureOrderAt(index)
+    const feature = compilerFeatureOrder[index]
 
     if (features.has(feature)) {
       result.push(feature)
@@ -91,7 +91,7 @@ export function sortCompilerRuntimeRequirements(requirements: Set<IrRuntimeRequi
   const extensionRequirements: IrRuntimeRequirement[] = []
 
   for (let index = 0; index < compilerRuntimeRequirementOrder.length; index = index + 1) {
-    const requirement = compilerRuntimeRequirementOrderAt(index)
+    const requirement = compilerRuntimeRequirementOrder[index]
 
     if (requirements.has(requirement)) {
       result.push(requirement)
@@ -113,7 +113,7 @@ export function sortCompilerRuntimeRequirements(requirements: Set<IrRuntimeRequi
 
 function compilerRuntimeRequirementOrderHas(requirement: IrRuntimeRequirement): boolean {
   for (let index = 0; index < compilerRuntimeRequirementOrder.length; index = index + 1) {
-    if (compilerRuntimeRequirementOrderAt(index) === requirement) {
+    if (compilerRuntimeRequirementOrder[index] === requirement) {
       return true
     }
   }
@@ -128,8 +128,18 @@ function insertOrderedRuntimeRequirement(
   requirements.push(requirement)
   let index = requirements.length - 1
 
-  while (index > 0 && requirements[index - 1] > requirement) {
-    requirements[index] = requirements[index - 1]
+  while (index > 0) {
+    const previous = requirements[index - 1]
+
+    if (typeof previous !== 'string') {
+      break
+    }
+
+    if (previous <= requirement) {
+      break
+    }
+
+    requirements[index] = previous
     index = index - 1
   }
 
@@ -140,7 +150,7 @@ function createCompilerFeatureDescriptors(): CompilerFeatureDescriptor[] {
   const result: CompilerFeatureDescriptor[] = []
 
   for (let rowIndex = 0; rowIndex < compilerFeatureDescriptorRows.length; rowIndex = rowIndex + 1) {
-    const row = compilerFeatureDescriptorRowAt(rowIndex)
+    const row = compilerFeatureDescriptorRows[rowIndex]
 
     pushAllDescriptors(result, row)
   }
@@ -152,7 +162,7 @@ function createCompilerFeatureOrder(): IrFeature[] {
   const result: IrFeature[] = []
 
   for (let index = 0; index < compilerFeatureDescriptors.length; index = index + 1) {
-    result.push(compilerFeatureDescriptorAt(index).id)
+    result.push(compilerFeatureDescriptors[index].id)
   }
 
   return result
@@ -163,7 +173,7 @@ function createCompilerRuntimeRequirementOrder(): IrRuntimeRequirement[] {
   const seen: Set<IrRuntimeRequirement> = new Set()
 
   for (let descriptorIndex = 0; descriptorIndex < compilerFeatureDescriptors.length; descriptorIndex = descriptorIndex + 1) {
-    const descriptor = compilerFeatureDescriptorAt(descriptorIndex)
+    const descriptor = compilerFeatureDescriptors[descriptorIndex]
 
     for (
       let requirementIndex = 0;
@@ -186,31 +196,15 @@ function copyCompilerFeatureOrder(): IrFeature[] {
   const result: IrFeature[] = []
 
   for (let index = 0; index < compilerFeatureOrder.length; index = index + 1) {
-    result.push(compilerFeatureOrderAt(index))
+    result.push(compilerFeatureOrder[index])
   }
 
   return result
 }
 
-function compilerFeatureOrderAt(index: number): IrFeature {
-  return compilerFeatureOrder[index]
-}
-
-function compilerRuntimeRequirementOrderAt(index: number): IrRuntimeRequirement {
-  return compilerRuntimeRequirementOrder[index]
-}
-
-function compilerFeatureDescriptorRowAt(index: number): CompilerFeatureDescriptor[] {
-  return compilerFeatureDescriptorRows[index]
-}
-
-function compilerFeatureDescriptorAt(index: number): CompilerFeatureDescriptor {
-  return compilerFeatureDescriptors[index]
-}
-
 function findCompilerFeatureDescriptor(featureName: IrFeature): CompilerFeatureDescriptor | null {
   for (let index = 0; index < compilerFeatureDescriptors.length; index = index + 1) {
-    const descriptor = compilerFeatureDescriptorAt(index)
+    const descriptor = compilerFeatureDescriptors[index]
 
     if (descriptor.id === featureName) {
       return descriptor

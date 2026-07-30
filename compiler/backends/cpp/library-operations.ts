@@ -176,6 +176,11 @@ export function emitPreparedCompilerLibraryNativeFieldExpression(
 
   if (directReference) {
     const objectName = expression.object.path[0]
+
+    if (objectName === null || typeof objectName === 'undefined') {
+      return null
+    }
+
     objectCppType = context.cppValueTypes.get(objectName)
     objectReference = emitCIdentifier(objectName)
 
@@ -231,6 +236,11 @@ function compilerLibraryNativeField(
 
   if (directReference) {
     const objectName = expression.object.path[0]
+
+    if (objectName === null || typeof objectName === 'undefined') {
+      return null
+    }
+
     fields = context.objectShapes.get(objectName) ?? context.moduleObjectShapes.get(objectName) ?? null
   } else {
     const shape = expression.object.shape as CObjectShape | null | undefined
@@ -678,7 +688,13 @@ export function emitPreparedCompilerLibraryCallExpression(
       let argumentExpression = 'inox_undefined_value()'
 
       if (sourceArgumentIndex < sourceArguments.length) {
-        const prepared = dependencies.emitCValueExpression(sourceArguments[sourceArgumentIndex], context)
+        const sourceArgument = sourceArguments[sourceArgumentIndex]
+
+        if (sourceArgument === null || typeof sourceArgument === 'undefined') {
+          return null
+        }
+
+        const prepared = dependencies.emitCValueExpression(sourceArgument, context)
         pushLines(lines, prepared.lines)
         argumentExpression = prepared.expression
         if (typeof prepared.cppType === 'string') {
@@ -699,6 +715,11 @@ export function emitPreparedCompilerLibraryCallExpression(
 
       if (sourceArgumentIndex < sourceArguments.length) {
         const sourceArgument = sourceArguments[sourceArgumentIndex]
+
+        if (sourceArgument === null || typeof sourceArgument === 'undefined') {
+          return null
+        }
+
         const recordLiteral = emitCompilerLibraryStringRecordLiteral(sourceArgument, context, dependencies, lines)
 
         if (recordLiteral !== null) {
@@ -733,7 +754,13 @@ export function emitPreparedCompilerLibraryCallExpression(
 
     if (kind === 'optional-argument') {
       if (sourceArgumentIndex < sourceArguments.length) {
-        const prepared = dependencies.emitCValueExpression(sourceArguments[sourceArgumentIndex], context)
+        const sourceArgument = sourceArguments[sourceArgumentIndex]
+
+        if (sourceArgument === null || typeof sourceArgument === 'undefined') {
+          return null
+        }
+
+        const prepared = dependencies.emitCValueExpression(sourceArgument, context)
         pushLines(lines, prepared.lines)
         if (typeof prepared.cppType === 'string') {
           argumentCppTypes.set(argumentsList.length, prepared.cppType)
@@ -747,7 +774,13 @@ export function emitPreparedCompilerLibraryCallExpression(
 
     if (kind === 'optional-number') {
       if (sourceArgumentIndex < sourceArguments.length) {
-        const prepared = dependencies.emitPreparedNumberExpression(sourceArguments[sourceArgumentIndex], context)
+        const sourceArgument = sourceArguments[sourceArgumentIndex]
+
+        if (sourceArgument === null || typeof sourceArgument === 'undefined') {
+          return null
+        }
+
+        const prepared = dependencies.emitPreparedNumberExpression(sourceArgument, context)
         pushLines(lines, prepared.lines)
         argumentsList.push(prepared.expression)
       }

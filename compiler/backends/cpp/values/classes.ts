@@ -2709,6 +2709,11 @@ function emitCClassRuntimeObjectInitLines(
 
     const valueExpression = substituteClassConstructorParams(assignment.value, constructorArgs, target)
     const field = info.fields[fieldIndex]
+
+    if (field === null || typeof field === 'undefined') {
+      continue
+    }
+
     let value = isRuntimeFunctionType(field.functionType)
       ? emitClassRuntimeCallbackValue(context, valueExpression, field.functionType)
       : emitClassValueExpression(context, valueExpression)
@@ -2768,11 +2773,12 @@ function mapClassConstructorArgs(expression: AnyNode, info: CClassInfo): CConstr
   const args = createConstructorArgMap()
   const params = classConstructorParams(info)
 
-  for (let index = 0; index < params.length; index = index + 1) {
+  for (let index = 0; index < params.length && index < expression.args.length; index = index + 1) {
     const param = params[index]
+    const arg = expression.args[index]
 
-    if (expression.args[index] !== null && typeof expression.args[index] !== 'undefined') {
-      args.set(param.name, expression.args[index])
+    if (arg !== null && typeof arg !== 'undefined') {
+      args.set(param.name, arg)
     }
   }
 
@@ -3022,7 +3028,7 @@ function emitPreparedCppValueConstructorArgs(
   const lines: string[] = []
   const args: string[] = []
 
-  for (let index = 0; index < params.length; index = index + 1) {
+  for (let index = 0; index < params.length && index < expression.args.length; index = index + 1) {
     const param = params[index]
     const arg = expression.args[index]
 
@@ -3114,6 +3120,11 @@ function resolveClassConstructorInfo(expression: ClassMaybeNode, context: ClassF
 
   const path: string[] = expression.callee.path
   const className = path[0]
+
+  if (className === null || typeof className === 'undefined') {
+    return null
+  }
+
   const info = classInfos.get(className)
 
   if (info !== null && typeof info !== 'undefined') {

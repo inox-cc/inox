@@ -47,18 +47,14 @@ function cExpressionChild(value: AnyNode | null | undefined): AnyNode | null {
   return value
 }
 
-function cStringAt(values: string[], index: number): string {
-  return values[index]
-}
-
 function cDottedPath(path: string[]): string {
   let output = ''
 
   for (let index = 0; index < path.length; index = index + 1) {
     if (index === 0) {
-      output = cStringAt(path, index)
+      output = path[index]
     } else {
-      output = `${output}.${cStringAt(path, index)}`
+      output = `${output}.${path[index]}`
     }
   }
 
@@ -358,7 +354,7 @@ function isBooleanBinaryOperator(operator: string): boolean {
 
 function cReferenceExpressionType(expression: AnyNode, context: CFunctionContext): string {
   const variableType = context.variables.get(cDottedPath(expression.path))
-  const name = cStringAt(expression.path, 0)
+  const name = expression.path[0] ?? ''
   const localName = expression.path.length === 1 && context.localValueNames.has(name)
   let metadataType: string | null = null
 
@@ -791,7 +787,7 @@ export function inferExpressionType(
     }
 
     if (expression.callee.type === 'Reference') {
-      const name = cStringAt(expression.callee.path, 0)
+      const name = expression.callee.path[0] ?? ''
       const returnType = context.functionReturnTypes.get(name)
 
       if (returnType !== null && typeof returnType !== 'undefined') {

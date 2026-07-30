@@ -4,7 +4,11 @@
 
 function first(value: string | string[]): string {
   if (Array.isArray(value) || Array.isArray(value)) {
-    return value[0]
+    if (value.length > 0) {
+      return value[0]
+    }
+
+    return ''
   }
 
   return value

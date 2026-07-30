@@ -35,18 +35,6 @@ type CapabilityUsage = {
 
 type StringSet = Set<string>
 
-function capabilityNodeAt(values: NodeList, index: number): AnyNode {
-  return values[index]
-}
-
-function capabilityUsageAt(values: CapabilityUsage[], index: number): CapabilityUsage {
-  return values[index]
-}
-
-function programAt(values: IrProgram[], index: number): IrProgram {
-  return values[index]
-}
-
 export function checkCppProfileCapabilities(programs: IrProgram[], options: CompileOptions): void {
   if (options.profile !== 'embedded') {
     return
@@ -58,7 +46,7 @@ export function checkCppProfileCapabilities(programs: IrProgram[], options: Comp
   const usages = collectCapabilityUsages(programs)
 
   for (let index = 0; index < usages.length; index = index + 1) {
-    const usage = capabilityUsageAt(usages, index)
+    const usage = usages[index]
 
     if (capabilityEnabled(options.capabilities, usage.key)) {
       continue
@@ -83,7 +71,7 @@ function collectCapabilityUsages(programs: IrProgram[]): CapabilityUsage[] {
   const usages: CapabilityUsage[] = []
 
   for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
-    const program = programAt(programs, programIndex)
+    const program = programs[programIndex]
     visitCapabilityNode(program.body, usages)
   }
 
@@ -97,7 +85,7 @@ function visitCapabilityNode(node: AnyNode | NodeList | null | undefined, usages
 
   if (Array.isArray(node)) {
     for (let index = 0; index < node.length; index = index + 1) {
-      const item = capabilityNodeAt(node, index)
+      const item = node[index]
       visitCapabilityNode(item, usages)
     }
     return

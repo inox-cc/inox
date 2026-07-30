@@ -208,7 +208,13 @@ function inferAsyncResultRejectionValueType(
   }
 
   if (expression.type === 'CallExpression' && deps.cAsyncResultOperationKind(expression) === 'reject') {
-    return inferRejectedValueTypeWithExceptions(expression.args[0], context, localExceptionValueNames, deps)
+    const rejectedValue = expression.args[0]
+
+    if (rejectedValue === null || typeof rejectedValue === 'undefined') {
+      return 'unknown'
+    }
+
+    return inferRejectedValueTypeWithExceptions(rejectedValue, context, localExceptionValueNames, deps)
   }
 
   if (expression.type === 'Reference' && expression.path.length === 1) {

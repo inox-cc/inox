@@ -312,9 +312,6 @@ type CallbackTopLevelNodeEntry = {
   node: CallbackNode
 }
 
-function callbackNodeAt(values: CallbackNode[], index: number): CallbackNode {
-  return values[index]
-}
 
 function callbackNodeArray(value: CallbackNode | CallbackNode[] | null | undefined): CallbackNode[] {
   if (Array.isArray(value)) {
@@ -338,25 +335,10 @@ function callbackArrowParams(expression: AnyNode | null | undefined): CallbackNo
   return []
 }
 
-function callbackParamAt(values: CFunctionParam[], index: number): CFunctionParam {
-  return values[index]
-}
 
-function callbackProgramAt(values: IrProgram[], index: number): IrProgram {
-  return values[index]
-}
 
-function callbackObjectShapeFieldAt(values: CObjectShapeField[], index: number): CObjectShapeField {
-  return values[index]
-}
 
-function callbackRuntimeArrowCaptureAt(values: CRuntimeArrowCapture[], index: number): CRuntimeArrowCapture {
-  return values[index]
-}
 
-function callbackTopLevelNodeEntryAt(values: CallbackTopLevelNodeEntry[], index: number): CallbackTopLevelNodeEntry {
-  return values[index]
-}
 
 function seenTypesIncludeDeclaredType(seenTypes: string[], declaredType: string | null | undefined): boolean {
   if (declaredType === null || typeof declaredType === 'undefined') {
@@ -648,7 +630,7 @@ function visitExternalEventLoopNode(
 
   if (Array.isArray(value)) {
     for (let index = 0; index < value.length; index = index + 1) {
-      const item = callbackNodeAt(value, index)
+      const item = value[index]
 
       visitExternalEventLoopNode(item, state)
     }
@@ -751,7 +733,7 @@ function visitExternalEventLoopChildren(current: AnyNode, state: ExternalEventLo
 
   if (current.type === 'ObjectLiteral') {
     for (let index = 0; index < current.properties.length; index = index + 1) {
-      const property = callbackNodeAt(current.properties, index)
+      const property = current.properties[index]
 
       visitExternalEventLoopNode(property.value, state)
     }
@@ -804,7 +786,7 @@ function visitExternalEventLoopChildren(current: AnyNode, state: ExternalEventLo
     visitExternalEventLoopNode(current.discriminant, state)
 
     for (let index = 0; index < current.cases.length; index = index + 1) {
-      const item = callbackNodeAt(current.cases, index)
+      const item = current.cases[index]
 
       visitExternalEventLoopNode(item.test, state)
       visitExternalEventLoopNode(item.consequent, state)
@@ -867,7 +849,7 @@ export function isPlainFunctionPointerType(
   }
 
   for (let index = 0; index < functionType.params.length; index = index + 1) {
-    const param = callbackParamAt(functionType.params, index)
+    const param = functionType.params[index]
 
     if (!isPlainFunctionPointerParam(param, seen, traversalSeenTypes, requiresObjectFunctionCompanions)) {
       return false
@@ -907,7 +889,7 @@ export function isRuntimeFunctionType(functionType: CFunctionType | null | undef
   let hasManagedParam = false
 
   for (let index = 0; index < functionType.params.length; index = index + 1) {
-    const param = callbackParamAt(functionType.params, index)
+    const param = functionType.params[index]
 
     if (!isSupportedRuntimeCallbackParam(param)) {
       return false
@@ -940,7 +922,7 @@ export function isSupportedRuntimeCallbackType(functionType: CFunctionType | nul
   }
 
   for (let index = 0; index < normalized.params.length; index = index + 1) {
-    const param = callbackParamAt(normalized.params, index)
+    const param = normalized.params[index]
 
     if (!isSupportedRuntimeCallbackParam(param)) {
       return false
@@ -1157,12 +1139,12 @@ export function collectCallbackWrappers(
   const pendingPlainFunctionArgs: PendingPlainFunctionArg[] = []
 
   for (let irIndex = 0; irIndex < irPrograms.length; irIndex = irIndex + 1) {
-    const ir = callbackProgramAt(irPrograms, irIndex)
+    const ir = irPrograms[irIndex]
     const topLevelScope: CallbackScope = new Map()
     const entries = collectIrTopLevelNodeEntries(ir)
 
     for (let entryIndex = 0; entryIndex < entries.length; entryIndex = entryIndex + 1) {
-      const item = callbackTopLevelNodeEntryAt(entries, entryIndex)
+      const item = entries[entryIndex]
 
       if (item.kind === 'function') {
         const scope: CallbackScope = new Map()
@@ -1170,7 +1152,7 @@ export function collectCallbackWrappers(
         const functionScopes: CallbackScope[] = [topLevelScope, scope]
 
         for (let statementIndex = 0; statementIndex < item.node.body.length; statementIndex = statementIndex + 1) {
-          const statement = callbackNodeAt(item.node.body, statementIndex)
+          const statement = item.node.body[statementIndex]
 
           visitCallbackStatement(statement, functionScopes, wrappers, pendingPlainFunctionArgs, context, deps)
         }
@@ -1212,7 +1194,7 @@ function collectPlainFunctionValueWrappers(
   deps: CallbackLoweringDependencies
 ): void {
   for (let irIndex = 0; irIndex < irPrograms.length; irIndex = irIndex + 1) {
-    const ir = callbackProgramAt(irPrograms, irIndex)
+    const ir = irPrograms[irIndex]
     const topLevelScope: CallbackScope = new Map()
 
     scanPlainFunctionValueStatements(ir.body, [topLevelScope], wrappers, context, deps)
@@ -1227,7 +1209,7 @@ function scanPlainFunctionValueStatements(
   deps: CallbackLoweringDependencies
 ): void {
   for (let index = 0; index < statements.length; index = index + 1) {
-    const statement = callbackNodeAt(statements, index)
+    const statement = statements[index]
 
     scanPlainFunctionValueStatement(statement, scopes, wrappers, context, deps)
   }
@@ -1298,7 +1280,7 @@ function callbackNodeMayContainReference(value: CallbackNode | CallbackNode[] | 
 
   if (Array.isArray(value)) {
     for (let index = 0; index < value.length; index = index + 1) {
-      if (callbackNodeMayContainReference(callbackNodeAt(value, index))) {
+      if (callbackNodeMayContainReference(value[index])) {
         return true
       }
     }
@@ -1529,7 +1511,7 @@ function libraryCallbackTargetFunctionType(
   const params: CFunctionParam[] = []
 
   for (let index = 0; index < declared.params.length; index = index + 1) {
-    const declaredParam = callbackParamAt(declared.params, index)
+    const declaredParam = declared.params[index]
     const contextualParam = contextual.params[index]
 
     if (contextualParam !== null && typeof contextualParam !== 'undefined') {
@@ -1559,7 +1541,7 @@ function registerArrowCallbackWrapper(
   const captures = collectArrowCaptures(expression, scopes, context, deps)
 
   for (let captureIndex = 0; captureIndex < captures.length; captureIndex = captureIndex + 1) {
-    const capture = callbackRuntimeArrowCaptureAt(captures, captureIndex)
+    const capture = captures[captureIndex]
     const declaration = capture.declaration
 
     if (
@@ -1633,9 +1615,11 @@ function registerPlainArrowCallbackWrapper(
 
 function refineArrowCallbackFunctionType(expression: AnyNode, functionType: CFunctionType): CFunctionType {
   const params: CFunctionParam[] = []
+  const expressionParams = callbackArrowParams(expression)
 
   for (let index = 0; index < functionType.params.length; index = index + 1) {
-    const param = callbackParamAt(functionType.params, index)
+    const param = functionType.params[index]
+    const arrowParam = index < expressionParams.length ? expressionParams[index] : null
     const refined: CFunctionParam = {
       name: param.name,
       typeRef: param.typeRef,
@@ -1651,9 +1635,7 @@ function refineArrowCallbackFunctionType(expression: AnyNode, functionType: CFun
       refined.nullable = true
     }
 
-    if (expression.params !== null && typeof expression.params !== 'undefined' && index < expression.params.length) {
-      const arrowParam = callbackNodeAt(expression.params, index)
-
+    if (arrowParam !== null && typeof arrowParam !== 'undefined') {
       if (arrowParam.name !== null && typeof arrowParam.name !== 'undefined') {
         refined.name = arrowParam.name
       }
@@ -1938,7 +1920,7 @@ function capturesAreModuleValues(captures: CRuntimeArrowCapture[], context: Call
   }
 
   for (let index = 0; index < captures.length; index = index + 1) {
-    const capture = callbackRuntimeArrowCaptureAt(captures, index)
+    const capture = captures[index]
 
     if (!moduleValueNames.has(capture.name)) {
       return false
@@ -1954,7 +1936,7 @@ function declareCallbackBinding(scope: CallbackScope, name: string, info: Callba
 
 function declareCallbackParams(scope: CallbackScope, params: CFunctionParam[]): void {
   for (let index = 0; index < params.length; index = index + 1) {
-    const param = callbackParamAt(params, index)
+    const param = params[index]
 
     declareCallbackBinding(scope, param.name, {
       name: param.name,
@@ -2151,7 +2133,7 @@ function objectShapeFieldValueType(shape: CObjectShape | null | undefined, name:
   }
 
   for (let index = 0; index < fields.length; index = index + 1) {
-    const field = callbackObjectShapeFieldAt(fields, index)
+    const field = fields[index]
 
     if (field.name === name) {
       return field.valueType
@@ -2222,7 +2204,13 @@ function visitCallbackStatement(
     }
 
     visitCallbackExpression(statement.init, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
-    declareCallbackVariable(scopes[scopes.length - 1], statement, scopes, context, deps)
+    const scope = scopes[scopes.length - 1]
+
+    if (scope === null || typeof scope === 'undefined') {
+      throw new Error('callback variable scope is missing')
+    }
+
+    declareCallbackVariable(scope, statement, scopes, context, deps)
     return
   }
 
@@ -2241,7 +2229,7 @@ function visitCallbackStatement(
     const blockScopes = appendCallbackScope(scopes, scope)
 
     for (let index = 0; index < statement.body.length; index = index + 1) {
-      const item = callbackNodeAt(statement.body, index)
+      const item = statement.body[index]
 
       visitCallbackStatement(item, blockScopes, wrappers, pendingPlainFunctionArgs, context, deps)
     }
@@ -2304,7 +2292,7 @@ function visitCallbackStatement(
     visitCallbackExpression(statement.discriminant, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
 
     for (let index = 0; index < statement.cases.length; index = index + 1) {
-      const item = callbackNodeAt(statement.cases, index)
+      const item = statement.cases[index]
       const consequent = callbackNodeArray(item.consequent)
 
       visitCallbackExpression(item.test, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
@@ -2312,7 +2300,7 @@ function visitCallbackStatement(
       const caseScopes = appendCallbackScope(scopes, scope)
 
       for (let consequentIndex = 0; consequentIndex < consequent.length; consequentIndex = consequentIndex + 1) {
-        const caseStatement = callbackNodeAt(consequent, consequentIndex)
+        const caseStatement = consequent[consequentIndex]
 
         visitCallbackStatement(caseStatement, caseScopes, wrappers, pendingPlainFunctionArgs, context, deps)
       }
@@ -2460,7 +2448,7 @@ function visitCallbackExpression(
     visitCallbackExpression(expression.callee, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
 
     for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = callbackNodeAt(expression.args, index)
+      const arg = expression.args[index]
 
       visitCallbackExpression(arg, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
     }
@@ -2469,7 +2457,7 @@ function visitCallbackExpression(
 
   if (expression.type === 'ArrayLiteral') {
     for (let index = 0; index < expression.elements.length; index = index + 1) {
-      const element = callbackNodeAt(expression.elements, index)
+      const element = expression.elements[index]
       const elementFunctionType = callbackArrayLiteralElementFunctionType(expression, element, context)
 
       if (elementFunctionType !== null && typeof elementFunctionType !== 'undefined') {
@@ -2483,7 +2471,7 @@ function visitCallbackExpression(
 
   if (expression.type === 'ObjectLiteral') {
     for (let index = 0; index < expression.properties.length; index = index + 1) {
-      const property = callbackNodeAt(expression.properties, index)
+      const property = expression.properties[index]
 
       if (property.value.functionType !== null && typeof property.value.functionType !== 'undefined') {
         registerCallbackExpression(property.value, property.value.functionType, scopes, wrappers, context, deps)
@@ -2530,7 +2518,7 @@ function visitClassConstructorCallbackExpression(
   }
 
   for (let index = 0; index < expression.args.length; index = index + 1) {
-    const arg = callbackNodeAt(expression.args, index)
+    const arg = expression.args[index]
     const param = params === null ? null : params[index]
 
     if (
@@ -2771,7 +2759,7 @@ function visitAsyncResultConstructorCallbackExpression(
 
   if (executor === null || typeof executor === 'undefined' || executor.type !== 'ArrowFunctionExpression') {
     for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = callbackNodeAt(expression.args, index)
+      const arg = expression.args[index]
 
       visitCallbackExpression(arg, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
     }
@@ -2782,7 +2770,7 @@ function visitAsyncResultConstructorCallbackExpression(
   const params = callbackArrowParams(executor)
 
   for (let index = 0; index < params.length; index = index + 1) {
-    const param = callbackNodeAt(params, index)
+    const param = params[index]
     declareCallbackBinding(scope, param.name, {
       name: param.name,
       valueType: 'asyncResult-settlement',
@@ -2803,7 +2791,7 @@ function visitAsyncResultConstructorCallbackExpression(
     const statements = callbackBlockStatements(executor.body)
 
     for (let index = 0; index < statements.length; index = index + 1) {
-      const statement = callbackNodeAt(statements, index)
+      const statement = statements[index]
 
       visitCallbackStatement(statement, executorScopes, wrappers, pendingPlainFunctionArgs, context, deps)
     }
@@ -2830,7 +2818,7 @@ function visitNestedCallbackArrowExpression(
   const params = callbackArrowParams(expression)
 
   for (let index = 0; index < params.length; index = index + 1) {
-    const param = callbackNodeAt(params, index)
+    const param = params[index]
     const valueType = callbackStringOrUnknown(param.valueType)
 
     declareCallbackBinding(scope, param.name, {
@@ -2853,7 +2841,7 @@ function visitNestedCallbackArrowExpression(
     const statements = callbackBlockStatements(expression.body)
 
     for (let index = 0; index < statements.length; index = index + 1) {
-      const statement = callbackNodeAt(statements, index)
+      const statement = statements[index]
 
       visitCallbackStatement(statement, arrowScopes, wrappers, pendingPlainFunctionArgs, context, deps)
     }
@@ -2871,7 +2859,7 @@ export function collectArrowCaptures(
   const params = callbackArrowParams(expression)
 
   for (let index = 0; index < params.length; index = index + 1) {
-    const param = callbackNodeAt(params, index)
+    const param = params[index]
 
     declareCallbackBinding(localScope, param.name, {
       name: param.name,
@@ -2896,7 +2884,7 @@ export function collectArrowCaptures(
     const statements = callbackBlockStatements(expression.body)
 
     for (let index = 0; index < statements.length; index = index + 1) {
-      const statement = callbackNodeAt(statements, index)
+      const statement = statements[index]
 
       visitRuntimeArrowCaptureStatement(statement, state)
     }
@@ -2959,6 +2947,10 @@ function runtimeArrowCaptureFromBinding(name: string, binding: CallbackScopeBind
 function declareRuntimeArrowCaptureLocal(statement: AnyNode, state: RuntimeArrowCaptureScanState): void {
   const scope = state.localScopes[state.localScopes.length - 1]
 
+  if (scope === null || typeof scope === 'undefined') {
+    throw new Error('runtime arrow capture scope is missing')
+  }
+
   declareCallbackBinding(scope, statement.name, {
     name: statement.name,
     valueType: callbackStringOrUnknown(statement.valueType),
@@ -2997,7 +2989,7 @@ function visitRuntimeArrowCaptureStatement(
     state.localScopes.push(scope)
 
     for (let index = 0; index < statement.body.length; index = index + 1) {
-      const item = callbackNodeAt(statement.body, index)
+      const item = statement.body[index]
 
       visitRuntimeArrowCaptureStatement(item, state)
     }
@@ -3060,7 +3052,7 @@ function visitRuntimeArrowCaptureStatement(
     visitRuntimeArrowCaptureExpression(statement.discriminant, state)
 
     for (let index = 0; index < statement.cases.length; index = index + 1) {
-      const item = callbackNodeAt(statement.cases, index)
+      const item = statement.cases[index]
       const consequents = callbackNodeArray(item.consequent)
 
       visitRuntimeArrowCaptureExpression(item.test, state)
@@ -3068,7 +3060,7 @@ function visitRuntimeArrowCaptureStatement(
       state.localScopes.push(scope)
 
       for (let consequentIndex = 0; consequentIndex < consequents.length; consequentIndex = consequentIndex + 1) {
-        const consequent = callbackNodeAt(consequents, consequentIndex)
+        const consequent = consequents[consequentIndex]
 
         visitRuntimeArrowCaptureStatement(consequent, state)
       }
@@ -3113,7 +3105,7 @@ function visitRuntimeArrowCaptureExpression(
     const placeholders = state.deps.collectTemplatePlaceholderExpressions(node)
 
     for (let index = 0; index < placeholders.length; index = index + 1) {
-      const expression = callbackNodeAt(placeholders, index)
+      const expression = placeholders[index]
 
       visitRuntimeArrowCaptureExpression(expression, state)
     }
@@ -3141,7 +3133,7 @@ function visitRuntimeArrowCaptureExpression(
     visitRuntimeArrowCaptureExpression(node.callee, state)
 
     for (let index = 0; index < node.args.length; index = index + 1) {
-      const arg = callbackNodeAt(node.args, index)
+      const arg = node.args[index]
 
       visitRuntimeArrowCaptureExpression(arg, state)
     }
@@ -3168,7 +3160,7 @@ function visitRuntimeArrowCaptureExpression(
 
   if (node.type === 'ArrayLiteral') {
     for (let index = 0; index < node.elements.length; index = index + 1) {
-      const element = callbackNodeAt(node.elements, index)
+      const element = node.elements[index]
 
       visitRuntimeArrowCaptureExpression(element, state)
     }
@@ -3178,7 +3170,7 @@ function visitRuntimeArrowCaptureExpression(
 
   if (node.type === 'ObjectLiteral') {
     for (let index = 0; index < node.properties.length; index = index + 1) {
-      const property = callbackNodeAt(node.properties, index)
+      const property = node.properties[index]
 
       visitRuntimeArrowCaptureExpression(property.value, state)
     }
@@ -3206,7 +3198,7 @@ function runtimeCallbackWrapperKey(target: string, functionType: CFunctionType):
   const paramTypes: string[] = []
 
   for (let index = 0; index < functionType.params.length; index = index + 1) {
-    const param = callbackParamAt(functionType.params, index)
+    const param = functionType.params[index]
 
     paramTypes.push(param.valueType)
   }
@@ -3268,7 +3260,7 @@ function emitPlainArrowCallbackParams(wrapper: CPlainArrowCallbackWrapper): stri
   let index = 0
 
   for (let paramIndex = 0; paramIndex < params.length; paramIndex = paramIndex + 1) {
-    const param = callbackParamAt(params, paramIndex)
+    const param = params[paramIndex]
     const name = plainArrowCallbackParamName(wrapper, index)
     const cName = plainArrowCallbackCParamName(param, name)
     const seenTypes: string[] = []
@@ -3348,7 +3340,7 @@ export function emitPlainArrowCallbackWrapperDeclaration(
   const paramPrelude: string[] = []
 
   for (let index = 0; index < params.length; index = index + 1) {
-    const param = callbackParamAt(params, index)
+    const param = params[index]
     const name = plainArrowCallbackParamName(wrapper, index)
 
     context.variables.set(name, param.valueType)
@@ -3864,7 +3856,7 @@ export function emitRuntimeArrowCallbackContextType(wrapper: CCallbackContextWra
   }
 
   for (let index = 0; index < captures.length; index = index + 1) {
-    const capture = callbackRuntimeArrowCaptureAt(captures, index)
+    const capture = captures[index]
     lines.push('  ' + emitRuntimeArrowCaptureCType(capture) + ' ' + emitRuntimeArrowCaptureField(capture) + ';')
   }
 
@@ -3884,14 +3876,14 @@ export function emitRuntimeArrowCallbackContextFinalizerDeclaration(wrapper: CCa
   ]
 
   for (let index = 0; index < captures.length; index = index + 1) {
-    const capture = callbackRuntimeArrowCaptureAt(captures, index)
+    const capture = captures[index]
     if (isRetainedRuntimeArrowCapture(capture)) {
       lines.push('  inox_release(captured->' + emitRuntimeArrowCaptureField(capture) + ');')
     }
   }
 
   for (let index = 0; index < captures.length; index = index + 1) {
-    const capture = callbackRuntimeArrowCaptureAt(captures, index)
+    const capture = captures[index]
     if (isAsyncResultSettlementRuntimeArrowCapture(capture)) {
       const field = emitRuntimeArrowCaptureField(capture)
       const destructor = callbackCppDestructorName(capture.asyncResultSettlementCppType)
@@ -4040,7 +4032,7 @@ export function emitRuntimeArrowCallbackContextLocals(
   }
 
   for (let index = 0; index < captures.length; index = index + 1) {
-    const capture = callbackRuntimeArrowCaptureAt(captures, index)
+    const capture = captures[index]
     context.localValueNames.add(capture.name)
     context.cppValueTypes.delete(capture.name)
 
@@ -4612,8 +4604,18 @@ export function emitFunctionPointerNativeBoundaryArgument(
     return value
   }
 
-  const expectedParam = callbackParamAt(expectedFunctionType.params, index)
-  const targetParam = callbackParamAt(targetFunctionType.params, index)
+  const expectedParam = expectedFunctionType.params[index]
+  const targetParam = targetFunctionType.params[index]
+
+  if (
+    expectedParam === null ||
+    typeof expectedParam === 'undefined' ||
+    targetParam === null ||
+    typeof targetParam === 'undefined'
+  ) {
+    return value
+  }
+
   const expectedCppType = libraryNativeBoundaryCppType(
     expectedParam.valueType,
     expectedParam.nullable === true,

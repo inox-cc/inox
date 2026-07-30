@@ -19,4 +19,7 @@ function refinedParams(node: Node): Param[] {
 }
 
 const params = refinedParams({ params: [{ valueType: 'string' }] })
-console.log(`${params.length}:${params[0].valueType ?? 'unknown'}`)
+
+if (params.length > 0) {
+  console.log(`${params.length}:${params[0].valueType ?? 'unknown'}`)
+}

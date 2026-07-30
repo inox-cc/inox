@@ -385,6 +385,10 @@ function stripOuterGeneratedScope(lines: string[]): string[] {
   for (let index = 1; index < lines.length - 1; index = index + 1) {
     const line = lines[index]
 
+    if (line === null || typeof line === 'undefined') {
+      continue
+    }
+
     if (line.trim() === '') {
       stripped.push('')
       continue
@@ -1395,10 +1399,20 @@ function objectFunctionCompanionName(root: string, path: string[]): string | nul
   let objectName = root
 
   for (let index = 0; index + 1 < path.length; index = index + 1) {
-    objectName = `${objectName}_${path[index]}`
+    const segment = path[index]
+
+    if (segment !== null && typeof segment !== 'undefined') {
+      objectName = `${objectName}_${segment}`
+    }
   }
 
-  return emitCObjectFunctionFieldName(objectName, path[path.length - 1])
+  const fieldName = path[path.length - 1]
+
+  if (fieldName === null || typeof fieldName === 'undefined') {
+    return null
+  }
+
+  return emitCObjectFunctionFieldName(objectName, fieldName)
 }
 
 function pushAwaitVariableDeclarationSpacing(lines: string[], expression: StatementNode): void {
@@ -3574,6 +3588,10 @@ function emitRuntimeStringAssignment(expression: StatementNode, context: CFuncti
   const path: string[] = expression.target.path
   const target = path[0]
 
+  if (target === null || typeof target === 'undefined') {
+    return null
+  }
+
   if (!context.runtimeStrings.has(target)) {
     return null
   }
@@ -3663,7 +3681,13 @@ function nativeClassExpressionVariableDeclarationClassName(
 
   if (statement.init.type === 'Reference' && statement.init.path.length === 1) {
     const path: string[] = statement.init.path
-    const referenceClassName = context.classInstanceTypes.get(path[0])
+    const name = path[0]
+
+    if (name === null || typeof name === 'undefined') {
+      return null
+    }
+
+    const referenceClassName = context.classInstanceTypes.get(name)
 
     if (referenceClassName !== null && typeof referenceClassName !== 'undefined') {
       return referenceClassName
@@ -3711,6 +3735,11 @@ function emitRuntimeValueAssignment(expression: StatementNode, context: CFunctio
 
   const path: string[] = expression.target.path
   const target = path[0]
+
+  if (target === null || typeof target === 'undefined') {
+    return null
+  }
+
   const reference = emitCIdentifier(target)
   const targetType = context.variables.get(target)
   const targetCppType = context.cppValueTypes.get(target)

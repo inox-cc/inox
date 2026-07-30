@@ -828,6 +828,11 @@ export function emitBoxedValueCleanup(context: CFunctionContext): string[] {
 
   for (let index = context.boxedValues.length - 1; index >= 0; index--) {
     const name = context.boxedValues[index]
+
+    if (name === null || typeof name === 'undefined') {
+      continue
+    }
+
     const localName = emitCLocalName(name)
 
     if (isRuntimeBoxedValueType(context.boxedValueTypes.get(name))) {

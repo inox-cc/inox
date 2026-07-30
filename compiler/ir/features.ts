@@ -33,34 +33,14 @@ export function collectIrFeatures(program: ProgramNode): IrFeature[] {
   return result
 }
 
-function featureProgramAt(programs: FeatureProgram[], index: number): FeatureProgram {
-  return programs[index]
-}
-
-function irFeatureAt(features: IrFeature[], index: number): IrFeature {
-  return features[index]
-}
-
-function runtimeRequirementProgramAt(programs: RuntimeRequirementProgram[], index: number): RuntimeRequirementProgram {
-  return programs[index]
-}
-
-function runtimeRequirementAt(requirements: IrRuntimeRequirement[], index: number): IrRuntimeRequirement {
-  return requirements[index]
-}
-
-function featureArrayNodeAt(nodes: FeatureRawNode[], index: number): FeatureRawNode {
-  return nodes[index]
-}
-
 export function collectIrFeatureRequirements(programs: FeatureProgram[]): IrFeature[] {
   const features = createFeatureSet()
 
   for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
-    const program = featureProgramAt(programs, programIndex)
+    const program = programs[programIndex]
 
     for (let featureIndex = 0; featureIndex < program.features.length; featureIndex = featureIndex + 1) {
-      const feature = irFeatureAt(program.features, featureIndex)
+      const feature = program.features[featureIndex]
 
       features.add(feature)
     }
@@ -79,7 +59,7 @@ export function collectRuntimeRequirements(
   const requirements = createRuntimeRequirementSet()
 
   for (let index = 0; index < features.length; index = index + 1) {
-    const feature = irFeatureAt(features, index)
+    const feature = features[index]
     const featureRequirements = compilerFeatureRuntimeRequirements(feature)
 
     if (featureRequirements !== null && typeof featureRequirements !== 'undefined') {
@@ -107,7 +87,7 @@ function visitRuntimeRequirementNode(
 
   if (Array.isArray(node)) {
     for (let index = 0; index < node.length; index = index + 1) {
-      visitRuntimeRequirementNode(featureArrayNodeAt(node, index), requirements, libraries)
+      visitRuntimeRequirementNode(node[index], requirements, libraries)
     }
     return
   }
@@ -180,14 +160,14 @@ export function collectIrRuntimeRequirements(programs: RuntimeRequirementProgram
   const requirements = createRuntimeRequirementSet()
 
   for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
-    const program = runtimeRequirementProgramAt(programs, programIndex)
+    const program = programs[programIndex]
 
     for (
       let requirementIndex = 0;
       requirementIndex < program.runtimeRequirements.length;
       requirementIndex = requirementIndex + 1
     ) {
-      const requirement = runtimeRequirementAt(program.runtimeRequirements, requirementIndex)
+      const requirement = program.runtimeRequirements[requirementIndex]
 
       requirements.add(requirement)
     }
@@ -210,7 +190,7 @@ function visitNode(node: FeatureRawNode | FeatureRawNode[] | null | undefined, f
   if (node !== null && typeof node !== 'undefined') {
     if (Array.isArray(node)) {
       for (let index = 0; index < node.length; index = index + 1) {
-        const item = featureArrayNodeAt(node, index)
+        const item = node[index]
 
         visitNode(item, features)
       }
@@ -225,7 +205,7 @@ function visitNode(node: FeatureRawNode | FeatureRawNode[] | null | undefined, f
 
     if (featureChildren !== null && typeof featureChildren !== 'undefined') {
       for (let childIndex = 0; childIndex < featureChildren.length; childIndex = childIndex + 1) {
-        visitNode(featureArrayNodeAt(featureChildren, childIndex), features)
+        visitNode(featureChildren[childIndex], features)
       }
 
       return

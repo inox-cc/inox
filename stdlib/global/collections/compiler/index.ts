@@ -675,7 +675,11 @@ function arrayIndexRead(): LibraryOperationDescriptor {
     cFailureMode: 'thrown',
     cPreservesPendingException: true,
     cResultMode: 'value',
-    resultTypeRef: parameterTypeRef,
+    resultTypeRef: nullableParameterTypeRef(),
+    indexBounds: {
+      minimumIndex: 0,
+      exclusiveUpperBoundMember: 'length'
+    },
     cResultMapping: { cppType: 'inox::Value', fields: [] },
     minArgs: 1,
     maxArgs: 1,

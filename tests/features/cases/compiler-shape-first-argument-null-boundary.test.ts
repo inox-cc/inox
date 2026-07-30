@@ -12,7 +12,7 @@ type Argument = {
   value: number
 }
 
-function argumentAt(argumentsList: Argument[], index: number): Argument {
+function argumentAt(argumentsList: Argument[], index: number): Argument | null {
   return argumentsList[index]
 }
 

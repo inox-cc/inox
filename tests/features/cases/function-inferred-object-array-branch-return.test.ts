@@ -14,4 +14,6 @@ function createEntries(primary: boolean) {
 
 const entries = createEntries(false)
 
-console.log(entries[0].name, entries[0].count)
+if (entries.length > 0) {
+  console.log(entries[0].name, entries[0].count)
+}

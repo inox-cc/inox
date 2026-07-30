@@ -417,10 +417,6 @@ function asyncTaskParamsOrEmpty(params: CAsyncTaskParam[] | null): CAsyncTaskPar
   return []
 }
 
-function asyncTaskNodeAt(nodes: AsyncTaskAstNode[], index: number): AsyncTaskAstNode {
-  return nodes[index]
-}
-
 function asyncTaskNodeOrNull(node: AsyncTaskAstNode | null | undefined): AsyncTaskAstNode | null {
   if (node === null || typeof node === 'undefined') {
     return null
@@ -434,30 +430,18 @@ function maybeAsyncTaskNodeAt(nodes: AsyncTaskAstNode[], index: number): AsyncTa
     return null
   }
 
-  return asyncTaskNodeAt(nodes, index)
-}
-
-function asyncTaskAwaitStepAt(steps: CAsyncTaskAwaitStep[], index: number): CAsyncTaskAwaitStep {
-  return steps[index]
-}
-
-function asyncTaskPrefixFrameLocalAt(locals: CAsyncTaskPrefixFrameLocal[], index: number): CAsyncTaskPrefixFrameLocal {
-  return locals[index]
-}
-
-function asyncTaskAwaitFrameLocalAt(locals: CAsyncTaskAwaitFrameLocal[], index: number): CAsyncTaskAwaitFrameLocal {
-  return locals[index]
-}
-
-function asyncTaskFrameLocalAt(locals: CAsyncTaskFrameLocal[], index: number): CAsyncTaskFrameLocal {
-  return locals[index]
+  return nodes[index] ?? null
 }
 
 function asyncTaskStatementsBeforeLast(statements: AsyncTaskAstNode[]): AsyncTaskAstNode[] {
   const out: AsyncTaskAstNode[] = []
 
   for (let index = 0; index < statements.length - 1; index = index + 1) {
-    out.push(asyncTaskNodeAt(statements, index))
+    const statement = statements[index]
+
+    if (statement !== null && typeof statement !== 'undefined') {
+      out.push(statement)
+    }
   }
 
   return out
@@ -550,7 +534,7 @@ function collectAsyncTaskLiveAcrossSuspensionNames(input: AsyncTaskLiveAcrossSus
   const nodes: AsyncTaskAstNode[] = []
 
   for (let index = 1; index < input.awaits.length; index = index + 1) {
-    const item = asyncTaskAwaitStepAt(input.awaits, index)
+    const item = input.awaits[index]
     const awaitedExpression = item.awaitedExpression
     const awaitedAsyncResultExpression = item.awaitedAsyncResultExpression
 
@@ -794,15 +778,11 @@ function appendAsyncTaskNodes(target: AsyncTaskAstNode[], source: AsyncTaskAstNo
   }
 }
 
-function asyncTaskSuccessPhaseKindAt(values: CAsyncTaskSuccessPhaseKind[], index: number): CAsyncTaskSuccessPhaseKind {
-  return values[index]
-}
-
 function asyncTaskSuccessPhaseKindSetFromArray(values: CAsyncTaskSuccessPhaseKind[]): Set<CAsyncTaskSuccessPhaseKind> {
   const result: Set<CAsyncTaskSuccessPhaseKind> = new Set()
 
   for (let index = 0; index < values.length; index = index + 1) {
-    result.add(asyncTaskSuccessPhaseKindAt(values, index))
+    result.add(values[index])
   }
 
   return result
@@ -1155,6 +1135,11 @@ function resolveAsyncTaskNestedTryBodyPlan(
   const tryChainResult = asyncTaskNestedTryChainOrEmpty(tryChainResultOrNull)
   const tryChain = tryChainResult.chain
   const innerTry = tryChain[tryChain.length - 1]
+
+  if (innerTry === null || typeof innerTry === 'undefined') {
+    return null
+  }
+
   const innerTryStatements = getAsyncTaskBlockStatements(innerTry.block)
   const postNestedStatements = tryChainResult.postNestedStatements
   const hasPostNestedStatements = postNestedStatements.length > 0
@@ -1219,7 +1204,11 @@ function resolveAsyncTaskNestedTryBodyPlan(
   let handlerSource: AsyncTaskAstNode | null = null
 
   if (handlerIndex >= 0) {
-    handlerSource = asyncTaskNodeAt(tryChain, handlerIndex).handler
+    const handlerOwner = tryChain[handlerIndex]
+
+    if (handlerOwner !== null && typeof handlerOwner !== 'undefined') {
+      handlerSource = handlerOwner.handler
+    }
   }
 
   const handler = resolveAsyncTaskTryHandler(handlerSource, context, params, returnType)
@@ -1358,6 +1347,10 @@ function splitAsyncTaskLeadingPrefixStatements(statements: AsyncTaskAstNode[]): 
     const statement = statements[index]
     const nextStatement = statements[index + 1]
 
+    if (statement === null || typeof statement === 'undefined') {
+      break
+    }
+
     if (
       isAsyncTaskDirectAwaitStatementShape(statement) ||
       isAsyncTaskStatementAwaitShape(statement) ||
@@ -1495,7 +1488,9 @@ function collectAsyncTaskTryFinalizers(tryChain: AsyncTaskAstNode[]): AsyncTaskA
 
 function findAsyncTaskNearestTryHandlerIndex(tryChain: AsyncTaskAstNode[]): number {
   for (let index = tryChain.length - 1; index >= 0; index = index - 1) {
-    if (tryChain[index].handler !== null && typeof tryChain[index].handler !== 'undefined') {
+    const item = tryChain[index]
+
+    if (item !== null && typeof item !== 'undefined' && item.handler !== null && typeof item.handler !== 'undefined') {
       return index
     }
   }
@@ -1511,7 +1506,11 @@ function collectAsyncTaskTryFinalizerStatements(
   const statements: AsyncTaskAstNode[] = []
 
   for (let index = fromIndex; index >= toIndex; index = index - 1) {
-    appendAsyncTaskNodes(statements, finalizers[index])
+    const finalizer = finalizers[index]
+
+    if (finalizer !== null && typeof finalizer !== 'undefined') {
+      appendAsyncTaskNodes(statements, finalizer)
+    }
   }
 
   return statements
@@ -1780,7 +1779,7 @@ function hasUnsupportedAsyncTaskTryControlFlow(value: AsyncTaskChildValue): bool
 
 function hasUnsupportedAsyncTaskTryControlFlowArray(values: AsyncTaskAstNode[]): boolean {
   for (let index = 0; index < values.length; index = index + 1) {
-    if (hasUnsupportedAsyncTaskTryControlFlow(asyncTaskNodeAt(values, index))) {
+    if (hasUnsupportedAsyncTaskTryControlFlow(values[index])) {
       return true
     }
   }
@@ -2352,7 +2351,7 @@ function emitAsyncTaskStartDeclaration(wrapper: CAsyncTaskWrapper, baseContext: 
   const prefixLocals: CAsyncTaskPrefixFrameLocal[] = collectAsyncTaskFrameLocals(wrapper, 'prefix')
 
   for (let index = 0; index < prefixLocals.length; index = index + 1) {
-    const local = asyncTaskPrefixFrameLocalAt(prefixLocals, index)
+    const local = prefixLocals[index]
 
     if (local.forceRuntimeStringDeclaration === true) {
       context.forceRuntimeStringDeclarations.add(local.name)
@@ -2363,7 +2362,11 @@ function emitAsyncTaskStartDeclaration(wrapper: CAsyncTaskWrapper, baseContext: 
   const prefixScope = asyncTaskDeps(context).pushVariableScope(context)
   const prefixAndScheduleLines: string[] = []
   const prefixStatements: AsyncTaskAstNode[] = wrapper.prefixStatements
-  const firstAwait = asyncTaskAwaitStepAt(wrapper.awaits, 0)
+  const firstAwait = wrapper.awaits[0]
+
+  if (firstAwait === null || typeof firstAwait === 'undefined') {
+    throw new Error('async task has no first await step')
+  }
 
   appendAsyncTaskLines(prefixAndScheduleLines, asyncTaskDeps(context).emitStatementList(prefixStatements, context))
   appendAsyncTaskLines(prefixAndScheduleLines, emitAsyncTaskStorePrefixLocalLines(wrapper))
@@ -2458,7 +2461,7 @@ function registerAsyncTaskAwaitLocals(
   const locals: CAsyncTaskAwaitFrameLocal[] = collectAsyncTaskVisibleAwaitFrameLocals(wrapper, count)
 
   for (let index = 0; index < locals.length; index = index + 1) {
-    const item = asyncTaskAwaitFrameLocalAt(locals, index)
+    const item = locals[index]
     const name = item.name
 
     if (name !== null && typeof name !== 'undefined') {
@@ -2471,7 +2474,7 @@ function registerAsyncTaskPrefixLocals(wrapper: CAsyncTaskWrapper, context: Asyn
   const locals: CAsyncTaskPrefixFrameLocal[] = collectAsyncTaskFrameLocals(wrapper, 'prefix')
 
   for (let index = 0; index < locals.length; index = index + 1) {
-    const local = asyncTaskPrefixFrameLocalAt(locals, index)
+    const local = locals[index]
 
     registerAsyncTaskLocalMetadata(local.name, local.type, local, context)
   }
@@ -2482,7 +2485,7 @@ function emitAsyncTaskStorePrefixLocalLines(wrapper: CAsyncTaskWrapper): string[
   const locals: CAsyncTaskPrefixFrameLocal[] = collectAsyncTaskFrameLocals(wrapper, 'prefix')
 
   for (let index = 0; index < locals.length; index = index + 1) {
-    const local = asyncTaskPrefixFrameLocalAt(locals, index)
+    const local = locals[index]
 
     if (local.type === 'string') {
       appendAsyncTaskLines(lines, emitPrepareOwnedValueWrite(`frame->${local.fieldName}`, 'raw'))
@@ -2520,7 +2523,7 @@ function emitAsyncTaskVisibleLocalReads(
     const prefixLocals: CAsyncTaskPrefixFrameLocal[] = collectAsyncTaskFrameLocals(wrapper, 'prefix')
 
     for (let index = 0; index < prefixLocals.length; index = index + 1) {
-      const local = asyncTaskPrefixFrameLocalAt(prefixLocals, index)
+      const local = prefixLocals[index]
 
       appendAsyncTaskLines(lines, emitAsyncTaskVisibleLocalRead(local.name, local.type, local.fieldName))
     }
@@ -2529,7 +2532,7 @@ function emitAsyncTaskVisibleLocalReads(
   const awaitLocals: CAsyncTaskAwaitFrameLocal[] = collectAsyncTaskVisibleAwaitFrameLocals(wrapper, count)
 
   for (let index = 0; index < awaitLocals.length; index = index + 1) {
-    const item = asyncTaskAwaitFrameLocalAt(awaitLocals, index)
+    const item = awaitLocals[index]
     const name = item.name
     const fieldName = item.fieldName
 
@@ -2552,7 +2555,7 @@ function collectAsyncTaskFrameLocals(
   const frameLocals: CAsyncTaskFrameLocal[] = wrapper.frameLocals
 
   for (let index = 0; index < frameLocals.length; index = index + 1) {
-    const local = asyncTaskFrameLocalAt(frameLocals, index)
+    const local = frameLocals[index]
 
     if (kind === 'all' || local.kind === kind) {
       locals.push(local)
@@ -2570,7 +2573,7 @@ function collectAsyncTaskVisibleAwaitFrameLocals(
   const source: CAsyncTaskAwaitFrameLocal[] = collectAsyncTaskFrameLocals(wrapper, 'await')
 
   for (let index = 0; index < source.length; index = index + 1) {
-    const local = asyncTaskAwaitFrameLocalAt(source, index)
+    const local = source[index]
 
     if (local.index < count && local.name !== null && typeof local.name !== 'undefined') {
       locals.push(local)
@@ -3659,6 +3662,11 @@ function emitAsyncTaskResumeCase(
   }
 
   const followingItem = wrapper.awaits[item.index + 1]
+
+  if (followingItem === null || typeof followingItem === 'undefined') {
+    throw new Error('async task continuation has no following await step')
+  }
+
   const context = createAsyncTaskEmitContext(baseContext, wrapper, 'void', item.index + 1)
   const schedule = emitAsyncTaskScheduleAwaitLines(wrapper, followingItem, context, {
     cleanup: 'resume',

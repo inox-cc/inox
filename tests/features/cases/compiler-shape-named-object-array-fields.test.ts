@@ -11,7 +11,15 @@ type PrefixOptionConstraint = {
 }
 
 function constraintFingerprint(constraints: PrefixOptionConstraint[]): string {
+  if (constraints.length === 0) {
+    return ''
+  }
+
   const constraint = constraints[0]
+
+  if (constraint.prefixes.length === 0 || constraint.allowedValues.length === 0) {
+    return ''
+  }
 
   return (
     constraint.prefixes[0] +

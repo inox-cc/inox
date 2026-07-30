@@ -100,10 +100,6 @@ type TemplateReferenceValidationState = {
   valid: boolean
 }
 
-function stringPathAt(values: string[], index: number): string {
-  return values[index]
-}
-
 export type StringLoweringDependencies = {
   canLowerCNullishCoalescingExpression(expression: AnyNode, context: StringCContext): boolean
   emitCallExpression(expression: AnyNode, context: StringCContext): string
@@ -165,7 +161,7 @@ function currentStringErrorTarget(context: StringCContext): string {
     return ''
   }
 
-  return targets[targets.length - 1]
+  return targets[targets.length - 1] ?? ''
 }
 
 function sourceLocationWithFile(loc: SourceLocation | undefined, line: number, column: number): SourceLocation {
@@ -206,7 +202,7 @@ function currentStringErrorTargetRequiresActive(context: StringCContext): boolea
     return false
   }
 
-  return flags[flags.length - 1]
+  return flags[flags.length - 1] ?? false
 }
 
 function registerStringErrorValue(context: StringCContext): void {
@@ -1731,9 +1727,15 @@ function dynamicRuntimeObjectFieldObject(expression: AnyNode): AnyNode | null {
 
 function runtimeObjectFieldAccess(expression: AnyNode): RuntimeObjectFieldAccess | null {
   if (expression.type === 'Reference' && expression.path.length > 1) {
+    const key = expression.path[expression.path.length - 1]
+
+    if (key === null || typeof key === 'undefined') {
+      return null
+    }
+
     return {
       object: referencePathObjectExpression(expression),
-      key: stringPathAt(expression.path, expression.path.length - 1)
+      key
     }
   }
 
@@ -1758,7 +1760,11 @@ function referencePathObjectExpression(expression: AnyNode): AnyNode {
   const path: string[] = []
 
   for (let index = 0; index < expression.path.length - 1; index = index + 1) {
-    path.push(stringPathAt(expression.path, index))
+    const segment = expression.path[index]
+
+    if (segment !== null && typeof segment !== 'undefined') {
+      path.push(segment)
+    }
   }
 
   const object: AnyNode = {
@@ -2096,7 +2102,11 @@ function runtimeObjectNameStringMemberObjectName(expression: AnyNode, context: S
     return null
   }
 
-  const objectName = stringPathAt(expression.object.path, 0)
+  const objectName = expression.object.path[0]
+
+  if (objectName === null || typeof objectName === 'undefined') {
+    return null
+  }
   const variables = context.variables
 
   if (variables === null || typeof variables === 'undefined') {
@@ -2583,13 +2593,16 @@ function parseTemplatePlaceholderExpression(
     const compileError = compileErrorOrNull(error)
 
     if (compileError !== null && typeof compileError !== 'undefined') {
-      const first = compileError.diagnostics[0]
       let code = 'INOX_C_STRING_EXPR'
       let message = 'invalid template placeholder expression'
 
       if (compileError.diagnostics.length > 0) {
-        code = first.code
-        message = `invalid template placeholder expression: ${first.message}`
+        const first = compileError.diagnostics[0]
+
+        if (first !== null && typeof first !== 'undefined') {
+          code = first.code
+          message = `invalid template placeholder expression: ${first.message}`
+        }
       }
 
       pushStringDiagnostic(context, diagnostic(code, message, loc))
@@ -2639,7 +2652,11 @@ function visitTemplatePlaceholderValue(
   if (node.type === 'Reference') {
     const name = node.path[0]
 
-    if (!isKnownTemplatePlaceholderReference(node, state.context)) {
+    if (
+      name !== null &&
+      typeof name !== 'undefined' &&
+      !isKnownTemplatePlaceholderReference(node, state.context)
+    ) {
       reportUnknownTemplatePlaceholderReference(node, name, state)
     }
   }
@@ -2781,13 +2798,18 @@ function isTemplateLibraryGlobalRootReference(operation: AnyNode, expression: An
   const bindingPath = bindingId.slice('global:'.length)
   const separator = bindingPath.indexOf('.')
   const root = separator < 0 ? bindingPath : bindingPath.slice(0, separator)
+  const referenceRoot = expression.path[0]
 
-  return expression.path[0] === root
+  return referenceRoot !== null && typeof referenceRoot !== 'undefined' && referenceRoot === root
 }
 
 function isKnownTemplatePlaceholderReference(expression: AnyNode, context: StringCContext): boolean {
   const name = expression.path[0]
   const variables = context.variables
+
+  if (name === null || typeof name === 'undefined') {
+    return false
+  }
 
   if (variables !== null && typeof variables !== 'undefined' && variables.has(joinStrings(expression.path, '.'))) {
     return true
