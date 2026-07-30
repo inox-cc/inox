@@ -197,6 +197,9 @@ export type SymbolInfo = {
   nullable?: boolean
   narrowingTrueNames?: string[]
   narrowingFalseNames?: string[]
+  narrowingDependencyRoots?: string[]
+  narrowingDependencyVersions?: number[]
+  narrowingCallVersion?: number
   asyncResultValueType?: ValueType | null
   asyncResultRejectionIntrinsicRole?: IntrinsicRole | null
   params?: AnyNode[]

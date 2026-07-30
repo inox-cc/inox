@@ -274,6 +274,12 @@ type CheckerValueTypeConditionNarrowing = {
   falseTypes: CheckerValueTypeNarrowing[]
 }
 
+type CheckerAliasNarrowingSnapshot = {
+  callVersion: number
+  roots: string[]
+  versions: number[]
+}
+
 type CheckerObjectUnionAlternative = {
   name: string
   shape: ObjectShapeInfo
@@ -438,6 +444,8 @@ class Checker {
   incompleteDeclaredTypeDependencies: Map<string, Set<string>>
   incompleteDeclaredTypes: Set<string>
   flowFacts: Map<string, CheckerFlowFact>
+  aliasMutationVersions: Map<string, number>
+  aliasCallVersion: number
   resolvedDeclaredTypes: Map<string, ResolvedTypeInfo>
   resolvingDeclaredTypes: Set<string>
   retriedIncompleteDeclaredTypes: Set<string>
@@ -476,6 +484,8 @@ class Checker {
     this.incompleteDeclaredTypeDependencies = new Map()
     this.incompleteDeclaredTypes = new Set()
     this.flowFacts = new Map()
+    this.aliasMutationVersions = new Map()
+    this.aliasCallVersion = 0
     this.resolvedDeclaredTypes = new Map()
     this.resolvingDeclaredTypes = new Set()
     this.retriedIncompleteDeclaredTypes = new Set()
@@ -1585,6 +1595,9 @@ class Checker {
 
       let narrowingTrueNames: string[] = []
       let narrowingFalseNames: string[] = []
+      let narrowingDependencyRoots: string[] = []
+      let narrowingDependencyVersions: number[] = []
+      let narrowingCallVersion = 0
 
       if (
         statement.kind === 'const' &&
@@ -1593,10 +1606,14 @@ class Checker {
         typeof statement.init !== 'undefined'
       ) {
         const narrowing = this.resolveNullableConditionNarrowing(statement.init)
+        const snapshot = this.nullableAliasNarrowingSnapshot(narrowing)
 
-        if (this.nullableAliasNarrowingIsStable(narrowing)) {
+        if (snapshot !== null) {
           narrowingTrueNames = narrowing.trueNames
           narrowingFalseNames = narrowing.falseNames
+          narrowingDependencyRoots = snapshot.roots
+          narrowingDependencyVersions = snapshot.versions
+          narrowingCallVersion = snapshot.callVersion
         }
       }
 
@@ -1748,6 +1765,9 @@ class Checker {
           nullable,
           narrowingTrueNames,
           narrowingFalseNames,
+          narrowingDependencyRoots,
+          narrowingDependencyVersions,
+          narrowingCallVersion,
           asyncResultValueType,
           asyncResultRejectionIntrinsicRole,
           functionType,
@@ -2096,8 +2116,13 @@ class Checker {
         expression.valueType = valueType
         expression.declaredType = valueTypeNarrowed ? (flowFact?.declaredType ?? null) : (symbol.declaredType ?? null)
         expression.typeRef = nullableNarrowed ? nonNullableTypeRef(symbol.typeRef) : (symbol.typeRef ?? null)
-        expression.narrowingTrueNames = symbol.narrowingTrueNames ?? []
-        expression.narrowingFalseNames = symbol.narrowingFalseNames ?? []
+        if (this.aliasNarrowingSnapshotIsCurrent(symbol)) {
+          expression.narrowingTrueNames = symbol.narrowingTrueNames ?? []
+          expression.narrowingFalseNames = symbol.narrowingFalseNames ?? []
+        } else {
+          expression.narrowingTrueNames = []
+          expression.narrowingFalseNames = []
+        }
 
         if (symbol.asyncResultValueType !== null && typeof symbol.asyncResultValueType !== 'undefined') {
           expression.asyncResultValueType = symbol.asyncResultValueType
@@ -2224,6 +2249,7 @@ class Checker {
       if (symbol === null || typeof symbol === 'undefined') {
         expression.valueType = 'unknown'
         expression.nullable = true
+        this.recordUnknownAliasCall()
 
         return expression.valueType
       }
@@ -2288,11 +2314,15 @@ class Checker {
         }
       }
 
+      this.recordUnknownAliasCall()
       return expression.valueType
     }
 
     if (expression.type === 'NewExpression') {
-      return this.checkNewExpression(expression)
+      const valueType = this.checkNewExpression(expression)
+
+      this.recordUnknownAliasCall()
+      return valueType
     }
 
     if (expression.type === 'AwaitExpression') {
@@ -2614,6 +2644,21 @@ class Checker {
   }
 
   checkAssignment(expression: AnyNode): ValueType {
+    const mutationPath = nullableNarrowingKey(expression.target)
+
+    if (mutationPath !== null) {
+      this.recordAliasMutation(mutationPath)
+    } else if (
+      expression.target.object !== null &&
+      typeof expression.target.object !== 'undefined'
+    ) {
+      const objectPath = nullableNarrowingKey(expression.target.object)
+
+      if (objectPath !== null) {
+        this.recordAliasMutation(objectPath)
+      }
+    }
+
     if (expression.target.type === 'MemberExpression') {
       return this.checkMemberAssignment(expression)
     }
@@ -2683,6 +2728,10 @@ class Checker {
 
     this.checkAssignableType(targetType, 'number', expression.argument.loc, false, false)
     const targetPath = nullableNarrowingKey(expression.argument)
+
+    if (targetPath !== null) {
+      this.recordAliasMutation(targetPath)
+    }
 
     if (expression.argument.type === 'Reference') {
       const symbol = this.resolveReference(expression.argument)
@@ -3853,6 +3902,14 @@ class Checker {
   }
 
   checkCallExpression(expression: AnyNode): ValueType {
+    try {
+      return this.checkCallExpressionBody(expression)
+    } finally {
+      this.recordUnknownAliasCall()
+    }
+  }
+
+  checkCallExpressionBody(expression: AnyNode): ValueType {
     const libraryDiagnosticType = this.checkCompilerLibraryCallOperation(expression)
 
     if (libraryDiagnosticType !== null) {
@@ -8185,7 +8242,11 @@ class Checker {
     if (expression.type === 'Reference' && expression.path.length === 1) {
       const symbol = this.scope.resolve(firstPathSegment(expression.path))
 
-      if (symbol !== null && typeof symbol !== 'undefined') {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        this.aliasNarrowingSnapshotIsCurrent(symbol)
+      ) {
         const trueNames = symbol.narrowingTrueNames ?? []
         const falseNames = symbol.narrowingFalseNames ?? []
 
@@ -8424,7 +8485,9 @@ class Checker {
     )
   }
 
-  nullableAliasNarrowingIsStable(narrowing: NullableConditionNarrowing): boolean {
+  nullableAliasNarrowingSnapshot(
+    narrowing: NullableConditionNarrowing
+  ): CheckerAliasNarrowingSnapshot | null {
     const names: string[] = []
 
     for (let index = 0; index < narrowing.trueNames.length; index = index + 1) {
@@ -8436,24 +8499,128 @@ class Checker {
     }
 
     if (names.length === 0) {
-      return false
+      return null
     }
+
+    const roots: string[] = []
+    const versions: number[] = []
 
     for (let index = 0; index < names.length; index = index + 1) {
       const name = names[index]
+      const root = narrowingPathRoot(name)
+      const symbol = this.scope.resolve(root)
 
-      if (name.includes('.')) {
+      if (
+        name.includes('[') ||
+        symbol === null ||
+        typeof symbol === 'undefined' ||
+        symbol.mutable === true
+      ) {
+        return null
+      }
+
+      if (name.includes('.') && !this.narrowingMemberPathIsReadonly(name, symbol)) {
+        return null
+      }
+
+      if (!roots.includes(root)) {
+        roots.push(root)
+        versions.push(this.aliasMutationVersions.get(root) ?? 0)
+      }
+    }
+
+    return {
+      callVersion: this.aliasCallVersion,
+      roots,
+      versions
+    }
+  }
+
+  narrowingMemberPathIsReadonly(path: string, rootSymbol: SymbolInfo): boolean {
+    const parts = path.split('.')
+    let shape = rootSymbol.shape ?? null
+
+    if (parts.length < 2 || shape === null) {
+      return false
+    }
+
+    for (let index = 1; index < parts.length; index = index + 1) {
+      const field = this.findShapeField(shape, parts[index])
+
+      if (
+        field === null ||
+        typeof field === 'undefined' ||
+        (field.readonly !== true && field.readonlyField !== true)
+      ) {
         return false
       }
 
-      const symbol = this.scope.resolve(name)
+      if (index + 1 < parts.length) {
+        const fieldType = this.resolveFieldDeclaredType(field)
+        shape = resolvedObjectShapeMetadata(field.shape, fieldType.shape)
 
-      if (symbol === null || typeof symbol === 'undefined' || symbol.mutable === true) {
+        if (shape === null) {
+          return false
+        }
+      }
+    }
+
+    return true
+  }
+
+  aliasNarrowingSnapshotIsCurrent(symbol: SymbolInfo): boolean {
+    const trueNames = symbol.narrowingTrueNames ?? []
+    const falseNames = symbol.narrowingFalseNames ?? []
+
+    if (trueNames.length === 0 && falseNames.length === 0) {
+      return true
+    }
+
+    const roots = symbol.narrowingDependencyRoots
+    const versions = symbol.narrowingDependencyVersions
+
+    if (
+      roots === null ||
+      typeof roots === 'undefined' ||
+      versions === null ||
+      typeof versions === 'undefined'
+    ) {
+      return true
+    }
+
+    const callVersion = symbol.narrowingCallVersion
+
+    if (
+      typeof callVersion !== 'number' ||
+      callVersion !== this.aliasCallVersion ||
+      roots.length !== versions.length
+    ) {
+      return false
+    }
+
+    for (let index = 0; index < roots.length; index = index + 1) {
+      const expectedVersion = versions[index]
+
+      if (
+        typeof expectedVersion !== 'number' ||
+        (this.aliasMutationVersions.get(roots[index]) ?? 0) !== expectedVersion
+      ) {
         return false
       }
     }
 
     return true
+  }
+
+  recordAliasMutation(path: string): void {
+    const root = narrowingPathRoot(path)
+    const previous = this.aliasMutationVersions.get(root) ?? 0
+
+    this.aliasMutationVersions.set(root, previous + 1)
+  }
+
+  recordUnknownAliasCall(): void {
+    this.aliasCallVersion = this.aliasCallVersion + 1
   }
 
   resolveTypeofNarrowing(expression: AnyNode): NullableConditionNarrowing | null {
