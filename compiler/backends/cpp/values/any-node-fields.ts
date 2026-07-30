@@ -154,4 +154,11 @@ export const compilerAnyNodeObjectFields: readonly string[] = [
   'update'
 ]
 
-export const compilerAnyNodeUnknownFields: readonly string[] = ['body', 'consequent', 'raw', 'source', 'value']
+export const compilerAnyNodeUnknownFields: readonly string[] = [
+  'body',
+  'consequent',
+  'literalValue',
+  'raw',
+  'source',
+  'value'
+]

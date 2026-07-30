@@ -66,6 +66,8 @@ type FieldTypeAnnotation = {
   valueType: string
 }
 
+type ScalarTypeLiteral = string | number | boolean
+
 type TypeAnnotationOptions = {
   stopAtLineBreak?: boolean
   stopAtStatementBoundary?: boolean
@@ -116,6 +118,32 @@ function fieldTypeAnnotation(valueType: string): FieldTypeAnnotation {
     ownership: 'strong',
     valueType
   }
+}
+
+function scalarTypeLiteral(tokens: Token[], start: number, end: number): ScalarTypeLiteral | null {
+  if (end !== start + 1) {
+    return null
+  }
+
+  const token = tokens[start]
+
+  if (token.type === 'string') {
+    return token.value
+  }
+
+  if (token.type === 'number') {
+    return Number(token.value)
+  }
+
+  if (token.value === 'true') {
+    return true
+  }
+
+  if (token.value === 'false') {
+    return false
+  }
+
+  return null
 }
 
 function stringArrayOrEmpty(values: string[] | null): string[] {
@@ -665,12 +693,25 @@ class Parser {
         continue
       }
 
+      const typeStart = this.position
       const parsedValueType = this.parseTypeAnnotation([',', ';', '}'], {
         stopAtLineBreak: true
       })
       const valueType = fieldTypeAnnotation(parsedValueType)
+      const field = createObjectTypeField(
+        name,
+        modifiers.readOnly,
+        optional,
+        valueType.valueType,
+        valueType.ownership
+      )
+      const literalValue = scalarTypeLiteral(this.tokens, typeStart, this.position)
 
-      fields.push(createObjectTypeField(name, modifiers.readOnly, optional, valueType.valueType, valueType.ownership))
+      if (literalValue !== null) {
+        field.literalValue = literalValue
+      }
+
+      fields.push(field)
 
       this.matchValue(',')
       this.matchValue(';')

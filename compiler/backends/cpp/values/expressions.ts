@@ -30,7 +30,10 @@ import {
   emitRuntimeNullableValueCheck,
   emitRuntimeValueCheck
 } from '../runtime-values.ts'
-import { runtimeTypeAlternativeValidExpressions } from '../runtime-type-alternatives.ts'
+import {
+  runtimeTypeAlternativeValidExpressions,
+  runtimeTypeAlternativesAreNullable
+} from '../runtime-type-alternatives.ts'
 import {
   cUnsupportedExpressionCode,
   emitCOperator,
@@ -5112,7 +5115,7 @@ export function emitCValueExpression(
     if (nativeValidExpression !== null) {
       const valid = nativeValidExpression.split('$value').join(temp)
       const mismatch =
-        callExpressionReturnsNullableRuntimeValue(expression, valueType, context)
+        callExpressionReturnsNullableRuntimeValue(expression, context)
           ? `${temp}.tag != INOX_TAG_UNDEFINED && ${temp}.tag != INOX_TAG_NULL && !(${valid})`
           : `!(${valid})`
 
@@ -5126,13 +5129,16 @@ export function emitCValueExpression(
 
       if (validExpressions !== null && validExpressions.length > 0) {
         const valid = validExpressions.join(' || ')
-        const mismatch = callExpressionReturnsNullableRuntimeValue(expression, valueType, context)
+        const nullable =
+          callExpressionReturnsNullableRuntimeValue(expression, context) ||
+          runtimeTypeAlternativesAreNullable(returnRuntimeTypeAlternatives)
+        const mismatch = nullable
           ? `${temp}.tag != INOX_TAG_UNDEFINED && ${temp}.tag != INOX_TAG_NULL && !(${valid})`
           : `!(${valid})`
 
         lines.push(emitRuntimeTypeCheck(mismatch, context))
       }
-    } else if (callExpressionReturnsNullableRuntimeValue(expression, valueType, context)) {
+    } else if (callExpressionReturnsNullableRuntimeValue(expression, context)) {
       appendLines(lines, emitRuntimeNullableValueCheck(temp, tag, context))
     } else {
       lines.push(emitRuntimeValueCheck(temp, tag, context))
@@ -5152,6 +5158,10 @@ function callExpressionReturnRuntimeTypeAlternatives(
   expression: CValueNode,
   context: CFunctionContext
 ): CRuntimeTypeAlternative[] | null | undefined {
+  if (Array.isArray(expression.runtimeTypeAlternatives)) {
+    return expression.runtimeTypeAlternatives
+  }
+
   if (expression.callee.type === 'Reference' && expression.callee.path.length === 1) {
     return context.functionReturnRuntimeTypeAlternatives.get(expression.callee.path[0])
   }
@@ -5162,13 +5172,8 @@ function callExpressionReturnRuntimeTypeAlternatives(
 
 function callExpressionReturnsNullableRuntimeValue(
   expression: CValueNode,
-  valueType: string,
   context: CFunctionContext
 ): boolean {
-  if (!isRuntimeNullableType(valueType)) {
-    return false
-  }
-
   if (expression.nullable === true) {
     return true
   }

@@ -34,6 +34,22 @@ export function runtimeTypeAlternativeValidExpressions(
   return expressions
 }
 
+export function runtimeTypeAlternativesAreNullable(
+  alternatives: CRuntimeTypeAlternative[] | null | undefined
+): boolean {
+  if (alternatives === null || typeof alternatives === 'undefined') {
+    return false
+  }
+
+  for (let index = 0; index < alternatives.length; index = index + 1) {
+    if (alternatives[index].nullable === true) {
+      return true
+    }
+  }
+
+  return false
+}
+
 function runtimeTypeAlternativeValidExpression(
   alternative: CRuntimeTypeAlternative,
   value: string,

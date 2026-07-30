@@ -1487,6 +1487,7 @@ export function resolveObjectShapeField(
     static: field.static,
     staticLoc: field.staticLoc,
     weakTypeValidated: weakField || field.weakTypeValidated === true,
+    literalValue: field.literalValue ?? null,
     loc: field.loc,
     declaredType,
     typeRef: qualifiedFieldTypeRef(fieldInfo.typeRef, weakField, optionalFieldsAreNullable && field.optional === true),

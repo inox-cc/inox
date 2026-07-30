@@ -28,7 +28,10 @@ import {
   runtimeObjectLikeTagMismatchCondition,
   runtimeObjectLikeValueMismatchCondition
 } from '../runtime-values.ts'
-import { runtimeTypeAlternativeValidExpressions } from '../runtime-type-alternatives.ts'
+import {
+  runtimeTypeAlternativeValidExpressions,
+  runtimeTypeAlternativesAreNullable
+} from '../runtime-type-alternatives.ts'
 import { cUnsupportedExpressionCode, cUnsupportedVariableDeclarationCode, containsAwaitExpression } from '../syntax.ts'
 import type {
   CFunctionParam,
@@ -1224,6 +1227,7 @@ export function emitRuntimeValueVariableDeclaration(
   const nativeCppType = libraryNativeBoundaryCppType(valueType, statement.nullable === true, false, nativeShape)
   const expectedTag = valueType === 'object' && nativeCppType !== null ? null : cRuntimeValueTag(valueType)
   const runtimeTypeAlternatives = statement.runtimeTypeAlternatives ?? expression.runtimeTypeAlternatives
+  const runtimeAlternativesNullable = runtimeTypeAlternativesAreNullable(runtimeTypeAlternatives)
   let nativeValidExpression = explicitlyOpaque
     ? null
     : compilerLibraryNativeRuntimeValueValidExpressionForTypeRef(context.libraries, statement.typeRef)
@@ -1242,7 +1246,7 @@ export function emitRuntimeValueVariableDeclaration(
     }
   }
 
-  const emittedExpression: StatementNode = explicitlyOpaque
+  let emittedExpression: StatementNode = explicitlyOpaque
     ? {
         ...expression,
         declaredType: 'unknown',
@@ -1251,7 +1255,23 @@ export function emitRuntimeValueVariableDeclaration(
         typeRef: statement.typeRef,
         valueType: 'unknown'
       }
-    : expression
+    : (statement.nullable === true || runtimeAlternativesNullable) && expression.nullable !== true
+      ? {
+          ...expression,
+          nullable: true
+        }
+      : expression
+
+  if (
+    runtimeTypeAlternatives !== null &&
+    typeof runtimeTypeAlternatives !== 'undefined' &&
+    expression.runtimeTypeAlternatives !== runtimeTypeAlternatives
+  ) {
+    emittedExpression = {
+      ...emittedExpression,
+      runtimeTypeAlternatives
+    }
+  }
   let value = statementDeps(context).emitCValueExpression(emittedExpression, context)
 
   if (nativeCppType !== null && value.cppType !== nativeCppType) {
@@ -1311,8 +1331,9 @@ export function emitRuntimeValueVariableDeclaration(
     if (validExpressions !== null && validExpressions.length > 0) {
       const name = emitCIdentifier(statement.name)
       const valid = validExpressions.join(' || ')
+      const nullable = statement.nullable === true || runtimeAlternativesNullable
       const mismatch =
-        statement.nullable === true
+        nullable
           ? `${name}.tag != INOX_TAG_UNDEFINED && ${name}.tag != INOX_TAG_NULL && !(${valid})`
           : `!(${valid})`
 

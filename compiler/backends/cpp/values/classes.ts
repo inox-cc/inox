@@ -28,7 +28,10 @@ import {
 } from '../context.ts'
 import { cStringLiteral, emitCIdentifier, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
-import { runtimeTypeAlternativeValidExpressions } from '../runtime-type-alternatives.ts'
+import {
+  runtimeTypeAlternativeValidExpressions,
+  runtimeTypeAlternativesAreNullable
+} from '../runtime-type-alternatives.ts'
 import type {
   CClassInfo,
   CClassMethod,
@@ -3299,8 +3302,10 @@ function emitKnownPreparedClassMethodCallExpression(
 
     if (alternativeValidExpressions !== null && alternativeValidExpressions.length > 0) {
       const valid = alternativeValidExpressions.join(' || ')
+      const nullable =
+        method.returnNullable === true || runtimeTypeAlternativesAreNullable(method.returnRuntimeTypeAlternatives)
       const mismatch =
-        method.returnNullable === true
+        nullable
           ? `${value}.tag != INOX_TAG_UNDEFINED && ${value}.tag != INOX_TAG_NULL && !(${valid})`
           : `!(${valid})`
 

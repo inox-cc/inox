@@ -747,7 +747,7 @@ function lowerVariableDeclaration(statement: LowerNode, context: LowerContext): 
     statement.declaredType,
     declared
   )
-  const nullable = variableDeclarationNullable(declared, statement.declaredType, init)
+  const nullable = variableDeclarationNullable(declared, statement, init)
   const shape = variableDeclarationShape(declared, statement, init)
   const functionType = variableDeclarationFunctionType(declared, statement, init)
   const asyncResultValueType = variableDeclarationAsyncResultValueType(declared, statement, init)
@@ -870,11 +870,15 @@ function variableDeclarationRuntimeTypeAlternatives(
 
 function variableDeclarationNullable(
   declared: LowerResolvedType,
-  declaredType: string | null | undefined,
+  statement: LowerNode,
   init: LowerNode | null
 ): boolean {
-  if (nullableString(declaredType) !== null) {
+  if (nullableString(statement.declaredType) !== null) {
     return declared.nullable
+  }
+
+  if (statement.nullable === true) {
+    return true
   }
 
   if (init !== null && typeof init !== 'undefined' && init.nullable === true) {

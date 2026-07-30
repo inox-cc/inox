@@ -51,7 +51,10 @@ import {
   utf8ByteLength
 } from './identifiers.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from './runtime-values.ts'
-import { runtimeTypeAlternativeValidExpressions } from './runtime-type-alternatives.ts'
+import {
+  runtimeTypeAlternativeValidExpressions,
+  runtimeTypeAlternativesAreNullable
+} from './runtime-type-alternatives.ts'
 import type {
   CClassInfo,
   CFunctionParam,
@@ -1410,8 +1413,12 @@ function emitRuntimeParamPreludeForParam(
   if (alternativeValidExpressions !== null) {
     if (alternativeValidExpressions.length > 0) {
       const valid = alternativeValidExpressions.join(' || ')
+      const nullable =
+        param.nullable === true ||
+        param.optional === true ||
+        runtimeTypeAlternativesAreNullable(param.runtimeTypeAlternatives)
       const mismatch =
-        param.nullable === true || param.optional === true
+        nullable
           ? `${alternativeRuntimeValueName}.tag != INOX_TAG_NULL && ${alternativeRuntimeValueName}.tag != INOX_TAG_UNDEFINED && !(${valid})`
           : `!(${valid})`
 

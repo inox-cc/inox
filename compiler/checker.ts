@@ -254,13 +254,17 @@ type CheckerNarrowingState = {
 }
 
 type CheckerFlowFact = {
+  declaredType: string | null
   nonNullable: boolean
+  shape: ObjectShapeInfo | null
   typeRef: TypeRef | null
   valueType: ValueType | null
 }
 
 type CheckerValueTypeNarrowing = {
+  declaredType: string | null
   name: string
+  shape: ObjectShapeInfo | null
   typeRef: TypeRef | null
   valueType: ValueType
 }
@@ -273,6 +277,13 @@ type CheckerValueTypeConditionNarrowing = {
 type CheckerObjectUnionAlternative = {
   name: string
   shape: ObjectShapeInfo
+}
+
+type CheckerScalarLiteral = string | number | boolean
+
+type CheckerDiscriminatorTarget = {
+  object: AnyNode
+  property: string
 }
 
 const maxObjectSpreadUnionBranches = 256
@@ -341,6 +352,7 @@ function intersectCheckerValueTypeNarrowings(
       if (
         candidate.name === narrowing.name &&
         candidate.valueType === narrowing.valueType &&
+        candidate.declaredType === narrowing.declaredType &&
         checkerNarrowingTypeRefsEquivalent(candidate.typeRef, narrowing.typeRef)
       ) {
         result.push(narrowing)
@@ -2076,12 +2088,13 @@ class Checker {
         const flowFact = this.flowFacts.get(path[0]) ?? null
         const narrowedTypeRef = flowFact?.typeRef ?? null
         const nullableNarrowed = flowFact?.nonNullable === true
+        const valueTypeNarrowed = flowFact?.valueType !== null && typeof flowFact?.valueType !== 'undefined'
         expression.bindingKind = symbol.kind
         expression.bindingLoc = symbol.loc ?? null
         valueType = flowFact?.valueType ?? symbol.valueType
         expression.nullable = symbol.nullable === true && !nullableNarrowed
         expression.valueType = valueType
-        expression.declaredType = symbol.declaredType ?? null
+        expression.declaredType = valueTypeNarrowed ? (flowFact?.declaredType ?? null) : (symbol.declaredType ?? null)
         expression.typeRef = nullableNarrowed ? nonNullableTypeRef(symbol.typeRef) : (symbol.typeRef ?? null)
         expression.narrowingTrueNames = symbol.narrowingTrueNames ?? []
         expression.narrowingFalseNames = symbol.narrowingFalseNames ?? []
@@ -2123,7 +2136,9 @@ class Checker {
           }
         }
 
-        if (symbol.shape !== null && typeof symbol.shape !== 'undefined') {
+        if (valueTypeNarrowed) {
+          expression.shape = flowFact?.shape ?? null
+        } else if (symbol.shape !== null && typeof symbol.shape !== 'undefined') {
           expression.shape = symbol.shape
         }
 
@@ -2842,9 +2857,9 @@ class Checker {
       if (narrowedValueType !== null) {
         this.checkExpression(expression.object)
         expression.valueType = narrowedValueType
-        expression.declaredType = null
+        expression.declaredType = flowFact?.declaredType ?? null
         expression.nullable = false
-        expression.shape = null
+        expression.shape = flowFact?.shape ?? null
         expression.functionType = null
         expression.functionOverloads = []
         expression.className = null
@@ -5249,7 +5264,9 @@ class Checker {
 
           if (narrowingKey !== null && typeof receiver.valueType === 'string') {
             this.setValueTypeFlowFact({
+              declaredType: receiver.declaredType ?? null,
               name: narrowingKey,
+              shape: receiver.shape ?? null,
               typeRef: receiverTypeRef,
               valueType: receiver.valueType as ValueType
             })
@@ -7020,6 +7037,10 @@ class Checker {
     shape: ObjectShapeInfo,
     declaredType: string | null = null
   ): void {
+    if (this.checkObjectLiteralAgainstDiscriminatedUnion(expression, declaredType)) {
+      return
+    }
+
     if (this.checkObjectLiteralAgainstUnionBranches(expression, shape, declaredType)) {
       return
     }
@@ -7146,6 +7167,81 @@ class Checker {
         this.report('INOX_UNKNOWN_FIELD', `unknown field ${property.key}`, property.loc)
       }
     }
+  }
+
+  checkObjectLiteralAgainstDiscriminatedUnion(expression: AnyNode, declaredType: string | null): boolean {
+    if (declaredType === null) {
+      return false
+    }
+
+    const alternatives = this.resolveDeclaredObjectUnionAlternatives(declaredType, nodeSourceLocation(expression))
+
+    if (alternatives.length < 2) {
+      return false
+    }
+
+    const properties: CheckerObjectPropertyNode[] = expression.properties
+    let discriminatorProperty: CheckerObjectPropertyNode | null = null
+    let discriminatorLiteral: CheckerScalarLiteral | null = null
+
+    for (const property of properties) {
+      if (property.spread === true) {
+        continue
+      }
+
+      const literal = this.checkerScalarLiteral(property.value)
+
+      if (literal === null) {
+        continue
+      }
+
+      let constrainedAlternatives = 0
+
+      for (const alternative of alternatives) {
+        const field = this.findShapeField(alternative.shape, property.key)
+        const fieldLiteral = this.checkerFieldScalarLiteral(field)
+
+        if (fieldLiteral !== null) {
+          constrainedAlternatives = constrainedAlternatives + 1
+        }
+      }
+
+      if (constrainedAlternatives === alternatives.length) {
+        discriminatorProperty = property
+        discriminatorLiteral = literal
+        break
+      }
+    }
+
+    if (discriminatorProperty === null || discriminatorLiteral === null) {
+      return false
+    }
+
+    const matching: CheckerObjectUnionAlternative[] = []
+
+    for (const alternative of alternatives) {
+      const field = this.findShapeField(alternative.shape, discriminatorProperty.key)
+
+      if (this.checkerScalarLiteralsEqual(this.checkerFieldScalarLiteral(field), discriminatorLiteral)) {
+        matching.push(alternative)
+      }
+    }
+
+    if (matching.length === 0) {
+      this.report(
+        'INOX_TYPE_MISMATCH',
+        `object discriminator ${discriminatorProperty.key} does not match ${declaredType}`,
+        discriminatorProperty.loc
+      )
+      return true
+    }
+
+    if (matching.length !== 1) {
+      return false
+    }
+
+    this.checkObjectLiteralAgainstShape(expression, matching[0].shape, matching[0].name)
+    return true
   }
 
   checkObjectLiteralAgainstUnionBranches(
@@ -8429,6 +8525,14 @@ class Checker {
     }
 
     const receiverNarrowing = this.resolveCompilerLibraryReceiverConditionNarrowing(expression)
+    const objectUnionNarrowing = this.resolveObjectUnionConditionNarrowing(expression)
+
+    if (objectUnionNarrowing.trueTypes.length > 0 || objectUnionNarrowing.falseTypes.length > 0) {
+      return {
+        trueTypes: mergeCheckerValueTypeNarrowings(receiverNarrowing.trueTypes, objectUnionNarrowing.trueTypes),
+        falseTypes: mergeCheckerValueTypeNarrowings(receiverNarrowing.falseTypes, objectUnionNarrowing.falseTypes)
+      }
+    }
 
     if (expression.type === 'CallExpression') {
       const narrowing: LibraryArgumentNarrowingDescriptor | null = expression.libraryArgumentNarrowing ?? null
@@ -8465,10 +8569,22 @@ class Checker {
         const metadata = typeRefCompatibilityMetadata(refinedTrueTypeRef, libraries, expressionLoc)
 
         if (isBuiltinValueType(metadata.valueType)) {
-          trueTypes.push({ name: key, typeRef: refinedTrueTypeRef, valueType: metadata.valueType })
+          trueTypes.push({
+            declaredType: null,
+            name: key,
+            shape: metadata.shape,
+            typeRef: refinedTrueTypeRef,
+            valueType: metadata.valueType
+          })
         }
       } else if (typeof narrowing.trueValueType === 'string' && isBuiltinValueType(narrowing.trueValueType)) {
-        trueTypes.push({ name: key, typeRef: null, valueType: narrowing.trueValueType })
+        trueTypes.push({
+          declaredType: null,
+          name: key,
+          shape: null,
+          typeRef: null,
+          valueType: narrowing.trueValueType
+        })
       }
 
       if (falseTypeRef !== null) {
@@ -8480,10 +8596,22 @@ class Checker {
         const metadata = typeRefCompatibilityMetadata(refinedFalseTypeRef, libraries, expressionLoc)
 
         if (isBuiltinValueType(metadata.valueType)) {
-          falseTypes.push({ name: key, typeRef: refinedFalseTypeRef, valueType: metadata.valueType })
+          falseTypes.push({
+            declaredType: null,
+            name: key,
+            shape: metadata.shape,
+            typeRef: refinedFalseTypeRef,
+            valueType: metadata.valueType
+          })
         }
       } else if (typeof narrowing.falseValueType === 'string' && isBuiltinValueType(narrowing.falseValueType)) {
-        falseTypes.push({ name: key, typeRef: null, valueType: narrowing.falseValueType })
+        falseTypes.push({
+          declaredType: null,
+          name: key,
+          shape: null,
+          typeRef: null,
+          valueType: narrowing.falseValueType
+        })
       }
 
       return {
@@ -8574,7 +8702,9 @@ class Checker {
     }
 
     const narrowing = {
+      declaredType: null,
       name: narrowingName,
+      shape: null,
       typeRef: null,
       valueType: narrowedType
     }
@@ -8589,6 +8719,186 @@ class Checker {
     return {
       trueTypes: evaluatedTypes,
       falseTypes: mergeCheckerValueTypeNarrowings(evaluatedTypes, [narrowing])
+    }
+  }
+
+  resolveObjectUnionConditionNarrowing(expression: AnyNode): CheckerValueTypeConditionNarrowing {
+    const empty: CheckerValueTypeConditionNarrowing = {
+      trueTypes: [],
+      falseTypes: []
+    }
+    let discriminator: AnyNode | null = null
+    let trueLiteral: CheckerScalarLiteral | null = null
+
+    if (
+      (expression.type === 'MemberExpression' || expression.type === 'IndexExpression') &&
+      expression.valueType === 'boolean'
+    ) {
+      discriminator = expression
+      trueLiteral = true
+    } else if (
+      expression.type === 'BinaryExpression' &&
+      (expression.operator === '===' || expression.operator === '!==')
+    ) {
+      const leftLiteral = this.checkerScalarLiteral(expression.left)
+      const rightLiteral = this.checkerScalarLiteral(expression.right)
+
+      if (leftLiteral !== null) {
+        discriminator = expression.right
+        trueLiteral = leftLiteral
+      } else if (rightLiteral !== null) {
+        discriminator = expression.left
+        trueLiteral = rightLiteral
+      }
+    }
+
+    if (discriminator === null || trueLiteral === null) {
+      return empty
+    }
+
+    const target = this.discriminatorTarget(discriminator)
+
+    if (target === null) {
+      return empty
+    }
+
+    const path = nullableNarrowingKey(target.object)
+    const declaredType: string | null = target.object.declaredType ?? null
+
+    if (path === null || declaredType === null) {
+      return empty
+    }
+
+    const alternatives = this.resolveDeclaredObjectUnionAlternatives(declaredType, nodeSourceLocation(expression))
+
+    if (alternatives.length < 2) {
+      return empty
+    }
+
+    const matching: CheckerObjectUnionAlternative[] = []
+    const remaining: CheckerObjectUnionAlternative[] = []
+
+    for (const alternative of alternatives) {
+      const field = this.findShapeField(alternative.shape, target.property)
+      const literalValue = this.checkerFieldScalarLiteral(field)
+
+      if (literalValue === null) {
+        return empty
+      }
+
+      if (this.checkerScalarLiteralsEqual(literalValue, trueLiteral)) {
+        matching.push(alternative)
+      } else {
+        remaining.push(alternative)
+      }
+    }
+
+    if (matching.length === 0 || remaining.length === 0) {
+      return empty
+    }
+
+    let trueAlternatives = matching
+    let falseAlternatives = remaining
+
+    if (expression.type === 'BinaryExpression' && expression.operator === '!==') {
+      trueAlternatives = remaining
+      falseAlternatives = matching
+    }
+
+    return {
+      trueTypes: [this.objectUnionAlternativesNarrowing(path, trueAlternatives, nodeSourceLocation(expression))],
+      falseTypes: [this.objectUnionAlternativesNarrowing(path, falseAlternatives, nodeSourceLocation(expression))]
+    }
+  }
+
+  checkerScalarLiteral(expression: AnyNode): CheckerScalarLiteral | null {
+    if (expression.type === 'StringLiteral') {
+      return expression.value
+    }
+
+    if (expression.type === 'NumberLiteral' && typeof expression.value === 'string') {
+      return Number(expression.value)
+    }
+
+    if (expression.type === 'BooleanLiteral') {
+      return expression.value === true
+    }
+
+    return null
+  }
+
+  checkerFieldScalarLiteral(field: AnyNode | null): CheckerScalarLiteral | null {
+    if (field === null) {
+      return null
+    }
+
+    const value = field.literalValue
+
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return value
+    }
+
+    return null
+  }
+
+  checkerScalarLiteralsEqual(
+    left: CheckerScalarLiteral | null,
+    right: CheckerScalarLiteral | null
+  ): boolean {
+    if (typeof left === 'string' && typeof right === 'string') {
+      return left === right
+    }
+
+    if (typeof left === 'number' && typeof right === 'number') {
+      return left === right
+    }
+
+    if (typeof left === 'boolean' && typeof right === 'boolean') {
+      return left === right
+    }
+
+    return false
+  }
+
+  discriminatorTarget(expression: AnyNode): CheckerDiscriminatorTarget | null {
+    if (expression.type === 'MemberExpression') {
+      return {
+        object: expression.object,
+        property: expression.property
+      }
+    }
+
+    if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+      return {
+        object: expression.object,
+        property: expression.index.value
+      }
+    }
+
+    return null
+  }
+
+  objectUnionAlternativesNarrowing(
+    path: string,
+    alternatives: CheckerObjectUnionAlternative[],
+    loc: SourceLocation
+  ): CheckerValueTypeNarrowing {
+    const names: string[] = []
+
+    for (const alternative of alternatives) {
+      names.push(alternative.name)
+    }
+
+    const declaredType = names.length === 1 ? names[0] : `union<${names.join(',')}>`
+    const resolved =
+      names.length === 1 ? this.resolveDeclaredType(names[0], loc) : this.resolveUnionDeclaredType(names, loc)
+
+    return {
+      declaredType,
+      name: path,
+      shape: resolved.shape,
+      typeRef: resolved.typeRef,
+      valueType: resolved.valueType
     }
   }
 
@@ -8662,7 +8972,9 @@ class Checker {
     }
 
     const narrowing: CheckerValueTypeNarrowing = {
+      declaredType: receiver?.declaredType ?? null,
       name,
+      shape: receiver?.shape ?? null,
       typeRef,
       valueType: valueType as ValueType
     }
@@ -8742,6 +9054,8 @@ class Checker {
     if (fact.valueType !== null) {
       valueType = fact.valueType
       expression.valueType = valueType
+      expression.declaredType = fact.declaredType
+      expression.shape = fact.shape
     }
 
     if (fact.typeRef !== null) {
@@ -8777,7 +9091,9 @@ class Checker {
     const previous = this.flowFacts.get(name) ?? null
 
     this.flowFacts.set(name, {
+      declaredType: previous?.declaredType ?? null,
       nonNullable: true,
+      shape: previous?.shape ?? null,
       typeRef: previous?.typeRef ?? null,
       valueType: previous?.valueType ?? null
     })
@@ -8787,7 +9103,9 @@ class Checker {
     const previous = this.flowFacts.get(narrowing.name) ?? null
 
     this.flowFacts.set(narrowing.name, {
+      declaredType: narrowing.declaredType,
       nonNullable: previous?.nonNullable === true,
+      shape: narrowing.shape,
       typeRef: narrowing.typeRef,
       valueType: narrowing.valueType
     })
