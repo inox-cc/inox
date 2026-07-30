@@ -195,7 +195,7 @@ export type StatementLoweringDependencies = {
     dependencies: ObjectVariableDeclarationDependencies
   ): string[]
   emitObjectFunctionCompanionReference(rootName: string, path: string[], context: CFunctionContext): string | null
-  emitOptionalRuntimeCallbackCallExpression(expression: StatementNode, context: CFunctionContext): string[]
+  emitOptionalCallbackCallExpression(expression: StatementNode, context: CFunctionContext): string[]
   objectVariableDeclarationDependencies: ObjectVariableDeclarationDependencies
   emitPreparedAsyncFunctionAsyncResultCallExpression(
     expression: StatementNode,
@@ -3955,7 +3955,7 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
   }
 
   if (expression.type === 'OptionalCallExpression') {
-    return deps.emitOptionalRuntimeCallbackCallExpression(expression, context)
+    return deps.emitOptionalCallbackCallExpression(expression, context)
   }
 
   return []

@@ -4707,7 +4707,7 @@ export type CValueExpressionDependencies = {
   emitCOptionalMemberValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCStringConcatValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCTemplateLiteralValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitOptionalRuntimeCallbackCallValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
+  emitOptionalCallbackCallValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedClassMethodCallExpression(
     expression: CValueNode,
@@ -4794,7 +4794,7 @@ export function emitCValueExpression(
   }
 
   if (expression.type === 'OptionalCallExpression' && deps.isNullableRuntimeExpression(expression, context)) {
-    return deps.emitOptionalRuntimeCallbackCallValueExpression(expression, context)
+    return deps.emitOptionalCallbackCallValueExpression(expression, context)
   }
 
   if (deps.isNullableScalarRuntimeExpression(expression, context)) {

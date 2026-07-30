@@ -433,7 +433,7 @@ const statementLoweringDependencies = {
   emitNullableRuntimeValueAssignment,
   emitObjectFunctionCompanionReference,
   emitObjectVariableDeclaration,
-  emitOptionalRuntimeCallbackCallExpression,
+  emitOptionalCallbackCallExpression,
   objectVariableDeclarationDependencies,
   emitPreparedAsyncFunctionAsyncResultCallExpression,
   emitPreparedCallExpression,
@@ -997,7 +997,7 @@ const cValueExpressionDependencies = {
   emitCStringConcatValueExpression,
   emitCTemplateLiteralValueExpression,
   emitCValueExpression,
-  emitOptionalRuntimeCallbackCallValueExpression,
+  emitOptionalCallbackCallValueExpression,
   emitPreparedCallExpression,
   emitPreparedClassMethodCallExpression,
   emitPreparedKnownObjectIndexValueExpression,
@@ -4503,7 +4503,7 @@ function emitPreparedNullableScalarRuntimeValueExpression(
   }
 
   if (expression !== null && typeof expression !== 'undefined' && expression.type === 'OptionalCallExpression') {
-    return emitOptionalRuntimeCallbackCallValueExpression(expression, context)
+    return emitOptionalCallbackCallValueExpression(expression, context)
   }
 
   const fieldValue = emitPreparedNullableScalarFieldValueExpression(expression, context)
@@ -8196,8 +8196,7 @@ function emitRuntimeCallbackCall(
   for (const arg of expression.args) {
     const value = emitCValueExpression(arg, context)
 
-    pushAll(lines, value.lines)
-    args.push(value.expression)
+    appendRuntimeCallbackArgument(lines, args, value, context)
   }
 
   const out = nextCName(context, 'inox_callback_out')
@@ -8218,7 +8217,23 @@ function emitRuntimeCallbackCall(
   }
 }
 
-function emitOptionalRuntimeCallbackCallExpression(expression: AnyNode, context: CFunctionContext): string[] {
+function emitOptionalCallbackCallExpression(expression: AnyNode, context: CFunctionContext): string[] {
+  const plainCallee = resolveOptionalPlainObjectFunctionCallee(expression.callee, context)
+
+  if (plainCallee !== null) {
+    const call = emitPreparedCallExpression(expression, context)
+    const lines: string[] = [`if (${plainCallee.name} != nullptr) {`]
+
+    pushIndented(lines, call.lines, '  ')
+
+    if (call.expression !== '') {
+      lines.push(`  ${call.expression};`)
+    }
+
+    lines.push('}')
+    return lines
+  }
+
   const functionType = resolveRuntimeCallbackCalleeType(expression.callee, context)
 
   if (functionType === null || typeof functionType === 'undefined') {
@@ -8238,14 +8253,13 @@ function emitOptionalRuntimeCallbackCallExpression(expression: AnyNode, context:
   const lines: string[] = []
   const args: string[] = []
 
-  lines.push(`if (${callee}.tag != INOX_TAG_NULL) {`)
+  lines.push(`if (${callee}.tag != INOX_TAG_NULL && ${callee}.tag != INOX_TAG_UNDEFINED) {`)
   lines.push(`  ${emitRuntimeTypeCheck(calleeTypeCheck, context)}`)
 
   for (const arg of expression.args) {
     const value = emitCValueExpression(arg, context)
 
-    pushIndented(lines, value.lines, '  ')
-    args.push(value.expression)
+    appendRuntimeCallbackArgument(lines, args, value, context, '  ')
   }
 
   const out = nextCName(context, 'inox_callback_out')
@@ -8267,10 +8281,16 @@ function emitOptionalRuntimeCallbackCallExpression(expression: AnyNode, context:
   return lines
 }
 
-function emitOptionalRuntimeCallbackCallValueExpression(
+function emitOptionalCallbackCallValueExpression(
   expression: AnyNode,
   context: CFunctionContext
 ): PreparedExpression {
+  const plainCallee = resolveOptionalPlainObjectFunctionCallee(expression.callee, context)
+
+  if (plainCallee !== null) {
+    return emitOptionalPlainObjectFunctionCallValueExpression(expression, plainCallee, context)
+  }
+
   const functionType = resolveRuntimeCallbackCalleeType(expression.callee, context)
   const resultType = inferExpressionType(expression, context)
   const expectedTag = cRuntimeValueTag(resultType)
@@ -8304,15 +8324,14 @@ function emitOptionalRuntimeCallbackCallValueExpression(
   const args: string[] = []
 
   registerOwnedValue(context, out)
-  lines.push(`${out} = inox_null_value();`)
-  lines.push(`if (${callee}.tag != INOX_TAG_NULL) {`)
+  lines.push(`${out} = inox_undefined_value();`)
+  lines.push(`if (${callee}.tag != INOX_TAG_NULL && ${callee}.tag != INOX_TAG_UNDEFINED) {`)
   lines.push(`  ${emitRuntimeTypeCheck(calleeTypeCheck, context)}`)
 
   for (const arg of expression.args) {
     const value = emitCValueExpression(arg, context)
 
-    pushIndented(lines, value.lines, '  ')
-    args.push(value.expression)
+    appendRuntimeCallbackArgument(lines, args, value, context, '  ')
   }
 
   if (args.length === 0) {
@@ -8327,6 +8346,107 @@ function emitOptionalRuntimeCallbackCallValueExpression(
   }
 
   lines.push(`  ${emitRuntimeValueCheck(out, expectedTag, context)}`)
+  lines.push('}')
+
+  return {
+    lines,
+    expression: out
+  }
+}
+
+function appendRuntimeCallbackArgument(
+  lines: string[],
+  args: string[],
+  value: PreparedExpression,
+  context: CFunctionContext,
+  indent = ''
+): void {
+  pushIndented(lines, value.lines, indent)
+
+  if (value.cppType === null || typeof value.cppType === 'undefined') {
+    args.push(value.expression)
+    return
+  }
+
+  const name = nextCName(context, 'inox_callback_arg')
+
+  lines.push(`${indent}auto ${name} = ${value.expression};`)
+  args.push(name)
+}
+
+type OptionalPlainObjectFunctionCallee = {
+  name: string
+}
+
+function resolveOptionalPlainObjectFunctionCallee(
+  callee: AnyNode,
+  context: CFunctionContext
+): OptionalPlainObjectFunctionCallee | null {
+  const objectField = objectFunctionFieldReference(callee, context)
+
+  if (
+    objectField === null ||
+    context.classInstanceTypes.has(objectField.objectName) ||
+    objectField.field.functionType === null ||
+    typeof objectField.field.functionType === 'undefined' ||
+    !isPlainObjectFunctionField(
+      objectField.field,
+      objectFunctionFieldSeenTypes(objectField.objectName, context)
+    )
+  ) {
+    return null
+  }
+
+  return {
+    name: objectField.name
+  }
+}
+
+function emitOptionalPlainObjectFunctionCallValueExpression(
+  expression: AnyNode,
+  callee: OptionalPlainObjectFunctionCallee,
+  context: CFunctionContext
+): PreparedExpression {
+  const valueType = inferExpressionType(expression, context)
+  const expectedTag = cRuntimeValueTag(valueType)
+  const call = emitPreparedCallExpression(expression, context)
+
+  if (call.expression === '' || (expectedTag === null && valueType !== 'number' && valueType !== 'boolean')) {
+    pushDiagnostic(
+      context,
+      diagnostic(
+        'INOX_C_OPTIONAL_CHAINING',
+        'this optional function result is not supported by the current C++ backend slice',
+        expression.loc
+      )
+    )
+
+    return {
+      lines: call.lines,
+      expression: 'inox_undefined_value()'
+    }
+  }
+
+  const out = nextCName(context, 'inox_optional_call')
+  const lines: string[] = []
+  let result = call.expression
+
+  if (valueType === 'number') {
+    result = `inox_number_value(${result})`
+  } else if (valueType === 'boolean') {
+    result = `inox_bool_value((${result}) != 0)`
+  }
+
+  registerOwnedValue(context, out)
+  lines.push(`${out} = inox_undefined_value();`)
+  lines.push(`if (${callee.name} != nullptr) {`)
+  pushIndented(lines, call.lines, '  ')
+  lines.push(`  ${out} = ${result};`)
+
+  if (expectedTag !== null) {
+    lines.push(`  ${emitRuntimeValueCheck(out, expectedTag, context)}`)
+  }
+
   lines.push('}')
 
   return {

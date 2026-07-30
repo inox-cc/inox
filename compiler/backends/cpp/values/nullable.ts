@@ -690,8 +690,14 @@ export function isNullableRuntimeExpression(expression: AnyNode, context: Nullab
   if (expression.type === 'OptionalCallExpression') {
     const functionType = nullableDeps(context).resolveRuntimeCallbackCalleeType(expression.callee, context)
 
+    if (functionType !== null && typeof functionType !== 'undefined') {
+      return isRuntimeNullableType(functionType.returnType)
+    }
+
     return (
-      functionType !== null && typeof functionType !== 'undefined' && isRuntimeNullableType(functionType.returnType)
+      (expression.callee.type === 'MemberExpression' || expression.callee.type === 'IndexExpression') &&
+      expression.nullable === true &&
+      isRuntimeNullableType(nullableDeps(context).inferExpressionType(expression, context))
     )
   }
 
