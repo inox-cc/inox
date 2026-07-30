@@ -1,6 +1,6 @@
 import { commonValueType } from './assignability.ts'
 import { compilerAnyNodeSyntaxChildFields } from '../any-node-fields.ts'
-import { memberExpressionPath } from '../member-paths.ts'
+import { expressionNarrowingPath } from '../member-paths.ts'
 import type { TypeRef } from '../extensions/types.ts'
 import type { AnyNode, ObjectShapeInfo, ProgramNode, SourceLocation, TypeAliasInfo, ValueType } from '../types.ts'
 
@@ -408,13 +408,7 @@ export function firstPathSegment(path: readonly string[]): string {
 }
 
 export function nullableNarrowingKey(expression: AnyNode | null | undefined): string | null {
-  const path = memberExpressionPath(expression)
-
-  if (path.length === 0) {
-    return null
-  }
-
-  return joinStrings(path, '.')
+  return expressionNarrowingPath(expression)
 }
 
 export function isOptionalChainProtectedExpression(expression: AnyNode | null | undefined): boolean {
@@ -965,18 +959,4 @@ function typeRefListsEqual(left: TypeRef[], right: TypeRef[]): boolean {
   }
 
   return true
-}
-
-function joinStrings(values: readonly string[], separator: string): string {
-  let result = ''
-
-  for (let index = 0; index < values.length; index = index + 1) {
-    if (index > 0) {
-      result = result + separator
-    }
-
-    result = result + values[index]
-  }
-
-  return result
 }

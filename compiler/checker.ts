@@ -131,7 +131,11 @@ import {
   uniqueNames
 } from './checker/helpers.ts'
 import { ownershipCycleDiagnostics } from './checker/ownership.ts'
-import { memberExpressionPath } from './member-paths.ts'
+import {
+  memberExpressionPath,
+  narrowingPathIsSameOrDescendant,
+  narrowingPathRoot
+} from './member-paths.ts'
 import {
   isBuiltinValueType,
   isNullableTypeName,
@@ -155,10 +159,8 @@ import {
   anyNodeObjectShape,
   checkerNodeAt,
   cloneObjectShapeField,
-  cloneStringSet,
   commonResolvedObjectShape,
   conditionalExpressionValueType,
-  deleteNullableNarrowingKey,
   firstPathSegment,
   isAnyNodeChildFieldName,
   isOptionalChainProtectedExpression,
@@ -238,9 +240,7 @@ class CheckerScope {
 
 type CheckerScopeState = {
   scope: CheckerScope
-  narrowedNullableNames: Set<string>
-  narrowedTypeRefs: Map<string, TypeRef>
-  narrowedValueTypes: Map<string, ValueType>
+  flowFacts: Map<string, CheckerFlowFact>
 }
 
 type CheckerTypeParameterState = {
@@ -250,9 +250,13 @@ type CheckerTypeParameterState = {
 }
 
 type CheckerNarrowingState = {
-  narrowedNullableNames: Set<string>
-  narrowedTypeRefs: Map<string, TypeRef>
-  narrowedValueTypes: Map<string, ValueType>
+  flowFacts: Map<string, CheckerFlowFact>
+}
+
+type CheckerFlowFact = {
+  nonNullable: boolean
+  typeRef: TypeRef | null
+  valueType: ValueType | null
 }
 
 type CheckerValueTypeNarrowing = {
@@ -421,9 +425,7 @@ class Checker {
   functionDepth: number
   incompleteDeclaredTypeDependencies: Map<string, Set<string>>
   incompleteDeclaredTypes: Set<string>
-  narrowedNullableNames: Set<string>
-  narrowedTypeRefs: Map<string, TypeRef>
-  narrowedValueTypes: Map<string, ValueType>
+  flowFacts: Map<string, CheckerFlowFact>
   resolvedDeclaredTypes: Map<string, ResolvedTypeInfo>
   resolvingDeclaredTypes: Set<string>
   retriedIncompleteDeclaredTypes: Set<string>
@@ -461,9 +463,7 @@ class Checker {
     this.functionDepth = 0
     this.incompleteDeclaredTypeDependencies = new Map()
     this.incompleteDeclaredTypes = new Set()
-    this.narrowedNullableNames = new Set()
-    this.narrowedTypeRefs = new Map()
-    this.narrowedValueTypes = new Map()
+    this.flowFacts = new Map()
     this.resolvedDeclaredTypes = new Map()
     this.resolvingDeclaredTypes = new Set()
     this.retriedIncompleteDeclaredTypes = new Set()
@@ -1362,17 +1362,11 @@ class Checker {
     const valueTypeNarrowing = this.resolveValueTypeConditionNarrowing(statement.condition)
 
     for (const name of narrowing.falseNames) {
-      this.narrowedNullableNames.add(name)
+      this.setNonNullableFlowFact(name)
     }
 
     for (const narrowed of valueTypeNarrowing.falseTypes) {
-      this.narrowedValueTypes.set(narrowed.name, narrowed.valueType)
-
-      if (narrowed.typeRef !== null) {
-        this.narrowedTypeRefs.set(narrowed.name, narrowed.typeRef)
-      } else {
-        this.narrowedTypeRefs.delete(narrowed.name)
-      }
+      this.setValueTypeFlowFact(narrowed)
     }
   }
 
@@ -1406,7 +1400,7 @@ class Checker {
 
       try {
         this.checkFlowScopedBody(consequent)
-        consequentNarrowedNames = cloneStringSet(this.narrowedNullableNames)
+        consequentNarrowedNames = this.nonNullableFlowFactNames()
       } finally {
         this.restoreNarrowedNullableNames(trueNarrowingState)
       }
@@ -1420,7 +1414,7 @@ class Checker {
 
         try {
           this.checkFlowScopedBody(alternate)
-          alternateNarrowedNames = cloneStringSet(this.narrowedNullableNames)
+          alternateNarrowedNames = this.nonNullableFlowFactNames()
         } finally {
           this.restoreNarrowedNullableNames(falseNarrowingState)
         }
@@ -1445,7 +1439,7 @@ class Checker {
           const commonNames = intersectNames(consequentNames, alternateNames)
 
           for (const name of commonNames) {
-            this.narrowedNullableNames.add(name)
+            this.setNonNullableFlowFact(name)
           }
         }
       } else if (consequentNarrowedNames !== null && typeof consequentNarrowedNames !== 'undefined') {
@@ -1458,7 +1452,7 @@ class Checker {
         const commonNames = intersectNames(consequentNames, narrowing.falseNames)
 
         for (const name of commonNames) {
-          this.narrowedNullableNames.add(name)
+          this.setNonNullableFlowFact(name)
         }
       }
 
@@ -2079,11 +2073,12 @@ class Checker {
       }
 
       if (symbol !== null && typeof symbol !== 'undefined') {
-        const narrowedTypeRef = this.narrowedTypeRefs.get(path[0]) ?? null
-        const nullableNarrowed = this.narrowedNullableNames.has(path[0])
+        const flowFact = this.flowFacts.get(path[0]) ?? null
+        const narrowedTypeRef = flowFact?.typeRef ?? null
+        const nullableNarrowed = flowFact?.nonNullable === true
         expression.bindingKind = symbol.kind
         expression.bindingLoc = symbol.loc ?? null
-        valueType = this.narrowedValueTypes.get(path[0]) ?? symbol.valueType
+        valueType = flowFact?.valueType ?? symbol.valueType
         expression.nullable = symbol.nullable === true && !nullableNarrowed
         expression.valueType = valueType
         expression.declaredType = symbol.declaredType ?? null
@@ -2653,14 +2648,14 @@ class Checker {
       if (expression.target.path.length === 1 && symbol.mutable === true) {
         const targetName = firstPathSegment(expression.target.path)
 
-        deleteNullableNarrowingKey(this.narrowedNullableNames, targetName)
+        this.deleteFlowFactsAtPath(targetName)
 
         if (this.expressionCanBeNull(expression.value)) {
           return valueType
         }
 
         if (symbol.nullable === true) {
-          this.narrowedNullableNames.add(targetName)
+          this.setNonNullableFlowFact(targetName)
         }
       }
     }
@@ -2672,6 +2667,7 @@ class Checker {
     const targetType = this.checkExpression(expression.argument)
 
     this.checkAssignableType(targetType, 'number', expression.argument.loc, false, false)
+    const targetPath = nullableNarrowingKey(expression.argument)
 
     if (expression.argument.type === 'Reference') {
       const symbol = this.resolveReference(expression.argument)
@@ -2687,14 +2683,32 @@ class Checker {
         }
       }
 
+      if (targetPath !== null) {
+        this.deleteFlowFactsAtPath(targetPath)
+      }
+
       return 'number'
     }
 
     if (expression.argument.type === 'MemberExpression') {
+      if (targetPath !== null) {
+        this.deleteFlowFactsAtPath(targetPath)
+      }
+
       return 'number'
     }
 
     if (expression.argument.type === 'IndexExpression') {
+      if (targetPath !== null) {
+        this.deleteFlowFactsAtPath(targetPath)
+      } else {
+        const objectPath = nullableNarrowingKey(expression.argument.object)
+
+        if (objectPath !== null) {
+          this.deleteFlowFactsAtPath(objectPath)
+        }
+      }
+
       return 'number'
     }
 
@@ -2822,9 +2836,10 @@ class Checker {
     const valueNarrowingKey = nullableNarrowingKey(expression)
 
     if (valueNarrowingKey !== null) {
-      const narrowedValueType = this.narrowedValueTypes.get(valueNarrowingKey)
+      const flowFact = this.flowFacts.get(valueNarrowingKey) ?? null
+      const narrowedValueType = flowFact?.valueType ?? null
 
-      if (narrowedValueType !== null && typeof narrowedValueType !== 'undefined') {
+      if (narrowedValueType !== null) {
         this.checkExpression(expression.object)
         expression.valueType = narrowedValueType
         expression.declaredType = null
@@ -2834,8 +2849,7 @@ class Checker {
         expression.functionOverloads = []
         expression.className = null
 
-        const narrowedTypeRef =
-          this.narrowedTypeRefs.get(valueNarrowingKey) ?? this.compilerLibraryTypeRefForValueType(narrowedValueType)
+        const narrowedTypeRef = flowFact?.typeRef ?? this.compilerLibraryTypeRefForValueType(narrowedValueType)
 
         if (narrowedTypeRef.kind !== 'unknown') {
           this.applyCompilerLibraryTypeRef(expression, narrowedTypeRef, null)
@@ -2911,7 +2925,7 @@ class Checker {
 
     const narrowedKey = nullableNarrowingKey(expression)
 
-    if (narrowedKey !== null && typeof narrowedKey !== 'undefined' && this.narrowedNullableNames.has(narrowedKey)) {
+    if (narrowedKey !== null && this.flowFacts.get(narrowedKey)?.nonNullable === true) {
       expression.nullable = false
     }
 
@@ -3011,7 +3025,7 @@ class Checker {
         expression.nullable = resolvedFieldNullableMetadata(field, fieldType)
         const narrowedKey = nullableNarrowingKey(expression)
 
-        if (narrowedKey !== null && this.narrowedNullableNames.has(narrowedKey)) {
+        if (narrowedKey !== null && this.flowFacts.get(narrowedKey)?.nonNullable === true) {
           expression.nullable = false
         }
 
@@ -3071,8 +3085,9 @@ class Checker {
     }
 
     const narrowedKey = nullableNarrowingKey(expression)
+    const flowFact = narrowedKey === null ? null : (this.flowFacts.get(narrowedKey) ?? null)
 
-    if (narrowedKey !== null && this.narrowedValueTypes.has(narrowedKey)) {
+    if (flowFact !== null && flowFact.valueType !== null) {
       return true
     }
 
@@ -3228,8 +3243,8 @@ class Checker {
     expression.target.nullable = targetNullable
     const narrowedKey = nullableNarrowingKey(expression.target)
 
-    if (narrowedKey !== null && typeof narrowedKey !== 'undefined') {
-      deleteNullableNarrowingKey(this.narrowedNullableNames, narrowedKey)
+    if (narrowedKey !== null) {
+      this.deleteFlowFactsAtPath(narrowedKey)
     }
 
     expression.target.valueType = targetValueType
@@ -3250,8 +3265,8 @@ class Checker {
 
     this.checkAssignableType(valueType, fieldType.valueType, expression.value.loc, targetNullable, valueCanBeNull)
 
-    if (narrowedKey !== null && typeof narrowedKey !== 'undefined' && targetNullable && !valueCanBeNull) {
-      this.narrowedNullableNames.add(narrowedKey)
+    if (narrowedKey !== null && targetNullable && !valueCanBeNull) {
+      this.setNonNullableFlowFact(narrowedKey)
     }
 
     const fieldArrayElementType = this.resolvedIterableElementValueType(fieldType)
@@ -3517,6 +3532,15 @@ class Checker {
     const objectType = this.checkExpression(expression.target.object)
     const indexType = this.checkExpression(expression.target.index)
     const valueType = this.checkExpression(expression.value)
+    const targetPath = nullableNarrowingKey(expression.target)
+    const objectPath = nullableNarrowingKey(expression.target.object)
+
+    if (targetPath !== null) {
+      this.deleteFlowFactsAtPath(targetPath)
+    } else if (objectPath !== null) {
+      this.deleteFlowFactsAtPath(objectPath)
+    }
+
     const argInfos = [
       this.checkedCallArgInfo(expression.target.index, indexType),
       this.checkedCallArgInfo(expression.value, valueType)
@@ -5224,8 +5248,11 @@ class Checker {
           this.applyCompilerLibraryTypeRef(receiver, receiverTypeRef, null)
 
           if (narrowingKey !== null && typeof receiver.valueType === 'string') {
-            this.narrowedValueTypes.set(narrowingKey, receiver.valueType as ValueType)
-            this.narrowedTypeRefs.set(narrowingKey, receiverTypeRef)
+            this.setValueTypeFlowFact({
+              name: narrowingKey,
+              typeRef: receiverTypeRef,
+              valueType: receiver.valueType as ValueType
+            })
           }
         }
       }
@@ -8697,6 +8724,54 @@ class Checker {
     return null
   }
 
+  nonNullableFlowFactNames(): Set<string> {
+    const result: Set<string> = new Set()
+
+    for (const name of this.flowFacts.keys()) {
+      const fact = this.flowFacts.get(name)
+
+      if (fact !== null && typeof fact !== 'undefined' && fact.nonNullable) {
+        result.add(name)
+      }
+    }
+
+    return result
+  }
+
+  setNonNullableFlowFact(name: string): void {
+    const previous = this.flowFacts.get(name) ?? null
+
+    this.flowFacts.set(name, {
+      nonNullable: true,
+      typeRef: previous?.typeRef ?? null,
+      valueType: previous?.valueType ?? null
+    })
+  }
+
+  setValueTypeFlowFact(narrowing: CheckerValueTypeNarrowing): void {
+    const previous = this.flowFacts.get(narrowing.name) ?? null
+
+    this.flowFacts.set(narrowing.name, {
+      nonNullable: previous?.nonNullable === true,
+      typeRef: narrowing.typeRef,
+      valueType: narrowing.valueType
+    })
+  }
+
+  deleteFlowFactsAtPath(path: string): void {
+    const stale: string[] = []
+
+    for (const name of this.flowFacts.keys()) {
+      if (narrowingPathIsSameOrDescendant(name, path)) {
+        stale.push(name)
+      }
+    }
+
+    for (const name of stale) {
+      this.flowFacts.delete(name)
+    }
+  }
+
   pushNarrowedNullableNames(
     names: string[],
     valueTypes: CheckerValueTypeNarrowing[] = []
@@ -8713,27 +8788,17 @@ class Checker {
     valueTypes: CheckerValueTypeNarrowing[] = []
   ): CheckerNarrowingState {
     const previous = {
-      narrowedNullableNames: this.narrowedNullableNames,
-      narrowedTypeRefs: this.narrowedTypeRefs,
-      narrowedValueTypes: this.narrowedValueTypes
+      flowFacts: this.flowFacts
     }
 
-    this.narrowedNullableNames = cloneStringSet(previous.narrowedNullableNames)
-    this.narrowedTypeRefs = new Map(previous.narrowedTypeRefs)
-    this.narrowedValueTypes = new Map(previous.narrowedValueTypes)
+    this.flowFacts = new Map(previous.flowFacts)
 
     for (const name of names) {
-      this.narrowedNullableNames.add(name)
+      this.setNonNullableFlowFact(name)
     }
 
     for (const narrowing of valueTypes) {
-      this.narrowedValueTypes.set(narrowing.name, narrowing.valueType)
-
-      if (narrowing.typeRef !== null) {
-        this.narrowedTypeRefs.set(narrowing.name, narrowing.typeRef)
-      } else {
-        this.narrowedTypeRefs.delete(narrowing.name)
-      }
+      this.setValueTypeFlowFact(narrowing)
     }
 
     return previous
@@ -8741,9 +8806,7 @@ class Checker {
 
   restoreNarrowedNullableNames(previous: CheckerNarrowingState | null): void {
     if (previous !== null && typeof previous !== 'undefined') {
-      this.narrowedNullableNames = previous.narrowedNullableNames
-      this.narrowedTypeRefs = previous.narrowedTypeRefs
-      this.narrowedValueTypes = previous.narrowedValueTypes
+      this.flowFacts = previous.flowFacts
     }
   }
 
@@ -9083,69 +9146,51 @@ class Checker {
     if (symbol.kind === 'class') {
       this.typeSymbols.set(name, symbol)
     }
-    deleteNullableNarrowingKey(this.narrowedNullableNames, name)
-    this.narrowedTypeRefs.delete(name)
-    this.narrowedValueTypes.delete(name)
+    this.deleteFlowFactsAtPath(name)
   }
 
   pushScope(): CheckerScopeState {
     const previous = {
       scope: this.scope,
-      narrowedNullableNames: this.narrowedNullableNames,
-      narrowedTypeRefs: this.narrowedTypeRefs,
-      narrowedValueTypes: this.narrowedValueTypes
+      flowFacts: this.flowFacts
     }
 
     this.scope = new CheckerScope(previous.scope)
-    this.narrowedNullableNames = cloneStringSet(previous.narrowedNullableNames)
-    this.narrowedTypeRefs = new Map(previous.narrowedTypeRefs)
-    this.narrowedValueTypes = new Map(previous.narrowedValueTypes)
+    this.flowFacts = new Map(previous.flowFacts)
 
     return previous
   }
 
   restoreScope(previous: CheckerScopeState): void {
     this.scope = previous.scope
-    this.narrowedNullableNames = previous.narrowedNullableNames
-    this.narrowedTypeRefs = previous.narrowedTypeRefs
-    this.narrowedValueTypes = previous.narrowedValueTypes
+    this.flowFacts = previous.flowFacts
   }
 
   restoreScopeWithOuterNarrowing(previous: CheckerScopeState): void {
     const currentScope = this.scope
-    const currentNarrowedNames = this.narrowedNullableNames
-    const restoredNarrowedNames: Set<string> = new Set()
+    const currentFlowFacts = this.flowFacts
+    const restoredFlowFacts: Map<string, CheckerFlowFact> = new Map()
 
-    for (const name of previous.narrowedNullableNames) {
-      const rootName = this.narrowingRootName(name)
+    for (const name of previous.flowFacts.keys()) {
+      const rootName = narrowingPathRoot(name)
+      const fact = previous.flowFacts.get(name)
 
-      if (currentScope.hasOwn(rootName)) {
-        restoredNarrowedNames.add(name)
+      if (currentScope.hasOwn(rootName) && fact !== null && typeof fact !== 'undefined') {
+        restoredFlowFacts.set(name, fact)
       }
     }
 
-    for (const name of currentNarrowedNames) {
-      const rootName = this.narrowingRootName(name)
+    for (const name of currentFlowFacts.keys()) {
+      const rootName = narrowingPathRoot(name)
+      const fact = currentFlowFacts.get(name)
 
-      if (!currentScope.hasOwn(rootName)) {
-        restoredNarrowedNames.add(name)
+      if (!currentScope.hasOwn(rootName) && fact !== null && typeof fact !== 'undefined') {
+        restoredFlowFacts.set(name, fact)
       }
     }
 
     this.scope = previous.scope
-    this.narrowedNullableNames = restoredNarrowedNames
-    this.narrowedTypeRefs = previous.narrowedTypeRefs
-    this.narrowedValueTypes = previous.narrowedValueTypes
-  }
-
-  narrowingRootName(name: string): string {
-    const dotIndex = name.indexOf('.')
-
-    if (dotIndex < 0) {
-      return name
-    }
-
-    return name.slice(0, dotIndex)
+    this.flowFacts = restoredFlowFacts
   }
 
   pushReturnContext(
