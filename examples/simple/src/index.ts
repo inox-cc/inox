@@ -13,6 +13,160 @@ console.log('process.version', process.version)
 console.log('process.versions', process.versions)
 console.log('process', process)
 
+type CompilerExampleItem = {
+  value: string
+}
+
+type CompilerExampleOptions = {
+  value: number
+}
+
+type CompilerExampleOperation = (value: number) => number
+
+type CompilerExampleOperations = {
+  apply: CompilerExampleOperation
+}
+
+function firstCompilerExampleValue(items: CompilerExampleItem[]): string {
+  if (items.length === 0) {
+    return 'empty'
+  }
+
+  return items[0].value
+}
+
+function checkCompilerStageOne() {
+  const options: CompilerExampleOptions = {
+    value: true ? 7 : 9
+  }
+  const values: number[] = [false ? 7 : 9]
+  const operations: CompilerExampleOperations = {
+    apply: (value: number) => value + 1
+  }
+  const parsed: unknown = JSON.parse('7')
+
+  console.log(
+    'compiler stage 1',
+    firstCompilerExampleValue([]),
+    options.value,
+    values[0],
+    operations.apply(2),
+    JSON.stringify(parsed)
+  )
+}
+
+type CompilerExampleCollections = {
+  names: Map<string, string>
+  tags: Set<string>
+}
+
+type CompilerExampleConfig = {
+  name: string
+  count?: number
+}
+
+type CompilerExampleLeftA = { a: number }
+type CompilerExampleLeftB = { b: number }
+type CompilerExampleLeft = CompilerExampleLeftA | CompilerExampleLeftB
+
+type CompilerExampleRightX = { value: boolean; x: number }
+type CompilerExampleRightY = { value: number; y: number }
+type CompilerExampleRight = CompilerExampleRightX | CompilerExampleRightY
+
+type CompilerExampleCombinedAY = { a: number; value: number; y: number }
+type CompilerExampleCombinedAX = { a: number; value: boolean; x: number }
+type CompilerExampleCombinedBY = { b: number; value: number; y: number }
+type CompilerExampleCombinedBX = { b: number; value: boolean; x: number }
+type CompilerExampleCombined =
+  | CompilerExampleCombinedAY
+  | CompilerExampleCombinedAX
+  | CompilerExampleCombinedBY
+  | CompilerExampleCombinedBX
+
+function inferredCompilerExampleValue(flag: boolean) {
+  const fallback = 9
+
+  if (flag) {
+    return 7
+  }
+
+  return fallback
+}
+
+async function inferredCompilerExampleAsyncValue(flag: boolean) {
+  const fallback = 11
+
+  if (flag) {
+    return 10
+  }
+
+  return fallback
+}
+
+function laterCompilerExampleStatus(): string {
+  return compilerExampleSettings.status
+}
+
+function firstCompilerExampleSize(values: Array<{ size: number } | null>): number {
+  for (const value of values) {
+    if (value !== null) {
+      return value.size
+    }
+  }
+
+  return 0
+}
+
+function readCompilerExampleCollections(contexts: CompilerExampleCollections[]): string {
+  const first = contexts[0]
+  const names: Map<string, string> = first.names
+
+  for (const context of contexts) {
+    const tags: Set<string> = context.tags
+
+    if (tags.has('typed')) {
+      return names.get('item') ?? 'missing'
+    }
+  }
+
+  return 'missing'
+}
+
+function combineCompilerExampleValues(
+  left: CompilerExampleLeft,
+  right: CompilerExampleRight
+): CompilerExampleCombined {
+  const combined: CompilerExampleCombined = { ...left, ...right }
+  return combined
+}
+
+async function checkCompilerStageTwo() {
+  const config: CompilerExampleConfig = { name: 'inox' }
+  config.count = 2
+
+  const names: Map<string, string> = new Map()
+  const tags: Set<string> = new Set()
+  names.set('item', 'typed collections')
+  tags.add('typed')
+
+  const collections: CompilerExampleCollections[] = [{ names, tags }]
+
+  combineCompilerExampleValues({ a: 1 }, { value: true, x: 2 })
+
+  console.log(
+    'compiler stage 2',
+    inferredCompilerExampleValue(true),
+    inferredCompilerExampleValue(false),
+    await inferredCompilerExampleAsyncValue(true),
+    laterCompilerExampleStatus(),
+    firstCompilerExampleSize([null, { size: 12 }]),
+    config.count
+  )
+  console.log('compiler stage 2 native types', readCompilerExampleCollections(collections))
+}
+
+const compilerExampleSettings = { status: 'ready' }
+
 function checkStringsAndMath() {
   const trimmed = '  Inox stdlib  '.trim()
   const parts = 'alpha,beta,gamma'.split(',')
@@ -107,6 +261,8 @@ async function checkFetch() {
   }
 }
 
+checkCompilerStageOne()
+await checkCompilerStageTwo()
 checkStringsAndMath()
 checkCollections()
 checkBinaryAndCrypto()
