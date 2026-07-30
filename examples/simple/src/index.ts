@@ -78,10 +78,7 @@ type CompilerExampleCombinedAX = { a: number; value: boolean; x: number }
 type CompilerExampleCombinedBY = { b: number; value: number; y: number }
 type CompilerExampleCombinedBX = { b: number; value: boolean; x: number }
 type CompilerExampleCombined =
-  | CompilerExampleCombinedAY
-  | CompilerExampleCombinedAX
-  | CompilerExampleCombinedBY
-  | CompilerExampleCombinedBX
+  CompilerExampleCombinedAY | CompilerExampleCombinedAX | CompilerExampleCombinedBY | CompilerExampleCombinedBX
 
 function inferredCompilerExampleValue(flag: boolean) {
   const fallback = 9
@@ -132,10 +129,7 @@ function readCompilerExampleCollections(contexts: CompilerExampleCollections[]):
   return 'missing'
 }
 
-function combineCompilerExampleValues(
-  left: CompilerExampleLeft,
-  right: CompilerExampleRight
-): CompilerExampleCombined {
+function combineCompilerExampleValues(left: CompilerExampleLeft, right: CompilerExampleRight): CompilerExampleCombined {
   const combined: CompilerExampleCombined = { ...left, ...right }
   return combined
 }
@@ -273,7 +267,7 @@ try {
   const foo = JSON.parse('{"v":{"1":2},{"3":4,"5":6}]}') // bad json
   console.log(foo)
 } catch (e) {
-  console.error('Error', e)
+  console.error('Test error:', e)
 }
 
 const foo = JSON.parse('{"v":[{"1":2},{"3":4,"5":"блаблабла"}]}')
