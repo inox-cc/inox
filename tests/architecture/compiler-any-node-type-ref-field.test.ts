@@ -90,7 +90,17 @@ import type { ModuleRecord } from './types.ts'
 
 export function namesDiffer(module: ModuleRecord): boolean {
   const item = module.imports[0]
+
+  if (!item) {
+    return false
+  }
+
   const specifier = item.specifiers[0]
+
+  if (!specifier) {
+    return false
+  }
+
   return specifier.local !== specifier.imported
 }
 `
@@ -176,7 +186,13 @@ import { compatibilityMetadata } from './metadata.ts'
 export function firstFieldName(): string {
   const metadata = compatibilityMetadata()
   const fields = metadata.shape?.fields ?? []
-  return fields[0].name
+  const field = fields[0]
+
+  if (!field) {
+    return ''
+  }
+
+  return field.name
 }
 `
       }

@@ -26,6 +26,7 @@ test('AnyNode object spread copies fallback values across a declaration boundary
           "import type { AnyNode } from './types.ts'",
           'export function copyFirst(values: AnyNode[]): AnyNode {',
           '  const value = values[0]',
+          "  if (!value) return { type: 'empty', shape: null }",
           '  return { ...value, shape: null }',
           '}'
         ].join('\n')

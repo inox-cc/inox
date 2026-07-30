@@ -10,8 +10,12 @@ test('array index preserves a package-native element boundary', () => {
   const result = compileSource(
     `
 function read(values: NativeBox[]): void {
-  const index = 0
-  const value = values[index]
+  if (values.length === 0) {
+    return
+  }
+
+  const value = values[0]
+  console.log(value.size)
 }
 `,
     { libraries, target: 'cc' }
@@ -47,7 +51,15 @@ function fixtureLibraries(): CompilerLibrarySet {
         cppType: 'FixtureNativeBox',
         cValueAdapter: 'FixtureNativeBox($value)',
         baseTypeIds: [],
-        runtimeRequirements: []
+        runtimeRequirements: [],
+        fields: [
+          {
+            name: 'size',
+            valueType: 'number',
+            readonly: true,
+            cMember: 'size'
+          }
+        ]
       }
     ]
   }

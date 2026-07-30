@@ -74,13 +74,13 @@ import { descriptor, descriptors } from './provider.ts'
 export function firstName(): string {
   const selected = descriptors()[0] ?? descriptor()
   const variants = selected.variants ?? []
-  return variants[0].nodes[0].name ?? ''
+  return variants[0]?.nodes?.[0]?.name ?? ''
 }
 
 export function firstIteratedName(): string {
   for (const selected of descriptors()) {
     const variants = selected.variants ?? []
-    return variants[0].nodes[0].name ?? ''
+    return variants[0]?.nodes?.[0]?.name ?? ''
   }
 
   return ''
@@ -92,7 +92,7 @@ export function firstIndexedName(): string {
   for (let index = 0; index < values.length; index = index + 1) {
     const selected = values[index]
     const variants = selected.variants ?? []
-    return variants[0].nodes[0].name ?? ''
+    return variants[0]?.nodes?.[0]?.name ?? ''
   }
 
   return ''

@@ -19,14 +19,15 @@ test('native type fields come only from library metadata', () => {
     'function entryName(entry: FixtureEntry): string { return entry.name }\n' +
       'const entries = await fixture.list()\n' +
       'const entry = entries[0]\n' +
-      'console.log(entry.name, entry.size)\n',
+      'if (entry) { console.log(entry.name, entry.size) }\n',
     { libraries: nativeFieldLibrarySet() }
   )
 
   const parameterField = result.ir.body[0].body[0].argument
   const entry = result.ir.body[2].init
-  const nameField = result.ir.body[3].expression.args[0]
-  const sizeField = result.ir.body[3].expression.args[1]
+  const log = result.ir.body[3].consequent.body[0].expression
+  const nameField = log.args[0]
+  const sizeField = log.args[1]
 
   assert.equal(parameterField.valueType, 'string')
   assert.equal(entry.shape.libraryTypeId, 'fixture#Entry')

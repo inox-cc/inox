@@ -17,7 +17,7 @@ test('node:fs operations lower only through package descriptors', async () => {
       'const entries = fs.readdirSync(path, { withFileTypes: true })\n' +
       'const entry = entries[0]\n' +
       'const stats = fs.statSync(path)\n' +
-      'console.log(bytes, text, names, entry.name, entry.isFile(), stats.size, stats.isDirectory(), constants.F_OK)\n' +
+      'if (entry) console.log(bytes, text, names, entry.name, entry.isFile(), stats.size, stats.isDirectory(), constants.F_OK)\n' +
       'fs.mkdirSync(path, { recursive: true })\n' +
       'fs.rmSync(path, { recursive: true, force: true })\n' +
       'fs.writeFileSync(path, bytes)\n' +

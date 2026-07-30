@@ -21,6 +21,11 @@ test('object spread сохраняет shape imported recursive object types', a
             }
 
             const param = target.params[0]
+
+            if (!param) {
+              return null
+            }
+
             const params = [{
               ...param,
               shape: param.shape

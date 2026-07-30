@@ -11,6 +11,11 @@ test('explicit native annotation keeps facade storage after dynamic reads', () =
 
     function inspect(nodes: AnyNode[]): boolean {
       const node = nodes[0]
+
+      if (!node) {
+        return false
+      }
+
       const names: Map<string, string> = node.names
 
       for (const child of nodes) {

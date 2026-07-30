@@ -14,7 +14,7 @@ function make(value: boolean): Box | string[] {
 }
 function read(): string {
   const result = make(false)
-  if (Array.isArray(result)) return result[0]
+  if (Array.isArray(result)) return result[0] ?? ''
   return result.value
 }
 console.log(read())
