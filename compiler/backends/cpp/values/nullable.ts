@@ -608,22 +608,22 @@ function intersectNames(left: string[], right: string[]): string[] {
   return names
 }
 
-export function isNarrowedNullableScalarReference(expression: AnyNode, context: NullableFunctionContext): boolean {
-  if (expression.type !== 'Reference' || expression.path.length !== 1) {
+export function isNarrowedNullableScalarExpression(expression: AnyNode, context: NullableFunctionContext): boolean {
+  const name = nullableScalarNarrowingKey(expression)
+
+  if (name === null) {
     return false
   }
 
-  const name = expression.path[0]
-
-  if (name === null || typeof name === 'undefined') {
+  if (!context.narrowedNullableScalars.has(name)) {
     return false
   }
 
-  return (
-    context.narrowedNullableScalars.has(name) &&
-    context.nullableVariables.has(name) &&
-    isNullableScalarType(context.variables.get(name))
-  )
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    return context.nullableVariables.has(name) && isNullableScalarType(context.variables.get(name))
+  }
+
+  return isNullableScalarNarrowingExpression(expression, name, context)
 }
 
 export function clearNullableScalarNarrowing(name: string, context: NullableFunctionContext): string[] {

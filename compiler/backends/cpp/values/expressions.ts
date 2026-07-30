@@ -80,7 +80,7 @@ import type { ClassLoweringDependencies } from './classes.ts'
 import type { NullableLoweringDependencies } from './nullable.ts'
 import {
   canLowerCScalarNullishCoalescingExpression,
-  isNarrowedNullableScalarReference,
+  isNarrowedNullableScalarExpression,
   isNullableRuntimeExpression,
   isNullableScalarRuntimeExpression,
   resolveNullableScalarConditionNarrowing
@@ -2748,28 +2748,23 @@ export function emitPreparedNumberExpression(
     return emitPreparedScalarTypeAssertionExpression(expression, context, deps)
   }
 
-  if (isNarrowedNullableScalarReference(expression, context)) {
-    const name = expression.path[0]
+  if (isNarrowedNullableScalarExpression(expression, context)) {
+    const valueType = deps.inferExpressionType(expression, context)
 
-    if (name === null || typeof name === 'undefined') {
+    if (expression.type === 'Reference' && expression.path.length === 1) {
       return {
         lines: [],
-        expression: '0'
+        expression: scalarRuntimeValueExpression(deps.emitReference(expression, context), valueType)
       }
     }
 
-    const resolvedType = context.variables.get(name)
-    let valueType = 'number'
+    const value = emitPreparedDynamicRuntimeValueExpression(expression, context, deps)
 
-    if (resolvedType !== null && typeof resolvedType !== 'undefined') {
-      valueType = resolvedType
-    }
-
-    const value = deps.emitReference(expression, context)
-
-    return {
-      lines: [],
-      expression: scalarRuntimeValueExpression(value, valueType)
+    if (value !== null && typeof value !== 'undefined') {
+      return {
+        lines: value.lines,
+        expression: scalarRuntimeValueExpression(value.expression, valueType)
+      }
     }
   }
 
@@ -4371,7 +4366,11 @@ function emitPreparedExpectedDynamicRuntimeScalarValueExpression(
     return null
   }
 
-  const check = emitRuntimeValueCheck(value.expression, cRuntimeValueTag(valueType), context)
+  let check = ''
+
+  if (!isNarrowedNullableScalarExpression(expression, context)) {
+    check = emitRuntimeValueCheck(value.expression, cRuntimeValueTag(valueType), context)
+  }
   const lines: string[] = []
 
   appendLines(lines, value.lines)

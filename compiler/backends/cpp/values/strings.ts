@@ -702,12 +702,16 @@ export function emitPreparedStringBytesOperand(
     if (isNullableRuntimeStringReference(name, context)) {
       const string = nextCName(context, tempPrefix)
       const reference = emitCIdentifier(name)
+      const lines: string[] = []
+
+      if (!isNarrowedNullableScalarPath(expression, context)) {
+        lines.push(emitRuntimeTypeCheck(`${reference}.tag != INOX_TAG_STRING || ${reference}.as.ref == 0`, context))
+      }
+
+      lines.push(`inox_string* ${string} = (inox_string*)${reference}.as.ref;`)
 
       return {
-        lines: [
-          emitRuntimeTypeCheck(`${reference}.tag != INOX_TAG_STRING || ${reference}.as.ref == 0`, context),
-          `inox_string* ${string} = (inox_string*)${reference}.as.ref;`
-        ],
+        lines,
         bytes: `${string}->bytes`,
         length: `${string}->len`
       }
@@ -1211,7 +1215,11 @@ function emitPreparedKnownObjectStringBytesOperand(
   registerOwnedValue(context, value)
 
   pushAllLines(lines, emitStringObjectGetValueLines(object, key, value, context))
-  lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
+
+  if (!isNarrowedNullableStringField(expression, field, context)) {
+    lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
+  }
+
   lines.push(`inox_string* ${string} = (inox_string*)${value}.as.ref;`)
 
   return {

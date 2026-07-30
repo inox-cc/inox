@@ -74,7 +74,10 @@ import {
 import type { ClassLoweringDependencies } from './classes.ts'
 import { emitCConditionClause, emitCNegatedConditionClause, objectExpressionPathName } from './expressions.ts'
 import type { NullableLoweringDependencies } from './nullable.ts'
-import { emitNullableRuntimeValueVariableDeclaration } from './nullable.ts'
+import {
+  emitNullableRuntimeValueVariableDeclaration,
+  isNarrowedNullableScalarExpression
+} from './nullable.ts'
 import { registerObjectShape } from './objects.ts'
 import type { ObjectVariableDeclarationDependencies } from './objects.ts'
 import { isRawStringLiteralExpression } from './strings.ts'
@@ -3610,7 +3613,11 @@ function emitRuntimeStringAssignment(expression: StatementNode, context: CFuncti
   const lines: string[] = []
 
   pushAllLines(lines, value.lines)
-  lines.push(emitRuntimeValueCheck(value.expression, 'INOX_TAG_STRING', context))
+
+  if (!isNarrowedNullableScalarExpression(expression.value, context)) {
+    lines.push(emitRuntimeValueCheck(value.expression, 'INOX_TAG_STRING', context))
+  }
+
   lines.push(`${storage} = ${value.expression};`)
   pushPreparedRuntimeValueOwnershipLines(lines, storage, value)
   lines.push(`${emitCIdentifier(target)} = (inox_string*)${storage}.as.ref;`)

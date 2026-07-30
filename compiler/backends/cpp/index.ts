@@ -225,6 +225,7 @@ import {
   emitCOptionalIndexValueExpression,
   emitCOptionalMemberValueExpression,
   emitNullableRuntimeValueVariableDeclaration,
+  isNarrowedNullableScalarExpression,
   isNullableRuntimeExpression,
   isNullableScalarRuntimeExpression,
   resolveNullableScalarConditionNarrowing
@@ -5847,6 +5848,13 @@ function emitFormattedOutputValue(
     return directObject
   }
 
+  if (
+    isNullableScalarRuntimeExpression(expression, context) &&
+    !isNarrowedNullableScalarExpression(expression, context)
+  ) {
+    return emitRuntimeValueLogValue(expression, context)
+  }
+
   if (valueType === 'string') {
     return emitStringLogValue(expression, context)
   }
@@ -6195,8 +6203,14 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): For
     }
 
     if (context.variables.get(name) === 'string' && context.nullableVariables.has(name)) {
+      const lines: string[] = []
+
+      if (!isNarrowedNullableScalarExpression(expression, context)) {
+        lines.push(emitRuntimeTypeCheck(`${reference}.tag != INOX_TAG_STRING || ${reference}.as.ref == 0`, context))
+      }
+
       return {
-        lines: [emitRuntimeTypeCheck(`${reference}.tag != INOX_TAG_STRING || ${reference}.as.ref == 0`, context)],
+        lines,
         format: formattedOutputStringFormat,
         values: [`inox::String(inox::Value(${reference}))`]
       }
@@ -6255,7 +6269,11 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): For
     const member = resolveKnownObjectMember(expression, context)
 
     if (member !== null && typeof member !== 'undefined' && member.valueType === 'string') {
-      return emitRuntimeStringLogValue({ kind: 'known-object', member }, context)
+      return emitRuntimeStringLogValue(
+        { kind: 'known-object', member },
+        context,
+        isNarrowedNullableScalarExpression(expression, context)
+      )
     }
   }
 
@@ -6263,7 +6281,11 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): For
     const field = resolveKnownObjectIndex(expression, context)
 
     if (field !== null && typeof field !== 'undefined' && field.valueType === 'string') {
-      return emitRuntimeStringLogValue({ kind: 'known-object-index', field }, context)
+      return emitRuntimeStringLogValue(
+        { kind: 'known-object-index', field },
+        context,
+        isNarrowedNullableScalarExpression(expression, context)
+      )
     }
   }
 
@@ -6617,14 +6639,21 @@ function emitModuleRuntimeBooleanLogValue(expression: AnyNode, context: CFunctio
   }
 }
 
-function emitRuntimeStringLogValue(source: RuntimeLogGetSource, context: CFunctionContext): FormattedOutputValue {
+function emitRuntimeStringLogValue(
+  source: RuntimeLogGetSource,
+  context: CFunctionContext,
+  narrowed: boolean = false
+): FormattedOutputValue {
   const value = nextCName(context, 'inox_log_value')
   const lines: string[] = []
 
   registerOwnedValue(context, value)
 
   pushAll(lines, emitRuntimeLogGetLines(source, value, context))
-  lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
+
+  if (!narrowed) {
+    lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
+  }
 
   return {
     lines,
