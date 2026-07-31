@@ -202,6 +202,7 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('asyncResultRejectionIntrinsicRole', 'string', null, true, loc),
       anyNodeField('propertyValueType', 'string', null, true, loc),
       anyNodeField('returnType', 'string', null, true, loc),
+      anyNodeField('callBoundaryReturnType', 'string', null, true, loc),
       anyNodeField('returnTypeRef', 'object', null, true, loc),
       anyNodeField('returnRuntimeTypeAlternatives', 'unknown', 'array<AnyNode>', true, loc),
       anyNodeField('declaredReturnType', 'string', null, true, loc),

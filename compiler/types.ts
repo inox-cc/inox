@@ -203,6 +203,7 @@ export type SymbolInfo = {
   asyncResultValueType?: ValueType | null
   asyncResultRejectionIntrinsicRole?: IntrinsicRole | null
   params?: AnyNode[]
+  paramTemplates?: AnyNode[]
   returnType?: ValueType
   declaredReturnType?: string | null
   returnTypeRef?: TypeRef | null

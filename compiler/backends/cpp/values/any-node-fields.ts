@@ -46,6 +46,7 @@ export const compilerAnyNodeStringFields: readonly string[] = [
   'libraryConstantValue',
   'libraryCallbackLifetime',
   'returnType',
+  'callBoundaryReturnType',
   'declaredReturnType',
   'returnAsyncResultValueType',
   'className',

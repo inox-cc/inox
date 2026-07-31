@@ -58,6 +58,7 @@ import type {
 import { cFunctionTypeValue } from '../types.ts'
 import {
   applyLibraryNativeValueAdapter,
+  cCallExpressionReturnsTypeErasedValue,
   cRuntimeValueTag,
   compilerLibraryNativeRuntimeValueExpressionForTypeRef,
   compilerLibraryNativeRuntimeValueValidExpressionForTypeRef,
@@ -3034,7 +3035,26 @@ export function emitPreparedNumberExpression(
   }
 
   if (expression.type === 'CallExpression') {
-    return deps.emitPreparedCallExpression(expression, context)
+    const call = deps.emitPreparedCallExpression(expression, context)
+
+    if (!cCallExpressionReturnsTypeErasedValue(expression)) {
+      return call
+    }
+
+    const valueType = deps.inferExpressionType(expression, context)
+    const temp = nextCName(context, 'inox_call_value')
+    const lines: string[] = []
+
+    registerOwnedValue(context, temp)
+    appendLines(lines, call.lines)
+    lines.push(`${temp} = ${call.expression};`)
+    lines.push(emitRuntimeValueCheck(temp, cRuntimeValueTag(valueType), context))
+
+    return {
+      lines,
+      expression: scalarRuntimeValueExpression(temp, valueType),
+      functionCompanions: call.functionCompanions
+    }
   }
 
   if (expression.type === 'OptionalCallExpression') {
@@ -5121,7 +5141,9 @@ export function emitCValueExpression(
     }
   }
 
-  const scalarValue = emitPreparedScalarRuntimeValueExpression(expression, context, deps)
+  const scalarValue = cCallExpressionReturnsTypeErasedValue(expression)
+    ? null
+    : emitPreparedScalarRuntimeValueExpression(expression, context, deps)
 
   if (scalarValue !== null && typeof scalarValue !== 'undefined') {
     return scalarValue
@@ -5131,6 +5153,7 @@ export function emitCValueExpression(
     const valueType = deps.inferExpressionType(expression, context)
 
     if (
+      !cCallExpressionReturnsTypeErasedValue(expression) &&
       valueType !== 'unknown' &&
       valueType !== 'async-result' &&
       !isManagedRuntimeReturnType(valueType) &&

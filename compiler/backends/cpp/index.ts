@@ -164,6 +164,7 @@ import type { CUnitDependencies } from './unit.ts'
 import {
   cIterableElementDeclaredName,
   cIterableElementFunctionType,
+  cCallExpressionReturnsTypeErasedValue,
   cRuntimeValueAdapterInfo,
   cRuntimeValueTag,
   applyLibraryNativeValueAdapter,
@@ -2742,6 +2743,17 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
       context.classInstanceTypes.set(statement.name, moduleClassName)
       return emitCNativeClassAssignmentLines(name, statement.init, info, context)
     }
+  }
+
+  if (context.moduleRuntimeValueNames.has(statement.name) && cCallExpressionReturnsTypeErasedValue(statement.init)) {
+    const value = emitCValueExpression(statement.init, context)
+    const lines: string[] = []
+
+    context.moduleValueTypes.set(statement.name, 'unknown')
+    pushAll(lines, value.lines)
+    pushModuleRuntimeValueAssignment(lines, name, value, context)
+    lines.push(`inox_retain(${name});`)
+    return lines
   }
 
   if (inferred === 'number' || inferred === 'boolean') {

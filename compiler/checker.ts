@@ -31,6 +31,7 @@ import {
   typeRefDeclaredName,
   typeRefIterableElementDeclaredName,
   typeRefIterableElementValueType,
+  typeRefIsAssignable,
   typeRefTraitArgument,
   typeRefsEquivalent,
   typeRefTraits
@@ -874,6 +875,8 @@ class Checker {
           if (specifier.returnType !== null && typeof specifier.returnType !== 'undefined') {
             symbol.valueType = 'function'
             symbol.params = this.resolveImportedParams(specifier.params ?? [])
+            symbol.paramTemplates = specifier.params ?? []
+            symbol.typeParameters = specifier.typeParameters ?? []
             symbol.returnType = specifier.returnType
             symbol.declaredReturnType = specifier.declaredReturnType ?? specifier.returnType
             symbol.returnTypeRef = specifier.returnTypeRef ?? null
@@ -911,6 +914,8 @@ class Checker {
               mutable: false,
               valueType: 'function',
               params: this.resolveParams(item.params),
+              paramTemplates: item.params,
+              typeParameters: item.typeParameters ?? [],
               returnType: returnInfo.valueType,
               declaredReturnType: item.declaredReturnType ?? item.returnType ?? null,
               returnTypeRef: returnInfo.typeRef,
@@ -1053,6 +1058,8 @@ class Checker {
         kind: 'function',
         valueType: 'function',
         params: this.resolveImportedParams(declaration.params ?? []),
+        paramTemplates: declaration.params ?? [],
+        typeParameters: declaration.typeParameters ?? [],
         returnType: declaration.returnType ?? declaration.declaredReturnType ?? 'unknown',
         declaredReturnType: declaration.declaredReturnType ?? declaration.returnType ?? null,
         returnTypeRef: declaration.returnTypeRef ?? null,
@@ -2159,6 +2166,8 @@ class Checker {
             kind: 'function',
             resolved: true,
             params,
+            paramTemplates: symbol.paramTemplates ?? [],
+            typeParameters: symbol.typeParameters ?? [],
             returnType: symbol.returnType,
             declaredReturnType: symbol.declaredReturnType ?? null,
             returnTypeRef: symbol.returnTypeRef ?? null,
@@ -3959,7 +3968,7 @@ class Checker {
   checkCallExpressionBody(expression: AnyNode): ValueType {
     const libraryDiagnosticType = this.checkCompilerLibraryCallOperation(expression)
 
-    if (libraryDiagnosticType !== null) {
+    if (libraryDiagnosticType !== null && typeof libraryDiagnosticType !== 'undefined') {
       return libraryDiagnosticType
     }
 
@@ -3971,7 +3980,13 @@ class Checker {
 
     this.inferCalledFunctionReturn(expression.callee)
     this.checkExpression(expression.callee)
-    const symbol = this.getCallableSymbol(expression.callee)
+    const declaredSymbol = this.getCallableSymbol(expression.callee)
+
+    if (declaredSymbol !== null && typeof declaredSymbol !== 'undefined') {
+      expression.callBoundaryReturnType = declaredSymbol.returnType ?? null
+    }
+
+    const symbol = this.instantiateUserFunctionSymbol(expression, declaredSymbol)
     const argInfos = this.checkedCallArgInfos(expression, symbol)
 
     if (symbol === null || typeof symbol === 'undefined') {
@@ -3981,6 +3996,116 @@ class Checker {
     const valueType = applyCallableSymbolCallInContext(this.callableSymbolContext(), expression, symbol, argInfos)
     expression.declaredType = symbol.declaredReturnType ?? null
     return valueType
+  }
+
+  instantiateUserFunctionSymbol(expression: AnyNode, symbol: SymbolInfo | null | undefined): SymbolInfo | null {
+    if (symbol === null || typeof symbol === 'undefined') {
+      return null
+    }
+
+    const typeArguments: string[] = expression.typeArguments ?? []
+
+    if (typeArguments.length === 0) {
+      return symbol
+    }
+
+    const typeParameters = symbol.typeParameters ?? []
+
+    if (typeParameters.length !== typeArguments.length) {
+      this.report(
+        'INOX_TYPE_ARGUMENT_COUNT',
+        `function expects ${typeParameters.length} type argument(s), got ${typeArguments.length}`,
+        expression.loc
+      )
+      return symbol
+    }
+
+    const resolvedArguments: ResolvedTypeInfo[] = []
+
+    for (let index = 0; index < typeArguments.length; index = index + 1) {
+      resolvedArguments.push(this.resolveDeclaredType(typeArguments[index], expression.loc))
+    }
+
+    const state = this.pushInstantiatedTypeParameters(typeParameters, typeArguments, nodeSourceLocation(expression))
+
+    try {
+      this.checkInstantiatedTypeParameterConstraints(
+        typeParameters,
+        typeArguments,
+        resolvedArguments,
+        nodeSourceLocation(expression)
+      )
+      const params = this.resolveParams(symbol.paramTemplates ?? symbol.params ?? [])
+      const declaredReturnType = symbol.declaredReturnType
+
+      if (declaredReturnType === null || typeof declaredReturnType === 'undefined') {
+        return { ...symbol, params }
+      }
+
+      const returnInfo = this.resolveDeclaredType(declaredReturnType, expression.loc)
+      const returnTypeRef = typeRefFromResolvedTypeInContext(returnInfo)
+
+      return {
+        ...symbol,
+        params,
+        declaredReturnType:
+          typeRefDeclaredName(returnTypeRef, resolveCompilerLibrarySet(this.options.libraries)) ?? declaredReturnType,
+        returnType: returnInfo.valueType,
+        returnTypeRef,
+        returnNullable: returnInfo.nullable,
+        returnAsyncResultValueType: returnInfo.asyncResultValueType,
+        returnShape: returnInfo.shape
+      }
+    } finally {
+      this.restoreFunctionTypeParameters(state)
+    }
+  }
+
+  checkInstantiatedTypeParameterConstraints(
+    typeParameters: AnyNode[],
+    typeArguments: string[],
+    resolvedArguments: ResolvedTypeInfo[],
+    loc: SourceLocation
+  ): void {
+    const libraries = resolveCompilerLibrarySet(this.options.libraries)
+
+    for (let index = 0; index < typeParameters.length; index = index + 1) {
+      const parameter = typeParameters[index]
+      const argumentName = typeArguments[index]
+      const argument = resolvedArguments[index]
+
+      if (
+        parameter === null ||
+        typeof parameter === 'undefined' ||
+        argumentName === null ||
+        typeof argumentName === 'undefined' ||
+        argument === null ||
+        typeof argument === 'undefined' ||
+        typeof parameter.constraint !== 'string' ||
+        parameter.constraint.length === 0
+      ) {
+        continue
+      }
+
+      const constraint = this.resolveDeclaredType(parameter.constraint, parameter.loc ?? loc)
+      const argumentTypeRef = typeRefFromResolvedTypeInContext(argument, argumentName)
+      const constraintTypeRef = typeRefFromResolvedTypeInContext(constraint, parameter.constraint)
+      const valueTypeAssignable = isAssignableType(
+        argument.valueType,
+        constraint.valueType,
+        constraint.nullable,
+        argument.nullable
+      )
+      const typeRefAssignable = typeRefIsAssignable(argumentTypeRef, constraintTypeRef, libraries)
+
+      if (!valueTypeAssignable || !typeRefAssignable) {
+        this.report(
+          'INOX_TYPE_ARGUMENT_CONSTRAINT',
+          `type argument ${argumentName} does not satisfy constraint ${parameter.constraint}`,
+          loc
+        )
+      }
+    }
   }
 
   checkCompilerLibraryCallOperation(
@@ -7799,43 +7924,41 @@ class Checker {
       return symbol
     }
 
+    if (callee.type === 'Reference' && callee.path.length === 1) {
+      const calleeName = firstPathSegment(callee.path)
+      const symbol = this.scope.resolve(calleeName)
+
+      if (symbol !== null && typeof symbol !== 'undefined' && symbol.kind === 'function') {
+        return symbol
+      }
+
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.valueType === 'function' &&
+        symbol.params !== null &&
+        typeof symbol.params !== 'undefined' &&
+        symbol.returnType !== null &&
+        typeof symbol.returnType !== 'undefined'
+      ) {
+        return symbol
+      }
+
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.valueType === 'function' &&
+        symbol.functionType !== null &&
+        typeof symbol.functionType !== 'undefined'
+      ) {
+        return this.callableSymbolFromFunctionType(symbol.functionType, symbol.loc)
+      }
+    }
+
     const calleeFunctionType = callee.functionType
 
     if (calleeFunctionType !== null && typeof calleeFunctionType !== 'undefined') {
       return this.callableSymbolFromFunctionType(calleeFunctionType, callee.loc)
-    }
-
-    if (callee.type !== 'Reference' || callee.path.length !== 1) {
-      return null
-    }
-
-    const calleeName = firstPathSegment(callee.path)
-    const symbol = this.scope.resolve(calleeName)
-
-    if (symbol !== null && typeof symbol !== 'undefined' && symbol.kind === 'function') {
-      return symbol
-    }
-
-    if (
-      symbol !== null &&
-      typeof symbol !== 'undefined' &&
-      symbol.valueType === 'function' &&
-      symbol.params !== null &&
-      typeof symbol.params !== 'undefined' &&
-      symbol.returnType !== null &&
-      typeof symbol.returnType !== 'undefined'
-    ) {
-      return symbol
-    }
-
-    if (
-      symbol !== null &&
-      typeof symbol !== 'undefined' &&
-      symbol.valueType === 'function' &&
-      symbol.functionType !== null &&
-      typeof symbol.functionType !== 'undefined'
-    ) {
-      return this.callableSymbolFromFunctionType(symbol.functionType, symbol.loc)
     }
 
     return null
@@ -7851,6 +7974,8 @@ class Checker {
       kind: 'function',
       valueType: 'function',
       params: resolvedFunctionType.params,
+      paramTemplates: resolvedFunctionType.paramTemplates ?? [],
+      typeParameters: resolvedFunctionType.typeParameters ?? [],
       returnType: resolvedFunctionType.returnType,
       declaredReturnType: resolvedFunctionType.declaredReturnType ?? null,
       returnTypeRef: resolvedFunctionType.returnTypeRef ?? null,

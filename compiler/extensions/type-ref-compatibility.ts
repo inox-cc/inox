@@ -1,4 +1,8 @@
-import { compilerLibraryIntrinsicRoleForTypeId, compilerLibraryNativeTypeForId } from './library-set.ts'
+import {
+  compilerLibraryIntrinsicRoleForTypeId,
+  compilerLibraryNativeTypeForId,
+  compilerLibraryNativeTypeIsAssignable
+} from './library-set.ts'
 import { instantiateNativeTypeTraits } from './type-ref-substitution.ts'
 import type {
   CompilerLibrarySet,
@@ -492,6 +496,166 @@ export function typeRefsEquivalent(left: TypeRef, right: TypeRef): boolean {
   }
 
   return left.kind === 'unknown' && right.kind === 'unknown' && concreteTypeRefQualifiersEqual(left, right)
+}
+
+/** Checks semantic assignability without relying on declaration or stdlib names. */
+export function typeRefIsAssignable(
+  actual: TypeRef,
+  expected: TypeRef,
+  libraries: CompilerLibrarySet
+): boolean {
+  return typeRefIsAssignableInContext(actual, expected, libraries, new Map<TypeRef, Set<TypeRef>>())
+}
+
+function typeRefIsAssignableInContext(
+  actual: TypeRef,
+  expected: TypeRef,
+  libraries: CompilerLibrarySet,
+  seen: Map<TypeRef, Set<TypeRef>>
+): boolean {
+  if (actual === expected) {
+    return true
+  }
+
+  if (actual.kind === 'unknown' || expected.kind === 'unknown') {
+    return true
+  }
+
+  if (expected.kind === 'parameter') {
+    return actual.kind === 'parameter' && actual.name === expected.name
+  }
+
+  if (actual.kind === 'parameter') {
+    return false
+  }
+
+  if (actual.nullable && !expected.nullable) {
+    return false
+  }
+
+  let expectedForActual = seen.get(actual)
+
+  if (expectedForActual === null || typeof expectedForActual === 'undefined') {
+    expectedForActual = new Set<TypeRef>()
+    seen.set(actual, expectedForActual)
+  } else if (expectedForActual.has(expected)) {
+    return true
+  }
+
+  expectedForActual.add(expected)
+
+  if (actual.kind === 'primitive' || expected.kind === 'primitive') {
+    return actual.kind === 'primitive' && expected.kind === 'primitive' && actual.name === expected.name
+  }
+
+  if (actual.kind === 'nominal' || expected.kind === 'nominal') {
+    if (actual.kind !== 'nominal' || expected.kind !== 'nominal') {
+      return false
+    }
+
+    if (!compilerLibraryNativeTypeIsAssignable(libraries, actual.typeId, expected.typeId)) {
+      return false
+    }
+
+    if (actual.typeId !== expected.typeId) {
+      return expected.args.length === 0
+    }
+
+    return typeRefListIsAssignable(actual.args, expected.args, libraries, seen)
+  }
+
+  if (actual.kind === 'function' || expected.kind === 'function') {
+    if (actual.kind !== 'function' || expected.kind !== 'function' || actual.params.length !== expected.params.length) {
+      return false
+    }
+
+    for (let index = 0; index < actual.params.length; index = index + 1) {
+      const actualParam = actual.params[index]
+      const expectedParam = expected.params[index]
+
+      if (
+        actualParam === null ||
+        typeof actualParam === 'undefined' ||
+        expectedParam === null ||
+        typeof expectedParam === 'undefined' ||
+        !typeRefIsAssignableInContext(expectedParam, actualParam, libraries, seen)
+      ) {
+        return false
+      }
+    }
+
+    return typeRefIsAssignableInContext(actual.result, expected.result, libraries, seen)
+  }
+
+  if (actual.kind !== 'object' || expected.kind !== 'object') {
+    return false
+  }
+
+  for (let index = 0; index < expected.fields.length; index = index + 1) {
+    const expectedField = expected.fields[index]
+
+    if (expectedField === null || typeof expectedField === 'undefined') {
+      return false
+    }
+
+    const actualField = actual.fields.find((field) => field.name === expectedField.name)
+
+    if (actualField === null || typeof actualField === 'undefined') {
+      if (expectedField.optional === true) {
+        continue
+      }
+
+      return false
+    }
+
+    if (actualField.optional === true && expectedField.optional !== true) {
+      return false
+    }
+
+    if (!typeRefIsAssignableInContext(actualField.typeRef, expectedField.typeRef, libraries, seen)) {
+      return false
+    }
+  }
+
+  if (expected.dynamicField !== null && typeof expected.dynamicField !== 'undefined') {
+    if (actual.dynamicField === null || typeof actual.dynamicField === 'undefined') {
+      return false
+    }
+
+    if (!typeRefIsAssignableInContext(actual.dynamicField, expected.dynamicField, libraries, seen)) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function typeRefListIsAssignable(
+  actual: TypeRef[],
+  expected: TypeRef[],
+  libraries: CompilerLibrarySet,
+  seen: Map<TypeRef, Set<TypeRef>>
+): boolean {
+  if (actual.length !== expected.length) {
+    return false
+  }
+
+  for (let index = 0; index < actual.length; index = index + 1) {
+    const actualItem = actual[index]
+    const expectedItem = expected[index]
+
+    if (
+      actualItem === null ||
+      typeof actualItem === 'undefined' ||
+      expectedItem === null ||
+      typeof expectedItem === 'undefined' ||
+      !typeRefIsAssignableInContext(actualItem, expectedItem, libraries, seen)
+    ) {
+      return false
+    }
+  }
+
+  return true
 }
 
 function concreteTypeRefQualifiersEqual(left: ConcreteTypeRef, right: ConcreteTypeRef): boolean {

@@ -23,7 +23,7 @@ import type {
   LibraryNativeIterationDescriptor,
   TypeRef
 } from '../../extensions/types.ts'
-import type { ObjectShapeInfo, SourceLocation } from '../../types.ts'
+import type { AnyNode, ObjectShapeInfo, SourceLocation } from '../../types.ts'
 import { emitCIdentifier } from './identifiers.ts'
 import {
   cCompilerLibrarySetValue,
@@ -66,6 +66,26 @@ type CNullableScalarParamRecord = {
 }
 
 export type CRuntimeValueTag = string | null
+
+export function cCallExpressionReturnsTypeErasedValue(expression: AnyNode | null | undefined): boolean {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'CallExpression' ||
+    expression.callee === null ||
+    typeof expression.callee === 'undefined'
+  ) {
+    return false
+  }
+
+  const functionType = expression.callee.functionType
+
+  if (expression.callBoundaryReturnType === 'unknown') {
+    return true
+  }
+
+  return functionType !== null && typeof functionType !== 'undefined' && functionType.returnType === 'unknown'
+}
 
 export function compilerLibraryIntrinsicSequenceMaterialization(
   libraries: CCompilerLibrarySet,

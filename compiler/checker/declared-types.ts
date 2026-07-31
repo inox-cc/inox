@@ -1549,6 +1549,8 @@ export function resolveFunctionTypeMetadata(
     kind: 'function',
     resolved: true,
     params,
+    paramTemplates: functionType.paramTemplates ?? functionType.params,
+    typeParameters: functionType.typeParameters ?? [],
     declaredReturnType: functionType.returnType,
     returnType: returnInfo.valueType,
     returnTypeRef: returnInfo.typeRef,

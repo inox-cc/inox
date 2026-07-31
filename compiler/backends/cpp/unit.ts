@@ -96,6 +96,7 @@ import {
   compilerLibraryIntrinsicResultCShape,
   compilerLibraryIntrinsicSequenceMaterialization,
   compilerLibraryNativeRuntimeValueExpressionForTypeRef,
+  cCallExpressionReturnsTypeErasedValue,
   emitCType,
   isManagedRuntimeReturnType,
   isOpaqueRuntimeValueType,
@@ -589,6 +590,10 @@ function cUnitValueType(node: AnyNode, context: CEmitContext): string {
   }
 
   if (node.nullable === true && isRuntimeNullableType(valueType)) {
+    return 'unknown'
+  }
+
+  if (cCallExpressionReturnsTypeErasedValue(node.init)) {
     return 'unknown'
   }
 

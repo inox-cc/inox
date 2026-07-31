@@ -111,6 +111,7 @@ import {
   compilerLibraryIntrinsicResultCShape,
   compilerLibraryNativeRuntimeRequirementsForCppType,
   compilerLibraryNativeRuntimeRequirementsForId,
+  cCallExpressionReturnsTypeErasedValue,
   emitCType,
   isManagedRuntimeReturnType,
   isOpaqueRuntimeValueType,
@@ -3280,6 +3281,10 @@ function cModuleValueType(node: AnyNode, context?: CEmitContext): string {
   }
 
   if (node.nullable === true && isRuntimeNullableType(valueType)) {
+    return 'unknown'
+  }
+
+  if (cCallExpressionReturnsTypeErasedValue(node.init)) {
     return 'unknown'
   }
 

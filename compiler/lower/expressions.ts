@@ -339,6 +339,11 @@ function lowerExpressionNodeOrNull(
 }
 
 function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressionNode): LowerExpressionNode {
+  const callBoundaryReturnType = nullableString(source.callBoundaryReturnType)
+  if (callBoundaryReturnType !== null && typeof callBoundaryReturnType !== 'undefined') {
+    target.callBoundaryReturnType = callBoundaryReturnType
+  }
+
   const declaredType = nullableString(source.declaredType)
   if (declaredType !== null && typeof declaredType !== 'undefined') {
     target.declaredType = declaredType

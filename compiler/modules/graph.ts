@@ -984,6 +984,7 @@ function applyImportedFunctionDeclarationMetadata(specifier: AnyNode, declaratio
   specifier.valueType = 'function'
   specifier.async = declaration.async === true
   specifier.params = declaration.params
+  specifier.typeParameters = declaration.typeParameters ?? []
   specifier.declaredReturnType = declaration.declaredReturnType ?? declaration.returnType ?? null
   specifier.returnType = declaration.returnType ?? declaration.declaredReturnType ?? 'unknown'
   specifier.returnTypeRef = declaration.returnTypeRef ?? null
