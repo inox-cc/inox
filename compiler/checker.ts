@@ -134,11 +134,7 @@ import {
   uniqueNames
 } from './checker/helpers.ts'
 import { ownershipCycleDiagnostics } from './checker/ownership.ts'
-import {
-  memberExpressionPath,
-  narrowingPathIsSameOrDescendant,
-  narrowingPathRoot
-} from './member-paths.ts'
+import { memberExpressionPath, narrowingPathIsSameOrDescendant, narrowingPathRoot } from './member-paths.ts'
 import {
   isBuiltinValueType,
   isNullableTypeName,
@@ -249,6 +245,19 @@ type CheckerTypeParameterState = {
   name: string
   previousType: TypeAliasInfo | null
   previousResolvedType: ResolvedTypeInfo | null
+}
+
+type CheckerClassConstructorMetadata = {
+  constructorParams: FunctionTypeParamMetadata[]
+  constructorParamTemplates: AnyNode[][]
+  constructorOverloads: SymbolInfo[]
+  shape: ObjectShapeInfo
+}
+
+type CheckerConstructorCandidate = {
+  callable: SymbolInfo
+  typeArgumentNames: string[]
+  typeArguments: ResolvedTypeInfo[]
 }
 
 type CheckerNarrowingState = {
@@ -743,55 +752,10 @@ class Checker {
   }
 
   declareLibraryGlobalClass(libraryId: string, item: AnyNode): void {
-    const constructorMethods: AnyNode[] = []
-
-    for (let index = 0; index < item.methods.length; index = index + 1) {
-      const method = item.methods[index]
-
-      if (method.name === 'constructor') {
-        constructorMethods.push(method)
-      }
-    }
-
-    const typeParameterState = this.pushFunctionTypeParameters(item)
+    const typeParameterState = this.pushTypeRefTemplateParameters(item.typeParameters ?? [])
 
     try {
-      const constructorMethod = constructorMethods[0] ?? null
-      let constructorParams: AnyNode[] = []
-
-      if (constructorMethod !== null && typeof constructorMethod !== 'undefined') {
-        constructorParams = this.resolveParams(constructorMethod.params)
-      }
-
-      const shape = this.resolveClassInstanceShape(item, constructorParams)
-      const constructorOverloads: SymbolInfo[] = []
-      const constructorParamTemplates: AnyNode[][] = []
-
-      if (constructorMethods.length === 0) {
-        constructorOverloads.push({
-          kind: 'function',
-          valueType: 'function',
-          params: [],
-          returnType: 'object',
-          returnShape: shape,
-          loc: item.loc
-        })
-        constructorParamTemplates.push([])
-      }
-
-      for (let index = 0; index < constructorMethods.length; index = index + 1) {
-        const method = constructorMethods[index]
-
-        constructorOverloads.push({
-          kind: 'function',
-          valueType: 'function',
-          params: this.resolveParams(method.params),
-          returnType: 'object',
-          returnShape: shape,
-          loc: method.loc
-        })
-        constructorParamTemplates.push(method.params)
-      }
+      const metadata = this.resolveClassConstructorMetadata(item)
 
       const symbol: SymbolInfo = {
         kind: 'class',
@@ -801,14 +765,14 @@ class Checker {
         libraryBindingId: `global:${item.name}`,
         classMethods: item.methods,
         typeParameters: item.typeParameters ?? [],
-        constructorParams,
-        constructorParamTemplates,
-        constructorOverloads,
-        shape,
+        constructorParams: metadata.constructorParams,
+        constructorParamTemplates: metadata.constructorParamTemplates,
+        constructorOverloads: metadata.constructorOverloads,
+        shape: metadata.shape,
         loc: item.loc
       }
 
-      item.shape = shape
+      item.shape = metadata.shape
       this.scope.bindings.set(item.name, symbol)
       this.typeSymbols.set(item.name, symbol)
     } finally {
@@ -824,6 +788,16 @@ class Checker {
         this.declareTypeAlias(item as TypeAliasDeclarationNode)
       } else if (item.type === 'ClassDeclaration') {
         this.classNames.add(item.name)
+
+        const typeParameters: AnyNode[] = item.typeParameters ?? []
+
+        if (typeParameters.length > 0) {
+          this.types.set(item.name, {
+            kind: 'object',
+            typeParameters,
+            fields: item.fields ?? []
+          })
+        }
       } else if (
         item.type === 'VariableDeclaration' &&
         item.kind === 'const' &&
@@ -868,10 +842,17 @@ class Checker {
           this.applyImportSpecifierValueMetadata(symbol, specifier)
 
           if (specifier.constructable === true) {
+            const classMethods: AnyNode[] = specifier.classMethods ?? []
+
             symbol.constructable = true
             symbol.className = specifier.className ?? null
             symbol.constructorParams = this.resolveImportedParams(specifier.constructorParams ?? [])
-            symbol.classMethods = specifier.classMethods ?? []
+            symbol.classMethods = classMethods
+            symbol.typeParameters = specifier.typeParameters ?? []
+            symbol.constructorParamTemplates = classConstructorParamTemplates(
+              classMethods,
+              specifier.constructorParams ?? []
+            )
           }
 
           if (specifier.returnType !== null && typeof specifier.returnType !== 'undefined') {
@@ -935,31 +916,59 @@ class Checker {
       }
 
       if (item.type === 'ClassDeclaration') {
-        const constructorMethod = findClassConstructorMethod(item)
-        let constructorParams: AnyNode[] = []
+        const typeParameterState = this.pushTypeRefTemplateParameters(item.typeParameters ?? [])
 
-        if (constructorMethod !== null && typeof constructorMethod !== 'undefined') {
-          constructorParams = this.resolveParams(constructorMethod.params)
+        try {
+          const metadata = this.resolveClassConstructorMetadata(item)
+
+          item.shape = metadata.shape
+
+          this.declare(
+            item.name,
+            {
+              kind: 'class',
+              mutable: false,
+              valueType: 'class',
+              classMethods: item.methods,
+              typeParameters: item.typeParameters ?? [],
+              constructorParams: metadata.constructorParams,
+              constructorParamTemplates: metadata.constructorParamTemplates,
+              constructorOverloads: metadata.constructorOverloads,
+              shape: metadata.shape,
+              loc: item.loc
+            },
+            item.loc
+          )
+        } finally {
+          this.restoreFunctionTypeParameters(typeParameterState)
         }
-
-        const shape = this.resolveClassInstanceShape(item, constructorParams)
-
-        item.shape = shape
-
-        this.declare(
-          item.name,
-          {
-            kind: 'class',
-            mutable: false,
-            valueType: 'class',
-            classMethods: item.methods,
-            constructorParams,
-            shape,
-            loc: item.loc
-          },
-          item.loc
-        )
       }
+    }
+  }
+
+  resolveClassConstructorMetadata(item: AnyNode): CheckerClassConstructorMetadata {
+    const methods = classConstructorMethods(item.methods ?? [])
+    const templates = classConstructorParamTemplates(item.methods ?? [], [])
+    const constructorParams = this.resolveParams(templates[0] ?? [])
+    const shape = this.resolveClassInstanceShape(item, constructorParams)
+    const constructorOverloads: SymbolInfo[] = []
+
+    for (let index = 0; index < templates.length; index = index + 1) {
+      constructorOverloads.push({
+        kind: 'function',
+        valueType: 'function',
+        params: this.resolveParams(templates[index]),
+        returnType: 'object',
+        returnShape: shape,
+        loc: methods[index]?.loc ?? item.loc
+      })
+    }
+
+    return {
+      constructorParams,
+      constructorParamTemplates: templates,
+      constructorOverloads,
+      shape
     }
   }
 
@@ -1685,17 +1694,14 @@ class Checker {
           ? null
           : (declared.typeRef ??
             (declared.valueType !== 'unknown' ||
-              declared.functionType !== null ||
-              declared.shape !== null ||
-              statement.declaredType === 'unknown' ||
-              statement.declaredType === 'any'
+            declared.functionType !== null ||
+            declared.shape !== null ||
+            statement.declaredType === 'unknown' ||
+            statement.declaredType === 'any'
               ? typeRefFromResolvedTypeInContext(declared, statement.declaredType ?? null)
               : null))
 
-      if (
-        declaredTypeRef !== null &&
-        typeof declaredTypeRef !== 'undefined'
-      ) {
+      if (declaredTypeRef !== null && typeof declaredTypeRef !== 'undefined') {
         typeRef = declaredTypeRef
 
         if (
@@ -2668,10 +2674,7 @@ class Checker {
 
     if (mutationPath !== null) {
       this.recordAliasMutation(mutationPath)
-    } else if (
-      expression.target.object !== null &&
-      typeof expression.target.object !== 'undefined'
-    ) {
+    } else if (expression.target.object !== null && typeof expression.target.object !== 'undefined') {
       const objectPath = nullableNarrowingKey(expression.target.object)
 
       if (objectPath !== null) {
@@ -4160,10 +4163,7 @@ class Checker {
     return { names, arguments: argumentsResult }
   }
 
-  resolveGenericFunctionParamTemplates(
-    symbol: SymbolInfo,
-    typeParameters: AnyNode[]
-  ): FunctionTypeParamMetadata[] {
+  resolveGenericFunctionParamTemplates(symbol: SymbolInfo, typeParameters: AnyNode[]): FunctionTypeParamMetadata[] {
     const state = this.pushTypeRefTemplateParameters(typeParameters)
 
     try {
@@ -4547,7 +4547,11 @@ class Checker {
     }
   }
 
-  constructorCallableSymbolForExpression(symbol: SymbolInfo, expression: AnyNode): SymbolInfo | null {
+  constructorCallableSymbolForExpression(
+    symbol: SymbolInfo,
+    expression: AnyNode,
+    argInfos: CheckedCallArgInfo[]
+  ): SymbolInfo | null {
     const typeParameters = symbol.typeParameters ?? []
 
     if (typeParameters.length === 0) {
@@ -4555,42 +4559,227 @@ class Checker {
     }
 
     const typeArguments: string[] = expression.typeArguments ?? []
+    const explicitTypeArguments = typeArguments.length > 0
 
-    if (typeArguments.length !== typeParameters.length) {
+    if (explicitTypeArguments && typeArguments.length !== typeParameters.length) {
       this.report(
         'INOX_TYPE_ARGUMENT_COUNT',
         `generic class ${expression.callee.path[0]} expects ${typeParameters.length} type argument(s), got ${typeArguments.length}`,
         expression.loc
       )
-      return null
+      return this.fallbackConstructorCallableSymbol(symbol, expression)
     }
 
-    const state = this.pushInstantiatedTypeParameters(typeParameters, typeArguments, nodeSourceLocation(expression))
+    const typeParameterNames: string[] = []
+
+    for (let index = 0; index < typeParameters.length; index = index + 1) {
+      typeParameterNames.push(typeParameters[index].name)
+    }
+
+    const templates = this.constructorParamTemplates(symbol)
+    const candidates: CheckerConstructorCandidate[] = []
+
+    for (let index = 0; index < templates.length; index = index + 1) {
+      const template = templates[index]
+      let argumentNames: string[] = []
+      let resolvedArguments: ResolvedTypeInfo[] = []
+
+      if (explicitTypeArguments) {
+        argumentNames = typeArguments
+
+        for (let argumentIndex = 0; argumentIndex < typeArguments.length; argumentIndex = argumentIndex + 1) {
+          resolvedArguments.push(this.resolveDeclaredType(typeArguments[argumentIndex], expression.loc))
+        }
+      } else {
+        const inferred = this.inferUserFunctionTypeArguments(
+          {
+            kind: 'function',
+            valueType: 'function',
+            paramTemplates: template
+          },
+          typeParameters,
+          typeParameterNames,
+          argInfos
+        )
+
+        if (inferred === null) {
+          continue
+        }
+
+        argumentNames = inferred.names
+        resolvedArguments = inferred.arguments
+      }
+
+      candidates.push(
+        this.instantiateConstructorCandidate(
+          symbol,
+          expression,
+          template,
+          index,
+          typeParameters,
+          argumentNames,
+          resolvedArguments
+        )
+      )
+    }
+
+    if (candidates.length === 0) {
+      this.report(
+        'INOX_TYPE_ARGUMENT_INFERENCE',
+        `cannot infer type argument(s) ${typeParameterNames.join(', ')}`,
+        expression.loc
+      )
+      return this.fallbackConstructorCallableSymbol(symbol, expression)
+    }
+
+    let selected = candidates[0]
+
+    for (let index = 0; index < candidates.length; index = index + 1) {
+      if (this.constructorCallableAcceptsArguments(candidates[index].callable, argInfos)) {
+        selected = candidates[index]
+        break
+      }
+    }
+
+    this.checkInstantiatedTypeParameterConstraints(
+      typeParameters,
+      selected.typeArgumentNames,
+      selected.typeArguments,
+      nodeSourceLocation(expression)
+    )
+
+    return selected.callable
+  }
+
+  constructorParamTemplates(symbol: SymbolInfo): AnyNode[][] {
+    const templates = symbol.constructorParamTemplates ?? []
+
+    if (templates.length > 0) {
+      return templates
+    }
+
+    return classConstructorParamTemplates(symbol.classMethods ?? [], symbol.constructorParams ?? [])
+  }
+
+  instantiateConstructorCandidate(
+    symbol: SymbolInfo,
+    expression: AnyNode,
+    template: AnyNode[],
+    overloadIndex: number,
+    typeParameters: AnyNode[],
+    typeArgumentNames: string[],
+    typeArguments: ResolvedTypeInfo[]
+  ): CheckerConstructorCandidate {
+    const state = this.pushResolvedInstantiatedTypeParameters(typeParameters, typeArguments)
 
     try {
-      const templates = symbol.constructorParamTemplates ?? []
-      const overloads: SymbolInfo[] = []
-
-      for (let index = 0; index < templates.length; index = index + 1) {
-        overloads.push({
-          kind: 'function',
-          valueType: 'function',
-          params: this.resolveParams(templates[index]),
-          returnType: 'object',
-          returnShape: symbol.shape ?? null,
-          loc: symbol.constructorOverloads?.[index]?.loc ?? expression.loc
-        })
+      const result = this.instantiatedClassResult(
+        symbol,
+        firstPathSegment(expression.callee.path),
+        typeParameters,
+        typeArgumentNames,
+        typeArguments
+      )
+      const callable: SymbolInfo = {
+        kind: 'function',
+        valueType: 'function',
+        params: this.resolveParams(template),
+        returnType: 'object',
+        returnTypeRef: result.typeRef,
+        returnShape: result.shape,
+        loc: symbol.constructorOverloads?.[overloadIndex]?.loc ?? expression.loc
       }
 
-      const first = overloads[0]
-
-      if (first === null || typeof first === 'undefined') {
-        return null
-      }
-
-      return { ...first, overloads }
+      return { callable, typeArgumentNames, typeArguments }
     } finally {
       this.restoreFunctionTypeParameters(state)
+    }
+  }
+
+  instantiatedClassResult(
+    symbol: SymbolInfo,
+    className: string,
+    typeParameters: AnyNode[],
+    typeArgumentNames: string[],
+    typeArguments: ResolvedTypeInfo[]
+  ): ResolvedTypeInfo {
+    const template = this.unresolvedTypeInfo()
+    template.valueType = 'object'
+    template.shape = symbol.shape ?? null
+    const templateTypeRef = typeRefFromResolvedTypeInContext(template, className)
+    const substitutions: TypeRefSubstitution[] = []
+
+    for (let index = 0; index < typeParameters.length; index = index + 1) {
+      const argument = typeArguments[index]
+
+      if (argument === null || typeof argument === 'undefined') {
+        continue
+      }
+
+      substitutions.push({
+        name: typeParameters[index].name,
+        typeRef: typeRefFromResolvedTypeInContext(argument, typeArgumentNames[index] ?? null)
+      })
+    }
+
+    let typeRef = substituteTypeRef(templateTypeRef, substitutions)
+
+    if (typeRef.kind === 'object') {
+      typeRef = {
+        ...typeRef,
+        declaredName: `${className}<${typeArgumentNames.join(',')}>`
+      }
+    }
+
+    return this.resolvedTypeInfoFromTypeRef(typeRef)
+  }
+
+  constructorCallableAcceptsArguments(callable: SymbolInfo, argInfos: CheckedCallArgInfo[]): boolean {
+    const params = callable.params ?? []
+
+    if (!acceptsArgumentCount(params, argInfos.length)) {
+      return false
+    }
+
+    const libraries = resolveCompilerLibrarySet(this.options.libraries)
+
+    for (let index = 0; index < argInfos.length; index = index + 1) {
+      const param = paramForArgument(params, index)
+      const argument = argInfos[index]
+
+      if (
+        param === null ||
+        typeof param === 'undefined' ||
+        argument === null ||
+        typeof argument === 'undefined' ||
+        !isAssignableType(
+          argument.valueType,
+          argumentParamValueType(param, libraries),
+          param.nullable === true || param.optional === true,
+          argument.nullable
+        )
+      ) {
+        return false
+      }
+    }
+
+    return true
+  }
+
+  fallbackConstructorCallableSymbol(symbol: SymbolInfo, expression: AnyNode): SymbolInfo {
+    const existing = this.constructorCallableSymbol(symbol)
+
+    if (existing !== null) {
+      return existing
+    }
+
+    return {
+      kind: 'function',
+      valueType: 'function',
+      params: symbol.constructorParams ?? [],
+      returnType: 'object',
+      returnShape: symbol.shape ?? null,
+      loc: symbol.loc ?? expression.loc
     }
   }
 
@@ -4614,11 +4803,7 @@ class Checker {
   ): CheckerTypeParameterState[] {
     const state: CheckerTypeParameterState[] = []
 
-    for (
-      let index = 0;
-      index < typeParameters.length && index < resolvedArguments.length;
-      index = index + 1
-    ) {
+    for (let index = 0; index < typeParameters.length && index < resolvedArguments.length; index = index + 1) {
       const name: string = typeParameters[index].name
       state.push({
         name,
@@ -6585,12 +6770,16 @@ class Checker {
       return 'object'
     }
 
-    const declarationConstructor = this.constructorCallableSymbolForExpression(symbol, expression)
+    const declarationConstructor = this.constructorCallableSymbolForExpression(symbol, expression, argInfos)
 
     if (declarationConstructor !== null) {
       applyCallableSymbolCallInContext(this.callableSymbolContext(), expression, declarationConstructor, argInfos)
       expression.className = constructorName
-      expression.shape = symbol.shape ?? expression.shape ?? null
+
+      if (expression.shape === null || typeof expression.shape === 'undefined') {
+        expression.shape = symbol.shape ?? null
+      }
+
       return 'object'
     }
 
@@ -6856,8 +7045,7 @@ class Checker {
     libraries: CompilerLibrarySet
   ): void {
     const operation = compilerLibraryOperationForIntrinsic(libraries, 'async-result', 'construct')
-    const resultTypeRef =
-      operation === null ? null : inferredAsyncResultTypeRef(operation, fulfilled)
+    const resultTypeRef = operation === null ? null : inferredAsyncResultTypeRef(operation, fulfilled)
 
     if (resultTypeRef === null) {
       declaration.returnType = 'async-result'
@@ -7318,169 +7506,175 @@ class Checker {
   }
 
   checkClassDeclaration(statement: AnyNode): void {
-    const fieldNames = new Set()
-    const methodNames = new Set()
+    const typeParameterState = this.pushFunctionTypeParameters(statement)
 
-    if (statement.extendsName !== null && typeof statement.extendsName !== 'undefined') {
-      let extendsLoc = statement.loc
+    try {
+      const fieldNames = new Set()
+      const methodNames = new Set()
 
-      if (statement.extendsLoc !== null && typeof statement.extendsLoc !== 'undefined') {
-        extendsLoc = statement.extendsLoc
-      }
+      if (statement.extendsName !== null && typeof statement.extendsName !== 'undefined') {
+        let extendsLoc = statement.loc
 
-      this.report('INOX_CLASS_EXTENDS', 'class inheritance is not supported', extendsLoc)
-    }
-
-    let fields: AnyNode[] = []
-
-    if (statement.fields !== null && typeof statement.fields !== 'undefined') {
-      fields = statement.fields
-    }
-
-    for (const field of fields) {
-      let fieldLoc = statement.loc
-
-      if (field.loc !== null && typeof field.loc !== 'undefined') {
-        fieldLoc = field.loc
-      }
-
-      if (field.static) {
-        let fieldStaticLoc = fieldLoc
-
-        if (field.staticLoc !== null && typeof field.staticLoc !== 'undefined') {
-          fieldStaticLoc = field.staticLoc
+        if (statement.extendsLoc !== null && typeof statement.extendsLoc !== 'undefined') {
+          extendsLoc = statement.extendsLoc
         }
 
-        this.report('INOX_CLASS_STATIC', 'static class fields are not supported', fieldStaticLoc)
+        this.report('INOX_CLASS_EXTENDS', 'class inheritance is not supported', extendsLoc)
       }
 
-      if (fieldNames.has(field.name)) {
-        this.report('INOX_REDECLARED_NAME', `field ${field.name} is already declared in this class`, fieldLoc)
+      let fields: AnyNode[] = []
+
+      if (statement.fields !== null && typeof statement.fields !== 'undefined') {
+        fields = statement.fields
       }
 
-      fieldNames.add(field.name)
-    }
+      for (const field of fields) {
+        let fieldLoc = statement.loc
 
-    for (const method of statement.methods) {
-      let methodLoc = statement.loc
-
-      if (method.loc !== null && typeof method.loc !== 'undefined') {
-        methodLoc = method.loc
-      }
-
-      if (method.static) {
-        let methodStaticLoc = methodLoc
-
-        if (method.staticLoc !== null && typeof method.staticLoc !== 'undefined') {
-          methodStaticLoc = method.staticLoc
+        if (field.loc !== null && typeof field.loc !== 'undefined') {
+          fieldLoc = field.loc
         }
 
-        this.report('INOX_CLASS_STATIC', 'static class methods are not supported', methodStaticLoc)
-      }
+        if (field.static) {
+          let fieldStaticLoc = fieldLoc
 
-      if (methodNames.has(method.name)) {
-        this.report('INOX_REDECLARED_NAME', `method ${method.name} is already declared in this class`, methodLoc)
-      }
+          if (field.staticLoc !== null && typeof field.staticLoc !== 'undefined') {
+            fieldStaticLoc = field.staticLoc
+          }
 
-      if (fieldNames.has(method.name)) {
-        this.report('INOX_REDECLARED_NAME', `method ${method.name} conflicts with a class field`, methodLoc)
-      }
-
-      methodNames.add(method.name)
-      const scopeState = this.pushScope()
-
-      try {
-        const previousReturnType = this.currentReturnType
-        const methodReturnInfo = this.resolveMethodReturnType(method)
-
-        this.currentReturnType = methodReturnInfo.valueType
-        const previousReturnNullable = this.currentReturnNullable
-        this.currentReturnNullable = methodReturnInfo.nullable
-        const previousReturnAsyncResultValueType = this.currentReturnAsyncResultValueType
-        const previousReturnShape = this.currentReturnShape
-        this.currentReturnShape = methodReturnInfo.shape
-        method.returnTypeRef = methodReturnInfo.typeRef
-        method.returnShape = methodReturnInfo.shape
-        this.currentReturnAsyncResultValueType = null
-
-        if (
-          methodReturnInfo.asyncResultValueType !== null &&
-          typeof methodReturnInfo.asyncResultValueType !== 'undefined'
-        ) {
-          this.currentReturnAsyncResultValueType = methodReturnInfo.asyncResultValueType
+          this.report('INOX_CLASS_STATIC', 'static class fields are not supported', fieldStaticLoc)
         }
 
-        const previousReturnAsync = this.currentReturnAsync
-        this.currentReturnAsync = false
-        const previousClassConstructor = this.currentClassConstructor
-        this.currentClassConstructor = nodeNameEquals(method, 'constructor')
-        const previousFunctionDepth = this.functionDepth
-        this.functionDepth = this.functionDepth + 1
-        let thisShape: ObjectShapeInfo | null = null
-
-        if (statement.shape !== null && typeof statement.shape !== 'undefined') {
-          thisShape = statement.shape
+        if (fieldNames.has(field.name)) {
+          this.report('INOX_REDECLARED_NAME', `field ${field.name} is already declared in this class`, fieldLoc)
         }
 
-        this.declare(
-          'this',
-          {
-            kind: 'this',
-            mutable: false,
-            valueType: 'object',
-            className: statement.name,
-            shape: thisShape,
-            loc: method.loc
-          },
-          method.loc
-        )
+        fieldNames.add(field.name)
+      }
 
-        for (let index = 0; index < method.params.length; index = index + 1) {
-          const param = method.params[index]
-          const declaredType = nodeDeclaredTypeOrValueType(param)
-          const paramInfo = this.resolveParam(param)
-          param.declaredType = declaredType
-          param.valueType = paramInfo.valueType
-          param.typeRef = paramInfo.typeRef
-          param.nullable = paramInfo.nullable
-          param.asyncResultValueType = paramInfo.asyncResultValueType ?? null
-          param.functionType = paramInfo.functionType
-          param.shape = paramInfo.shape
-          param.className = this.declaredClassName(declaredType)
+      for (const method of statement.methods) {
+        let methodLoc = statement.loc
 
-          this.declare(
-            param.name,
-            {
-              kind: 'param',
-              mutable: true,
-              className: param.className,
-              valueType: paramInfo.valueType,
-              declaredType,
-              typeRef: paramInfo.typeRef,
-              nullable: paramInfo.nullable,
-              asyncResultValueType: paramInfo.asyncResultValueType,
-              functionType: paramInfo.functionType,
-              shape: paramInfo.shape,
-              loc: param.loc
-            },
-            param.loc
-          )
+        if (method.loc !== null && typeof method.loc !== 'undefined') {
+          methodLoc = method.loc
         }
+
+        if (method.static) {
+          let methodStaticLoc = methodLoc
+
+          if (method.staticLoc !== null && typeof method.staticLoc !== 'undefined') {
+            methodStaticLoc = method.staticLoc
+          }
+
+          this.report('INOX_CLASS_STATIC', 'static class methods are not supported', methodStaticLoc)
+        }
+
+        if (methodNames.has(method.name)) {
+          this.report('INOX_REDECLARED_NAME', `method ${method.name} is already declared in this class`, methodLoc)
+        }
+
+        if (fieldNames.has(method.name)) {
+          this.report('INOX_REDECLARED_NAME', `method ${method.name} conflicts with a class field`, methodLoc)
+        }
+
+        methodNames.add(method.name)
+        const scopeState = this.pushScope()
 
         try {
-          this.checkStatements(method.body)
+          const previousReturnType = this.currentReturnType
+          const methodReturnInfo = this.resolveMethodReturnType(method)
+
+          this.currentReturnType = methodReturnInfo.valueType
+          const previousReturnNullable = this.currentReturnNullable
+          this.currentReturnNullable = methodReturnInfo.nullable
+          const previousReturnAsyncResultValueType = this.currentReturnAsyncResultValueType
+          const previousReturnShape = this.currentReturnShape
+          this.currentReturnShape = methodReturnInfo.shape
+          method.returnTypeRef = methodReturnInfo.typeRef
+          method.returnShape = methodReturnInfo.shape
+          this.currentReturnAsyncResultValueType = null
+
+          if (
+            methodReturnInfo.asyncResultValueType !== null &&
+            typeof methodReturnInfo.asyncResultValueType !== 'undefined'
+          ) {
+            this.currentReturnAsyncResultValueType = methodReturnInfo.asyncResultValueType
+          }
+
+          const previousReturnAsync = this.currentReturnAsync
+          this.currentReturnAsync = false
+          const previousClassConstructor = this.currentClassConstructor
+          this.currentClassConstructor = nodeNameEquals(method, 'constructor')
+          const previousFunctionDepth = this.functionDepth
+          this.functionDepth = this.functionDepth + 1
+          let thisShape: ObjectShapeInfo | null = null
+
+          if (statement.shape !== null && typeof statement.shape !== 'undefined') {
+            thisShape = statement.shape
+          }
+
+          this.declare(
+            'this',
+            {
+              kind: 'this',
+              mutable: false,
+              valueType: 'object',
+              className: statement.name,
+              shape: thisShape,
+              loc: method.loc
+            },
+            method.loc
+          )
+
+          for (let index = 0; index < method.params.length; index = index + 1) {
+            const param = method.params[index]
+            const declaredType = nodeDeclaredTypeOrValueType(param)
+            const paramInfo = this.resolveParam(param)
+            param.declaredType = declaredType
+            param.valueType = paramInfo.valueType
+            param.typeRef = paramInfo.typeRef
+            param.nullable = paramInfo.nullable
+            param.asyncResultValueType = paramInfo.asyncResultValueType ?? null
+            param.functionType = paramInfo.functionType
+            param.shape = paramInfo.shape
+            param.className = this.declaredClassName(declaredType)
+
+            this.declare(
+              param.name,
+              {
+                kind: 'param',
+                mutable: true,
+                className: param.className,
+                valueType: paramInfo.valueType,
+                declaredType,
+                typeRef: paramInfo.typeRef,
+                nullable: paramInfo.nullable,
+                asyncResultValueType: paramInfo.asyncResultValueType,
+                functionType: paramInfo.functionType,
+                shape: paramInfo.shape,
+                loc: param.loc
+              },
+              param.loc
+            )
+          }
+
+          try {
+            this.checkStatements(method.body)
+          } finally {
+            this.currentReturnType = previousReturnType
+            this.currentReturnNullable = previousReturnNullable
+            this.currentReturnAsyncResultValueType = previousReturnAsyncResultValueType
+            this.currentReturnShape = previousReturnShape
+            this.currentReturnAsync = previousReturnAsync
+            this.currentClassConstructor = previousClassConstructor
+            this.functionDepth = previousFunctionDepth
+          }
         } finally {
-          this.currentReturnType = previousReturnType
-          this.currentReturnNullable = previousReturnNullable
-          this.currentReturnAsyncResultValueType = previousReturnAsyncResultValueType
-          this.currentReturnShape = previousReturnShape
-          this.currentReturnAsync = previousReturnAsync
-          this.currentClassConstructor = previousClassConstructor
-          this.functionDepth = previousFunctionDepth
+          this.restoreScope(scopeState)
         }
-      } finally {
-        this.restoreScope(scopeState)
       }
+    } finally {
+      this.restoreFunctionTypeParameters(typeParameterState)
     }
   }
 
@@ -8397,11 +8591,7 @@ class Checker {
 
     const value: AnyNode = expression.value
 
-    if (
-      value.type !== 'BinaryExpression' ||
-      value.operator !== '+' ||
-      !this.referenceNamesBinding(value.left, name)
-    ) {
+    if (value.type !== 'BinaryExpression' || value.operator !== '+' || !this.referenceNamesBinding(value.left, name)) {
       return false
     }
 
@@ -8770,11 +8960,7 @@ class Checker {
     if (expression.type === 'Reference' && expression.path.length === 1) {
       const symbol = this.scope.resolve(firstPathSegment(expression.path))
 
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        this.aliasNarrowingSnapshotIsCurrent(symbol)
-      ) {
+      if (symbol !== null && typeof symbol !== 'undefined' && this.aliasNarrowingSnapshotIsCurrent(symbol)) {
         const trueNames = symbol.narrowingTrueNames ?? []
         const falseNames = symbol.narrowingFalseNames ?? []
 
@@ -9121,9 +9307,7 @@ class Checker {
     )
   }
 
-  nullableAliasNarrowingSnapshot(
-    narrowing: NullableConditionNarrowing
-  ): CheckerAliasNarrowingSnapshot | null {
+  nullableAliasNarrowingSnapshot(narrowing: NullableConditionNarrowing): CheckerAliasNarrowingSnapshot | null {
     const names: string[] = []
 
     for (let index = 0; index < narrowing.trueNames.length; index = index + 1) {
@@ -9146,12 +9330,7 @@ class Checker {
       const root = narrowingPathRoot(name)
       const symbol = this.scope.resolve(root)
 
-      if (
-        name.includes('[') ||
-        symbol === null ||
-        typeof symbol === 'undefined' ||
-        symbol.mutable === true
-      ) {
+      if (name.includes('[') || symbol === null || typeof symbol === 'undefined' || symbol.mutable === true) {
         return null
       }
 
@@ -9183,11 +9362,7 @@ class Checker {
     for (let index = 1; index < parts.length; index = index + 1) {
       const field = this.findShapeField(shape, parts[index])
 
-      if (
-        field === null ||
-        typeof field === 'undefined' ||
-        (field.readonly !== true && field.readonlyField !== true)
-      ) {
+      if (field === null || typeof field === 'undefined' || (field.readonly !== true && field.readonlyField !== true)) {
         return false
       }
 
@@ -9215,22 +9390,13 @@ class Checker {
     const roots = symbol.narrowingDependencyRoots
     const versions = symbol.narrowingDependencyVersions
 
-    if (
-      roots === null ||
-      typeof roots === 'undefined' ||
-      versions === null ||
-      typeof versions === 'undefined'
-    ) {
+    if (roots === null || typeof roots === 'undefined' || versions === null || typeof versions === 'undefined') {
       return true
     }
 
     const callVersion = symbol.narrowingCallVersion
 
-    if (
-      typeof callVersion !== 'number' ||
-      callVersion !== this.aliasCallVersion ||
-      roots.length !== versions.length
-    ) {
+    if (typeof callVersion !== 'number' || callVersion !== this.aliasCallVersion || roots.length !== versions.length) {
       return false
     }
 
@@ -9370,11 +9536,7 @@ class Checker {
           return receiverNarrowing
         }
 
-        const refinedTrueTypeRef = this.refineArgumentNarrowingTypeRef(
-          argument,
-          trueTypeRef,
-          expressionLoc
-        )
+        const refinedTrueTypeRef = this.refineArgumentNarrowingTypeRef(argument, trueTypeRef, expressionLoc)
         const metadata = typeRefCompatibilityMetadata(refinedTrueTypeRef, libraries, expressionLoc)
 
         if (isBuiltinValueType(metadata.valueType)) {
@@ -9403,11 +9565,7 @@ class Checker {
           return receiverNarrowing
         }
 
-        const refinedFalseTypeRef = this.refineArgumentNarrowingTypeRef(
-          argument,
-          falseTypeRef,
-          expressionLoc
-        )
+        const refinedFalseTypeRef = this.refineArgumentNarrowingTypeRef(argument, falseTypeRef, expressionLoc)
         const metadata = typeRefCompatibilityMetadata(refinedFalseTypeRef, libraries, expressionLoc)
 
         if (isBuiltinValueType(metadata.valueType)) {
@@ -9656,10 +9814,7 @@ class Checker {
     return null
   }
 
-  checkerScalarLiteralsEqual(
-    left: CheckerScalarLiteral | null,
-    right: CheckerScalarLiteral | null
-  ): boolean {
+  checkerScalarLiteralsEqual(left: CheckerScalarLiteral | null, right: CheckerScalarLiteral | null): boolean {
     if (typeof left === 'string' && typeof right === 'string') {
       return left === right
     }
@@ -9825,7 +9980,11 @@ class Checker {
     }
 
     if (this.isWeakNullableReceiver(receiver)) {
-      this.report('INOX_WEAK_ACCESS', 'nullable weak value access requires optional chaining or a prior null check', loc)
+      this.report(
+        'INOX_WEAK_ACCESS',
+        'nullable weak value access requires optional chaining or a prior null check',
+        loc
+      )
       return
     }
 
@@ -10540,9 +10699,7 @@ function isUnknownTypeRef(typeRef: TypeRef | null | undefined): boolean {
   return typeRef !== null && typeof typeRef !== 'undefined' && typeRef.kind === 'unknown'
 }
 
-function commonInferredFunctionReturn(
-  candidates: InferredFunctionReturnCandidate[]
-): InferredFunctionReturnCandidate {
+function commonInferredFunctionReturn(candidates: InferredFunctionReturnCandidate[]): InferredFunctionReturnCandidate {
   if (candidates.length === 0) {
     return {
       valueType: 'void',
@@ -10892,6 +11049,35 @@ function nodeSourceLocation(node: AnyNode): SourceLocation {
   return loc
 }
 
+function classConstructorMethods(methods: AnyNode[]): AnyNode[] {
+  const constructors: AnyNode[] = []
+
+  for (let index = 0; index < methods.length; index = index + 1) {
+    const method = methods[index]
+
+    if (nodeNameEquals(method, 'constructor')) {
+      constructors.push(method)
+    }
+  }
+
+  return constructors
+}
+
+function classConstructorParamTemplates(methods: AnyNode[], fallback: AnyNode[]): AnyNode[][] {
+  const constructors = classConstructorMethods(methods)
+  const templates: AnyNode[][] = []
+
+  for (let index = 0; index < constructors.length; index = index + 1) {
+    templates.push(constructors[index].params ?? [])
+  }
+
+  if (templates.length === 0) {
+    templates.push(fallback)
+  }
+
+  return templates
+}
+
 function checkerNodeArrayOrEmpty(value: AnyNode | AnyNode[] | null | undefined): AnyNode[] {
   if (!Array.isArray(value)) {
     return []
@@ -10956,10 +11142,7 @@ function containsOptionalAccessExpression(expression: AnyNode): boolean {
     return true
   }
 
-  if (
-    expression.type === 'MemberExpression' ||
-    expression.type === 'IndexExpression'
-  ) {
+  if (expression.type === 'MemberExpression' || expression.type === 'IndexExpression') {
     return containsOptionalAccessExpression(expression.object)
   }
 

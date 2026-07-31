@@ -7,10 +7,7 @@ import {
   resolveCompilerLibrarySet
 } from '../extensions/library-set.ts'
 import { compilerLibraryOptionsFingerprint } from '../extensions/library-options.ts'
-import type {
-  CompilerLibraryLiteralTypeInference,
-  CompilerLibrarySet
-} from '../extensions/types.ts'
+import type { CompilerLibraryLiteralTypeInference, CompilerLibrarySet } from '../extensions/types.ts'
 import type { CompilerHost } from '../host.ts'
 import { lowerHirToIr } from '../ir.ts'
 import { tokenize } from '../lexer.ts'
@@ -314,12 +311,7 @@ function visitModuleGraphFile(
       const importedProgram = moduleProgramForImports(importedModule)
 
       if (importedProgram !== null) {
-        applyImportedDeclarationMetadata(
-          specifier,
-          exported,
-          importedProgram,
-          importedModule.external !== true
-        )
+        applyImportedDeclarationMetadata(specifier, exported, importedProgram, importedModule.external !== true)
       }
 
       if (importedProgram !== null) {
@@ -864,10 +856,7 @@ function libraryRuntimeImportDeclarationProgram(context: ModuleGraphContext, sou
     return null
   }
 
-  const result = parseModuleDeclarationContractResult(
-    declaration.declarationSource,
-    declaration.source
-  )
+  const result = parseModuleDeclarationContractResult(declaration.declarationSource, declaration.source)
 
   for (const item of result.diagnostics) {
     context.diagnostics.push(item)
@@ -946,6 +935,7 @@ function applyImportedDeclarationMetadata(
     specifier.valueType = 'function'
     specifier.className = useLocalClassBindingName ? specifier.local : declaration.name
     specifier.constructable = true
+    specifier.typeParameters = declaration.typeParameters ?? []
     specifier.constructorParams = importedClassConstructorParams(declaration)
     specifier.classMethods = declaration.methods ?? []
     specifier.shape = declaration.shape ?? null

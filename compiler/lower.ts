@@ -133,8 +133,10 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
   }
 
   if (item.type === 'ClassDeclaration') {
-    return [
-      {
+    const typeParameterState = pushLowerTypeParameters(item, context)
+
+    try {
+      const lowered: AnyNode = {
         type: 'ClassDeclaration',
         exported: item.exported,
         name: item.name,
@@ -143,7 +145,16 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
         fields: lowerClassFields(item.fields),
         methods: lowerClassMethods(item.methods, context)
       }
-    ]
+      const typeParameters = cloneLowerTypeParameters(item.typeParameters)
+
+      if (typeParameters.length > 0) {
+        lowered.typeParameters = typeParameters
+      }
+
+      return [lowered]
+    } finally {
+      restoreLowerTypeParameters(typeParameterState, context)
+    }
   }
 
   return lowerStatementList([item], context)
