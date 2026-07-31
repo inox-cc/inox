@@ -291,6 +291,7 @@ type PendingPlainFunctionArg = {
   functionType: CFunctionType
   index: number
   scopes: CallbackScope[]
+  storageFunctionType: CFunctionType | null | undefined
 }
 
 type ExternalEventLoopScanState = {
@@ -1180,7 +1181,7 @@ export function collectCallbackWrappers(
         {
           name: '',
           valueType: 'function',
-          functionType: pending.functionType
+          functionType: pending.storageFunctionType
         },
         context
       )
@@ -2757,13 +2758,15 @@ function visitCallbackFunctionArg(
   context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): void {
+  const concreteFunctionType = arg.functionType ?? param.functionType
+
   if (isNullableFunctionType(param.valueType, param.nullable)) {
-    registerRuntimeCallbackExpression(arg, param.functionType, scopes, wrappers, context, deps)
+    registerRuntimeCallbackExpression(arg, concreteFunctionType, scopes, wrappers, context, deps)
     return
   }
 
   if (isRuntimeFunctionType(param.functionType)) {
-    registerRuntimeCallbackExpression(arg, param.functionType, scopes, wrappers, context, deps)
+    registerRuntimeCallbackExpression(arg, concreteFunctionType, scopes, wrappers, context, deps)
     return
   }
 
@@ -2771,8 +2774,9 @@ function visitCallbackFunctionArg(
     callee: expression.callee,
     index: index,
     arg: arg,
-    functionType: normalizeFunctionType(param.functionType),
-    scopes: scopes
+    functionType: normalizeFunctionType(concreteFunctionType),
+    scopes: scopes,
+    storageFunctionType: param.functionType
   })
 
   const argInfo = callbackArgumentInfo(arg, scopes)
@@ -2781,7 +2785,7 @@ function visitCallbackFunctionArg(
     callbackExpressionHasCaptures(arg, scopes, context, deps) ||
     (argInfo !== null && typeof argInfo !== 'undefined' && argInfo.runtimeCallback === true)
   ) {
-    markRuntimeFunctionParam(expression.callee, index, param.functionType, context)
+    markRuntimeFunctionParam(expression.callee, index, concreteFunctionType, context)
   }
 }
 

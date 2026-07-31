@@ -2471,7 +2471,20 @@ function appendPreparedCallArg(
       appendLines(lines, value.lines)
       args.push(value.expression)
     } else {
-      args.push(deps.emitFunctionValueExpression(arg, context))
+      const target = deps.emitFunctionValueExpression(arg, context)
+      const targetFunctionType = deps.resolveFunctionValueType(arg, context)
+
+      args.push(
+        emitAdaptedFunctionPointerExpression(
+          target,
+          targetFunctionType,
+          param.functionType,
+          context,
+          deps,
+          calleeSeenTypes,
+          []
+        )
+      )
     }
   } else if (paramValueType === 'number' || paramValueType === 'boolean') {
     const value = emitPreparedScalarCallArgumentExpression(arg, paramValueType, context, deps)

@@ -4001,11 +4001,14 @@ class Checker {
       (declaredSymbol.typeParameters ?? []).length > 0 &&
       (expression.typeArguments ?? []).length === 0
     ) {
-      inferenceArgInfos = this.checkedCallArgInfos(expression)
+      inferenceArgInfos = this.genericFunctionInferenceArgInfos(expression, declaredSymbol)
     }
 
     const symbol = this.instantiateUserFunctionSymbol(expression, declaredSymbol, inferenceArgInfos)
-    const argInfos = inferenceArgInfos ?? this.checkedCallArgInfos(expression, symbol)
+    const argInfos =
+      inferenceArgInfos === null
+        ? this.checkedCallArgInfos(expression, symbol)
+        : this.contextualizedGenericCallArgInfos(expression, symbol, inferenceArgInfos)
 
     if (symbol === null || typeof symbol === 'undefined') {
       return 'unknown'
@@ -6352,6 +6355,79 @@ class Checker {
     }
 
     return argInfos
+  }
+
+  genericFunctionInferenceArgInfos(expression: AnyNode, symbol: SymbolInfo): CheckedCallArgInfo[] {
+    const provisional: CheckedCallArgInfo[] = []
+
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const argument = expression.args[index]
+
+      if (argument.type === 'ArrowFunctionExpression') {
+        provisional.push({
+          valueType: 'function',
+          nullable: false,
+          loc: argument.loc,
+          shape: null,
+          typeRef: this.compilerLibraryUnknownTypeRef()
+        })
+      } else {
+        provisional.push(this.checkedCallArgInfo(argument))
+      }
+    }
+
+    const typeParameters = symbol.typeParameters ?? []
+    const names: string[] = []
+
+    for (let index = 0; index < typeParameters.length; index = index + 1) {
+      names.push(typeParameters[index].name)
+    }
+
+    if (this.inferUserFunctionTypeArguments(symbol, typeParameters, names, provisional) !== null) {
+      return provisional
+    }
+
+    const checked: CheckedCallArgInfo[] = []
+
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      checked.push(this.checkedCallArgInfo(expression.args[index]))
+    }
+
+    return checked
+  }
+
+  contextualizedGenericCallArgInfos(
+    expression: AnyNode,
+    symbol: SymbolInfo | null,
+    inferred: CheckedCallArgInfo[]
+  ): CheckedCallArgInfo[] {
+    if (symbol === null) {
+      return inferred
+    }
+
+    const result: CheckedCallArgInfo[] = []
+    const params = symbol.params ?? []
+
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const argument = expression.args[index]
+      const param = paramForArgument(params, index)
+
+      if (
+        argument.type === 'ArrowFunctionExpression' &&
+        param !== null &&
+        typeof param !== 'undefined' &&
+        param.functionType !== null &&
+        typeof param.functionType !== 'undefined'
+      ) {
+        this.checkArrowFunctionExpression(argument, param.functionType)
+        result.push(this.checkedCallArgInfo(argument, 'function'))
+        continue
+      }
+
+      result.push(inferred[index] ?? this.checkedCallArgInfo(argument))
+    }
+
+    return result
   }
 
   checkedCallArgInfo(argument: AnyNode, knownValueType?: ValueType): CheckedCallArgInfo {
