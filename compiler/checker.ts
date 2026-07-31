@@ -9507,7 +9507,39 @@ class Checker {
       return
     }
 
-    this.report('INOX_WEAK_ACCESS', 'nullable weak value access requires optional chaining or a prior null check', loc)
+    if (this.isWeakNullableReceiver(receiver)) {
+      this.report('INOX_WEAK_ACCESS', 'nullable weak value access requires optional chaining or a prior null check', loc)
+      return
+    }
+
+    this.report('INOX_NULLABLE_ACCESS', 'nullable value access requires optional chaining or a prior null check', loc)
+  }
+
+  isWeakNullableReceiver(receiver: AnyNode): boolean {
+    const typeRef: TypeRef | null | undefined = receiver.typeRef
+
+    if (
+      typeRef !== null &&
+      typeof typeRef !== 'undefined' &&
+      typeRef.kind !== 'parameter' &&
+      typeRef.ownership === 'weak'
+    ) {
+      return true
+    }
+
+    if (receiver.type !== 'MemberExpression') {
+      return false
+    }
+
+    const shape = this.resolveExpressionShape(receiver.object)
+
+    if (shape === null || typeof shape === 'undefined') {
+      return false
+    }
+
+    const field = this.resolveExpressionShapeField(receiver.object, shape, receiver.property)
+
+    return field !== null && typeof field !== 'undefined' && field.ownership === 'weak'
   }
 
   inferNullableAccessValueType(expression: AnyNode): ValueType | null {

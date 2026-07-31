@@ -1,5 +1,5 @@
 // @targets cc
-// @expect diagnostics INOX_WEAK_ACCESS
+// @expect diagnostics INOX_NULLABLE_ACCESS
 
 type Child = {
   count: number

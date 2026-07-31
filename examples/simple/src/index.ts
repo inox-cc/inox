@@ -115,6 +115,10 @@ function firstCompilerExampleSize(values: Array<{ size: number } | null>): numbe
 }
 
 function readCompilerExampleCollections(contexts: CompilerExampleCollections[]): string {
+  if (contexts.length === 0) {
+    return 'missing'
+  }
+
   const first = contexts[0]
   const names: Map<string, string> = first.names
 
