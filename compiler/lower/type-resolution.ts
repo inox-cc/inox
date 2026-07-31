@@ -1,16 +1,19 @@
 import {
   arrayElementTypeNameFromKnownTypeName,
+  functionTypeNamesFromTypeName,
   genericTypeApplicationFromTypeName,
   isArrayTypeName,
   isBuiltinValueType,
   isNullableTypeName,
   nullableTypeNameFromKnownTypeName,
+  typeQueryTargetNameFromTypeName,
   unionTypeNamesFromTypeName
 } from '../type-names.ts'
 import type { AnyNode, ProgramNode } from '../types.ts'
 import {
   compilerLibraryNativeTypeForIntrinsic,
   compilerLibraryNativeTypeForName,
+  compilerLibraryTypeOperatorForName,
   resolveCompilerLibrarySet
 } from '../extensions/library-set.ts'
 import { instantiateNativeTypeRef } from '../extensions/type-ref-substitution.ts'
@@ -70,7 +73,7 @@ export function createLowerContext(
     classNames: collectClassNames(ast),
     libraries: resolveCompilerLibrarySet(libraries),
     nextId: 0,
-    variables: new Map(),
+    variables: collectFunctionVariables(ast),
     resolvingTypes: new Set(),
     typeSubstitutions: new Map()
   }
@@ -87,9 +90,54 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
     return cloneResolvedType(substitution)
   }
 
+  const typeQueryTarget = typeQueryTargetNameFromTypeName(name)
+
+  if (typeQueryTarget !== null) {
+    const value = context.variables.get(typeQueryTarget)
+
+    if (value !== null && typeof value !== 'undefined' && value.functionType !== null) {
+      return resolveFunctionType(value.functionType, context)
+    }
+
+    return unresolvedType()
+  }
+
+  const functionTypeNames = functionTypeNamesFromTypeName(name)
+
+  if (functionTypeNames !== null) {
+    const params: LowerTypeNode[] = []
+
+    for (let index = 0; index < functionTypeNames.params.length; index = index + 1) {
+      params.push({ name: `arg${index}`, declaredType: functionTypeNames.params[index] })
+    }
+
+    return resolveFunctionType(
+      {
+        kind: 'function',
+        params,
+        declaredReturnType: functionTypeNames.result,
+        returnType: functionTypeNames.result
+      },
+      context
+    )
+  }
+
   const genericApplication = genericTypeApplicationFromTypeName(name)
 
   if (genericApplication !== null) {
+    const typeOperator = compilerLibraryTypeOperatorForName(context.libraries, genericApplication.name)
+
+    if (typeOperator !== null && genericApplication.args.length === 1) {
+      const operand = resolveDeclaredType(genericApplication.args[0], context)
+      const operandTypeRef = operand.typeRef
+
+      if (typeOperator.kind === 'function-result' && operandTypeRef !== null && operandTypeRef.kind === 'function') {
+        return resolvedTypeFromTypeRef(operandTypeRef.result, context)
+      }
+
+      return unresolvedType()
+    }
+
     if (genericApplication.name === 'NonNullable' && genericApplication.args.length === 1) {
       const resolved = resolveDeclaredType(genericApplication.args[0], context)
 
@@ -407,6 +455,26 @@ function resolveFunctionType(typeInfo: LowerTypeNode, context: LowerContext): Lo
     returnNullable: returnType.nullable,
     returnAsyncResultValueType: nullableString(returnType.asyncResultValueType),
     returnShape: returnType.shape ?? nullableNode(typeInfo.returnShape)
+  }
+  const paramTypeRefs: TypeRef[] = []
+
+  for (let index = 0; index < params.length; index = index + 1) {
+    const declaredType = fieldDeclaredType(params[index]) ?? 'unknown'
+    const parameterType = resolveDeclaredType(declaredType, context)
+    const parameterTypeRef: TypeRef | null = params[index].typeRef ?? null
+
+    paramTypeRefs.push(parameterTypeRef ?? typeRefForResolvedType(parameterType, declaredType))
+  }
+
+  const explicitReturnTypeRef: TypeRef | null = typeInfo.returnTypeRef ?? null
+
+  resolved.typeRef = {
+    kind: 'function',
+    params: paramTypeRefs,
+    result: explicitReturnTypeRef ?? typeRefForResolvedType(returnType, returnTypeName),
+    nullable: false,
+    ownership: 'value',
+    traits: []
   }
 
   return resolved
@@ -995,6 +1063,37 @@ function collectTypes(ast: ProgramNode): Map<string, LowerTypeNode> {
   return types
 }
 
+function collectFunctionVariables(ast: ProgramNode): Map<string, LowerTypeNode> {
+  const variables: Map<string, LowerTypeNode> = new Map()
+
+  for (let index = 0; index < ast.body.length; index = index + 1) {
+    const item = ast.body[index]
+
+    if (item.type === 'FunctionDeclaration') {
+      variables.set(item.name, {
+        valueType: 'function',
+        functionType: {
+          kind: 'function',
+          params: item.params ?? [],
+          declaredReturnType: item.declaredReturnType ?? item.returnType ?? 'unknown',
+          returnType: item.returnType ?? item.declaredReturnType ?? 'unknown',
+          returnTypeRef: nullableNode(item.returnTypeRef),
+          returnNullable: item.returnNullable === true,
+          returnAsyncResultValueType: nullableString(item.returnAsyncResultValueType),
+          returnShape: nullableNode(item.returnShape)
+        }
+      })
+      continue
+    }
+
+    if (item.type === 'VariableDeclaration' && item.valueType === 'function' && item.functionType !== null) {
+      variables.set(item.name, item)
+    }
+  }
+
+  return variables
+}
+
 function collectObjectType(valueType: LowerTypeNode): LowerTypeNode {
   return {
     kind: 'object',
@@ -1310,6 +1409,54 @@ function typeRefForResolvedType(resolved: LowerResolvedType, declaredType: strin
   }
 
   return primitiveTypeRef(resolved.valueType ?? declaredType) ?? unknownTypeRef()
+}
+
+function resolvedTypeFromTypeRef(typeRef: TypeRef, context: LowerContext): LowerResolvedType {
+  if (typeRef.kind === 'parameter') {
+    const resolved = unresolvedType()
+    resolved.typeRef = typeRef
+    resolved.nullable = typeRef.nullable === true
+    return resolved
+  }
+
+  const metadata = typeRefCompatibilityMetadata(typeRef, context.libraries, { line: 1, column: 1 })
+  const resolved = namedResolvedType(metadata.valueType)
+
+  resolved.typeRef = typeRef
+  resolved.nullable = metadata.nullable
+  resolved.shape = metadata.shape
+  resolved.asyncResultValueType = metadata.asyncResultValueType
+
+  if (typeRef.kind === 'function') {
+    const params: LowerTypeNode[] = []
+
+    for (let index = 0; index < typeRef.params.length; index = index + 1) {
+      const parameter = resolvedTypeFromTypeRef(typeRef.params[index], context)
+
+      params.push({
+        name: `arg${index}`,
+        valueType: parameter.valueType ?? 'unknown',
+        typeRef: typeRef.params[index],
+        nullable: parameter.nullable,
+        asyncResultValueType: nullableString(parameter.asyncResultValueType),
+        shape: nullableNode(parameter.shape)
+      })
+    }
+
+    const result = resolvedTypeFromTypeRef(typeRef.result, context)
+    resolved.functionType = {
+      kind: 'function',
+      resolved: true,
+      params,
+      returnType: result.valueType ?? 'unknown',
+      returnTypeRef: typeRef.result,
+      returnNullable: result.nullable,
+      returnAsyncResultValueType: nullableString(result.asyncResultValueType),
+      returnShape: nullableNode(result.shape)
+    }
+  }
+
+  return resolved
 }
 
 function primitiveTypeRef(valueType: string): TypeRef | null {

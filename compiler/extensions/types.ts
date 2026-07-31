@@ -10,6 +10,7 @@ export type LibraryOptionScalar = string | number | boolean
 export type CorePrimitiveType = 'boolean' | 'bytes' | 'null' | 'number' | 'string' | 'void'
 export type TypeOwnership = 'value' | 'owned' | 'borrowed' | 'weak'
 export type TypeTraitId = 'iterable' | 'indexable' | 'awaitable'
+export type LibraryTypeOperatorKind = 'function-result'
 
 export type TypeTraitRef = {
   traitId: TypeTraitId
@@ -91,6 +92,12 @@ export type LibraryOptionDescriptor = {
   integer?: boolean
   minimum?: number
   maximum?: number
+}
+
+export type LibraryTypeOperatorDescriptor = {
+  libraryId: LibraryId
+  name: string
+  kind: LibraryTypeOperatorKind
 }
 
 export type LibraryOptionConditionDescriptor = {
@@ -508,6 +515,7 @@ export type CompilerLibraryDescriptor = {
   id: LibraryId
   dependencies: LibraryId[]
   declarations: LibraryDeclarationDescriptor[]
+  typeOperators?: LibraryTypeOperatorDescriptor[]
   options?: LibraryOptionDescriptor[]
   runtimeInitializers?: LibraryRuntimeInitializerDescriptor[]
   nativeTypes?: LibraryNativeTypeDescriptor[]
@@ -519,6 +527,7 @@ export type CompilerLibraryDescriptor = {
 export type CompilerLibraryPackageDescriptor = {
   id: LibraryId
   dependencies: LibraryId[]
+  typeOperators?: LibraryTypeOperatorDescriptor[]
   options?: LibraryOptionDescriptor[]
   runtimeInitializers?: LibraryRuntimeInitializerDescriptor[]
   nativeTypes?: LibraryNativeTypeDescriptor[]
@@ -530,6 +539,7 @@ export type CompilerLibraryPackageDescriptor = {
 export type CompilerLibrarySet = {
   fingerprint: string
   declarations: LibraryDeclarationDescriptor[]
+  typeOperators?: LibraryTypeOperatorDescriptor[]
   options?: LibraryOptionDescriptor[]
   runtimeInitializers?: LibraryRuntimeInitializerDescriptor[]
   nativeTypes: LibraryNativeTypeDescriptor[]

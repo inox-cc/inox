@@ -19,6 +19,11 @@ export type InlineObjectTypeField = {
   typeName: string
 }
 
+export type FunctionTypeNames = {
+  params: string[]
+  result: string
+}
+
 export function arrayElementTypeNameFromTypeName(name: string): string | null {
   return genericTypeInner(name, 'array')
 }
@@ -131,6 +136,59 @@ export function genericTypeApplicationFromTypeName(name: string): GenericTypeApp
   }
 }
 
+export function typeQueryTargetNameFromTypeName(name: string): string | null {
+  const prefix = 'typeof:'
+
+  if (!name.startsWith(prefix)) {
+    return null
+  }
+
+  const target = name.slice(prefix.length)
+  return isIdentifierTypeName(target) ? target : null
+}
+
+export function functionTypeNamesFromTypeName(name: string): FunctionTypeNames | null {
+  if (!name.startsWith('(')) {
+    return null
+  }
+
+  const arrow = functionTypeArrowIndex(name)
+
+  if (arrow <= 0 || name.slice(arrow - 1, arrow) !== ')') {
+    return null
+  }
+
+  const rawParams = splitGenericArgs(name.slice(1, arrow - 1))
+  const params: string[] = []
+
+  for (let index = 0; index < rawParams.length; index = index + 1) {
+    const rawParam = rawParams[index]
+    const colon = topLevelTypeDelimiterIndex(rawParam, ':')
+    let typeName = rawParam
+
+    if (colon >= 0 && colon < rawParam.length - 1) {
+      typeName = rawParam.slice(colon + 1)
+    }
+
+    if (typeName.startsWith('...')) {
+      typeName = typeName.slice(3)
+    }
+
+    params.push(normalizeTypeName(typeName))
+  }
+
+  const result = name.slice(arrow + 2)
+
+  if (result.length === 0) {
+    return null
+  }
+
+  return {
+    params,
+    result: normalizeTypeName(result)
+  }
+}
+
 export function unionTypeNamesFromTypeName(name: string): string[] | null {
   const inner = genericTypeInner(name, 'union')
 
@@ -148,6 +206,12 @@ export function unionTypeNamesFromTypeName(name: string): string[] | null {
 }
 
 export function normalizeTypeName(name: string): string {
+  const typeQueryTarget = typeQueryTargetNameFromTypeName(name)
+
+  if (typeQueryTarget !== null) {
+    return `typeof:${typeQueryTarget}`
+  }
+
   const parenthesizedInner = parenthesizedTypeInner(name)
 
   if (parenthesizedInner !== null && typeof parenthesizedInner !== 'undefined') {
@@ -155,6 +219,12 @@ export function normalizeTypeName(name: string): string {
   }
 
   if (isFunctionTypeName(name)) {
+    const functionType = functionTypeNamesFromTypeName(name)
+
+    if (functionType !== null) {
+      return `(${joinStrings(functionType.params, ',')})=>${functionType.result}`
+    }
+
     return 'function'
   }
 
@@ -453,7 +523,7 @@ export function isBuiltinTypeDependencyName(name: string): boolean {
     return true
   }
 
-  if (name === 'Function' || name === 'Record') {
+  if (name === 'Function' || name === 'Record' || name === 'typeof') {
     return true
   }
 

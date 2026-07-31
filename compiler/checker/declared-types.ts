@@ -1,6 +1,7 @@
 import { diagnostic } from '../diagnostics.ts'
 import {
   arrayElementTypeNameFromKnownTypeName,
+  functionTypeNamesFromTypeName,
   genericTypeApplicationFromTypeName,
   inlineObjectTypeFieldsFromTypeName,
   indexedAccessTypeNameFromTypeName,
@@ -10,6 +11,7 @@ import {
   nullableTypeNameFromKnownTypeName,
   recordTypeNamesFromTypeName,
   typeNameDependencyNames,
+  typeQueryTargetNameFromTypeName,
   unionTypeNamesFromTypeName,
   weakTypeNameFromTypeName
 } from '../type-names.ts'
@@ -43,7 +45,11 @@ import type {
   TypeAliasDeclarationNode
 } from './resolved-types.ts'
 import { mergeShapeFields } from './helpers.ts'
-import { compilerLibraryNativeTypeForIntrinsic, compilerLibraryNativeTypeForName } from '../extensions/library-set.ts'
+import {
+  compilerLibraryNativeTypeForIntrinsic,
+  compilerLibraryNativeTypeForName,
+  compilerLibraryTypeOperatorForName
+} from '../extensions/library-set.ts'
 import { instantiateNativeTypeRef } from '../extensions/type-ref-substitution.ts'
 import {
   commonTypeRef,
@@ -116,6 +122,18 @@ export function resolveDeclaredType(
     return cloneResolvedTypeInfo(substitution)
   }
 
+  const typeQueryTarget = typeQueryTargetNameFromTypeName(name)
+
+  if (typeQueryTarget !== null) {
+    return resolveTypeQueryDeclaredType(context, typeQueryTarget, loc)
+  }
+
+  const functionTypeNames = functionTypeNamesFromTypeName(name)
+
+  if (functionTypeNames !== null) {
+    return resolveInlineFunctionDeclaredType(context, functionTypeNames.params, functionTypeNames.result, loc)
+  }
+
   if (name === 'AnyNode') {
     return resolveAnyNodeDeclaredType(context, loc)
   }
@@ -181,6 +199,27 @@ export function resolveDeclaredType(
   const genericApplication = genericTypeApplicationFromTypeName(name)
 
   if (genericApplication !== null) {
+    const typeOperator = compilerLibraryTypeOperatorForName(context.libraries, genericApplication.name)
+
+    if (typeOperator !== null) {
+      if (genericApplication.args.length !== 1) {
+        context.diagnostics.push(
+          diagnostic(
+            'INOX_TYPE_ARGUMENT_COUNT',
+            `type operator ${genericApplication.name} expects 1 type argument, got ${genericApplication.args.length}`,
+            loc
+          )
+        )
+        return unresolvedTypeInfo()
+      }
+
+      const operand = resolveDeclaredType(context, genericApplication.args[0], loc)
+
+      if (typeOperator.kind === 'function-result') {
+        return resolveFunctionResultTypeOperator(context, genericApplication.name, operand, loc)
+      }
+    }
+
     if (genericApplication.name === 'NonNullable' && genericApplication.args.length === 1) {
       const resolved = resolveDeclaredType(context, genericApplication.args[0], loc)
 
@@ -424,6 +463,125 @@ export function resolveDeclaredType(
   context.diagnostics.push(diagnostic('INOX_UNKNOWN_TYPE', `unknown type ${name}`, loc))
 
   return unresolvedTypeInfo()
+}
+
+function resolveTypeQueryDeclaredType(
+  context: DeclaredTypeResolverContext,
+  targetName: string,
+  loc: SourceLocation
+): ResolvedTypeInfo {
+  const symbol = context.symbols.get(targetName)
+
+  if (symbol === null || typeof symbol === 'undefined') {
+    context.diagnostics.push(diagnostic('INOX_UNKNOWN_TYPE_QUERY', `unknown value ${targetName} in type query`, loc))
+    return unresolvedTypeInfo()
+  }
+
+  const info = unresolvedTypeInfo()
+  info.valueType = symbol.valueType
+  info.nullable = symbol.nullable === true
+  info.typeRef = symbol.typeRef ?? null
+  info.functionType = symbol.functionType ?? null
+  info.shape = symbol.shape ?? null
+  info.asyncResultValueType = symbol.asyncResultValueType ?? null
+
+  if (
+    info.functionType === null &&
+    symbol.returnType !== null &&
+    typeof symbol.returnType !== 'undefined'
+  ) {
+    const params: FunctionTypeParamMetadata[] = []
+    const symbolParams = symbol.params ?? []
+
+    for (let index = 0; index < symbolParams.length; index = index + 1) {
+      params.push(symbolParams[index] as FunctionTypeParamMetadata)
+    }
+
+    info.valueType = 'function'
+    info.functionType = {
+      kind: 'function',
+      resolved: true,
+      params,
+      paramTemplates: symbol.paramTemplates ?? symbol.params ?? [],
+      typeParameters: symbol.typeParameters ?? [],
+      returnType: symbol.returnType,
+      declaredReturnType: symbol.declaredReturnType ?? symbol.returnType,
+      returnTypeRef: symbol.returnTypeRef ?? null,
+      returnNullable: symbol.returnNullable === true,
+      returnAsyncResultValueType: symbol.returnAsyncResultValueType ?? null,
+      returnShape: symbol.returnShape ?? null,
+      loc
+    }
+  }
+
+  if (info.typeRef === null) {
+    info.typeRef = typeRefFromResolvedType(info)
+  }
+
+  return info
+}
+
+function resolveInlineFunctionDeclaredType(
+  context: DeclaredTypeResolverContext,
+  parameterTypeNames: string[],
+  resultTypeName: string,
+  loc: SourceLocation
+): ResolvedTypeInfo {
+  const params: FunctionTypeParamMetadata[] = []
+
+  for (let index = 0; index < parameterTypeNames.length; index = index + 1) {
+    const parameterTypeName = parameterTypeNames[index]
+    const parameterInfo = resolveDeclaredType(context, parameterTypeName, loc)
+
+    params.push({
+      name: `arg${index}`,
+      loc,
+      declaredType: parameterTypeName,
+      valueType: parameterInfo.valueType,
+      typeRef: typeRefFromResolvedType(parameterInfo, parameterTypeName),
+      nullable: parameterInfo.nullable,
+      asyncResultValueType: parameterInfo.asyncResultValueType,
+      functionType: parameterInfo.functionType,
+      shape: parameterInfo.shape
+    })
+  }
+
+  const resultInfo = resolveDeclaredType(context, resultTypeName, loc)
+  const info = unresolvedTypeInfo()
+  info.valueType = 'function'
+  info.functionType = {
+    kind: 'function',
+    resolved: true,
+    params,
+    paramTemplates: params,
+    returnType: resultInfo.valueType,
+    declaredReturnType: resultTypeName,
+    returnTypeRef: typeRefFromResolvedType(resultInfo, resultTypeName),
+    returnNullable: resultInfo.nullable,
+    returnAsyncResultValueType: resultInfo.asyncResultValueType,
+    returnShape: resultInfo.shape,
+    loc
+  }
+  info.typeRef = typeRefFromResolvedType(info)
+  return info
+}
+
+function resolveFunctionResultTypeOperator(
+  context: DeclaredTypeResolverContext,
+  operatorName: string,
+  operand: ResolvedTypeInfo,
+  loc: SourceLocation
+): ResolvedTypeInfo {
+  const operandTypeRef = operand.typeRef ?? typeRefFromResolvedType(operand)
+
+  if (operandTypeRef.kind !== 'function') {
+    context.diagnostics.push(
+      diagnostic('INOX_TYPE_OPERATOR_OPERAND', `${operatorName} requires a function type`, loc)
+    )
+    return unresolvedTypeInfo()
+  }
+
+  return resolvedTypeInfoFromTypeRef(context, operandTypeRef.result, loc)
 }
 
 function resolveInlineObjectDeclaredType(

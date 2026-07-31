@@ -24,6 +24,7 @@ import type {
   LibraryRuntimeInitializerArgumentDescriptor,
   LibraryRuntimeInitializerDescriptor,
   LibraryStringPrefixOptionConstraintDescriptor,
+  LibraryTypeOperatorDescriptor,
   RuntimeRequirementDescriptor,
   ObjectTypeRef,
   TypeRef,
@@ -54,6 +55,7 @@ export function createCompilerLibrarySet(
 ): CompilerLibrarySet {
   const ordered = orderCompilerLibraries(libraries)
   const declarations: LibraryDeclarationDescriptor[] = []
+  const typeOperators: LibraryTypeOperatorDescriptor[] = []
   const options: LibraryOptionDescriptor[] = []
   const runtimeInitializers: LibraryRuntimeInitializerDescriptor[] = []
   const nativeTypes: LibraryNativeTypeDescriptor[] = []
@@ -68,6 +70,7 @@ export function createCompilerLibrarySet(
 
     validateCompilerLibraryDescriptorOwnership(library)
     pushDeclarations(declarations, library.declarations)
+    pushTypeOperators(typeOperators, library.typeOperators ?? [])
     pushLibraryOptions(options, library.options ?? [])
     pushRuntimeInitializers(runtimeInitializers, library.runtimeInitializers ?? [])
     pushNativeTypes(nativeTypes, library.nativeTypes ?? [])
@@ -78,6 +81,7 @@ export function createCompilerLibrarySet(
 
   validateCompilerLibrarySet(
     declarations,
+    typeOperators,
     options,
     runtimeInitializers,
     nativeTypes,
@@ -90,6 +94,7 @@ export function createCompilerLibrarySet(
   return {
     fingerprint: compilerLibrarySetFingerprint(ordered, targetOptions),
     declarations,
+    typeOperators,
     options,
     runtimeInitializers,
     nativeTypes,
@@ -394,6 +399,7 @@ function validateLibraryDependencies(
 
 function validateCompilerLibrarySet(
   declarations: LibraryDeclarationDescriptor[],
+  typeOperators: LibraryTypeOperatorDescriptor[],
   options: LibraryOptionDescriptor[],
   runtimeInitializers: LibraryRuntimeInitializerDescriptor[],
   nativeTypes: LibraryNativeTypeDescriptor[],
@@ -402,6 +408,7 @@ function validateCompilerLibrarySet(
   runtimeRequirements: RuntimeRequirementDescriptor[]
 ): void {
   validateUniqueDeclarationSources(declarations)
+  validateUniqueTypeOperators(typeOperators)
   validateGlobalDeclarations(declarations)
   validateCompilerLibraryOptionDescriptors(options)
   validateUniqueRuntimeRequirementIds(runtimeRequirements)
@@ -430,6 +437,16 @@ function validateCompilerLibraryDescriptorOwnership(library: CompilerLibraryDesc
   }
 
   const options = library.options ?? []
+
+  const typeOperators = library.typeOperators ?? []
+
+  for (let index = 0; index < typeOperators.length; index = index + 1) {
+    validateCompilerLibraryItemOwner(
+      library.id,
+      typeOperators[index].libraryId,
+      `type operator ${typeOperators[index].name}`
+    )
+  }
 
   for (let index = 0; index < options.length; index = index + 1) {
     validateCompilerLibraryItemOwner(library.id, options[index].libraryId, `option ${options[index].optionId}`)
@@ -2242,6 +2259,24 @@ function validateUniqueRuntimeRequirementIds(requirements: RuntimeRequirementDes
   }
 }
 
+function validateUniqueTypeOperators(operators: LibraryTypeOperatorDescriptor[]): void {
+  const names: Set<string> = new Set()
+
+  for (let index = 0; index < operators.length; index = index + 1) {
+    const operator = operators[index]
+
+    if (operator.name.trim().length === 0) {
+      throw new Error(`Compiler library ${operator.libraryId} has an empty type operator name`)
+    }
+
+    if (names.has(operator.name)) {
+      throw new Error(`Duplicate compiler library type operator ${operator.name}`)
+    }
+
+    names.add(operator.name)
+  }
+}
+
 function compilerLibrarySetFingerprint(
   libraries: CompilerLibraryDescriptor[],
   targetOptions: LibraryOptionDescriptor[]
@@ -2262,6 +2297,7 @@ function compilerLibrarySetFingerprint(
     const library = libraries[index]
     const dependencyIds = sortedStrings(library.dependencies)
     const declarationIds: string[] = []
+    const typeOperatorIds: string[] = []
     const optionIds: string[] = []
     const initializerIds: string[] = []
     const nativeTypeIds: string[] = []
@@ -2283,6 +2319,13 @@ function compilerLibrarySetFingerprint(
           ':' +
           item.declarationSource
       )
+    }
+
+    const libraryTypeOperators = library.typeOperators ?? []
+
+    for (let itemIndex = 0; itemIndex < libraryTypeOperators.length; itemIndex = itemIndex + 1) {
+      const item = libraryTypeOperators[itemIndex]
+      insertSortedString(typeOperatorIds, `${item.libraryId}:${item.name}:${item.kind}`)
     }
 
     for (let itemIndex = 0; itemIndex < library.operations.length; itemIndex = itemIndex + 1) {
@@ -2496,6 +2539,8 @@ function compilerLibrarySetFingerprint(
         dependencyIds.join(',') +
         '|decl=' +
         declarationIds.join(',') +
+        '|type-operators=' +
+        typeOperatorIds.join(',') +
         '|options=' +
         optionIds.join(',') +
         '|initializers=' +
@@ -3187,6 +3232,12 @@ function insertSortedString(values: string[], value: string): void {
 }
 
 function pushDeclarations(target: LibraryDeclarationDescriptor[], values: LibraryDeclarationDescriptor[]): void {
+  for (let index = 0; index < values.length; index = index + 1) {
+    target.push(values[index])
+  }
+}
+
+function pushTypeOperators(target: LibraryTypeOperatorDescriptor[], values: LibraryTypeOperatorDescriptor[]): void {
   for (let index = 0; index < values.length; index = index + 1) {
     target.push(values[index])
   }

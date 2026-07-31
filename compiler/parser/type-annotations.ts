@@ -91,7 +91,9 @@ export function readTypeAnnotation(
       continue
     }
 
-    if (token.type === 'string') {
+    if (token.value === 'typeof') {
+      parts.push('typeof:')
+    } else if (token.type === 'string') {
       parts.push(typeAnnotationStringToken(parts, token.value))
     } else if (token.type === 'number') {
       parts.push('number')

@@ -12,6 +12,7 @@ import type {
   LibraryOptionDescriptor,
   LibraryOperationDescriptor,
   LibraryRuntimeInitializerDescriptor,
+  LibraryTypeOperatorDescriptor,
   RuntimeRequirementDescriptor,
   TypeRef
 } from '../../compiler/extensions/types.ts'
@@ -238,6 +239,7 @@ function compilerLibraryDescriptor(library: DiscoveredCompilerLibrary): Compiler
     id: library.id,
     dependencies: compilerPackage === null ? [] : compilerPackage.dependencies,
     declarations,
+    typeOperators: compilerPackage === null ? [] : (compilerPackage.typeOperators ?? []),
     options: compilerPackage === null ? [] : (compilerPackage.options ?? []),
     runtimeInitializers: compilerPackage === null ? [] : (compilerPackage.runtimeInitializers ?? []),
     nativeTypes: compilerPackage === null ? [] : (compilerPackage.nativeTypes ?? []),
@@ -278,6 +280,14 @@ function renderRegistrySource(librarySet: CompilerLibrarySet, discovered: Discov
   source = source + '\nexport const defaultCompilerLibrarySet: CompilerLibrarySet = {\n'
   source = source + `  "fingerprint": ${JSON.stringify(librarySet.fingerprint)},\n`
   source = source + `  "declarations": ${JSON.stringify(librarySet.declarations, null, 2)},\n`
+  source =
+    source +
+    `  "typeOperators": ${renderPackageArray(
+      librarySet.typeOperators ?? [],
+      discovered,
+      packageNames,
+      'typeOperators'
+    )},\n`
   source =
     source + `  "options": ${renderPackageArray(librarySet.options ?? [], discovered, packageNames, 'options')},\n`
   source =
@@ -425,7 +435,9 @@ type PackageArrayItem =
   | LibraryRuntimeInitializerDescriptor
   | IntrinsicRoleBinding
   | RuntimeRequirementDescriptor
+  | LibraryTypeOperatorDescriptor
 type PackageArrayName =
+  | 'typeOperators'
   | 'options'
   | 'runtimeInitializers'
   | 'nativeTypes'
@@ -483,6 +495,10 @@ function compilerPackageArray(
   compilerPackage: CompilerLibraryPackageDescriptor,
   arrayName: PackageArrayName
 ): PackageArrayItem[] {
+  if (arrayName === 'typeOperators') {
+    return compilerPackage.typeOperators ?? []
+  }
+
   if (arrayName === 'operations') {
     return compilerPackage.operations
   }

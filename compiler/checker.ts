@@ -734,6 +734,7 @@ class Checker {
     const firstOverload = this.importedFunctionDeclarationSymbol(item, nodeSourceLocation(item))
     symbol.overloads = [firstOverload]
     this.scope.bindings.set(item.name, symbol)
+    this.typeSymbols.set(item.name, symbol)
   }
 
   declareLibraryGlobalVariable(libraryId: string, item: AnyNode): void {
@@ -10680,7 +10681,12 @@ class Checker {
     }
 
     this.scope.bindings.set(name, symbol)
-    if (symbol.kind === 'class') {
+    if (
+      symbol.kind === 'class' ||
+      symbol.kind === 'function' ||
+      symbol.kind === 'import' ||
+      symbol.valueType === 'function'
+    ) {
       this.typeSymbols.set(name, symbol)
     }
     this.deleteFlowFactsAtPath(name)

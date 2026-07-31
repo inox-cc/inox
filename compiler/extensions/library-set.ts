@@ -6,17 +6,41 @@ import type {
   LibraryEffectiveReceiverOperationDescriptor,
   LibraryNativeTypeDescriptor,
   LibraryOperationDescriptor,
-  LibraryOperationKind
+  LibraryOperationKind,
+  LibraryTypeOperatorDescriptor
 } from './types.ts'
 
 export const emptyCompilerLibrarySet: CompilerLibrarySet = {
   fingerprint: 'inox:library-set:v1:811c9dc5',
   declarations: [],
+  typeOperators: [],
   nativeTypes: [],
   operations: [],
   effectiveReceiverOperations: [],
   intrinsicBindings: [],
   runtimeRequirements: []
+}
+
+export function compilerLibraryTypeOperatorForName(
+  libraries: CompilerLibrarySet,
+  name: string
+): LibraryTypeOperatorDescriptor | null {
+  const operators = libraries.typeOperators ?? []
+  let result: LibraryTypeOperatorDescriptor | null = null
+
+  for (let index = 0; index < operators.length; index = index + 1) {
+    if (operators[index].name !== name) {
+      continue
+    }
+
+    if (result !== null) {
+      return null
+    }
+
+    result = operators[index]
+  }
+
+  return result
 }
 
 export function compilerLibraryNativeTypeForName(
