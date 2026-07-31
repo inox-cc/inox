@@ -544,7 +544,7 @@ class Parser {
     const typeParameters = this.parseFunctionTypeParameters()
     this.expectValue('=', 'INOX_EXPECTED_TYPE', 'expected = after type alias name')
 
-    if (this.isValue('(')) {
+    if (this.isFunctionTypeStart()) {
       return createTypeAliasDeclaration(exported, name, typeParameters, this.parseFunctionType(false))
     }
 
@@ -687,7 +687,7 @@ class Parser {
       }
 
       this.expectValue(':', 'INOX_EXPECTED_TYPE', 'expected : after object type field name')
-      if (this.isValue('(')) {
+      if (this.isFunctionTypeStart()) {
         const field = createObjectTypeField(name, modifiers.readOnly, optional, 'function', 'strong')
 
         field.functionType = this.parseFunctionType(true)
@@ -866,7 +866,7 @@ class Parser {
 
     this.expectValue(':', 'INOX_EXPECTED_TYPE', 'expected : after class field name')
 
-    if (this.isValue('(')) {
+    if (this.isFunctionTypeStart()) {
       const field = createFieldDefinition({
         name,
         staticToken,
@@ -958,14 +958,29 @@ class Parser {
     this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after method parameters')
     let returnType = 'unknown'
     let declaredReturnType: string | null = null
+    let returnShape: AnyNode | null = null
 
     if (name.value === 'constructor') {
       returnType = 'void'
     }
 
     if (this.matchValue(':')) {
-      declaredReturnType = this.parseTypeAnnotation(['{'], null)
-      returnType = declaredReturnType
+      if (this.isValue('{')) {
+        returnType = 'object'
+        returnShape = this.parseObjectType(null)
+
+        if (this.matchValue('|')) {
+          const unionMember = this.parseTypeAnnotation(['{'], null)
+
+          if (unionMember === 'null') {
+            returnType = 'nullable<object>'
+          }
+        }
+      } else {
+        returnType = this.parseTypeAnnotation(['{'], null)
+      }
+
+      declaredReturnType = returnType
     }
 
     return createMethodDefinition({
@@ -975,6 +990,7 @@ class Parser {
       params,
       declaredReturnType,
       returnType,
+      returnShape,
       body: this.parseBlock()
     })
   }
@@ -1632,7 +1648,7 @@ class Parser {
     if (this.matchValue(':')) {
       const typeStart = this.position
 
-      if (this.isValue('(')) {
+      if (this.isFunctionTypeStart()) {
         functionType = this.parseFunctionType(false, [',', ')', '='])
         valueType = 'function'
       } else if (this.isValue('{')) {
@@ -2508,6 +2524,33 @@ class Parser {
 
     let depth = 0
 
+    let offset = 0
+
+    while (this.peek(offset).type !== 'eof') {
+      const token = this.peek(offset)
+
+      if (token.value === '(') {
+        depth = depth + 1
+      } else if (token.value === ')') {
+        depth = depth - 1
+
+        if (depth === 0) {
+          return this.peek(offset + 1).value === '=>'
+        }
+      }
+
+      offset = offset + 1
+    }
+
+    return false
+  }
+
+  isFunctionTypeStart(): boolean {
+    if (!this.isValue('(')) {
+      return false
+    }
+
+    let depth = 0
     let offset = 0
 
     while (this.peek(offset).type !== 'eof') {

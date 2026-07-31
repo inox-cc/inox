@@ -39,6 +39,7 @@ type MethodDefinitionOptions = {
   params: AnyNode[]
   declaredReturnType: string | null
   returnType: string
+  returnShape: AnyNode | null
   body: AnyNode[]
 }
 
@@ -250,6 +251,7 @@ export function createMethodDefinition(options: MethodDefinitionOptions): AnyNod
     params: options.params,
     declaredReturnType: options.declaredReturnType,
     returnType: options.returnType,
+    returnShape: options.returnShape,
     body: options.body
   }
 }

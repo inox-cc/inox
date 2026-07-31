@@ -1644,16 +1644,6 @@ export function emitCUnit(
   emitCUnitNativeClassForwardDeclarations(lines, baseContext, declarationLines)
   pushUnitLines(lines, declarationLines)
   emitCUnitValueDefinitions(lines, compileTimeValueDeclarations, baseContext)
-  pushUnitLines(
-    lines,
-    emitCNativeClassDeclarations(
-      baseContext,
-      collectCUnitClassMethodPrototypes(baseContext, deps),
-      classDescriptorNames,
-      inlineConstructorDefinitions,
-      inlineMethodDefinitions
-    )
-  )
   const arrowCallbackWrappers: CRuntimeArrowCallbackWrapper[] = []
   const asyncResultChainCallbackWrappers: CAsyncResultChainWrapper[] = []
   const callbackWrappers: CCallbackWrapperMap = baseContext.callbackWrappers
@@ -1740,6 +1730,17 @@ export function emitCUnit(
   ) {
     lines.push('')
   }
+
+  pushUnitLines(
+    lines,
+    emitCNativeClassDeclarations(
+      baseContext,
+      collectCUnitClassMethodPrototypes(baseContext, deps),
+      classDescriptorNames,
+      inlineConstructorDefinitions,
+      inlineMethodDefinitions
+    )
+  )
 
   for (const classInfo of baseContext.classInfos.values()) {
     if (cClassUsesInlineDefinitions(classInfo) || classInfo.constructor?.inline === true) {

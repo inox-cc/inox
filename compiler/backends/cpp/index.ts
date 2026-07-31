@@ -8153,6 +8153,11 @@ function emitRuntimeArrowCaptureStoreLines(
     if (capture.valueType === 'string') {
       if (moduleCaptureName !== null && typeof moduleCaptureName !== 'undefined') {
         lines.push(`${field} = ${storedCaptureName};`)
+      } else if (
+        context.cppValueTypes.get(capture.name) === 'inox::Value' ||
+        context.cppValueTypes.get(capture.name) === 'inox::String'
+      ) {
+        lines.push(`${field} = ${captureName}.raw();`)
       } else {
         lines.push(`${field}.tag = INOX_TAG_STRING;`)
         lines.push(`${field}.as.ref = (inox_ref*)&${captureName}->header;`)

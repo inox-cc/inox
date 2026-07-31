@@ -1537,8 +1537,10 @@ export function resolveFunctionTypeMetadata(
   }
 
   const typeLoc: SourceLocation = { line: typeLine, column: typeColumn }
-  const returnInfo = resolveDeclaredType(context, functionType.returnType, typeLoc)
-  const params = resolveFunctionTypeParams(context, functionType.params, typeLoc)
+  const declaredReturnType = functionType.declaredReturnType ?? functionType.returnType
+  const paramTemplates = functionType.paramTemplates ?? functionType.params
+  const returnInfo = resolveDeclaredType(context, declaredReturnType, typeLoc)
+  const params = resolveFunctionTypeParams(context, paramTemplates, typeLoc)
   let returnAsyncResultValueType: ValueType | null = null
 
   if (returnInfo.asyncResultValueType !== null && typeof returnInfo.asyncResultValueType !== 'undefined') {
@@ -1549,9 +1551,9 @@ export function resolveFunctionTypeMetadata(
     kind: 'function',
     resolved: true,
     params,
-    paramTemplates: functionType.paramTemplates ?? functionType.params,
+    paramTemplates,
     typeParameters: functionType.typeParameters ?? [],
-    declaredReturnType: functionType.returnType,
+    declaredReturnType,
     returnType: returnInfo.valueType,
     returnTypeRef: returnInfo.typeRef,
     returnNullable: returnInfo.nullable,

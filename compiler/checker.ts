@@ -42,6 +42,7 @@ import {
 } from './extensions/operation-type-refs.ts'
 import { instantiateNativeTypeRef, substituteTypeRef } from './extensions/type-ref-substitution.ts'
 import type { TypeRefSubstitution } from './extensions/type-ref-substitution.ts'
+import { inferTypeRefSubstitutions } from './extensions/type-ref-inference.ts'
 import {
   parseCompilerLibraryGlobalDeclarations,
   type ParsedCompilerLibraryGlobalDeclaration
@@ -75,6 +76,7 @@ import {
   resolveDeclaredType as resolveDeclaredTypeInContext,
   resolveFieldDeclaredType as resolveFieldDeclaredTypeInContext,
   resolveFunctionTypeMetadata as resolveFunctionTypeMetadataInContext,
+  functionTypeMetadataFromTypeRef,
   resolveObjectShape as resolveObjectShapeInContext,
   resolveObjectShapeBases as resolveObjectShapeBasesInContext,
   resolveObjectShapeField as resolveObjectShapeFieldInContext,
@@ -1117,6 +1119,8 @@ class Checker {
     if (declaredFunctionType !== null) {
       paramInfo.valueType = 'function'
       paramInfo.functionType = declaredFunctionType
+      paramInfo.typeRef = null
+      paramInfo.typeRef = typeRefFromResolvedTypeInContext(paramInfo)
     }
 
     if (param.shape !== null && typeof param.shape !== 'undefined') {
@@ -3881,7 +3885,7 @@ class Checker {
         params.push(this.resolveParam(param))
       }
 
-      const returnInfo = this.resolveDeclaredType(method.returnType, method.loc)
+      const returnInfo = this.resolveMethodReturnType(method)
 
       return (
         check.returnValueTypes.includes(returnInfo.valueType) &&
@@ -3986,8 +3990,19 @@ class Checker {
       expression.callBoundaryReturnType = declaredSymbol.returnType ?? null
     }
 
-    const symbol = this.instantiateUserFunctionSymbol(expression, declaredSymbol)
-    const argInfos = this.checkedCallArgInfos(expression, symbol)
+    let inferenceArgInfos: CheckedCallArgInfo[] | null = null
+
+    if (
+      declaredSymbol !== null &&
+      typeof declaredSymbol !== 'undefined' &&
+      (declaredSymbol.typeParameters ?? []).length > 0 &&
+      (expression.typeArguments ?? []).length === 0
+    ) {
+      inferenceArgInfos = this.checkedCallArgInfos(expression)
+    }
+
+    const symbol = this.instantiateUserFunctionSymbol(expression, declaredSymbol, inferenceArgInfos)
+    const argInfos = inferenceArgInfos ?? this.checkedCallArgInfos(expression, symbol)
 
     if (symbol === null || typeof symbol === 'undefined') {
       return 'unknown'
@@ -3998,20 +4013,31 @@ class Checker {
     return valueType
   }
 
-  instantiateUserFunctionSymbol(expression: AnyNode, symbol: SymbolInfo | null | undefined): SymbolInfo | null {
+  instantiateUserFunctionSymbol(
+    expression: AnyNode,
+    symbol: SymbolInfo | null | undefined,
+    argInfos: CheckedCallArgInfo[] | null = null
+  ): SymbolInfo | null {
     if (symbol === null || typeof symbol === 'undefined') {
       return null
     }
 
     const typeArguments: string[] = expression.typeArguments ?? []
+    const typeParameters = symbol.typeParameters ?? []
+    const typeParameterNames: string[] = []
 
-    if (typeArguments.length === 0) {
+    for (let index = 0; index < typeParameters.length; index = index + 1) {
+      typeParameterNames.push(typeParameters[index].name)
+    }
+
+    let argumentNames: string[] = []
+    let resolvedArguments: ResolvedTypeInfo[] = []
+
+    if (typeArguments.length === 0 && typeParameters.length === 0) {
       return symbol
     }
 
-    const typeParameters = symbol.typeParameters ?? []
-
-    if (typeParameters.length !== typeArguments.length) {
+    if (typeArguments.length > 0 && typeParameters.length !== typeArguments.length) {
       this.report(
         'INOX_TYPE_ARGUMENT_COUNT',
         `function expects ${typeParameters.length} type argument(s), got ${typeArguments.length}`,
@@ -4020,18 +4046,34 @@ class Checker {
       return symbol
     }
 
-    const resolvedArguments: ResolvedTypeInfo[] = []
+    if (typeArguments.length > 0) {
+      argumentNames = typeArguments
 
-    for (let index = 0; index < typeArguments.length; index = index + 1) {
-      resolvedArguments.push(this.resolveDeclaredType(typeArguments[index], expression.loc))
+      for (let index = 0; index < typeArguments.length; index = index + 1) {
+        resolvedArguments.push(this.resolveDeclaredType(typeArguments[index], expression.loc))
+      }
+    } else {
+      const inferred = this.inferUserFunctionTypeArguments(symbol, typeParameters, typeParameterNames, argInfos)
+
+      if (inferred === null) {
+        this.report(
+          'INOX_TYPE_ARGUMENT_INFERENCE',
+          `cannot infer type argument(s) ${typeParameterNames.join(', ')}`,
+          expression.loc
+        )
+        return symbol
+      }
+
+      argumentNames = inferred.names
+      resolvedArguments = inferred.arguments
     }
 
-    const state = this.pushInstantiatedTypeParameters(typeParameters, typeArguments, nodeSourceLocation(expression))
+    const state = this.pushResolvedInstantiatedTypeParameters(typeParameters, resolvedArguments)
 
     try {
       this.checkInstantiatedTypeParameterConstraints(
         typeParameters,
-        typeArguments,
+        argumentNames,
         resolvedArguments,
         nodeSourceLocation(expression)
       )
@@ -4059,6 +4101,124 @@ class Checker {
     } finally {
       this.restoreFunctionTypeParameters(state)
     }
+  }
+
+  inferUserFunctionTypeArguments(
+    symbol: SymbolInfo,
+    typeParameters: AnyNode[],
+    typeParameterNames: string[],
+    argInfos: CheckedCallArgInfo[] | null
+  ): { names: string[]; arguments: ResolvedTypeInfo[] } | null {
+    if (argInfos === null) {
+      return null
+    }
+
+    const params = this.resolveGenericFunctionParamTemplates(symbol, typeParameters)
+    const templates: TypeRef[] = []
+    const actuals: TypeRef[] = []
+
+    for (let index = 0; index < argInfos.length; index = index + 1) {
+      const param = paramForArgument(params, index)
+      const argInfo = argInfos[index]
+      const templateTypeRef = param?.typeRef as TypeRef | null | undefined
+
+      if (
+        param !== null &&
+        typeof param !== 'undefined' &&
+        templateTypeRef !== null &&
+        typeof templateTypeRef !== 'undefined' &&
+        argInfo !== null &&
+        typeof argInfo !== 'undefined'
+      ) {
+        templates.push(templateTypeRef)
+        actuals.push(argInfo.typeRef)
+      }
+    }
+
+    const libraries = resolveCompilerLibrarySet(this.options.libraries)
+    const inferred = inferTypeRefSubstitutions(templates, actuals, typeParameterNames, libraries)
+
+    if (inferred.conflicts.length > 0 || inferred.unresolved.length > 0) {
+      return null
+    }
+
+    const names: string[] = []
+    const argumentsResult: ResolvedTypeInfo[] = []
+
+    for (let index = 0; index < typeParameterNames.length; index = index + 1) {
+      const name = typeParameterNames[index]
+      const substitution = inferred.substitutions.find((candidate) => candidate.name === name)
+
+      if (substitution === null || typeof substitution === 'undefined') {
+        return null
+      }
+
+      names.push(typeRefDeclaredName(substitution.typeRef, libraries) ?? 'unknown')
+      argumentsResult.push(this.resolvedTypeInfoFromTypeRef(substitution.typeRef))
+    }
+
+    return { names, arguments: argumentsResult }
+  }
+
+  resolveGenericFunctionParamTemplates(
+    symbol: SymbolInfo,
+    typeParameters: AnyNode[]
+  ): FunctionTypeParamMetadata[] {
+    const state = this.pushTypeRefTemplateParameters(typeParameters)
+
+    try {
+      const resolvedParams = this.resolveParams(symbol.paramTemplates ?? symbol.params ?? [])
+      const params: FunctionTypeParamMetadata[] = []
+
+      for (let index = 0; index < resolvedParams.length; index = index + 1) {
+        const param = resolvedParams[index]
+
+        if (param === null || typeof param === 'undefined') {
+          continue
+        }
+
+        if (param.typeRef === null || typeof param.typeRef === 'undefined') {
+          param.typeRef = typeRefFromResolvedTypeInContext(
+            {
+              valueType: param.valueType,
+              nullable: param.nullable === true,
+              typeRef: null,
+              functionType: param.functionType ?? null,
+              shape: param.shape ?? null,
+              asyncResultValueType: param.asyncResultValueType ?? null
+            },
+            param.declaredType ?? null
+          )
+        }
+
+        params.push(param)
+      }
+
+      return params
+    } finally {
+      this.restoreFunctionTypeParameters(state)
+    }
+  }
+
+  resolvedTypeInfoFromTypeRef(typeRef: TypeRef): ResolvedTypeInfo {
+    const info = this.unresolvedTypeInfo()
+    info.typeRef = typeRef
+
+    if (typeRef.kind === 'parameter') {
+      info.nullable = typeRef.nullable === true
+      return info
+    }
+
+    const libraries = resolveCompilerLibrarySet(this.options.libraries)
+    const loc = { line: 1, column: 1 }
+    const metadata = typeRefCompatibilityMetadata(typeRef, libraries, loc)
+
+    info.valueType = metadata.valueType
+    info.nullable = metadata.nullable
+    info.functionType = functionTypeMetadataFromTypeRef(this.declaredTypeContext(), typeRef, loc)
+    info.shape = metadata.shape
+    info.asyncResultValueType = metadata.asyncResultValueType
+    return info
   }
 
   checkInstantiatedTypeParameterConstraints(
@@ -4445,6 +4605,13 @@ class Checker {
       resolvedArguments.push(this.resolveDeclaredType(typeArguments[index], loc))
     }
 
+    return this.pushResolvedInstantiatedTypeParameters(typeParameters, resolvedArguments)
+  }
+
+  pushResolvedInstantiatedTypeParameters(
+    typeParameters: AnyNode[],
+    resolvedArguments: ResolvedTypeInfo[]
+  ): CheckerTypeParameterState[] {
     const state: CheckerTypeParameterState[] = []
 
     for (
@@ -4460,6 +4627,30 @@ class Checker {
       })
       this.types.set(name, { kind: 'alias', valueType: 'unknown' })
       this.resolvedDeclaredTypes.set(name, resolvedArguments[index])
+    }
+
+    return state
+  }
+
+  pushTypeRefTemplateParameters(typeParameters: AnyNode[]): CheckerTypeParameterState[] {
+    const state: CheckerTypeParameterState[] = []
+
+    for (let index = 0; index < typeParameters.length; index = index + 1) {
+      const name: string = typeParameters[index].name
+      state.push({
+        name,
+        previousType: this.types.get(name) ?? null,
+        previousResolvedType: this.resolvedDeclaredTypes.get(name) ?? null
+      })
+      this.types.set(name, { kind: 'alias', valueType: 'unknown' })
+      this.resolvedDeclaredTypes.set(name, {
+        valueType: 'unknown',
+        nullable: false,
+        typeRef: { kind: 'parameter', name },
+        functionType: null,
+        shape: null,
+        asyncResultValueType: null
+      })
     }
 
     return state
@@ -5741,7 +5932,7 @@ class Checker {
       params.push(this.resolveParam(param))
     }
 
-    const returnInfo = this.resolveDeclaredType(method.returnType, method.loc)
+    const returnInfo = this.resolveMethodReturnType(method)
 
     if (!acceptsArgumentCount(params, expression.args.length)) {
       this.report(
@@ -7200,7 +7391,8 @@ class Checker {
 
       try {
         const previousReturnType = this.currentReturnType
-        const methodReturnInfo = this.resolveDeclaredType(method.returnType, method.loc)
+        const methodReturnInfo = this.resolveMethodReturnType(method)
+
         this.currentReturnType = methodReturnInfo.valueType
         const previousReturnNullable = this.currentReturnNullable
         this.currentReturnNullable = methodReturnInfo.nullable
@@ -10023,6 +10215,17 @@ class Checker {
     if (item.returnShape !== null && typeof item.returnShape !== 'undefined') {
       resolved.valueType = 'object'
       resolved.shape = this.resolveObjectShape(item.returnShape)
+    }
+
+    return resolved
+  }
+
+  resolveMethodReturnType(method: AnyNode): ResolvedTypeInfo {
+    const resolved = this.resolveDeclaredType(method.returnType, method.loc)
+
+    if (method.returnShape !== null && typeof method.returnShape !== 'undefined') {
+      resolved.valueType = 'object'
+      resolved.shape = this.resolveObjectShape(method.returnShape)
     }
 
     return resolved

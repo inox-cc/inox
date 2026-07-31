@@ -18,7 +18,7 @@ export function instantiateNativeTypeRef(
   return {
     kind: 'nominal',
     typeId: nativeType.typeId,
-    args: substituteTypeRefs(typeArguments, [], new Set<string>()),
+    args: typeArguments.slice(),
     nullable: false,
     ownership: 'value',
     traits: instantiateNativeTypeTraits(nativeType, typeArguments)
@@ -61,6 +61,18 @@ function substituteTypeRefInScope(
 
     if (substitution === null) {
       throw new Error(`Missing TypeRef substitution ${typeRef.name}`)
+    }
+
+    if (substitution.typeRef.kind === 'parameter') {
+      const nested = typeRefSubstitution(substitutions, substitution.typeRef.name)
+
+      if (
+        substitution.typeRef.name === typeRef.name ||
+        nested === null ||
+        nested === substitution
+      ) {
+        return typeRef.nullable === true ? nullableTypeRef(substitution.typeRef) : substitution.typeRef
+      }
     }
 
     if (resolving.has(typeRef.name)) {

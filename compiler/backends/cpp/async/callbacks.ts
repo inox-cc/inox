@@ -1156,6 +1156,15 @@ export function collectCallbackWrappers(
 
           visitCallbackStatement(statement, functionScopes, wrappers, pendingPlainFunctionArgs, context, deps)
         }
+      } else if (item.kind === 'class') {
+        visitCallbackClassMethods(
+          item.node,
+          topLevelScope,
+          wrappers,
+          pendingPlainFunctionArgs,
+          context,
+          deps
+        )
       } else if (item.kind === 'statement') {
         visitCallbackStatement(item.node, [topLevelScope], wrappers, pendingPlainFunctionArgs, context, deps)
       }
@@ -1185,6 +1194,31 @@ export function collectCallbackWrappers(
   collectPlainFunctionValueWrappers(irPrograms, wrappers, context, deps)
 
   return wrappers
+}
+
+function visitCallbackClassMethods(
+  classNode: CallbackNode,
+  topLevelScope: CallbackScope,
+  wrappers: CallbackWrapperMap,
+  pendingPlainFunctionArgs: PendingPlainFunctionArg[],
+  context: CallbackEmitContext,
+  deps: CallbackLoweringDependencies
+): void {
+  const methods = callbackNodeArray(classNode.methods)
+
+  for (let methodIndex = 0; methodIndex < methods.length; methodIndex = methodIndex + 1) {
+    const method = methods[methodIndex]
+    const scope: CallbackScope = new Map()
+    declareCallbackParams(scope, callbackNodeArray(method.params))
+    const methodScopes: CallbackScope[] = [topLevelScope, scope]
+    const body = callbackNodeArray(method.body)
+
+    for (let statementIndex = 0; statementIndex < body.length; statementIndex = statementIndex + 1) {
+      const statement = body[statementIndex]
+
+      visitCallbackStatement(statement, methodScopes, wrappers, pendingPlainFunctionArgs, context, deps)
+    }
+  }
 }
 
 function collectPlainFunctionValueWrappers(
@@ -1240,6 +1274,24 @@ function scanPlainFunctionValueStatement(
     const scope: CallbackScope = new Map()
     declareCallbackParams(scope, statement.params)
     scanPlainFunctionValueStatements(statement.body, appendCallbackScope(scopes, scope), wrappers, context, deps)
+    return
+  }
+
+  if (statement.type === 'ClassDeclaration') {
+    const methods = callbackNodeArray(statement.methods)
+
+    for (let methodIndex = 0; methodIndex < methods.length; methodIndex = methodIndex + 1) {
+      const method = methods[methodIndex]
+      const scope: CallbackScope = new Map()
+      declareCallbackParams(scope, callbackNodeArray(method.params))
+      scanPlainFunctionValueStatements(
+        callbackNodeArray(method.body),
+        appendCallbackScope(scopes, scope),
+        wrappers,
+        context,
+        deps
+      )
+    }
   }
 }
 
@@ -1934,18 +1986,25 @@ function declareCallbackBinding(scope: CallbackScope, name: string, info: Callba
   scope.set(name, info)
 }
 
-function declareCallbackParams(scope: CallbackScope, params: CFunctionParam[]): void {
+function declareCallbackParams(scope: CallbackScope, params: (CFunctionParam | CallbackNode)[]): void {
   for (let index = 0; index < params.length; index = index + 1) {
     const param = params[index]
+    const name = callbackStringOrNull(param.name)
 
-    declareCallbackBinding(scope, param.name, {
-      name: param.name,
-      valueType: param.valueType,
+    if (name === null) {
+      continue
+    }
+
+    const valueType = callbackStringOrUnknown(param.valueType)
+
+    declareCallbackBinding(scope, name, {
+      name,
+      valueType,
       declaration: param,
       functionType: param.functionType,
       nullable: param.nullable === true,
       shape: param.shape,
-      runtimeManaged: isManagedRuntimeCallbackParamValueType(param.valueType),
+      runtimeManaged: isManagedRuntimeCallbackParamValueType(valueType),
       mutable: true
     })
   }

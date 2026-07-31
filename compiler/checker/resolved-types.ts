@@ -68,6 +68,8 @@ export type FunctionTypeMetadata = {
   kind?: string
   resolved: boolean
   params: FunctionTypeParamMetadata[]
+  paramTemplates?: AnyNode[]
+  typeParameters?: AnyNode[]
   returnType: ValueType
   returnTypeRef?: TypeRef | null
   declaredReturnType?: string
