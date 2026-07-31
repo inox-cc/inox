@@ -471,9 +471,20 @@ class Parser {
     let declaredReturnType: string | null = null
     let returnType = isAsync ? 'void' : 'unknown'
     let returnShape: AnyNode | null = null
+    let typePredicateParameterName: string | null = null
+    let typePredicateType: string | null = null
+    let typePredicateLoc: SourceLocation | null = null
 
     if (this.matchValue(':')) {
-      if (this.isValue('{')) {
+      if ((this.is('identifier') || this.is('keyword')) && this.peek(1).value === 'is') {
+        const parameter = this.advance()
+
+        this.advance()
+        typePredicateParameterName = parameter.value
+        typePredicateType = this.parseTypeAnnotation(['{'], null)
+        typePredicateLoc = locFromToken(parameter)
+        returnType = 'boolean'
+      } else if (this.isValue('{')) {
         returnType = 'object'
         returnShape = this.parseObjectType(null)
 
@@ -500,6 +511,9 @@ class Parser {
       declaredReturnType,
       returnType,
       returnShape,
+      typePredicateParameterName,
+      typePredicateType,
+      typePredicateLoc,
       body: this.parseBlock()
     })
   }
@@ -959,13 +973,24 @@ class Parser {
     let returnType = 'unknown'
     let declaredReturnType: string | null = null
     let returnShape: AnyNode | null = null
+    let typePredicateParameterName: string | null = null
+    let typePredicateType: string | null = null
+    let typePredicateLoc: SourceLocation | null = null
 
     if (name.value === 'constructor') {
       returnType = 'void'
     }
 
     if (this.matchValue(':')) {
-      if (this.isValue('{')) {
+      if ((this.is('identifier') || this.is('keyword')) && this.peek(1).value === 'is') {
+        const parameter = this.advance()
+
+        this.advance()
+        typePredicateParameterName = parameter.value
+        typePredicateType = this.parseTypeAnnotation(['{'], null)
+        typePredicateLoc = locFromToken(parameter)
+        returnType = 'boolean'
+      } else if (this.isValue('{')) {
         returnType = 'object'
         returnShape = this.parseObjectType(null)
 
@@ -991,6 +1016,9 @@ class Parser {
       declaredReturnType,
       returnType,
       returnShape,
+      typePredicateParameterName,
+      typePredicateType,
+      typePredicateLoc,
       body: this.parseBlock()
     })
   }

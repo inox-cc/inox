@@ -113,6 +113,10 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
         returnNullable: returnType.nullable,
         returnAsyncResultValueType: nullableString(returnType.asyncResultValueType),
         returnShape: returnType.shape,
+        typePredicateParameterName: nullableString(item.typePredicateParameterName),
+        typePredicateType: nullableString(item.typePredicateType),
+        typePredicateLoc: nullableNode(item.typePredicateLoc),
+        argumentNarrowing: nullableNode(item.argumentNarrowing),
         body: lowerStatementList(lowerNodeArrayOrEmpty(item.body), context)
       }
       const libraryRuntimeRequirements = returnType.libraryRuntimeRequirements
@@ -346,6 +350,10 @@ function lowerClassMethod(method: AnyNode, context: LowerContext): AnyNode {
     returnNullable: returnType.nullable,
     returnAsyncResultValueType: nullableString(returnType.asyncResultValueType),
     returnShape: nullableNode(returnType.shape),
+    typePredicateParameterName: nullableString(method.typePredicateParameterName),
+    typePredicateType: nullableString(method.typePredicateType),
+    typePredicateLoc: nullableNode(method.typePredicateLoc),
+    argumentNarrowing: nullableNode(method.argumentNarrowing),
     body: lowerStatementList(lowerNodeArrayOrEmpty(method.body), context)
   }
 }

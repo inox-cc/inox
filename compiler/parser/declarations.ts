@@ -10,6 +10,9 @@ type FunctionDeclarationOptions = {
   declaredReturnType: string | null
   returnType: string
   returnShape: AnyNode | null
+  typePredicateParameterName: string | null
+  typePredicateType: string | null
+  typePredicateLoc: SourceLocation | null
   body: AnyNode[]
 }
 
@@ -40,6 +43,9 @@ type MethodDefinitionOptions = {
   declaredReturnType: string | null
   returnType: string
   returnShape: AnyNode | null
+  typePredicateParameterName: string | null
+  typePredicateType: string | null
+  typePredicateLoc: SourceLocation | null
   body: AnyNode[]
 }
 
@@ -135,6 +141,9 @@ export function createFunctionDeclaration(options: FunctionDeclarationOptions): 
     returnNullable: false,
     returnAsyncResultValueType: null,
     returnShape: options.returnShape,
+    typePredicateParameterName: options.typePredicateParameterName,
+    typePredicateType: options.typePredicateType,
+    typePredicateLoc: options.typePredicateLoc,
     body: options.body
   }
 }
@@ -252,6 +261,9 @@ export function createMethodDefinition(options: MethodDefinitionOptions): AnyNod
     declaredReturnType: options.declaredReturnType,
     returnType: options.returnType,
     returnShape: options.returnShape,
+    typePredicateParameterName: options.typePredicateParameterName,
+    typePredicateType: options.typePredicateType,
+    typePredicateLoc: options.typePredicateLoc,
     body: options.body
   }
 }

@@ -364,6 +364,11 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.libraryArgumentNarrowing = libraryArgumentNarrowing
   }
 
+  const argumentNarrowing = source.argumentNarrowing
+  if (argumentNarrowing !== null && typeof argumentNarrowing === 'object') {
+    target.argumentNarrowing = argumentNarrowing
+  }
+
   const libraryBindingId = nullableString(source.libraryBindingId)
   if (libraryBindingId !== null && typeof libraryBindingId !== 'undefined') {
     target.libraryBindingId = libraryBindingId

@@ -410,7 +410,7 @@ export type LibraryCSequenceMaterializationDescriptor = {
   failureMode: 'thrown'
 }
 
-export type LibraryArgumentNarrowingDescriptor = {
+export type ArgumentNarrowingDescriptor = {
   argumentIndex: number
   trueTypeRef?: TypeRef | null
   falseTypeRef?: TypeRef | null
@@ -419,6 +419,8 @@ export type LibraryArgumentNarrowingDescriptor = {
   trueNonNullable?: boolean
   falseNonNullable?: boolean
 }
+
+export type LibraryArgumentNarrowingDescriptor = ArgumentNarrowingDescriptor
 
 export type LibraryIndexBoundsDescriptor = {
   minimumIndex: number

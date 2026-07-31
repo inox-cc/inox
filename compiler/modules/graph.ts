@@ -981,6 +981,10 @@ function applyImportedFunctionDeclarationMetadata(specifier: AnyNode, declaratio
   specifier.returnNullable = declaration.returnNullable === true
   specifier.returnAsyncResultValueType = declaration.returnAsyncResultValueType ?? null
   specifier.returnShape = declaration.returnShape ?? null
+  specifier.typePredicateParameterName = declaration.typePredicateParameterName ?? null
+  specifier.typePredicateType = declaration.typePredicateType ?? null
+  specifier.typePredicateLoc = declaration.typePredicateLoc ?? null
+  specifier.argumentNarrowing = declaration.argumentNarrowing ?? null
 }
 
 function findExportedFunctionDeclarations(program: ProgramNode, name: string): AnyNode[] {

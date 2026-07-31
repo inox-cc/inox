@@ -1,5 +1,11 @@
 import type { CompilerHost } from './host.ts'
-import type { CompilerLibraryOptionValue, CompilerLibrarySet, IntrinsicRole, TypeRef } from './extensions/types.ts'
+import type {
+  ArgumentNarrowingDescriptor,
+  CompilerLibraryOptionValue,
+  CompilerLibrarySet,
+  IntrinsicRole,
+  TypeRef
+} from './extensions/types.ts'
 
 export type SourceLocation = {
   file?: string
@@ -179,6 +185,9 @@ export type CallableOverloadInfo = {
   returnNullable?: boolean
   returnAsyncResultValueType?: ValueType | null
   returnShape?: ObjectShapeInfo | null
+  typePredicateParameterName?: string | null
+  typePredicateType?: string | null
+  argumentNarrowing?: ArgumentNarrowingDescriptor | null
   async?: boolean
   loc?: SourceLocation
 }
@@ -210,6 +219,9 @@ export type SymbolInfo = {
   returnNullable?: boolean
   returnAsyncResultValueType?: ValueType | null
   returnShape?: ObjectShapeInfo | null
+  typePredicateParameterName?: string | null
+  typePredicateType?: string | null
+  argumentNarrowing?: ArgumentNarrowingDescriptor | null
   async?: boolean
   className?: string | null
   classMethods?: AnyNode[]

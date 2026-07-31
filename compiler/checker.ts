@@ -53,11 +53,11 @@ import {
   resolveCompilerLibraryOptionValue
 } from './extensions/library-options.ts'
 import type {
+  ArgumentNarrowingDescriptor,
   ConcreteTypeRef,
   CompilerLibrarySet,
   CompilerLibraryLiteralTypeInference,
   IntrinsicRole,
-  LibraryArgumentNarrowingDescriptor,
   LibraryCResultMappingDescriptor,
   LibraryOperationDescriptor,
   LibraryOperationKind,
@@ -866,6 +866,9 @@ class Checker {
             symbol.returnNullable = specifier.returnNullable === true
             symbol.returnAsyncResultValueType = specifier.returnAsyncResultValueType ?? null
             symbol.returnShape = specifier.returnShape ?? null
+            symbol.typePredicateParameterName = specifier.typePredicateParameterName ?? null
+            symbol.typePredicateType = specifier.typePredicateType ?? null
+            symbol.argumentNarrowing = specifier.argumentNarrowing ?? null
             symbol.async = specifier.async === true
 
             const functionOverloads: AnyNode[] = specifier.functionOverloads ?? []
@@ -905,6 +908,9 @@ class Checker {
               returnNullable: returnInfo.nullable,
               returnAsyncResultValueType: returnInfo.asyncResultValueType ?? null,
               returnShape: returnInfo.shape,
+              typePredicateParameterName: item.typePredicateParameterName ?? null,
+              typePredicateType: item.typePredicateType ?? null,
+              argumentNarrowing: this.resolveUserTypePredicate(item),
               async: item.async,
               loc: item.loc
             },
@@ -1077,6 +1083,9 @@ class Checker {
         returnNullable: declaration.returnNullable === true,
         returnAsyncResultValueType: declaration.returnAsyncResultValueType ?? null,
         returnShape: declaration.returnShape ?? null,
+        typePredicateParameterName: declaration.typePredicateParameterName ?? null,
+        typePredicateType: declaration.typePredicateType ?? null,
+        argumentNarrowing: this.resolveUserTypePredicate(declaration) ?? declaration.argumentNarrowing ?? null,
         async: declaration.async === true,
         loc
       }
@@ -1119,6 +1128,71 @@ class Checker {
     }
 
     return resolvedParam
+  }
+
+  resolveUserTypePredicate(item: AnyNode, reportErrors: boolean = true): ArgumentNarrowingDescriptor | null {
+    const parameterName = item.typePredicateParameterName
+    const predicateType = item.typePredicateType
+
+    if (typeof parameterName !== 'string' || typeof predicateType !== 'string') {
+      return null
+    }
+
+    const params: AnyNode[] = item.params ?? []
+    let argumentIndex = -1
+
+    for (let index = 0; index < params.length; index = index + 1) {
+      if (params[index].name === parameterName) {
+        argumentIndex = index
+        break
+      }
+    }
+
+    const predicateLoc = item.typePredicateLoc ?? item.loc
+
+    if (argumentIndex < 0) {
+      if (reportErrors) {
+        this.report(
+          'INOX_TYPE_PREDICATE_PARAMETER',
+          `type predicate parameter ${parameterName} is not a function parameter`,
+          predicateLoc
+        )
+      }
+
+      return null
+    }
+
+    const predicateInfo = this.resolveDeclaredType(predicateType, predicateLoc)
+    const param = params[argumentIndex]
+
+    if (param === null || typeof param === 'undefined') {
+      return null
+    }
+
+    const parameterTypeName = nodeDeclaredTypeOrValueType(param)
+    const parameterInfo = this.resolveDeclaredType(parameterTypeName, param.loc)
+    const predicateTypeRef = typeRefFromResolvedTypeInContext(predicateInfo, predicateType)
+    const parameterTypeRef = typeRefFromResolvedTypeInContext(parameterInfo, parameterTypeName)
+
+    if (!typeRefIsAssignable(predicateTypeRef, parameterTypeRef, resolveCompilerLibrarySet(this.options.libraries))) {
+      if (reportErrors) {
+        this.report(
+          'INOX_TYPE_PREDICATE_TYPE',
+          `type predicate ${predicateType} is not assignable to parameter ${parameterName}: ${parameterTypeName}`,
+          predicateLoc
+        )
+      }
+
+      return null
+    }
+
+    const narrowing: ArgumentNarrowingDescriptor = {
+      argumentIndex,
+      trueTypeRef: predicateTypeRef
+    }
+
+    item.argumentNarrowing = narrowing
+    return narrowing
   }
 
   resolveParamType(param: AnyNode, declaredType: string): ResolvedTypeInfo {
@@ -4016,6 +4090,7 @@ class Checker {
 
     const valueType = applyCallableSymbolCallInContext(this.callableSymbolContext(), expression, symbol, argInfos)
     expression.declaredType = symbol.declaredReturnType ?? null
+    expression.argumentNarrowing = symbol.argumentNarrowing ?? null
     return valueType
   }
 
@@ -4085,9 +4160,16 @@ class Checker {
       )
       const params = this.resolveParams(symbol.paramTemplates ?? symbol.params ?? [])
       const declaredReturnType = symbol.declaredReturnType
+      const instantiatedPredicate: AnyNode = {
+        params: symbol.paramTemplates ?? symbol.params ?? [],
+        typePredicateParameterName: symbol.typePredicateParameterName ?? null,
+        typePredicateType: symbol.typePredicateType ?? null,
+        loc: symbol.loc
+      }
+      const argumentNarrowing = this.resolveUserTypePredicate(instantiatedPredicate, false)
 
       if (declaredReturnType === null || typeof declaredReturnType === 'undefined') {
-        return { ...symbol, params }
+        return { ...symbol, params, argumentNarrowing }
       }
 
       const returnInfo = this.resolveDeclaredType(declaredReturnType, expression.loc)
@@ -4102,7 +4184,8 @@ class Checker {
         returnTypeRef,
         returnNullable: returnInfo.nullable,
         returnAsyncResultValueType: returnInfo.asyncResultValueType,
-        returnShape: returnInfo.shape
+        returnShape: returnInfo.shape,
+        argumentNarrowing
       }
     } finally {
       this.restoreFunctionTypeParameters(state)
@@ -6154,6 +6237,7 @@ class Checker {
     }
 
     expression.shape = returnInfo.shape
+    expression.argumentNarrowing = method.argumentNarrowing ?? this.resolveUserTypePredicate(method)
 
     return returnInfo.valueType
   }
@@ -7654,6 +7738,7 @@ class Checker {
         }
 
         methodNames.add(method.name)
+        method.argumentNarrowing = this.resolveUserTypePredicate(method)
         const scopeState = this.pushScope()
 
         try {
@@ -9339,7 +9424,8 @@ class Checker {
       return empty
     }
 
-    const narrowing: LibraryArgumentNarrowingDescriptor | null = expression.libraryArgumentNarrowing ?? null
+    const narrowing: ArgumentNarrowingDescriptor | null =
+      expression.argumentNarrowing ?? expression.libraryArgumentNarrowing ?? null
 
     if (narrowing === null || typeof narrowing !== 'object') {
       return empty
@@ -9580,7 +9666,8 @@ class Checker {
     }
 
     if (expression.type === 'CallExpression') {
-      const narrowing: LibraryArgumentNarrowingDescriptor | null = expression.libraryArgumentNarrowing ?? null
+      const narrowing: ArgumentNarrowingDescriptor | null =
+        expression.argumentNarrowing ?? expression.libraryArgumentNarrowing ?? null
 
       if (narrowing === null || typeof narrowing !== 'object') {
         return receiverNarrowing

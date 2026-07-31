@@ -1864,6 +1864,13 @@ function formatParamList(params: AnyNode[] | null | undefined): string {
 }
 
 function declarationReturnType(item: AnyNode): string {
+  const predicateParameterName = nullableStringMetadata(item.typePredicateParameterName)
+  const predicateType = nullableStringMetadata(item.typePredicateType)
+
+  if (predicateParameterName !== null && predicateType !== null) {
+    return `${predicateParameterName} is ${predicateType}`
+  }
+
   const declared = nullableStringMetadata(item.declaredReturnType)
 
   if (declared !== null) {
@@ -2101,6 +2108,10 @@ function cloneFunctionDeclaration(item: AnyNode): AnyNode {
     returnNullable: item.returnNullable === true,
     returnAsyncResultValueType: nullableMetadata(item.returnAsyncResultValueType),
     returnShape: nullableMetadata(item.returnShape),
+    typePredicateParameterName: nullableMetadata(item.typePredicateParameterName),
+    typePredicateType: nullableMetadata(item.typePredicateType),
+    typePredicateLoc: nullableMetadata(item.typePredicateLoc),
+    argumentNarrowing: nullableMetadata(item.argumentNarrowing),
     body: []
   }
   const typeParameters = cloneTypeParameters(item.typeParameters)
@@ -2331,6 +2342,10 @@ function cloneClassMethods(methods: AnyNode[] | null | undefined): AnyNode[] {
       returnTypeRef: nullableMetadata(method.returnTypeRef),
       returnNullable: method.returnNullable === true,
       returnAsyncResultValueType: nullableMetadata(method.returnAsyncResultValueType),
+      typePredicateParameterName: nullableMetadata(method.typePredicateParameterName),
+      typePredicateType: nullableMetadata(method.typePredicateType),
+      typePredicateLoc: nullableMetadata(method.typePredicateLoc),
+      argumentNarrowing: nullableMetadata(method.argumentNarrowing),
       body: []
     })
   }
