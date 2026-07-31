@@ -1962,7 +1962,7 @@ class Parser {
       callee = createMemberExpression(callee, property)
     }
 
-    const typeArguments = this.parseTypeArgumentsBeforeCall()
+    const typeArguments = this.parseTypeArgumentsBeforeCall(true)
 
     if (this.matchValue('(')) {
       while (!this.isValue(')') && !this.is('eof')) {
@@ -2271,8 +2271,8 @@ class Parser {
     return this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected property name')
   }
 
-  parseTypeArgumentsBeforeCall(): string[] {
-    if (!this.isTypeArgumentsBeforeCall()) {
+  parseTypeArgumentsBeforeCall(allowWithoutArgumentList: boolean = false): string[] {
+    if (!this.isTypeArgumentsBeforeCall(allowWithoutArgumentList)) {
       return []
     }
 
@@ -2291,34 +2291,90 @@ class Parser {
     return typeArguments
   }
 
-  isTypeArgumentsBeforeCall(): boolean {
+  isTypeArgumentsBeforeCall(allowWithoutArgumentList: boolean = false): boolean {
     if (!this.isValue('<')) {
       return false
     }
 
     let offset = 0
-    let depth = 0
-    const line = this.current().line
+    let angleDepth = 0
+    let braceDepth = 0
+    let bracketDepth = 0
+    let parenDepth = 0
+    let argumentCount = 0
+    let argumentHasToken = false
 
     while (this.peek(offset).type !== 'eof') {
       const token = this.peek(offset)
 
-      if (token.line !== line || this.isInvalidCallTypeArgumentToken(token.value)) {
+      if (!this.isCallTypeArgumentToken(token, braceDepth)) {
         return false
       }
 
       if (token.value === '<') {
-        depth = depth + 1
-      } else if (token.value === '>') {
-        depth = depth - 1
-
-        if (depth === 0) {
-          return this.peek(offset + 1).value === '('
+        angleDepth = angleDepth + 1
+        if (angleDepth > 1) {
+          argumentHasToken = true
         }
-      }
+      } else if (token.value === '>') {
+        angleDepth = angleDepth - 1
 
-      if (depth < 0) {
+        if (angleDepth === 0) {
+          if (
+            braceDepth !== 0 ||
+            bracketDepth !== 0 ||
+            parenDepth !== 0 ||
+            (!argumentHasToken && argumentCount === 0)
+          ) {
+            return false
+          }
+
+          const next = this.peek(offset + 1)
+          return (
+            next.value === '(' ||
+            (allowWithoutArgumentList && this.isNewTypeArgumentBoundary(token, next))
+          )
+        }
+      } else if (angleDepth <= 0) {
         return false
+      } else if (token.value === '{') {
+        braceDepth = braceDepth + 1
+        argumentHasToken = true
+      } else if (token.value === '}') {
+        if (braceDepth === 0) {
+          return false
+        }
+        braceDepth = braceDepth - 1
+      } else if (token.value === '[') {
+        bracketDepth = bracketDepth + 1
+        argumentHasToken = true
+      } else if (token.value === ']') {
+        if (bracketDepth === 0) {
+          return false
+        }
+        bracketDepth = bracketDepth - 1
+      } else if (token.value === '(') {
+        parenDepth = parenDepth + 1
+        argumentHasToken = true
+      } else if (token.value === ')') {
+        if (parenDepth === 0) {
+          return false
+        }
+        parenDepth = parenDepth - 1
+      } else if (
+        token.value === ',' &&
+        angleDepth === 1 &&
+        braceDepth === 0 &&
+        bracketDepth === 0 &&
+        parenDepth === 0
+      ) {
+        if (!argumentHasToken) {
+          return false
+        }
+        argumentCount = argumentCount + 1
+        argumentHasToken = false
+      } else {
+        argumentHasToken = true
       }
 
       offset = offset + 1
@@ -2327,17 +2383,32 @@ class Parser {
     return false
   }
 
-  isInvalidCallTypeArgumentToken(value: string): boolean {
-    return (
-      value === '&&' ||
-      value === '||' ||
-      value === '===' ||
-      value === '!==' ||
-      value === '=' ||
-      value === ';' ||
-      value === '{' ||
-      value === '}'
+  isCallTypeArgumentToken(token: Token, braceDepth: number): boolean {
+    if (
+      token.type === 'identifier' ||
+      token.type === 'keyword' ||
+      token.type === 'string' ||
+      token.type === 'number'
+    ) {
+      return true
+    }
+
+    if (token.value === ';') {
+      return braceDepth > 0
+    }
+
+    return stringArrayIncludes(
+      ['<', '>', ',', '.', '[', ']', '(', ')', '{', '}', ':', '?', '|', '&', '=>', '...'],
+      token.value
     )
+  }
+
+  isNewTypeArgumentBoundary(closingToken: Token, nextToken: Token): boolean {
+    if (nextToken.type === 'eof' || nextToken.line > closingToken.line) {
+      return true
+    }
+
+    return stringArrayIncludes([';', ',', ')', ']', '}', '.', '?.'], nextToken.value)
   }
 
   skipTypeUntil(values: string[]): void {
