@@ -23,6 +23,7 @@ export function readTypeAnnotation(
   options: TypeAnnotationReadOptions | null
 ): TypeAnnotationReadResult {
   const parts: string[] = []
+  let braceDepth = 0
   let bracketDepth = 0
   let genericDepth = 0
   let parenDepth = 0
@@ -44,6 +45,7 @@ export function readTypeAnnotation(
       genericDepth === 0 &&
       parenDepth === 0 &&
       bracketDepth === 0 &&
+      braceDepth === 0 &&
       stringArrayIncludes(stopValues, token.value) &&
       token.value !== '['
     ) {
@@ -53,6 +55,8 @@ export function readTypeAnnotation(
     if (
       genericDepth === 0 &&
       parenDepth === 0 &&
+      bracketDepth === 0 &&
+      braceDepth === 0 &&
       parts.length > 0 &&
       actualOptions.stopAtLineBreak === true &&
       token.line > lastTokenLine
@@ -63,6 +67,8 @@ export function readTypeAnnotation(
     if (
       genericDepth === 0 &&
       parenDepth === 0 &&
+      bracketDepth === 0 &&
+      braceDepth === 0 &&
       parts.length > 0 &&
       actualOptions.stopAtStatementBoundary === true &&
       token.line > lastTokenLine &&
@@ -71,7 +77,11 @@ export function readTypeAnnotation(
       break
     }
 
-    if (token.value === '<') {
+    if (token.value === '{') {
+      braceDepth = braceDepth + 1
+    } else if (token.value === '}' && braceDepth > 0) {
+      braceDepth = braceDepth - 1
+    } else if (token.value === '<') {
       genericDepth = genericDepth + 1
     } else if (token.value === '>' && genericDepth > 0) {
       genericDepth = genericDepth - 1

@@ -2,6 +2,7 @@ import {
   arrayElementTypeNameFromKnownTypeName,
   functionTypeNamesFromTypeName,
   genericTypeApplicationFromTypeName,
+  inlineObjectTypeNamesFromTypeName,
   isArrayTypeName,
   isBuiltinValueType,
   isNullableTypeName,
@@ -9,6 +10,7 @@ import {
   typeQueryTargetNameFromTypeName,
   unionTypeNamesFromTypeName
 } from '../type-names.ts'
+import type { InlineObjectTypeNames } from '../type-names.ts'
 import type { AnyNode, ProgramNode } from '../types.ts'
 import {
   compilerLibraryNativeTypeForIntrinsic,
@@ -18,7 +20,7 @@ import {
 } from '../extensions/library-set.ts'
 import { instantiateNativeTypeRef } from '../extensions/type-ref-substitution.ts'
 import { commonTypeRef, typeRefCompatibilityMetadata } from '../extensions/type-ref-compatibility.ts'
-import type { CompilerLibrarySet, CorePrimitiveType, TypeRef } from '../extensions/types.ts'
+import type { CompilerLibrarySet, CorePrimitiveType, ObjectTypeRefField, TypeRef } from '../extensions/types.ts'
 
 type LowerTypeNode = AnyNode
 
@@ -120,6 +122,12 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
       },
       context
     )
+  }
+
+  const inlineObject = inlineObjectTypeNamesFromTypeName(name)
+
+  if (inlineObject !== null) {
+    return resolveInlineObjectType(inlineObject, context)
   }
 
   const genericApplication = genericTypeApplicationFromTypeName(name)
@@ -500,6 +508,86 @@ function resolveFunctionParam(param: LowerTypeNode, context: LowerContext): Lowe
     functionType: declared.functionType,
     loc: param.loc
   }
+}
+
+function resolveInlineObjectType(inlineObject: InlineObjectTypeNames, context: LowerContext): LowerResolvedType {
+  const fields: LowerTypeNode[] = []
+
+  for (let index = 0; index < inlineObject.fields.length; index = index + 1) {
+    const inlineField = inlineObject.fields[index]
+    const declared = resolveDeclaredType(inlineField.typeName, context)
+
+    fields.push({
+      name: inlineField.name,
+      optional: inlineField.optional,
+      readonly: false,
+      ownership: 'strong',
+      declaredType: inlineField.typeName,
+      typeRef: declared.typeRef,
+      valueType: declared.valueType ?? 'unknown',
+      nullable: declared.nullable || inlineField.optional,
+      asyncResultValueType: nullableString(declared.asyncResultValueType),
+      shape: declared.shape,
+      functionType: declared.functionType
+    })
+  }
+
+  let dynamicField: LowerTypeNode | null = null
+
+  if (inlineObject.indexSignature !== null) {
+    const valueTypeName = inlineObject.indexSignature.valueTypeName
+    const declared = resolveDeclaredType(valueTypeName, context)
+
+    dynamicField = {
+      name: '',
+      optional: false,
+      readonly: false,
+      ownership: 'strong',
+      declaredType: valueTypeName,
+      typeRef: declared.typeRef,
+      valueType: declared.valueType ?? 'unknown',
+      nullable: declared.nullable,
+      asyncResultValueType: nullableString(declared.asyncResultValueType),
+      shape: declared.shape,
+      functionType: declared.functionType
+    }
+  }
+
+  const resolved = namedResolvedType('object')
+  resolved.shape = {
+    kind: 'object',
+    baseTypes: [],
+    dynamic: dynamicField !== null,
+    dynamicField,
+    fields
+  }
+  const typeRefFields: ObjectTypeRefField[] = []
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    const field = fields[index]
+    const typeRefField: ObjectTypeRefField = {
+      name: field.name,
+      typeRef: field.typeRef ?? unknownTypeRef(),
+      readonly: field.readonly === true
+    }
+
+    if (field.optional === true) {
+      typeRefField.optional = true
+    }
+
+    typeRefFields.push(typeRefField)
+  }
+
+  resolved.typeRef = {
+    kind: 'object',
+    fields: typeRefFields,
+    dynamic: dynamicField !== null,
+    dynamicField: dynamicField?.typeRef ?? null,
+    nullable: false,
+    ownership: 'value',
+    traits: []
+  }
+  return resolved
 }
 
 export function resolveObjectShape(shape: LowerTypeNode, context: LowerContext): LowerTypeNode {

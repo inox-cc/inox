@@ -7971,8 +7971,26 @@ class Checker {
         continue
       }
 
-      if (shape.dynamic !== true && !this.findShapeField(shape, property.key)) {
+      const knownField = findExplicitShapeFieldInContext(shape, property.key)
+
+      if (shape.dynamic !== true && !knownField) {
         this.report('INOX_UNKNOWN_FIELD', `unknown field ${property.key}`, property.loc)
+      } else if (
+        shape.dynamic === true &&
+        !knownField &&
+        shape.dynamicField !== null &&
+        typeof shape.dynamicField !== 'undefined'
+      ) {
+        const dynamicFieldType = this.resolveFieldDeclaredType(shape.dynamicField)
+        const propertyType = this.checkExpression(property.value)
+
+        this.checkAssignableType(
+          propertyType,
+          dynamicFieldType.valueType,
+          property.loc,
+          dynamicFieldType.nullable,
+          this.expressionCanBeNull(property.value)
+        )
       }
     }
   }

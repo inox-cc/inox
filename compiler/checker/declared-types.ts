@@ -3,7 +3,7 @@ import {
   arrayElementTypeNameFromKnownTypeName,
   functionTypeNamesFromTypeName,
   genericTypeApplicationFromTypeName,
-  inlineObjectTypeFieldsFromTypeName,
+  inlineObjectTypeNamesFromTypeName,
   indexedAccessTypeNameFromTypeName,
   isArrayTypeName,
   isBuiltinValueType,
@@ -15,7 +15,7 @@ import {
   unionTypeNamesFromTypeName,
   weakTypeNameFromTypeName
 } from '../type-names.ts'
-import type { InlineObjectTypeField } from '../type-names.ts'
+import type { InlineObjectTypeNames } from '../type-names.ts'
 import type {
   AnyNode,
   Diagnostic,
@@ -138,10 +138,10 @@ export function resolveDeclaredType(
     return resolveAnyNodeDeclaredType(context, loc)
   }
 
-  const inlineObjectFields = inlineObjectTypeFieldsFromTypeName(name)
+  const inlineObject = inlineObjectTypeNamesFromTypeName(name)
 
-  if (inlineObjectFields !== null) {
-    return resolveInlineObjectDeclaredType(context, inlineObjectFields, loc)
+  if (inlineObject !== null) {
+    return resolveInlineObjectDeclaredType(context, inlineObject, loc)
   }
 
   const rootResolution = context.resolvingDeclaredTypes.size === 0
@@ -586,12 +586,12 @@ function resolveFunctionResultTypeOperator(
 
 function resolveInlineObjectDeclaredType(
   context: DeclaredTypeResolverContext,
-  inlineFields: InlineObjectTypeField[],
+  inlineObject: InlineObjectTypeNames,
   loc: SourceLocation
 ): ResolvedTypeInfo {
   const fields: AnyNode[] = []
 
-  for (const inlineField of inlineFields) {
+  for (const inlineField of inlineObject.fields) {
     const weakTarget = weakTypeNameFromTypeName(inlineField.typeName)
     const declaredType = weakTarget ?? inlineField.typeName
 
@@ -608,12 +608,34 @@ function resolveInlineObjectDeclaredType(
   }
 
   const info = unresolvedTypeInfo()
+  let dynamicField: AnyNode | null = null
+
+  if (inlineObject.indexSignature !== null) {
+    const valueTypeName = inlineObject.indexSignature.valueTypeName
+    const valueInfo = resolveDeclaredType(context, valueTypeName, loc)
+
+    dynamicField = {
+      name: '',
+      optional: false,
+      readonly: false,
+      ownership: 'strong',
+      declaredType: valueTypeName,
+      valueType: valueInfo.valueType,
+      nullable: valueInfo.nullable,
+      typeRef: valueInfo.typeRef,
+      asyncResultValueType: valueInfo.asyncResultValueType,
+      functionType: valueInfo.functionType,
+      shape: valueInfo.shape,
+      loc
+    }
+  }
+
   info.valueType = 'object'
   info.shape = resolveObjectShape(context, {
     kind: 'object',
     baseTypes: [],
-    dynamic: false,
-    dynamicField: null,
+    dynamic: dynamicField !== null,
+    dynamicField,
     fields
   })
 

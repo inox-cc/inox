@@ -19,6 +19,16 @@ export type InlineObjectTypeField = {
   typeName: string
 }
 
+export type InlineObjectTypeIndexSignature = {
+  keyTypeName: string
+  valueTypeName: string
+}
+
+export type InlineObjectTypeNames = {
+  fields: InlineObjectTypeField[]
+  indexSignature: InlineObjectTypeIndexSignature | null
+}
+
 export type FunctionTypeNames = {
   params: string[]
   result: string
@@ -276,10 +286,10 @@ export function normalizeTypeName(name: string): string {
     return normalizeUnionTypeNames(args)
   }
 
-  const inlineObjectFields = inlineObjectTypeFieldsFromTypeName(name)
+  const inlineObject = inlineObjectTypeNamesFromTypeName(name)
 
-  if (inlineObjectFields !== null) {
-    return normalizedInlineObjectTypeName(inlineObjectFields)
+  if (inlineObject !== null) {
+    return normalizedInlineObjectTypeName(inlineObject)
   }
 
   if (name.endsWith('[]')) {
@@ -355,13 +365,14 @@ export function normalizeTypeName(name: string): string {
   return 'unknown'
 }
 
-export function inlineObjectTypeFieldsFromTypeName(name: string): InlineObjectTypeField[] | null {
+export function inlineObjectTypeNamesFromTypeName(name: string): InlineObjectTypeNames | null {
   if (!name.startsWith('{') || !name.endsWith('}')) {
     return null
   }
 
   const sourceFields = splitInlineObjectFields(name.slice(1, -1))
   const fields: InlineObjectTypeField[] = []
+  let indexSignature: InlineObjectTypeIndexSignature | null = null
 
   if (sourceFields === null) {
     return null
@@ -375,6 +386,32 @@ export function inlineObjectTypeFieldsFromTypeName(name: string): InlineObjectTy
     }
 
     const rawFieldName = sourceField.slice(0, colon)
+
+    if (rawFieldName.startsWith('[') && rawFieldName.endsWith(']')) {
+      if (indexSignature !== null) {
+        return null
+      }
+
+      const indexParameter = rawFieldName.slice(1, -1)
+      const indexColon = topLevelTypeDelimiterIndex(indexParameter, ':')
+
+      if (indexColon <= 0 || indexColon >= indexParameter.length - 1) {
+        return null
+      }
+
+      const parameterName = indexParameter.slice(0, indexColon)
+
+      if (!isIdentifierTypeName(parameterName)) {
+        return null
+      }
+
+      indexSignature = {
+        keyTypeName: normalizeTypeName(indexParameter.slice(indexColon + 1)),
+        valueTypeName: normalizeTypeName(sourceField.slice(colon + 1))
+      }
+      continue
+    }
+
     const optional = rawFieldName.endsWith('?')
     let fieldNameEnd = rawFieldName.length
 
@@ -395,7 +432,7 @@ export function inlineObjectTypeFieldsFromTypeName(name: string): InlineObjectTy
     })
   }
 
-  return fields
+  return { fields, indexSignature }
 }
 
 export function indexedAccessTypeNameFromTypeName(name: string): IndexedAccessTypeName | null {
@@ -605,10 +642,16 @@ function joinStrings(values: string[], separator: string): string {
   return result
 }
 
-function normalizedInlineObjectTypeName(fields: InlineObjectTypeField[]): string {
+function normalizedInlineObjectTypeName(inlineObject: InlineObjectTypeNames): string {
   const parts: string[] = []
 
-  for (const field of fields) {
+  if (inlineObject.indexSignature !== null) {
+    parts.push(
+      `[key:${inlineObject.indexSignature.keyTypeName}]:${inlineObject.indexSignature.valueTypeName}`
+    )
+  }
+
+  for (const field of inlineObject.fields) {
     parts.push(`${field.name}${field.optional ? '?' : ''}:${field.typeName}`)
   }
 
