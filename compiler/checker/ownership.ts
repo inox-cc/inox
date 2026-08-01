@@ -5,25 +5,22 @@ import {
   nullableTypeNameFromKnownTypeName
 } from '../type-names.ts'
 import { diagnostic } from '../diagnostics.ts'
-import type { AnyNode, Diagnostic, ProgramNode, TypeAliasInfo } from '../types.ts'
+import type { AnyNode, Diagnostic, ProgramNode } from '../types.ts'
 import { nodeNameEquals } from './resolved-types.ts'
 import type { OwnershipGraphEdge } from './resolved-types.ts'
 
 export type OwnershipCycleContext = {
   classNames: Set<string>
   program: ProgramNode
-  types: Map<string, TypeAliasInfo>
 }
 
 export function ownershipCycleDiagnostics(
   classNames: Set<string>,
-  program: ProgramNode,
-  types: Map<string, TypeAliasInfo>
+  program: ProgramNode
 ): Diagnostic[] {
   const context: OwnershipCycleContext = {
     classNames,
-    program,
-    types
+    program
   }
   const graph = buildOwnershipGraph(context)
   const path: OwnershipGraphEdge[] = []
@@ -144,13 +141,7 @@ function buildOwnershipGraph(context: OwnershipCycleContext): Map<string, Owners
   }
 
   for (const item of context.program.body) {
-    if (item.type === 'TypeAliasDeclaration') {
-      const typeInfo = item.valueType as TypeAliasInfo
-
-      if (typeInfo.kind === 'object') {
-        addOwnershipFieldEdges(graph, nodeNames, item.name, typeInfo.fields)
-      }
-    } else if (item.type === 'ClassDeclaration') {
+    if (item.type === 'ClassDeclaration') {
       let fields: AnyNode[] = []
 
       if (item.fields !== null && typeof item.fields !== 'undefined') {
@@ -167,10 +158,6 @@ function buildOwnershipGraph(context: OwnershipCycleContext): Map<string, Owners
 function ownershipGraphNodeNames(context: OwnershipCycleContext): Set<string> {
   const names: Set<string> = new Set()
 
-  for (const name of context.types.keys()) {
-    names.add(name)
-  }
-
   for (const name of context.classNames) {
     names.add(name)
   }
@@ -185,10 +172,6 @@ function addOwnershipFieldEdges(
   fields: AnyNode[]
 ): void {
   for (const field of fields) {
-    if ((owner === 'Scope' || owner === 'CheckerScope') && nodeNameEquals(field, 'parent')) {
-      continue
-    }
-
     if (field.ownership === 'weak' || hasWeakOwnershipMarker(fields, field.name)) {
       continue
     }

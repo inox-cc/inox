@@ -811,7 +811,7 @@ class Checker {
       }
     }
 
-    const ownershipDiagnostics = ownershipCycleDiagnostics(this.classNames, this.program, this.types)
+    const ownershipDiagnostics = ownershipCycleDiagnostics(this.classNames, this.program)
 
     for (const item of ownershipDiagnostics) {
       this.diagnostics.push(item)
