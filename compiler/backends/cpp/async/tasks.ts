@@ -51,6 +51,7 @@ import type { StringLoweringDependencies } from '../values/strings.ts'
 import {
   cAsyncResultOperationKind,
   isAsyncFunctionCallee,
+  isAsyncResultConstructorExpression,
   isAsyncResultReturningFunctionCallee,
   resolveCAsyncFunctionAwaitValueType
 } from './async-results.ts'
@@ -139,6 +140,11 @@ export type AsyncTaskLoweringDependencies = {
   ): CPreparedCallArgs
   emitPreparedCallExpression(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): PreparedExpression
   emitPreparedCompilerLibraryCallExpression(
+    expression: AsyncTaskAstNode,
+    context: AsyncTaskFunctionContext,
+    options?: CPreparedCallOptions
+  ): PreparedExpression | null
+  emitPreparedAsyncResultConstructorExpression(
     expression: AsyncTaskAstNode,
     context: AsyncTaskFunctionContext,
     options?: CPreparedCallOptions
@@ -2363,7 +2369,15 @@ function isSupportedAsyncTaskDirectAwaitAsyncResultExpression(
   expression: AsyncTaskAstNode | null | undefined,
   context: AsyncTaskPlannerContext
 ): boolean {
-  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined') {
+    return false
+  }
+
+  if (isAsyncResultConstructorExpression(expression)) {
+    return true
+  }
+
+  if (expression.type !== 'CallExpression') {
     return false
   }
 
@@ -3141,7 +3155,24 @@ function emitPreparedAsyncTaskAsyncResultSourceExpression(
 ): PreparedAsyncTaskAsyncResult | null {
   const expression = item.awaitedAsyncResultExpression
 
-  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined') {
+    return null
+  }
+
+  if (isAsyncResultConstructorExpression(expression)) {
+    const constructor = asyncTaskDeps(context).emitPreparedAsyncResultConstructorExpression(expression, context, {
+      out: 'frame->awaited',
+      owned: false
+    })
+
+    if (constructor === null || typeof constructor === 'undefined') {
+      return null
+    }
+
+    return { lines: constructor.lines }
+  }
+
+  if (expression.type !== 'CallExpression') {
     return null
   }
 

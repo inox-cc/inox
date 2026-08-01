@@ -864,6 +864,13 @@ const asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies = {
   emitPreparedCallArgs,
   emitPreparedCallExpression,
   emitPreparedCompilerLibraryCallExpression,
+  emitPreparedAsyncResultConstructorExpression: (expression, context, options) =>
+    emitPreparedAsyncResultConstructorExpression(
+      expression,
+      context as CFunctionContext,
+      asyncResultLoweringDependencies,
+      options
+    ),
   emitPreparedNumberExpression,
   emitPreparedStringBytesOperand,
   emitRuntimeArrowCaptureStoreLines,
