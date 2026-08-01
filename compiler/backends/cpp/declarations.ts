@@ -537,13 +537,6 @@ function pushFunctionHeadParam(
   context: CEmitContext
 ): void {
   params.push(emitFunctionHeadParam(param, index, statement, context))
-  pushObjectFunctionFieldParams(params, param, context)
-}
-
-function pushObjectFunctionFieldParams(params: string[], param: CFunctionParam, context: CEmitContext): void {
-  void params
-  void param
-  void context
 }
 
 function seenTypesIncludeDeclaredType(seenTypes: string[], declaredType: string | null | undefined): boolean {
@@ -1122,7 +1115,6 @@ function emitRuntimeClassMethodParams(info: CClassInfo, method: CNode, context: 
 
   for (let index = 0; index < method.params.length; index = index + 1) {
     params.push(emitClassMethodParam(method.params[index], index, method, context))
-    pushObjectFunctionFieldParams(params, method.params[index], context)
   }
 
   return params
@@ -1138,7 +1130,6 @@ function emitClassMethodParams(info: CClassInfo, method: CNode, context: CEmitCo
 
   for (let index = 0; index < method.params.length; index = index + 1) {
     params.push(emitClassMethodParam(method.params[index], index, method, context))
-    pushObjectFunctionFieldParams(params, method.params[index], context)
   }
 
   return params

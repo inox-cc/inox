@@ -690,8 +690,8 @@ function emitCModuleFunctionPointerRuntimeAdapterDefinitions(lines: string[], co
 }
 
 function registerCModuleFunctionPointerAdapterRuntimeBridges(context: CEmitContext): void {
-  const moduleObjectFunctionFields = collectCModuleObjectFunctionFieldNames(context)
-  const moduleObjectFunctionFieldInfos = collectCModuleObjectFunctionFieldInfos(context)
+  const moduleObjectFunctionFields: Set<string> = new Set()
+  const moduleObjectFunctionFieldInfos: FunctionPointerParamInfo[] = []
 
   for (const adapter of context.functionPointerAdapters) {
     const targetFunctionType = functionPointerAdapterTargetFunctionType(adapter, context)
@@ -1654,9 +1654,9 @@ function emitCModuleFunctionPointerAdapterDefinitions(lines: string[], context: 
     return
   }
 
-  const moduleObjectFunctionFields = collectCModuleObjectFunctionFieldNames(context)
-  const moduleObjectFunctionFieldInfos = collectCModuleObjectFunctionFieldInfos(context)
-  const runtimeModuleObjectFunctionFields = collectCModuleRuntimeObjectFunctionFieldNames(context)
+  const moduleObjectFunctionFields: Set<string> = new Set()
+  const moduleObjectFunctionFieldInfos: FunctionPointerParamInfo[] = []
+  const runtimeModuleObjectFunctionFields: Set<string> = new Set()
 
   for (const adapter of context.functionPointerAdapters) {
     pushCModuleLines(
@@ -2184,82 +2184,6 @@ function functionPointerPointerParamInfoForName(
   }
 
   return null
-}
-
-function collectCModuleObjectFunctionFieldNames(context: CEmitContext): Set<string> {
-  void context
-  return new Set()
-}
-
-function collectCModuleObjectFunctionFieldInfos(context: CEmitContext): FunctionPointerParamInfo[] {
-  void context
-  return []
-}
-
-function collectCModuleRuntimeObjectFunctionFieldNames(context: CEmitContext): Set<string> {
-  void context
-  return new Set()
-}
-
-function collectCModuleRuntimeObjectFunctionFieldNamesFromShape(
-  names: Set<string>,
-  objectName: string,
-  fields: CObjectShapeField[],
-  seenTypes: string[]
-): void {
-  for (const field of fields) {
-    if (field.valueType === 'function') {
-      if (!isPlainObjectFunctionField(field) && isRuntimeFunctionType(field.functionType)) {
-        names.add(emitCObjectFunctionFieldName(objectName, field.name))
-      }
-    } else if (
-      field.valueType === 'object' &&
-      field.shape !== null &&
-      typeof field.shape !== 'undefined' &&
-      field.shape.fields !== null &&
-      typeof field.shape.fields !== 'undefined'
-    ) {
-      if (
-        field.declaredType !== null &&
-        typeof field.declaredType !== 'undefined' &&
-        seenTypes.includes(field.declaredType)
-      ) {
-        continue
-      }
-
-      let pushedType = false
-
-      if (field.declaredType !== null && typeof field.declaredType !== 'undefined') {
-        seenTypes.push(field.declaredType)
-        pushedType = true
-      }
-
-      collectCModuleRuntimeObjectFunctionFieldNamesFromShape(
-        names,
-        `${objectName}_${field.name}`,
-        field.shape.fields,
-        seenTypes
-      )
-
-      if (pushedType) {
-        seenTypes.pop()
-      }
-    }
-  }
-}
-
-function collectCModuleObjectFunctionFieldNamesFromShape(
-  names: Set<string>,
-  objectName: string,
-  fields: CObjectShapeField[]
-): void {
-  for (const field of fields) {
-    if (field.valueType === 'function') {
-      if (isPlainObjectFunctionField(field) || isRuntimeFunctionType(field.functionType)) {
-        names.add(emitCObjectFunctionFieldName(objectName, field.name))
-      }
-    }
-  }
 }
 
 function emitFunctionPointerAdapterModuleObjectFieldArg(

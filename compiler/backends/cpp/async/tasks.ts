@@ -497,6 +497,7 @@ function createAsyncTaskFrameLocals(
       name: local.name,
       type: local.type,
       fieldName: local.fieldName,
+      initializeAtStart: local.initializeAtStart,
       forceRuntimeStringDeclaration: local.forceRuntimeStringDeclaration,
       shape: local.shape,
       typeRef: local.typeRef,
@@ -1046,6 +1047,12 @@ function resolveAsyncTaskTryBodyPlan(
     return null
   }
 
+  const nestedCatchAwaitBody = resolveAsyncTaskNestedCatchAwaitBodyPlan(tryStatement, context, params, returnType)
+
+  if (nestedCatchAwaitBody !== null && typeof nestedCatchAwaitBody !== 'undefined') {
+    return nestedCatchAwaitBody
+  }
+
   const nestedTryFinallyBody = resolveAsyncTaskNestedTryBodyPlan(tryStatement, context, params, returnType)
 
   if (nestedTryFinallyBody !== null && typeof nestedTryFinallyBody !== 'undefined') {
@@ -1114,6 +1121,187 @@ function resolveAsyncTaskTryBodyPlan(
       handlerFinalizerStatements: finalizerStatements
     }
   })
+}
+
+function resolveAsyncTaskNestedCatchAwaitBodyPlan(
+  outerTry: AsyncTaskAstNode,
+  context: AsyncTaskPlannerContext,
+  params: CAsyncTaskParam[],
+  returnType: string
+): AsyncTaskBodyPlan | null {
+  const outerHandlerSource = asyncTaskNodeOrNull(outerTry.handler)
+  const outerStatements = getAsyncTaskBlockStatements(outerTry.block)
+
+  if (
+    outerHandlerSource === null ||
+    outerStatements.length < 2 ||
+    outerStatements[0]?.type !== 'TryStatement'
+  ) {
+    return null
+  }
+
+  const innerTry = outerStatements[0]
+  const innerHandlerSource = asyncTaskNodeOrNull(innerTry.handler)
+
+  if (innerHandlerSource === null) {
+    return null
+  }
+
+  const successStatements = outerStatements.slice(1)
+  const innerFinalizerStatements = getAsyncTaskBlockStatements(asyncTaskNodeOrNull(innerTry.finalizer))
+  const outerFinalizerStatements = getAsyncTaskBlockStatements(asyncTaskNodeOrNull(outerTry.finalizer))
+  const resolvedSuccessHandler = resolveAsyncTaskTerminalContinuation(
+    successStatements,
+    null,
+    context,
+    params,
+    [],
+    returnType
+  )
+  const resolvedOuterHandler = resolveAsyncTaskTryHandler(outerHandlerSource, context, params, returnType)
+
+  if (
+    resolvedSuccessHandler === null ||
+    typeof resolvedSuccessHandler === 'undefined' ||
+    resolvedOuterHandler === null ||
+    typeof resolvedOuterHandler === 'undefined' ||
+    hasUnsupportedAsyncTaskTryControlFlow(innerFinalizerStatements) ||
+    hasUnsupportedAsyncTaskTryControlFlow(outerFinalizerStatements)
+  ) {
+    return null
+  }
+
+  const outerHandler: CAsyncTaskTryHandlerPlan = {
+    ...resolvedOuterHandler,
+    statements: [...innerFinalizerStatements, ...resolvedOuterHandler.statements]
+  }
+
+  const innerAwaits = resolveAsyncTaskAwaitSteps(getAsyncTaskBlockStatements(innerTry.block), context)
+
+  if (innerAwaits === null || typeof innerAwaits === 'undefined') {
+    return null
+  }
+
+  let catchParam: string | null = null
+
+  if (typeof innerHandlerSource.param === 'string') {
+    catchParam = innerHandlerSource.param
+  }
+  const catchLocals: CAsyncTaskPrefixLocal[] = []
+
+  if (catchParam !== null && typeof catchParam !== 'undefined') {
+    catchLocals.push({
+      name: catchParam,
+      type: 'string',
+      fieldName: `catch_${emitCIdentifier(catchParam)}`,
+      initializeAtStart: false,
+      forceRuntimeStringDeclaration: true
+    })
+  }
+
+  const catchScope = pushAsyncTaskExpressionContextScope(context, params, catchLocals)
+  const catchAwaitsSource = resolveAsyncTaskAwaitSteps(getAsyncTaskBlockStatements(innerHandlerSource.body), context)
+  asyncTaskDeps(context).restoreVariableScope(context, catchScope)
+
+  if (catchAwaitsSource === null || typeof catchAwaitsSource === 'undefined') {
+    return null
+  }
+
+  const catchAwaits = reindexAsyncTaskAwaitSteps(catchAwaitsSource, innerAwaits.length)
+  const awaits: CAsyncTaskAwaitStep[] = []
+  const firstCatchIndex = catchAwaits[0]?.index
+  const catchFieldName = catchLocals[0]?.fieldName ?? null
+
+  for (let index = 0; index < innerAwaits.length; index = index + 1) {
+    const item = innerAwaits[index]
+    const next = innerAwaits[index + 1]
+
+    awaits.push({
+      ...item,
+      successNextIndex: next?.index ?? null,
+      rejectNextIndex: firstCatchIndex,
+      rejectParamFieldName: catchFieldName
+    })
+  }
+
+  for (let index = 0; index < catchAwaits.length; index = index + 1) {
+    const item = catchAwaits[index]
+    const next = catchAwaits[index + 1]
+
+    awaits.push({
+      ...item,
+      successNextIndex: next?.index ?? null,
+      rejectNextIndex: null,
+      rejectParamFieldName: null
+    })
+  }
+
+  return createAsyncTaskBodyPlan({
+    awaits,
+    prefixStatements: [],
+    prefixLocals: catchLocals,
+    successPreFinalizerStatements: [],
+    successPrefixFinalizerStatements: [],
+    successStatements: [...innerFinalizerStatements, ...resolvedSuccessHandler.statements],
+    returnExpression: resolvedSuccessHandler.returnExpression,
+    returnType,
+    tryRegion: {
+      handler: outerHandler,
+      preHandlerFinalizerStatements: [],
+      successFinalizerStatements: outerFinalizerStatements,
+      handlerFinalizerStatements: outerFinalizerStatements
+    }
+  })
+}
+
+function resolveAsyncTaskTerminalContinuation(
+  statements: AsyncTaskAstNode[],
+  param: string | null,
+  context: AsyncTaskPlannerContext,
+  params: CAsyncTaskParam[],
+  locals: Array<CAsyncTaskAwaitStep | CAsyncTaskPrefixLocal>,
+  returnType: string
+): CAsyncTaskTryHandlerPlan | null {
+  const returnStatement = getAsyncTaskLastStatement(statements)
+
+  if (returnStatement === null || returnStatement.type !== 'ReturnStatement') {
+    return null
+  }
+
+  const bodyStatements = getAsyncTaskStatementsBeforeLast(statements)
+
+  if (hasUnsupportedAsyncTaskTryControlFlow(bodyStatements)) {
+    return null
+  }
+
+  const scope = pushAsyncTaskExpressionContextScope(context, params, locals)
+  registerAsyncTaskStatementListLocals(context, bodyStatements)
+  const returnExpression = resolveAsyncTaskReturnValueExpression(
+    getAsyncTaskReturnArgument(returnStatement),
+    returnType,
+    context
+  )
+  asyncTaskDeps(context).restoreVariableScope(context, scope)
+
+  if (returnType !== 'void' && (returnExpression === null || typeof returnExpression === 'undefined')) {
+    return null
+  }
+
+  return {
+    param,
+    statements: bodyStatements,
+    returnExpression
+  }
+}
+
+function reindexAsyncTaskAwaitSteps(steps: CAsyncTaskAwaitStep[], offset: number): CAsyncTaskAwaitStep[] {
+  const result: CAsyncTaskAwaitStep[] = []
+
+  for (const item of steps) {
+    result.push({ ...item, index: item.index + offset })
+  }
+
+  return result
 }
 
 function resolveAsyncTaskNestedTryBodyPlan(
@@ -2002,21 +2190,11 @@ function resolveAsyncTaskStatementAwaitStep(
     return null
   }
 
-  let awaitedType = statement.expression.valueType
-
-  if (awaitedType === null || typeof awaitedType === 'undefined') {
-    awaitedType = 'void'
-  }
-
   const awaitedExpression = statement.expression.argument
   let awaitedAsyncResultExpression: AsyncTaskAstNode | null = null
 
   if (isSupportedAsyncTaskDirectAwaitAsyncResultExpression(awaitedExpression, context)) {
     awaitedAsyncResultExpression = awaitedExpression
-  }
-
-  if (awaitedType !== 'void') {
-    return null
   }
 
   let storedAwaitedExpression: AsyncTaskAstNode | null = awaitedExpression
@@ -2028,7 +2206,7 @@ function resolveAsyncTaskStatementAwaitStep(
   return {
     index: index,
     name: null,
-    type: awaitedType,
+    type: 'void',
     fieldName: null,
     awaitedExpression: storedAwaitedExpression,
     awaitedAsyncResultExpression: awaitedAsyncResultExpression
@@ -2486,6 +2664,10 @@ function emitAsyncTaskStorePrefixLocalLines(wrapper: CAsyncTaskWrapper): string[
 
   for (let index = 0; index < locals.length; index = index + 1) {
     const local = locals[index]
+
+    if (local.initializeAtStart === false) {
+      continue
+    }
 
     if (local.type === 'string') {
       appendAsyncTaskLines(lines, emitPrepareOwnedValueWrite(`frame->${local.fieldName}`, 'raw'))
@@ -3586,11 +3768,7 @@ function emitAsyncTaskResumeCase(
   returnValue: PreparedExpression | null,
   returnValueOwnedValues: string[]
 ): string[] {
-  let nextItem: CAsyncTaskAwaitStep | null = null
-
-  if (item.index + 1 < wrapper.awaits.length) {
-    nextItem = wrapper.awaits[item.index + 1]
-  }
+  const nextItem = resolveAsyncTaskSuccessor(wrapper, item)
 
   const valueCheck = emitAsyncTaskFulfilledValueCheck(wrapper, item, baseContext.libraries)
   const lines: string[] = []
@@ -3661,16 +3839,10 @@ function emitAsyncTaskResumeCase(
     return lines
   }
 
-  const followingItem = wrapper.awaits[item.index + 1]
-
-  if (followingItem === null || typeof followingItem === 'undefined') {
-    throw new Error('async task continuation has no following await step')
-  }
-
   const context = createAsyncTaskEmitContext(baseContext, wrapper, 'void', item.index + 1)
-  const schedule = emitAsyncTaskScheduleAwaitLines(wrapper, followingItem, context, {
+  const schedule = emitAsyncTaskScheduleAwaitLines(wrapper, nextItem, context, {
     cleanup: 'resume',
-    final: followingItem.index === wrapper.awaits.length - 1
+    final: nextItem.index === wrapper.awaits.length - 1
   })
 
   appendIndentedAsyncTaskLines(lines, emitAsyncTaskVisibleLocalReads(wrapper, item.index + 1, null), '  ')
@@ -3687,12 +3859,24 @@ function emitAsyncTaskResumeCase(
     '    '
   )
   lines.push('  }')
-  lines.push(`  frame->state = ${followingItem.index};`)
+  lines.push(`  frame->state = ${nextItem.index};`)
   appendIndentedAsyncTaskLines(lines, schedule, '  ')
   lines.push('  return INOX_OK;')
   lines.push('}')
 
   return lines
+}
+
+function resolveAsyncTaskSuccessor(wrapper: CAsyncTaskWrapper, item: CAsyncTaskAwaitStep): CAsyncTaskAwaitStep | null {
+  if (typeof item.successNextIndex === 'number') {
+    return wrapper.awaits[item.successNextIndex] ?? null
+  }
+
+  if (item.successNextIndex === null) {
+    return null
+  }
+
+  return wrapper.awaits[item.index + 1] ?? null
 }
 
 function hasAsyncTaskStatementLocalDeclarations(statements: AsyncTaskAstNode[]): boolean {
@@ -3982,7 +4166,7 @@ function emitAsyncTaskSettleAndMaybeFinalizeLines(
 }
 
 function emitAsyncTaskRejectDeclaration(wrapper: CAsyncTaskWrapper, baseContext: AsyncTaskEmitContext): string[] {
-  if (wrapper.hasTryRegion) {
+  if (wrapper.hasTryRegion || hasAsyncTaskPerStateRejection(wrapper)) {
     return emitAsyncTaskTryRejectDeclaration(wrapper, baseContext)
   }
 
@@ -4013,6 +4197,18 @@ function emitAsyncTaskRejectDeclaration(wrapper: CAsyncTaskWrapper, baseContext:
   lines.push('}')
 
   return lines
+}
+
+function hasAsyncTaskPerStateRejection(wrapper: CAsyncTaskWrapper): boolean {
+  for (const item of wrapper.awaits) {
+    if (
+      typeof item.rejectNextIndex === 'number'
+    ) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function emitAsyncTaskTryRejectDeclaration(wrapper: CAsyncTaskWrapper, baseContext: AsyncTaskEmitContext): string[] {
@@ -4048,7 +4244,11 @@ function emitAsyncTaskTryRejectCase(
   item: CAsyncTaskAwaitStep,
   baseContext: AsyncTaskEmitContext
 ): string[] {
-  let handler = wrapper.tryHandler
+  if (typeof item.rejectNextIndex === 'number') {
+    return emitAsyncTaskTryRejectTransitionCase(wrapper, item, baseContext, item.rejectNextIndex)
+  }
+
+  const handler = wrapper.tryHandler
 
   if (handler !== null && typeof handler !== 'undefined') {
     return emitAsyncTaskTryRejectHandlerCase(wrapper, item, baseContext, handler)
@@ -4067,6 +4267,54 @@ function emitAsyncTaskTryRejectCase(
     ),
     '  '
   )
+  lines.push('}')
+
+  return lines
+}
+
+function emitAsyncTaskTryRejectTransitionCase(
+  wrapper: CAsyncTaskWrapper,
+  item: CAsyncTaskAwaitStep,
+  baseContext: AsyncTaskEmitContext,
+  nextIndex: number
+): string[] {
+  const nextItem = wrapper.awaits[nextIndex]
+
+  if (nextItem === null || typeof nextItem === 'undefined') {
+    throw new Error('async task rejection continuation has no target await step')
+  }
+
+  const lines = [`case ${item.index}: {`]
+  const catchFieldName = item.rejectParamFieldName
+
+  if (catchFieldName !== null && typeof catchFieldName !== 'undefined') {
+    lines.push('  if (inox_error.tag != INOX_TAG_STRING || inox_error.as.ref == 0) {')
+    appendIndentedAsyncTaskLines(
+      lines,
+      emitAsyncTaskSettleAndMaybeFinalizeLines(
+        wrapper,
+        item,
+        asyncTaskProviderRejectExpression(baseContext.libraries, 'frame->asyncResult', 'inox_error')
+      ),
+      '    '
+    )
+    lines.push('  }')
+    lines.push(`  inox_release(frame->${catchFieldName});`)
+    lines.push(`  frame->${catchFieldName} = inox_error;`)
+    lines.push(`  inox_retain(frame->${catchFieldName});`)
+  }
+
+  lines.push('  frame->awaited = {};')
+  appendIndentedAsyncTaskLines(lines, emitAsyncTaskVisibleLocalReads(wrapper, nextIndex, null), '  ')
+  lines.push('  inox_loop* inox_loop = frame->inox_loop;')
+  lines.push(`  frame->state = ${nextIndex};`)
+  const context = createAsyncTaskEmitContext(baseContext, wrapper, 'void', nextIndex)
+  const schedule = emitAsyncTaskScheduleAwaitLines(wrapper, nextItem, context, {
+    cleanup: 'resume',
+    final: nextIndex === wrapper.awaits.length - 1
+  })
+  appendIndentedAsyncTaskLines(lines, schedule, '  ')
+  lines.push('  return INOX_OK;')
   lines.push('}')
 
   return lines
@@ -4122,7 +4370,16 @@ function emitAsyncTaskTryHandlerBodyAndReturnLines(
   baseContext: AsyncTaskEmitContext,
   handler: CAsyncTaskTryHandlerPlan
 ): string[] {
-  const visibleAwaitCount = item.index
+  return emitAsyncTaskContinuationBodyAndReturnLines(wrapper, item, baseContext, handler, item.index)
+}
+
+function emitAsyncTaskContinuationBodyAndReturnLines(
+  wrapper: CAsyncTaskWrapper,
+  item: CAsyncTaskAwaitStep,
+  baseContext: AsyncTaskEmitContext,
+  handler: CAsyncTaskTryHandlerPlan,
+  visibleAwaitCount: number
+): string[] {
   const context = createAsyncTaskEmitContext(baseContext, wrapper, wrapper.returnType, visibleAwaitCount)
   const handlerParam = handler.param
 

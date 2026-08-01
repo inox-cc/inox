@@ -207,6 +207,11 @@ async function refineCompilerDeclarationContracts(
   const compiledModules: DeclarationEffectModule[] = []
 
   for (const file of compilerFiles) {
+    if (usesSeededCompilerDeclarationContract(file.path)) {
+      console.log(`using seeded compiler declaration ${file.path.slice('/project/'.length)}`)
+      continue
+    }
+
     console.log(`refining compiler declaration ${file.path.slice('/project/'.length)}`)
     const result = await refineCompilerDeclarationContract(
       file,
@@ -226,6 +231,10 @@ async function refineCompilerDeclarationContracts(
   replaceDeclarationContractFunctionEffects(refined, functionEffects)
 
   return refined
+}
+
+function usesSeededCompilerDeclarationContract(path: string): boolean {
+  return path === `${generatedLibrarySourceRoot}/default-registry.ts`
 }
 
 function releaseSelfHostedCompilationMemory(): void {

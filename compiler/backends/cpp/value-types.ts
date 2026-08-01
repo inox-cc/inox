@@ -163,10 +163,15 @@ export function cIterableElementFunctionType(
 export function cFunctionTypeFromTypeRef(
   typeRef: CTypeRef | null | undefined,
   libraries: CCompilerLibrarySet,
-  loc: SourceLocation
+  loc: SourceLocation | null | undefined
 ): CFunctionType | null {
   const resolvedTypeRef = cTypeRefValue(typeRef)
   const resolvedLibraries = cCompilerLibrarySetValue(libraries)
+  let sourceLocation: SourceLocation = { line: 1, column: 1 }
+
+  if (loc !== null && typeof loc !== 'undefined') {
+    sourceLocation = loc
+  }
 
   if (resolvedTypeRef === null || resolvedTypeRef.kind !== 'function') {
     return null
@@ -176,7 +181,7 @@ export function cFunctionTypeFromTypeRef(
 
   for (let index = 0; index < resolvedTypeRef.params.length; index = index + 1) {
     const paramTypeRef = resolvedTypeRef.params[index]
-    const metadata = cTypeRefMetadata(paramTypeRef, resolvedLibraries, loc)
+    const metadata = cTypeRefMetadata(paramTypeRef, resolvedLibraries, sourceLocation)
     params.push({
       name: `arg${index}`,
       valueType: metadata.valueType,
@@ -195,7 +200,7 @@ export function cFunctionTypeFromTypeRef(
     return null
   }
 
-  const result = cTypeRefMetadata(resultTypeRef, resolvedLibraries, loc)
+  const result = cTypeRefMetadata(resultTypeRef, resolvedLibraries, sourceLocation)
 
   return {
     kind: 'function',

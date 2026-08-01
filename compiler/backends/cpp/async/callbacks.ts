@@ -1157,7 +1157,7 @@ function visitCallbackClassMethods(
     const returnFunctionType = cFunctionTypeFromTypeRef(
       method.returnTypeRef,
       resolveCCompilerLibrarySet(context.libraries),
-      method.loc
+      callbackSourceLocation(method)
     )
 
     syncReturnedCallbackFunctionTypes(body, returnFunctionType)

@@ -348,6 +348,7 @@ export type CAsyncTaskPrefixLocal = {
   name: string
   type: string
   fieldName: string
+  initializeAtStart?: boolean
   forceRuntimeStringDeclaration?: boolean
   shape?: CObjectShape | null
   typeRef?: CTypeRef | null
@@ -364,6 +365,9 @@ export type CAsyncTaskAwaitStep = {
   fieldName: string | null
   awaitedExpression: AnyNode | null
   awaitedAsyncResultExpression: AnyNode | null
+  successNextIndex?: number | null
+  rejectNextIndex?: number | null
+  rejectParamFieldName?: string | null
   shape?: CObjectShape | null
   typeRef?: CTypeRef | null
 }
