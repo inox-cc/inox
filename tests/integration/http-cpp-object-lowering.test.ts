@@ -59,7 +59,7 @@ createServer((request, response) => {
   assert.match(source, /inox_library_object_\d+\.listen\(8081, "127\.0\.0\.1"\)/)
   assert.match(
     source,
-    /static inox_status inox_callback_arrow_\d+\(void\* inox_context, const inox_value\* args, size_t arg_count, inox_value\* out\)/
+    /static inox_status inox_callback_arrow_\d+\(\s*void\* inox_context,\s*const inox_value\* args,\s*size_t arg_count,\s*inox_value\* inox_callback_out\s*\)/
   )
   assert.match(source, /arg_count < 2/)
   assert.match(source, /HttpRequest request = /)

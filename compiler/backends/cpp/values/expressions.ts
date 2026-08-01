@@ -58,6 +58,7 @@ import {
   applyLibraryNativeValueAdapter,
   cCallExpressionReturnsTypeErasedValue,
   cRuntimeValueTag,
+  compilerLibraryIntrinsicNativeCppType,
   compilerLibraryNativeRuntimeValueExpressionForTypeRef,
   compilerLibraryNativeRuntimeValueValidExpressionForTypeRef,
   isManagedRuntimeReturnType,
@@ -1868,6 +1869,10 @@ function emitRuntimeObjectFunctionFieldCall(
     args.push('inox_undefined_value()')
   }
 
+  if (callee.functionType.returnType === 'async-result') {
+    return emitRuntimeAsyncCallbackCall(calleeName, args, lines, context)
+  }
+
   const out = nextCName(context, 'inox_callback_out')
   registerOwnedValue(context, out)
 
@@ -1900,6 +1905,43 @@ function emitRuntimeObjectFunctionFieldCall(
     lines,
     expression: out,
     valueType: callee.functionType.returnType
+  }
+}
+
+function emitRuntimeAsyncCallbackCall(
+  callee: string,
+  args: string[],
+  lines: string[],
+  context: CFunctionContext
+): PreparedExpression {
+  const providerCppType = compilerLibraryIntrinsicNativeCppType(context.libraries, 'async-result')
+
+  if (providerCppType === null || providerCppType.length === 0) {
+    context.diagnostics.push(
+      diagnostic(
+        'INOX_C_ASYNC_CALLBACK',
+        'runtime async callback invocation requires an intrinsic async-result provider'
+      )
+    )
+    return { lines, expression: '', valueType: 'async-result' }
+  }
+
+  const out = nextCName(context, 'inox_async_callback_out')
+  lines.push(`${providerCppType} ${out};`)
+
+  if (args.length === 0) {
+    lines.push(emitStatusCheck(`inox_callback_call_async(${callee}, 0, 0, &${out})`, context))
+  } else {
+    const argArray = nextCName(context, 'inox_callback_args')
+    lines.push(`inox_value ${argArray}[] = { ${joinStrings(args, ', ')} };`)
+    lines.push(emitStatusCheck(`inox_callback_call_async(${callee}, ${argArray}, ${args.length}, &${out})`, context))
+  }
+
+  return {
+    lines,
+    expression: out,
+    cppType: providerCppType,
+    valueType: 'async-result'
   }
 }
 
@@ -5032,8 +5074,10 @@ export function emitCValueExpression(
       }
 
       return {
-        lines: [emitRuntimeTypeCheck(`(*${reference}).tag != ${tag} || (*${reference}).as.ref == 0`, context)],
-        expression: `(*${reference})`
+        lines: [
+          emitRuntimeTypeCheck(`${reference}->value.tag != ${tag} || ${reference}->value.as.ref == 0`, context)
+        ],
+        expression: `${reference}->value`
       }
     }
 

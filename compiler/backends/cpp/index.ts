@@ -6146,10 +6146,13 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): For
     if (isBoxedRuntimeStringName(name, context)) {
       return {
         lines: [
-          emitRuntimeTypeCheck(`(*${emittedName}).tag != INOX_TAG_STRING || (*${emittedName}).as.ref == 0`, context)
+          emitRuntimeTypeCheck(
+            `${emittedName}->value.tag != INOX_TAG_STRING || ${emittedName}->value.as.ref == 0`,
+            context
+          )
         ],
         format: formattedOutputStringFormat,
-        values: [`inox::String(inox::Value(*${emittedName}))`]
+        values: [`inox::String(inox::Value(${emittedName}->value))`]
       }
     }
 
@@ -7961,14 +7964,16 @@ function emitRuntimeCallbackValueInto(
     return emitUndefinedRuntimeCallbackValueInto(out, context)
   }
 
-  const callbackContext = '0'
+  const callbackContext = wrapper.kind === 'named' && wrapper.needsEventLoop ? 'inox::loop()' : '0'
 
   const lines: string[] = []
   const target = prepareRuntimeCallbackOutTarget(out, context, lines)
+  const callbackConstructor =
+    wrapper.functionType.returnType === 'async-result' ? 'inox_callback_new_async' : 'inox_callback_new'
 
   lines.push(
     emitStatusCheck(
-      `inox_callback_new(&inox_default_allocator, ${wrapper.name}, ${callbackContext}, 0, ${target})`,
+      `${callbackConstructor}(&inox_default_allocator, ${wrapper.name}, ${callbackContext}, 0, ${target})`,
       context
     )
   )
@@ -8007,7 +8012,10 @@ function prepareRuntimeCallbackOutTarget(out: string, context: CFunctionContext,
 
 function isSupportedRuntimeArrowCaptureValueType(valueType: string): boolean {
   return (
-    isNullableScalarType(valueType) || isManagedRuntimeReturnType(valueType) || valueType === 'asyncResult-settlement'
+    isNullableScalarType(valueType) ||
+    isManagedRuntimeReturnType(valueType) ||
+    valueType === 'function' ||
+    valueType === 'asyncResult-settlement'
   )
 }
 
@@ -8067,8 +8075,10 @@ function emitRuntimeArrowCallbackValueInto(
   }
 
   const finalizerName = callbackContextWrapperFinalizerName(wrapper)
+  const callbackConstructor =
+    wrapper.functionType.returnType === 'async-result' ? 'inox_callback_new_async' : 'inox_callback_new'
   lines.push(
-    `if (inox_callback_new(&inox_default_allocator, ${wrapper.name}, ${contextName}, ${finalizerName}, ${target}) != INOX_OK) {`
+    `if (${callbackConstructor}(&inox_default_allocator, ${wrapper.name}, ${contextName}, ${finalizerName}, ${target}) != INOX_OK) {`
   )
   lines.push(`  ${finalizerName}(${contextName});`)
   lines.push(`  ${emitFailureStatement(context)}`)
@@ -8169,6 +8179,42 @@ function emitRuntimeCallbackCall(
     args.push('inox_undefined_value()')
   }
 
+  if (functionType.returnType === 'async-result') {
+    const providerCppType = compilerLibraryIntrinsicNativeCppType(context.libraries, 'async-result')
+
+    if (providerCppType === null || providerCppType.length === 0) {
+      pushDiagnostic(
+        context,
+        diagnostic(
+          'INOX_C_ASYNC_CALLBACK',
+          'runtime async callback invocation requires an intrinsic async-result provider',
+          expression.loc
+        )
+      )
+      return { lines, expression: '', valueType: 'async-result' }
+    }
+
+    const asyncOut = nextCName(context, 'inox_async_callback_out')
+    lines.push(`${providerCppType} ${asyncOut};`)
+
+    if (args.length === 0) {
+      lines.push(emitStatusCheck(`inox_callback_call_async(${callee}, 0, 0, &${asyncOut})`, context))
+    } else {
+      const argArray = nextCName(context, 'inox_callback_args')
+      lines.push(`inox_value ${argArray}[] = { ${joinStrings(args, ', ')} };`)
+      lines.push(
+        emitStatusCheck(`inox_callback_call_async(${callee}, ${argArray}, ${args.length}, &${asyncOut})`, context)
+      )
+    }
+
+    return {
+      lines,
+      expression: asyncOut,
+      cppType: providerCppType,
+      valueType: 'async-result'
+    }
+  }
+
   const out = nextCName(context, 'inox_callback_out')
   registerOwnedValue(context, out)
 
@@ -8221,9 +8267,9 @@ function emitOptionalCallbackCallExpression(expression: AnyNode, context: CFunct
     return lines
   }
 
-  const functionType = resolveRuntimeCallbackCalleeType(expression.callee, context)
+  const preparedCallee = prepareOptionalRuntimeCallbackCallee(expression.callee, context)
 
-  if (functionType === null || typeof functionType === 'undefined') {
+  if (preparedCallee === null) {
     pushDiagnostic(
       context,
       diagnostic(
@@ -8235,9 +8281,9 @@ function emitOptionalCallbackCallExpression(expression: AnyNode, context: CFunct
     return []
   }
 
-  const callee = emitRuntimeCallbackCalleeReference(expression.callee, context)
+  const callee = preparedCallee.expression
   const calleeTypeCheck = `${callee}.tag != INOX_TAG_FUNCTION || ${callee}.as.ref == 0`
-  const lines: string[] = []
+  const lines: string[] = preparedCallee.lines
   const args: string[] = []
 
   lines.push(`if (${callee}.tag != INOX_TAG_NULL && ${callee}.tag != INOX_TAG_UNDEFINED) {`)
@@ -8275,15 +8321,14 @@ function emitOptionalCallbackCallValueExpression(expression: AnyNode, context: C
     return emitOptionalPlainObjectFunctionCallValueExpression(expression, plainCallee, context)
   }
 
-  const functionType = resolveRuntimeCallbackCalleeType(expression.callee, context)
+  const preparedCallee = prepareOptionalRuntimeCallbackCallee(expression.callee, context)
   const resultType = inferExpressionType(expression, context)
   const expectedTag = cRuntimeValueTag(resultType)
   const expectedTagName = expectedTag ?? ''
 
   if (
-    functionType === null ||
-    typeof functionType === 'undefined' ||
-    !isRuntimeNullableType(functionType.returnType) ||
+    preparedCallee === null ||
+    !isRuntimeNullableType(preparedCallee.functionType.returnType) ||
     expectedTagName === ''
   ) {
     pushDiagnostic(
@@ -8301,10 +8346,10 @@ function emitOptionalCallbackCallValueExpression(expression: AnyNode, context: C
     }
   }
 
-  const callee = emitRuntimeCallbackCalleeReference(expression.callee, context)
+  const callee = preparedCallee.expression
   const out = nextCName(context, 'inox_optional_call')
   const calleeTypeCheck = `${callee}.tag != INOX_TAG_FUNCTION || ${callee}.as.ref == 0`
-  const lines: string[] = []
+  const lines: string[] = preparedCallee.lines
   const args: string[] = []
 
   registerOwnedValue(context, out)
@@ -8335,6 +8380,56 @@ function emitOptionalCallbackCallValueExpression(expression: AnyNode, context: C
   return {
     lines,
     expression: out
+  }
+}
+
+type PreparedOptionalRuntimeCallbackCallee = {
+  expression: string
+  functionType: CFunctionType
+  lines: string[]
+}
+
+function prepareOptionalRuntimeCallbackCallee(
+  callee: AnyNode,
+  context: CFunctionContext
+): PreparedOptionalRuntimeCallbackCallee | null {
+  const functionType = resolveRuntimeCallbackCalleeType(callee, context)
+
+  if (functionType !== null && typeof functionType !== 'undefined') {
+    return {
+      expression: emitRuntimeCallbackCalleeReference(callee, context),
+      functionType,
+      lines: []
+    }
+  }
+
+  const objectField = objectFunctionFieldReference(callee, context)
+
+  if (
+    objectField === null ||
+    context.classInstanceTypes.has(objectField.objectName) ||
+    objectField.field.functionType === null ||
+    typeof objectField.field.functionType === 'undefined' ||
+    !isSupportedRuntimeCallbackType(objectField.field.functionType) ||
+    isPlainObjectFunctionField(objectField.field, objectFunctionFieldSeenTypes(objectField.objectName, context)) ||
+    (callee.type !== 'MemberExpression' && callee.type !== 'IndexExpression')
+  ) {
+    return null
+  }
+
+  const object = emitCValueExpression(callee.object, context)
+  const callback = nextCName(context, 'inox_optional_callback')
+  const lines: string[] = []
+
+  registerOwnedValue(context, callback)
+  pushAll(lines, object.lines)
+  lines.push(`${callback} = inox::get(${object.expression}, ${cStringLiteral(objectField.fieldName)});`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+
+  return {
+    expression: callback,
+    functionType: normalizeFunctionType(objectField.field.functionType),
+    lines
   }
 }
 

@@ -70,6 +70,7 @@ type AsyncResultFunctionContext = AsyncResultEmitContext & {
   failureStatement?: string | null
   failureStatementUsed?: boolean
   localValueNames: AsyncResultStringSet
+  functionTypes: AsyncResultFunctionTypeMap
   nextId: number
   objectShapes: AsyncResultObjectShapeMap
   ownedAsyncResults: string[]
@@ -82,6 +83,7 @@ type AsyncResultFunctionContext = AsyncResultEmitContext & {
   runtimeCallbackReturnOut?: string
   runtimeCallbackReturnShape?: CObjectShape | null
   runtimeCallbackReturnType?: string
+  runtimeCallbacks: AsyncResultStringSet
   runtimeStrings: AsyncResultStringSet
   statusReturn: boolean
   usedRuntimeCallbackCleanupGoto?: boolean
@@ -813,6 +815,19 @@ export function emitPreparedAsyncResultExpression(
 
   if (asyncResultCall !== null && typeof asyncResultCall !== 'undefined') {
     return asyncResultCall
+  }
+
+  if (
+    expression.type === 'CallExpression' &&
+    expression.valueType === 'async-result' &&
+    expression.callee?.functionType?.returnType === 'async-result'
+  ) {
+    const runtimeCallbackCall = dependencies.emitPreparedCallExpression(expression, context)
+
+    return preparedAsyncResultWithValueType(
+      runtimeCallbackCall,
+      resolvedAsyncResultExpressionValueType(expression, context, runtimeCallbackCall.valueType)
+    )
   }
 
   const expressionName = asyncResultReferenceName(expression)

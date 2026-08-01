@@ -528,9 +528,6 @@ function emitCUnitObjectFunctionFieldDefinitions(
           )}) = 0;`
         )
         emitted = true
-      } else if (isRuntimeFunctionType(field.functionType)) {
-        lines.push(`static inox_value ${name};`)
-        emitted = true
       }
     } else if (
       field.valueType === 'object' &&
@@ -1034,7 +1031,7 @@ function collectCUnitObjectFunctionFieldNames(context: CEmitContext): Set<string
     for (const field of fields) {
       if (
         field.valueType === 'function' &&
-        (isPlainObjectFunctionField(field) || isRuntimeFunctionType(field.functionType))
+        isPlainObjectFunctionField(field)
       ) {
         names.add(emitCObjectFunctionFieldName(objectName, field.name))
       }
@@ -1524,13 +1521,15 @@ export function emitCUnit(
   baseContext.runtimeEntryPath = entryPath
   baseContext.classInfos = createClassInfos(classes, diagnostics)
   const classDescriptorNames = collectCClassDescriptorNames(irPrograms, baseContext.classInfos)
-  const valueDeclarations = collectCUnitValueDeclarations(irPrograms, baseContext)
-  const compileTimeValueDeclarations = collectCUnitCompileTimeValueDeclarations(valueDeclarations)
-  const runtimeValueDeclarations = collectCUnitRuntimeValueDeclarations(valueDeclarations)
+  let valueDeclarations = collectCUnitValueDeclarations(irPrograms, baseContext)
   registerCUnitValueDeclarations(baseContext, valueDeclarations)
   registerCUnitSyntheticImportNames(baseContext, irPrograms)
   baseContext.externalEventLoopFunctions = deps.collectExternalEventLoopFunctions(functions)
   baseContext.callbackWrappers = collectCallbackWrappers(irPrograms, baseContext, deps.callbackLoweringDependencies)
+  valueDeclarations = collectCUnitValueDeclarations(irPrograms, baseContext)
+  registerCUnitValueDeclarations(baseContext, valueDeclarations)
+  const compileTimeValueDeclarations = collectCUnitCompileTimeValueDeclarations(valueDeclarations)
+  const runtimeValueDeclarations = collectCUnitRuntimeValueDeclarations(valueDeclarations)
   baseContext.asyncResultChainWrappers = collectAsyncResultChainWrappers(
     irPrograms,
     baseContext,
@@ -1539,7 +1538,8 @@ export function emitCUnit(
   baseContext.asyncTaskWrappers = collectAsyncTaskWrappers(
     functionEntries,
     baseContext,
-    deps.asyncTaskLoweringDependencies
+    deps.asyncTaskLoweringDependencies,
+    baseContext.callbackWrappers
   )
   const classMethods = collectClassMethods(baseContext)
   const signatureRuntimeTypes = collectCUnitContextRuntimeTypes(baseContext)

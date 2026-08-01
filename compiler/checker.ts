@@ -5071,7 +5071,8 @@ class Checker {
             argInfos
           ),
           check.functionAsync === false ? check.functionAsyncDiagnosticCode : null,
-          check.functionAsync === false ? check.functionAsyncDiagnosticMessage : null
+          check.functionAsync === false ? check.functionAsyncDiagnosticMessage : null,
+          check.functionAsync === true
         )
         argInfos[index] = this.checkedCallArgInfo(argument, 'function')
       }
@@ -5320,6 +5321,7 @@ class Checker {
     const expectedReturnType = expectedFunctionType?.returnType ?? check.functionReturnType
 
     if (
+      !(actualAsync && check.functionAsync === true) &&
       expectedReturnType !== null &&
       typeof expectedReturnType !== 'undefined' &&
       symbol.returnType !== null &&
@@ -7318,9 +7320,12 @@ class Checker {
     expression: AnyNode,
     functionType?: AnyNode | null,
     asyncDiagnosticCode?: string | null,
-    asyncDiagnosticMessage?: string | null
+    asyncDiagnosticMessage?: string | null,
+    allowAsync: boolean = false
   ): void {
-    if (expression.async === true) {
+    const expectedAsyncResult = functionType?.returnType === 'async-result'
+
+    if (expression.async === true && !allowAsync && !expectedAsyncResult) {
       this.report(
         asyncDiagnosticCode ?? 'INOX_ASYNC_CALLBACK',
         asyncDiagnosticMessage ??
@@ -7328,6 +7333,17 @@ class Checker {
         expression.loc
       )
       return
+    }
+
+    if (
+      expression.async === true &&
+      compilerLibraryOperationForIntrinsic(
+        resolveCompilerLibrarySet(this.options.libraries),
+        'async-result',
+        'construct'
+      ) === null
+    ) {
+      this.reportMissingCompilerLibraryIntrinsicProvider(expression, 'async-result')
     }
 
     expression.valueType = 'function'
@@ -7362,6 +7378,7 @@ class Checker {
     }
 
     let actualReturnType: ValueType = 'unknown'
+    let asyncResultValueType: ValueType = 'void'
 
     if (
       functionType !== null &&
@@ -7370,6 +7387,18 @@ class Checker {
       typeof functionType.returnType !== 'undefined'
     ) {
       actualReturnType = functionType.returnType
+
+      if (expression.async === true) {
+        if (
+          functionType.returnType === 'async-result' &&
+          functionType.returnAsyncResultValueType !== null &&
+          typeof functionType.returnAsyncResultValueType !== 'undefined'
+        ) {
+          asyncResultValueType = functionType.returnAsyncResultValueType
+        } else {
+          asyncResultValueType = functionType.returnType
+        }
+      }
     }
 
     const scopeState = this.pushScope()
@@ -7402,7 +7431,7 @@ class Checker {
 
         if (paramValueType === 'unknown' && expected !== null && typeof expected !== 'undefined') {
           let expectedValueType = nodeValueTypeOrUnknown(expected)
-          let asyncResultValueType: ValueType | null = null
+          let paramAsyncResultValueType: ValueType | null = null
           let expectedFunctionType: FunctionTypeMetadata | null = null
           let shape: ObjectShapeInfo | null = null
 
@@ -7411,7 +7440,7 @@ class Checker {
           }
 
           if (expected.asyncResultValueType !== null && typeof expected.asyncResultValueType !== 'undefined') {
-            asyncResultValueType = expected.asyncResultValueType
+            paramAsyncResultValueType = expected.asyncResultValueType
           }
 
           if (expected.functionType !== null && typeof expected.functionType !== 'undefined') {
@@ -7426,7 +7455,7 @@ class Checker {
             valueType: expectedValueType,
             nullable: expected.nullable === true,
             typeRef: expected.typeRef ?? null,
-            asyncResultValueType,
+            asyncResultValueType: paramAsyncResultValueType,
             functionType: expectedFunctionType,
             shape
           }
@@ -7496,12 +7525,38 @@ class Checker {
 
       if (expression.expressionBody) {
         const previousFunctionDepth = this.functionDepth
+        const previousAsyncDepth = this.asyncDepth
         this.functionDepth = this.functionDepth + 1
+
+        if (expression.async === true) {
+          this.asyncDepth = this.asyncDepth + 1
+        }
 
         try {
           actualReturnType = this.checkExpression(expression.body)
 
+          if (expression.async === true) {
+            if (actualReturnType === 'async-result') {
+              this.checkAssignableType(
+                this.resolveExpressionAsyncResultValueType(expression.body),
+                asyncResultValueType,
+                expression.body.loc,
+                false,
+                false
+              )
+            } else {
+              this.checkAssignableType(
+                actualReturnType,
+                asyncResultValueType,
+                expression.body.loc,
+                false,
+                this.expressionCanBeNull(expression.body)
+              )
+            }
+          }
+
           if (
+            expression.async !== true &&
             functionType !== null &&
             typeof functionType !== 'undefined' &&
             functionType.returnType !== null &&
@@ -7534,6 +7589,7 @@ class Checker {
           }
         } finally {
           this.functionDepth = previousFunctionDepth
+          this.asyncDepth = previousAsyncDepth
         }
       } else {
         if (functionType === null || typeof functionType === 'undefined') {
@@ -7554,6 +7610,7 @@ class Checker {
           const previousReturnAsyncResultValueType = this.currentReturnAsyncResultValueType
           const previousReturnAsync = this.currentReturnAsync
           const previousFunctionDepth = this.functionDepth
+          const previousAsyncDepth = this.asyncDepth
 
           try {
             let expectedReturnType: ValueType = 'unknown'
@@ -7562,10 +7619,10 @@ class Checker {
               expectedReturnType = functionType.returnType
             }
 
-            this.currentReturnType = expectedReturnType
+            this.currentReturnType = expression.async === true ? 'async-result' : expectedReturnType
             this.currentReturnFunctionType = null
             this.currentReturnNullable = functionType.returnNullable === true
-            this.currentReturnAsyncResultValueType = null
+            this.currentReturnAsyncResultValueType = expression.async === true ? asyncResultValueType : null
 
             if (
               functionType.returnAsyncResultValueType !== null &&
@@ -7574,8 +7631,12 @@ class Checker {
               this.currentReturnAsyncResultValueType = functionType.returnAsyncResultValueType
             }
 
-            this.currentReturnAsync = false
+            this.currentReturnAsync = expression.async === true
             this.functionDepth = this.functionDepth + 1
+
+            if (expression.async === true) {
+              this.asyncDepth = this.asyncDepth + 1
+            }
             this.checkStatements(expression.body)
           } finally {
             this.currentReturnType = previousReturnType
@@ -7584,6 +7645,7 @@ class Checker {
             this.currentReturnAsyncResultValueType = previousReturnAsyncResultValueType
             this.currentReturnAsync = previousReturnAsync
             this.functionDepth = previousFunctionDepth
+            this.asyncDepth = previousAsyncDepth
           }
         }
       }
@@ -7662,6 +7724,14 @@ class Checker {
       typeof expression.body.asyncResultValueType !== 'undefined'
     ) {
       expression.returnAsyncResultValueType = expression.body.asyncResultValueType
+    }
+
+    if (expression.async === true) {
+      expression.returnType = 'async-result'
+      expression.declaredReturnType = 'async-result'
+      expression.returnTypeRef = null
+      expression.returnNullable = false
+      expression.returnAsyncResultValueType = asyncResultValueType
     }
 
     if (expression.functionType === null || typeof expression.functionType === 'undefined') {
@@ -10574,7 +10644,11 @@ class Checker {
       }
     }
 
-    if (item.returnShape !== null && typeof item.returnShape !== 'undefined') {
+    if (
+      resolved.shape === null &&
+      item.returnShape !== null &&
+      typeof item.returnShape !== 'undefined'
+    ) {
       resolved.valueType = 'object'
       resolved.shape = this.resolveObjectShape(item.returnShape)
     }
@@ -10583,14 +10657,7 @@ class Checker {
   }
 
   resolveMethodReturnType(method: AnyNode): ResolvedTypeInfo {
-    const resolved = this.resolveDeclaredType(method.returnType, method.loc)
-
-    if (method.returnShape !== null && typeof method.returnShape !== 'undefined') {
-      resolved.valueType = 'object'
-      resolved.shape = this.resolveObjectShape(method.returnShape)
-    }
-
-    return resolved
+    return this.resolveFunctionDeclarationReturnType(method)
   }
 
   pushFunctionTypeParameters(item: AnyNode): CheckerTypeParameterState[] {

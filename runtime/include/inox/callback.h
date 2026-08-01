@@ -10,11 +10,18 @@ extern "C" {
 #endif
 
 typedef inox_status (*inox_callback_call_fn)(void* context, const inox_value* args, size_t arg_count, inox_value* out);
+typedef inox_status (*inox_callback_async_call_fn)(
+  void* context,
+  const inox_value* args,
+  size_t arg_count,
+  void* out
+);
 typedef void (*inox_callback_finalizer_fn)(void* context);
 
 typedef struct inox_callback {
   inox_ref header;
   inox_callback_call_fn call;
+  inox_callback_async_call_fn async_call;
   void* context;
   inox_callback_finalizer_fn finalizer;
 } inox_callback;
@@ -38,7 +45,20 @@ inox_status inox_callback_new(
   inox_callback_finalizer_fn finalizer,
   inox_value* out
 );
+inox_status inox_callback_new_async(
+  inox_allocator* allocator,
+  inox_callback_async_call_fn call,
+  void* context,
+  inox_callback_finalizer_fn finalizer,
+  inox_value* out
+);
 inox_status inox_callback_call(inox_value callback, const inox_value* args, size_t arg_count, inox_value* out);
+inox_status inox_callback_call_async(
+  inox_value callback,
+  const inox_value* args,
+  size_t arg_count,
+  void* out
+);
 inox_status inox_shared_number_box_new(inox_allocator* allocator, double value, inox_shared_number_box** out);
 void inox_shared_number_box_retain(inox_shared_number_box* box);
 void inox_shared_number_box_release(inox_shared_number_box* box);

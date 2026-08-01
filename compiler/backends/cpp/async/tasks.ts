@@ -1,6 +1,6 @@
 import { diagnostic } from '../../../diagnostics.ts'
 import type { LibraryAsyncResultOperationKind } from '../../../extensions/types.ts'
-import type { AnyNode, IrFunctionDeclaration, SourceLocation } from '../../../types.ts'
+import type { AnyNode, IrFunctionDeclaration, SourceLocation, ValueType } from '../../../types.ts'
 import type { CEmitContextWithDependencies, CFunctionContextWithDependencies } from '../context.ts'
 import { emitPrepareOwnedValueWrite, nextCName } from '../context.ts'
 import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../identifiers.ts'
@@ -30,6 +30,8 @@ import type {
   CPreparedStringBytesOperand,
   CAsyncResultChainWrapper,
   CAsyncResultConstructorHandler,
+  CCallbackWrapper,
+  CRuntimeArrowCallbackWrapper,
   CRuntimeArrowCapture,
   CPreparedExpression as PreparedExpression
 } from '../types.ts'
@@ -41,6 +43,7 @@ import {
   cRuntimeValueTag,
   emitCType,
   isManagedRuntimeReturnType,
+  libraryNativeBoundaryCppType,
   renderCompilerLibraryCAsyncTaskBridgeExpression
 } from '../value-types.ts'
 import { isAsyncResultChainCallbackWrapperWithContext } from './callbacks.ts'
@@ -90,11 +93,16 @@ type AsyncTaskFunctionContext = CFunctionContextWithDependencies<
 >
 
 type AsyncTaskLocalMetadataContext = {
+  boxedVariables: AsyncTaskStringSet
+  cppValueTypes: AsyncTaskStringMap
+  functionTypes: AsyncTaskFunctionTypeMap
   libraries: CCompilerLibrarySet
+  localValueNames: AsyncTaskStringSet
   objectDeclaredTypes: AsyncTaskStringMap
   objectShapes: AsyncTaskObjectShapeFieldMap
   runtimeStringValues: AsyncTaskStringMap
   runtimeStrings: AsyncTaskStringSet
+  runtimeCallbacks: AsyncTaskStringSet
   variables: AsyncTaskStringMap
 }
 
@@ -354,7 +362,8 @@ function asAsyncTaskPlannerContext(context: AsyncTaskEmitContext): AsyncTaskPlan
 export function collectAsyncTaskWrappers(
   functions: AsyncTaskFunctionNodeEntry[],
   context: AsyncTaskEmitContext,
-  dependencies: AsyncTaskLoweringDependencies
+  dependencies: AsyncTaskLoweringDependencies,
+  callbackWrappers: Map<string, CCallbackWrapper> | null = null
 ): Map<string, CAsyncTaskWrapper> {
   context.asyncTaskLoweringDependencies = dependencies
   const wrappers: Map<string, CAsyncTaskWrapper> = new Map()
@@ -377,7 +386,175 @@ export function collectAsyncTaskWrappers(
     }
   }
 
+  if (callbackWrappers !== null) {
+    for (const callback of callbackWrappers.values()) {
+      if (callback.kind !== 'arrow' || callback.expression.async !== true) {
+        continue
+      }
+
+      const plannerContext = asAsyncTaskPlannerContext(dependencies.createFunctionContext(context, 'void', false))
+      const entry = createAsyncCallbackTaskEntry(callback)
+      const params = resolveAsyncTaskWrapperParams(entry.declaration, plannerContext)
+
+      if (params === null || typeof params === 'undefined') {
+        context.diagnostics.push(
+          diagnostic(
+            'INOX_C_ASYNC_CALLBACK',
+            'async callback parameters or captures cannot cross the async boundary in the C++ backend',
+            callback.expression.loc
+          )
+        )
+        continue
+      }
+
+      const wrapper = createAsyncTaskWrapperFromBodyPlan(entry.node, entry.declaration, plannerContext, params)
+
+      if (wrapper === null || typeof wrapper === 'undefined') {
+        context.diagnostics.push(
+          diagnostic(
+            'INOX_C_ASYNC_CALLBACK',
+            'async callback body cannot be represented by the current async state machine',
+            callback.expression.loc
+          )
+        )
+        continue
+      }
+
+      wrappers.set(callback.name, wrapper)
+    }
+  }
+
   return wrappers
+}
+
+function createAsyncCallbackTaskEntry(wrapper: CRuntimeArrowCallbackWrapper): AsyncTaskFunctionNodeEntry {
+  const params = createAsyncCallbackTaskParams(wrapper)
+  const body = createAsyncCallbackTaskBody(wrapper)
+  const returnAsyncResultValueType = callbackAsyncResultValueType(wrapper)
+  const declaration: IrFunctionDeclaration = {
+    name: wrapper.name,
+    exported: false,
+    async: true,
+    params,
+    declaredReturnType: 'async-result',
+    returnType: 'async-result',
+    returnNullable: false,
+    returnAsyncResultValueType,
+    loc: wrapper.expression.loc
+  }
+
+  return {
+    declaration,
+    node: {
+      ...wrapper.expression,
+      type: 'FunctionDeclaration',
+      name: wrapper.name,
+      async: true,
+      params,
+      body
+    }
+  }
+}
+
+function createAsyncCallbackTaskParams(wrapper: CRuntimeArrowCallbackWrapper): CAsyncTaskParam[] {
+  const params: CAsyncTaskParam[] = []
+  const expressionParams: AnyNode[] = wrapper.expression.params ?? []
+
+  for (let index = 0; index < wrapper.functionType.params.length; index = index + 1) {
+    const source = wrapper.functionType.params[index]
+    const expressionParam = expressionParams[index]
+    const name = expressionParam?.name ?? source.name
+    const nativeCppType = libraryNativeBoundaryCppType(
+      source.valueType,
+      source.nullable === true,
+      source.optional === true,
+      source.shape
+    )
+
+    params.push({
+      ...source,
+      name,
+      argName: '',
+      fieldName: '',
+      cppType: nativeCppType,
+      storageKind: asyncCallbackParamStorageKind(source.valueType, nativeCppType)
+    })
+  }
+
+  for (const capture of wrapper.captures) {
+    const nativeCppType = libraryNativeBoundaryCppType(capture.valueType, false, false, capture.shape)
+    let storageKind = asyncCallbackParamStorageKind(capture.valueType, nativeCppType)
+
+    if (capture.mutable === true) {
+      storageKind = capture.valueType === 'number' || capture.valueType === 'boolean' ? 'boxed-number' : 'boxed-value'
+    }
+
+    params.push({
+      name: capture.name,
+      valueType: capture.valueType,
+      argName: '',
+      fieldName: '',
+      functionType: capture.functionType,
+      shape: capture.shape,
+      cppType: capture.asyncResultSettlementCppType ?? nativeCppType,
+      storageKind
+    })
+  }
+
+  return params
+}
+
+function asyncCallbackParamStorageKind(
+  valueType: string,
+  nativeCppType: string | null
+): CAsyncTaskParam['storageKind'] {
+  if (nativeCppType !== null) {
+    return 'native'
+  }
+
+  if (valueType === 'function') {
+    return 'runtime-value'
+  }
+
+  return null
+}
+
+function createAsyncCallbackTaskBody(wrapper: CRuntimeArrowCallbackWrapper): AsyncTaskAstNode[] {
+  if (wrapper.expression.expressionBody === true) {
+    return [
+      {
+        type: 'ReturnStatement',
+        argument: wrapper.expression.body,
+        loc: wrapper.expression.loc
+      }
+    ]
+  }
+
+  const source: AsyncTaskAstNode[] = Array.isArray(wrapper.expression.body)
+    ? wrapper.expression.body
+    : wrapper.expression.body?.body ?? []
+  const body = [...source]
+  const last = body[body.length - 1]
+
+  if (last === null || typeof last === 'undefined' || last.type !== 'ReturnStatement') {
+    body.push({
+      type: 'ReturnStatement',
+      argument: null,
+      loc: wrapper.expression.loc
+    })
+  }
+
+  return body
+}
+
+function callbackAsyncResultValueType(wrapper: CRuntimeArrowCallbackWrapper): ValueType {
+  const valueType = wrapper.expression.returnAsyncResultValueType
+
+  if (valueType !== null && typeof valueType !== 'undefined') {
+    return valueType
+  }
+
+  return 'void'
 }
 
 function createAsyncTaskWrapperFromBodyPlan(
@@ -902,7 +1079,14 @@ function resolveAsyncTaskWrapperParams(
   )
 
   for (const param of params) {
-    if (param.nullable === true || !isSupportedAsyncTaskParamType(param.valueType)) {
+    if (
+      param.nullable === true ||
+      (!isSupportedAsyncTaskParamType(param.valueType) &&
+        (param as CAsyncTaskParam).storageKind !== 'native' &&
+        (param as CAsyncTaskParam).storageKind !== 'runtime-value' &&
+        (param as CAsyncTaskParam).storageKind !== 'boxed-number' &&
+        (param as CAsyncTaskParam).storageKind !== 'boxed-value')
+    ) {
       return null
     }
   }
@@ -915,7 +1099,9 @@ function resolveAsyncTaskWrapperParams(
       valueType: param.valueType,
       nullable: param.nullable,
       fieldName: `param_${emitCIdentifier(param.name)}`,
-      argName: `inox_arg_${emitCIdentifier(param.name)}`
+      argName: `inox_arg_${emitCIdentifier(param.name)}`,
+      cppType: (param as CAsyncTaskParam).cppType,
+      storageKind: (param as CAsyncTaskParam).storageKind
     })
   }
 
@@ -958,17 +1144,18 @@ function resolveAsyncTaskBodyPlan(
     return null
   }
 
-  const tryBody = resolveAsyncTaskTryBodyPlan(statement, context, params, returnType)
+  const normalizedStatement = normalizeAsyncTaskImplicitVoidReturn(statement, returnType)
+  const tryBody = resolveAsyncTaskTryBodyPlan(normalizedStatement, context, params, returnType)
 
   if (tryBody !== null && typeof tryBody !== 'undefined') {
     return tryBody
   }
 
-  if (statement.body.length < 2) {
+  if (normalizedStatement.body.length < 2) {
     return null
   }
 
-  const returnStatement = getAsyncTaskLastStatement(statement.body)
+  const returnStatement = getAsyncTaskLastStatement(normalizedStatement.body)
 
   if (
     returnStatement === null ||
@@ -978,14 +1165,29 @@ function resolveAsyncTaskBodyPlan(
     return null
   }
 
-  const awaits = resolveAsyncTaskAwaitSteps(getAsyncTaskStatementsBeforeLast(statement.body), context)
+  const leading = splitAsyncTaskLeadingPrefixStatements(
+    getAsyncTaskStatementsBeforeLast(normalizedStatement.body)
+  )
+  const prefixResult = resolveAsyncTaskPrefixLocals(context, params, leading.prefixStatements)
 
-  if (awaits === null || typeof awaits === 'undefined') {
+  if (prefixResult === null || typeof prefixResult === 'undefined') {
     return null
   }
 
-  const resolvedAwaits = asyncTaskAwaitStepsOrEmpty(awaits)
-  const returnScope = pushAsyncTaskExpressionContextScope(context, params, resolvedAwaits)
+  const prefixScope = pushAsyncTaskExpressionContextScope(context, params, prefixResult.locals)
+  const awaitResult = resolveAsyncTaskAwaitStepsAndTrailingStatements(leading.awaitStatements, context)
+  asyncTaskDeps(context).restoreVariableScope(context, prefixScope)
+
+  if (awaitResult === null || typeof awaitResult === 'undefined') {
+    return null
+  }
+
+  const resolvedAwaits = asyncTaskAwaitStepsOrEmpty(awaitResult.awaits)
+  const returnLocals: Array<CAsyncTaskAwaitStep | CAsyncTaskPrefixLocal> = []
+  appendAsyncTaskFrameLocals(returnLocals, prefixResult.locals)
+  appendAsyncTaskFrameLocals(returnLocals, resolvedAwaits)
+  const returnScope = pushAsyncTaskExpressionContextScope(context, params, returnLocals)
+  registerAsyncTaskStatementListLocals(context, awaitResult.trailingStatements)
   const returnExpression = resolveAsyncTaskReturnValueExpression(
     getAsyncTaskReturnArgument(returnStatement),
     returnType,
@@ -999,15 +1201,43 @@ function resolveAsyncTaskBodyPlan(
 
   return createAsyncTaskBodyPlan({
     awaits: resolvedAwaits,
-    prefixStatements: [],
-    prefixLocals: [],
+    prefixStatements: leading.prefixStatements,
+    prefixLocals: prefixResult.locals,
     successPreFinalizerStatements: [],
     successPrefixFinalizerStatements: [],
-    successStatements: [],
+    successStatements: awaitResult.trailingStatements,
     returnExpression,
     returnType,
     tryRegion: null
   })
+}
+
+function normalizeAsyncTaskImplicitVoidReturn(
+  statement: AsyncTaskAstNode,
+  returnType: string
+): AsyncTaskAstNode {
+  if (returnType !== 'void') {
+    return statement
+  }
+
+  const body: AsyncTaskAstNode[] = statement.body ?? []
+  const last = getAsyncTaskLastStatement(body)
+
+  if (last !== null && last.type === 'ReturnStatement') {
+    return statement
+  }
+
+  return {
+    ...statement,
+    body: [
+      ...body,
+      {
+        type: 'ReturnStatement',
+        argument: null,
+        loc: statement.loc
+      }
+    ]
+  }
 }
 
 function resolveAsyncTaskDeclarationReturnType(
@@ -2393,6 +2623,10 @@ function isSupportedAsyncTaskDirectAwaitAsyncResultExpression(
     return true
   }
 
+  if (isRuntimeCallbackAsyncResultCallExpression(expression)) {
+    return true
+  }
+
   if (
     !isAsyncFunctionCallee(expression.callee, context) ||
     asyncTaskDeps(context).isThrowingFunctionCallee(expression.callee, context)
@@ -2417,6 +2651,16 @@ function resolvedAsyncFunctionAwaitValueType(expression: AsyncTaskAstNode, conte
   }
 
   return 'unknown'
+}
+
+function isRuntimeCallbackAsyncResultCallExpression(expression: AsyncTaskAstNode): boolean {
+  if (expression.type !== 'CallExpression') {
+    return false
+  }
+
+  const functionType = expression.callee?.functionType
+
+  return functionType?.returnType === 'async-result'
 }
 
 function resolveAsyncTaskReturnValueExpression(
@@ -2481,7 +2725,7 @@ export function emitAsyncTaskFrameType(wrapper: CAsyncTaskWrapper, libraries: CC
   lines.push('  int state;')
 
   for (const param of wrapper.params) {
-    lines.push(`  ${emitAsyncTaskStorageCType(param.valueType)} ${param.fieldName};`)
+    lines.push(`  ${emitAsyncTaskParamStorageCType(param)} ${param.fieldName};`)
   }
 
   for (const local of wrapper.frameLocals) {
@@ -2561,7 +2805,7 @@ function emitAsyncTaskStartDeclaration(wrapper: CAsyncTaskWrapper, baseContext: 
   }
 
   appendAsyncTaskLines(prefixAndScheduleLines, asyncTaskDeps(context).emitStatementList(prefixStatements, context))
-  appendAsyncTaskLines(prefixAndScheduleLines, emitAsyncTaskStorePrefixLocalLines(wrapper))
+  appendAsyncTaskLines(prefixAndScheduleLines, emitAsyncTaskStorePrefixLocalLines(wrapper, context))
   appendAsyncTaskLines(
     prefixAndScheduleLines,
     emitAsyncTaskScheduleAwaitLines(wrapper, firstAwait, context, {
@@ -2587,8 +2831,12 @@ function emitAsyncTaskStartDeclaration(wrapper: CAsyncTaskWrapper, baseContext: 
   for (const param of wrapper.params) {
     lines.push(`  frame->${param.fieldName} = ${param.argName};`)
 
-    if (isManagedRuntimeReturnType(param.valueType)) {
+    if (asyncTaskParamUsesRuntimeValueStorage(param)) {
       lines.push(`  inox_retain(frame->${param.fieldName});`)
+    } else if (param.storageKind === 'boxed-number') {
+      lines.push(`  inox_shared_number_box_retain(frame->${param.fieldName});`)
+    } else if (param.storageKind === 'boxed-value') {
+      lines.push(`  inox_shared_value_box_retain(frame->${param.fieldName});`)
     }
   }
 
@@ -2631,7 +2879,7 @@ function emitAsyncTaskStartParams(wrapper: CAsyncTaskWrapper, libraries: CCompil
   const params = ['inox_loop* inox_loop']
 
   for (const param of wrapper.params) {
-    params.push(`${emitCType(param.valueType)} ${param.argName}`)
+    params.push(`${emitAsyncTaskParamStorageCType(param)} ${param.argName}`)
   }
 
   params.push(`${asyncTaskProviderCppType(libraries)}& out`)
@@ -2672,7 +2920,7 @@ function registerAsyncTaskPrefixLocals(wrapper: CAsyncTaskWrapper, context: Asyn
   }
 }
 
-function emitAsyncTaskStorePrefixLocalLines(wrapper: CAsyncTaskWrapper): string[] {
+function emitAsyncTaskStorePrefixLocalLines(wrapper: CAsyncTaskWrapper, context: AsyncTaskFunctionContext): string[] {
   const lines: string[] = []
   const locals: CAsyncTaskPrefixFrameLocal[] = collectAsyncTaskFrameLocals(wrapper, 'prefix')
 
@@ -2685,6 +2933,13 @@ function emitAsyncTaskStorePrefixLocalLines(wrapper: CAsyncTaskWrapper): string[
 
     if (local.type === 'string') {
       appendAsyncTaskLines(lines, emitPrepareOwnedValueWrite(`frame->${local.fieldName}`, 'raw'))
+
+      if (context.cppStringValues.has(local.name)) {
+        lines.push(`frame->${local.fieldName} = ${local.name}.raw();`)
+        lines.push(`inox_retain(frame->${local.fieldName});`)
+        continue
+      }
+
       lines.push(`frame->${local.fieldName}.tag = INOX_TAG_STRING;`)
       lines.push(`frame->${local.fieldName}.as.ref = (inox_ref*)&${local.name}->header;`)
       lines.push(`inox_retain(frame->${local.fieldName});`)
@@ -2712,7 +2967,7 @@ function emitAsyncTaskVisibleLocalReads(
   const lines: string[] = []
 
   for (const param of wrapper.params) {
-    appendAsyncTaskLines(lines, emitAsyncTaskVisibleLocalRead(param.name, param.valueType, param.fieldName))
+    appendAsyncTaskLines(lines, emitAsyncTaskVisibleParamRead(param))
   }
 
   if (options === null || typeof options === 'undefined' || options.includePrefixLocals !== false) {
@@ -2786,6 +3041,27 @@ function registerAsyncTaskLocalMetadata(
   context: AsyncTaskLocalMetadataContext
 ): void {
   context.variables.set(name, valueType)
+  context.localValueNames.add(name)
+  context.cppValueTypes.delete(name)
+  context.functionTypes.delete(name)
+  context.objectDeclaredTypes.delete(name)
+  context.objectShapes.delete(name)
+  context.runtimeCallbacks.delete(name)
+  context.runtimeStringValues.delete(name)
+  context.runtimeStrings.delete(name)
+  const param = item as CAsyncTaskParam
+
+  if (param.storageKind === 'native' && typeof param.cppType === 'string') {
+    context.cppValueTypes.set(name, param.cppType)
+  }
+
+  if (valueType === 'function') {
+    context.runtimeCallbacks.add(name)
+
+    if (param.functionType !== null && typeof param.functionType !== 'undefined') {
+      context.functionTypes.set(name, param.functionType)
+    }
+  }
 
   if (valueType === 'string') {
     context.runtimeStrings.add(name)
@@ -2846,6 +3122,62 @@ function emitAsyncTaskVisibleLocalRead(name: string, valueType: string, fieldNam
   }
 
   return [`${emitCType(valueType)} ${name} = frame->${fieldName};`]
+}
+
+function emitAsyncTaskVisibleParamRead(param: CAsyncTaskParam): string[] {
+  if (param.storageKind === 'boxed-number') {
+    return [`double ${param.name} = frame->${param.fieldName}->value;`]
+  }
+
+  if (param.storageKind === 'boxed-value') {
+    if (param.valueType === 'string') {
+      return [`inox_string* ${param.name} = (inox_string*)frame->${param.fieldName}->value.as.ref;`]
+    }
+
+    return [`inox_value ${param.name} = frame->${param.fieldName}->value;`]
+  }
+
+  if (param.storageKind === 'native' && typeof param.cppType === 'string') {
+    return [`${param.cppType} ${param.name} = frame->${param.fieldName};`]
+  }
+
+  if (asyncTaskParamUsesRuntimeValueStorage(param)) {
+    if (param.valueType === 'string') {
+      return [`inox_string* ${param.name} = (inox_string*)frame->${param.fieldName}.as.ref;`]
+    }
+
+    return [`inox_value ${param.name} = frame->${param.fieldName};`]
+  }
+
+  return emitAsyncTaskVisibleLocalRead(param.name, param.valueType, param.fieldName)
+}
+
+function emitAsyncTaskParamStorageCType(param: CAsyncTaskParam): string {
+  if (param.storageKind === 'boxed-number') {
+    return 'inox_shared_number_box*'
+  }
+
+  if (param.storageKind === 'boxed-value') {
+    return 'inox_shared_value_box*'
+  }
+
+  if (param.storageKind === 'native' && typeof param.cppType === 'string') {
+    return param.cppType
+  }
+
+  if (asyncTaskParamUsesRuntimeValueStorage(param)) {
+    return 'inox_value'
+  }
+
+  return emitAsyncTaskStorageCType(param.valueType)
+}
+
+function asyncTaskParamUsesRuntimeValueStorage(param: CAsyncTaskParam): boolean {
+  return (
+    param.storageKind === 'runtime-value' ||
+    ((param.storageKind === null || typeof param.storageKind === 'undefined') &&
+      isManagedRuntimeReturnType(param.valueType))
+  )
 }
 
 function createAsyncTaskEmitContext(
@@ -3160,16 +3492,20 @@ function emitPreparedAsyncTaskAsyncResultSourceExpression(
   }
 
   if (isAsyncResultConstructorExpression(expression)) {
-    const constructor = asyncTaskDeps(context).emitPreparedAsyncResultConstructorExpression(expression, context, {
-      out: 'frame->awaited',
-      owned: false
-    })
+    const preparedConstructor = asyncTaskDeps(context).emitPreparedAsyncResultConstructorExpression(
+      expression,
+      context,
+      {
+        out: 'frame->awaited',
+        owned: false
+      }
+    )
 
-    if (constructor === null || typeof constructor === 'undefined') {
+    if (preparedConstructor === null || typeof preparedConstructor === 'undefined') {
       return null
     }
 
-    return { lines: constructor.lines }
+    return { lines: preparedConstructor.lines }
   }
 
   if (expression.type !== 'CallExpression') {
@@ -3190,6 +3526,18 @@ function emitPreparedAsyncTaskAsyncResultSourceExpression(
     const lines: string[] = []
     appendAsyncTaskLines(lines, libraryCall.lines)
     lines.push(`frame->awaited = ${libraryCall.expression};`)
+    lines.push(
+      `status = ${asyncTaskProviderValidExpression(context.libraries, 'frame->awaited')} ? INOX_OK : INOX_ERR_TYPE;`
+    )
+    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, context.libraries, options, null))
+    return { lines }
+  }
+
+  if (isRuntimeCallbackAsyncResultCallExpression(expression)) {
+    const call = asyncTaskDeps(context).emitPreparedCallExpression(expression, context)
+    const lines: string[] = []
+    appendAsyncTaskLines(lines, call.lines)
+    lines.push(`frame->awaited = ${call.expression};`)
     lines.push(
       `status = ${asyncTaskProviderValidExpression(context.libraries, 'frame->awaited')} ? INOX_OK : INOX_ERR_TYPE;`
     )
@@ -4090,6 +4438,7 @@ function emitAsyncTaskTrySuccessPreludeAndReturnLines(
 
   appendAsyncTaskLines(lines, asyncTaskDeps(context).emitOwnedValueDeclarations(context))
   appendAsyncTaskLines(lines, preludeLines)
+  appendAsyncTaskLines(lines, emitAsyncTaskStoreBoxedParamLines(wrapper))
   appendAsyncTaskLines(lines, returnValue.lines)
   appendAsyncTaskLines(lines, emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, visibleAwaitCount))
   lines.push(
@@ -4173,9 +4522,37 @@ function emitAsyncTaskTryStatementList(
 
   appendAsyncTaskLines(result, asyncTaskDeps(context).emitOwnedValueDeclarations(context))
   appendAsyncTaskLines(result, lines)
+  appendAsyncTaskLines(result, emitAsyncTaskStoreBoxedParamLines(wrapper))
   appendAsyncTaskLines(result, asyncTaskDeps(context).emitOwnedValueCleanup(context))
 
   return result
+}
+
+function emitAsyncTaskStoreBoxedParamLines(wrapper: CAsyncTaskWrapper): string[] {
+  const lines: string[] = []
+
+  for (const param of wrapper.params) {
+    if (param.storageKind === 'boxed-number') {
+      lines.push(`frame->${param.fieldName}->value = ${param.name};`)
+      continue
+    }
+
+    if (param.storageKind !== 'boxed-value') {
+      continue
+    }
+
+    let value = param.name
+
+    if (param.valueType === 'string') {
+      value = `inox_value{ INOX_TAG_STRING, { .ref = (inox_ref*)&${param.name}->header } }`
+    }
+
+    lines.push(`inox_retain(${value});`)
+    lines.push(`inox_release(frame->${param.fieldName}->value);`)
+    lines.push(`frame->${param.fieldName}->value = ${value};`)
+  }
+
+  return lines
 }
 
 function emitAsyncTaskSettleAndMaybeFinalizeLines(
@@ -4456,8 +4833,12 @@ function emitAsyncTaskFinalizerDeclaration(wrapper: CAsyncTaskWrapper): string[]
   lines.push('  inox_loop* frame_loop = frame->inox_loop;')
 
   for (const param of wrapper.params) {
-    if (isManagedRuntimeReturnType(param.valueType)) {
+    if (asyncTaskParamUsesRuntimeValueStorage(param)) {
       lines.push(`  inox_release(frame->${param.fieldName});`)
+    } else if (param.storageKind === 'boxed-number') {
+      lines.push(`  inox_shared_number_box_release(frame->${param.fieldName});`)
+    } else if (param.storageKind === 'boxed-value') {
+      lines.push(`  inox_shared_value_box_release(frame->${param.fieldName});`)
     }
   }
 

@@ -706,7 +706,6 @@ function isKeyword(value: string): boolean {
     value === 'catch' ||
     value === 'class' ||
     value === 'const' ||
-    value === 'constructor' ||
     value === 'continue' ||
     value === 'default' ||
     value === 'delete' ||

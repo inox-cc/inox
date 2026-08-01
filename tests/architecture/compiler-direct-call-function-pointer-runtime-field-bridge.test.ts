@@ -5,7 +5,7 @@ import { compileFileToCppModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
-test('direct call bridges a static object function field into runtime callback storage', () => {
+test('direct call reads an object function field from runtime callback storage', () => {
   const host = createMemoryCompilerHost(
     [
       {
@@ -38,11 +38,9 @@ use({ dependencies })
   const source = files.find((file) => file.path === 'index.cc')
 
   assert.ok(source)
-  assert.match(source.code, /static inox_value \(\*inox_objfn_dependencies_pick\)\(inox_value\) = 0;/)
-  assert.match(
-    source.code,
-    /static inox_value use\(inox_value context, inox_value inox_objfn_context_dependencies_pick\)/
-  )
-  assert.match(source.code, /inox_function_pointer_callback_context_\d+->target = inox_objfn_dependencies_pick;/)
-  assert.match(source.code, /use\(inox_object_\d+, inox_function_pointer_callback_\d+\);/)
+  assert.doesNotMatch(source.code, /inox_objfn_|inox_function_pointer_callback/)
+  assert.match(source.code, /static inox_value use\(inox_value context\)/)
+  assert.match(source.code, /inox_callback_\d+ = inox::get\(inox_value_\d+, "pick"\);/)
+  assert.match(source.code, /inox_callback_call\(inox_callback_\d+, inox_callback_args_\d+, 1,/)
+  assert.match(source.code, /inox_callback_new\(&inox_default_allocator, inox_callback_pick_\d+, 0, 0,/)
 })

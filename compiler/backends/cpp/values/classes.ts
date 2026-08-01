@@ -1,13 +1,7 @@
 import { diagnostic } from '../../../diagnostics.ts'
 import { irClassMethodEffectName } from '../../../ir.ts'
 import type { AnyNode, Diagnostic, IrProgram, SourceLocation } from '../../../types.ts'
-import {
-  emitFunctionPointerParams,
-  emitFunctionPointerReturnType,
-  isPlainObjectFunctionField,
-  isRuntimeObjectFunctionField,
-  isRuntimeFunctionType
-} from '../async/callbacks.ts'
+import { isRuntimeFunctionType } from '../async/callbacks.ts'
 import { functionTakesEventLoopParam } from '../async/async-results.ts'
 import type {
   CEmitContextWithDependencies,
@@ -26,7 +20,7 @@ import {
   registerOwnedAsyncResult,
   registerOwnedValue
 } from '../context.ts'
-import { cStringLiteral, emitCIdentifier, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
+import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
 import {
   runtimeTypeAlternativeValidExpressions,
@@ -708,79 +702,9 @@ function emitCClassParamDeclarations(params: CFunctionParam[], context: ClassPhy
 
   for (const param of params) {
     declarations.push(emitCClassParamDeclaration(param, context))
-    pushCClassObjectShapeFunctionFieldParamDeclarations(
-      declarations,
-      param.name,
-      param.shape,
-      classConstructorSeenTypes()
-    )
   }
 
   return joinStrings(declarations, ', ')
-}
-
-function pushCClassObjectShapeFunctionFieldParamDeclarations(
-  declarations: string[],
-  objectName: string,
-  shape: CObjectShape | null | undefined,
-  seenTypes: string[]
-): void {
-  if (shape === null || typeof shape === 'undefined') {
-    return
-  }
-
-  if (shape.fields === null || typeof shape.fields === 'undefined') {
-    return
-  }
-
-  const fields: CObjectShapeField[] = shape.fields
-
-  for (const field of fields) {
-    if (field.valueType === 'function') {
-      const declaration = emitCClassObjectFunctionFieldParamDeclaration(objectName, field)
-
-      if (declaration !== null) {
-        declarations.push(declaration)
-      }
-    } else if (field.valueType === 'object') {
-      if (classConstructorSeenTypesInclude(seenTypes, field.declaredType)) {
-        continue
-      }
-
-      const pushedTypes = pushClassConstructorSeenType(seenTypes, field.declaredType)
-
-      pushCClassObjectShapeFunctionFieldParamDeclarations(
-        declarations,
-        `${objectName}_${field.name}`,
-        field.shape,
-        seenTypes
-      )
-
-      popClassConstructorSeenTypes(seenTypes, pushedTypes)
-    }
-  }
-}
-
-function emitCClassObjectFunctionFieldParamDeclaration(objectName: string, field: CObjectShapeField): string | null {
-  const functionType = field.functionType
-  const name = emitCObjectFunctionFieldName(objectName, field.name)
-
-  if (isRuntimeObjectFunctionField(field)) {
-    return `inox_value ${emitCIdentifier(name)}`
-  }
-
-  if (isPlainObjectFunctionField(field) || isRuntimeFunctionType(functionType)) {
-    return emitCClassFunctionPointerParamDeclaration(name, functionType)
-  }
-
-  return null
-}
-
-function emitCClassFunctionPointerParamDeclaration(
-  name: string,
-  functionType: CFunctionType | null | undefined
-): string {
-  return `${emitFunctionPointerReturnType(functionType)} (*${emitCIdentifier(name)})(${emitFunctionPointerParams(functionType, [], [])})`
 }
 
 function classConstructorSeenTypes(): string[] {

@@ -5,7 +5,7 @@ import { compileFileToCppModulesSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { emitModuleDeclarationContract } from '../../compiler/modules/declarations.ts'
 
-test('textual reexport declaration preserves the provider recursive companion ABI exactly', () => {
+test('textual reexport declaration preserves recursive runtime callback object parameters', () => {
   const typesSource = `
 type FirstDependencies = { alpha(value: string): string; };
 export type RecursiveDependencies = {
@@ -109,9 +109,7 @@ function invoke(context: EmitContext, dependencies: RecursiveDependencies): stri
   const source = result.files.find((file) => file.path === 'index.cc')
 
   assert.ok(source)
-  assert.match(
-    source.code,
-    /collect\(\s*context,\s*inox_objfn_context_first_alpha,\s*inox_objfn_context_recursive_create,\s*inox_objfn_context_recursive_run,\s*dependencies,\s*inox_objfn_dependencies_create,\s*inox_objfn_dependencies_run\s*\)/
-  )
+  assert.match(source.code, /collect\(context, dependencies\)/)
+  assert.doesNotMatch(source.code, /inox_objfn_/)
   assert.doesNotMatch(source.code, /inox_function_pointer_adapter_/)
 })

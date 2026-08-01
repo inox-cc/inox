@@ -25,6 +25,6 @@ test('node:events diagnostic package владеет compiler entrypoint без n
   )
 
   assert.ok(packageImport)
-  assert.match(rendered.registrySource, new RegExp(`compilerLibraryPackage${packageImport[1]}\\.operations\\[0\\]`))
+  assert.match(rendered.registrySource, new RegExp(`\\.\\.\\.compilerLibraryPackage${packageImport[1]}`))
   assert.match(rendered.manifestSource, /stdlib\/node\/events\/compiler\/index\.ts/)
 })

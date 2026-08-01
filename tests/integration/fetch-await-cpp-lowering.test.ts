@@ -150,15 +150,15 @@ await checkFetchFacade()
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
-  const checkFetchFacade = functionSource(source, 'static void checkFetchFacade() {')
 
-  assert.match(checkFetchFacade, /auto controller = inox::AbortController\(\);/)
-  assert.match(checkFetchFacade, /controller\.abort\(\);/)
-  assert.match(checkFetchFacade, /\.init\(0, controller\.signal\);/)
-  assert.match(checkFetchFacade, /res\.headers\.has\("content-type"\)/)
-  assert.match(checkFetchFacade, /res\.headers\.get\("content-type"\)/)
-  assert.doesNotMatch(checkFetchFacade, /inox::AbortController\(controller\)/)
-  assert.doesNotMatch(checkFetchFacade, /inox::FetchHeaders\(/)
+  assert.match(source, /auto controller = inox::AbortController\(\);/)
+  assert.match(source, /controller\.abort\(\);/)
+  assert.match(source, /\.init\(0, controller\.signal\);/)
+  assert.match(source, /frame->awaited = inox::fetch\("http:\/\/example\.com\/", inox_object_\d+\);/)
+  assert.match(source, /auto inox_value_\d+ = inox::get\(res, "headers"\);/)
+  assert.match(source, /inox::FetchHeaders\(inox_value_\d+\)\.has\("content-type"\)/)
+  assert.match(source, /inox::FetchHeaders\(inox_value_\d+\)\.get\("content-type"\)/)
+  assert.doesNotMatch(source, /inox::AbortController\(controller\)/)
   assert.doesNotMatch(source, /fetch_abort_controller/)
   assert.doesNotMatch(source, /fetch_headers_(?:get|has)/)
 }

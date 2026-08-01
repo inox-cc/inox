@@ -11,7 +11,7 @@ import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.
 
 const handleTypeId = 'bridge#Handle'
 
-test('captured native handle проходит через generic runtime callback argument adapter', () => {
+test('module native handle проходит через generic runtime callback argument adapter', () => {
   const result = compileSource(
     `
 const handle = bridge.open()
@@ -32,8 +32,9 @@ bridge.listen(() => {
   assert.deepEqual(releaseCall.libraryCArgumentKinds, ['value'])
   assert.deepEqual(releaseCall.libraryCArgumentAdapters, ['BridgeHandle($value)'])
   assert.doesNotMatch(serializedIr, /timerRuntimeMethod|"valueType":"timer"/)
-  assert.match(result.code, /inox_value handle = captured->handle;/)
+  assert.match(result.code, /static BridgeHandle handle;/)
   assert.match(result.code, /bridge\.release\(BridgeHandle\(handle\)\)/)
+  assert.doesNotMatch(result.code, /captured->handle|static inox_value handle/)
   assert.doesNotMatch(result.code, /inox_timer_handle|inox_loop_(?:clear|set)_timer/)
 })
 

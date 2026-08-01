@@ -28,6 +28,7 @@ test('entrypoint package node:os добавляет generated operations и runt
   )
 
   assert.ok(packageImport)
-  assert.match(rendered.registrySource, new RegExp(`compilerLibraryPackage${packageImport[1]}\\.operations\\[4\\]`))
+  assert.match(rendered.registrySource, new RegExp(`\\.\\.\\.compilerLibraryPackage${packageImport[1]}`))
+  assert.match(rendered.registrySource, new RegExp(JSON.stringify(rendered.librarySet.fingerprint)))
   assert.equal(rendered.manifestSource.includes('stdlib/node/os/compiler/index.ts'), true)
 })

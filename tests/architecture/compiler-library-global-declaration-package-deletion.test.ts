@@ -16,7 +16,7 @@ test('удаление global package убирает ambient declaration, operat
   const before = await generatedSources()
   assert.match(before.registry, /declare global/)
   assert.match(before.registry, /stdlib\/global\/bridge\/compiler\/index\.ts/)
-  assert.match(before.registry, /compilerLibraryPackage0\.operations\[0\]/)
+  assert.match(before.registry, /\.\.\.compilerLibraryPackage0/)
   assert.match(before.nativePlan, /stdlib\/global\/bridge\/src\/bridge\.cc/)
 
   await rm(resolve(fixtureRoot, 'stdlib/global/bridge'), { recursive: true, force: true })

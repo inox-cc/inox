@@ -159,6 +159,10 @@ export function emitCObjectFunctionFieldName(objectName: string, fieldName: stri
   return `inox_objfn_${emitCIdentifier(objectName)}_${emitCIdentifier(fieldName)}`
 }
 
+export function emitCRuntimeCallbackFieldName(objectName: string, fieldName: string): string {
+  return `inox_callback_field_${emitCIdentifier(objectName)}_${emitCIdentifier(fieldName)}`
+}
+
 export function utf8ByteLength(value: string): number {
   let length = 0
 

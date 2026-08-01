@@ -68,9 +68,10 @@ test('data-only library Promise operations preserve fulfilled metadata and lower
     { libraries: promiseLibrarySet(), target: 'cc' }
   )
 
-  assert.match(asyncResult.code, /auto inox_await_\d+ = fixture\.load\(\)\.awaitValue\(\);/)
+  assert.match(asyncResult.code, /frame->awaited = fixture\.load\(\);/)
+  assert.match(asyncResult.code, /status = frame->awaited\.observe\(/)
+  assert.match(asyncResult.code, /if \(inox_value_input\.tag != INOX_TAG_OBJECT/)
   assert.doesNotMatch(asyncResult.code, /inox_library_asyncResult_\d+/)
-  assert.match(asyncResult.code, /FixtureItem\(inox_await_\d+\)/)
 
   const changed = promiseLibrary()
   changed.operations[0].resultTypeRef = promiseTypeRef(fixtureItemTypeRef(), primitiveTypeRef('string'))

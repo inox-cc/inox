@@ -296,6 +296,7 @@ export type CNamedCallbackWrapper = {
   target: string
   cTarget?: string | null
   targetFunctionType?: CFunctionType | null
+  needsEventLoop: boolean
 }
 
 export type CRuntimeArrowCallbackWrapper = {
@@ -340,6 +341,8 @@ export type CCallbackContextWrapper = CRuntimeArrowCallbackWrapper | CAsyncResul
 export type CAsyncTaskParam = CFunctionParam & {
   argName: string
   fieldName: string
+  cppType?: string | null
+  storageKind?: 'boxed-number' | 'boxed-value' | 'native' | 'runtime-value' | null
 }
 
 export type CAsyncTaskFrameLocalKind = 'prefix' | 'await'

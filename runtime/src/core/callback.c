@@ -15,14 +15,15 @@ static void inox_callback_dispose_ref(inox_ref* ref) {
   }
 }
 
-inox_status inox_callback_new(
+static inox_status inox_callback_new_internal(
   inox_allocator* allocator,
   inox_callback_call_fn call,
+  inox_callback_async_call_fn async_call,
   void* context,
   inox_callback_finalizer_fn finalizer,
   inox_value* out
 ) {
-  if (allocator == 0 || allocator->alloc == 0 || call == 0 || out == 0) {
+  if (allocator == 0 || allocator->alloc == 0 || (call == 0 && async_call == 0) || out == 0) {
     return INOX_ERR_TYPE;
   }
 
@@ -42,6 +43,7 @@ inox_status inox_callback_new(
   callback->header.dispose = inox_callback_dispose_ref;
   inox_ref_init_weak(&callback->header);
   callback->call = call;
+  callback->async_call = async_call;
   callback->context = context;
   callback->finalizer = finalizer;
 
@@ -52,6 +54,34 @@ inox_status inox_callback_new(
 #endif
 
   return INOX_OK;
+}
+
+inox_status inox_callback_new(
+  inox_allocator* allocator,
+  inox_callback_call_fn call,
+  void* context,
+  inox_callback_finalizer_fn finalizer,
+  inox_value* out
+) {
+  if (call == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  return inox_callback_new_internal(allocator, call, 0, context, finalizer, out);
+}
+
+inox_status inox_callback_new_async(
+  inox_allocator* allocator,
+  inox_callback_async_call_fn call,
+  void* context,
+  inox_callback_finalizer_fn finalizer,
+  inox_value* out
+) {
+  if (call == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  return inox_callback_new_internal(allocator, 0, call, context, finalizer, out);
 }
 
 inox_status inox_callback_call(inox_value callback, const inox_value* args, size_t arg_count, inox_value* out) {
@@ -76,6 +106,29 @@ inox_status inox_callback_call(inox_value callback, const inox_value* args, size
   *out = inox_undefined_value();
 
   return instance->call(instance->context, args, arg_count, out);
+}
+
+inox_status inox_callback_call_async(
+  inox_value callback,
+  const inox_value* args,
+  size_t arg_count,
+  void* out
+) {
+  if (out == 0 || callback.tag != INOX_TAG_FUNCTION || callback.as.ref == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  if (callback.as.ref->kind != INOX_REF_FUNCTION || (args == 0 && arg_count != 0)) {
+    return INOX_ERR_TYPE;
+  }
+
+  inox_callback* instance = (inox_callback*)callback.as.ref;
+
+  if (instance->async_call == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  return instance->async_call(instance->context, args, arg_count, out);
 }
 
 inox_status inox_shared_number_box_new(inox_allocator* allocator, double value, inox_shared_number_box** out) {

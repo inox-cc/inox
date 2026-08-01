@@ -9,7 +9,7 @@ import {
 } from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 
-test('captured materializable library object сохраняет native receiver adapter', () => {
+test('module materializable library object сохраняет native receiver storage in callback', () => {
   const result = compileSource(
     `
 const direct = bridge.open()
@@ -25,9 +25,9 @@ bridge.listen(() => {
 
   assert.match(result.code, /BridgeHandle direct;/)
   assert.match(result.code, /direct\.close\(\)/)
-  assert.match(result.code, /inox_value handle = captured->handle;/)
-  assert.match(result.code, /BridgeHandle\(handle\)\.close\(inox_callback_\d+\)/)
-  assert.doesNotMatch(result.code, /\binox_value handle = [^;]+;[\s\S]*\bhandle\.close\(/)
+  assert.match(result.code, /static BridgeHandle handle;/)
+  assert.match(result.code, /handle\.close\(inox_callback_\d+\)/)
+  assert.doesNotMatch(result.code, /captured->handle|static inox_value handle/)
 })
 
 function bridgeLibrary(): CompilerLibraryDescriptor {

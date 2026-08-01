@@ -5,7 +5,7 @@ import { compileFileToCppModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
-test('recursive object function companions keep a lossless static pointer ABI', () => {
+test('recursive object function fields keep a lossless runtime callback ABI', () => {
   const host = createMemoryCompilerHost(
     [
       {
@@ -45,13 +45,9 @@ export function implementation(value: object, context: object, label?: string): 
   const source = files.find((file) => file.path === 'index.cc')
 
   assert.ok(source)
-  assert.match(
-    source.code,
-    /static inox_value \(\*inox_objfn_dependencies_adapt\)\(inox_value, inox_value, inox_value \(\*\)\(inox_value, inox_value\), inox_value\) = 0;/
-  )
-  assert.match(
-    source.code,
-    /return inox_objfn_dependencies_adapt\(inox_arg_0, inox_arg_1, inox_objfn_dependencies_adapt, inox_undefined_value\(\)\);/
-  )
-  assert.doesNotMatch(source.code, /inox_callback_call\(inox_objfn_dependencies_adapt/)
+  assert.doesNotMatch(source.code, /inox_objfn_dependencies_adapt|inox_function_pointer_adapter/)
+  assert.match(source.code, /static inox_status inox_callback_arrow_\d+\(/)
+  assert.match(source.code, /inox_value inox_callback_padded_args\[3\];/)
+  assert.match(source.code, /inox_callback_new\(&inox_default_allocator, inox_callback_arrow_\d+, 0, 0,/)
+  assert.match(source.code, /inox_object_\d+\.init\(0, inox_callback_\d+\);/)
 })

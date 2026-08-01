@@ -51,7 +51,8 @@ const compilerCoreRuntimeRequirementIds = [
 
 export function createCompilerLibrarySet(
   libraries: CompilerLibraryDescriptor[],
-  targetOptions: LibraryOptionDescriptor[] = []
+  targetOptions: LibraryOptionDescriptor[] = [],
+  precomputedFingerprint?: string
 ): CompilerLibrarySet {
   const ordered = orderCompilerLibraries(libraries)
   const declarations: LibraryDeclarationDescriptor[] = []
@@ -92,7 +93,10 @@ export function createCompilerLibrarySet(
   const effectiveReceiverOperations = buildEffectiveReceiverOperations(nativeTypes, operations)
 
   return {
-    fingerprint: compilerLibrarySetFingerprint(ordered, targetOptions),
+    fingerprint:
+      typeof precomputedFingerprint === 'string'
+        ? precomputedFingerprint
+        : compilerLibrarySetFingerprint(ordered, targetOptions),
     declarations,
     typeOperators,
     options,

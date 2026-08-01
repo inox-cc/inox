@@ -19,6 +19,7 @@ import type {
   CPlainArrowCallbackWrapper,
   CAsyncResultChainWrapper,
   CAsyncResultConstructorHandler,
+  CAsyncTaskWrapper,
   CRuntimeArrowCallbackWrapper,
   CRuntimeArrowCapture,
   CRuntimeCallbackWrapper,
@@ -33,8 +34,12 @@ import {
   compilerLibraryNativeRuntimeValueExpressionForId,
   compilerLibraryNativeRuntimeValueExpressionForTypeRef,
   compilerLibraryNativeRuntimeValueValidExpressionForTypeRef,
+  compilerLibraryIntrinsicNativeCppType,
+  compilerLibraryIntrinsicAsyncResultCValidExpression,
+  compilerLibraryIntrinsicAsyncResultCExpression,
   emitCStringParamName,
   emitCType,
+  isBoxedScalarParam,
   isManagedRuntimeReturnType,
   isNullableScalarType,
   isOpaqueRuntimeValueType,
@@ -83,6 +88,7 @@ export type ExternalEventLoopScanDependencies = {
 }
 
 type CallbackEmitContext = {
+  asyncTaskWrappers?: Map<string, CAsyncTaskWrapper>
   boxedMutableCaptureDeclarations: CallbackMutableDeclarationSet
   callbackArrowWrappers: CallbackArrowWrapperMap
   callbackWrappers: CallbackWrapperMap
@@ -91,7 +97,11 @@ type CallbackEmitContext = {
   functionAsyncFlags: CallbackBooleanMap
   functionNames: CallbackStringMap
   functionParams: CallbackFunctionParamMap
+  functionReturnNullables?: Map<string, boolean>
+  functionReturnShapes?: Map<string, CObjectShape | null>
+  functionReturnTypeRefs?: Map<string, object | null>
   functionReturnTypes: CallbackStringMap
+  functionReturnAsyncResultValueTypes?: Map<string, string | null>
   jsGlobalRoots: CallbackStringSet
   libraries?: CCompilerLibrarySet
   moduleObjectShapes?: CallbackObjectShapeMap
@@ -107,6 +117,7 @@ type CallbackFunctionContext = CallbackEmitContext & {
   eventLoopUsed: boolean
   explicitEventLoop: boolean
   externalEventLoop: boolean
+  functionTypes: CallbackFunctionTypeMap
   localValueNames: CallbackStringSet
   objectShapes: CallbackObjectShapeMap
   asyncResultConstructorHandlers: CallbackAsyncResultConstructorHandlerMap
@@ -115,6 +126,7 @@ type CallbackFunctionContext = CallbackEmitContext & {
   runtimeCallbackReturnOut?: string
   runtimeCallbackReturnShape?: CObjectShape | null
   runtimeCallbackReturnType?: string
+  runtimeCallbacks: CallbackStringSet
   runtimeStrings: CallbackStringSet
   statusReturn: boolean
   usedRuntimeCallbackCleanupGoto?: boolean
@@ -568,7 +580,7 @@ function isPlainFunctionPointerReturn(functionType: CFunctionType, allowNullable
 }
 
 function isManagedRuntimeCallbackParamValueType(valueType: string): boolean {
-  return valueType === 'string' || valueType === 'object' || valueType === 'bytes'
+  return valueType === 'string' || valueType === 'object' || valueType === 'bytes' || valueType === 'function'
 }
 
 function isSupportedRuntimeCallbackParamValueType(valueType: string): boolean {
@@ -577,7 +589,8 @@ function isSupportedRuntimeCallbackParamValueType(valueType: string): boolean {
     valueType === 'boolean' ||
     valueType === 'string' ||
     valueType === 'object' ||
-    valueType === 'bytes'
+    valueType === 'bytes' ||
+    valueType === 'function'
   )
 }
 
@@ -989,6 +1002,7 @@ export function isSupportedRuntimeCallbackReturnType(returnType: string | null |
     returnType === 'number' ||
     returnType === 'boolean' ||
     returnType === 'string' ||
+    returnType === 'async-result' ||
     isManagedRuntimeReturnType(returnType)
   )
 }
@@ -1409,43 +1423,16 @@ function registerCallbackExpression(
     return
   }
 
-  const arrowNeedsEventLoop =
-    expression !== null &&
-    typeof expression !== 'undefined' &&
-    expression.type === 'ArrowFunctionExpression' &&
-    functionUsesExternalEventLoop(expression, context.externalEventLoopFunctions, deps)
-
-  if (isPlainFunctionPointerType(functionType, seenTypes)) {
-    if (
-      expression !== null &&
-      typeof expression !== 'undefined' &&
-      expression.type === 'ArrowFunctionExpression' &&
-      !arrowNeedsEventLoop
-    ) {
-      registerPlainArrowCallbackWrapper(
-        expression,
-        normalizeFunctionType(functionType),
-        scopes,
-        wrappers,
-        context,
-        deps
-      )
-    }
-
+  if (expression !== null && typeof expression !== 'undefined' && expression.type === 'ArrowFunctionExpression') {
+    registerArrowCallbackWrapper(expression, normalizeFunctionType(functionType), scopes, wrappers, context, deps)
     return
   }
 
-  if (arrowNeedsEventLoop && isSupportedRuntimeCallbackType(functionType)) {
-    registerRuntimeCallbackExpression(expression, functionType, scopes, wrappers, context, deps)
+  if (isPlainFunctionPointerType(functionType, seenTypes)) {
     return
   }
 
   if (!isRuntimeFunctionType(functionType)) {
-    return
-  }
-
-  if (expression !== null && typeof expression !== 'undefined' && expression.type === 'ArrowFunctionExpression') {
-    registerArrowCallbackWrapper(expression, normalizeFunctionType(functionType), scopes, wrappers, context, deps)
     return
   }
 
@@ -1548,7 +1535,8 @@ function registerNamedCallbackWrapper(
     target: target,
     cTarget,
     targetFunctionType: libraryCallbackTargetFunctionType(expression, functionType, cTarget),
-    functionType: functionType
+    functionType: functionType,
+    needsEventLoop: callbackBooleanValueIsTrue(context.functionAsyncFlags.get(target))
   }
 
   wrappers.set(key, wrapper)
@@ -1589,7 +1577,9 @@ function registerArrowCallbackWrapper(
   context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): void {
-  if (context.callbackArrowWrappers.has(expression)) {
+  const existing = context.callbackArrowWrappers.get(expression)
+
+  if (existing !== null && typeof existing !== 'undefined') {
     return
   }
 
@@ -1611,7 +1601,8 @@ function registerArrowCallbackWrapper(
     }
   }
 
-  const resolvedFunctionType = refineArrowCallbackFunctionType(expression, functionType)
+  const resolvedFunctionType =
+    expression.async === true ? normalizeFunctionType(functionType) : refineArrowCallbackFunctionType(expression, functionType)
   const wrapper: CCallbackWrapper = {
     kind: 'arrow',
     key: key,
@@ -1620,7 +1611,8 @@ function registerArrowCallbackWrapper(
     finalizerName: `inox_callback_context_${index}_finalize`,
     expression: expression,
     functionType: resolvedFunctionType,
-    needsEventLoop: functionUsesExternalEventLoop(expression, context.externalEventLoopFunctions, deps),
+    needsEventLoop:
+      expression.async === true || functionUsesExternalEventLoop(expression, context.externalEventLoopFunctions, deps),
     captures: captures
   }
 
@@ -2618,6 +2610,10 @@ function visitClassConstructorCallbackExpression(
       }
     }
 
+    if (param !== null && typeof param !== 'undefined' && param.valueType === 'object') {
+      visitCallbackObjectFunctionArg(arg, param, scopes, wrappers, context, deps)
+    }
+
     visitCallbackExpression(arg, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
   }
 }
@@ -3016,6 +3012,12 @@ function addRuntimeArrowCaptureReference(reference: AnyNode, state: RuntimeArrow
     return
   }
 
+  const moduleValueNames = context.moduleValueNames
+
+  if (moduleValueNames !== null && typeof moduleValueNames !== 'undefined' && moduleValueNames.has(name)) {
+    return
+  }
+
   const outer = lookupCallbackBinding(name, state.outerScopes)
 
   if (outer !== null && typeof outer !== 'undefined' && !state.captures.has(name)) {
@@ -3321,7 +3323,13 @@ export function emitRuntimeCallbackWrapperHead(wrapper: CRuntimeCallbackWrapper)
       ? 'static inline inox_status '
       : 'static inox_status '
 
-  return prefix + wrapper.name + '(void* inox_context, const inox_value* args, size_t arg_count, inox_value* out)'
+  const outType = wrapper.functionType.returnType === 'async-result' ? 'void*' : 'inox_value*'
+
+  return (
+    prefix +
+    wrapper.name +
+    `(void* inox_context, const inox_value* args, size_t arg_count, ${outType} inox_callback_out)`
+  )
 }
 
 export function isRuntimeCallbackWrapper(wrapper: CCallbackWrapper): boolean {
@@ -3552,14 +3560,53 @@ function joinStrings(values: string[], separator: string): string {
   return result
 }
 
-function emitIndentedRuntimeArgCountCheck(paramCount: number): string {
-  let argsCheck = ''
+function runtimeCallbackParamIsOmittable(param: CFunctionParam): boolean {
+  return param.optional === true || (param.defaultValue !== null && typeof param.defaultValue !== 'undefined')
+}
 
-  if (paramCount !== 0) {
-    argsCheck = ' || args == 0'
+function runtimeCallbackRequiredParamCount(params: CFunctionParam[]): number {
+  let count = 0
+
+  for (let index = 0; index < params.length; index = index + 1) {
+    const param = params[index]
+
+    if (param !== null && typeof param !== 'undefined' && !runtimeCallbackParamIsOmittable(param)) {
+      count = index + 1
+    }
   }
 
-  return `  if (out == 0 || arg_count < ${paramCount}${argsCheck}) return INOX_ERR_TYPE;`
+  return count
+}
+
+function emitIndentedRuntimeArgCountCheck(params: CFunctionParam[]): string {
+  const requiredCount = runtimeCallbackRequiredParamCount(params)
+
+  return (
+    `  if (inox_callback_out == 0 || arg_count < ${requiredCount} || ` +
+    '(arg_count > 0 && args == 0)) return INOX_ERR_TYPE;'
+  )
+}
+
+function emitIndentedRuntimeArgsPadding(params: CFunctionParam[]): string[] {
+  const requiredCount = runtimeCallbackRequiredParamCount(params)
+
+  if (requiredCount === params.length) {
+    return []
+  }
+
+  return [
+    `  inox_value inox_callback_padded_args[${params.length}];`,
+    `  if (arg_count < ${params.length}) {`,
+    '    size_t inox_callback_arg_index = 0;',
+    '    for (; inox_callback_arg_index < arg_count; inox_callback_arg_index = inox_callback_arg_index + 1) {',
+    '      inox_callback_padded_args[inox_callback_arg_index] = args[inox_callback_arg_index];',
+    '    }',
+    `    for (; inox_callback_arg_index < ${params.length}; inox_callback_arg_index = inox_callback_arg_index + 1) {`,
+    '      inox_callback_padded_args[inox_callback_arg_index] = inox_undefined_value();',
+    '    }',
+    '    args = inox_callback_padded_args;',
+    '  }'
+  ]
 }
 
 export function emitRuntimeCallbackWrapperDeclaration(
@@ -3571,7 +3618,12 @@ export function emitRuntimeCallbackWrapperDeclaration(
     return emitRuntimeArrowCallbackWrapperDeclaration(wrapper, context, deps)
   }
 
-  const targetTakesEventLoop = false
+  if (wrapper.functionType.returnType === 'async-result') {
+    return emitNamedAsyncRuntimeCallbackWrapperDeclaration(wrapper, context)
+  }
+
+  const targetTakesEventLoop = wrapper.needsEventLoop
+  const wrapperFunctionType = namedRuntimeCallbackWrapperFunctionType(wrapper, context)
   const lines: string[] = [emitRuntimeCallbackWrapperHead(wrapper) + ' {']
 
   if (targetTakesEventLoop) {
@@ -3580,10 +3632,11 @@ export function emitRuntimeCallbackWrapperDeclaration(
     lines.push('  (void)inox_context;')
   }
 
-  lines.push(emitIndentedRuntimeArgCountCheck(wrapper.functionType.params.length))
-  lines.push('  *out = inox_undefined_value();')
+  lines.push(emitIndentedRuntimeArgCountCheck(wrapperFunctionType.params))
+  pushLines(lines, emitIndentedRuntimeArgsPadding(wrapperFunctionType.params))
+  lines.push('  *inox_callback_out = inox_undefined_value();')
   const args: string[] = []
-  const params: CFunctionParam[] = wrapper.functionType.params
+  const params: CFunctionParam[] = wrapperFunctionType.params
   let index = 0
 
   for (const param of params) {
@@ -3593,6 +3646,25 @@ export function emitRuntimeCallbackWrapperDeclaration(
   }
 
   const callArgs = emitNamedRuntimeCallbackTargetArgs(wrapper, args, targetTakesEventLoop, context)
+
+  if (targetTakesEventLoop) {
+    const task = context.asyncTaskWrappers?.get(wrapper.target)
+    const providerCppType = compilerLibraryIntrinsicNativeCppType(
+      resolveCCompilerLibrarySet(context.libraries),
+      'async-result'
+    )
+
+    if (task !== null && typeof task !== 'undefined' && providerCppType !== null && providerCppType.length > 0) {
+      lines.push(`  ${providerCppType} inox_async_callback_result;`)
+      callArgs.push('inox_async_callback_result')
+      lines.push(`  inox_status inox_async_callback_status = ${task.startName}(${joinStrings(callArgs, ', ')});`)
+      lines.push('  if (inox_async_callback_status != INOX_OK) return inox_async_callback_status;')
+      lines.push('  return INOX_OK;')
+      lines.push('}')
+
+      return lines
+    }
+  }
 
   const wrapperTarget = wrapper.target
   let functionName = context.functionNames.get(wrapperTarget)
@@ -3608,25 +3680,135 @@ export function emitRuntimeCallbackWrapperDeclaration(
     typeof context.throwingFunctions !== 'undefined' &&
     context.throwingFunctions.has(wrapperTarget)
   ) {
-    pushLines(lines, emitThrowingRuntimeCallbackTargetCall(wrapper, functionName, callArgs))
+    pushLines(lines, emitThrowingRuntimeCallbackTargetCall(wrapper, functionName, callArgs, context))
     lines.push('}')
 
     return lines
   }
 
   if (wrapper.functionType.returnNullable === true && isNullableScalarType(wrapper.functionType.returnType)) {
-    lines.push(`  *out = ${call};`)
+    lines.push(`  *inox_callback_out = ${call};`)
   } else if (wrapper.functionType.returnType === 'number') {
-    lines.push(`  *out = inox_number_value(${call});`)
+    lines.push(`  *inox_callback_out = inox_number_value(${call});`)
   } else if (wrapper.functionType.returnType === 'boolean') {
-    lines.push(`  *out = inox_bool_value((${call}) != 0);`)
+    lines.push(`  *inox_callback_out = inox_bool_value((${call}) != 0);`)
   } else if (isManagedRuntimeReturnType(wrapper.functionType.returnType)) {
-    lines.push(`  *out = ${call};`)
+    pushManagedRuntimeCallbackResult(lines, namedRuntimeCallbackTargetFunctionType(wrapper, context), call)
   } else {
     lines.push(`  ${call};`)
   }
 
   lines.push('  return INOX_OK;')
+  lines.push('}')
+
+  return lines
+}
+
+function emitNamedAsyncRuntimeCallbackWrapperDeclaration(
+  wrapper: CNamedCallbackWrapper,
+  context: CallbackEmitContext
+): string[] {
+  const providerCppType = compilerLibraryIntrinsicNativeCppType(
+    resolveCCompilerLibrarySet(context.libraries),
+    'async-result'
+  )
+  const lines: string[] = [emitRuntimeCallbackWrapperHead(wrapper) + ' {']
+  const wrapperFunctionType = namedRuntimeCallbackWrapperFunctionType(wrapper, context)
+
+  if (providerCppType === null || providerCppType.length === 0) {
+    lines.push('  (void)inox_context;')
+    lines.push('  (void)args;')
+    lines.push('  (void)arg_count;')
+    lines.push('  (void)inox_callback_out;')
+    lines.push('  return INOX_ERR_TYPE;')
+    lines.push('}')
+    return lines
+  }
+
+  const task = context.asyncTaskWrappers?.get(wrapper.target)
+
+  if (task !== null && typeof task !== 'undefined') {
+    lines.push('  if (inox_context == 0) return INOX_ERR_TYPE;')
+  } else {
+    lines.push('  (void)inox_context;')
+  }
+
+  lines.push(emitIndentedRuntimeArgCountCheck(wrapperFunctionType.params))
+  pushLines(lines, emitIndentedRuntimeArgsPadding(wrapperFunctionType.params))
+  lines.push(
+    `  ${providerCppType}& inox_async_callback_out = *static_cast<${providerCppType}*>(inox_callback_out);`
+  )
+  lines.push('  inox_async_callback_out = {};')
+  const args: string[] = []
+
+  for (let index = 0; index < wrapperFunctionType.params.length; index = index + 1) {
+    const param = wrapperFunctionType.params[index]
+    pushIndentedLines(lines, emitRuntimeCallbackWrapperArgChecks(param, index, context.libraries))
+    args.push(emitRuntimeCallbackWrapperArg(param, index))
+  }
+
+  const callArgs = emitNamedRuntimeCallbackTargetArgs(
+    wrapper,
+    args,
+    task !== null && typeof task !== 'undefined',
+    context
+  )
+
+  if (task !== null && typeof task !== 'undefined') {
+    callArgs.push('inox_async_callback_out')
+    lines.push(`  return ${task.startName}(${joinStrings(callArgs, ', ')});`)
+    lines.push('}')
+    return lines
+  }
+
+  let functionName = context.functionNames.get(wrapper.target)
+
+  if (functionName === null || typeof functionName === 'undefined') {
+    functionName = wrapper.cTarget ?? emitCFunctionName(wrapper.target)
+  }
+
+  const call = `${functionName}(${joinStrings(callArgs, ', ')})`
+
+  if (callbackBooleanValueIsTrue(context.functionAsyncFlags.get(wrapper.target))) {
+    const fulfill = compilerLibraryIntrinsicAsyncResultCExpression(
+      resolveCCompilerLibrarySet(context.libraries),
+      'fulfill'
+    )
+    const returnValueTypes = context.functionReturnAsyncResultValueTypes
+    let valueType: string | null = null
+
+    if (returnValueTypes !== null && typeof returnValueTypes !== 'undefined') {
+      const resolvedValueType = returnValueTypes.get(wrapper.target)
+
+      if (resolvedValueType !== null && typeof resolvedValueType !== 'undefined') {
+        valueType = resolvedValueType
+      }
+    }
+
+    if (fulfill === null || valueType === null) {
+      lines.push('  return INOX_ERR_TYPE;')
+      lines.push('}')
+      return lines
+    }
+
+    if (valueType === 'void') {
+      lines.push(`  ${call};`)
+      lines.push(`  inox_async_callback_out = ${fulfill}();`)
+    } else if (valueType === 'number') {
+      lines.push(`  inox_async_callback_out = ${fulfill}(inox_number_value(${call}));`)
+    } else if (valueType === 'boolean') {
+      lines.push(`  inox_async_callback_out = ${fulfill}(inox_bool_value((${call}) != 0));`)
+    } else {
+      lines.push(`  inox_async_callback_out = ${fulfill}(${call});`)
+    }
+  } else {
+    lines.push(`  inox_async_callback_out = ${call};`)
+  }
+  const valid = compilerLibraryIntrinsicAsyncResultCValidExpression(
+    resolveCCompilerLibrarySet(context.libraries),
+    'inox_async_callback_out'
+  )
+  lines.push(`  return ${valid} ? INOX_OK : INOX_ERR_TYPE;`)
   lines.push('}')
 
   return lines
@@ -3655,11 +3837,12 @@ export function emitFunctionPointerRuntimeAdapterDefinition(
     '  void* inox_context,',
     '  const inox_value* args,',
     '  size_t arg_count,',
-    '  inox_value* out',
+    '  inox_value* inox_callback_out',
     ') {',
     '  if (inox_context == 0) return INOX_ERR_TYPE;',
-    emitIndentedRuntimeArgCountCheck(functionType.params.length),
-    '  *out = inox_undefined_value();',
+    emitIndentedRuntimeArgCountCheck(functionType.params),
+    ...emitIndentedRuntimeArgsPadding(functionType.params),
+    '  *inox_callback_out = inox_undefined_value();',
     `  ${adapter.contextTypeName}* captured = (${adapter.contextTypeName}*)inox_context;`,
     '  if (captured->target == 0) return INOX_ERR_TYPE;'
   ]
@@ -3675,13 +3858,13 @@ export function emitFunctionPointerRuntimeAdapterDefinition(
   const call = `captured->target(${joinStrings(args, ', ')})`
 
   if (functionType.returnNullable === true && isNullableScalarType(functionType.returnType)) {
-    lines.push(`  *out = ${call};`)
+    lines.push(`  *inox_callback_out = ${call};`)
   } else if (functionType.returnType === 'number') {
-    lines.push(`  *out = inox_number_value(${call});`)
+    lines.push(`  *inox_callback_out = inox_number_value(${call});`)
   } else if (functionType.returnType === 'boolean') {
-    lines.push(`  *out = inox_bool_value((${call}) != 0);`)
+    lines.push(`  *inox_callback_out = inox_bool_value((${call}) != 0);`)
   } else if (isManagedRuntimeReturnType(functionType.returnType) || functionType.returnType === 'unknown') {
-    lines.push(`  *out = ${call};`)
+    pushManagedRuntimeCallbackResult(lines, functionType, call)
   } else {
     lines.push(`  ${call};`)
   }
@@ -3692,13 +3875,32 @@ export function emitFunctionPointerRuntimeAdapterDefinition(
   return lines
 }
 
+function pushManagedRuntimeCallbackResult(
+  lines: string[],
+  functionType: CFunctionType,
+  call: string
+): void {
+  if (emitFunctionPointerReturnType(functionType) === 'inox_value') {
+    lines.push(`  *inox_callback_out = ${call};`)
+    return
+  }
+
+  lines.push(`  auto inox_callback_result = ${call};`)
+  lines.push('  *inox_callback_out = inox_callback_result.release();')
+}
+
 function emitThrowingRuntimeCallbackTargetCall(
   wrapper: CNamedCallbackWrapper,
   functionName: string,
-  callArgs: string[]
+  callArgs: string[],
+  context?: CallbackEmitContext
 ): string[] {
   const lines: string[] = []
-  const resultType = throwingRuntimeCallbackTargetResultType(wrapper.functionType)
+  const targetFunctionType =
+    context === null || typeof context === 'undefined'
+      ? wrapper.functionType
+      : namedRuntimeCallbackTargetFunctionType(wrapper, context)
+  const resultType = throwingRuntimeCallbackTargetResultType(targetFunctionType)
   const call = `${functionName}(${joinStrings(callArgs, ', ')})`
 
   if (resultType !== 'void') {
@@ -3708,7 +3910,7 @@ function emitThrowingRuntimeCallbackTargetCall(
   }
 
   lines.push('  if (inox::thrown()) return INOX_ERR_THROW;')
-  pushLines(lines, emitThrowingRuntimeCallbackResult(wrapper.functionType, resultType))
+  pushLines(lines, emitThrowingRuntimeCallbackResult(wrapper.functionType, targetFunctionType, resultType))
   lines.push('  return INOX_OK;')
 
   return lines
@@ -3723,24 +3925,35 @@ function throwingRuntimeCallbackTargetResultType(functionType: CFunctionType): s
     return 'inox_value'
   }
 
-  return emitCType(functionType.returnType)
+  return emitFunctionPointerReturnType(functionType)
 }
 
-function emitThrowingRuntimeCallbackResult(functionType: CFunctionType, resultType: string): string[] {
+function emitThrowingRuntimeCallbackResult(
+  functionType: CFunctionType,
+  targetFunctionType: CFunctionType,
+  resultType: string
+): string[] {
   if (resultType === 'void') {
     return []
   }
 
   if (resultType === 'inox_value') {
-    return ['  *out = inox_callback_result;']
+    return ['  *inox_callback_out = inox_callback_result;']
+  }
+
+  if (
+    isManagedRuntimeReturnType(functionType.returnType) &&
+    emitFunctionPointerReturnType(targetFunctionType) !== 'inox_value'
+  ) {
+    return ['  *inox_callback_out = inox_callback_result.release();']
   }
 
   if (functionType.returnType === 'number') {
-    return ['  *out = inox_number_value(inox_callback_result);']
+    return ['  *inox_callback_out = inox_number_value(inox_callback_result);']
   }
 
   if (functionType.returnType === 'boolean') {
-    return ['  *out = inox_bool_value(inox_callback_result != 0);']
+    return ['  *inox_callback_out = inox_bool_value(inox_callback_result != 0);']
   }
 
   return []
@@ -3769,6 +3982,22 @@ function emitNamedRuntimeCallbackTargetArgs(
       continue
     }
 
+    const runtimeArgIndex = runtimeCallbackArgIndex(name)
+
+    if (runtimeArgIndex !== null && runtimeArgIndex >= runtimeArgs.length) {
+      const targetParam = targetFunctionType.params[runtimeArgIndex]
+
+      if (
+        targetParam !== null &&
+        typeof targetParam !== 'undefined' &&
+        (targetParam.optional === true ||
+          (targetParam.defaultValue !== null && typeof targetParam.defaultValue !== 'undefined'))
+      ) {
+        callArgs.push(emitOmittedFunctionPointerArg(targetParam))
+        continue
+      }
+    }
+
     const moduleObjectFunctionField = emitRuntimeCallbackModuleObjectFieldArg(name, moduleObjectFunctionFields)
 
     if (moduleObjectFunctionField !== null && typeof moduleObjectFunctionField !== 'undefined') {
@@ -3782,6 +4011,20 @@ function emitNamedRuntimeCallbackTargetArgs(
   return callArgs
 }
 
+function emitOmittedFunctionPointerArg(param: CFunctionParam): string {
+  const cType = emitFunctionPointerParamCType(param)
+
+  if (cType === 'inox_value') {
+    return 'inox_undefined_value()'
+  }
+
+  if (cType === 'void*') {
+    return 'nullptr'
+  }
+
+  return '0'
+}
+
 function namedRuntimeCallbackTargetFunctionType(
   wrapper: CNamedCallbackWrapper,
   context: CallbackEmitContext
@@ -3791,24 +4034,51 @@ function namedRuntimeCallbackTargetFunctionType(
   }
 
   const params = context.functionParams.get(wrapper.target)
+  const returnType = context.functionReturnTypes.get(wrapper.target)
 
-  if (params === null || typeof params === 'undefined') {
+  if (
+    params === null ||
+    typeof params === 'undefined' ||
+    returnType === null ||
+    typeof returnType === 'undefined'
+  ) {
     return wrapper.functionType
   }
+
+  const returnShape = context.functionReturnShapes?.get(wrapper.target)
+  const returnTypeRef = context.functionReturnTypeRefs?.get(wrapper.target)
+  const returnNullable = context.functionReturnNullables?.get(wrapper.target)
 
   return {
     declaredReturnType: wrapper.functionType.declaredReturnType,
     kind: wrapper.functionType.kind,
     params,
-    returnTypeRef: wrapper.functionType.returnTypeRef,
-    returnNullable: wrapper.functionType.returnNullable,
+    returnTypeRef: returnTypeRef ?? wrapper.functionType.returnTypeRef,
+    returnNullable: returnNullable ?? wrapper.functionType.returnNullable,
     returnAsyncResultValueType: wrapper.functionType.returnAsyncResultValueType,
-    returnShape: wrapper.functionType.returnShape,
-    returnType: wrapper.functionType.returnType
+    returnShape: returnShape ?? wrapper.functionType.returnShape,
+    returnType
   }
 }
 
+function namedRuntimeCallbackWrapperFunctionType(
+  wrapper: CNamedCallbackWrapper,
+  context: CallbackEmitContext
+): CFunctionType {
+  return mergeArrowCallbackFunctionTypes(wrapper.functionType, namedRuntimeCallbackTargetFunctionType(wrapper, context))
+}
+
 function runtimeCallbackArgByName(name: string, runtimeArgs: string[]): string | null {
+  const index = runtimeCallbackArgIndex(name)
+
+  if (index === null || index >= runtimeArgs.length) {
+    return null
+  }
+
+  return runtimeArgs[index]
+}
+
+function runtimeCallbackArgIndex(name: string): number | null {
   const prefix = 'inox_arg_'
 
   if (!name.startsWith(prefix)) {
@@ -3833,11 +4103,7 @@ function runtimeCallbackArgByName(name: string, runtimeArgs: string[]): string |
     return null
   }
 
-  if (value >= runtimeArgs.length) {
-    return null
-  }
-
-  return runtimeArgs[value]
+  return value
 }
 
 function collectCallbackModuleObjectFunctionFieldNames(context: CallbackEmitContext): Set<string> {
@@ -4009,6 +4275,10 @@ function emitRuntimeArrowCallbackWrapperDeclaration(
   baseContext: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): string[] {
+  if (wrapper.functionType.returnType === 'async-result') {
+    return emitRuntimeAsyncArrowCallbackWrapperDeclaration(wrapper, baseContext, deps)
+  }
+
   const lines: string[] = []
 
   if (isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
@@ -4025,13 +4295,16 @@ function emitRuntimeArrowCallbackWrapperDeclaration(
   } else {
     context.runtimeCallbackReturnShape = null
   }
-  context.runtimeCallbackReturnOut = '(*out)'
+  context.runtimeCallbackReturnOut = '(*inox_callback_out)'
   context.runtimeCallbackCleanupLabel = 'inox_callback_cleanup'
   const bodyLines: string[] = []
 
   pushLines(bodyLines, emitRuntimeArrowCallbackContextLocals(wrapper, context, deps))
   pushLines(bodyLines, emitRuntimeArrowCallbackParamPrelude(wrapper, context, deps))
-  const statementLines = emitRuntimeArrowCallbackStatementLines(wrapper, context, deps)
+  const statementLines =
+    wrapper.expression.async === true
+      ? emitRuntimeArrowAsyncTaskStartLines(wrapper, context)
+      : emitRuntimeArrowCallbackStatementLines(wrapper, context, deps)
 
   lines.push(emitRuntimeCallbackWrapperHead(wrapper) + ' {')
 
@@ -4041,8 +4314,9 @@ function emitRuntimeArrowCallbackWrapperDeclaration(
     lines.push('  (void)inox_context;')
   }
 
-  lines.push(emitIndentedRuntimeArgCountCheck(wrapper.functionType.params.length))
-  lines.push('  *out = inox_undefined_value();')
+  lines.push(emitIndentedRuntimeArgCountCheck(wrapper.functionType.params))
+  pushLines(lines, emitIndentedRuntimeArgsPadding(wrapper.functionType.params))
+  lines.push('  *inox_callback_out = inox_undefined_value();')
   pushIndentedLines(lines, bodyLines)
   pushIndentedLines(lines, deps.emitLoopFlowDeclarations(context))
   pushIndentedLines(lines, deps.emitReturnFlowDeclarations(context))
@@ -4067,6 +4341,127 @@ function emitRuntimeArrowCallbackWrapperDeclaration(
   return lines
 }
 
+function emitRuntimeAsyncArrowCallbackWrapperDeclaration(
+  wrapper: CRuntimeArrowCallbackWrapper,
+  baseContext: CallbackEmitContext,
+  deps: CallbackLoweringDependencies
+): string[] {
+  const lines: string[] = []
+
+  if (isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
+    pushLines(lines, emitRuntimeArrowCallbackContextFinalizerDeclaration(wrapper))
+    lines.push('')
+  }
+
+  const context = deps.createFunctionContext(baseContext, 'void', false)
+  context.cleanupEnabled = false
+  context.statusReturn = true
+  const bodyLines: string[] = []
+  pushLines(bodyLines, emitRuntimeArrowCallbackContextLocals(wrapper, context, deps))
+  pushLines(bodyLines, emitRuntimeArrowCallbackParamPrelude(wrapper, context, deps))
+  const providerCppType = compilerLibraryIntrinsicNativeCppType(
+    resolveCCompilerLibrarySet(context.libraries),
+    'async-result'
+  )
+  const task = context.asyncTaskWrappers?.get(wrapper.name)
+  const args = runtimeArrowAsyncTaskArgs(wrapper)
+
+  lines.push(emitRuntimeCallbackWrapperHead(wrapper) + ' {')
+
+  if (isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
+    lines.push('  if (inox_context == 0) return INOX_ERR_TYPE;')
+  } else {
+    lines.push('  (void)inox_context;')
+  }
+
+  lines.push(emitIndentedRuntimeArgCountCheck(wrapper.functionType.params))
+  pushLines(lines, emitIndentedRuntimeArgsPadding(wrapper.functionType.params))
+  pushIndentedLines(lines, bodyLines)
+
+  if (
+    providerCppType === null ||
+    providerCppType.length === 0 ||
+    task === null ||
+    typeof task === 'undefined'
+  ) {
+    lines.push('  return INOX_ERR_TYPE;')
+    lines.push('}')
+    return lines
+  }
+
+  lines.push(
+    `  ${providerCppType}& inox_async_callback_out = *static_cast<${providerCppType}*>(inox_callback_out);`
+  )
+  lines.push('  inox_async_callback_out = {};')
+  args.push('inox_async_callback_out')
+  lines.push(`  return ${task.startName}(${joinStrings(args, ', ')});`)
+  lines.push('}')
+
+  return lines
+}
+
+function emitRuntimeArrowAsyncTaskStartLines(
+  wrapper: CRuntimeArrowCallbackWrapper,
+  context: CallbackFunctionContext
+): string[] {
+  const task = context.asyncTaskWrappers?.get(wrapper.name)
+
+  if (task === null || typeof task === 'undefined') {
+    return ['return INOX_ERR_TYPE;']
+  }
+
+  const providerCppType = compilerLibraryIntrinsicNativeCppType(
+    resolveCCompilerLibrarySet(context.libraries),
+    'async-result'
+  )
+
+  if (providerCppType === null || providerCppType.length === 0) {
+    return ['return INOX_ERR_TYPE;']
+  }
+
+  const args = runtimeArrowAsyncTaskArgs(wrapper)
+
+  args.push('inox_async_callback_result')
+
+  return [
+    `${providerCppType} inox_async_callback_result;`,
+    `inox_status inox_async_callback_status = ${task.startName}(${joinStrings(args, ', ')});`,
+    'if (inox_async_callback_status != INOX_OK) return inox_async_callback_status;'
+  ]
+}
+
+function runtimeArrowAsyncTaskArgs(wrapper: CRuntimeArrowCallbackWrapper): string[] {
+  const args = ['inox_loop']
+
+  for (let index = 0; index < wrapper.functionType.params.length; index = index + 1) {
+    const param = wrapper.functionType.params[index]
+    const nativeCppType = libraryNativeBoundaryCppType(
+      param.valueType,
+      param.nullable === true,
+      param.optional === true,
+      param.shape
+    )
+
+    if (nativeCppType !== null) {
+      args.push(runtimeArrowCallbackParamName(wrapper, index))
+    } else if (isManagedRuntimeCallbackParamValueType(param.valueType)) {
+      args.push(`args[${index}]`)
+    } else {
+      args.push(runtimeArrowCallbackParamName(wrapper, index))
+    }
+  }
+
+  for (const capture of wrapper.captures) {
+    if (isRetainedRuntimeArrowCapture(capture)) {
+      args.push(`captured->${emitRuntimeArrowCaptureField(capture)}`)
+    } else {
+      args.push(capture.name)
+    }
+  }
+
+  return args
+}
+
 function emitRuntimeArrowCallbackStatementLines(
   wrapper: CRuntimeArrowCallbackWrapper,
   context: CallbackFunctionContext,
@@ -4086,7 +4481,7 @@ function emitRuntimeArrowCallbackStatementLines(
 
     const lines: string[] = []
     pushLines(lines, value.lines)
-    lines.push(`*out = ${expression};`)
+    lines.push(`*inox_callback_out = ${expression};`)
 
     return lines
   }
@@ -4267,6 +4662,14 @@ function emitRuntimeArrowCallbackParamPrelude(
       continue
     }
 
+    if (param.valueType === 'function') {
+      context.runtimeCallbacks.add(name)
+      context.functionTypes.set(name, normalizeFunctionType(param.functionType))
+      lines.push(`inox_value ${name} = args[${index}];`)
+      index = index + 1
+      continue
+    }
+
     if (param.valueType === 'number') {
       lines.push(`double ${name} = args[${index}].as.number;`)
       index = index + 1
@@ -4377,6 +4780,7 @@ function emitRuntimeCallbackWrapperArgChecks(
   index: number,
   libraries: CCompilerLibrarySet | null | undefined
 ): string[] {
+  const omittable = runtimeCallbackParamIsOmittable(param)
   const nativeValidExpression = compilerLibraryNativeRuntimeValueValidExpressionForTypeRef(libraries, param.typeRef)
 
   if (nativeValidExpression !== null) {
@@ -4388,14 +4792,14 @@ function emitRuntimeCallbackWrapperArgChecks(
       mismatch = `${value}.tag != INOX_TAG_NULL && ${mismatch}`
     }
 
-    if (param.optional === true) {
+    if (omittable) {
       mismatch = `${value}.tag != INOX_TAG_UNDEFINED && ${mismatch}`
     }
 
     return [`if (${mismatch}) return INOX_ERR_TYPE;`]
   }
 
-  if (param.optional === true && param.valueType === 'string') {
+  if (omittable && param.valueType === 'string') {
     const nullCheck = param.nullable === true ? `args[${index}].tag != INOX_TAG_NULL && ` : ''
     return [
       `if (args[${index}].tag != INOX_TAG_UNDEFINED && ${nullCheck}` +
@@ -4403,7 +4807,7 @@ function emitRuntimeCallbackWrapperArgChecks(
     ]
   }
 
-  if (param.optional === true && param.valueType === 'object') {
+  if (omittable && param.valueType === 'object') {
     const nullCheck = param.nullable === true ? `args[${index}].tag != INOX_TAG_NULL && ` : ''
     return [
       `if (args[${index}].tag != INOX_TAG_UNDEFINED && ${nullCheck}` +
@@ -4411,7 +4815,7 @@ function emitRuntimeCallbackWrapperArgChecks(
     ]
   }
 
-  if (param.optional === true && param.valueType === 'bytes') {
+  if (omittable && param.valueType === 'bytes') {
     const nullCheck = param.nullable === true ? `args[${index}].tag != INOX_TAG_NULL && ` : ''
     return [
       `if (args[${index}].tag != INOX_TAG_UNDEFINED && ${nullCheck}` +
@@ -4419,7 +4823,20 @@ function emitRuntimeCallbackWrapperArgChecks(
     ]
   }
 
-  if (param.optional === true && isNullableScalarType(param.valueType)) {
+  if (omittable && param.valueType === 'function') {
+    return [
+      `if (args[${index}].tag != INOX_TAG_UNDEFINED && ` +
+        `(args[${index}].tag != INOX_TAG_FUNCTION || args[${index}].as.ref == 0)) return INOX_ERR_TYPE;`
+    ]
+  }
+
+  if (param.valueType === 'function') {
+    return [
+      `if (args[${index}].tag != INOX_TAG_FUNCTION || args[${index}].as.ref == 0) return INOX_ERR_TYPE;`
+    ]
+  }
+
+  if (omittable && isNullableScalarType(param.valueType)) {
     const tag = cRuntimeValueTag(param.valueType)
     const nullCheck = param.nullable === true ? `args[${index}].tag != INOX_TAG_NULL && ` : ''
 
@@ -4922,7 +5339,7 @@ function emitFunctionPointerParamCType(param: CFunctionParam): string {
     return libraryCppType
   }
 
-  if (param.nullable === true && isNullableScalarType(param.valueType)) {
+  if (isBoxedScalarParam(param)) {
     return 'inox_value'
   }
 

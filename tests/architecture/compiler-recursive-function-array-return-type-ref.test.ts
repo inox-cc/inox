@@ -36,5 +36,8 @@ test('recursive function fields preserve package array return TypeRef through lo
     target: 'cc'
   })
 
-  assert.match(generated.code, /static Array \(\*inox_objfn_dependencies_emitLines\)/)
+  assert.doesNotMatch(generated.code, /inox_objfn_dependencies_emitLines/)
+  assert.match(generated.code, /auto inox_callback_result = emitLines\(args\[0\], args\[1\]\);/)
+  assert.match(generated.code, /\*inox_callback_out = inox_callback_result\.release\(\);/)
+  assert.match(generated.code, /inox_callback_new\(&inox_default_allocator, inox_callback_emitLines_\d+, 0, 0,/)
 })

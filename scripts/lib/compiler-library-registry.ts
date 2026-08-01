@@ -7,13 +7,7 @@ import type {
   CompilerLibraryLiteralTypeInference,
   CompilerLibraryPackageDescriptor,
   CompilerLibrarySet,
-  IntrinsicRoleBinding,
-  LibraryNativeTypeDescriptor,
   LibraryOptionDescriptor,
-  LibraryOperationDescriptor,
-  LibraryRuntimeInitializerDescriptor,
-  LibraryTypeOperatorDescriptor,
-  RuntimeRequirementDescriptor,
   TypeRef
 } from '../../compiler/extensions/types.ts'
 import { discoverCompilerLibraries, type DiscoveredCompilerLibrary } from './compiler-library-discovery.ts'
@@ -250,7 +244,9 @@ function compilerLibraryDescriptor(library: DiscoveredCompilerLibrary): Compiler
 }
 
 function renderRegistrySource(librarySet: CompilerLibrarySet, discovered: DiscoveredCompilerLibrary[]): string {
-  let source = "import type { CompilerLibrarySet, TypeRef } from '../../compiler/extensions/types.ts'\n"
+  let source =
+    "import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'\n" +
+    "import type { CompilerLibraryDescriptor, CompilerLibrarySet, TypeRef } from '../../compiler/extensions/types.ts'\n"
   const packageNames: Map<string, string> = new Map()
   const literalInferenceNames: Map<string, string> = new Map()
   let packageIndex = 0
@@ -277,49 +273,29 @@ function renderRegistrySource(librarySet: CompilerLibrarySet, discovered: Discov
     }
   }
 
-  source = source + '\nexport const defaultCompilerLibrarySet: CompilerLibrarySet = {\n'
-  source = source + `  "fingerprint": ${JSON.stringify(librarySet.fingerprint)},\n`
-  source = source + `  "declarations": ${JSON.stringify(librarySet.declarations, null, 2)},\n`
-  source =
-    source +
-    `  "typeOperators": ${renderPackageArray(
-      librarySet.typeOperators ?? [],
-      discovered,
-      packageNames,
-      'typeOperators'
-    )},\n`
-  source =
-    source + `  "options": ${renderPackageArray(librarySet.options ?? [], discovered, packageNames, 'options')},\n`
-  source =
-    source +
-    `  "runtimeInitializers": ${renderPackageArray(
-      librarySet.runtimeInitializers ?? [],
-      discovered,
-      packageNames,
-      'runtimeInitializers'
-    )},\n`
-  source =
-    source +
-    `  "nativeTypes": ${renderPackageArray(librarySet.nativeTypes, discovered, packageNames, 'nativeTypes')},\n`
-  source =
-    source + `  "operations": ${renderPackageArray(librarySet.operations, discovered, packageNames, 'operations')},\n`
-  source =
-    source +
-    `  "intrinsicBindings": ${renderPackageArray(
-      librarySet.intrinsicBindings,
-      discovered,
-      packageNames,
-      'intrinsicBindings'
-    )},\n`
-  source =
-    source +
-    `  "runtimeRequirements": ${renderPackageArray(
-      librarySet.runtimeRequirements,
-      discovered,
-      packageNames,
-      'runtimeRequirements'
-    )}\n`
-  source = source + '}\n'
+  source = source + '\nconst compilerLibraryDescriptors: CompilerLibraryDescriptor[] = [\n'
+
+  for (const library of discovered) {
+    const descriptor = compilerLibraryDescriptor(library)
+    const packageName = packageNames.get(library.id)
+
+    if (packageName === null || typeof packageName === 'undefined') {
+      source = source + `  ${JSON.stringify(descriptor)},\n`
+      continue
+    }
+
+    source = source + '  {\n'
+    source = source + `    ...${packageName},\n`
+    source = source + `    declarations: ${JSON.stringify(descriptor.declarations)}\n`
+    source = source + '  },\n'
+  }
+
+  source = source + ']\n\n'
+  source = source + 'export const defaultCompilerLibrarySet: CompilerLibrarySet = createCompilerLibrarySet(\n'
+  source = source + '  compilerLibraryDescriptors,\n'
+  source = source + `  ${JSON.stringify(defaultCompilerTargetOptions)},\n`
+  source = source + `  ${JSON.stringify(librarySet.fingerprint)}\n`
+  source = source + ')\n'
   source = source + renderLiteralTypeInferenceDispatch(discovered, literalInferenceNames)
 
   return source
@@ -426,100 +402,6 @@ function pushLiteralProviderId(providerIds: string[], providerId: string | null 
   }
 
   providerIds.push(providerId)
-}
-
-type PackageArrayItem =
-  | LibraryNativeTypeDescriptor
-  | LibraryOptionDescriptor
-  | LibraryOperationDescriptor
-  | LibraryRuntimeInitializerDescriptor
-  | IntrinsicRoleBinding
-  | RuntimeRequirementDescriptor
-  | LibraryTypeOperatorDescriptor
-type PackageArrayName =
-  | 'typeOperators'
-  | 'options'
-  | 'runtimeInitializers'
-  | 'nativeTypes'
-  | 'operations'
-  | 'intrinsicBindings'
-  | 'runtimeRequirements'
-
-function renderPackageArray(
-  values: PackageArrayItem[],
-  discovered: DiscoveredCompilerLibrary[],
-  packageNames: Map<string, string>,
-  arrayName: PackageArrayName
-): string {
-  const rows: string[] = []
-
-  for (const value of values) {
-    const reference = compilerPackageItemReference(value, discovered, packageNames, arrayName)
-    rows.push(reference === null ? JSON.stringify(value) : reference)
-  }
-
-  if (rows.length === 0) {
-    return '[]'
-  }
-
-  return '[\n    ' + rows.join(',\n    ') + '\n  ]'
-}
-
-function compilerPackageItemReference(
-  value: PackageArrayItem,
-  discovered: DiscoveredCompilerLibrary[],
-  packageNames: Map<string, string>,
-  arrayName: PackageArrayName
-): string | null {
-  for (const library of discovered) {
-    const compilerPackage = library.compilerPackage
-    const packageName = packageNames.get(library.id)
-
-    if (compilerPackage === null || packageName === null || typeof packageName === 'undefined') {
-      continue
-    }
-
-    const items = compilerPackageArray(compilerPackage, arrayName)
-
-    for (let index = 0; index < items.length; index = index + 1) {
-      if (items[index] === value) {
-        return `${packageName}.${arrayName}[${index}]`
-      }
-    }
-  }
-
-  return null
-}
-
-function compilerPackageArray(
-  compilerPackage: CompilerLibraryPackageDescriptor,
-  arrayName: PackageArrayName
-): PackageArrayItem[] {
-  if (arrayName === 'typeOperators') {
-    return compilerPackage.typeOperators ?? []
-  }
-
-  if (arrayName === 'operations') {
-    return compilerPackage.operations
-  }
-
-  if (arrayName === 'options') {
-    return compilerPackage.options ?? []
-  }
-
-  if (arrayName === 'runtimeInitializers') {
-    return compilerPackage.runtimeInitializers ?? []
-  }
-
-  if (arrayName === 'nativeTypes') {
-    return compilerPackage.nativeTypes ?? []
-  }
-
-  if (arrayName === 'intrinsicBindings') {
-    return compilerPackage.intrinsicBindings
-  }
-
-  return compilerPackage.runtimeRequirements
 }
 
 function jsonSource(value: unknown): string {

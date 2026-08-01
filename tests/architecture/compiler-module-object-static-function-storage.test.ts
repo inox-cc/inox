@@ -5,7 +5,7 @@ import { compileFileToCppModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
-test('module object stores a named function with optional parameters as a static pointer', () => {
+test('module object stores a named function with optional parameters as a runtime callback', () => {
   const host = createMemoryCompilerHost(
     [
       {
@@ -28,10 +28,8 @@ test('module object stores a named function with optional parameters as a static
   const source = files.find((file) => file.path === 'index.cc')
 
   assert.ok(source)
-  assert.match(source.code, /static inox_value \(\*inox_objfn_dependencies_adapt\)\(inox_value, inox_value\) = 0;/)
-  assert.match(
-    source.code,
-    /inox_objfn_dependencies_adapt = inox_mod_implementation_ts_[a-f0-9]+_implementation;/
-  )
-  assert.doesNotMatch(source.code, /inox_callback_new\([^\n]*dependencies_adapt/)
+  assert.doesNotMatch(source.code, /inox_objfn_dependencies_adapt|\(\*dependencies_adapt\)/)
+  assert.match(source.code, /static inox_status inox_callback_implementation_\d+\(/)
+  assert.match(source.code, /inox_callback_new\(/)
+  assert.match(source.code, /inox_object_\d+\.init\(0, inox_callback_\d+\);/)
 })

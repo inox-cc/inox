@@ -90,9 +90,12 @@ consume(dependencies)
 
   assert.ok(source)
   assert.doesNotMatch(source.code, /inox_objfn_|inox_native_adapter_result/)
-  assert.match(source.code, /\(\*out\) = inox_return_value_\d+;/)
-  assert.match(source.code, /if \(!\(Array\(inox::Value\(\(\*out\)\)\)\.valid\(\)\)\) return INOX_ERR_TYPE;/)
-  assert.match(source.code, /inox_retain\(\(\*out\)\);/)
+  assert.match(source.code, /\(\*inox_callback_out\) = inox_return_value_\d+;/)
+  assert.match(
+    source.code,
+    /if \(!\(Array\(inox::Value\(\(\*inox_callback_out\)\)\)\.valid\(\)\)\) return INOX_ERR_TYPE;/
+  )
+  assert.match(source.code, /inox_retain\(\(\*inox_callback_out\)\);/)
 })
 
 test('function pointer result bridge resolves package runtime mapping from return shape identity', () => {

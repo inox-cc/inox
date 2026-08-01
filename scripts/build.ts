@@ -48,7 +48,6 @@ type GeneratedFile = {
   code: string
 }
 
-type GeneratedFileMap = Map<string, string>
 type FunctionEffectMap = Map<string, IrFunctionEffect[]>
 type DeclarationEffectModule = {
   path: string
@@ -118,45 +117,32 @@ async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
     stdlibDeclarationFiles,
     bootstrapLibraries
   )
-  const generatedFiles: GeneratedFileMap = new Map()
+  const generatedWorkDir = `${options.generatedDir}.tmp`
+
+  await rm(generatedWorkDir, {
+    recursive: true,
+    force: true
+  })
+  await mkdir(generatedWorkDir, {
+    recursive: true
+  })
 
   console.log('emitting self-hosted compiler C++ modules')
   await emitCompilerModules(
     compilerFiles,
     new Set([driverPath, semanticProbeDriverPath]),
     declarationContracts,
-    generatedFiles,
+    generatedWorkDir,
     stdlibDeclarationFiles,
     bootstrapLibraries
   )
-  addFunctionEffectSidecarFiles(generatedFiles, declarationContracts)
+  await writeFunctionEffectSidecarFiles(generatedWorkDir, declarationContracts)
 
   await rm(options.generatedDir, {
     recursive: true,
     force: true
   })
-  await mkdir(options.generatedDir, {
-    recursive: true
-  })
-
-  const generatedPaths = Array.from(generatedFiles.keys())
-
-  generatedPaths.sort()
-
-  for (const path of generatedPaths) {
-    const code = generatedFiles.get(path)
-
-    if (typeof code === 'undefined') {
-      continue
-    }
-
-    const output = join(options.generatedDir, path)
-
-    await mkdir(dirname(output), {
-      recursive: true
-    })
-    await writeFile(output, code)
-  }
+  await rename(generatedWorkDir, options.generatedDir)
 
   await mkdir(dirname(options.out), {
     recursive: true
@@ -173,9 +159,14 @@ async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
   console.log(options.out)
 }
 
-function addGeneratedFiles(files: GeneratedFileMap, generated: { path: string; code: string }[]): void {
+async function writeGeneratedFiles(generatedDir: string, generated: GeneratedFile[]): Promise<void> {
   for (const file of generated) {
-    files.set(file.path, file.code)
+    const output = join(generatedDir, file.path)
+
+    await mkdir(dirname(output), {
+      recursive: true
+    })
+    await writeFile(output, file.code)
   }
 }
 
@@ -272,7 +263,7 @@ async function emitCompilerModules(
   compilerFiles: SourceFile[],
   driverPaths: Set<string>,
   declarationContracts: DeclarationContract[],
-  generatedFiles: GeneratedFileMap,
+  generatedDir: string,
   stdlibDeclarationFiles: SourceFile[],
   bootstrapLibraries: CompilerLibrarySet
 ): Promise<void> {
@@ -286,7 +277,7 @@ async function emitCompilerModules(
       bootstrapLibraries
     )
 
-    addGeneratedFiles(generatedFiles, modules.files)
+    await writeGeneratedFiles(generatedDir, modules.files)
     releaseSelfHostedCompilationMemory()
   }
 }
@@ -576,13 +567,20 @@ function addDeclarationFunctionEffects(
   }
 }
 
-function addFunctionEffectSidecarFiles(files: GeneratedFileMap, contracts: DeclarationContract[]): void {
+async function writeFunctionEffectSidecarFiles(
+  generatedDir: string,
+  contracts: DeclarationContract[]
+): Promise<void> {
+  const files: GeneratedFile[] = []
+
   for (const contract of contracts) {
-    files.set(
-      generatedPathForSourcePath(contract.sourcePath, '.effects.json'),
-      emitModuleFunctionEffectsContract(contract.functionEffects)
-    )
+    files.push({
+      path: generatedPathForSourcePath(contract.sourcePath, '.effects.json'),
+      code: emitModuleFunctionEffectsContract(contract.functionEffects)
+    })
   }
+
+  await writeGeneratedFiles(generatedDir, files)
 }
 
 function replaceDeclarationContractFunctionEffects(

@@ -43,7 +43,7 @@ export function implementation(value: object, label?: string): object | null {
     /inox_value inox_callback_result = inox_mod_implementation_ts_[a-f0-9]+_implementation\(args\[0\], args\[1\]\);/
   )
   assert.match(source.code, /if \(inox::thrown\(\)\) return INOX_ERR_THROW;/)
-  assert.match(source.code, /\*out = inox_callback_result;/)
+  assert.match(source.code, /\*inox_callback_out = inox_callback_result;/)
   assert.doesNotMatch(source.code, /\binox_callback_error\b/)
   assert.doesNotMatch(source.code, /\binox_callback_status\b/)
 })

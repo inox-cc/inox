@@ -12,7 +12,13 @@ import {
   nextCName,
   registerOwnedValue
 } from '../context.ts'
-import { cStringLiteral, emitCIdentifier, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
+import {
+  cStringLiteral,
+  emitCIdentifier,
+  emitCObjectFunctionFieldName,
+  emitCRuntimeCallbackFieldName,
+  utf8ByteLength
+} from '../identifiers.ts'
 import {
   emitRuntimeFieldValueCheck,
   runtimeObjectApiValueMismatchCondition,
@@ -1618,9 +1624,12 @@ function emitObjectFunctionFieldVariableDeclaration(
   dependencies: ObjectVariableDeclarationDependencies,
   seenTypes: string[]
 ): string[] {
-  const name = emitCObjectFunctionFieldName(objectName, field.name)
+  const runtime = isRuntimeObjectFunctionField(field, seenTypes)
+  const name = runtime
+    ? emitCRuntimeCallbackFieldName(objectName, field.name)
+    : emitCObjectFunctionFieldName(objectName, field.name)
 
-  if (isRuntimeObjectFunctionField(field, seenTypes)) {
+  if (runtime) {
     registerOwnedValue(context, name)
     return dependencies.emitRuntimeCallbackValueInto(property.value, field.functionType, name, context)
   }
@@ -1671,9 +1680,12 @@ function emitObjectShapeFunctionFieldVariableDeclaration(
   allowMissing: boolean
 ): string[] {
   const value = objectFunctionFieldSourcePropertyValue(source, field.name)
-  const name = emitCObjectFunctionFieldName(objectName, field.name)
+  const runtime = isRuntimeObjectFunctionField(field, seenTypes)
+  const name = runtime
+    ? emitCRuntimeCallbackFieldName(objectName, field.name)
+    : emitCObjectFunctionFieldName(objectName, field.name)
 
-  if (isRuntimeObjectFunctionField(field, seenTypes)) {
+  if (runtime) {
     if (
       allowMissing &&
       (source.expression === null || typeof source.expression === 'undefined') &&
@@ -1842,7 +1854,7 @@ function emitRuntimeObjectShapeFunctionFieldVariableDeclaration(
   }
 
   if (source.pathName !== null && typeof source.pathName !== 'undefined') {
-    const sourceName = emitCObjectFunctionFieldName(source.pathName, field.name)
+    const sourceName = emitCRuntimeCallbackFieldName(source.pathName, field.name)
     const lines: string[] = []
 
     lines.push(`${name} = ${sourceName};`)
@@ -2036,7 +2048,9 @@ export function emitObjectVariableDeclaration(
     if (property !== null && typeof property !== 'undefined') {
       if (field.valueType === 'function') {
         if (isSupportedObjectFunctionField(field, seenTypes)) {
-          const functionValueName = emitCObjectFunctionFieldName(statement.name, field.name)
+          const functionValueName = isRuntimeObjectFunctionField(field, seenTypes)
+            ? emitCRuntimeCallbackFieldName(statement.name, field.name)
+            : emitCObjectFunctionFieldName(statement.name, field.name)
 
           appendLines(
             lines,

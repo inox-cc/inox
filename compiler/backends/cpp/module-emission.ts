@@ -2360,7 +2360,12 @@ function createCModuleBaseContext(
     context,
     deps.asyncResultChainLoweringDependencies
   )
-  context.asyncTaskWrappers = collectAsyncTaskWrappers(functionEntries, context, deps.asyncTaskLoweringDependencies)
+  context.asyncTaskWrappers = collectAsyncTaskWrappers(
+    functionEntries,
+    context,
+    deps.asyncTaskLoweringDependencies,
+    context.callbackWrappers
+  )
 
   return context
 }

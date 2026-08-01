@@ -10,9 +10,6 @@ import type {
 const libraryId = 'node:timers'
 const runtimeRequirement = libraryId
 const runtimeRequirements = [runtimeRequirement]
-const asyncCallbackDiagnosticCode = 'INOX_ASYNC_TIMER_CALLBACK'
-const asyncCallbackDiagnosticMessage =
-  'async timer callbacks are not supported in the MVP; use a synchronous timer callback and handle Promise work explicitly'
 const voidTypeRef: PrimitiveTypeRef = {
   kind: 'primitive',
   name: 'void',
@@ -158,9 +155,7 @@ function callbackArgument(): LibraryArgumentCheckDescriptor {
     valueTypes: ['function'],
     functionParameters: [],
     functionReturnType: 'void',
-    functionAsync: false,
-    functionAsyncDiagnosticCode: asyncCallbackDiagnosticCode,
-    functionAsyncDiagnosticMessage: asyncCallbackDiagnosticMessage
+    functionAsync: true
   }
 }
 

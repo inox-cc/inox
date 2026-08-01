@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { compileFileToCppModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 
-test('локальный @inline const arrow генерирует inline callback wrapper', () => {
+test('локальный @inline const arrow генерирует inline runtime callback wrapper', () => {
   const host = createMemoryCompilerHost(
     [
       {
@@ -23,5 +23,6 @@ test('локальный @inline const arrow генерирует inline callbac
   const source = files.find((file) => file.path === 'index.cc')
 
   assert.ok(source)
-  assert.match(source.code, /static inline double inox_callback_arrow_[0-9]+\(double value\)/)
+  assert.match(source.code, /static inline inox_status inox_callback_arrow_[0-9]+\(/)
+  assert.match(source.code, /inox_callback_new\(&inox_default_allocator, inox_callback_arrow_[0-9]+,/)
 })

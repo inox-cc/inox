@@ -73,8 +73,8 @@ boxed()
 `)
 
   assert.match(boxedSource, /goto cleanup;/)
-  assert.match(boxedSource, /cleanup:\n\n  if \(name != 0\) \{/)
-  assert.match(boxedSource, /inox_default_free\(0, name, sizeof\(inox_value\), _Alignof\(inox_value\)\);/)
+  assert.match(boxedSource, /cleanup:\n  inox_shared_value_box_release\(name\);/)
+  assert.doesNotMatch(boxedSource, /inox_default_free\(0, name, /)
 }
 
 export async function assertNativeRaiiFunctionsUseDirectReturns(compilerPath: string): Promise<void> {
