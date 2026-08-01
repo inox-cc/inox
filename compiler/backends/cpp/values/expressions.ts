@@ -6,7 +6,8 @@ import {
   emitFunctionPointerReturnType,
   isPlainObjectFunctionField,
   isPlainFunctionPointerType,
-  isRuntimeFunctionType
+  isRuntimeFunctionType,
+  isSupportedRuntimeCallbackType
 } from '../async/callbacks.ts'
 import type { AsyncTaskLoweringDependencies } from '../async/tasks.ts'
 import type { CEmitContextWithDependencies, CFunctionContextWithDependencies } from '../context.ts'
@@ -26,10 +27,7 @@ import {
   emitPreparedCompilerLibraryNativeFieldExpression,
   isCompilerLibraryNativeFieldExpression
 } from '../library-operations.ts'
-import {
-  emitRuntimeNullableValueCheck,
-  emitRuntimeValueCheck
-} from '../runtime-values.ts'
+import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
 import {
   runtimeTypeAlternativeValidExpressions,
   runtimeTypeAlternativesAreNullable
@@ -114,8 +112,10 @@ type ObjectFunctionArgumentSource = {
 
 type RuntimeObjectFunctionCallee = {
   fieldIndex: number
+  fieldName: string
   functionType: CFunctionType
   name: string
+  object: CValueNode
   objectName: string
 }
 
@@ -303,10 +303,7 @@ function canEmitStringCompareOperands(
 }
 
 function isRuntimeReferenceEqualityType(valueType: string): boolean {
-  return (
-    valueType === 'object' ||
-    valueType === 'bytes'
-  )
+  return valueType === 'object' || valueType === 'bytes'
 }
 
 function referenceName(expression: CValueNode): string | null {
@@ -892,11 +889,7 @@ function objectShapeFieldAt(
   return null
 }
 
-function appendDefaultObjectFunctionFieldArgument(
-  args: string[],
-  field: CObjectShapeField,
-  seenTypes: string[]
-): void {
+function appendDefaultObjectFunctionFieldArgument(args: string[], field: CObjectShapeField, seenTypes: string[]): void {
   if (isRuntimeObjectFunctionField(field, seenTypes)) {
     args.push('inox_null_value()')
   } else {
@@ -970,13 +963,7 @@ function emitObjectFunctionFieldArgument(
           sourceSeenTypes
         )
 
-        return deps.emitFunctionPointerRuntimeCallbackValue(
-          adaptedTarget,
-          bridgeFunctionType,
-          [],
-          context,
-          source.loc
-        )
+        return deps.emitFunctionPointerRuntimeCallbackValue(adaptedTarget, bridgeFunctionType, [], context, source.loc)
       }
 
       return {
@@ -1198,56 +1185,24 @@ function copyStringArray(values: string[]): string[] {
 }
 
 function appendObjectFunctionFieldArguments(
-  lines: string[],
-  args: string[],
-  expression: CValueNode,
-  param: CFunctionParam,
-  context: CFunctionContext,
-  deps: CCallExpressionDependencies,
-  calleeSeenTypes: string[],
-  functionCompanions: CPreparedFunctionCompanion[] = []
+  _lines: string[],
+  _args: string[],
+  _expression: CValueNode,
+  _param: CFunctionParam,
+  _context: CFunctionContext,
+  _deps: CCallExpressionDependencies,
+  _calleeSeenTypes: string[],
+  _functionCompanions: CPreparedFunctionCompanion[] = []
 ): void {
-  const seenTypes: string[] = []
-
-  for (const seenType of calleeSeenTypes) {
-    seenTypes.push(seenType)
-  }
-
-  if (seenTypesIncludeDeclaredType(seenTypes, param.declaredType)) {
-    return
-  }
-
-  pushSeenDeclaredType(seenTypes, param.declaredType)
-
-  appendObjectShapeFunctionFieldArguments(
-    lines,
-    args,
-    objectFunctionArgumentSource(expression, context, functionCompanions),
-    param.shape,
-    context,
-    deps,
-    seenTypes
-  )
+  return
 }
 
 function appendDefaultObjectFunctionFieldArguments(
-  args: string[],
-  param: CFunctionParam,
-  calleeSeenTypes: string[]
+  _args: string[],
+  _param: CFunctionParam,
+  _calleeSeenTypes: string[]
 ): void {
-  const seenTypes: string[] = []
-
-  for (const seenType of calleeSeenTypes) {
-    seenTypes.push(seenType)
-  }
-
-  if (seenTypesIncludeDeclaredType(seenTypes, param.declaredType)) {
-    return
-  }
-
-  pushSeenDeclaredType(seenTypes, param.declaredType)
-
-  appendDefaultObjectShapeFunctionFieldArguments(args, param.shape, seenTypes)
+  return
 }
 
 function appendObjectShapeFunctionFieldArguments(
@@ -1464,11 +1419,11 @@ function appendDefaultObjectShapeFunctionFieldArguments(
 }
 
 function isSupportedObjectFunctionField(field: CObjectShapeField, seenTypes: string[] = []): boolean {
-  return isPlainObjectFunctionField(field, seenTypes) || isRuntimeFunctionType(field.functionType)
+  return isPlainObjectFunctionField(field, seenTypes) || isSupportedRuntimeCallbackType(field.functionType)
 }
 
 function isRuntimeObjectFunctionField(field: CObjectShapeField, seenTypes: string[] = []): boolean {
-  return !isPlainObjectFunctionField(field, seenTypes) && isRuntimeFunctionType(field.functionType)
+  return !isPlainObjectFunctionField(field, seenTypes) && isSupportedRuntimeCallbackType(field.functionType)
 }
 
 function objectFunctionFieldCallee(callee: CValueNode, context: CFunctionContext): string | null {
@@ -1554,6 +1509,32 @@ function runtimeObjectFunctionFieldCallee(
   const resolved = resolveObjectFunctionField(callee, context)
 
   if (
+    (resolved === null || typeof resolved === 'undefined') &&
+    (callee.type === 'MemberExpression' || callee.type === 'IndexExpression') &&
+    callee.functionType !== null &&
+    typeof callee.functionType !== 'undefined' &&
+    isSupportedRuntimeCallbackType(callee.functionType)
+  ) {
+    const fieldName =
+      callee.type === 'MemberExpression'
+        ? callee.property
+        : callee.index.type === 'StringLiteral'
+          ? callee.index.value
+          : null
+
+    if (fieldName !== null) {
+      return {
+        fieldIndex: -1,
+        fieldName,
+        functionType: callee.functionType,
+        name: '',
+        object: callee.object,
+        objectName: ''
+      }
+    }
+  }
+
+  if (
     resolved === null ||
     typeof resolved === 'undefined' ||
     resolved.field.functionType === null ||
@@ -1575,9 +1556,48 @@ function runtimeObjectFunctionFieldCallee(
 
   return {
     fieldIndex,
+    fieldName: resolved.fieldName,
     functionType: resolved.field.functionType,
     name: fieldIndex === -1 ? emitCObjectFunctionFieldName(resolved.objectName, resolved.fieldName) : '',
+    object: callee.type === 'MemberExpression' || callee.type === 'IndexExpression' ? callee.object : callee,
     objectName: fieldIndex === -1 ? '' : resolved.objectName
+  }
+}
+
+function runtimeObjectFunctionFieldCalleeFromCall(
+  expression: CValueNode,
+  params: CFunctionParam[] | null
+): RuntimeObjectFunctionCallee | null {
+  const callee = expression.callee
+
+  if (callee.type !== 'MemberExpression' && callee.type !== 'IndexExpression') {
+    return null
+  }
+
+  const fieldName =
+    callee.type === 'MemberExpression'
+      ? callee.property
+      : callee.index.type === 'StringLiteral'
+        ? callee.index.value
+        : null
+
+  if (fieldName === null) {
+    return null
+  }
+
+  return {
+    fieldIndex: -1,
+    fieldName,
+    functionType: {
+      kind: 'function',
+      params: params ?? [],
+      returnNullable: expression.nullable === true,
+      returnShape: expression.shape ?? null,
+      returnType: expression.valueType ?? 'void'
+    },
+    name: '',
+    object: callee.object,
+    objectName: ''
   }
 }
 
@@ -1821,13 +1841,31 @@ function emitRuntimeObjectFunctionFieldCall(
         context
       )
     )
+  } else {
+    const object = deps.emitCValueExpression(callee.object, context)
+
+    calleeName = nextCName(context, 'inox_callback')
+    registerOwnedValue(context, calleeName)
+    appendLines(lines, object.lines)
+    lines.push(`${calleeName} = inox::get(${object.expression}, ${cStringLiteral(callee.fieldName)});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   }
 
   for (const arg of expression.args) {
     const value = deps.emitCValueExpression(arg, context)
 
     appendLines(lines, value.lines)
-    args.push(value.expression)
+    if (value.cppType !== null && typeof value.cppType !== 'undefined') {
+      const name = nextCName(context, 'inox_callback_arg')
+      lines.push(`auto ${name} = ${value.expression};`)
+      args.push(name)
+    } else {
+      args.push(value.expression)
+    }
+  }
+
+  for (let index = args.length; index < callee.functionType.params.length; index = index + 1) {
+    args.push('inox_undefined_value()')
   }
 
   const out = nextCName(context, 'inox_callback_out')
@@ -1839,14 +1877,29 @@ function emitRuntimeObjectFunctionFieldCall(
     const argArray = nextCName(context, 'inox_callback_args')
 
     lines.push(`inox_value ${argArray}[] = { ${joinStrings(args, ', ')} };`)
-    lines.push(
-      emitStatusCheck(`inox_callback_call(${calleeName}, ${argArray}, ${args.length}, ${out}.out())`, context)
-    )
+    lines.push(emitStatusCheck(`inox_callback_call(${calleeName}, ${argArray}, ${args.length}, ${out}.out())`, context))
+  }
+
+  if (callee.functionType.returnType === 'number') {
+    lines.push(emitRuntimeTypeCheck(`${out}.raw().tag != INOX_TAG_NUMBER`, context))
+    return {
+      lines,
+      expression: `${out}.raw().as.number`
+    }
+  }
+
+  if (callee.functionType.returnType === 'boolean') {
+    lines.push(emitRuntimeTypeCheck(`${out}.raw().tag != INOX_TAG_BOOL`, context))
+    return {
+      lines,
+      expression: `${out}.raw().as.boolean ? 1 : 0`
+    }
   }
 
   return {
     lines,
-    expression: out
+    expression: out,
+    valueType: callee.functionType.returnType
   }
 }
 
@@ -2083,13 +2136,15 @@ export function emitPreparedCallExpression(
     return deps.emitRuntimeCallbackCall(expression, callbackType, context)
   }
 
-  const objectCallback = runtimeObjectFunctionFieldCallee(expression.callee, context)
+  const params = deps.resolveFunctionParams(expression.callee, context)
+  const storedFunctionCallee = deps.inferExpressionType(expression.callee, context) === 'function'
+  const objectCallback =
+    runtimeObjectFunctionFieldCallee(expression.callee, context) ??
+    (storedFunctionCallee ? runtimeObjectFunctionFieldCalleeFromCall(expression, params) : null)
 
   if (objectCallback !== null && typeof objectCallback !== 'undefined') {
     return emitRuntimeObjectFunctionFieldCall(expression, objectCallback, context, deps)
   }
-
-  const params = deps.resolveFunctionParams(expression.callee, context)
 
   if (params === null || typeof params === 'undefined') {
     return {
@@ -2114,13 +2169,7 @@ export function emitPreparedCallExpression(
   if (isPendingExceptionFunctionCallee(expression.callee, context)) {
     return withFunctionCallReturnMetadata(
       expression,
-      emitPreparedPendingExceptionCallExpression(
-        expression,
-        args,
-        lines,
-        returnFunctionCompanions,
-        context
-      ),
+      emitPreparedPendingExceptionCallExpression(expression, args, lines, returnFunctionCompanions, context),
       context
     )
   }
@@ -2251,10 +2300,7 @@ function prepareCallReturnFunctionCompanions(
   return companions
 }
 
-function appendCallReturnFunctionCompanionArgs(
-  args: string[],
-  companions: CPreparedFunctionCompanion[]
-): void {
+function appendCallReturnFunctionCompanionArgs(args: string[], companions: CPreparedFunctionCompanion[]): void {
   for (const companion of companions) {
     args.push(`&${companion.expression}`)
   }
@@ -2518,12 +2564,7 @@ function emitPreparedObjectCallArgumentExpression(
 function nativeClassParamName(param: CFunctionParam, context: CFunctionContext): string | null {
   const className = param.className
 
-  if (
-    className === null ||
-    typeof className === 'undefined' ||
-    param.nullable === true ||
-    param.ownership === 'weak'
-  ) {
+  if (className === null || typeof className === 'undefined' || param.nullable === true || param.ownership === 'weak') {
     return null
   }
 
@@ -2668,7 +2709,11 @@ export function emitCExpression(
 ): string {
   if (isCoalesceExpression(expression)) {
     context.diagnostics.push(
-      diagnostic('INOX_C_NULLISH', 'nullish coalescing is not supported by the current C++ backend slice', expression.loc)
+      diagnostic(
+        'INOX_C_NULLISH',
+        'nullish coalescing is not supported by the current C++ backend slice',
+        expression.loc
+      )
     )
     return '0'
   }
@@ -2966,10 +3011,7 @@ export function emitPreparedNumberExpression(
       deps
     )
 
-    if (
-      nullableRuntimeStringLiteralCompare !== null &&
-      typeof nullableRuntimeStringLiteralCompare !== 'undefined'
-    ) {
+    if (nullableRuntimeStringLiteralCompare !== null && typeof nullableRuntimeStringLiteralCompare !== 'undefined') {
       return nullableRuntimeStringLiteralCompare
     }
 
@@ -3130,7 +3172,6 @@ export function emitPreparedNumberExpression(
         }
       }
     }
-
   }
 
   if (deps.isIndexAccessExpression(expression)) {
@@ -3152,7 +3193,6 @@ export function emitPreparedNumberExpression(
         expression: scalarRuntimeValueExpression(objectField.expression, objectField.valueType ?? 'number')
       }
     }
-
   }
 
   if (expression.type === 'AwaitExpression') {
@@ -5202,10 +5242,9 @@ export function emitCValueExpression(
 
     if (nativeValidExpression !== null) {
       const valid = nativeValidExpression.split('$value').join(temp)
-      const mismatch =
-        callExpressionReturnsNullableRuntimeValue(expression, context)
-          ? `${temp}.tag != INOX_TAG_UNDEFINED && ${temp}.tag != INOX_TAG_NULL && !(${valid})`
-          : `!(${valid})`
+      const mismatch = callExpressionReturnsNullableRuntimeValue(expression, context)
+        ? `${temp}.tag != INOX_TAG_UNDEFINED && ${temp}.tag != INOX_TAG_NULL && !(${valid})`
+        : `!(${valid})`
 
       lines.push(emitRuntimeTypeCheck(mismatch, context))
     } else if (returnRuntimeTypeAlternatives !== null && typeof returnRuntimeTypeAlternatives !== 'undefined') {
@@ -5264,10 +5303,7 @@ function callExpressionReturnRuntimeTypeAlternatives(
   return resolved?.field.functionType?.returnRuntimeTypeAlternatives
 }
 
-function callExpressionReturnsNullableRuntimeValue(
-  expression: CValueNode,
-  context: CFunctionContext
-): boolean {
+function callExpressionReturnsNullableRuntimeValue(expression: CValueNode, context: CFunctionContext): boolean {
   if (expression.nullable === true) {
     return true
   }

@@ -74,10 +74,7 @@ import {
 import type { ClassLoweringDependencies } from './classes.ts'
 import { emitCConditionClause, emitCNegatedConditionClause, objectExpressionPathName } from './expressions.ts'
 import type { NullableLoweringDependencies } from './nullable.ts'
-import {
-  emitNullableRuntimeValueVariableDeclaration,
-  isNarrowedNullableScalarExpression
-} from './nullable.ts'
+import { emitNullableRuntimeValueVariableDeclaration, isNarrowedNullableScalarExpression } from './nullable.ts'
 import { registerObjectShape } from './objects.ts'
 import type { ObjectVariableDeclarationDependencies } from './objects.ts'
 import { isRawStringLiteralExpression } from './strings.ts'
@@ -1339,10 +1336,9 @@ export function emitRuntimeValueVariableDeclaration(
       const name = emitCIdentifier(statement.name)
       const valid = validExpressions.join(' || ')
       const nullable = statement.nullable === true || runtimeAlternativesNullable
-      const mismatch =
-        nullable
-          ? `${name}.tag != INOX_TAG_UNDEFINED && ${name}.tag != INOX_TAG_NULL && !(${valid})`
-          : `!(${valid})`
+      const mismatch = nullable
+        ? `${name}.tag != INOX_TAG_UNDEFINED && ${name}.tag != INOX_TAG_NULL && !(${valid})`
+        : `!(${valid})`
 
       lines.push(emitRuntimeTypeCheck(mismatch, context))
     }
@@ -4155,6 +4151,10 @@ export function emitRuntimeCallbackRuntimeValueReturnLines(
   }
 
   const expectedTag = cRuntimeValueTag(returnType)
+  const nativeValidExpression = compilerLibraryNativeRuntimeValueValidExpressionForTypeId(
+    context.libraries,
+    context.runtimeCallbackReturnShape?.libraryTypeId
+  )
   let value: PreparedExpression = {
     lines: [],
     expression: 'inox_undefined_value()'
@@ -4167,7 +4167,14 @@ export function emitRuntimeCallbackRuntimeValueReturnLines(
   const lines: string[] = []
   pushAllLines(lines, value.lines)
   pushRuntimeValueReturnAssignment(lines, returnOut, value, context)
-  if (context.returnNullable === true) {
+  if (nativeValidExpression !== null) {
+    const valid = nativeValidExpression.split('$value').join(returnOut)
+    const mismatch =
+      context.returnNullable === true
+        ? `${returnOut}.tag != INOX_TAG_UNDEFINED && ${returnOut}.tag != INOX_TAG_NULL && !(${valid})`
+        : `!(${valid})`
+    lines.push(emitRuntimeTypeCheck(mismatch, context))
+  } else if (context.returnNullable === true) {
     pushAllLines(lines, emitRuntimeNullableValueCheck(returnOut, expectedTag, context))
   } else {
     lines.push(emitRuntimeValueCheck(returnOut, expectedTag, context))

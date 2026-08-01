@@ -2875,9 +2875,7 @@ function emitPreparedModuleRuntimeScalarValueAssignment(
 ): string[] {
   const scalarType = valueType ?? (value.scalarType === 'bool' ? 'boolean' : 'number')
   const boxed =
-    scalarType === 'boolean'
-      ? `inox_bool_value((${value.expression}) != 0)`
-      : `inox_number_value(${value.expression})`
+    scalarType === 'boolean' ? `inox_bool_value((${value.expression}) != 0)` : `inox_number_value(${value.expression})`
   const lines: string[] = []
 
   context.variables.set(statement.name, 'unknown')
@@ -3070,30 +3068,13 @@ function registerModuleAsyncResultAssignmentMetadata(
 }
 
 function emitModuleObjectFunctionFieldAssignments(
-  objectName: string,
-  expression: AnyNode,
-  declaredType: string | null | undefined,
-  context: CFunctionContext,
-  prepared?: PreparedExpression
+  _objectName: string,
+  _expression: AnyNode,
+  _declaredType: string | null | undefined,
+  _context: CFunctionContext,
+  _prepared?: PreparedExpression
 ): string[] {
-  if (expression.type !== 'ObjectLiteral') {
-    return emitPreparedModuleObjectFunctionFieldAssignments(objectName, prepared, declaredType, context)
-  }
-
-  const moduleFields = context.moduleObjectShapes.get(objectName)
-  const fields = moduleFields ?? context.objectShapes.get(objectName)
-
-  if (fields === null || typeof fields === 'undefined') {
-    return []
-  }
-
-  const seenTypes = ['CFunctionContext']
-
-  if (declaredType !== null && typeof declaredType !== 'undefined' && !seenTypes.includes(declaredType)) {
-    seenTypes.push(declaredType)
-  }
-
-  return emitModuleObjectFunctionFieldAssignmentsFromShape(objectName, expression, fields, context, seenTypes)
+  return []
 }
 
 function emitPreparedModuleObjectFunctionFieldAssignments(
@@ -3893,22 +3874,11 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
     if (field.valueType === 'function') {
       const fieldName = emitCObjectFunctionFieldName(statement.name, field.name)
 
-      if (isRuntimeObjectFunctionField(field)) {
-        registerOwnedValue(context, fieldName)
-        pushAll(lines, emitRuntimeCallbackValueInto(nodeOrEmpty(propertyValue), field.functionType, fieldName, context))
-      } else {
-        lines.push(
-          `${emitFunctionPointerVariable(
-            fieldName,
-            nodeOrEmpty(propertyValue),
-            context,
-            true,
-            field.functionType,
-            propertyValue.loc,
-            seenTypes
-          )};`
-        )
-      }
+      registerOwnedValue(context, fieldName)
+      pushAll(lines, emitRuntimeCallbackValueInto(nodeOrEmpty(propertyValue), field.functionType, fieldName, context))
+      lines.push(
+        emitStatusCheck(`inox_object_init_known(*${emitCIdentifier(statement.name)}, ${index}, ${fieldName})`, context)
+      )
 
       continue
     }
@@ -3982,13 +3952,21 @@ function emitObjectMemberVariableDeclaration(
     return emitObjectStringMemberVariableDeclaration(statement, context, objectName, key)
   }
 
+  if (member.valueType === 'function') {
+    const name = emitCIdentifier(statement.name)
+    const lines: string[] = []
+
+    registerOwnedValue(context, name)
+    pushAll(lines, emitObjectMemberGetLines(objectName, key, name, context))
+    lines.push(emitRuntimeTypeCheck(`${name}.tag != INOX_TAG_FUNCTION || ${name}.as.ref == 0`, context))
+    context.variables.set(statement.name, 'function')
+    context.functionTypes.set(statement.name, normalizeFunctionType(member.functionType))
+    context.runtimeCallbacks.add(statement.name)
+    return lines
+  }
+
   if (!isNullableScalarType(member.valueType)) {
     let message = `object field type ${member.valueType} is not supported by the current C++ backend slice`
-
-    if (member.valueType === 'function') {
-      message =
-        'stored callback object fields need delayed closure lifetime support and are not supported by the current C++ backend slice'
-    }
 
     pushDiagnostic(context, diagnostic(cUnsupportedExpressionCode(member.valueType), message, statement.loc))
     return [`double ${emitCIdentifier(statement.name)} = 0;`]
@@ -4117,51 +4095,11 @@ function emitKnownObjectMemberAssignment(
 }
 
 function emitKnownObjectMemberFunctionFieldAssignments(
-  expression: AnyNode,
-  member: CKnownObjectField,
-  context: CFunctionContext
+  _expression: AnyNode,
+  _member: CKnownObjectField,
+  _context: CFunctionContext
 ): string[] {
-  if (!context.moduleObjectShapes.has(member.objectName) && !context.objectShapes.has(member.objectName)) {
-    return []
-  }
-
-  const key = knownObjectMemberKey(member)
-  const fields = member.shape?.fields
-
-  if (key === '' || fields === null || typeof fields === 'undefined') {
-    return []
-  }
-
-  const targetObjectName = `${member.objectName}_${key}`
-  const seenTypes = objectFunctionFieldSeenTypes(member.objectName, context)
-
-  if (
-    member.declaredType !== null &&
-    typeof member.declaredType !== 'undefined' &&
-    !seenTypes.includes(member.declaredType)
-  ) {
-    seenTypes.push(member.declaredType)
-  }
-
-  if (expression.value.type === 'ObjectLiteral') {
-    return emitModuleObjectFunctionFieldAssignmentsFromShape(
-      targetObjectName,
-      expression.value,
-      fields,
-      context,
-      seenTypes
-    )
-  }
-
-  const copied = emitModuleObjectFunctionFieldAssignmentsFromReference(
-    targetObjectName,
-    expression.value,
-    fields,
-    context,
-    seenTypes
-  )
-
-  return copied ?? []
+  return []
 }
 
 function emitDynamicObjectMemberAssignment(
@@ -4283,10 +4221,7 @@ function emitObjectFieldInitializerValue(
   context: CFunctionContext
 ): PreparedExpression {
   if (field.valueType === 'function') {
-    return {
-      lines: [],
-      expression: 'inox_undefined_value()'
-    }
+    return emitRuntimeCallbackValue(propertyValue, field.functionType, context)
   }
 
   if (!isSupportedObjectFieldStorageType(field.valueType)) {
@@ -5001,40 +4936,24 @@ function emitCObjectLiteralValueExpression(
     const propertyValue = findObjectLiteralPropertyValue(expression, field.name)
 
     if (field.valueType === 'function') {
-      if (
-        propertyValue !== null &&
-        typeof propertyValue !== 'undefined' &&
-        isPlainObjectFunctionField(field) &&
-        field.functionType !== null &&
-        typeof field.functionType !== 'undefined'
-      ) {
-        const companionName = nextCName(context, 'inox_object_function')
-
-        lines.push(
-          `${emitFunctionPointerVariable(
-            companionName,
-            propertyValue,
-            context,
-            true,
-            field.functionType,
-            propertyValue.loc
-          )};`
-        )
-        functionCompanions.push({
-          path: [field.name],
-          expression: companionName,
-          functionType: field.functionType,
-          seenTypes: []
-        })
-      } else if (propertyValue === null || typeof propertyValue === 'undefined') {
+      if (propertyValue === null || typeof propertyValue === 'undefined') {
         const spread = preparedObjectSpreadForField(spreads, expression.properties, field.name)
-        const spreadCompanion = preparedFunctionCompanionAt(spread?.functionCompanions, [field.name])
 
-        if (spreadCompanion !== null) {
-          functionCompanions.push(spreadCompanion)
+        if (spread !== null && typeof spread !== 'undefined') {
+          const spreadValue = nextCName(context, 'inox_spread_value')
+          lines.push(`auto ${spreadValue} = inox::get(${spread.name}, ${cStringLiteral(field.name)});`)
+          lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+          lines.push(`${temp}.init(${index}, ${spreadValue});`)
+          lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
         }
+
+        continue
       }
 
+      const value = emitRuntimeCallbackValue(propertyValue, field.functionType, context)
+      pushAll(lines, value.lines)
+      lines.push(`${temp}.init(${index}, ${value.expression});`)
+      lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
       continue
     }
 
@@ -7859,19 +7778,6 @@ function emitFunctionValueExpression(expression: AnyNode, context: CFunctionCont
 }
 
 function resolveRuntimeCallbackCalleeType(callee: AnyNode, context: CFunctionContext): CFunctionType | null {
-  const objectField = objectFunctionFieldReference(callee, context)
-
-  if (objectField !== null && typeof objectField !== 'undefined') {
-    const seenTypes = objectFunctionFieldSeenTypes(objectField.objectName, context)
-
-    if (
-      !context.classInstanceTypes.has(objectField.objectName) &&
-      isRuntimeObjectFunctionField(objectField.field, seenTypes)
-    ) {
-      return normalizeFunctionType(objectField.field.functionType)
-    }
-  }
-
   if (callee.type === 'Reference' && callee.path.length === 1) {
     const name = callee.path[0]
 
@@ -7890,16 +7796,6 @@ function resolveRuntimeCallbackCalleeType(callee: AnyNode, context: CFunctionCon
 }
 
 function emitRuntimeCallbackCalleeReference(callee: AnyNode, context: CFunctionContext): string {
-  const objectField = objectFunctionFieldReference(callee, context)
-
-  if (
-    objectField !== null &&
-    typeof objectField !== 'undefined' &&
-    isRuntimeObjectFunctionField(objectField.field, objectFunctionFieldSeenTypes(objectField.objectName, context))
-  ) {
-    return objectField.name
-  }
-
   return emitReference(callee, context)
 }
 
@@ -8040,11 +7936,7 @@ function emitUndefinedRawRuntimeCallbackValueInto(out: string): string[] {
   return [`inox_release(${out});`, `${out} = inox_undefined_value();`]
 }
 
-function emitRuntimeCallbackReferenceValueInto(
-  source: string,
-  out: string,
-  context: CFunctionContext
-): string[] {
+function emitRuntimeCallbackReferenceValueInto(source: string, out: string, context: CFunctionContext): string[] {
   if (context.ownedValues.includes(out)) {
     return [`${out} = ${source};`]
   }
@@ -8203,7 +8095,7 @@ function emitRuntimeArrowCaptureStoreLines(
 
 function emitRuntimeCallbackCall(
   expression: AnyNode,
-  _functionType: CFunctionType,
+  functionType: CFunctionType,
   context: CFunctionContext
 ): PreparedExpression {
   const lines: string[] = []
@@ -8214,6 +8106,10 @@ function emitRuntimeCallbackCall(
     const value = emitCValueExpression(arg, context)
 
     appendRuntimeCallbackArgument(lines, args, value, context)
+  }
+
+  for (let index = args.length; index < functionType.params.length; index = index + 1) {
+    args.push('inox_undefined_value()')
   }
 
   const out = nextCName(context, 'inox_callback_out')
@@ -8228,9 +8124,26 @@ function emitRuntimeCallbackCall(
     lines.push(emitStatusCheck(`inox_callback_call(${callee}, ${argArray}, ${args.length}, ${out}.out())`, context))
   }
 
+  if (functionType.returnType === 'number') {
+    lines.push(emitRuntimeTypeCheck(`${out}.raw().tag != INOX_TAG_NUMBER`, context))
+    return {
+      lines,
+      expression: `${out}.raw().as.number`
+    }
+  }
+
+  if (functionType.returnType === 'boolean') {
+    lines.push(emitRuntimeTypeCheck(`${out}.raw().tag != INOX_TAG_BOOL`, context))
+    return {
+      lines,
+      expression: `${out}.raw().as.boolean ? 1 : 0`
+    }
+  }
+
   return {
     lines,
-    expression: out
+    expression: out,
+    valueType: functionType.returnType
   }
 }
 
@@ -8298,10 +8211,7 @@ function emitOptionalCallbackCallExpression(expression: AnyNode, context: CFunct
   return lines
 }
 
-function emitOptionalCallbackCallValueExpression(
-  expression: AnyNode,
-  context: CFunctionContext
-): PreparedExpression {
+function emitOptionalCallbackCallValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   const plainCallee = resolveOptionalPlainObjectFunctionCallee(expression.callee, context)
 
   if (plainCallee !== null) {
@@ -8406,10 +8316,7 @@ function resolveOptionalPlainObjectFunctionCallee(
     context.classInstanceTypes.has(objectField.objectName) ||
     objectField.field.functionType === null ||
     typeof objectField.field.functionType === 'undefined' ||
-    !isPlainObjectFunctionField(
-      objectField.field,
-      objectFunctionFieldSeenTypes(objectField.objectName, context)
-    )
+    !isPlainObjectFunctionField(objectField.field, objectFunctionFieldSeenTypes(objectField.objectName, context))
   ) {
     return null
   }

@@ -2187,70 +2187,18 @@ function functionPointerPointerParamInfoForName(
 }
 
 function collectCModuleObjectFunctionFieldNames(context: CEmitContext): Set<string> {
-  const names: Set<string> = new Set()
-
-  for (const objectName of context.moduleObjectShapes.keys()) {
-    const fields = context.moduleObjectShapes.get(objectName)
-
-    if (fields !== null && typeof fields !== 'undefined') {
-      collectCModuleObjectFunctionFieldNamesFromShape(names, objectName, fields)
-    }
-  }
-
-  return names
+  void context
+  return new Set()
 }
 
 function collectCModuleObjectFunctionFieldInfos(context: CEmitContext): FunctionPointerParamInfo[] {
-  const infos: FunctionPointerParamInfo[] = []
-
-  for (const objectName of context.moduleObjectShapes.keys()) {
-    const fields = context.moduleObjectShapes.get(objectName)
-
-    if (fields === null || typeof fields === 'undefined') {
-      continue
-    }
-
-    for (const field of fields) {
-      if (field.valueType !== 'function') {
-        continue
-      }
-
-      const plain = isPlainObjectFunctionField(field)
-      const runtime = !plain && isRuntimeFunctionType(field.functionType)
-
-      if (!plain && !runtime) {
-        continue
-      }
-
-      infos.push({
-        functionType: field.functionType ?? null,
-        name: emitCObjectFunctionFieldName(objectName, field.name),
-        runtimeFunction: runtime,
-        seenTypes: cModuleObjectFunctionFieldSeenTypes()
-      })
-    }
-  }
-
-  return infos
+  void context
+  return []
 }
 
 function collectCModuleRuntimeObjectFunctionFieldNames(context: CEmitContext): Set<string> {
-  const names: Set<string> = new Set()
-
-  for (const objectName of context.moduleObjectShapes.keys()) {
-    const fields = context.moduleObjectShapes.get(objectName)
-
-    if (fields !== null && typeof fields !== 'undefined') {
-      collectCModuleRuntimeObjectFunctionFieldNamesFromShape(
-        names,
-        objectName,
-        fields,
-        cModuleObjectFunctionFieldSeenTypes()
-      )
-    }
-  }
-
-  return names
+  void context
+  return new Set()
 }
 
 function collectCModuleRuntimeObjectFunctionFieldNamesFromShape(
@@ -2834,9 +2782,7 @@ function cModuleValueCompileTimeInitializer(node: AnyNode): string | null {
   return null
 }
 
-function collectCModuleCompileTimeValueDeclarations(
-  values: CModuleValueDeclaration[]
-): CModuleValueDeclaration[] {
+function collectCModuleCompileTimeValueDeclarations(values: CModuleValueDeclaration[]): CModuleValueDeclaration[] {
   const result: CModuleValueDeclaration[] = []
 
   for (let index = 0; index < values.length; index = index + 1) {
@@ -3199,65 +3145,12 @@ function cModuleObjectFunctionFieldSeenTypes(declaredType?: string | null): stri
 }
 
 function emitCModuleObjectFunctionFieldDefinitions(
-  lines: string[],
-  objectName: string,
-  fields: CObjectShapeField[],
-  seenTypes: string[]
+  _lines: string[],
+  _objectName: string,
+  _fields: CObjectShapeField[],
+  _seenTypes: string[]
 ): boolean {
-  let emitted = false
-
-  for (const field of fields) {
-    if (field.valueType === 'function') {
-      const name = emitCObjectFunctionFieldName(objectName, field.name)
-
-      if (isPlainObjectFunctionField(field, seenTypes)) {
-        lines.push(
-          `static ${emitFunctionPointerReturnType(field.functionType)} (*${name})(${emitFunctionPointerParams(
-            field.functionType,
-            [],
-            seenTypes
-          )}) = 0;`
-        )
-        emitted = true
-      } else if (isRuntimeFunctionType(field.functionType)) {
-        lines.push(`static inox_value ${name};`)
-        emitted = true
-      }
-    } else if (
-      field.valueType === 'object' &&
-      field.shape !== null &&
-      typeof field.shape !== 'undefined' &&
-      field.shape.fields !== null &&
-      typeof field.shape.fields !== 'undefined'
-    ) {
-      if (
-        field.declaredType !== null &&
-        typeof field.declaredType !== 'undefined' &&
-        seenTypes.includes(field.declaredType)
-      ) {
-        continue
-      }
-
-      let pushedType = false
-
-      if (field.declaredType !== null && typeof field.declaredType !== 'undefined') {
-        seenTypes.push(field.declaredType)
-        pushedType = true
-      }
-
-      if (
-        emitCModuleObjectFunctionFieldDefinitions(lines, `${objectName}_${field.name}`, field.shape.fields, seenTypes)
-      ) {
-        emitted = true
-      }
-
-      if (pushedType) {
-        seenTypes.pop()
-      }
-    }
-  }
-
-  return emitted
+  return false
 }
 
 function cModuleValueType(node: AnyNode, context?: CEmitContext): string {

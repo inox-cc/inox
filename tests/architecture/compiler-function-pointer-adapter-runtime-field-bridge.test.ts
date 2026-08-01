@@ -13,7 +13,7 @@ import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import type { Diagnostic } from '../../compiler/types.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
-test('function pointer adapter bridges a static companion into runtime callback storage', () => {
+test('stored object callbacks use the runtime value without companion pointers', () => {
   const host = createMemoryCompilerHost(
     [
       {
@@ -55,19 +55,12 @@ consume(dependencies)
   const source = files.find((file) => file.path === 'index.cc')
 
   assert.ok(source)
-  assert.match(source.code, /static inox_value \(\*inox_objfn_dependencies_pick\)\(inox_value\) = 0;/)
-  assert.match(source.code, /inox_adapter_callback_context_\d+->target = inox_objfn_dependencies_pick;/)
-  assert.match(
-    source.code,
-    /inox_objfn_dependencies_run\(\s*inox_arg_0,\s*inox_objfn_dependencies_run,\s*inox_adapter_callback_\d+/
-  )
-  assert.doesNotMatch(
-    source.code,
-    /inox_objfn_dependencies_run\(\s*inox_arg_0,\s*inox_objfn_dependencies_run,\s*inox_objfn_dependencies_pick/
-  )
+  assert.doesNotMatch(source.code, /inox_objfn_/)
+  assert.match(source.code, /inox_callback_\d+ = inox::get\(inox_value_\d+, "pick"\);/)
+  assert.match(source.code, /inox_callback_call\(inox_callback_\d+, inox_callback_args_\d+, 1,/)
 })
 
-test('function pointer adapter retains a package-native result converted to runtime value', () => {
+test('stored callback returns package-native values through the runtime callback ABI', () => {
   const host = createMemoryCompilerHost(
     [
       {
@@ -96,9 +89,10 @@ consume(dependencies)
   const source = files.find((file) => file.path === 'index.cc')
 
   assert.ok(source)
-  assert.match(source.code, /auto inox_native_adapter_result = inox_objfn_dependencies_lines\(\);/)
-  assert.match(source.code, /inox_value inox_adapter_result = inox_native_adapter_result\.raw\(\);/)
-  assert.match(source.code, /inox_retain\(inox_adapter_result\);/)
+  assert.doesNotMatch(source.code, /inox_objfn_|inox_native_adapter_result/)
+  assert.match(source.code, /\(\*out\) = inox_return_value_\d+;/)
+  assert.match(source.code, /if \(!\(Array\(inox::Value\(\(\*out\)\)\)\.valid\(\)\)\) return INOX_ERR_TYPE;/)
+  assert.match(source.code, /inox_retain\(\(\*out\)\);/)
 })
 
 test('function pointer result bridge resolves package runtime mapping from return shape identity', () => {
@@ -134,20 +128,13 @@ test('function pointer result bridge reports a missing runtime mapping before C+
     }
   }
   const diagnostics: Diagnostic[] = []
-  const lines = emitFunctionPointerAdapterResultLines(
-    expected,
-    target,
-    libraries,
-    'native_target()',
-    [],
-    diagnostics
-  )
+  const lines = emitFunctionPointerAdapterResultLines(expected, target, libraries, 'native_target()', [], diagnostics)
 
   assert.equal(diagnostics[0]?.code, 'INOX_C_FUNCTION_VALUE')
   assert.deepEqual(lines, ['  return inox_undefined_value();'])
 })
 
-test('compiler rejects a missing native result bridge before returning generated C++', () => {
+test('compiler rejects a missing native package value adapter before returning generated C++', () => {
   const libraries = createCompilerLibrarySet([fixtureNativeLibrary(null)])
   let thrown: unknown = null
 
@@ -170,7 +157,7 @@ test('compiler rejects a missing native result bridge before returning generated
     thrown = error
   }
 
-  assert.match(nativeBridgeDiagnosticMessages(thrown).join('\n'), /registered runtime-value expression/)
+  assert.match(nativeBridgeDiagnosticMessages(thrown).join('\n'), /package C\+\+ value adapter/)
 })
 
 function nativeBridgeDiagnosticMessages(error: unknown): string[] {

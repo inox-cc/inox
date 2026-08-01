@@ -1,6 +1,10 @@
 import { diagnostic } from '../../../diagnostics.ts'
 import type { AnyNode, Diagnostic } from '../../../types.ts'
-import { isPlainObjectFunctionField, isRuntimeFunctionType } from '../async/callbacks.ts'
+import {
+  isPlainObjectFunctionField,
+  isRuntimeObjectFunctionField,
+  isSupportedRuntimeCallbackType
+} from '../async/callbacks.ts'
 import {
   emitFailureStatement,
   emitRuntimeTypeCheck,
@@ -1635,119 +1639,26 @@ function emitObjectFunctionFieldVariableDeclaration(
 }
 
 function emitNestedObjectFunctionFieldVariableDeclarations(
-  objectName: string,
-  field: CObjectShapeField,
-  property: ObjectPropertyNode,
-  context: ObjectFunctionContext,
-  dependencies: ObjectVariableDeclarationDependencies,
-  seenTypes: string[]
+  _objectName: string,
+  _field: CObjectShapeField,
+  _property: ObjectPropertyNode,
+  _context: ObjectFunctionContext,
+  _dependencies: ObjectVariableDeclarationDependencies,
+  _seenTypes: string[]
 ): string[] {
-  if (field.valueType !== 'object') {
-    return []
-  }
-
-  if (
-    field.declaredType !== null &&
-    typeof field.declaredType !== 'undefined' &&
-    seenTypes.includes(field.declaredType)
-  ) {
-    return []
-  }
-
-  const nestedSeenTypes: string[] = []
-
-  for (const seenType of seenTypes) {
-    nestedSeenTypes.push(seenType)
-  }
-
-  if (
-    field.declaredType !== null &&
-    typeof field.declaredType !== 'undefined' &&
-    !nestedSeenTypes.includes(field.declaredType)
-  ) {
-    nestedSeenTypes.push(field.declaredType)
-  }
-
-  return emitObjectShapeFunctionFieldVariableDeclarations(
-    `${objectName}_${field.name}`,
-    field.shape,
-    objectFunctionFieldSource(property.value),
-    context,
-    dependencies,
-    nestedSeenTypes,
-    false
-  )
+  return []
 }
 
 function emitObjectShapeFunctionFieldVariableDeclarations(
-  objectName: string,
-  shape: CObjectShape | null | undefined,
-  source: ObjectFunctionFieldSource,
-  context: ObjectFunctionContext,
-  dependencies: ObjectVariableDeclarationDependencies,
-  seenTypes: string[],
-  allowMissing: boolean
+  _objectName: string,
+  _shape: CObjectShape | null | undefined,
+  _source: ObjectFunctionFieldSource,
+  _context: ObjectFunctionContext,
+  _dependencies: ObjectVariableDeclarationDependencies,
+  _seenTypes: string[],
+  _allowMissing: boolean
 ): string[] {
-  const lines: string[] = []
-
-  if (shape === null || typeof shape === 'undefined' || shape.fields === null || typeof shape.fields === 'undefined') {
-    return lines
-  }
-
-  const fields: CObjectShapeField[] = shape.fields
-
-  for (const field of fields) {
-    if (field.valueType === 'function') {
-      if (isSupportedObjectFunctionField(field, seenTypes)) {
-        appendLines(
-          lines,
-          emitObjectShapeFunctionFieldVariableDeclaration(
-            objectName,
-            field,
-            source,
-            context,
-            dependencies,
-            seenTypes,
-            allowMissing
-          )
-        )
-      }
-    } else if (field.valueType === 'object') {
-      if (
-        field.declaredType !== null &&
-        typeof field.declaredType !== 'undefined' &&
-        seenTypes.includes(field.declaredType)
-      ) {
-        continue
-      }
-
-      let pushedType = false
-
-      if (field.declaredType !== null && typeof field.declaredType !== 'undefined') {
-        seenTypes.push(field.declaredType)
-        pushedType = true
-      }
-
-      appendLines(
-        lines,
-        emitObjectShapeFunctionFieldVariableDeclarations(
-          `${objectName}_${field.name}`,
-          field.shape,
-          nestedObjectFunctionFieldSource(source, field.name),
-          context,
-          dependencies,
-          seenTypes,
-          allowMissing
-        )
-      )
-
-      if (pushedType) {
-        seenTypes.pop()
-      }
-    }
-  }
-
-  return lines
+  return []
 }
 
 function emitObjectShapeFunctionFieldVariableDeclaration(
@@ -1870,11 +1781,7 @@ function refineObjectFunctionFieldNativeBoundaryMetadata(
   const params: CFunctionParam[] = []
   let changed = false
 
-  for (
-    let index = 0;
-    index < targetType.params.length && index < sourceType.params.length;
-    index = index + 1
-  ) {
+  for (let index = 0; index < targetType.params.length && index < sourceType.params.length; index = index + 1) {
     const targetParam = targetType.params[index]
     const sourceParam = sourceType.params[index]
 
@@ -2129,6 +2036,8 @@ export function emitObjectVariableDeclaration(
     if (property !== null && typeof property !== 'undefined') {
       if (field.valueType === 'function') {
         if (isSupportedObjectFunctionField(field, seenTypes)) {
+          const functionValueName = emitCObjectFunctionFieldName(statement.name, field.name)
+
           appendLines(
             lines,
             emitObjectFunctionFieldVariableDeclaration(
@@ -2140,6 +2049,8 @@ export function emitObjectVariableDeclaration(
               seenTypes
             )
           )
+          lines.push(`${reference}.init(${index}, ${functionValueName});`)
+          lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
         }
 
         continue
@@ -2322,11 +2233,7 @@ function objectSpreadPropertyHasField(property: ObjectPropertyNode, fieldName: s
 }
 
 function isSupportedObjectFunctionField(field: CObjectShapeField, seenTypes: string[] = []): boolean {
-  return isPlainObjectFunctionField(field, seenTypes) || isRuntimeFunctionType(field.functionType)
-}
-
-function isRuntimeObjectFunctionField(field: CObjectShapeField, seenTypes: string[] = []): boolean {
-  return !isPlainObjectFunctionField(field, seenTypes) && isRuntimeFunctionType(field.functionType)
+  return isPlainObjectFunctionField(field, seenTypes) || isSupportedRuntimeCallbackType(field.functionType)
 }
 
 function objectVariableDeclaredTypes(statement: AnyNode): string[] {

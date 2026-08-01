@@ -497,32 +497,11 @@ export function emitFunctionHead(statement: CNode, context: CEmitContext): strin
 }
 
 function functionReturnCompanions(
-  shape: CObjectShape | null | undefined,
-  declaredReturnType: string | null,
-  returnType: string
+  _shape: CObjectShape | null | undefined,
+  _declaredReturnType: string | null,
+  _returnType: string
 ): CPreparedFunctionCompanion[] {
-  const companions: CPreparedFunctionCompanion[] = []
-
-  for (const info of collectFunctionPointerReturnCompanionInfos({
-    declaredReturnType,
-    kind: 'function',
-    params: [],
-    returnShape: shape,
-    returnType
-  })) {
-    if (info.runtimeFunction || info.functionType === null) {
-      continue
-    }
-
-    companions.push({
-      path: info.path,
-      expression: emitFunctionReturnCompanionOutName(info.path),
-      functionType: info.functionType,
-      seenTypes: info.seenTypes
-    })
-  }
-
-  return companions
+  return []
 }
 
 function pushFunctionReturnCompanionParams(params: string[], companions: CPreparedFunctionCompanion[]): void {
@@ -559,14 +538,9 @@ function pushFunctionHeadParam(
 }
 
 function pushObjectFunctionFieldParams(params: string[], param: CFunctionParam, context: CEmitContext): void {
-  if (param.valueType !== 'object') {
-    return
-  }
-
-  const seenTypes: string[] = []
-  pushSeenDeclaredType(seenTypes, param.declaredType)
-
-  pushObjectShapeFunctionFieldParams(params, param.name, param.shape, context, param.loc, seenTypes)
+  void params
+  void param
+  void context
 }
 
 function seenTypesIncludeDeclaredType(seenTypes: string[], declaredType: string | null | undefined): boolean {
@@ -1417,10 +1391,9 @@ function emitRuntimeParamPreludeForParam(
         param.nullable === true ||
         param.optional === true ||
         runtimeTypeAlternativesAreNullable(param.runtimeTypeAlternatives)
-      const mismatch =
-        nullable
-          ? `${alternativeRuntimeValueName}.tag != INOX_TAG_NULL && ${alternativeRuntimeValueName}.tag != INOX_TAG_UNDEFINED && !(${valid})`
-          : `!(${valid})`
+      const mismatch = nullable
+        ? `${alternativeRuntimeValueName}.tag != INOX_TAG_NULL && ${alternativeRuntimeValueName}.tag != INOX_TAG_UNDEFINED && !(${valid})`
+        : `!(${valid})`
 
       lines.push(emitRuntimeTypeCheck(mismatch, context))
     }
@@ -1563,12 +1536,7 @@ function isNativeClassParam(param: CFunctionParam, context: CFunctionContext): b
 function nativeClassParamName(param: CFunctionParam, context: CEmitContext): string | null {
   const className = param.className
 
-  if (
-    className === null ||
-    typeof className === 'undefined' ||
-    param.nullable === true ||
-    param.ownership === 'weak'
-  ) {
+  if (className === null || typeof className === 'undefined' || param.nullable === true || param.ownership === 'weak') {
     return null
   }
 
