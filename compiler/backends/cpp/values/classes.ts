@@ -430,7 +430,7 @@ function classFieldUsesRuntimeValueStorage(field: CObjectShapeField): boolean {
   }
 
   if (field.className !== null && typeof field.className !== 'undefined') {
-    return false
+    return field.ownership !== 'weak' && field.nullable === true
   }
 
   return (
@@ -3844,8 +3844,16 @@ export function emitNativeClassFieldAssignment(expression: AnyNode, context: Cla
     }
 
     const value = emitClassValueExpression(context, expression.value)
+    const classInstance = emitPreparedClassInstanceRefValueExpression(value, context)
 
     pushAllLines(lines, value.lines)
+
+    if (classInstance !== null && typeof classInstance !== 'undefined') {
+      pushAllLines(lines, classInstance.lines)
+      pushAllLines(lines, emitCClassFieldWriteLines(access.reference, classInstance.expression, access.field))
+      return lines
+    }
+
     pushAllLines(lines, emitCClassFieldWriteLines(access.reference, value.expression, access.field))
     return lines
   }
