@@ -1,5 +1,6 @@
 // @targets cc
-// @expect diagnostics INOX_C_FUNCTION_VALUE
+// @expect pass
+// @stdout captured:x
 
 type Inner = {
   transform(value: string): string
@@ -15,4 +16,4 @@ function execute(prefix: string, deps: Inner): string {
   return invoke((value) => prefix + value.transform('x'), deps)
 }
 
-execute('captured:', { transform: (value) => value })
+console.log(execute('captured:', { transform: (value) => value }))

@@ -6130,6 +6130,10 @@ class Checker {
     const nestedFields = field.resultShapeFields
     const nestedTypeId = field.resultTypeId
 
+    if (field.typeRef !== null && typeof field.typeRef !== 'undefined') {
+      this.applyCompilerLibraryTypeRef(result, field.typeRef, null)
+    }
+
     if (
       (nestedFields !== null && typeof nestedFields !== 'undefined') ||
       (nestedTypeId !== null && typeof nestedTypeId !== 'undefined')

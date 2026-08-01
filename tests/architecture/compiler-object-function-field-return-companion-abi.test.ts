@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { compileSource } from '../../compiler/core.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
-test('returned object function fields use a package-independent companion ABI', () => {
+test('returned object function fields remain runtime values without a companion ABI', () => {
   const result = compileSource(
     `
 type Worker = (value: number) => number
@@ -17,9 +17,9 @@ apply(make())
     { libraries: defaultCompilerLibrarySet, target: 'cc' }
   )
 
-  assert.match(result.code, /inox_value make\(double \(\*\*inox_outfn_work\)\(double\)\)/)
-  assert.match(result.code, /\*inox_outfn_work = inox_object_function_\d+;/)
-  assert.match(result.code, /double \(\*inox_call_function_\d+\)\(double\) = 0;/)
-  assert.match(result.code, /make\(&inox_call_function_\d+\)/)
-  assert.match(result.code, /apply\([^,]+, inox_call_function_\d+\)/)
+  assert.match(result.code, /inox_value make\(\)/)
+  assert.match(result.code, /inox_object_\d+\.init\(0, inox_callback_\d+\)/)
+  assert.match(result.code, /inox::get\(carrier, "work"\)/)
+  assert.match(result.code, /inox_callback_call\(/)
+  assert.doesNotMatch(result.code, /inox_outfn_|inox_call_function_/)
 })

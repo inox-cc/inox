@@ -1687,6 +1687,9 @@ function refineArrowCallbackFunctionType(expression: AnyNode, functionType: CFun
     refined.functionType = param.functionType
     refined.asyncResultValueType = param.asyncResultValueType
     refined.shape = param.shape
+    refined.defaultValue = param.defaultValue
+    refined.optional = param.optional
+    refined.rest = param.rest
 
     if (param.nullable === true) {
       refined.nullable = true

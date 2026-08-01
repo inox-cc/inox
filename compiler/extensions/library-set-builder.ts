@@ -3110,6 +3110,7 @@ function resultShapeFieldsFingerprint(fields: LibraryResultShapeFieldDescriptor[
     rows.push(
       `${field.name}=${field.valueType}:${field.readonly ? 'readonly' : 'mutable'}:` +
         `${field.nullable ? 'nullable' : 'required'}:` +
+        `${typeRefFingerprintOrEmpty(field.typeRef)}:` +
         `${field.cMember ?? ''}:${field.cGetter ?? ''}:${field.resultTypeId ?? ''}:${field.cppType ?? ''}:` +
         (nestedFields === null || typeof nestedFields === 'undefined'
           ? ''
@@ -3128,6 +3129,7 @@ function nestedResultShapeFieldsFingerprint(fields: LibraryNestedResultShapeFiel
     rows.push(
       `${field.name}=${field.valueType}:${field.readonly ? 'readonly' : 'mutable'}:` +
         `${field.nullable ? 'nullable' : 'required'}:` +
+        `${typeRefFingerprintOrEmpty(field.typeRef)}:` +
         `${field.cMember ?? ''}:${field.cGetter ?? ''}:${field.resultTypeId ?? ''}:${field.cppType ?? ''}`
     )
   }

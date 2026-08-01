@@ -282,6 +282,7 @@ export type LibraryStringPrefixOptionConstraintDescriptor = LibraryOptionConstra
 export type LibraryResultShapeFieldDescriptor = {
   name: string
   valueType: string
+  typeRef?: TypeRef | null
   readonly: boolean
   nullable?: boolean
   cMember?: string | null
@@ -294,6 +295,7 @@ export type LibraryResultShapeFieldDescriptor = {
 export type LibraryNestedResultShapeFieldDescriptor = {
   name: string
   valueType: string
+  typeRef?: TypeRef | null
   readonly: boolean
   nullable?: boolean
   cMember?: string | null
