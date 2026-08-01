@@ -1,9 +1,10 @@
 // @targets cc
-// @expect diagnostics INOX_C_FUNCTION_VALUE
+// @expect pass
+// @stdout returned:value
 
-function make(): Function {
-  return () => {}
+function make(): (value: string) => string {
+  return value => 'returned:' + value
 }
 
 const callback = make()
-callback()
+console.log(callback('value'))

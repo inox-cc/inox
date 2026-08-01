@@ -686,7 +686,7 @@ export function emitCReturnType(valueType: CValueTypeInput, nullable: boolean, s
     return 'inox_value'
   }
 
-  if (isManagedRuntimeReturnType(valueType)) {
+  if (valueType === 'function' || isManagedRuntimeReturnType(valueType)) {
     return 'inox_value'
   }
 

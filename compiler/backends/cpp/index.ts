@@ -164,6 +164,7 @@ import type { CUnitDependencies } from './unit.ts'
 import {
   cIterableElementDeclaredName,
   cIterableElementFunctionType,
+  cFunctionTypeFromTypeRef,
   cCallExpressionReturnsTypeErasedValue,
   cRuntimeValueAdapterInfo,
   cRuntimeValueTag,
@@ -2282,6 +2283,12 @@ function emitFunctionPointerVariableWithCInitializer(
 }
 
 function resolveFunctionValueType(expression: AnyNode, context: CFunctionContext): CFunctionType | null {
+  if (expression.type === 'CallExpression') {
+    const calleeType = resolveFunctionValueType(expression.callee, context)
+
+    return cFunctionTypeFromTypeRef(calleeType?.returnTypeRef, context.libraries, expression.loc)
+  }
+
   if (expression.type === 'Reference' && expression.path.length === 1) {
     const name = expression.path[0]
     const params = context.functionParams.get(name)
@@ -2533,6 +2540,15 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
   const declared = knownValueType(statement.valueType)
   const variableType = inferred === 'function' ? 'function' : (declared ?? inferred)
   context.variables.set(statement.name, variableType)
+
+  if (variableType === 'function' && statement.init !== null && typeof statement.init !== 'undefined') {
+    const functionType = resolveFunctionValueType(statement.init, context)
+
+    if (functionType !== null) {
+      statement.functionType = functionType
+      statement.init.functionType = functionType
+    }
+  }
 
   const functionScalarDeclaration = emitFunctionScalarVariableDeclaration(statement, context, variableType)
 
@@ -2886,7 +2902,12 @@ function emitPreparedModuleRuntimeScalarValueAssignment(
 }
 
 function emitModuleFunctionValueAssignment(statement: AnyNode, name: string, context: CFunctionContext): string[] {
-  const functionType = moduleFunctionValueType(statement)
+  const functionType = normalizeFunctionType(
+    resolveFunctionValueType(statement.init, context) ?? moduleFunctionValueType(statement)
+  )
+
+  statement.functionType = functionType
+  statement.init.functionType = functionType
 
   context.variables.set(statement.name, 'function')
   context.functionTypes.set(statement.name, functionType)
@@ -2932,6 +2953,10 @@ function moduleFunctionValueType(statement: AnyNode): CFunctionType {
 
 function moduleFunctionValueUsesRuntimeCallback(statement: AnyNode, context: CFunctionContext): boolean {
   if (moduleValueIsGenericFunctionDeclaration(statement)) {
+    return true
+  }
+
+  if (statement.init !== null && typeof statement.init !== 'undefined' && statement.init.type === 'CallExpression') {
     return true
   }
 
@@ -4277,6 +4302,10 @@ function emitPreparedRuntimeValueArgumentExpression(
   context: CFunctionContext,
   preservePendingException: boolean
 ): PreparedExpression {
+  if (inferExpressionType(expression, context) === 'function') {
+    return emitRuntimeCallbackValue(expression, normalizeFunctionType(resolveFunctionValueType(expression, context)), context)
+  }
+
   if (preservePendingException) {
     const libraryCall = emitPreparedCompilerLibraryCallExpression(expression, context, {
       deferThrownCheck: true
@@ -7860,6 +7889,22 @@ function emitRuntimeCallbackValueInto(
     isRuntimeObjectFunctionField(objectField.field, objectFunctionFieldSeenTypes(objectField.objectName, context))
   ) {
     return emitRuntimeCallbackReferenceValueInto(objectField.name, out, context)
+  }
+
+  if (expression.type === 'CallExpression') {
+    const call = emitPreparedCallExpression(expression, context)
+    const lines: string[] = []
+
+    pushAll(lines, call.lines)
+
+    if (context.ownedValues.includes(out)) {
+      lines.push(`${out} = inox::adopt(${call.expression});`)
+    } else {
+      lines.push(`inox_release(${out});`)
+      lines.push(`${out} = ${call.expression};`)
+    }
+
+    return lines
   }
 
   if (expression.type === 'ArrowFunctionExpression') {

@@ -66,6 +66,7 @@ import type {
 } from './types.ts'
 import { cFunctionTypeValue } from './types.ts'
 import {
+  cFunctionTypeFromTypeRef,
   cRuntimeValueTag,
   cTypeRefNativeShape,
   compilerLibraryIntrinsicSequenceMaterialization,
@@ -305,6 +306,7 @@ export function emitFunctionDeclaration(
   const returnNullable = returnInfo.returnNullable
   const params = resolveFunctionDeclarationParams(statement.name, statement.params, baseContext)
   const context: CDeclarationFunctionContext = createFunctionContext(baseContext, returnType, returnNullable)
+  context.returnFunctionType = cFunctionTypeFromTypeRef(statement.returnTypeRef, context.libraries, statement.loc)
   context.returnShape = physicalReturnShape(statement, context.functionReturnShapes.get(statement.name), context)
   context.returnFunctionCompanions = functionReturnCompanions(
     context.returnShape,
@@ -750,6 +752,7 @@ export function emitClassMethodDeclaration(
     method.returnType,
     method.returnNullable
   )
+  context.returnFunctionType = cFunctionTypeFromTypeRef(method.returnTypeRef, context.libraries, method.loc)
   const params = method.params
   const methodEffectName = irClassMethodEffectName(info.name, method.name)
 

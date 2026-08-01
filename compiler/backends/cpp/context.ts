@@ -260,6 +260,7 @@ export type CFunctionContextWithDependencies<
   failureStatement?: string | null
   failureStatementUsed?: boolean
   returnFunctionCompanions: CPreparedFunctionCompanion[]
+  returnFunctionType: CFunctionType | null
   functionTypes: CFunctionTypeMap
   localValueNames: CStringSet
   moduleValueDeclarationScope: boolean
@@ -412,6 +413,7 @@ export function createFunctionContext<
     errorTargets: [],
     errorTargetActiveFlags: [],
     returnFunctionCompanions: [],
+    returnFunctionType: null,
     functionTypes: new Map(),
     localValueNames: new Set(),
     eventLoopUsed: false,
@@ -659,7 +661,12 @@ export function emitReturnValueDeclarations(context: CReturnValueDeclarationCont
     return ['inox_value inox_return = inox_undefined_value();']
   }
 
-  if (returnType === 'unknown' || isManagedRuntimeReturnType(returnType) || isOpaqueRuntimeValueType(returnType)) {
+  if (
+    returnType === 'function' ||
+    returnType === 'unknown' ||
+    isManagedRuntimeReturnType(returnType) ||
+    isOpaqueRuntimeValueType(returnType)
+  ) {
     return ['inox_value inox_return = inox_undefined_value();']
   }
 

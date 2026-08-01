@@ -1,5 +1,8 @@
 // @targets cc
-// @expect diagnostics INOX_C_FUNCTION_VALUE
+// @expect pass
 
 const callbacks: Function[] = []
 callbacks.push(() => {})
+
+const callback = callbacks[0]
+callback()

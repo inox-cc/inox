@@ -49,6 +49,7 @@ import {
   applyLibraryNativeValueAdapter,
   cIterableElementDeclaredName,
   cIterableElementValueType,
+  cFunctionTypeFromTypeRef,
   cRuntimeValueTag,
   cTypeRefDeclaredName,
   cTypeRefNativeShape,
@@ -1069,6 +1070,10 @@ export function emitFunctionScalarVariableDeclaration(
     runtimeFunctionType = normalizeFunctionType(functionType)
   }
 
+  if (statement.init !== null && typeof statement.init !== 'undefined' && statement.init.type === 'CallExpression') {
+    runtimeFunctionType = normalizeFunctionType(functionType)
+  }
+
   context.variables.set(statement.name, 'function')
   if (runtimeFunctionType !== null && typeof runtimeFunctionType !== 'undefined') {
     context.functionTypes.set(statement.name, runtimeFunctionType)
@@ -1914,6 +1919,7 @@ export function emitBoxedRuntimeValueVariableDeclaration(
 function isCForOfValueType(valueType: string): boolean {
   return (
     valueType === 'unknown' ||
+    valueType === 'function' ||
     valueType === 'number' ||
     valueType === 'boolean' ||
     isManagedRuntimeReturnType(valueType)
@@ -1927,6 +1933,25 @@ function registerForOfElementMetadata(
   statement: StatementNode,
   managedObjectCppValue: boolean
 ): void {
+  let functionType = statement.functionType ?? cFunctionTypeFromTypeRef(statement.typeRef, context.libraries, statement.loc)
+
+  if (
+    functionType === null &&
+    (elementType === 'function' ||
+      statement.declaredType === 'Function' ||
+      statement.inferredDeclaredType === 'Function')
+  ) {
+    functionType = normalizeFunctionType(null)
+  }
+
+  if (functionType !== null && typeof functionType !== 'undefined') {
+    context.variables.set(name, 'function')
+    context.functionTypes.set(name, functionType)
+    context.runtimeCallbacks.add(name)
+    context.localValueNames.add(name)
+    return
+  }
+
   context.variables.set(name, elementType)
 
   if (elementType === 'string') {
@@ -1976,6 +2001,16 @@ function emitForOfElementDeclaration(
   moveManagedValue: boolean = false
 ): PreparedExpression {
   const name = statement.name
+  let functionType = statement.functionType ?? cFunctionTypeFromTypeRef(statement.typeRef, context.libraries, statement.loc)
+
+  if (
+    functionType === null &&
+    (elementType === 'function' ||
+      statement.declaredType === 'Function' ||
+      statement.inferredDeclaredType === 'Function')
+  ) {
+    functionType = normalizeFunctionType(null)
+  }
   let declaration = `double ${name} = ${value}.as.number;`
   const checks: string[] = []
   const nativeCppType = libraryNativeBoundaryCppType(elementType, statement.nullable === true, false, statement.shape)
@@ -1984,7 +2019,10 @@ function emitForOfElementDeclaration(
     statement.typeRef
   )
 
-  if (nativeCppType !== null) {
+  if (functionType !== null && typeof functionType !== 'undefined') {
+    declaration = `inox_value ${name} = ${value};`
+    checks.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_FUNCTION || ${value}.as.ref == 0`, context))
+  } else if (nativeCppType !== null) {
     declaration = `${nativeCppType} ${name} = ${applyLibraryNativeValueAdapter(
       value,
       libraryNativeValueAdapter(statement.shape)
@@ -2226,6 +2264,10 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
     }
 
     if (callbackWrapper !== null && typeof callbackWrapper !== 'undefined' && callbackWrapper.kind === 'arrow') {
+      runtimeFunctionType = normalizeFunctionType(functionType)
+    }
+
+    if (statement.init !== null && typeof statement.init !== 'undefined' && statement.init.type === 'CallExpression') {
       runtimeFunctionType = normalizeFunctionType(functionType)
     }
 
@@ -4063,7 +4105,12 @@ function isRuntimeCallbackReturnContext(context: CFunctionContext): boolean {
 }
 
 function isRuntimeValueReturnType(valueType: string | null | undefined): boolean {
-  return valueType === 'unknown' || isManagedRuntimeReturnType(valueType) || isOpaqueRuntimeValueType(valueType)
+  return (
+    valueType === 'function' ||
+    valueType === 'unknown' ||
+    isManagedRuntimeReturnType(valueType) ||
+    isOpaqueRuntimeValueType(valueType)
+  )
 }
 
 function emitAsyncResultReturnStatement(statement: StatementNode, context: CFunctionContext): string[] {
@@ -4189,6 +4236,18 @@ function emitRuntimeReturnValueExpression(
   returnType: string,
   returnShape: CObjectShape | null | undefined
 ): PreparedExpression {
+  if (returnType === 'function') {
+    if (
+      context.returnFunctionType !== null &&
+      typeof context.returnFunctionType !== 'undefined' &&
+      (argument.functionType === null || typeof argument.functionType === 'undefined')
+    ) {
+      argument.functionType = context.returnFunctionType
+    }
+
+    return statementDeps(context).emitPreparedRuntimeValueArgumentExpression(argument, context, false)
+  }
+
   if (returnType === 'object' && argument.type === 'ObjectLiteral') {
     return statementDeps(context).emitCObjectLiteralValueExpression(argument, context, returnShape)
   }

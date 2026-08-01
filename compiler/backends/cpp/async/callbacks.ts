@@ -27,6 +27,7 @@ import type {
 import { cTypeRefValue } from '../types.ts'
 import {
   applyLibraryNativeValueAdapter,
+  cFunctionTypeFromTypeRef,
   cIterableElementFunctionType,
   cRuntimeValueTag,
   compilerLibraryNativeRuntimeValueExpressionForId,
@@ -1091,6 +1092,13 @@ export function collectCallbackWrappers(
         const scope: CallbackScope = new Map()
         declareCallbackParams(scope, item.node.params)
         const functionScopes: CallbackScope[] = [topLevelScope, scope]
+        const returnFunctionType = cFunctionTypeFromTypeRef(
+          item.node.returnTypeRef,
+          resolveCCompilerLibrarySet(context.libraries),
+          item.node.loc
+        )
+
+        syncReturnedCallbackFunctionTypes(item.node.body, returnFunctionType)
 
         for (let statementIndex = 0; statementIndex < item.node.body.length; statementIndex = statementIndex + 1) {
           const statement = item.node.body[statementIndex]
@@ -1146,12 +1154,80 @@ function visitCallbackClassMethods(
     declareCallbackParams(scope, callbackNodeArray(method.params))
     const methodScopes: CallbackScope[] = [topLevelScope, scope]
     const body = callbackNodeArray(method.body)
+    const returnFunctionType = cFunctionTypeFromTypeRef(
+      method.returnTypeRef,
+      resolveCCompilerLibrarySet(context.libraries),
+      method.loc
+    )
+
+    syncReturnedCallbackFunctionTypes(body, returnFunctionType)
 
     for (let statementIndex = 0; statementIndex < body.length; statementIndex = statementIndex + 1) {
       const statement = body[statementIndex]
 
       visitCallbackStatement(statement, methodScopes, wrappers, pendingPlainFunctionArgs, context, deps)
     }
+  }
+}
+
+function syncReturnedCallbackFunctionTypes(
+  statements: CallbackNode[],
+  functionType: CFunctionType | null
+): void {
+  if (functionType === null) {
+    return
+  }
+
+  for (const statement of statements) {
+    syncReturnedCallbackFunctionType(statement, functionType)
+  }
+}
+
+function syncReturnedCallbackFunctionType(statement: CallbackNode | null | undefined, functionType: CFunctionType): void {
+  if (statement === null || typeof statement === 'undefined') {
+    return
+  }
+
+  if (statement.type === 'ReturnStatement') {
+    const argument = statement.argument
+
+    if (argument !== null && typeof argument !== 'undefined') {
+      argument.functionType = functionType
+    }
+    return
+  }
+
+  if (statement.type === 'BlockStatement') {
+    syncReturnedCallbackFunctionTypes(statement.body, functionType)
+    return
+  }
+
+  if (statement.type === 'IfStatement') {
+    syncReturnedCallbackFunctionType(statement.consequent, functionType)
+    syncReturnedCallbackFunctionType(statement.alternate, functionType)
+    return
+  }
+
+  if (statement.type === 'WhileStatement' || statement.type === 'ForStatement' || statement.type === 'ForOfStatement') {
+    syncReturnedCallbackFunctionType(statement.body, functionType)
+    return
+  }
+
+  if (statement.type === 'SwitchStatement') {
+    for (const item of statement.cases) {
+      syncReturnedCallbackFunctionTypes(item.consequent, functionType)
+    }
+    return
+  }
+
+  if (statement.type === 'TryStatement') {
+    syncReturnedCallbackFunctionType(statement.block, functionType)
+
+    if (statement.handler !== null && typeof statement.handler !== 'undefined') {
+      syncReturnedCallbackFunctionType(statement.handler.body, functionType)
+    }
+
+    syncReturnedCallbackFunctionType(statement.finalizer, functionType)
   }
 }
 
@@ -2207,7 +2283,24 @@ function visitCallbackStatement(
     return
   }
 
-  if (statement.type === 'ReturnStatement' || statement.type === 'ThrowStatement') {
+  if (statement.type === 'ReturnStatement') {
+    const argument = statement.argument
+
+    if (
+      argument !== null &&
+      typeof argument !== 'undefined' &&
+      (argument.type === 'ArrowFunctionExpression' ||
+        argument.valueType === 'function' ||
+        (argument.functionType !== null && typeof argument.functionType !== 'undefined'))
+    ) {
+      registerRuntimeCallbackExpression(argument, argument.functionType, scopes, wrappers, context, deps)
+    } else {
+      visitCallbackExpression(argument, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
+    }
+    return
+  }
+
+  if (statement.type === 'ThrowStatement') {
     visitCallbackExpression(statement.argument, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
     return
   }
@@ -2590,6 +2683,14 @@ function visitCallbackCallExpression(
 
     if (param !== null && typeof param !== 'undefined' && param.valueType === 'object') {
       visitCallbackObjectFunctionArg(arg, param, scopes, wrappers, context, deps)
+    }
+
+    if (
+      (param === null || typeof param === 'undefined') &&
+      (arg.type === 'ArrowFunctionExpression' || arg.valueType === 'function') &&
+      expression.libraryCArgumentKinds?.includes('runtime-value')
+    ) {
+      registerRuntimeCallbackExpression(arg, arg.functionType, scopes, wrappers, context, deps)
     }
 
     visitCallbackExpression(arg, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
