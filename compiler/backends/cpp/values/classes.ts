@@ -39,14 +39,17 @@ import type {
 } from '../types.ts'
 import { cTypeRefValue, isReadonlyCObjectShapeField } from '../types.ts'
 import {
+  applyLibraryNativeValueAdapter,
   emitCType,
   cRuntimeValueTag,
   compilerLibraryNativeRuntimeValueExpressionForId,
+  compilerLibraryNativeRuntimeValueExpressionForTypeRef,
   isManagedRuntimeReturnType,
   isNullableScalarType,
   isOpaqueRuntimeValueType,
   libraryNativeBoundaryCppType,
   libraryNativeCppType,
+  libraryNativeValueAdapter,
   requireCompilerLibraryAsyncResultCppType
 } from '../value-types.ts'
 import { emitObjectValueReference, resolveCObjectExpressionName } from './objects.ts'
@@ -417,11 +420,19 @@ function classValueType(info: CClassInfo): string {
 }
 
 function classFieldUsesRuntimeValueStorage(field: CObjectShapeField): boolean {
+  if (classFieldUsesWeakValueStorage(field)) {
+    return false
+  }
+
   if (classFieldUsesNativeClassStorage(field)) {
     return false
   }
 
   if (classFieldLibraryNativeCppType(field) !== null) {
+    return false
+  }
+
+  if (classFieldOptionalLibraryNativeCppType(field) !== null) {
     return false
   }
 
@@ -441,6 +452,10 @@ function classFieldUsesRuntimeValueStorage(field: CObjectShapeField): boolean {
   )
 }
 
+function classFieldUsesWeakValueStorage(field: CObjectShapeField): boolean {
+  return field.ownership === 'weak'
+}
+
 export function classFieldUsesCppStringStorage(field: CObjectShapeField): boolean {
   return (
     field.valueType === 'string' &&
@@ -455,6 +470,10 @@ export function classParamUsesCppValueStorage(param: CFunctionParam): boolean {
   }
 
   if (classParamLibraryNativeCppType(param) !== null) {
+    return false
+  }
+
+  if (classParamOptionalLibraryNativeCppType(param) !== null) {
     return false
   }
 
@@ -523,7 +542,11 @@ export function classInfosUseCppValueRuntime(context: ClassInfoLookupContext): b
     }
 
     for (const field of info.fields) {
-      if (classFieldUsesRuntimeValueStorage(field) || classFieldUsesCppStringStorage(field)) {
+      if (
+        classFieldUsesRuntimeValueStorage(field) ||
+        classFieldUsesCppStringStorage(field) ||
+        classFieldUsesWeakValueStorage(field)
+      ) {
         return true
       }
     }
@@ -544,13 +567,28 @@ function classFieldUsesNativeClassStorage(field: CObjectShapeField): boolean {
 function classFieldLibraryNativeCppType(field: CObjectShapeField): string | null {
   const typeRef = cTypeRefValue(field.typeRef)
 
-  if (typeRef === null || typeRef.kind !== 'nominal' || typeRef.nullable || typeRef.ownership === 'weak') {
+  if (
+    typeRef === null ||
+    typeRef.kind !== 'nominal' ||
+    typeRef.nullable ||
+    typeRef.ownership === 'weak' ||
+    field.nullable === true ||
+    field.optional === true
+  ) {
     return null
   }
 
   const shapeTypeId = field.shape?.libraryTypeId
 
   if (shapeTypeId !== typeRef.typeId) {
+    return null
+  }
+
+  return libraryNativeCppType(field.shape)
+}
+
+export function classFieldOptionalLibraryNativeCppType(field: CObjectShapeField): string | null {
+  if (field.ownership === 'weak' || (field.nullable !== true && field.optional !== true)) {
     return null
   }
 
@@ -568,11 +606,19 @@ function classCanUseNativeLowering(fields: CObjectShapeField[]): boolean {
 }
 
 function classFieldSupportsNativeLowering(field: CObjectShapeField): boolean {
+  if (classFieldUsesWeakValueStorage(field)) {
+    return true
+  }
+
   if (classFieldUsesNativeClassStorage(field)) {
     return true
   }
 
   if (classFieldLibraryNativeCppType(field) !== null) {
+    return true
+  }
+
+  if (classFieldOptionalLibraryNativeCppType(field) !== null) {
     return true
   }
 
@@ -584,6 +630,10 @@ function classFieldSupportsNativeLowering(field: CObjectShapeField): boolean {
 }
 
 function emitCClassFieldType(field: CObjectShapeField, context: ClassInfoLookupContext): string {
+  if (classFieldUsesWeakValueStorage(field)) {
+    return 'inox::WeakValue'
+  }
+
   if (classFieldUsesNativeClassStorage(field)) {
     return emitCClassTypeNameForClassName(context, field.className)
   }
@@ -592,6 +642,12 @@ function emitCClassFieldType(field: CObjectShapeField, context: ClassInfoLookupC
 
   if (libraryCppType !== null) {
     return libraryCppType
+  }
+
+  const optionalLibraryCppType = classFieldOptionalLibraryNativeCppType(field)
+
+  if (optionalLibraryCppType !== null) {
+    return `std::optional<${optionalLibraryCppType}>`
   }
 
   if (classFieldUsesCppStringStorage(field)) {
@@ -606,6 +662,10 @@ function emitCClassFieldType(field: CObjectShapeField, context: ClassInfoLookupC
 }
 
 function emitCClassFieldDefaultValue(field: CObjectShapeField, context: ClassInfoLookupContext): string {
+  if (classFieldUsesWeakValueStorage(field)) {
+    return 'inox::WeakValue()'
+  }
+
   if (classFieldUsesNativeClassStorage(field)) {
     return emitCClassTypeNameForClassName(context, field.className) + '()'
   }
@@ -614,6 +674,10 @@ function emitCClassFieldDefaultValue(field: CObjectShapeField, context: ClassInf
 
   if (libraryCppType !== null) {
     return libraryCppType + '()'
+  }
+
+  if (classFieldOptionalLibraryNativeCppType(field) !== null) {
+    return 'std::nullopt'
   }
 
   if (classFieldUsesRuntimeValueStorage(field)) {
@@ -647,6 +711,12 @@ function emitCClassParamType(param: CFunctionParam, context: ClassPhysicalTypeCo
     return libraryCppType
   }
 
+  const optionalLibraryCppType = classParamOptionalLibraryNativeCppType(param)
+
+  if (optionalLibraryCppType !== null) {
+    return `std::optional<${optionalLibraryCppType}>`
+  }
+
   if (classParamUsesCppValueStorage(param)) {
     return 'const inox::Value&'
   }
@@ -660,6 +730,14 @@ function emitCClassParamType(param: CFunctionParam, context: ClassPhysicalTypeCo
 
 function classParamLibraryNativeCppType(param: CFunctionParam): string | null {
   return libraryNativeBoundaryCppType(param.valueType, param.nullable === true, param.optional === true, param.shape)
+}
+
+export function classParamOptionalLibraryNativeCppType(param: CFunctionParam): string | null {
+  if (param.ownership === 'weak' || (param.nullable !== true && param.optional !== true)) {
+    return null
+  }
+
+  return libraryNativeCppType(param.shape)
 }
 
 function classParamPhysicalCppType(param: CFunctionParam, context: ClassPhysicalTypeContext): string | null {
@@ -1228,6 +1306,10 @@ function pushIndentedClassFieldReadLines(target: string[], lines: string[]): voi
 function emitCClassDescriptorFieldReadLines(field: CObjectShapeField, context: CEmitContext): string[] {
   const reference = `value.${emitCClassFieldName(field.name)}`
 
+  if (classFieldUsesWeakValueStorage(field)) {
+    return [`return ${reference}.copy_to(out);`]
+  }
+
   if (field.valueType === 'number') {
     return [`*out = inox_number_value(${reference});`, 'return INOX_OK;']
   }
@@ -1250,6 +1332,12 @@ function emitCClassDescriptorFieldReadLines(field: CObjectShapeField, context: C
     ]
   }
 
+  const optionalLibraryCppType = classFieldOptionalLibraryNativeCppType(field)
+
+  if (optionalLibraryCppType !== null) {
+    return emitCClassDescriptorOptionalNativeFieldReadLines(field, reference, context)
+  }
+
   const nativeRuntimeValueLines = emitCClassDescriptorNativeFieldReadLines(field, reference, context)
 
   if (nativeRuntimeValueLines !== null) {
@@ -1261,6 +1349,29 @@ function emitCClassDescriptorFieldReadLines(field: CObjectShapeField, context: C
   }
 
   return ['*out = inox_undefined_value();', 'return INOX_OK;']
+}
+
+function emitCClassDescriptorOptionalNativeFieldReadLines(
+  field: CObjectShapeField,
+  reference: string,
+  context: CEmitContext
+): string[] {
+  const typeRef = cTypeRefValue(field.typeRef)
+  const typeId = typeRef !== null && typeRef.kind === 'nominal' ? typeRef.typeId : null
+  const expression =
+    typeId === null ? null : compilerLibraryNativeRuntimeValueExpressionForId(context.libraries, typeId)
+  const lines = [`if (!${reference}.has_value()) {`, '  *out = inox_null_value();', '  return INOX_OK;', '}']
+
+  if (expression === null) {
+    lines.push('return INOX_ERR_UNSUPPORTED;')
+    return lines
+  }
+
+  const runtimeValue = expression.split('$value').join(`(*${reference})`)
+  lines.push(`*out = ${runtimeValue};`)
+  lines.push('inox_retain(*out);')
+  lines.push('return INOX_OK;')
+  return lines
 }
 
 function emitCClassDescriptorNativeFieldReadLines(
@@ -2397,6 +2508,7 @@ function resolveClassShapeField(field: CObjectShapeField): CObjectShapeField {
 
   return {
     name: field.name,
+    optional: field.optional,
     readonlyField: isReadonlyCObjectShapeField(field),
     ownership,
     valueType,
@@ -2906,12 +3018,29 @@ function emitPreparedNativeClassConstructorArgs(
     const arg = prepared.args[index]
     const param = index < params.length ? params[index] : null
 
-    if (param !== null && classParamUsesCppStringStorage(param)) {
+    const optionalLibraryCppType = param === null ? null : classParamOptionalLibraryNativeCppType(param)
+    const sourceArg = index < expression.args.length ? expression.args[index] : null
+
+    if (
+      optionalLibraryCppType !== null &&
+      (sourceArg === null || sourceArg?.type === 'NullLiteral' || sourceArg?.type === 'UndefinedLiteral')
+    ) {
+      args.push('std::nullopt')
+    } else if (optionalLibraryCppType !== null) {
+      const adapted = applyLibraryNativeValueAdapter(arg, libraryNativeValueAdapter(param?.shape))
+      args.push(`std::optional<${optionalLibraryCppType}>(${adapted})`)
+    } else if (param !== null && classParamUsesCppStringStorage(param)) {
       args.push('inox::String(inox::Value(' + arg + '))')
     } else if (param !== null && classParamUsesCppValueStorage(param)) {
       args.push('inox::Value(' + arg + ')')
     } else {
       args.push(arg)
+    }
+  }
+
+  for (let index = prepared.args.length; index < params.length; index = index + 1) {
+    if (classParamOptionalLibraryNativeCppType(params[index]) !== null) {
+      args.push('std::nullopt')
     }
   }
 
@@ -3675,12 +3804,25 @@ export function emitPreparedNativeClassFieldScalarExpression(
 
 export function emitPreparedNativeClassFieldValueExpression(
   expression: AnyNode,
-  context: ClassLookupContext
+  context: ClassFunctionContext
 ): PreparedExpression | null {
   const access = resolveNativeClassFieldAccess(expression, context)
 
   if (access === null || typeof access === 'undefined') {
     return null
+  }
+
+  if (classFieldUsesWeakValueStorage(access.field)) {
+    const value = nextCName(context, 'inox_weak_value')
+    registerOwnedValue(context, value)
+
+    return {
+      lines: [emitStatusCheck(`${access.reference}.copy_to(${value}.out())`, context)],
+      expression: value,
+      cppType: 'inox::Value',
+      nullable: true,
+      valueType: access.field.valueType
+    }
   }
 
   if (access.field.valueType === 'number') {
@@ -3703,6 +3845,19 @@ export function emitPreparedNativeClassFieldValueExpression(
       expression: access.reference,
       cppType: 'inox::String',
       valueType: 'string'
+    }
+  }
+
+  const optionalLibraryCppType = classFieldOptionalLibraryNativeCppType(access.field)
+
+  if (optionalLibraryCppType !== null) {
+    return {
+      lines: [],
+      expression: `(*${access.reference})`,
+      cppType: optionalLibraryCppType,
+      nullable: true,
+      nullableCppCondition: `${access.reference}.has_value()`,
+      valueType: access.field.valueType
     }
   }
 
@@ -3834,6 +3989,46 @@ export function emitNativeClassFieldAssignment(expression: AnyNode, context: Cla
   }
 
   const lines: string[] = []
+
+  if (classFieldUsesWeakValueStorage(access.field)) {
+    const value = emitClassValueExpression(context, expression.value)
+    let runtimeExpression = value.expression
+    const classInstance = emitPreparedClassInstanceRefValueExpression(value, context)
+
+    pushAllLines(lines, value.lines)
+
+    if (classInstance !== null && typeof classInstance !== 'undefined') {
+      pushAllLines(lines, classInstance.lines)
+      runtimeExpression = classInstance.expression
+    } else {
+      const nativeRuntimeExpression = compilerLibraryNativeRuntimeValueExpressionForTypeRef(
+        context.libraries,
+        access.field.typeRef
+      )
+
+      const nativeCppType = libraryNativeCppType(access.field.shape)
+
+      if (nativeRuntimeExpression !== null && nativeCppType !== null && value.cppType === nativeCppType) {
+        runtimeExpression = nativeRuntimeExpression.split('$value').join(value.expression)
+      }
+    }
+
+    lines.push(emitStatusCheck(`${access.reference}.assign(${runtimeExpression})`, context))
+    return lines
+  }
+
+  const optionalLibraryCppType = classFieldOptionalLibraryNativeCppType(access.field)
+
+  if (optionalLibraryCppType !== null) {
+    if (expression.value.type === 'NullLiteral') {
+      return [`${access.reference}.reset();`]
+    }
+
+    const value = emitClassValueExpression(context, expression.value)
+    pushAllLines(lines, value.lines)
+    lines.push(`${access.reference} = ${value.expression};`)
+    return lines
+  }
 
   if (classFieldUsesRuntimeValueStorage(access.field)) {
     const cppValueReference = cppValueRuntimeStringReference(expression.value, context)

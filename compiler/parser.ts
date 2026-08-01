@@ -869,8 +869,9 @@ class Parser {
     }
 
     const name = this.parseClassMemberName()
+    const optional = this.matchValue('?')
 
-    if (!modifiers.readOnly && (this.isValue('(') || this.isValue('<'))) {
+    if (!optional && !modifiers.readOnly && (this.isValue('(') || this.isValue('<'))) {
       return this.parseClassMethod(name, staticToken)
     }
 
@@ -883,6 +884,7 @@ class Parser {
     if (this.isFunctionTypeStart()) {
       const field = createFieldDefinition({
         name,
+        optional,
         staticToken,
         readOnly: modifiers.readOnly,
         ownership: 'strong',
@@ -902,6 +904,7 @@ class Parser {
 
     return createFieldDefinition({
       name,
+      optional,
       staticToken,
       readOnly: modifiers.readOnly,
       ownership: valueType.ownership,

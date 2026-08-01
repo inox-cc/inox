@@ -1282,7 +1282,7 @@ class Checker {
       typeRef: fieldInfo.typeRef,
       className: this.declaredClassName(declaredType),
       valueType: fieldInfo.valueType,
-      nullable: fieldInfo.nullable,
+      nullable: fieldInfo.nullable || field.optional === true,
       asyncResultValueType: fieldInfo.asyncResultValueType ?? null,
       functionType: fieldInfo.functionType,
       shape: fieldInfo.shape

@@ -413,6 +413,7 @@ export function emitPreparedCompilerLibraryCallExpression(
           receiver,
           prepared.expression,
           prepared.cppType,
+          prepared.nullableCppCondition,
           context
         )
 
@@ -1668,8 +1669,13 @@ function compilerLibraryOptionalReceiverCondition(
   receiver: AnyNode,
   expression: string,
   cppType: string | null | undefined,
+  nullableCppCondition: string | null | undefined,
   context: CFunctionContext
 ): string | null {
+  if (nullableCppCondition !== null && typeof nullableCppCondition !== 'undefined') {
+    return nullableCppCondition
+  }
+
   if (cppType === null || typeof cppType === 'undefined' || cppType === 'inox::Value' || cppType === 'inox_value') {
     return `${expression}.tag != INOX_TAG_NULL && ${expression}.tag != INOX_TAG_UNDEFINED`
   }

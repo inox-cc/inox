@@ -75,6 +75,10 @@ export function filterUnusedCPreludeIncludes(code: string): string {
       continue
     }
 
+    if (line === '#include "inox/weak.h"' && !body.includes('inox::WeakValue')) {
+      continue
+    }
+
     if (line === '#include <string.h>' && !cPreludeBodyUsesCStringHeader(body)) {
       continue
     }
@@ -88,6 +92,10 @@ export function filterUnusedCPreludeIncludes(code: string): string {
     }
 
     if (line === '#include <new>' && !body.includes('new (')) {
+      continue
+    }
+
+    if (line === '#include <optional>' && !body.includes('std::optional') && !body.includes('std::nullopt')) {
       continue
     }
 
@@ -169,7 +177,7 @@ export function emitCPrelude(
   needsObjectRuntime: boolean,
   libraryCPreludeIncludes: string[]
 ): string[] {
-  const systemIncludes = ['#include <stdio.h>', '#include <math.h>']
+  const systemIncludes = ['#include <stdio.h>', '#include <math.h>', '#include <optional>']
   const localIncludes: string[] = []
 
   if (needsMainRuntime) {
@@ -196,6 +204,7 @@ export function emitCPrelude(
 
   if (needsRuntime) {
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/allocator.h"')
+    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/weak.h"')
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/loop.h"')
     if (needsCallbackRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/callback.h"')

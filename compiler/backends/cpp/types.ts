@@ -20,6 +20,7 @@ export type CPreparedExpression = {
   cppType?: string
   cppDeclaredName?: string
   cppMutableTemporary?: boolean
+  nullableCppCondition?: string
   pendingExceptionDeferred?: boolean
 }
 

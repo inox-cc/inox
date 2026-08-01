@@ -35,6 +35,7 @@ export const compilerAnyNodeStringFields: readonly string[] = [
   'libraryCIteratorValueMember',
   'libraryCIteratorReceiverAdapter',
   'libraryCIteratorValueAdapter',
+  'nullableCppCondition',
   'libraryCIteratorCreationFailureMode',
   'libraryCIteratorNextFailureMode',
   'libraryCExpression',

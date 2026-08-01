@@ -88,6 +88,8 @@ import {
 import type { ClassLoweringDependencies } from './values/classes.ts'
 import {
   classFieldUsesCppStringStorage,
+  classFieldOptionalLibraryNativeCppType,
+  classParamOptionalLibraryNativeCppType,
   classParamUsesCppStringStorage,
   classParamUsesCppValueStorage,
   cClassValueTypeName,
@@ -905,7 +907,14 @@ function nativeClassConstructorInitializerForStatement(
 }
 
 function nativeClassConstructorParamCanInitializeField(field: CObjectShapeField, param: CFunctionParam): boolean {
-  return classFieldUsesCppStringStorage(field) && classParamUsesCppStringStorage(param)
+  if (classFieldUsesCppStringStorage(field) && classParamUsesCppStringStorage(param)) {
+    return true
+  }
+
+  const fieldCppType = classFieldOptionalLibraryNativeCppType(field)
+  const paramCppType = classParamOptionalLibraryNativeCppType(param)
+
+  return fieldCppType !== null && fieldCppType === paramCppType
 }
 
 function nativeClassFieldForName(info: CClassInfo, name: string): CObjectShapeField | null {
@@ -1042,7 +1051,11 @@ function emitConstructorRuntimeParamPreludeForParam(
   context: CDeclarationFunctionContext,
   deps: CDeclarationEmissionDependencies
 ): string[] {
-  if (classParamUsesCppValueStorage(param) || classParamUsesCppStringStorage(param)) {
+  if (
+    classParamUsesCppValueStorage(param) ||
+    classParamUsesCppStringStorage(param) ||
+    classParamOptionalLibraryNativeCppType(param) !== null
+  ) {
     return []
   }
 

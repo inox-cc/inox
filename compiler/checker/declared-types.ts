@@ -46,6 +46,7 @@ import type {
 } from './resolved-types.ts'
 import { mergeShapeFields } from './helpers.ts'
 import {
+  compilerLibraryNativeTypeForId,
   compilerLibraryNativeTypeForIntrinsic,
   compilerLibraryNativeTypeForName,
   compilerLibraryTypeOperatorForName
@@ -2023,8 +2024,27 @@ export function resolveWeakFieldDeclaredType(context: DeclaredTypeResolverContex
   }
 
   const fieldInfo = resolveWeakTargetDeclaredType(context, targetName, fieldSourceLocation(field))
+  const nativeTypeId =
+    fieldInfo.typeRef !== null && fieldInfo.typeRef.kind === 'nominal'
+      ? fieldInfo.typeRef.typeId
+      : fieldInfo.shape?.libraryTypeId
+  const genericTarget = typeof targetName === 'string' ? genericTypeApplicationFromTypeName(targetName) : null
+  const nativeTypeName = genericTarget?.name ?? targetName
+  const nativeType =
+    typeof nativeTypeId === 'string'
+      ? compilerLibraryNativeTypeForId(context.libraries, nativeTypeId)
+      : typeof nativeTypeName === 'string'
+        ? compilerLibraryNativeTypeForName(context.libraries, nativeTypeName)
+        : null
+  const nativeRuntimeExpression = nativeType?.cRuntimeValueExpression
 
-  if (fieldInfo.valueType !== 'unknown' && fieldInfo.valueType !== 'object' && field.weakTypeValidated !== true) {
+  if (
+    field.weakTypeValidated !== true &&
+    ((fieldInfo.valueType !== 'unknown' && fieldInfo.valueType !== 'object') ||
+      (nativeType !== null &&
+        nativeType !== undefined &&
+        (nativeRuntimeExpression === null || typeof nativeRuntimeExpression === 'undefined')))
+  ) {
     let weakLoc = field.loc
 
     if (field.weakLoc !== null && typeof field.weakLoc !== 'undefined') {
@@ -2034,7 +2054,7 @@ export function resolveWeakFieldDeclaredType(context: DeclaredTypeResolverContex
     context.diagnostics.push(
       diagnostic(
         'INOX_WEAK_TYPE',
-        `weak field ${field.name} must target an object or class type in the current compiler slice`,
+        `weak field ${field.name} must target a runtime-managed object or class type`,
         weakLoc
       )
     )

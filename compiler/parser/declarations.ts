@@ -29,6 +29,7 @@ type ClassDeclarationOptions = {
 
 type FieldDefinitionOptions = {
   name: Token
+  optional: boolean
   staticToken: Token | null
   readOnly: boolean
   ownership: string
@@ -241,6 +242,7 @@ export function createFieldDefinition(options: FieldDefinitionOptions): AnyNode 
     name: options.name.value,
     static: options.staticToken !== null && typeof options.staticToken !== 'undefined',
     staticLoc: nullableTokenLocation(options.staticToken),
+    optional: options.optional,
     readonly: options.readOnly,
     ownership: options.ownership,
     weakLoc: null,

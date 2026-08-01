@@ -493,7 +493,7 @@ function normalizeNodeConsoleArrayLine(line: string): string {
 function featureRuntimeCompileArgs(emittedC: string): string[] {
   const args: string[] = []
 
-  if (emittedC.includes('INOX_FIELD_WEAK')) {
+  if (emittedC.includes('INOX_FIELD_WEAK') || emittedC.includes('inox::WeakValue')) {
     args.push('-DINOX_ENABLE_WEAK=1')
   }
 
