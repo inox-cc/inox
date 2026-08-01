@@ -1873,9 +1873,12 @@ export function emitBoxedScalarVariableDeclaration(statement: StatementNode, con
 
   const lines: string[] = []
   pushAllLines(lines, value.lines)
-  lines.push(`${emitCIdentifier(statement.name)} = (double*)inox_default_alloc(0, sizeof(double), _Alignof(double));`)
-  lines.push(`if (${emitCIdentifier(statement.name)} == 0) ${deps.emitFailureStatement(context)}`)
-  lines.push(`*${emitCIdentifier(statement.name)} = ${value.expression};`)
+  lines.push(
+    emitStatusCheck(
+      `inox_shared_number_box_new(&inox_default_allocator, ${value.expression}, &${emitCIdentifier(statement.name)})`,
+      context
+    )
+  )
 
   return lines
 }
@@ -1901,17 +1904,17 @@ export function emitBoxedRuntimeValueVariableDeclaration(
   const lines: string[] = []
   pushAllLines(lines, value.lines)
   lines.push(
-    `${emitCIdentifier(statement.name)} = (inox_value*)inox_default_alloc(0, sizeof(inox_value), _Alignof(inox_value));`
-  )
-  lines.push(`if (${emitCIdentifier(statement.name)} == 0) ${deps.emitFailureStatement(context)}`)
-  lines.push(`*${emitCIdentifier(statement.name)} = ${value.expression};`)
-  lines.push(
-    emitRuntimeTypeCheck(
-      `(*${emitCIdentifier(statement.name)}).tag != ${tag} || (*${emitCIdentifier(statement.name)}).as.ref == 0`,
+    emitStatusCheck(
+      `inox_shared_value_box_new(&inox_default_allocator, ${value.expression}, &${emitCIdentifier(statement.name)})`,
       context
     )
   )
-  lines.push(`inox_retain(*${emitCIdentifier(statement.name)});`)
+  lines.push(
+    emitRuntimeTypeCheck(
+      `${emitCIdentifier(statement.name)}->value.tag != ${tag} || ${emitCIdentifier(statement.name)}->value.as.ref == 0`,
+      context
+    )
+  )
 
   return lines
 }

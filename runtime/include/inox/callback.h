@@ -19,6 +19,18 @@ typedef struct inox_callback {
   inox_callback_finalizer_fn finalizer;
 } inox_callback;
 
+typedef struct inox_shared_number_box {
+  size_t ref_count;
+  inox_allocator* allocator;
+  double value;
+} inox_shared_number_box;
+
+typedef struct inox_shared_value_box {
+  size_t ref_count;
+  inox_allocator* allocator;
+  inox_value value;
+} inox_shared_value_box;
+
 inox_status inox_callback_new(
   inox_allocator* allocator,
   inox_callback_call_fn call,
@@ -27,6 +39,12 @@ inox_status inox_callback_new(
   inox_value* out
 );
 inox_status inox_callback_call(inox_value callback, const inox_value* args, size_t arg_count, inox_value* out);
+inox_status inox_shared_number_box_new(inox_allocator* allocator, double value, inox_shared_number_box** out);
+void inox_shared_number_box_retain(inox_shared_number_box* box);
+void inox_shared_number_box_release(inox_shared_number_box* box);
+inox_status inox_shared_value_box_new(inox_allocator* allocator, inox_value value, inox_shared_value_box** out);
+void inox_shared_value_box_retain(inox_shared_value_box* box);
+void inox_shared_value_box_release(inox_shared_value_box* box);
 
 #ifdef __cplusplus
 }

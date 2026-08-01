@@ -77,3 +77,93 @@ inox_status inox_callback_call(inox_value callback, const inox_value* args, size
 
   return instance->call(instance->context, args, arg_count, out);
 }
+
+inox_status inox_shared_number_box_new(inox_allocator* allocator, double value, inox_shared_number_box** out) {
+  if (allocator == 0 || allocator->alloc == 0 || out == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  inox_shared_number_box* box =
+    allocator->alloc(allocator->user, sizeof(inox_shared_number_box), _Alignof(inox_shared_number_box));
+
+  if (box == 0) {
+    *out = 0;
+    return INOX_ERR_OOM;
+  }
+
+  box->ref_count = 1;
+  box->allocator = allocator;
+  box->value = value;
+  *out = box;
+  return INOX_OK;
+}
+
+void inox_shared_number_box_retain(inox_shared_number_box* box) {
+  if (box != 0) {
+    box->ref_count += 1;
+  }
+}
+
+void inox_shared_number_box_release(inox_shared_number_box* box) {
+  if (box == 0 || box->ref_count == 0) {
+    return;
+  }
+
+  box->ref_count -= 1;
+
+  if (box->ref_count != 0) {
+    return;
+  }
+
+  inox_allocator* allocator = box->allocator;
+
+  if (allocator != 0 && allocator->free != 0) {
+    allocator->free(allocator->user, box, sizeof(inox_shared_number_box), _Alignof(inox_shared_number_box));
+  }
+}
+
+inox_status inox_shared_value_box_new(inox_allocator* allocator, inox_value value, inox_shared_value_box** out) {
+  if (allocator == 0 || allocator->alloc == 0 || out == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  inox_shared_value_box* box =
+    allocator->alloc(allocator->user, sizeof(inox_shared_value_box), _Alignof(inox_shared_value_box));
+
+  if (box == 0) {
+    *out = 0;
+    return INOX_ERR_OOM;
+  }
+
+  box->ref_count = 1;
+  box->allocator = allocator;
+  box->value = value;
+  inox_retain(box->value);
+  *out = box;
+  return INOX_OK;
+}
+
+void inox_shared_value_box_retain(inox_shared_value_box* box) {
+  if (box != 0) {
+    box->ref_count += 1;
+  }
+}
+
+void inox_shared_value_box_release(inox_shared_value_box* box) {
+  if (box == 0 || box->ref_count == 0) {
+    return;
+  }
+
+  box->ref_count -= 1;
+
+  if (box->ref_count != 0) {
+    return;
+  }
+
+  inox_release(box->value);
+  inox_allocator* allocator = box->allocator;
+
+  if (allocator != 0 && allocator->free != 0) {
+    allocator->free(allocator->user, box, sizeof(inox_shared_value_box), _Alignof(inox_shared_value_box));
+  }
+}

@@ -667,7 +667,7 @@ export function emitObjectValueReference(name: string, context: ObjectFunctionCo
   }
 
   if (context.boxedVariables.has(name) && context.variables.get(name) === 'object') {
-    return `(*${emitCIdentifier(name)})`
+    return `${emitCIdentifier(name)}->value`
   }
 
   return emitCIdentifier(name)

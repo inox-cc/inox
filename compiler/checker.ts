@@ -397,6 +397,7 @@ function checkerNarrowingTypeRefsEquivalent(left: TypeRef | null, right: TypeRef
 
 type CheckerReturnContextState = {
   returnType: ValueType
+  returnFunctionType: AnyNode | null
   returnNullable: boolean
   returnAsyncResultValueType: ValueType | null
   returnShape: ObjectShapeInfo | null
@@ -451,6 +452,7 @@ class Checker {
   breakDepth: number
   continueDepth: number
   currentReturnType: ValueType
+  currentReturnFunctionType: AnyNode | null
   currentReturnNullable: boolean
   currentReturnAsyncResultValueType: ValueType | null
   currentReturnShape: ObjectShapeInfo | null
@@ -492,6 +494,7 @@ class Checker {
     this.breakDepth = 0
     this.continueDepth = 0
     this.currentReturnType = 'void'
+    this.currentReturnFunctionType = null
     this.currentReturnNullable = false
     this.currentReturnAsyncResultValueType = null
     this.currentReturnShape = null
@@ -1360,10 +1363,12 @@ class Checker {
 
       try {
         const previousReturnType = this.currentReturnType
+        const previousReturnFunctionType = this.currentReturnFunctionType
         const returnInfo = this.resolveFunctionDeclarationReturnType(item)
         item.returnTypeRef = returnInfo.typeRef
         item.returnShape = returnInfo.shape
         this.currentReturnType = returnInfo.valueType
+        this.currentReturnFunctionType = returnInfo.functionType ?? null
         const previousReturnNullable = this.currentReturnNullable
         this.currentReturnNullable = returnInfo.nullable
         const previousReturnAsyncResultValueType = this.currentReturnAsyncResultValueType
@@ -1434,6 +1439,7 @@ class Checker {
           this.checkStatements(item.body)
         } finally {
           this.currentReturnType = previousReturnType
+          this.currentReturnFunctionType = previousReturnFunctionType
           this.currentReturnNullable = previousReturnNullable
           this.currentReturnAsyncResultValueType = previousReturnAsyncResultValueType
           this.currentReturnShape = previousReturnShape
@@ -1938,7 +1944,12 @@ class Checker {
       let actual: ValueType = 'void'
 
       if (statement.argument !== null && typeof statement.argument !== 'undefined') {
-        actual = this.checkExpression(statement.argument)
+        if (statement.argument.type === 'ArrowFunctionExpression' && this.currentReturnFunctionType !== null) {
+          this.checkArrowFunctionExpression(statement.argument, this.currentReturnFunctionType)
+          actual = 'function'
+        } else {
+          actual = this.checkExpression(statement.argument)
+        }
       }
 
       if (this.inferredFunctionReturnCandidates !== null) {
@@ -7534,6 +7545,7 @@ class Checker {
           actualReturnType = 'void'
         } else {
           const previousReturnType = this.currentReturnType
+          const previousReturnFunctionType = this.currentReturnFunctionType
           const previousReturnNullable = this.currentReturnNullable
           const previousReturnAsyncResultValueType = this.currentReturnAsyncResultValueType
           const previousReturnAsync = this.currentReturnAsync
@@ -7547,6 +7559,7 @@ class Checker {
             }
 
             this.currentReturnType = expectedReturnType
+            this.currentReturnFunctionType = null
             this.currentReturnNullable = functionType.returnNullable === true
             this.currentReturnAsyncResultValueType = null
 
@@ -7562,6 +7575,7 @@ class Checker {
             this.checkStatements(expression.body)
           } finally {
             this.currentReturnType = previousReturnType
+            this.currentReturnFunctionType = previousReturnFunctionType
             this.currentReturnNullable = previousReturnNullable
             this.currentReturnAsyncResultValueType = previousReturnAsyncResultValueType
             this.currentReturnAsync = previousReturnAsync
@@ -7744,9 +7758,11 @@ class Checker {
 
         try {
           const previousReturnType = this.currentReturnType
+          const previousReturnFunctionType = this.currentReturnFunctionType
           const methodReturnInfo = this.resolveMethodReturnType(method)
 
           this.currentReturnType = methodReturnInfo.valueType
+          this.currentReturnFunctionType = methodReturnInfo.functionType ?? null
           const previousReturnNullable = this.currentReturnNullable
           this.currentReturnNullable = methodReturnInfo.nullable
           const previousReturnAsyncResultValueType = this.currentReturnAsyncResultValueType
@@ -7824,6 +7840,7 @@ class Checker {
             this.checkStatements(method.body)
           } finally {
             this.currentReturnType = previousReturnType
+            this.currentReturnFunctionType = previousReturnFunctionType
             this.currentReturnNullable = previousReturnNullable
             this.currentReturnAsyncResultValueType = previousReturnAsyncResultValueType
             this.currentReturnShape = previousReturnShape
@@ -10762,6 +10779,7 @@ class Checker {
   ): CheckerReturnContextState {
     const previous = {
       returnType: this.currentReturnType,
+      returnFunctionType: this.currentReturnFunctionType,
       returnNullable: this.currentReturnNullable,
       returnAsyncResultValueType: this.currentReturnAsyncResultValueType,
       returnShape: this.currentReturnShape,
@@ -10769,6 +10787,7 @@ class Checker {
     }
 
     this.currentReturnType = returnType
+    this.currentReturnFunctionType = null
     this.currentReturnNullable = returnNullable
     this.currentReturnAsyncResultValueType = returnAsyncResultValueType
     this.currentReturnShape = returnShape
@@ -10779,6 +10798,7 @@ class Checker {
 
   restoreReturnContext(previous: CheckerReturnContextState): void {
     this.currentReturnType = previous.returnType
+    this.currentReturnFunctionType = previous.returnFunctionType
     this.currentReturnNullable = previous.returnNullable
     this.currentReturnAsyncResultValueType = previous.returnAsyncResultValueType
     this.currentReturnShape = previous.returnShape

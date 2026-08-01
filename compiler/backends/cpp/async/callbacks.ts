@@ -3969,7 +3969,16 @@ export function emitRuntimeArrowCallbackContextFinalizerDeclaration(wrapper: CCa
 
   for (let index = 0; index < captures.length; index = index + 1) {
     const capture = captures[index]
-    if (isRetainedRuntimeArrowCapture(capture)) {
+    if (isSharedMutableRuntimeArrowCapture(capture)) {
+      const boxKind = mutableRuntimeArrowCaptureBoxKind(capture)
+      lines.push(
+        '  inox_shared_' +
+          boxKind +
+          '_box_release(captured->' +
+          emitRuntimeArrowCaptureField(capture) +
+          ');'
+      )
+    } else if (isRetainedRuntimeArrowCapture(capture)) {
       lines.push('  inox_release(captured->' + emitRuntimeArrowCaptureField(capture) + ');')
     }
   }
@@ -4285,11 +4294,11 @@ function runtimeArrowCallbackParamName(wrapper: CRuntimeArrowCallbackWrapper, in
 export function emitRuntimeArrowCaptureCType(capture: CRuntimeArrowCapture): string {
   if (capture.mutable) {
     if (isPlainCallbackParamValueType(capture.valueType)) {
-      return 'double*'
+      return 'inox_shared_number_box*'
     }
 
     if (isManagedRuntimeCallbackParamValueType(capture.valueType)) {
-      return 'inox_value*'
+      return 'inox_shared_value_box*'
     }
   }
 
@@ -4316,6 +4325,14 @@ export function isRetainedRuntimeArrowCapture(capture: CRuntimeArrowCapture): bo
   return (
     capture.runtimeManaged === true && isManagedRuntimeCallbackParamValueType(capture.valueType) && !capture.mutable
   )
+}
+
+function isSharedMutableRuntimeArrowCapture(capture: CRuntimeArrowCapture): boolean {
+  return capture.mutable === true && isSupportedRuntimeCallbackParamValueType(capture.valueType)
+}
+
+function mutableRuntimeArrowCaptureBoxKind(capture: CRuntimeArrowCapture): 'number' | 'value' {
+  return isPlainCallbackParamValueType(capture.valueType) ? 'number' : 'value'
 }
 
 export function isAsyncResultSettlementRuntimeArrowCapture(capture: CRuntimeArrowCapture): boolean {

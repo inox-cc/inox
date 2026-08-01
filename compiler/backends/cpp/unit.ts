@@ -681,6 +681,10 @@ function cUnitFunctionValueUsesRuntimeCallback(node: AnyNode, context: CEmitCont
     return true
   }
 
+  if (node.init !== null && typeof node.init !== 'undefined' && node.init.type === 'CallExpression') {
+    return true
+  }
+
   if (node.init !== null && typeof node.init !== 'undefined' && node.init.type === 'ArrowFunctionExpression') {
     const wrapper = context.callbackArrowWrappers.get(node.init)
 

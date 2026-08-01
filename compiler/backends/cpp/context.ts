@@ -773,9 +773,9 @@ export function emitBoxedValueDeclarations(context: CBoxedValueDeclarationContex
 
   for (const name of boxedValues) {
     if (isRuntimeBoxedValueType(boxedValueTypes.get(name))) {
-      lines.push(`inox_value* ${emitCLocalName(name)} = 0;`)
+      lines.push(`inox_shared_value_box* ${emitCLocalName(name)} = 0;`)
     } else {
-      lines.push(`double* ${emitCLocalName(name)} = 0;`)
+      lines.push(`inox_shared_number_box* ${emitCLocalName(name)} = 0;`)
     }
   }
 
@@ -843,12 +843,9 @@ export function emitBoxedValueCleanup(context: CFunctionContext): string[] {
     const localName = emitCLocalName(name)
 
     if (isRuntimeBoxedValueType(context.boxedValueTypes.get(name))) {
-      lines.push(`if (${localName} != 0) {`)
-      lines.push(`  inox_release(*${localName});`)
-      lines.push(`  inox_default_free(0, ${localName}, sizeof(inox_value), _Alignof(inox_value));`)
-      lines.push('}')
+      lines.push(`inox_shared_value_box_release(${localName});`)
     } else {
-      lines.push(`if (${localName} != 0) inox_default_free(0, ${localName}, sizeof(double), _Alignof(double));`)
+      lines.push(`inox_shared_number_box_release(${localName});`)
     }
   }
 

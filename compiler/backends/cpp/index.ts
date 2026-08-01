@@ -3764,8 +3764,8 @@ function emitBoxedRuntimeValueAssignment(expression: AnyNode, context: CFunction
   lines.push(`auto ${temp} = ${value.expression};`)
   lines.push(emitRuntimeTypeCheck(`${temp}.tag != ${tag} || ${temp}.as.ref == 0`, context))
   lines.push(`inox_retain(${temp});`)
-  lines.push(`inox_release(*${reference});`)
-  lines.push(`*${reference} = ${temp};`)
+  lines.push(`inox_release(${reference}->value);`)
+  lines.push(`${reference}->value = ${temp};`)
 
   return lines
 }
@@ -6772,7 +6772,7 @@ function emitReference(expression: AnyNode, context: CFunctionContext): string {
       }
 
       if (context.boxedVariables.has(name)) {
-        return `(*${emitCIdentifier(name)})`
+        return `${emitCIdentifier(name)}->value`
       }
 
       return emitCIdentifier(name)
@@ -8083,6 +8083,11 @@ function emitRuntimeArrowCaptureStoreLines(
 
   if (isSupportedMutableRuntimeArrowCapture(capture, context)) {
     lines.push(`${field} = ${captureName};`)
+    if (capture.valueType === 'number' || capture.valueType === 'boolean') {
+      lines.push(`inox_shared_number_box_retain(${field});`)
+    } else {
+      lines.push(`inox_shared_value_box_retain(${field});`)
+    }
     return lines
   }
 

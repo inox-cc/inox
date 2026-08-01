@@ -37,6 +37,7 @@ import {
   emitReturnFlowDeclarations,
   emitReturnValueDeclarations,
   emitRuntimeTypeCheck,
+  emitStatusCheck,
   nextCName,
   registerBoxedValue,
   registerOwnedValue,
@@ -1438,10 +1439,9 @@ function emitRuntimeParamPreludeForParam(
     }
 
     lines.push(emitRuntimeTypeCheck(`${paramName}.tag != ${tag} || ${paramName}.as.ref == 0`, context))
-    lines.push(`${localName} = (inox_value*)inox_default_alloc(0, sizeof(inox_value), _Alignof(inox_value));`)
-    lines.push(`if (${localName} == 0) ${emitFailureStatement(context)}`)
-    lines.push(`*${localName} = ${paramName};`)
-    lines.push(`inox_retain(*${localName});`)
+    lines.push(
+      emitStatusCheck(`inox_shared_value_box_new(&inox_default_allocator, ${paramName}, &${localName})`, context)
+    )
     return lines
   }
 
@@ -1484,9 +1484,12 @@ function emitRuntimeParamPreludeForParam(
   }
 
   if (isBoxedFunctionParam(param, index, statement, context) && isBoxedScalarParamValueType(param.valueType)) {
-    lines.push(`${localName} = (double*)inox_default_alloc(0, sizeof(double), _Alignof(double));`)
-    lines.push(`if (${localName} == 0) ${emitFailureStatement(context)}`)
-    lines.push(`*${localName} = ${emitCScalarParamName(param.name)};`)
+    lines.push(
+      emitStatusCheck(
+        `inox_shared_number_box_new(&inox_default_allocator, ${emitCScalarParamName(param.name)}, &${localName})`,
+        context
+      )
+    )
   }
 
   return lines

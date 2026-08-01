@@ -3269,6 +3269,10 @@ function cModuleFunctionValueUsesRuntimeCallback(node: AnyNode, context?: CEmitC
     return true
   }
 
+  if (node.init !== null && typeof node.init !== 'undefined' && node.init.type === 'CallExpression') {
+    return true
+  }
+
   if (
     context !== null &&
     typeof context !== 'undefined' &&
