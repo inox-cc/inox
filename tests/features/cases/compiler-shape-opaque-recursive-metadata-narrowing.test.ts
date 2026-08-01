@@ -10,7 +10,6 @@ type ScalarMetadata = {
 type ObjectMetadata = {
   kind: 'object'
   dynamicField?: RecursiveMetadata | null
-  dynamicFieldOwnership?: 'weak'
 }
 
 type RecursiveMetadata = ScalarMetadata | ObjectMetadata
