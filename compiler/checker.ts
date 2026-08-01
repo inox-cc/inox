@@ -133,7 +133,6 @@ import {
   statementAlwaysExits,
   uniqueNames
 } from './checker/helpers.ts'
-import { ownershipCycleDiagnostics } from './checker/ownership.ts'
 import { memberExpressionPath, narrowingPathIsSameOrDescendant, narrowingPathRoot } from './member-paths.ts'
 import {
   isBuiltinValueType,
@@ -809,12 +808,6 @@ class Checker {
       ) {
         this.topLevelConstDeclarations.set(item.name, item)
       }
-    }
-
-    const ownershipDiagnostics = ownershipCycleDiagnostics(this.classNames, this.program)
-
-    for (const item of ownershipDiagnostics) {
-      this.diagnostics.push(item)
     }
 
     throwDiagnostics(this.diagnostics)
