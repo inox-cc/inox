@@ -3039,7 +3039,9 @@ function emitPreparedNativeClassConstructorArgs(
   }
 
   for (let index = prepared.args.length; index < params.length; index = index + 1) {
-    if (classParamOptionalLibraryNativeCppType(params[index]) !== null) {
+    const param = params[index]
+
+    if (param !== undefined && classParamOptionalLibraryNativeCppType(param) !== null) {
       args.push('std::nullopt')
     }
   }
