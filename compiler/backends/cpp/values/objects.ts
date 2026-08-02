@@ -6,6 +6,7 @@ import {
   isSupportedRuntimeCallbackType
 } from '../async/callbacks.ts'
 import {
+  emitCObjectShapeDefinition,
   emitFailureStatement,
   emitRuntimeTypeCheck,
   emitStatusCheck,
@@ -41,16 +42,14 @@ import type {
 } from '../types.ts'
 import { isReadonlyCObjectShapeField } from '../types.ts'
 import {
-  applyLibraryNativeValueAdapter,
   cIterableElementDeclaredName,
+  cRuntimeValueAdapterInfo,
   cRuntimeValueTag,
   compilerLibraryNativeRuntimeValueValidExpressionForTypeRef,
   isManagedRuntimeReturnType,
   isNullableScalarType,
   isOpaqueRuntimeValueType,
-  libraryNativeBoundaryCppType,
-  libraryNativeCppType,
-  libraryNativeValueAdapter
+  libraryNativeCppType
 } from '../value-types.ts'
 import {
   compilerAnyNodeArrayFields,
@@ -83,6 +82,10 @@ type ObjectFunctionContext = ObjectShapeContext &
     failureStatement?: string | null
     failureStatementUsed?: boolean
     nextId: number
+    hoistObjectShapeDefinitions?: boolean
+    objectShapeDefinitionCounter?: { value: number }
+    objectShapeDefinitionNames?: Map<string, string>
+    objectShapeDefinitions?: string[]
     ownedValues: string[]
     returnType?: string
     statusReturn: boolean
@@ -1212,13 +1215,20 @@ function emitPreparedKnownObjectFieldValueExpression(
 
   const temp = nextCName(context, 'inox_value')
   const object = emitObjectValueReference(access.objectName, context)
+  const valueExpression = `inox::object_value_at(${object}, ${field.index}, ${cStringLiteral(access.key)})`
+  const adapter = objectFieldDeferredAdapter(field, valueExpression, context)
+
+  if (adapter !== null) {
+    return preparedAdaptedObjectFieldReadValue(field, adapter)
+  }
+
   const lines: string[] = []
 
-  lines.push(`auto ${temp} = inox::object_value_at(${object}, ${field.index}, ${cStringLiteral(access.key)});`)
+  lines.push(`auto ${temp} = ${valueExpression};`)
   appendLines(lines, emitObjectThrownCheckLines(context))
   appendLines(lines, emitKnownObjectFieldValueCheck(temp, field, expression, context))
 
-  return preparedObjectFieldReadValue(field, temp, lines)
+  return preparedObjectFieldReadValue(field, temp, lines, context)
 }
 
 function emitPreparedKnownObjectFieldRuntimeValueExpression(
@@ -1278,13 +1288,18 @@ function emitPreparedObjectExpressionFieldValueExpression(
     appendPrefixedLines(lines, emitObjectFieldRuntimeValueCheck(temp, field, expression, context), '  ')
     lines.push('}')
 
-    return preparedObjectFieldReadValue(field, temp, lines)
+    return preparedObjectFieldReadValue(field, temp, lines, context)
   }
 
   appendLines(lines, object.lines)
-  lines.push(
-    `auto ${temp} = inox::object_value_at(${object.expression}, ${field.index}, ${cStringLiteral(field.key)});`
-  )
+  const valueExpression = `inox::object_value_at(${object.expression}, ${field.index}, ${cStringLiteral(field.key)})`
+  const adapter = objectFieldDeferredAdapter(field, valueExpression, context)
+
+  if (adapter !== null) {
+    return preparedAdaptedObjectFieldReadValue(field, adapter, lines)
+  }
+
+  lines.push(`auto ${temp} = ${valueExpression};`)
   appendLines(lines, emitObjectThrownCheckLines(context))
   if (objectFieldValueMayBeNullish(field)) {
     appendLines(lines, emitObjectFieldRuntimeValueCheck(temp, field, expression, context))
@@ -1292,7 +1307,7 @@ function emitPreparedObjectExpressionFieldValueExpression(
     appendLines(lines, emitObjectFieldRuntimeValueCheck(temp, field, expression, context))
   }
 
-  return preparedObjectFieldReadValue(field, temp, lines)
+  return preparedObjectFieldReadValue(field, temp, lines, context)
 }
 
 function emitPreparedObjectExpressionFieldRuntimeValueExpression(
@@ -1321,28 +1336,16 @@ function emitPreparedObjectExpressionFieldRuntimeValueExpression(
   }
 }
 
-function preparedObjectFieldReadValue(field: CObjectFieldInfo, value: string, lines: string[]): PreparedExpression {
-  const nativeCppType = libraryNativeBoundaryCppType(
-    field.valueType,
-    field.nullable === true,
-    field.optional === true,
-    field.shape
-  )
+function preparedObjectFieldReadValue(
+  field: CObjectFieldInfo,
+  value: string,
+  lines: string[],
+  context: ObjectFunctionContext
+): PreparedExpression {
+  const adapter = objectFieldDeferredAdapter(field, value, context)
 
-  if (nativeCppType !== null) {
-    const adapter = libraryNativeValueAdapter(field.shape)
-    const expression =
-      adapter === null || adapter.length === 0
-        ? `${nativeCppType}(${value})`
-        : applyLibraryNativeValueAdapter(value, adapter)
-
-    return {
-      lines,
-      expression,
-      cppType: nativeCppType,
-      runtimeTypeChecked: true,
-      valueType: field.valueType
-    }
+  if (adapter !== null) {
+    return preparedAdaptedObjectFieldReadValue(field, adapter, lines)
   }
 
   return {
@@ -1351,6 +1354,39 @@ function preparedObjectFieldReadValue(field: CObjectFieldInfo, value: string, li
     cppType: 'inox::Value',
     nullable: objectFieldValueMayBeNullish(field),
     runtimeTypeChecked: libraryNativeCppType(field.shape) !== null,
+    valueType: field.valueType
+  }
+}
+
+function objectFieldDeferredAdapter(
+  field: CObjectFieldInfo,
+  value: string,
+  context: ObjectFunctionContext
+): ReturnType<typeof cRuntimeValueAdapterInfo> {
+  if (objectFieldValueMayBeNullish(field)) {
+    return null
+  }
+
+  const adapter = cRuntimeValueAdapterInfo(field.valueType, field.shape, value, context.libraries)
+
+  if (adapter?.failureMode !== 'thrown' || !adapter.preservesPendingException) {
+    return null
+  }
+
+  return adapter
+}
+
+function preparedAdaptedObjectFieldReadValue(
+  field: CObjectFieldInfo,
+  adapter: NonNullable<ReturnType<typeof cRuntimeValueAdapterInfo>>,
+  lines: string[] = []
+): PreparedExpression {
+  return {
+    lines,
+    expression: adapter.valueExpression,
+    cppType: adapter.cppType,
+    evaluationFailureMode: 'thrown',
+    runtimeTypeChecked: true,
     valueType: field.valueType
   }
 }
@@ -2022,18 +2058,16 @@ export function emitObjectVariableDeclaration(
   dependencies: ObjectVariableDeclarationDependencies
 ): string[] {
   const reference = emitCIdentifier(statement.name)
-  const shapeName = nextCName(context, `inox_shape_${reference}`)
-  const fieldsName = `${shapeName}_fields`
+  const suggestedShapeName = nextCName(context, `inox_shape_${reference}`)
   const fields = objectVariableShapeFields(statement, context, dependencies)
   const properties = statement.init.properties
-  const lines = [`static const inox_field_info ${fieldsName}[] = {`]
-
-  for (const field of fields) {
-    lines.push(`  { ${cStringLiteral(field.name)}, ${dependencies.emitCFieldFlags(field)} },`)
-  }
-
-  lines.push('};')
-  lines.push(`static const inox_shape ${shapeName} = { ${fields.length}, ${fieldsName} };`)
+  const shapeDefinition = emitCObjectShapeDefinition(
+    context,
+    suggestedShapeName,
+    fields.map((field) => `{ ${cStringLiteral(field.name)}, ${dependencies.emitCFieldFlags(field)} }`)
+  )
+  const shapeName = shapeDefinition.shapeName
+  const lines = shapeDefinition.lines
   const directValues = directObjectVariableInitializerValues(fields, properties, context, dependencies)
   const directSpreadValues =
     directValues === null
@@ -2213,6 +2247,10 @@ function directObjectVariableInitializerValues(
     }
   }
 
+  while (values.length > 0 && values[values.length - 1] === 'inox_undefined_value()') {
+    values.pop()
+  }
+
   return { lines, values }
 }
 
@@ -2261,6 +2299,10 @@ function directSpreadObjectVariableInitializerValues(
     }
 
     values.push(`inox::get(${source.expression}, ${cStringLiteral(field.name)})`)
+  }
+
+  while (values.length > 0 && values[values.length - 1] === 'inox_undefined_value()') {
+    values.pop()
   }
 
   return { lines: [], values }

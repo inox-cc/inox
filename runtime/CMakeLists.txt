@@ -117,6 +117,7 @@ set(INOX_RUNTIME_SOURCES
   "${INOX_RUNTIME_DIR}/src/core/exception.cc"
   "${INOX_RUNTIME_DIR}/src/core/main.cc"
   "${INOX_RUNTIME_DIR}/src/core/value.c"
+  "${INOX_RUNTIME_DIR}/src/core/value_bridge.cc"
   "${INOX_RUNTIME_DIR}/src/objects/object.cc"
   ${INOX_STDLIB_SOURCES}
 )

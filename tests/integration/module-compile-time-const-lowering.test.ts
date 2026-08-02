@@ -35,7 +35,7 @@ console.log(read())
 
   assert.ok(source)
   assert.match(source, /static const double count = 123;/)
-  assert.match(source, /static const double enabled = true;/)
+  assert.match(source, /static const bool enabled = true;/)
   assert.doesNotMatch(source, /\n  count = 123;/)
   assert.doesNotMatch(source, /\n  enabled = true;/)
 }

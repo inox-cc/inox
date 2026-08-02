@@ -23,7 +23,8 @@ const result = new Maker().make(false)
     result.code,
     /inox_method_value_\d+\.tag == INOX_TAG_OBJECT \|\| inox_method_value_\d+\.tag == INOX_TAG_CLASS_INSTANCE/
   )
-  assert.match(result.code, /Array\(inox::Value\(inox_method_value_\d+\)\)\.valid\(\)/)
+  assert.match(result.code, /inox_method_value_\d+\.tag == INOX_TAG_ARRAY/)
+  assert.match(result.code, /inox_method_value_\d+\.as\.ref != 0/)
   assert.doesNotMatch(
     result.code,
     /if \(\(inox_method_value_\d+\.tag != INOX_TAG_OBJECT && inox_method_value_\d+\.tag != INOX_TAG_CLASS_INSTANCE\)/

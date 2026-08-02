@@ -227,7 +227,8 @@ function emitRuntimeObjectGetValueLines(
   key: string | number,
   value: string,
   context: CFunctionContext,
-  expectedKey?: string
+  expectedKey?: string,
+  scalarType?: string
 ): string[] {
   const read =
     typeof key === 'number'
@@ -235,7 +236,15 @@ function emitRuntimeObjectGetValueLines(
         ? `inox::object_value_at(${object}, ${key})`
         : `inox::object_value_at(${object}, ${key}, ${cStringLiteral(expectedKey)})`
       : `inox::get(${object}, ${cStringLiteral(key)})`
-  const lines = [`${value} = ${read};`]
+  let valueExpression = read
+
+  if (scalarType === 'number') {
+    valueExpression = `inox::expect_number(${read})`
+  } else if (scalarType === 'boolean') {
+    valueExpression = `inox::expect_boolean(${read})`
+  }
+
+  const lines = [`auto ${value} = ${valueExpression};`]
 
   appendLines(lines, emitRuntimeThrownCheckLines(context))
 
@@ -328,10 +337,10 @@ function referenceName(expression: CValueNode): string | null {
 
 function cBooleanLiteral(value: boolean): string {
   if (value) {
-    return '1'
+    return 'true'
   }
 
-  return '0'
+  return 'false'
 }
 
 function isRawPointerType(valueType: string): boolean {
@@ -2406,6 +2415,13 @@ function withFunctionCallReturnMetadata(
     returnNullable = functionType.returnNullable === true
   }
 
+  if (!returnNullable && (returnType === 'number' || returnType === 'boolean')) {
+    value.cppType = returnType === 'boolean' ? 'bool' : 'double'
+    value.scalarType = returnType === 'boolean' ? 'bool' : 'double'
+    value.valueType = returnType
+    return value
+  }
+
   const cppType = libraryNativeBoundaryCppType(returnType, returnNullable, false, shape)
 
   const raiiType = managedRaiiReturnCppType(returnType, returnNullable, shape)
@@ -2947,10 +2963,10 @@ export function emitPreparedNumberExpression(
   }
 
   if (expression.type === 'BooleanLiteral') {
-    let value = '0'
+    let value = 'false'
 
     if (expression.value) {
-      value = '1'
+      value = 'true'
     }
 
     return {
@@ -3230,7 +3246,8 @@ export function emitPreparedNumberExpression(
         member.index,
         value,
         context,
-        member.key ?? undefined
+        member.key ?? undefined,
+        member.valueType
       )
 
       return emitPreparedRuntimeNumberValue(member.valueType, value, getLines, context)
@@ -3265,7 +3282,14 @@ export function emitPreparedNumberExpression(
     if (field !== null && typeof field !== 'undefined' && isNumberOrBooleanValueType(field.valueType)) {
       const value = nextCName(context, 'inox_expr_value')
       const objectReference = deps.emitObjectValueReference(field.objectName ?? '', context)
-      const getLines = emitRuntimeObjectGetValueLines(objectReference, field.index, value, context, field.key)
+      const getLines = emitRuntimeObjectGetValueLines(
+        objectReference,
+        field.index,
+        value,
+        context,
+        field.key,
+        field.valueType
+      )
 
       return emitPreparedRuntimeNumberValue(field.valueType, value, getLines, context)
     }
@@ -3283,6 +3307,14 @@ export function emitPreparedNumberExpression(
   if (expression.type === 'AwaitExpression') {
     const valueType = deps.inferExpressionType(expression, context)
     const awaited = deps.emitCAwaitValueExpression(expression, context)
+
+    if (awaited.cppType === 'double' || awaited.cppType === 'bool') {
+      return {
+        lines: awaited.lines,
+        expression: awaited.expression,
+        scalarType: awaited.cppType === 'double' ? 'double' : undefined
+      }
+    }
 
     return {
       lines: awaited.lines,
@@ -3483,14 +3515,14 @@ function emitPreparedOptionalRuntimeObjectFieldValueExpression(
   const value = nextCName(context, 'inox_value')
   const lines: string[] = []
 
-  registerOwnedValue(context, value)
   appendLines(lines, object.lines)
   appendLines(lines, emitRuntimeObjectGetValueLines(object.expression, key, value, context))
 
   return {
     lines,
     expression: value,
-    owned: true
+    cppType: 'inox::Value',
+    owned: false
   }
 }
 
@@ -4837,16 +4869,16 @@ function emitPreparedRuntimeNumberValue(
   valueType: string,
   value: string,
   getLines: string[],
-  context: CFunctionContext
+  _context: CFunctionContext
 ): PreparedExpression {
-  registerOwnedValue(context, value)
   const lines: string[] = []
 
   appendLines(lines, getLines)
 
   return {
     lines,
-    expression: scalarRuntimeValueExpression(value, valueType)
+    expression: value,
+    scalarType: valueType === 'number' ? 'double' : undefined
   }
 }
 

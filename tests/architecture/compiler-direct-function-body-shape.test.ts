@@ -14,6 +14,8 @@ test('обычная non-void функция не получает лишний 
   const end = result.code.indexOf('\n}\n', start)
   const body = result.code.slice(start, end)
 
-  assert.doesNotMatch(body, /double inox_return = 0;\n\s+\{/)
-  assert.equal(body.match(/return inox_return;/g)?.length, 1)
+  assert.doesNotMatch(body, /inox_return/)
+  assert.match(body, /return 2;/)
+  assert.match(result.code, /console\.log\("%.17g", value\(\)\);/)
+  assert.doesNotMatch(result.code, /static_cast<double>\(value\(\)\)/)
 })

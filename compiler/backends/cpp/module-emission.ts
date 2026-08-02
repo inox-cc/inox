@@ -426,7 +426,7 @@ export function emitCModuleSource(
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics)
 
-  const lines: string[] = []
+  let lines: string[] = []
   const headerDeclarations = collectCModuleHeaderDeclarationLines(plan, context, deps)
   const headerIncludes = collectCModuleHeaderIncludeLines(
     plan,
@@ -436,6 +436,7 @@ export function emitCModuleSource(
     headerDeclarations,
     options.host
   )
+  context.hoistObjectShapeDefinitions = true
 
   if (headerDeclarations.length > 0) {
     lines.push(`#include "${relativeCIncludePath(plan.sourcePath, plan.headerPath, options.host)}"`)
@@ -482,6 +483,7 @@ export function emitCModuleSource(
   if (context.runtimeInitializerDefinitions.length > 0) {
     lines.push('')
   }
+  const objectShapeDefinitionIndex = lines.length
 
   const bodyLines: string[] = []
   const inlineConstructorDefinitions: CClassInlineDefinitionMap = new Map()
@@ -614,6 +616,15 @@ export function emitCModuleSource(
   emitCModuleFunctionPointerRuntimeAdapterDefinitions(lines, context)
   emitCModuleFunctionPointerAdapterDefinitions(lines, context)
   pushCModuleLines(lines, bodyLines)
+
+  if (context.objectShapeDefinitions.length > 0) {
+    lines = [
+      ...lines.slice(0, objectShapeDefinitionIndex),
+      ...context.objectShapeDefinitions,
+      '',
+      ...lines.slice(objectShapeDefinitionIndex)
+    ]
+  }
 
   return filterUnusedCPreludeIncludes(joinCModuleLines(lines))
 }

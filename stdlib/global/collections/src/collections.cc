@@ -231,9 +231,16 @@ static MapStorage* map_data(const Map& value) {
 }
 
 static bool inox_map_add_entry(Map& map, const inox::Value& entry_value) {
+  inox_value raw_entry = entry_value.raw();
+
+  if (raw_entry.tag != INOX_TAG_ARRAY || raw_entry.as.ref == 0) {
+    inox_collection_throw("TypeError: Map constructor entry is not a key/value pair");
+    return false;
+  }
+
   Array entry(entry_value);
 
-  if (!entry.valid() || entry.length() < 2) {
+  if (entry.length() < 2) {
     inox_collection_throw("TypeError: Map constructor entry is not a key/value pair");
     return false;
   }
@@ -251,7 +258,15 @@ static bool inox_map_add_entry(Map& map, const inox::Value& entry_value) {
 
 Map::Map() : inox::Value(inox_map_create_value()) {}
 
-Map::Map(const inox::Value& value) : inox::Value(value) {}
+Map::Map(const inox::Value& value) : inox::Value(value) {
+  if (inox::thrown()) {
+    return;
+  }
+
+  if (!valid()) {
+    inox_collection_throw("TypeError: expected Map");
+  }
+}
 
 static inox::Value inox_map_create_value() {
   if (inox_default_allocator.alloc == 0) {
@@ -579,7 +594,7 @@ size_t Map::size() const {
 
 MapIterator Map::entries() const {
   if (!valid()) {
-    inox_collection_throw("TypeError: Map.entries receiver is not a Map");
+    inox::fatal("Map.entries native facade invariant failed");
   }
 
   return MapIterator(*this, 0);
@@ -587,7 +602,7 @@ MapIterator Map::entries() const {
 
 MapIterator Map::keys() const {
   if (!valid()) {
-    inox_collection_throw("TypeError: Map.keys receiver is not a Map");
+    inox::fatal("Map.keys native facade invariant failed");
   }
 
   return MapIterator(*this, 1);
@@ -595,7 +610,7 @@ MapIterator Map::keys() const {
 
 MapIterator Map::values() const {
   if (!valid()) {
-    inox_collection_throw("TypeError: Map.values receiver is not a Map");
+    inox::fatal("Map.values native facade invariant failed");
   }
 
   return MapIterator(*this, 2);
@@ -610,8 +625,7 @@ MapIterationResult MapIterator::next() {
   MapStorage* instance = map_data(value);
 
   if (instance == 0) {
-    inox_collection_throw("TypeError: Map iterator receiver is not a Map");
-    return { true, inox::Value() };
+    inox::fatal("Map iterator native facade invariant failed");
   }
 
   while (index_ < instance->capacity) {
@@ -820,7 +834,15 @@ static inox_status inox_set_find(SetStorage* set, inox_value value, uint64_t has
 
 Set::Set() : inox::Value(inox_set_create_value()) {}
 
-Set::Set(const inox::Value& value) : inox::Value(value) {}
+Set::Set(const inox::Value& value) : inox::Value(value) {
+  if (inox::thrown()) {
+    return;
+  }
+
+  if (!valid()) {
+    inox_collection_throw("TypeError: expected Set");
+  }
+}
 
 Set Set::from(const inox::Value& values) {
   Set result;
@@ -1109,7 +1131,7 @@ size_t Set::size() const {
 
 SetIterator Set::values() const {
   if (!valid()) {
-    inox_collection_throw("TypeError: Set.values receiver is not a Set");
+    inox::fatal("Set.values native facade invariant failed");
   }
 
   return SetIterator(*this);
@@ -1124,8 +1146,7 @@ SetIterationResult SetIterator::next() {
   SetStorage* instance = set_data(value);
 
   if (instance == 0) {
-    inox_collection_throw("TypeError: Set iterator receiver is not a Set");
-    return { true, inox::Value() };
+    inox::fatal("Set iterator native facade invariant failed");
   }
 
   while (index_ < instance->capacity) {
@@ -1461,9 +1482,25 @@ static inox_status inox_array_join_part(inox_value value, char* buffer, size_t b
 
 Array::Array() : inox::Value() {}
 
-Array::Array(const inox::Value& value) : inox::Value(value) {}
+Array::Array(const inox::Value& value) : inox::Value(value) {
+  if (inox::thrown()) {
+    return;
+  }
 
-Array::Array(inox::Value&& value) : inox::Value(std::move(value)) {}
+  if (!valid()) {
+    inox_collection_throw("TypeError: expected Array");
+  }
+}
+
+Array::Array(inox::Value&& value) : inox::Value(std::move(value)) {
+  if (inox::thrown()) {
+    return;
+  }
+
+  if (!valid()) {
+    inox_collection_throw("TypeError: expected Array");
+  }
+}
 
 static ArrayStorage* array_data(const Array& value) {
   inox_value raw = value.raw();
@@ -1485,8 +1522,7 @@ size_t Array::length() const {
   inox_value array = inox::Value::raw();
 
   if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
-    inox_collection_throw("TypeError: Array.length receiver is not an Array");
-    return 0;
+    inox::fatal("Array.length native facade invariant failed");
   }
 
   return ((ArrayStorage*)array.as.ref)->length;
@@ -1548,6 +1584,10 @@ Array Array::create(size_t len) {
 }
 
 Array Array::from(std::initializer_list<inox::Value> values) {
+  if (inox::thrown()) {
+    return Array();
+  }
+
   Array result = Array::create(values.size());
 
   if (!result.valid() || inox::thrown()) {
@@ -2112,8 +2152,7 @@ ArrayIterator Array::values() const {
   }
 
   if (!valid()) {
-    inox_collection_throw("TypeError: Array.values receiver is not an Array");
-    return ArrayIterator();
+    inox::fatal("Array.values native facade invariant failed");
   }
 
   return ArrayIterator(*this);

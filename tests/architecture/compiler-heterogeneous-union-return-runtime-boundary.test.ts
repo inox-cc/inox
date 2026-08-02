@@ -22,11 +22,11 @@ console.log(read())
     { libraries: defaultCompilerLibrarySet, target: 'cc' }
   )
 
-  assert.match(result.code, /inox::Value make\(double value\)/)
+  assert.match(result.code, /inox::Value make\(bool value\)/)
   assert.match(result.code, /inox::Value result = inox_call_result_\d+;/)
   assert.match(
     result.code,
-    /\(result\.tag == INOX_TAG_OBJECT \|\| result\.tag == INOX_TAG_CLASS_INSTANCE\).*Array\(inox::Value\(result\)\)\.valid\(\)/s
+    /\(result\.tag == INOX_TAG_OBJECT \|\| result\.tag == INOX_TAG_CLASS_INSTANCE\).*result\.tag == INOX_TAG_ARRAY && result\.as\.ref != 0/s
   )
   assert.doesNotMatch(
     result.code,

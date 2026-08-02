@@ -24,6 +24,6 @@ test('C++ backend восстанавливает native type пустого ма
   const code = emitTargetFromIr('cc', compiled.ir, { libraries: defaultCompilerLibrarySet })
 
   assert.ok(provider)
-  assert.match(code, new RegExp(`${provider.cppType} inox_array_[0-9]+ = ${provider.cppType}::create\\(0\\);`))
+  assert.match(code, new RegExp(`auto inox_array_[0-9]+ = ${provider.cppType}::create\\(0\\);`))
   assert.doesNotMatch(code, /inox::Value::create/)
 })

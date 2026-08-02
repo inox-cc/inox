@@ -249,6 +249,9 @@ inline Value adopt(inox_value value) {
   return Value(adopt_value, value);
 }
 
+double expect_number(const Value& value);
+bool expect_boolean(const Value& value);
+
 } // namespace inox
 
 #include "inox/string.h"

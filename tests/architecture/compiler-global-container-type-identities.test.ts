@@ -35,9 +35,10 @@ test('Array, Set и Promise принадлежат discoverable global packages 
       baseTypeIds: [],
       runtimeRequirements: [arrayRuntimeRequirement],
       cValueAdapter: 'Array($value)',
+      cValueAdapterFailureMode: 'thrown',
       cValueAdapterPreservesPendingException: true,
       cRuntimeValueExpression: '$value.raw()',
-      cRuntimeValueValidExpression: 'Array(inox::Value($value)).valid()',
+      cRuntimeValueValidExpression: '$value.tag == INOX_TAG_ARRAY && $value.as.ref != 0',
       typeParameters: ['T'],
       traits: [
         {
@@ -62,9 +63,7 @@ test('Array, Set и Promise принадлежат discoverable global packages 
         valueMember: 'value',
         receiverAdapter: 'Array($value)',
         managedValue: true,
-        rangeBased: true,
-        preservesPendingException: true,
-        creationFailureMode: 'thrown'
+        rangeBased: true
       }
     }
   )
@@ -77,9 +76,10 @@ test('Array, Set и Promise принадлежат discoverable global packages 
       valueType: 'object',
       cppType: 'Set',
       cValueAdapter: 'Set($value)',
+      cValueAdapterFailureMode: 'thrown',
       cValueAdapterPreservesPendingException: true,
       cRuntimeValueExpression: '$value.raw()',
-      cRuntimeValueValidExpression: 'Set(inox::Value($value)).valid()',
+      cRuntimeValueValidExpression: '$value.tag == INOX_TAG_SET && $value.as.ref != 0',
       baseTypeIds: [],
       runtimeRequirements: ['global:collections#set'],
       typeParameters: ['T'],
@@ -90,16 +90,14 @@ test('Array, Set и Promise принадлежат discoverable global packages 
         doneMember: 'done',
         valueMember: 'value',
         receiverAdapter: 'Set($value)',
-        valueAdapter: '$value.raw()',
-        creationFailureMode: 'thrown',
-        nextFailureMode: 'thrown'
+        valueAdapter: '$value.raw()'
       }
     }
   )
   assert.equal(
     (collectionsPackage.nativeTypes ?? []).find((item) => item.declarationNames.includes('Map'))
       ?.cRuntimeValueValidExpression,
-    'Map(inox::Value($value)).valid()'
+    '$value.tag == INOX_TAG_MAP && $value.as.ref != 0'
   )
   assert.deepEqual(collectionsPackage.intrinsicBindings, [
     { role: 'array-literal', bindingId: 'global:collections#Array.intrinsic' }

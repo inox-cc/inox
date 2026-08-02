@@ -69,6 +69,7 @@ import {
   emitBoxedValueCleanup,
   emitBoxedValueDeclarations,
   emitCleanupReturn,
+  emitCObjectShapeDefinition,
   emitErrorChannelDeclarations,
   emitEventLoopReference,
   emitFailureStatement,
@@ -1269,6 +1270,10 @@ function createBaseContext(
     objectAccessorReturnPaths,
     moduleObjectShapes,
     moduleValueTypes: new Map(),
+    hoistObjectShapeDefinitions: false,
+    objectShapeDefinitionCounter: { value: 0 },
+    objectShapeDefinitionNames: new Map(),
+    objectShapeDefinitions: [],
     asyncResultChainArrowWrappers: new Map(),
     asyncResultChainWrappers: new Map(),
     runtimeEntrypointAdapter: null,
@@ -3711,8 +3716,7 @@ function isBoxedRuntimeStringReference(expression: AnyNode, context: CFunctionCo
 }
 
 function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
-  const shapeName = nextCName(context, `inox_shape_${emitCIdentifier(statement.name)}`)
-  const fieldsName = `${shapeName}_fields`
+  const suggestedShapeName = nextCName(context, `inox_shape_${emitCIdentifier(statement.name)}`)
   let fields: CObjectShapeField[] = []
   const shape: CObjectShape | null | undefined = statement.shape
 
@@ -3736,14 +3740,13 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
     }
   }
 
-  const lines = [`static const inox_field_info ${fieldsName}[] = {`]
-
-  for (const field of fields) {
-    lines.push(`  { ${cStringLiteral(field.name)}, ${emitCFieldFlags(field)} },`)
-  }
-
-  lines.push('};')
-  lines.push(`static const inox_shape ${shapeName} = { ${fields.length}, ${fieldsName} };`)
+  const shapeDefinition = emitCObjectShapeDefinition(
+    context,
+    suggestedShapeName,
+    fields.map((field) => `{ ${cStringLiteral(field.name)}, ${emitCFieldFlags(field)} }`)
+  )
+  const shapeName = shapeDefinition.shapeName
+  const lines = shapeDefinition.lines
   registerBoxedValue(context, statement.name, 'object')
   context.boxedVariables.add(statement.name)
   context.variables.set(statement.name, 'object')
@@ -4644,7 +4647,12 @@ function emitCArrayLiteralValueExpression(
     }
   }
 
-  const target = outputTarget?.declare === true ? `auto ${temp}` : (outputTarget?.name ?? `${arrayCppType} ${temp}`)
+  const target =
+    outputTarget === null || typeof outputTarget === 'undefined'
+      ? `auto ${temp}`
+      : outputTarget.declare
+        ? `auto ${temp}`
+        : outputTarget.name
   const literalExpression = materialization.literalExpression
 
   if (
@@ -4656,7 +4664,11 @@ function emitCArrayLiteralValueExpression(
     const values: string[] = []
 
     for (let index = 0; index < expression.elements.length; index = index + 1) {
-      const value = emitCValueExpression(expression.elements[index], context)
+      const element = expression.elements[index]
+      const value =
+        element.type === 'ObjectLiteral'
+          ? emitCObjectLiteralValueExpression(element, context, null, true)
+          : emitCValueExpression(element, context)
       pushAll(lines, value.lines)
       values.push(value.expression)
     }
@@ -4853,11 +4865,11 @@ function cNodeSourceLocation(node: AnyNode): SourceLocation {
 function emitCObjectLiteralValueExpression(
   expression: AnyNode,
   context: CFunctionContext,
-  shape: CObjectShape | null = null
+  shape: CObjectShape | null = null,
+  inlineAggregate: boolean = false
 ): PreparedExpression {
   const temp = nextCName(context, 'inox_object')
-  const shapeName = nextCName(context, 'inox_shape_value')
-  const fieldsName = `${shapeName}_fields`
+  const suggestedShapeName = nextCName(context, 'inox_shape_value')
   let resolvedShape = shape ?? objectLiteralExpressionRuntimeShape(expression)
 
   if (
@@ -4870,19 +4882,29 @@ function emitCObjectLiteralValueExpression(
 
   const fields = objectLiteralValueShapeFields(expression, context, resolvedShape)
   const functionCompanions: CPreparedFunctionCompanion[] = []
-  const lines = [`static const inox_field_info ${fieldsName}[] = {`]
-
-  for (const field of fields) {
-    lines.push(`  { ${cStringLiteral(field.name)}, ${emitCFieldFlags(field)} },`)
-  }
-
-  lines.push('};')
-  lines.push(`static const inox_shape ${shapeName} = { ${fields.length}, ${fieldsName} };`)
+  const shapeDefinition = emitCObjectShapeDefinition(
+    context,
+    suggestedShapeName,
+    fields.map((field) => `{ ${cStringLiteral(field.name)}, ${emitCFieldFlags(field)} }`)
+  )
+  const shapeName = shapeDefinition.shapeName
+  const lines = shapeDefinition.lines
   const direct = emitDirectObjectLiteralInitializer(expression, fields, context)
 
   if (direct !== null) {
     pushAll(lines, direct.lines)
-    lines.push(`auto ${temp} = inox::ObjectValue::from(&${shapeName}, { ${joinStrings(direct.values, ', ')} });`)
+    const initializer = `inox::ObjectValue::from(&${shapeName}, { ${joinStrings(direct.values, ', ')} })`
+
+    if (inlineAggregate && direct.lines.length === 0 && direct.functionCompanions.length === 0) {
+      return {
+        lines,
+        expression: initializer,
+        cppType: 'inox::ObjectValue',
+        valueType: 'object'
+      }
+    }
+
+    lines.push(`auto ${temp} = ${initializer};`)
     lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
@@ -4998,6 +5020,10 @@ function emitDirectObjectLiteralInitializer(
 
   if (propertyIndex !== properties.length) {
     return null
+  }
+
+  while (values.length > 0 && values[values.length - 1] === 'inox_undefined_value()') {
+    values.pop()
   }
 
   return { lines, values, functionCompanions }
@@ -6596,21 +6622,23 @@ function emitModuleRuntimeBooleanLogValue(expression: AnyNode, context: CFunctio
 function emitRuntimeStringLogValue(
   source: RuntimeLogGetSource,
   context: CFunctionContext,
-  narrowed: boolean = false
+  _narrowed: boolean = false
 ): FormattedOutputValue {
   const value = nextCName(context, 'inox_log_value')
   const lines: string[] = []
+  const getExpression = emitRuntimeLogGetExpression(source, context)
 
-  pushAll(lines, emitRuntimeLogGetLines(source, value, context))
-
-  if (!narrowed) {
-    lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
+  if (getExpression === null) {
+    lines.push(emitStatusCheck('INOX_ERR_FIELD', context))
+  } else {
+    lines.push(`auto ${value} = inox::String(${getExpression});`)
+    pushAll(lines, emitThrownCheckLines(context))
   }
 
   return {
     lines,
     format: formattedOutputStringFormat,
-    values: [`inox::String(inox::Value(${value}))`]
+    values: [value]
   }
 }
 
@@ -6621,16 +6649,21 @@ function emitRuntimeNumberLogValue(
 ): FormattedOutputValue {
   const value = nextCName(context, 'inox_log_value')
   const lines: string[] = []
-  let tag = 'INOX_TAG_NUMBER'
-  let formattedValue = `${value}.as.number`
+  const getExpression = emitRuntimeLogGetExpression(source, context)
+  let adapter = 'inox::expect_number'
+  let formattedValue = value
 
   if (valueType === 'boolean') {
-    tag = 'INOX_TAG_BOOL'
-    formattedValue = `static_cast<double>(${value}.as.boolean ? 1 : 0)`
+    adapter = 'inox::expect_boolean'
+    formattedValue = `static_cast<double>(${value} ? 1 : 0)`
   }
 
-  pushAll(lines, emitRuntimeLogGetLines(source, value, context))
-  lines.push(emitRuntimeValueCheck(value, tag, context))
+  if (getExpression === null) {
+    lines.push(emitStatusCheck('INOX_ERR_FIELD', context))
+  } else {
+    lines.push(`auto ${value} = ${adapter}(${getExpression});`)
+    pushAll(lines, emitThrownCheckLines(context))
+  }
 
   return {
     lines,
@@ -6642,47 +6675,42 @@ function emitRuntimeNumberLogValue(
 function emitRuntimeBooleanLogValue(source: RuntimeLogGetSource, context: CFunctionContext): FormattedOutputValue {
   const value = nextCName(context, 'inox_log_value')
   const lines: string[] = []
+  const getExpression = emitRuntimeLogGetExpression(source, context)
 
-  pushAll(lines, emitRuntimeLogGetLines(source, value, context))
-  lines.push(emitRuntimeValueCheck(value, 'INOX_TAG_BOOL', context))
+  if (getExpression === null) {
+    lines.push(emitStatusCheck('INOX_ERR_FIELD', context))
+  } else {
+    lines.push(`auto ${value} = inox::expect_boolean(${getExpression});`)
+    pushAll(lines, emitThrownCheckLines(context))
+  }
 
   return {
     lines,
     format: formattedOutputBooleanFormat,
-    values: [`${value}.as.boolean`]
+    values: [value]
   }
 }
 
-function emitRuntimeLogGetLines(source: RuntimeLogGetSource, temp: string, context: CFunctionContext): string[] {
+function emitRuntimeLogGetExpression(source: RuntimeLogGetSource, context: CFunctionContext): string | null {
   if (source.kind === 'known-object-index') {
     const field = source.field
 
     if (field === null || typeof field === 'undefined') {
-      return [emitStatusCheck('INOX_ERR_FIELD', context)]
+      return null
     }
 
     const object = emitObjectValueReference(field.objectName, context)
-    const lines = [
-      `auto ${temp} = inox::object_value_at(${object}, ${field.index}, ${cStringLiteral(field.key)});`
-    ]
-    pushAll(lines, emitThrownCheckLines(context))
-
-    return lines
+    return `inox::object_value_at(${object}, ${field.index}, ${cStringLiteral(field.key)})`
   }
 
   const member = source.member
 
   if (member === null || typeof member === 'undefined') {
-    return [emitStatusCheck('INOX_ERR_FIELD', context)]
+    return null
   }
 
   const object = emitObjectValueReference(member.objectName, context)
-  const lines = [
-    `auto ${temp} = inox::object_value_at(${object}, ${member.index}, ${cStringLiteral(knownObjectMemberKey(member))});`
-  ]
-  pushAll(lines, emitThrownCheckLines(context))
-
-  return lines
+  return `inox::object_value_at(${object}, ${member.index}, ${cStringLiteral(knownObjectMemberKey(member))})`
 }
 
 function emitRuntimeExceptionValue(expression: AnyNode, context: CFunctionContext): FormattedOutputValue {
@@ -7176,6 +7204,25 @@ function emitPreparedAwaitResultExpression(
     }
   }
 
+  const scalarAdapter = cAwaitScalarAdapter(valueType, awaitExpression)
+
+  if (scalarAdapter !== null) {
+    const converted = nextCName(context, 'inox_await')
+
+    lines.push(`auto ${converted} = ${scalarAdapter.expression};`)
+    pushAll(lines, emitAwaitResultRejectedAsyncResultLines(converted, rejectionValueType, context))
+
+    return {
+      lines,
+      expression: converted,
+      cppDeclaredName: converted,
+      cppType: scalarAdapter.cppType,
+      owned: false,
+      runtimeTypeChecked: true,
+      valueType
+    }
+  }
+
   const adapter = resolveAwaitValueAdapterInfo(expression, awaitExpression, valueType, context)
 
   if (adapter !== null && adapter.failureMode === 'thrown' && adapter.preservesPendingException) {
@@ -7229,6 +7276,27 @@ function emitPreparedAwaitResultExpression(
   }
 
   return preparedExpression
+}
+
+function cAwaitScalarAdapter(
+  valueType: string,
+  awaitExpression: string
+): { cppType: string; expression: string } | null {
+  if (valueType === 'number') {
+    return {
+      cppType: 'double',
+      expression: `inox::expect_number(${awaitExpression})`
+    }
+  }
+
+  if (valueType === 'boolean') {
+    return {
+      cppType: 'bool',
+      expression: `inox::expect_boolean(${awaitExpression})`
+    }
+  }
+
+  return null
 }
 
 type AwaitResultCppValueInfo = {

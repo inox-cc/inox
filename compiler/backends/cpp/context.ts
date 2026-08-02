@@ -21,6 +21,7 @@ import type {
 import { emitCIdentifier } from './identifiers.ts'
 import {
   emitCReturnType,
+  emitCType,
   isManagedRuntimeReturnType,
   isNullableScalarType,
   isOpaqueRuntimeValueType,
@@ -159,6 +160,10 @@ export type CEmitContextWithDependencies<
   moduleObjectShapes: CObjectShapeFieldMap
   moduleValueTypes: CStringMap
   nextId: number
+  hoistObjectShapeDefinitions: boolean
+  objectShapeDefinitionCounter: { value: number }
+  objectShapeDefinitionNames: CStringMap
+  objectShapeDefinitions: string[]
   nullableLoweringDependencies: NullableDependencies
   pendingExceptionFunctions: CStringSet
   runtimeEntryPath: string | null
@@ -431,6 +436,10 @@ export function createFunctionContext<
     explicitEventLoop: false,
     externalEventLoop: false,
     moduleValueDeclarationScope: false,
+    hoistObjectShapeDefinitions: baseContext.hoistObjectShapeDefinitions,
+    objectShapeDefinitionCounter: baseContext.objectShapeDefinitionCounter,
+    objectShapeDefinitionNames: baseContext.objectShapeDefinitionNames,
+    objectShapeDefinitions: baseContext.objectShapeDefinitions,
     narrowedNullableScalars: new Set(),
     nullableVariables: new Set(),
     objectAliases: new Map(),
@@ -453,6 +462,81 @@ export function createFunctionContext<
     returnNullable: returnNullable,
     returnType: returnType
   }
+}
+
+type CObjectShapeDefinitionContext = {
+  hoistObjectShapeDefinitions?: boolean
+  objectShapeDefinitionCounter?: { value: number }
+  objectShapeDefinitionNames?: CStringMap
+  objectShapeDefinitions?: string[]
+}
+
+export type CObjectShapeDefinition = {
+  lines: string[]
+  shapeName: string
+}
+
+export function emitCObjectShapeDefinition(
+  context: CObjectShapeDefinitionContext,
+  suggestedShapeName: string,
+  fields: string[]
+): CObjectShapeDefinition {
+  const counter = context.objectShapeDefinitionCounter
+  const names = context.objectShapeDefinitionNames
+  const definitions = context.objectShapeDefinitions
+
+  if (
+    context.hoistObjectShapeDefinitions !== true ||
+    counter === null ||
+    typeof counter === 'undefined' ||
+    names === null ||
+    typeof names === 'undefined' ||
+    definitions === null ||
+    typeof definitions === 'undefined'
+  ) {
+    return {
+      lines: cObjectShapeDefinitionLines(suggestedShapeName, fields),
+      shapeName: suggestedShapeName
+    }
+  }
+
+  const key = fields.join('\u0000')
+  const existing = names.get(key)
+
+  if (existing !== null && typeof existing !== 'undefined') {
+    return { lines: [], shapeName: existing }
+  }
+
+  const id = counter.value
+  const shapeName = `inox_object_shape_${id}`
+
+  counter.value = id + 1
+  names.set(key, shapeName)
+
+  if (definitions.length > 0) {
+    definitions.push('')
+  }
+
+  const definitionLines = cObjectShapeDefinitionLines(shapeName, fields)
+
+  for (const line of definitionLines) {
+    definitions.push(line)
+  }
+
+  return { lines: [], shapeName }
+}
+
+function cObjectShapeDefinitionLines(shapeName: string, fields: string[]): string[] {
+  const fieldsName = `${shapeName}_fields`
+  const lines = [`static const inox_field_info ${fieldsName}[] = {`]
+
+  for (const field of fields) {
+    lines.push(`  ${field},`)
+  }
+
+  lines.push('};')
+  lines.push(`static const inox_shape ${shapeName} = { ${fields.length}, ${fieldsName} };`)
+  return lines
 }
 
 export function emitStatusCheck(call: string, context: CFailureContext): string {
@@ -692,7 +776,7 @@ export function emitReturnValueDeclarations(context: CReturnValueDeclarationCont
   }
 
   if (returnType !== 'void') {
-    return ['double inox_return = 0;']
+    return [`${emitCType(returnType)} inox_return{};`]
   }
 
   return []

@@ -52,6 +52,7 @@ import {
   cIterableElementValueType,
   cFunctionTypeFromTypeRef,
   cRuntimeValueTag,
+  cRuntimeValueAdapterInfo,
   cTypeRefDeclaredName,
   cTypeRefNativeShape,
   compilerLibraryNativeIterationForId,
@@ -1139,9 +1140,10 @@ export function emitNumberBooleanScalarVariableDeclaration(
 
   const value = deps.emitPreparedNumberExpression(statement.init, context)
   const lines: string[] = []
+  const cppType = inferred === 'boolean' ? 'bool' : 'double'
   pushAllLines(lines, value.lines)
   lines.push(
-    `${constPrefix(statement.kind === 'const')}double ${emitCIdentifier(statement.name)} = ${value.expression};`
+    `${constPrefix(statement.kind === 'const')}${cppType} ${emitCIdentifier(statement.name)} = ${value.expression};`
   )
   pushAwaitVariableDeclarationSpacing(lines, statement.init)
 
@@ -1161,16 +1163,18 @@ function emitDynamicObjectScalarVariableDeclaration(
   const value = deps.emitCValueExpression(statement.init, context)
   const tag = cRuntimeValueTag(valueType)
   const lines: string[] = []
+  let cppType = 'double'
   let runtimeValueExpression = `${value.expression}.as.number`
 
   if (valueType === 'boolean') {
-    runtimeValueExpression = `(${value.expression}.as.boolean ? 1 : 0)`
+    cppType = 'bool'
+    runtimeValueExpression = `${value.expression}.as.boolean`
   }
 
   pushAllLines(lines, value.lines)
   lines.push(emitRuntimeValueCheck(value.expression, tag, context))
   lines.push(
-    `${constPrefix(statement.kind === 'const')}double ${emitCIdentifier(statement.name)} = ${runtimeValueExpression};`
+    `${constPrefix(statement.kind === 'const')}${cppType} ${emitCIdentifier(statement.name)} = ${runtimeValueExpression};`
   )
 
   return lines
@@ -1285,7 +1289,7 @@ export function emitRuntimeValueVariableDeclaration(
   let value = statementDeps(context).emitCValueExpression(emittedExpression, context)
 
   if (nativeCppType !== null && value.cppType !== nativeCppType) {
-    const adapter = libraryNativeValueAdapter(nativeShape)
+    const adapter = cRuntimeValueAdapterInfo(valueType, nativeShape, value.expression, context.libraries)
 
     if (adapter === null) {
       pushDiagnostic(
@@ -1299,8 +1303,9 @@ export function emitRuntimeValueVariableDeclaration(
     } else {
       value = {
         ...value,
-        expression: applyLibraryNativeValueAdapter(value.expression, adapter),
+        expression: adapter.valueExpression,
         cppType: nativeCppType,
+        evaluationFailureMode: adapter.failureMode ?? undefined,
         valueType: 'object'
       }
     }
@@ -1317,6 +1322,10 @@ export function emitRuntimeValueVariableDeclaration(
   pushAllLines(lines, value.lines)
   lines.push(emitLocalRuntimeValueDeclaration(statement, value, context))
   pushRuntimeValueFunctionCompanionDeclarations(lines, statement, value, context)
+
+  if (value.evaluationFailureMode === 'thrown') {
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+  }
 
   if (shouldSkipRuntimeValueDeclarationCheck(statement, value, valueType)) {
     pushAwaitVariableDeclarationSpacing(lines, expression)

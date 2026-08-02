@@ -132,7 +132,11 @@ const arrayOperations: LibraryOperationDescriptor[] = [
     }),
     cFailureMode: null
   },
-  arrayMemberRead('length', numberTypeRef, 'static_cast<double>($value)'),
+  {
+    ...arrayMemberRead('length', numberTypeRef, 'static_cast<double>($value)'),
+    cFailureMode: null,
+    cPreservesPendingException: true
+  },
   {
     ...arrayReceiverCall('includes', booleanTypeRef, ['runtime-value'], [{ valueTypes: [], typeRef: parameterTypeRef }]),
     cFailureMode: null,
@@ -283,7 +287,11 @@ const mapOperations: LibraryOperationDescriptor[] = [
   },
   mapReceiverCall('clear', 'clear', voidTypeRef, []),
   mapReceiverCall('delete', 'erase', booleanTypeRef, [keyParameterTypeRef]),
-  mapReceiverCall('entries', 'entries', mapIteratorTypeRef(mapEntryIteratorNativeTypeId, []), []),
+  {
+    ...mapReceiverCall('entries', 'entries', mapIteratorTypeRef(mapEntryIteratorNativeTypeId, []), []),
+    cFailureMode: null,
+    cPreservesPendingException: true
+  },
   mapIndexRead(),
   mapIndexWrite(),
   {
@@ -295,7 +303,11 @@ const mapOperations: LibraryOperationDescriptor[] = [
     cFailureMode: null,
     cPreservesPendingException: true
   },
-  mapReceiverCall('keys', 'keys', mapIteratorTypeRef(mapKeyIteratorNativeTypeId, [keyParameterTypeRef]), []),
+  {
+    ...mapReceiverCall('keys', 'keys', mapIteratorTypeRef(mapKeyIteratorNativeTypeId, [keyParameterTypeRef]), []),
+    cFailureMode: null,
+    cPreservesPendingException: true
+  },
   mapReceiverCall('set', 'set', mapTypeRef(keyParameterTypeRef, valueParameterTypeRef), [
     keyParameterTypeRef,
     valueParameterTypeRef
@@ -315,7 +327,11 @@ const mapOperations: LibraryOperationDescriptor[] = [
     cResultAdapter: 'static_cast<double>($value)',
     resultTypeRef: numberTypeRef
   },
-  mapReceiverCall('values', 'values', mapIteratorTypeRef(mapValueIteratorNativeTypeId, [valueParameterTypeRef]), [])
+  {
+    ...mapReceiverCall('values', 'values', mapIteratorTypeRef(mapValueIteratorNativeTypeId, [valueParameterTypeRef]), []),
+    cFailureMode: null,
+    cPreservesPendingException: true
+  }
 ]
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
@@ -331,9 +347,10 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       baseTypeIds: [],
       runtimeRequirements: [arrayRuntimeRequirement],
       cValueAdapter: 'Array($value)',
+      cValueAdapterFailureMode: 'thrown',
       cValueAdapterPreservesPendingException: true,
       cRuntimeValueExpression: '$value.raw()',
-      cRuntimeValueValidExpression: 'Array(inox::Value($value)).valid()',
+      cRuntimeValueValidExpression: '$value.tag == INOX_TAG_ARRAY && $value.as.ref != 0',
       typeParameters: ['T'],
       traits: [
         { traitId: 'indexable', args: [numberTypeRef, parameterTypeRef] },
@@ -346,9 +363,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
         valueMember: 'value',
         receiverAdapter: 'Array($value)',
         managedValue: true,
-        rangeBased: true,
-        preservesPendingException: true,
-        creationFailureMode: 'thrown'
+        rangeBased: true
       }
     },
     {
@@ -360,9 +375,10 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       baseTypeIds: [],
       runtimeRequirements: [mapRuntimeRequirement],
       cValueAdapter: 'Map($value)',
+      cValueAdapterFailureMode: 'thrown',
       cValueAdapterPreservesPendingException: true,
       cRuntimeValueExpression: '$value.raw()',
-      cRuntimeValueValidExpression: 'Map(inox::Value($value)).valid()',
+      cRuntimeValueValidExpression: '$value.tag == INOX_TAG_MAP && $value.as.ref != 0',
       typeParameters: ['K', 'V'],
       traits: [
         { traitId: 'indexable', args: [keyParameterTypeRef, valueParameterTypeRef] },
@@ -375,7 +391,6 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
         valueMember: 'value',
         receiverAdapter: 'Map($value)',
         valueAdapter: '$value.raw()',
-        creationFailureMode: 'thrown',
         nextFailureMode: 'thrown'
       }
     },
@@ -391,9 +406,10 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       baseTypeIds: [],
       runtimeRequirements: [setRuntimeRequirement],
       cValueAdapter: 'Set($value)',
+      cValueAdapterFailureMode: 'thrown',
       cValueAdapterPreservesPendingException: true,
       cRuntimeValueExpression: '$value.raw()',
-      cRuntimeValueValidExpression: 'Set(inox::Value($value)).valid()',
+      cRuntimeValueValidExpression: '$value.tag == INOX_TAG_SET && $value.as.ref != 0',
       typeParameters: ['T'],
       traits: [{ traitId: 'iterable', args: [parameterTypeRef] }],
       cIteration: {
@@ -402,9 +418,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
         doneMember: 'done',
         valueMember: 'value',
         receiverAdapter: 'Set($value)',
-        valueAdapter: '$value.raw()',
-        creationFailureMode: 'thrown',
-        nextFailureMode: 'thrown'
+        valueAdapter: '$value.raw()'
       }
     }
   ],

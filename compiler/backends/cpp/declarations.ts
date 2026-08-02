@@ -242,7 +242,7 @@ function declarationBodyEndsWithReturn(lines: string[]): boolean {
     const line = lines[index].trim()
 
     if (line !== '') {
-      return line.startsWith('return ') && line.endsWith(';')
+      return (line.startsWith('return ') || line.startsWith('co_return ')) && line.endsWith(';')
     }
   }
 
@@ -356,15 +356,19 @@ export function emitFunctionDeclaration(
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(statement.body, context))
   pushIndentedDeclarationLines(bodyLines, emitEventLoopDrain(context))
   const needsCleanup = shouldEmitCleanupLabel(context)
-  const directRaiiReturn =
-    !needsCleanup &&
+  const directScalarReturn =
+    context.returnNullable !== true && (context.returnType === 'number' || context.returnType === 'boolean')
+  const directManagedReturn =
     !context.coroutine &&
+    managedRaiiReturnCppType(context.returnType, context.returnNullable === true, context.returnShape) !== null
+  const directValueReturn =
+    !needsCleanup &&
     !context.returnFlowUsed &&
     context.returnFunctionCompanions.length === 0 &&
-    managedRaiiReturnCppType(context.returnType, context.returnNullable === true, context.returnShape) !== null
+    (directScalarReturn || directManagedReturn)
 
   lines.push(`${emitFunctionHead(statement, context)} {`)
-  if (!directRaiiReturn) {
+  if (!directValueReturn) {
     pushIndentedDeclarationLines(lines, emitReturnValueDeclarations(context))
   }
   pushIndentedDeclarationLines(lines, emitFunctionReturnCompanionPrelude(context.returnFunctionCompanions))
@@ -393,20 +397,22 @@ export function emitFunctionDeclaration(
         : 'return inox_return;'
     let directReturnBody = replaceCleanupGotosWithReturn(bodyLines, returnStatement)
 
-    if (directRaiiReturn) {
-      directReturnBody = simplifyManagedRaiiReturnBody(directReturnBody)
+    if (directValueReturn) {
+      directReturnBody = simplifyDirectValueReturnBody(directReturnBody, returnStatement)
     }
 
     if (context.coroutine) {
       pushDeclarationLines(lines, directReturnBody)
-      if (!declarationBodyEndsWith(directReturnBody, returnStatement)) {
+      if (directValueReturn && !declarationBodyEndsWithReturn(directReturnBody)) {
+        lines.push('  co_return {};')
+      } else if (!directValueReturn && !declarationBodyEndsWith(directReturnBody, returnStatement)) {
         lines.push(`  ${returnStatement}`)
       }
     } else if (context.returnType !== 'void') {
       pushDeclarationLines(lines, directReturnBody)
-      if (directRaiiReturn && !declarationBodyEndsWithReturn(directReturnBody)) {
+      if (directValueReturn && !declarationBodyEndsWithReturn(directReturnBody)) {
         lines.push('  return {};')
-      } else if (!directRaiiReturn && !declarationBodyEndsWith(directReturnBody, returnStatement)) {
+      } else if (!directValueReturn && !declarationBodyEndsWith(directReturnBody, returnStatement)) {
         lines.push(`  ${returnStatement}`)
       }
     } else {
@@ -419,9 +425,8 @@ export function emitFunctionDeclaration(
   return lines
 }
 
-function simplifyManagedRaiiReturnBody(lines: string[]): string[] {
+function simplifyDirectValueReturnBody(lines: string[], returnStatement: string): string[] {
   const result: string[] = []
-  const returnStorage = 'return inox_return;'
 
   for (let index = 0; index < lines.length; index = index + 1) {
     const line = lines[index]
@@ -433,24 +438,25 @@ function simplifyManagedRaiiReturnBody(lines: string[]): string[] {
       trimmed.endsWith(';') &&
       next !== null &&
       typeof next !== 'undefined' &&
-      next.trim() === returnStorage
+      next.trim() === returnStatement
     ) {
       const indent = line.slice(0, line.length - line.trimStart().length)
       const expression = trimmed.slice('inox_return = '.length, trimmed.length - 1)
 
-      result.push(`${indent}return ${expression};`)
+      result.push(`${indent}${returnStatement.split('inox_return').join(expression)}`)
       index = index + 1
       continue
     }
 
-    if (trimmed === returnStorage) {
+    if (trimmed === returnStatement) {
       const indent = line.slice(0, line.length - line.trimStart().length)
-      result.push(`${indent}return {};`)
+      result.push(`${indent}${returnStatement.startsWith('co_return ') ? 'co_return {};' : 'return {};'}`)
       continue
     }
 
-    if (line.endsWith(` ${returnStorage}`)) {
-      result.push(`${line.slice(0, line.length - returnStorage.length)}return {};`)
+    if (line.endsWith(` ${returnStatement}`)) {
+      const fallback = returnStatement.startsWith('co_return ') ? 'co_return {};' : 'return {};'
+      result.push(`${line.slice(0, line.length - returnStatement.length)}${fallback}`)
       continue
     }
 

@@ -34,6 +34,7 @@ values.set(1, ['ok'])
   const source = files.find((file) => file.path === 'index.cc')
 
   assert.ok(source)
-  assert.match(source.code, /auto inox_module_value_\d+ = Map\(inox_value_\d+\);/)
+  assert.match(source.code, /auto inox_module_value_\d+ = Map\(inox::object_value_at\(holder, 0, "values"\)\);/)
+  assert.doesNotMatch(source.code, /auto inox_value_\d+ = inox::object_value_at\(holder, 0, "values"\);/)
   assert.match(source.code, /values\.set/)
 })

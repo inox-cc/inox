@@ -12,7 +12,7 @@ test('простой object literal создаётся одной агрегат
 
   assert.match(
     result.code,
-    /auto value = inox::ObjectValue::from\(&inox_shape_value_\d+, \{ inox::String\("inox", 4\), inox_undefined_value\(\) \}\);/
+    /auto value = inox::ObjectValue::from\(&inox_object_shape_\d+, \{ inox::String\("inox", 4\) \}\);/
   )
   assert.doesNotMatch(result.code, /value\.init\(/)
 })

@@ -14,7 +14,11 @@ test('подготовленные элементы массива собира�
     { libraries: defaultCompilerLibrarySet, target: 'cc' }
   )
 
-  assert.match(result.code, /auto items = Array::from\(\{ inox_null_value\(\), inox_object_\d+ \}\);/)
+  assert.match(
+    result.code,
+    /auto items = Array::from\(\{ inox_null_value\(\), inox::ObjectValue::from\(&inox_object_shape_\d+, \{ inox_number_value\(12\) \}\) \}\);/
+  )
+  assert.doesNotMatch(result.code, /auto inox_object_\d+ =/)
   assert.doesNotMatch(result.code, /auto items = Array::create\(0\);/)
   assert.doesNotMatch(result.code, /items\.push\(/)
 })

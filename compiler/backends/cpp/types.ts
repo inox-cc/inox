@@ -10,6 +10,7 @@ export type CppEmitOptions = {
 export type CPreparedExpression = {
   lines: string[]
   expression: string
+  evaluationFailureMode?: 'thrown'
   functionCompanions?: CPreparedFunctionCompanion[]
   nullable?: boolean
   owned?: boolean

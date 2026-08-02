@@ -93,7 +93,7 @@ consume(dependencies)
   assert.match(source.code, /\(\*inox_callback_out\) = inox_return_value_\d+;/)
   assert.match(
     source.code,
-    /if \(!\(Array\(inox::Value\(\(\*inox_callback_out\)\)\)\.valid\(\)\)\) return INOX_ERR_TYPE;/
+    /if \(!\(\(\*inox_callback_out\)\.tag == INOX_TAG_ARRAY && \(\*inox_callback_out\)\.as\.ref != 0\)\) return INOX_ERR_TYPE;/
   )
   assert.match(source.code, /inox_retain\(\(\*inox_callback_out\)\);/)
 })

@@ -23,6 +23,7 @@ console.log(readCount())
 
   assert.match(result.code, /inox::set_object_value_at\(config, 1, "count", inox_number_value\(2\)\);/)
   assert.match(result.code, /inox::object_value_at\(config, 1, "count"\)/)
+  assert.match(result.code, /inox::expect_number\(inox::object_value_at\(config, 1, "count"\)\)/)
   assert.doesNotMatch(result.code, /inox_object_set\(config, "count"/)
   assert.doesNotMatch(result.code, /inox::get\(config, "count"\)/)
   assert.doesNotMatch(result.code, /inox::Value inox_log_value_\d+;/)

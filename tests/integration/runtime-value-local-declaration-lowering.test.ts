@@ -63,7 +63,7 @@ for (const a of foo.v) {
   assert.doesNotMatch(source, /JSON\.parse\(inox::StringView\("[^"]+", \d+\), foo\)/)
   assert.match(
     source,
-    /auto (inox_library_range_\d+) = Array\(inox::object_value_at\(foo, 0, "v"\)\)\.values\(\);\n  if \(inox::thrown\(\)\) return;\n\n  for \(auto a : \1\) \{/
+    /auto (inox_library_range_\d+) = Array\(inox::object_value_at\(foo, 0, "v"\)\)\.values\(\);\n\n  for \(auto a : \1\) \{/
   )
   assert.doesNotMatch(source, /ArrayStorage|->items|inox_for_array_/)
   assert.match(source, /\n\s+auto b = Object\.values\(a\);\n\s+if \(inox::thrown\(\)\) return;/)

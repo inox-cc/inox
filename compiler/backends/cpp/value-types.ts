@@ -297,6 +297,10 @@ export function emitCType(valueType: CValueTypeInput): string {
     return ''
   }
 
+  if (valueType === 'boolean') {
+    return 'bool'
+  }
+
   return 'double'
 }
 
@@ -364,7 +368,7 @@ export function cRuntimeValueAdapterInfo(
   valueType: CValueTypeInput,
   shape: CLibraryNativeShape | null | undefined,
   valueExpression: string,
-  libraries: CCompilerLibrarySet
+  libraries: CCompilerLibrarySet | null | undefined
 ): CRuntimeValueAdapterInfo | null {
   if (valueType === 'string') {
     return {

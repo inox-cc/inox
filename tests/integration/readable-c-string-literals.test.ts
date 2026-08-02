@@ -162,7 +162,8 @@ console.log(read())
 
   assert.match(nestedReferenceSource, /static const double seed = 7;/)
   assert.doesNotMatch(nestedReferenceSource, /\n  seed = 7;/)
-  assert.match(nestedReferenceSource, /inox_return = seed;/)
+  assert.match(nestedReferenceSource, /return seed;/)
+  assert.doesNotMatch(nestedReferenceSource, /inox_return/)
 
   const jsonLocalHost = createMemoryCompilerHost(
     [

@@ -15,7 +15,7 @@ accept(['value'])
   )
 
   assert.match(result.code, /value\.tag == INOX_TAG_CLASS_INSTANCE/)
-  assert.match(result.code, /Array\(inox::Value\(value\)\)\.valid\(\)/)
+  assert.match(result.code, /value\.tag == INOX_TAG_ARRAY && value\.as\.ref != 0/)
   assert.doesNotMatch(
     result.code,
     /if \(\(value\.tag != INOX_TAG_OBJECT && value\.tag != INOX_TAG_CLASS_INSTANCE\) \|\| value\.as\.ref == 0\)/

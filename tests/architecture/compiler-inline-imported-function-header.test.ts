@@ -28,5 +28,5 @@ test('экспортируемая @inline function подключает header 
 
   assert.ok(header)
   assert.match(header.code, /#include "base.h"/)
-  assert.match(header.code, /return = \(inox_mod_[^(]+_base\(value\) \+ 1\)/)
+  assert.match(header.code, /return \(inox_mod_[^(]+_base\(value\) \+ 1\);/)
 })

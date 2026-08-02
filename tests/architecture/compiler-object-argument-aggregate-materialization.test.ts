@@ -12,7 +12,7 @@ test('object literal в аргументе создаётся одной агр�
 
   assert.match(
     result.code,
-    /auto inox_object_\d+ = inox::ObjectValue::from\(&inox_shape_value_\d+, \{ inox_number_value\(2\) \}\);/
+    /auto inox_object_\d+ = inox::ObjectValue::from\(&inox_object_shape_\d+, \{ inox_number_value\(2\) \}\);/
   )
   assert.doesNotMatch(result.code, /inox_object_\d+\.init\(/)
 })

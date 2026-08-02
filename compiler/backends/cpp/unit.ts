@@ -1508,6 +1508,7 @@ export function emitCUnit(
     topLevelNodes,
     options.libraries
   )
+  baseContext.hoistObjectShapeDefinitions = true
   baseContext.exceptionValueShape = cObjectShapeFromMetadata(
     compilerLibraryIntrinsicResultCShape(options.libraries, 'exception-value', { line: 1, column: 1 })
   )
@@ -1566,7 +1567,7 @@ export function emitCUnit(
   }
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics)
-  const lines = emitCPrelude(
+  let lines = emitCPrelude(
     needsRuntime,
     true,
     needsAsyncRuntime,
@@ -1582,6 +1583,7 @@ export function emitCUnit(
   if (baseContext.runtimeInitializerDefinitions.length > 0) {
     lines.push('')
   }
+  const objectShapeDefinitionIndex = lines.length
   const declarationLines: string[] = []
   const functionPrototypeNames = collectCUnitNeededFunctionPrototypeNames(functions, classMethods, baseContext)
   const inlineConstructorDefinitions: CClassInlineDefinitionMap = new Map()
@@ -1812,6 +1814,15 @@ export function emitCUnit(
   pushUnitLines(lines, mainLines)
 
   throwDiagnostics(diagnostics)
+
+  if (baseContext.objectShapeDefinitions.length > 0) {
+    lines = [
+      ...lines.slice(0, objectShapeDefinitionIndex),
+      ...baseContext.objectShapeDefinitions,
+      '',
+      ...lines.slice(objectShapeDefinitionIndex)
+    ]
+  }
 
   const code = filterUnusedCPreludeIncludes(joinCUnitLines(lines))
 

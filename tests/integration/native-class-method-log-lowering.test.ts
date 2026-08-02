@@ -60,8 +60,8 @@ class Foo {
     target: 'cc'
   })
 
-  assert.match(result.code, /inox_value test\(double flag\) \{/)
-  assert.doesNotMatch(result.code, /inox_value test\(double flag\);/)
+  assert.match(result.code, /inox_value test\(bool flag\) \{/)
+  assert.doesNotMatch(result.code, /inox_value test\(bool flag\);/)
   assert.doesNotMatch(result.code, /Foo::test/)
 }
 

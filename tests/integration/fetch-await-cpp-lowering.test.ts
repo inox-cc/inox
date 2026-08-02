@@ -66,11 +66,11 @@ await checkFetch()
     checkFetch,
     /auto txt = inox::String\(co_await res\.text\(\)\);\n    if \(inox::thrown\(\)\) goto catch_0;/
   )
-  assert.match(checkFetch, /auto inox_object_\d+ = inox::ObjectValue::create\(&inox_shape_value_\d+\);/)
+  assert.match(checkFetch, /auto inox_object_\d+ = inox::ObjectValue::create\(&inox_object_shape_\d+\);/)
   assert.match(checkFetch, /\.init\(0, inox::String\("POST", 4\)\);/)
   assert.match(
     checkFetch,
-    /auto inox_object_\d+ = inox::ObjectValue::from\(&inox_shape_value_\d+, \{ inox::String\("text\/plain", 10\) \}\);/
+    /auto inox_object_\d+ = inox::ObjectValue::from\(&inox_object_shape_\d+, \{ inox::String\("text\/plain", 10\) \}\);/
   )
   assert.match(
     checkFetch,

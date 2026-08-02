@@ -123,7 +123,8 @@ test('global:collections владеет Array declarations, operations, iteratio
   assert.match(result.code, /Array::from\(\{ inox_number_value\(1\), inox_number_value\(2\) \}\)/)
   assert.doesNotMatch(result.code, /inox_array_\d+\.push\(/)
   assert.match(result.code, /values\.push\(/)
-  assert.match(result.code, /static_cast<double>\(inox_library_result_\d+\)/)
+  assert.match(result.code, /static_cast<double>\(values\.length\(\)\)/)
+  assert.doesNotMatch(result.code, /values\.length\(\);\n  if \(inox::thrown\(\)\)/)
   assert.match(result.code, /values\.some\(/)
   assert.match(result.code, /values\.find\(/)
   assert.match(result.code, /values\.filter\(/)
@@ -143,4 +144,5 @@ test('global:collections владеет Array declarations, operations, iteratio
 
   assert.ok(iterationOnly.ir.runtimeRequirements.includes('global:collections#array'))
   assert.match(iterationOnly.code, /#include "inox\/array\.h"/)
+  assert.doesNotMatch(iterationOnly.code, /\.values\(\);\n  if \(inox::thrown\(\)\)/)
 })
