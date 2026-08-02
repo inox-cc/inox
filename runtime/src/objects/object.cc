@@ -724,6 +724,22 @@ inox_status inox_object_value_at(inox_value object, size_t index, inox_value* ou
     return INOX_ERR_TYPE;
   }
 
+  if (object.tag == INOX_TAG_CLASS_INSTANCE) {
+    inox_class_instance_ref* ref = (inox_class_instance_ref*)object.as.ref;
+    const inox_class_descriptor* descriptor = ref->descriptor;
+
+    if (
+      ref->instance == 0 ||
+      !inox_class_descriptor_is_valid(descriptor) ||
+      index >= descriptor->field_count
+    ) {
+      *out = inox_undefined_value();
+      return INOX_ERR_FIELD;
+    }
+
+    return descriptor->read_field(ref->instance, (uint32_t)index, out);
+  }
+
   if (object.tag == INOX_TAG_ARRAY) {
     Array values{inox::Value(object)};
 
@@ -1014,6 +1030,32 @@ ObjectValue ObjectValue::create(const inox_shape* shape) {
   return ObjectValue(adopt_value, value);
 }
 
+ObjectValue ObjectValue::from(const inox_shape* shape, std::initializer_list<Value> values) {
+  if (thrown()) {
+    return ObjectValue();
+  }
+
+  if (shape == nullptr || values.size() > shape->field_count) {
+    throw_value(String("Object initializer does not match shape"));
+    return ObjectValue();
+  }
+
+  ObjectValue result = create(shape);
+  uint32_t index = 0;
+
+  for (const Value& value : values) {
+    result.init(index, value.raw());
+
+    if (thrown()) {
+      return result;
+    }
+
+    index += 1;
+  }
+
+  return result;
+}
+
 bool ObjectValue::valid() const {
   inox_value value = raw();
 
@@ -1027,9 +1069,7 @@ void ObjectValue::init(uint32_t index, inox_value value) const {
 }
 
 void ObjectValue::set(uint32_t index, inox_value value) const {
-  if (inox_object_set_known(raw(), index, value) != INOX_OK) {
-    throw_value(String("Object set failed"));
-  }
+  set_object_value_at(raw(), index, value);
 }
 
 static Value finish_object_index_read(inox_status status, inox_value out, const char* message) {
@@ -1060,6 +1100,77 @@ Value object_value_at(inox_value object, size_t index) {
     out,
     "Object.values index failed"
   );
+}
+
+Value object_value_at(inox_value object, size_t index, const char* name) {
+  if (thrown()) {
+    return Value();
+  }
+
+  if (name == nullptr) {
+    return object_value_at(object, index);
+  }
+
+  if (object.tag == INOX_TAG_OBJECT && object.as.ref != nullptr) {
+    inox_object* instance = (inox_object*)object.as.ref;
+
+    if (
+      index < instance->shape->field_count &&
+      strcmp(instance->shape->fields[index].name, name) == 0
+    ) {
+      return object_value_at(object, index);
+    }
+  } else if (object.tag == INOX_TAG_CLASS_INSTANCE && object.as.ref != nullptr) {
+    inox_class_instance_ref* ref = (inox_class_instance_ref*)object.as.ref;
+    const inox_class_descriptor* descriptor = ref->descriptor;
+
+    if (
+      inox_class_descriptor_is_valid(descriptor) &&
+      index < descriptor->field_count &&
+      strcmp(descriptor->fields[index].name, name) == 0
+    ) {
+      return object_value_at(object, index);
+    }
+  }
+
+  return get(object, name);
+}
+
+void set_object_value_at(inox_value object, size_t index, inox_value value) {
+  if (thrown()) {
+    return;
+  }
+
+  if (inox_object_set_known(object, index, value) != INOX_OK) {
+    throw_value(String("Object set failed"));
+  }
+}
+
+void set_object_value_at(inox_value object, size_t index, const char* name, inox_value value) {
+  if (thrown()) {
+    return;
+  }
+
+  if (name == nullptr) {
+    set_object_value_at(object, index, value);
+    return;
+  }
+
+  if (object.tag == INOX_TAG_OBJECT && object.as.ref != nullptr) {
+    inox_object* instance = (inox_object*)object.as.ref;
+
+    if (
+      index < instance->shape->field_count &&
+      strcmp(instance->shape->fields[index].name, name) == 0
+    ) {
+      set_object_value_at(object, index, value);
+      return;
+    }
+  }
+
+  if (inox_object_set(object, name, strlen(name), value) != INOX_OK) {
+    throw_value(String("Object set failed"));
+  }
 }
 
 Value object_entry_at(inox_value object, size_t index) {

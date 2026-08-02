@@ -87,9 +87,9 @@ export async function assertNativeCompilerRuntimeValuesUseRaiiAssignments(compil
 function assertRaiiAssignments(source: string): void {
   assert.match(source, /inox::Value uninitialized;/)
   assert.doesNotMatch(source, /uninitialized = inox_undefined_value\(\);/)
-  assert.match(source, /inox_field_\d+ = inox::get\(payload, "name"\);/)
-  assert.match(source, /inox_field_\d+ = inox::get\(payload, "count"\);/)
-  assert.match(source, /nested = inox::get\(payload, "nested"\);/)
+  assert.match(source, /inox_field_\d+ = inox::object_value_at\(payload, 0, "name"\);/)
+  assert.match(source, /inox_field_\d+ = inox::object_value_at\(payload, 1, "count"\);/)
+  assert.match(source, /nested = inox::object_value_at\(payload, 2, "nested"\);/)
   assert.doesNotMatch(source, /(?:inox_field_\d+|nested) = inox_undefined_value\(\);/)
   assert.match(source, /nullable = inox_nullable_value_\d+;/)
   assert.doesNotMatch(source, /inox_(?:nullable_conditional|value)_\d+ = inox_undefined_value\(\);/)

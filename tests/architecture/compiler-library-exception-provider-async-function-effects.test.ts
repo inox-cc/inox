@@ -40,7 +40,7 @@ readDetail()
   assert.ok(failEffect)
   assert.deepEqual(failEffect?.throwValueTypes, ['exception-object'])
   assert.equal(readEffect?.throws, false)
-  assert.match(result.code, /inox::get\(fault, "detail"\)/)
+  assert.match(result.code, /inox::object_value_at\(fault, 0, "detail"\)/)
   assert.doesNotMatch(result.code, /\bError\b/)
 
   const contract = emitModuleFunctionEffectsContract([failEffect])

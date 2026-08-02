@@ -1753,10 +1753,7 @@ function emitCompilerLibraryResultShape(
   }
 
   lines.push('};')
-  lines.push(`static const inox_shape ${shapeName} = {`)
-  lines.push(`  ${fields.length},`)
-  lines.push(`  ${fieldsName}`)
-  lines.push('};')
+  lines.push(`static const inox_shape ${shapeName} = { ${fields.length}, ${fieldsName} };`)
 
   return {
     lines,

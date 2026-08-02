@@ -36,6 +36,7 @@ import {
   compilerLibraryIntrinsicNativeCppType,
   compilerLibraryIntrinsicAsyncResultCValidExpression,
   emitCStringParamName,
+  emitCReturnType,
   emitCType,
   isBoxedScalarParam,
   isManagedRuntimeReturnType,
@@ -3668,7 +3669,16 @@ export function emitRuntimeCallbackWrapperDeclaration(
   } else if (wrapper.functionType.returnType === 'boolean') {
     lines.push(`  *inox_callback_out = inox_bool_value((${call}) != 0);`)
   } else if (isManagedRuntimeReturnType(wrapper.functionType.returnType)) {
-    pushManagedRuntimeCallbackResult(lines, namedRuntimeCallbackTargetFunctionType(wrapper, context), call)
+    const targetFunctionType = namedRuntimeCallbackTargetFunctionType(wrapper, context)
+    pushManagedRuntimeCallbackResult(
+      lines,
+      emitCReturnType(
+        targetFunctionType.returnType,
+        targetFunctionType.returnNullable === true,
+        targetFunctionType.returnShape
+      ),
+      call
+    )
   } else {
     lines.push(`  ${call};`)
   }
@@ -3792,7 +3802,7 @@ export function emitFunctionPointerRuntimeAdapterDefinition(
   } else if (functionType.returnType === 'boolean') {
     lines.push(`  *inox_callback_out = inox_bool_value((${call}) != 0);`)
   } else if (isManagedRuntimeReturnType(functionType.returnType) || functionType.returnType === 'unknown') {
-    pushManagedRuntimeCallbackResult(lines, functionType, call)
+    pushManagedRuntimeCallbackResult(lines, emitFunctionPointerReturnType(functionType), call)
   } else {
     lines.push(`  ${call};`)
   }
@@ -3805,10 +3815,10 @@ export function emitFunctionPointerRuntimeAdapterDefinition(
 
 function pushManagedRuntimeCallbackResult(
   lines: string[],
-  functionType: CFunctionType,
+  resultType: string,
   call: string
 ): void {
-  if (emitFunctionPointerReturnType(functionType) === 'inox_value') {
+  if (resultType === 'inox_value') {
     lines.push(`  *inox_callback_out = ${call};`)
     return
   }
@@ -3838,7 +3848,7 @@ function emitThrowingRuntimeCallbackTargetCall(
   }
 
   lines.push('  if (inox::thrown()) return INOX_ERR_THROW;')
-  pushLines(lines, emitThrowingRuntimeCallbackResult(wrapper.functionType, targetFunctionType, resultType))
+  pushLines(lines, emitThrowingRuntimeCallbackResult(wrapper.functionType, resultType))
   lines.push('  return INOX_OK;')
 
   return lines
@@ -3853,12 +3863,15 @@ function throwingRuntimeCallbackTargetResultType(functionType: CFunctionType): s
     return 'inox_value'
   }
 
-  return emitFunctionPointerReturnType(functionType)
+  return emitCReturnType(
+    functionType.returnType,
+    functionType.returnNullable === true,
+    functionType.returnShape
+  )
 }
 
 function emitThrowingRuntimeCallbackResult(
   functionType: CFunctionType,
-  targetFunctionType: CFunctionType,
   resultType: string
 ): string[] {
   if (resultType === 'void') {
@@ -3871,7 +3884,7 @@ function emitThrowingRuntimeCallbackResult(
 
   if (
     isManagedRuntimeReturnType(functionType.returnType) &&
-    emitFunctionPointerReturnType(targetFunctionType) !== 'inox_value'
+    resultType !== 'inox_value'
   ) {
     return ['  *inox_callback_out = inox_callback_result.release();']
   }
@@ -4849,22 +4862,11 @@ function emitRuntimeCallbackWrapperArg(param: CFunctionParam, index: number): st
 
 export function emitFunctionPointerReturnType(functionType: CFunctionType | null | undefined): string {
   if (functionType !== null && typeof functionType !== 'undefined') {
-    const libraryCppType = libraryNativeBoundaryCppType(
+    return emitCReturnType(
       functionType.returnType,
       functionType.returnNullable === true,
-      false,
       functionType.returnShape
     )
-
-    if (libraryCppType !== null) {
-      return libraryCppType
-    }
-
-    if (functionType.returnNullable === true && isNullableScalarType(functionType.returnType)) {
-      return 'inox_value'
-    }
-
-    return emitCType(functionType.returnType)
   }
 
   return emitCType('void')
@@ -4923,6 +4925,14 @@ export function emitFunctionPointerAdapterResultLines(
   const targetReturnType = emitFunctionPointerReturnType(targetFunctionType)
 
   if (adapterReturnType === 'inox_value' && targetReturnType !== 'inox_value') {
+    if (isRuntimeRaiiCppType(targetReturnType)) {
+      lines.push(`  auto inox_adapter_result = ${call};`)
+      pushCallbackLines(lines, cleanupLines)
+      lines.push('  return inox_adapter_result.release();')
+
+      return lines
+    }
+
     const expression = functionPointerNativeReturnRuntimeValueExpression(
       functionType,
       targetFunctionType,
@@ -4963,6 +4973,10 @@ export function emitFunctionPointerAdapterResultLines(
   lines.push('  return inox_adapter_result;')
 
   return lines
+}
+
+function isRuntimeRaiiCppType(cppType: string): boolean {
+  return cppType === 'inox::String' || cppType === 'inox::ObjectValue' || cppType === 'inox::Value'
 }
 
 function pushCallbackLines(lines: string[], additions: string[]): void {

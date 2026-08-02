@@ -67,7 +67,8 @@ import {
   isRuntimeNullableType,
   libraryNativeBoundaryCppType,
   libraryNativeCppType,
-  libraryNativeValueAdapter
+  libraryNativeValueAdapter,
+  managedRaiiReturnCppType
 } from '../value-types.ts'
 import {
   cClassValueTypeName,
@@ -177,7 +178,13 @@ type NullableScalarNarrowingSnapshot = {
   narrowedNullableScalars: CStringSet
 }
 
-type TypeofOperandStorage = 'runtime-value' | 'raw-string' | 'raw-number' | 'raw-boolean' | 'raw-pointer'
+type TypeofOperandStorage =
+  | 'runtime-value'
+  | 'cpp-string'
+  | 'raw-string'
+  | 'raw-number'
+  | 'raw-boolean'
+  | 'raw-pointer'
 
 type PreparedTypeofOperand = {
   lines: string[]
@@ -217,11 +224,18 @@ function emitRuntimeThrownCheckLines(context: CFunctionContext): string[] {
 
 function emitRuntimeObjectGetValueLines(
   object: string,
-  key: string,
+  key: string | number,
   value: string,
-  context: CFunctionContext
+  context: CFunctionContext,
+  expectedKey?: string
 ): string[] {
-  const lines = [`${value} = inox::get(${object}, ${cStringLiteral(key)});`]
+  const read =
+    typeof key === 'number'
+      ? expectedKey === null || typeof expectedKey === 'undefined'
+        ? `inox::object_value_at(${object}, ${key})`
+        : `inox::object_value_at(${object}, ${key}, ${cStringLiteral(expectedKey)})`
+      : `inox::get(${object}, ${cStringLiteral(key)})`
+  const lines = [`${value} = ${read};`]
 
   appendLines(lines, emitRuntimeThrownCheckLines(context))
 
@@ -356,6 +370,10 @@ function typeofRuntimeValueTagCheck(value: string, typeName: string): string | n
 }
 
 function typeofRawOperandCheck(operand: PreparedTypeofOperand, typeName: string): string | null {
+  if (operand.storage === 'cpp-string') {
+    return cBooleanLiteral(typeName === 'string')
+  }
+
   if (operand.storage === 'raw-string') {
     if (typeName === 'undefined') {
       return `${operand.expression} == 0`
@@ -424,6 +442,15 @@ function emitPreparedTypeofArgumentValue(
       }
     }
 
+    if (context.cppStringValues.has(name)) {
+      return {
+        lines: [],
+        expression: reference,
+        storage: 'cpp-string',
+        valueType: 'string'
+      }
+    }
+
     if (context.runtimeStrings.has(name) || variableType === 'string') {
       return {
         lines: [],
@@ -475,6 +502,15 @@ function emitPreparedTypeofArgumentValue(
   }
 
   const value = deps.emitCValueExpression(expression, context)
+
+  if (value.cppType === 'inox::String') {
+    return {
+      lines: value.lines,
+      expression: value.expression,
+      storage: 'cpp-string',
+      valueType: 'string'
+    }
+  }
 
   return {
     lines: value.lines,
@@ -2280,6 +2316,7 @@ function emitPreparedPendingExceptionCallExpression(
   return {
     lines,
     expression: result,
+    cppDeclaredName: result,
     functionCompanions: returnFunctionCompanions
   }
 }
@@ -2370,6 +2407,14 @@ function withFunctionCallReturnMetadata(
   }
 
   const cppType = libraryNativeBoundaryCppType(returnType, returnNullable, false, shape)
+
+  const raiiType = managedRaiiReturnCppType(returnType, returnNullable, shape)
+
+  if (cppType === null && raiiType !== null) {
+    value.cppType = raiiType
+    value.valueType = returnType ?? value.valueType
+    return value
+  }
 
   if (cppType === null) {
     return value
@@ -3180,8 +3225,13 @@ export function emitPreparedNumberExpression(
     if (member !== null && typeof member !== 'undefined' && isNumberOrBooleanValueType(member.valueType)) {
       const value = nextCName(context, 'inox_expr_value')
       const objectReference = deps.emitObjectValueReference(member.objectName ?? '', context)
-      const key = member.key ?? ''
-      const getLines = emitRuntimeObjectGetValueLines(objectReference, key, value, context)
+      const getLines = emitRuntimeObjectGetValueLines(
+        objectReference,
+        member.index,
+        value,
+        context,
+        member.key ?? undefined
+      )
 
       return emitPreparedRuntimeNumberValue(member.valueType, value, getLines, context)
     }
@@ -3215,7 +3265,7 @@ export function emitPreparedNumberExpression(
     if (field !== null && typeof field !== 'undefined' && isNumberOrBooleanValueType(field.valueType)) {
       const value = nextCName(context, 'inox_expr_value')
       const objectReference = deps.emitObjectValueReference(field.objectName ?? '', context)
-      const getLines = emitRuntimeObjectGetValueLines(objectReference, field.key, value, context)
+      const getLines = emitRuntimeObjectGetValueLines(objectReference, field.index, value, context, field.key)
 
       return emitPreparedRuntimeNumberValue(field.valueType, value, getLines, context)
     }

@@ -45,10 +45,10 @@ for (const a of foo.v) {
   assert.doesNotMatch(source, /auto inox_library_object_\d+ = Object\.(?:values|entries)\(a\);/)
   assert.match(
     source,
-    /auto (inox_library_range_\d+) = Array\(inox::get\(foo, "v"\)\)\.values\(\);\n  if \(inox::thrown\(\)\) return;\n\n  for \(auto a : \1\) \{/
+    /auto (inox_library_range_\d+) = Array\(inox::object_value_at\(foo, 0, "v"\)\)\.values\(\);\n  if \(inox::thrown\(\)\) return;\n\n  for \(auto a : \1\) \{/
   )
   assert.doesNotMatch(source, /ArrayStorage|->items|Array\.raw/)
-  assert.doesNotMatch(source, /inox::object_(?:value|entry)_at/)
+  assert.doesNotMatch(source, /inox::object_entry_at/)
   assert.doesNotMatch(source, /Array\(inox_(?:values|entries)_\d+\)\.get\(0\)/)
   assert.doesNotMatch(source, /auto inox_value_\d+ = inox::get\(foo, "v"\);/)
   assert.doesNotMatch(source, /\.valid\(\)/)

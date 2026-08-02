@@ -163,6 +163,7 @@ const arrayOperations: LibraryOperationDescriptor[] = [
     null,
     0
   ),
+  arrayCallbackReceiverCall('every', booleanTypeRef, [...arrayPredicateParameters()], 'boolean'),
   arrayCallbackReceiverCall('filter', arrayTypeRef(parameterTypeRef), arrayPredicateParameters(), 'boolean'),
   arrayCallbackReceiverCall('find', nullableParameterTypeRef(), arrayPredicateParameters(), 'boolean', {
     cppType: 'inox::Value',

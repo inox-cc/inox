@@ -36,8 +36,9 @@ function read(values: string[]): string {
 console.log(read(['a']))
 `)
 
-  assert.match(returningSource, /if \(inox::thrown\(\)\) return inox_return;/)
-  assert.match(returningSource, /return inox_return;/)
+  assert.match(returningSource, /if \(inox::thrown\(\)\) return \{\};/)
+  assert.match(returningSource, /return inox_library_result_\d+;/)
+  assert.doesNotMatch(returningSource, /inox::String inox_return/)
   assert.doesNotMatch(returningSource, /goto cleanup;|cleanup:/)
 
   const moduleFiles = compileFiles([
@@ -119,7 +120,7 @@ console.log(read(values))
     const source = await readFile(outputCc, 'utf8')
 
     assert.match(source, /if \(inox::thrown\(\)\) return;/)
-    assert.match(source, /if \(inox::thrown\(\)\) return inox_return;/)
+    assert.match(source, /if \(inox::thrown\(\)\) return \{\};/)
     assert.doesNotMatch(source, /goto cleanup;|cleanup:/)
   } finally {
     await rm(workspace, {

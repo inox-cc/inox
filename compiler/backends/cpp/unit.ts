@@ -53,11 +53,12 @@ import {
   emitAsyncResultChainCallbackWrapperHead
 } from './async/async-results.ts'
 import { collectAsyncCoroutineWrappers } from './async/coroutines.ts'
-import type {
-  CAsyncCoroutineWrapperMap,
-  CCallbackWrapperMap,
-  CEmitContextWithDependencies,
-  CAsyncResultChainWrapperMap
+import {
+  normalizeClassReturnShapes,
+  type CAsyncCoroutineWrapperMap,
+  type CCallbackWrapperMap,
+  type CEmitContextWithDependencies,
+  type CAsyncResultChainWrapperMap
 } from './context.ts'
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
 import {
@@ -1512,6 +1513,7 @@ export function emitCUnit(
   )
   baseContext.runtimeEntryPath = entryPath
   baseContext.classInfos = createClassInfos(classes, diagnostics)
+  normalizeClassReturnShapes(baseContext)
   const classDescriptorNames = collectCClassDescriptorNames(irPrograms, baseContext.classInfos)
   let valueDeclarations = collectCUnitValueDeclarations(irPrograms, baseContext)
   registerCUnitValueDeclarations(baseContext, valueDeclarations)

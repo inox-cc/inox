@@ -684,6 +684,7 @@ function shouldKeepGeneratedCSingleLineControl(control: GeneratedCSingleLineCont
   return (
     statement === 'return;' ||
     generatedCStringStartsWithAt(statement, 'return ', 0) ||
+    generatedCStringStartsWithAt(statement, 'co_return ', 0) ||
     generatedCStringStartsWithAt(statement, 'goto ', 0) ||
     statement === 'break;' ||
     statement === 'continue;'

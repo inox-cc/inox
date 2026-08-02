@@ -263,6 +263,7 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('libraryCIteratorNextFailureMode', 'string', null, true, loc),
       anyNodeField('libraryCIteratorPreservesPendingException', 'boolean', null, false, loc),
       anyNodeField('className', 'string', null, true, loc),
+      anyNodeField('functionStorage', 'string', null, true, loc),
       anyNodeField('functionTypeOwnership', 'string', null, true, loc),
       anyNodeField('shapeOwnership', 'string', null, true, loc),
       anyNodeField('syntheticValueImportName', 'string', null, true, loc),

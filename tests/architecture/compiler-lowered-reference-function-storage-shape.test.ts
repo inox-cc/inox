@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
+import { compilerAnyNodeStringFields } from '../../compiler/backends/cpp/values/any-node-fields.ts'
 import { compileSourceToIr } from '../../compiler/compiler.ts'
 
 test('lowering заранее сохраняет поле functionStorage у ссылки на функцию', () => {
@@ -13,4 +14,5 @@ const renderer = { render }
   assert.equal(reference.type, 'Reference')
   assert.ok(Object.hasOwn(reference, 'functionStorage'))
   assert.equal(reference.functionStorage, null)
+  assert.ok(compilerAnyNodeStringFields.includes('functionStorage'))
 })

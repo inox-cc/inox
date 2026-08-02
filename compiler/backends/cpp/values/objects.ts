@@ -1214,7 +1214,7 @@ function emitPreparedKnownObjectFieldValueExpression(
   const object = emitObjectValueReference(access.objectName, context)
   const lines: string[] = []
 
-  lines.push(`auto ${temp} = inox::get(${object}, ${cStringLiteral(access.key)});`)
+  lines.push(`auto ${temp} = inox::object_value_at(${object}, ${field.index}, ${cStringLiteral(access.key)});`)
   appendLines(lines, emitObjectThrownCheckLines(context))
   appendLines(lines, emitKnownObjectFieldValueCheck(temp, field, expression, context))
 
@@ -1234,7 +1234,7 @@ function emitPreparedKnownObjectFieldRuntimeValueExpression(
 
   return {
     lines: [],
-    expression: `inox::get(${object}, ${cStringLiteral(key)})`,
+    expression: `inox::object_value_at(${object}, ${field.index}, ${cStringLiteral(key)})`,
     cppType: 'inox::Value',
     nullable: objectFieldValueMayBeNullish(field),
     valueType: field.valueType
@@ -1271,7 +1271,9 @@ function emitPreparedObjectExpressionFieldValueExpression(
     lines.push(`  ${temp} = inox_null_value();`)
     lines.push('} else {')
     lines.push(`  ${emitRuntimeTypeCheck(runtimeObjectLikeValueMismatchCondition(object.expression), context)}`)
-    lines.push(`  ${temp} = inox::get(${object.expression}, ${cStringLiteral(field.key)});`)
+    lines.push(
+      `  ${temp} = inox::object_value_at(${object.expression}, ${field.index}, ${cStringLiteral(field.key)});`
+    )
     appendPrefixedLines(lines, emitObjectThrownCheckLines(context), '  ')
     appendPrefixedLines(lines, emitObjectFieldRuntimeValueCheck(temp, field, expression, context), '  ')
     lines.push('}')
@@ -1280,7 +1282,9 @@ function emitPreparedObjectExpressionFieldValueExpression(
   }
 
   appendLines(lines, object.lines)
-  lines.push(`auto ${temp} = inox::get(${object.expression}, ${cStringLiteral(field.key)});`)
+  lines.push(
+    `auto ${temp} = inox::object_value_at(${object.expression}, ${field.index}, ${cStringLiteral(field.key)});`
+  )
   appendLines(lines, emitObjectThrownCheckLines(context))
   if (objectFieldValueMayBeNullish(field)) {
     appendLines(lines, emitObjectFieldRuntimeValueCheck(temp, field, expression, context))
@@ -1310,7 +1314,7 @@ function emitPreparedObjectExpressionFieldRuntimeValueExpression(
 
   return {
     lines: object.lines,
-    expression: `inox::get(${object.expression}, ${cStringLiteral(field.key)})`,
+    expression: `inox::object_value_at(${object.expression}, ${field.index}, ${cStringLiteral(field.key)})`,
     cppType: 'inox::Value',
     nullable: objectFieldValueMayBeNullish(field),
     valueType: field.valueType
@@ -2029,11 +2033,27 @@ export function emitObjectVariableDeclaration(
   }
 
   lines.push('};')
-  lines.push(`static const inox_shape ${shapeName} = {`)
-  lines.push(`  ${fields.length},`)
-  lines.push(`  ${fieldsName}`)
-  lines.push('};')
-  lines.push(`auto ${reference} = inox::ObjectValue::create(&${shapeName});`)
+  lines.push(`static const inox_shape ${shapeName} = { ${fields.length}, ${fieldsName} };`)
+  const directValues = directObjectVariableInitializerValues(fields, properties, context, dependencies)
+  const directSpreadValues =
+    directValues === null
+      ? directSpreadObjectVariableInitializerValues(fields, properties, context, dependencies)
+      : null
+  const initializerValues = directValues ?? directSpreadValues
+  const declaration = context.ownedValues.includes(statement.name) ? reference : `auto ${reference}`
+
+  if (initializerValues !== null) {
+    appendLines(lines, initializerValues.lines)
+    lines.push(
+      `${declaration} = inox::ObjectValue::from(&${shapeName}, { ${joinObjectInitializerValues(initializerValues.values)} });`
+    )
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+    context.variables.set(statement.name, 'object')
+    registerObjectShapeFields(context, statement.name, fields, new Set())
+    return lines
+  }
+
+  lines.push(`${declaration} = inox::ObjectValue::create(&${shapeName});`)
   lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   const spreads = prepareObjectVariableSpreads(properties, context, dependencies, lines)
 
@@ -2163,6 +2183,168 @@ export function emitObjectVariableDeclaration(
   }
 
   return lines
+}
+
+function directObjectVariableInitializerValues(
+  fields: CObjectShapeField[],
+  properties: ObjectPropertyNode[],
+  context: ObjectFunctionContext,
+  dependencies: ObjectVariableDeclarationDependencies
+): { lines: string[]; values: string[] } | null {
+  if (!objectVariableCanUseDirectInitializer(fields, properties)) {
+    return null
+  }
+
+  const lines: string[] = []
+  const values: string[] = []
+  let propertyIndex = 0
+
+  for (const field of fields) {
+    const property = properties[propertyIndex]
+
+    if (property !== null && typeof property !== 'undefined' && property.key === field.name) {
+      const value = emitObjectFieldInitializerValue(field, property, context, dependencies)
+
+      appendLines(lines, value.lines)
+      values.push(value.expression)
+      propertyIndex = propertyIndex + 1
+    } else {
+      values.push('inox_undefined_value()')
+    }
+  }
+
+  return { lines, values }
+}
+
+function directSpreadObjectVariableInitializerValues(
+  fields: CObjectShapeField[],
+  properties: ObjectPropertyNode[],
+  context: ObjectFunctionContext,
+  dependencies: ObjectVariableDeclarationDependencies
+): { lines: string[]; values: string[] } | null {
+  if (
+    properties.length === 0 ||
+    properties.some((property) => property.spread !== true || property.value.type !== 'Reference')
+  ) {
+    return null
+  }
+
+  const values: string[] = []
+
+  for (const field of fields) {
+    if (objectShapeFieldHasFunctionStorage(field, new Set())) {
+      return null
+    }
+
+    let source: PreparedExpression | null = null
+
+    for (let index = properties.length - 1; index >= 0; index = index - 1) {
+      const property = properties[index]
+
+      if (
+        property !== null &&
+        typeof property !== 'undefined' &&
+        objectSpreadPropertyHasField(property, field.name)
+      ) {
+        source = dependencies.emitCValueExpression(property.value, context)
+        break
+      }
+    }
+
+    if (source === null || source.lines.length > 0) {
+      if (field.optional === true) {
+        values.push('inox_undefined_value()')
+        continue
+      }
+
+      return null
+    }
+
+    values.push(`inox::get(${source.expression}, ${cStringLiteral(field.name)})`)
+  }
+
+  return { lines: [], values }
+}
+
+function objectVariableCanUseDirectInitializer(
+  fields: CObjectShapeField[],
+  properties: ObjectPropertyNode[]
+): boolean {
+  let propertyIndex = 0
+
+  for (const field of fields) {
+    if (objectShapeFieldHasFunctionStorage(field, new Set())) {
+      return false
+    }
+
+    const property = properties[propertyIndex]
+
+    if (property !== null && typeof property !== 'undefined' && property.key === field.name) {
+      if (property.spread === true || !isDirectObjectInitializerValue(property.value)) {
+        return false
+      }
+
+      propertyIndex = propertyIndex + 1
+    } else if (field.optional !== true) {
+      return false
+    }
+  }
+
+  return propertyIndex === properties.length
+}
+
+function isDirectObjectInitializerValue(value: ObjectFieldNode): boolean {
+  return (
+    value.type === 'StringLiteral' ||
+    value.type === 'NumberLiteral' ||
+    value.type === 'BooleanLiteral' ||
+    value.type === 'NullLiteral' ||
+    value.type === 'Reference'
+  )
+}
+
+function objectShapeFieldHasFunctionStorage(field: CObjectShapeField, seen: Set<CObjectShape>): boolean {
+  if (field.valueType === 'function') {
+    return true
+  }
+
+  const shape = field.shape
+
+  if (shape === null || typeof shape === 'undefined' || seen.has(shape)) {
+    return false
+  }
+
+  const fields = shape.fields
+
+  if (fields === null || typeof fields === 'undefined') {
+    return false
+  }
+
+  seen.add(shape)
+
+  for (const nested of fields) {
+    if (objectShapeFieldHasFunctionStorage(nested, seen)) {
+      seen.delete(shape)
+      return true
+    }
+  }
+
+  seen.delete(shape)
+  return false
+}
+
+function joinObjectInitializerValues(values: string[]): string {
+  let result = ''
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (index > 0) {
+      result = result + ', '
+    }
+
+    result = result + values[index]
+  }
+
+  return result
 }
 
 function prepareObjectVariableSpreads(

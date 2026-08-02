@@ -19,7 +19,7 @@ test('portable async lowering получает exception shape от выбран
   const rejectionSource = await readFile('compiler/backends/cpp/async/rejections.ts', 'utf8')
   const metadataSource = await readFile('compiler/checker/expression-metadata.ts', 'utf8')
 
-  assert.match(result.code, /inox::get\(fault, "detail"\)/)
+  assert.match(result.code, /inox::object_value_at\(fault, 0, "detail"\)/)
   assert.doesNotMatch(asyncSource, /fieldName === '(?:name|message|code|cause)'/)
   assert.doesNotMatch(asyncSource, /inputRejectionValueType !== 'error'/)
   assert.doesNotMatch(rejectionSource, /return 'error'/)

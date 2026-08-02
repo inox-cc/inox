@@ -82,6 +82,7 @@ import {
   isOpaqueRuntimeValueType,
   libraryNativeBoundaryCppType,
   libraryNativeCppType,
+  managedRaiiReturnCppType,
   requireCompilerLibraryAsyncResultCppType
 } from './value-types.ts'
 import type { ClassLoweringDependencies } from './values/classes.ts'
@@ -236,6 +237,18 @@ function declarationBodyEndsWith(lines: string[], statement: string): boolean {
   return false
 }
 
+function declarationBodyEndsWithReturn(lines: string[]): boolean {
+  for (let index = lines.length - 1; index >= 0; index = index - 1) {
+    const line = lines[index].trim()
+
+    if (line !== '') {
+      return line.startsWith('return ') && line.endsWith(';')
+    }
+  }
+
+  return false
+}
+
 function emitCLocalName(name: string): string {
   return emitCIdentifier(name)
 }
@@ -343,9 +356,17 @@ export function emitFunctionDeclaration(
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(statement.body, context))
   pushIndentedDeclarationLines(bodyLines, emitEventLoopDrain(context))
   const needsCleanup = shouldEmitCleanupLabel(context)
+  const directRaiiReturn =
+    !needsCleanup &&
+    !context.coroutine &&
+    !context.returnFlowUsed &&
+    context.returnFunctionCompanions.length === 0 &&
+    managedRaiiReturnCppType(context.returnType, context.returnNullable === true, context.returnShape) !== null
 
   lines.push(`${emitFunctionHead(statement, context)} {`)
-  pushIndentedDeclarationLines(lines, emitReturnValueDeclarations(context))
+  if (!directRaiiReturn) {
+    pushIndentedDeclarationLines(lines, emitReturnValueDeclarations(context))
+  }
   pushIndentedDeclarationLines(lines, emitFunctionReturnCompanionPrelude(context.returnFunctionCompanions))
   pushIndentedDeclarationLines(lines, emitLoopFlowDeclarations(context))
   pushIndentedDeclarationLines(lines, emitReturnFlowDeclarations(context))
@@ -370,7 +391,11 @@ export function emitFunctionDeclaration(
       : context.returnType === 'void'
         ? 'return;'
         : 'return inox_return;'
-    const directReturnBody = replaceCleanupGotosWithReturn(bodyLines, returnStatement)
+    let directReturnBody = replaceCleanupGotosWithReturn(bodyLines, returnStatement)
+
+    if (directRaiiReturn) {
+      directReturnBody = simplifyManagedRaiiReturnBody(directReturnBody)
+    }
 
     if (context.coroutine) {
       pushDeclarationLines(lines, directReturnBody)
@@ -378,8 +403,12 @@ export function emitFunctionDeclaration(
         lines.push(`  ${returnStatement}`)
       }
     } else if (context.returnType !== 'void') {
-      pushScopedDeclarationBody(lines, directReturnBody)
-      lines.push(`  ${returnStatement}`)
+      pushDeclarationLines(lines, directReturnBody)
+      if (directRaiiReturn && !declarationBodyEndsWithReturn(directReturnBody)) {
+        lines.push('  return {};')
+      } else if (!directRaiiReturn && !declarationBodyEndsWith(directReturnBody, returnStatement)) {
+        lines.push(`  ${returnStatement}`)
+      }
     } else {
       pushDeclarationLines(lines, directReturnBody)
     }
@@ -388,6 +417,47 @@ export function emitFunctionDeclaration(
   lines.push('}')
 
   return lines
+}
+
+function simplifyManagedRaiiReturnBody(lines: string[]): string[] {
+  const result: string[] = []
+  const returnStorage = 'return inox_return;'
+
+  for (let index = 0; index < lines.length; index = index + 1) {
+    const line = lines[index]
+    const trimmed = line.trim()
+    const next = lines[index + 1]
+
+    if (
+      trimmed.startsWith('inox_return = ') &&
+      trimmed.endsWith(';') &&
+      next !== null &&
+      typeof next !== 'undefined' &&
+      next.trim() === returnStorage
+    ) {
+      const indent = line.slice(0, line.length - line.trimStart().length)
+      const expression = trimmed.slice('inox_return = '.length, trimmed.length - 1)
+
+      result.push(`${indent}return ${expression};`)
+      index = index + 1
+      continue
+    }
+
+    if (trimmed === returnStorage) {
+      const indent = line.slice(0, line.length - line.trimStart().length)
+      result.push(`${indent}return {};`)
+      continue
+    }
+
+    if (line.endsWith(` ${returnStorage}`)) {
+      result.push(`${line.slice(0, line.length - returnStorage.length)}return {};`)
+      continue
+    }
+
+    result.push(line)
+  }
+
+  return result
 }
 
 function registerFunctionParamsInContext(
@@ -860,8 +930,10 @@ export function emitClassMethodDeclaration(
     const directReturnBody = replaceCleanupGotosWithReturn(bodyLines, returnStatement)
 
     if (context.returnType !== 'void') {
-      pushScopedDeclarationBody(lines, directReturnBody)
-      lines.push('  return inox_return;')
+      pushDeclarationLines(lines, directReturnBody)
+      if (!declarationBodyEndsWith(directReturnBody, returnStatement)) {
+        lines.push(`  ${returnStatement}`)
+      }
     } else {
       pushDeclarationLines(lines, directReturnBody)
     }
@@ -1264,6 +1336,16 @@ function physicalReturnShape(
     if (nativeShape !== null) {
       return nativeShape
     }
+  }
+
+  const declaredReturnType = declaration.declaredReturnType
+
+  if (
+    declaredReturnType !== null &&
+    typeof declaredReturnType !== 'undefined' &&
+    context.classInfos.has(declaredReturnType)
+  ) {
+    return null
   }
 
   return fallback ?? null
@@ -1719,10 +1801,7 @@ function emitDefaultRuntimeParamPreludeForParam(
     const lines: string[] = [
       `static const inox_field_info ${fieldsName}[] = {`,
       '};',
-      `static const inox_shape ${shapeName} = {`,
-      '  0,',
-      `  ${fieldsName}`,
-      '};',
+      `static const inox_shape ${shapeName} = { 0, ${fieldsName} };`,
       `if (${localName}.tag == INOX_TAG_UNDEFINED) {`
     ]
 

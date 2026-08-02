@@ -21,6 +21,7 @@ import type {
   LibraryNativeIterationDescriptor,
   TypeRef
 } from '../../extensions/types.ts'
+import { genericTypeApplicationFromTypeName } from '../../type-names.ts'
 import type { AnyNode, ObjectShapeInfo, SourceLocation } from '../../types.ts'
 import { emitCIdentifier } from './identifiers.ts'
 import {
@@ -31,6 +32,7 @@ import {
 import type { CCompilerLibrarySet, CFunctionParam, CFunctionType, CObjectShape, CTypeRef } from './types.ts'
 
 type CLibraryNativeShape = {
+  builtin?: string | null
   libraryCValueAdapter?: string | null
   libraryCppType?: string | null
   libraryTypeId?: string | null
@@ -667,11 +669,56 @@ export function emitCReturnType(valueType: CValueTypeInput, nullable: boolean, s
     return 'inox_value'
   }
 
+  const raiiType = managedRaiiReturnCppType(valueType, nullable, shape)
+
+  if (raiiType !== null) {
+    return raiiType
+  }
+
   if (valueType === 'function' || isManagedRuntimeReturnType(valueType)) {
     return 'inox_value'
   }
 
   return emitCType(valueType)
+}
+
+export function managedRaiiReturnCppType(
+  valueType: CValueTypeInput,
+  nullable: boolean,
+  shape?: CLibraryNativeShape | null
+): string | null {
+  if (nullable) {
+    return null
+  }
+
+  if (valueType === 'string') {
+    return 'inox::String'
+  }
+
+  if (isObjectUnionValueType(valueType)) {
+    return 'inox::Value'
+  }
+
+  if (
+    valueType === 'object' &&
+    shape !== null &&
+    typeof shape !== 'undefined' &&
+    shape.builtin !== 'compiler.AnyNode' &&
+    libraryNativeCppType(shape) === null
+  ) {
+    return 'inox::ObjectValue'
+  }
+
+  return null
+}
+
+function isObjectUnionValueType(valueType: CValueTypeInput): boolean {
+  if (valueType === null || typeof valueType === 'undefined') {
+    return false
+  }
+
+  const application = genericTypeApplicationFromTypeName(valueType)
+  return application?.name === 'union' && application.args.every((argument) => argument === 'object')
 }
 
 export function cRuntimeValueTag(valueType: CValueTypeInput): CRuntimeValueTag {

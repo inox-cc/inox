@@ -2721,10 +2721,7 @@ function emitCClassRuntimeObjectInitLines(
   }
 
   lines.push('};')
-  lines.push(`static const inox_shape ${shapeName} = {`)
-  lines.push(`  ${info.fields.length},`)
-  lines.push(`  ${fieldsName}`)
-  lines.push('};')
+  lines.push(`static const inox_shape ${shapeName} = { ${info.fields.length}, ${fieldsName} };`)
   lines.push(emitStatusCheck(`inox_object_new(&inox_default_allocator, &${shapeName}, ${target}.out())`, context))
 
   const constructorArgs = mapClassConstructorArgs(expression, info)

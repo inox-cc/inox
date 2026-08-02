@@ -2179,6 +2179,14 @@ export function isRuntimeProducedStringExpression(
   }
 
   if (
+    expression.type === 'Reference' &&
+    expression.path.length === 1 &&
+    context.cppStringValues?.has(expression.path[0] ?? '') === true
+  ) {
+    return true
+  }
+
+  if (
     expression.type === 'CallExpression' &&
     stringDeps(context).inferExpressionType(expression, context) === 'string'
   ) {

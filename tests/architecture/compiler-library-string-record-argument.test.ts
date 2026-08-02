@@ -16,7 +16,7 @@ test('string-record argument lowering остаётся generic и сохраня
 
   assert.match(result.code, /bridge\.make\(\{ \{ "q", "smoke" \}, \{ "page", page \} \}\)/)
   assert.match(result.code, /bridge\.make\("q=direct"\)/)
-  assert.match(result.code, /inox::ObjectValue::create/)
+  assert.match(result.code, /inox::ObjectValue::from/)
   assert.match(result.code, /bridge\.make\(init\)/)
 })
 

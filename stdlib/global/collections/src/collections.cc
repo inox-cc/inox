@@ -1838,6 +1838,37 @@ Array Array::slice(size_t start, size_t end) const {
   return Array(inox::adopt(inox_array_adopt_storage(target)));
 }
 
+bool Array::every(inox::Callback predicate) const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox_collection_throw("TypeError: Array.every receiver is not an Array");
+    return false;
+  }
+
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
+
+  for (size_t index = 0; index < instance->length; index += 1) {
+    bool match = false;
+
+    if (!inox_array_call_predicate(
+          predicate,
+          instance->items[index],
+          index,
+          "TypeError: Array.every callback must return boolean",
+          &match
+        )) {
+      return false;
+    }
+
+    if (!match) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 bool Array::some(inox::Callback predicate) const {
   inox_value array = inox::Value::raw();
 

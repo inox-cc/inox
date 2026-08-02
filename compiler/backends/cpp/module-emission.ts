@@ -73,6 +73,7 @@ import {
   emitOwnedValueDeclarations,
   emitReturnFlowDeclarations,
   emitReturnValueDeclarations,
+  normalizeClassReturnShapes,
   replaceCleanupGotosWithReturn,
   shouldEmitCleanupLabel
 } from './context.ts'
@@ -1053,6 +1054,14 @@ function collectCModuleHeaderIncludeLines(
 
   if (cModuleHeaderDeclarationsNeedValue(declarationLines)) {
     pushUniqueCModuleLine(includes, '#include "inox/value.h"')
+  }
+
+  if (cModuleDeclarationLinesReferenceName(declarationLines, 'inox::String')) {
+    pushUniqueCModuleLine(includes, '#include "inox/string.h"')
+  }
+
+  if (cModuleDeclarationLinesReferenceName(declarationLines, 'inox::ObjectValue')) {
+    pushUniqueCModuleLine(includes, '#include "inox/object.h"')
   }
 
   if (cModuleDeclarationLinesReferenceName(declarationLines, 'inox_loop')) {
@@ -2333,6 +2342,7 @@ function createCModuleBaseContext(
 
   context.classInfos = createClassInfos(classNodes, diagnostics, plan.classSymbolNames)
   registerImportedCModuleClassInfos(context, plan, diagnostics)
+  normalizeClassReturnShapes(context)
 
   registerCModuleValueDeclarations(context, plan)
   registerImportedCModuleValueDeclarations(context, plan)

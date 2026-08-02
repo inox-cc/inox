@@ -5388,6 +5388,7 @@ class Checker {
       ) {
         param.shape = {
           kind: 'object',
+          dynamic: false,
           fields: shapeFields,
           libraryCValueAdapter: nativeType?.cValueAdapter ?? null,
           libraryTypeId: parameter.resultTypeId,
@@ -5399,6 +5400,7 @@ class Checker {
       ) {
         param.shape = {
           kind: 'object',
+          dynamic: false,
           fields: shapeFields
         }
       }

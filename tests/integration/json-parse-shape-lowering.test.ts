@@ -45,7 +45,7 @@ console.log(Object.entries(foo.v)[0][0])
   assert.match(source, /if \(inox::thrown\(\)\) return;/)
   assert.match(
     source,
-    /auto inox_library_result_\d+ = Array\(Object\.entries\(inox::get\(foo, "v"\)\)\.get\(0\)\)\.get\(0\);\n  if \(inox::thrown\(\)\) return;/
+    /auto inox_library_result_\d+ = Array\(Object\.entries\(inox::object_value_at\(foo, 0, "v"\)\)\.get\(0\)\)\.get\(0\);\n  if \(inox::thrown\(\)\) return;/
   )
   assert.doesNotMatch(source, /auto inox_library_object_\d+/)
   assert.doesNotMatch(source, /auto inox_value_\d+ = inox::get\(foo, "v"\);/)
@@ -142,7 +142,7 @@ export async function assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariable
     assert.match(source, /if \(inox::thrown\(\)\) return;/)
     assert.match(
       source,
-      /auto inox_library_result_\d+ = Array\(Object\.entries\(inox::get\(foo, "v"\)\)\.get\(0\)\)\.get\(0\);\n  if \(inox::thrown\(\)\) return;/
+      /auto inox_library_result_\d+ = Array\(Object\.entries\(inox::object_value_at\(foo, 0, "v"\)\)\.get\(0\)\)\.get\(0\);\n  if \(inox::thrown\(\)\) return;/
     )
     assert.doesNotMatch(source, /auto inox_library_object_\d+/)
     assert.doesNotMatch(source, /auto inox_value_\d+ = inox::get\(foo, "v"\);/)

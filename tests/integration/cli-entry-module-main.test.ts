@@ -61,7 +61,7 @@ export async function assertCliEntryModuleMain(compilerPath: string): Promise<vo
     assert.doesNotMatch(generatedDependency, /static [^\n]* inox_mod_src_lib_value_ts_.*_localValue\(\);/)
     assert.doesNotMatch(generatedDependency, /static [^\n]* inox_mod_src_lib_value_ts_.*_exportedValue\(\);/)
     const localValueDefinition = generatedDependency.search(/\nstatic [^\n]* localValue\(\) \{/)
-    const exportedValueDefinition = generatedDependency.search(/\ninox_value [^\n]*_exportedValue\(\) \{/)
+    const exportedValueDefinition = generatedDependency.search(/\ninox::String [^\n]*_exportedValue\(\) \{/)
 
     assert.ok(localValueDefinition >= 0, 'missing localValue definition')
     assert.ok(exportedValueDefinition >= 0, 'missing exportedValue definition')

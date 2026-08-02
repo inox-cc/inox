@@ -2480,7 +2480,7 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
     return functionScalarDeclaration
   }
 
-  const stringScalarDeclaration = emitStringScalarVariableDeclaration(statement, context, inferred)
+  const stringScalarDeclaration = emitStringScalarVariableDeclaration(statement, context, variableType)
 
   if (stringScalarDeclaration !== null && typeof stringScalarDeclaration !== 'undefined') {
     return stringScalarDeclaration
@@ -3743,10 +3743,7 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
   }
 
   lines.push('};')
-  lines.push(`static const inox_shape ${shapeName} = {`)
-  lines.push(`  ${fields.length},`)
-  lines.push(`  ${fieldsName}`)
-  lines.push('};')
+  lines.push(`static const inox_shape ${shapeName} = { ${fields.length}, ${fieldsName} };`)
   registerBoxedValue(context, statement.name, 'object')
   context.boxedVariables.add(statement.name)
   context.variables.set(statement.name, 'object')
@@ -3867,9 +3864,15 @@ function emitDynamicObjectMemberVariableDeclaration(
   return emitObjectMemberVariableDeclaration(statement, member, context, member.objectName, member.key)
 }
 
-function emitObjectMemberGetLines(objectName: string, key: string, temp: string, context: CFunctionContext): string[] {
+function emitObjectMemberGetLines(
+  objectName: string,
+  index: number,
+  key: string,
+  temp: string,
+  context: CFunctionContext
+): string[] {
   const object = emitObjectValueReference(objectName, context)
-  const lines = [`${temp} = inox::get(${object}, ${cStringLiteral(key)});`]
+  const lines = [`${temp} = inox::object_value_at(${object}, ${index}, ${cStringLiteral(key)});`]
 
   pushAll(lines, emitThrownCheckLines(context))
 
@@ -3898,7 +3901,7 @@ function emitObjectMemberVariableDeclaration(
   }
 
   if (member.valueType === 'string') {
-    return emitObjectStringMemberVariableDeclaration(statement, context, objectName, key)
+    return emitObjectStringMemberVariableDeclaration(statement, member, context, objectName, key)
   }
 
   if (member.valueType === 'function') {
@@ -3906,7 +3909,7 @@ function emitObjectMemberVariableDeclaration(
     const lines: string[] = []
 
     registerOwnedValue(context, name)
-    pushAll(lines, emitObjectMemberGetLines(objectName, key, name, context))
+    pushAll(lines, emitObjectMemberGetLines(objectName, member.index, key, name, context))
     lines.push(emitRuntimeTypeCheck(`${name}.tag != INOX_TAG_FUNCTION || ${name}.as.ref == 0`, context))
     context.variables.set(statement.name, 'function')
     context.functionTypes.set(statement.name, normalizeFunctionType(member.functionType))
@@ -3930,7 +3933,7 @@ function emitObjectMemberVariableDeclaration(
     runtimeValueExpression = `${temp}.as.boolean ? 1 : 0`
   }
 
-  pushAll(lines, emitObjectMemberGetLines(objectName, key, temp, context))
+  pushAll(lines, emitObjectMemberGetLines(objectName, member.index, key, temp, context))
   lines.push(`double ${emitCIdentifier(statement.name)} = ${runtimeValueExpression};`)
 
   context.variables.set(statement.name, member.valueType)
@@ -3948,7 +3951,7 @@ function emitObjectBytesMemberVariableDeclaration(
   registerOwnedValue(context, statement.name)
   const lines: string[] = []
 
-  pushAll(lines, emitObjectMemberGetLines(objectName, key, statement.name, context))
+  pushAll(lines, emitObjectMemberGetLines(objectName, member.index, key, statement.name, context))
   lines.push(
     emitRuntimeTypeCheck(
       `${emitCIdentifier(statement.name)}.tag != INOX_TAG_BYTES || ${emitCIdentifier(statement.name)}.as.ref == 0`,
@@ -3971,7 +3974,7 @@ function emitObjectObjectMemberVariableDeclaration(
   registerOwnedValue(context, statement.name)
   const lines: string[] = []
 
-  pushAll(lines, emitObjectMemberGetLines(objectName, key, statement.name, context))
+  pushAll(lines, emitObjectMemberGetLines(objectName, member.index, key, statement.name, context))
 
   if (libraryNativeCppType(member.shape) === null) {
     lines.push(emitRuntimeTypeCheck(runtimeObjectLikeValueMismatchCondition(emitCIdentifier(statement.name)), context))
@@ -4000,6 +4003,7 @@ function emitObjectObjectMemberVariableDeclaration(
 
 function emitObjectStringMemberVariableDeclaration(
   statement: AnyNode,
+  member: CKnownObjectField,
   context: CFunctionContext,
   objectName: string,
   key: string
@@ -4009,7 +4013,7 @@ function emitObjectStringMemberVariableDeclaration(
 
   registerOwnedValue(context, temp)
 
-  pushAll(lines, emitObjectMemberGetLines(objectName, key, temp, context))
+  pushAll(lines, emitObjectMemberGetLines(objectName, member.index, key, temp, context))
   lines.push(emitRuntimeTypeCheck(`${temp}.tag != INOX_TAG_STRING || ${temp}.as.ref == 0`, context))
   lines.push(`inox_string* ${emitCIdentifier(statement.name)} = (inox_string*)${temp}.as.ref;`)
 
@@ -4032,13 +4036,10 @@ function emitKnownObjectMemberAssignment(
 
   pushAll(lines, value.lines)
   pushAll(lines, emitKnownObjectMemberFunctionFieldAssignments(expression, member, context))
-  const key = knownObjectMemberKey(member)
   lines.push(
-    emitStatusCheck(
-      `inox_object_set(${emitObjectValueReference(member.objectName, context)}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, ${value.expression})`,
-      context
-    )
+    `inox::set_object_value_at(${emitObjectValueReference(member.objectName, context)}, ${member.index}, ${cStringLiteral(knownObjectMemberKey(member))}, ${value.expression});`
   )
+  pushAll(lines, emitThrownCheckLines(context))
 
   return lines
 }
@@ -4064,11 +4065,9 @@ function emitDynamicObjectMemberAssignment(
 
   pushAll(lines, value.lines)
   lines.push(
-    emitStatusCheck(
-      `inox_object_set(${emitObjectValueReference(member.objectName, context)}, ${cStringLiteral(member.key)}, ${utf8ByteLength(member.key)}, ${value.expression})`,
-      context
-    )
+    `inox::set_object_value_at(${emitObjectValueReference(member.objectName, context)}, ${member.index}, ${cStringLiteral(member.key)}, ${value.expression});`
   )
+  pushAll(lines, emitThrownCheckLines(context))
 
   return lines
 }
@@ -4652,7 +4651,7 @@ function emitCArrayLiteralValueExpression(
     typeof literalExpression === 'string' &&
     literalExpression.length > 0 &&
     expression.elements.length > 0 &&
-    compilerArrayLiteralCanUseDirectMaterialization(expression)
+    compilerArrayLiteralCanUseDirectMaterialization(expression, context)
   ) {
     const values: string[] = []
 
@@ -4793,15 +4792,17 @@ function renderSequenceMaterializationExpression(
   return rendered
 }
 
-function compilerArrayLiteralCanUseDirectMaterialization(expression: AnyNode): boolean {
+function compilerArrayLiteralCanUseDirectMaterialization(
+  expression: AnyNode,
+  context: CFunctionContext
+): boolean {
   for (let index = 0; index < expression.elements.length; index = index + 1) {
     const element = expression.elements[index]
 
     if (
-      element.type !== 'StringLiteral' &&
-      element.type !== 'NumberLiteral' &&
-      element.type !== 'BooleanLiteral' &&
-      element.type !== 'NullLiteral'
+      element.type === 'SpreadElement' ||
+      inferExpressionType(element, context) === 'function' ||
+      arrayLiteralElementFunctionType(expression, element, context) !== null
     ) {
       return false
     }
@@ -4876,10 +4877,23 @@ function emitCObjectLiteralValueExpression(
   }
 
   lines.push('};')
-  lines.push(`static const inox_shape ${shapeName} = {`)
-  lines.push(`  ${fields.length},`)
-  lines.push(`  ${fieldsName}`)
-  lines.push('};')
+  lines.push(`static const inox_shape ${shapeName} = { ${fields.length}, ${fieldsName} };`)
+  const direct = emitDirectObjectLiteralInitializer(expression, fields, context)
+
+  if (direct !== null) {
+    pushAll(lines, direct.lines)
+    lines.push(`auto ${temp} = inox::ObjectValue::from(&${shapeName}, { ${joinStrings(direct.values, ', ')} });`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+
+    return {
+      lines,
+      expression: temp,
+      cppType: 'inox::ObjectValue',
+      functionCompanions: direct.functionCompanions,
+      valueType: 'object'
+    }
+  }
+
   lines.push(`auto ${temp} = inox::ObjectValue::create(&${shapeName});`)
   lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   const spreads = prepareObjectLiteralSpreads(expression, context, lines)
@@ -4944,6 +4958,59 @@ function emitCObjectLiteralValueExpression(
     functionCompanions,
     valueType: 'object'
   }
+}
+
+function emitDirectObjectLiteralInitializer(
+  expression: AnyNode,
+  fields: CObjectShapeField[],
+  context: CFunctionContext
+): { lines: string[]; values: string[]; functionCompanions: CPreparedFunctionCompanion[] } | null {
+  const properties: CObjectLiteralPropertyNode[] = expression.properties
+  const lines: string[] = []
+  const values: string[] = []
+  const functionCompanions: CPreparedFunctionCompanion[] = []
+  let propertyIndex = 0
+
+  for (const field of fields) {
+    if (field.valueType === 'function') {
+      return null
+    }
+
+    const property = properties[propertyIndex]
+
+    if (property !== null && typeof property !== 'undefined' && property.key === field.name) {
+      if (property.spread === true || !isDirectObjectLiteralInitializerValue(property.value)) {
+        return null
+      }
+
+      const value = emitObjectFieldInitializerValue(field, nodeOrEmpty(property.value), context)
+
+      pushAll(lines, value.lines)
+      pushPreparedFunctionCompanions(functionCompanions, value.functionCompanions, field.name)
+      values.push(value.expression)
+      propertyIndex = propertyIndex + 1
+    } else if (field.optional === true) {
+      values.push('inox_undefined_value()')
+    } else {
+      return null
+    }
+  }
+
+  if (propertyIndex !== properties.length) {
+    return null
+  }
+
+  return { lines, values, functionCompanions }
+}
+
+function isDirectObjectLiteralInitializerValue(value: AnyNode): boolean {
+  return (
+    value.type === 'StringLiteral' ||
+    value.type === 'NumberLiteral' ||
+    value.type === 'BooleanLiteral' ||
+    value.type === 'NullLiteral' ||
+    value.type === 'Reference'
+  )
 }
 
 function prepareObjectLiteralSpreads(
@@ -6534,8 +6601,6 @@ function emitRuntimeStringLogValue(
   const value = nextCName(context, 'inox_log_value')
   const lines: string[] = []
 
-  registerOwnedValue(context, value)
-
   pushAll(lines, emitRuntimeLogGetLines(source, value, context))
 
   if (!narrowed) {
@@ -6559,8 +6624,6 @@ function emitRuntimeNumberLogValue(
   let tag = 'INOX_TAG_NUMBER'
   let formattedValue = `${value}.as.number`
 
-  registerOwnedValue(context, value)
-
   if (valueType === 'boolean') {
     tag = 'INOX_TAG_BOOL'
     formattedValue = `static_cast<double>(${value}.as.boolean ? 1 : 0)`
@@ -6579,8 +6642,6 @@ function emitRuntimeNumberLogValue(
 function emitRuntimeBooleanLogValue(source: RuntimeLogGetSource, context: CFunctionContext): FormattedOutputValue {
   const value = nextCName(context, 'inox_log_value')
   const lines: string[] = []
-
-  registerOwnedValue(context, value)
 
   pushAll(lines, emitRuntimeLogGetLines(source, value, context))
   lines.push(emitRuntimeValueCheck(value, 'INOX_TAG_BOOL', context))
@@ -6601,9 +6662,9 @@ function emitRuntimeLogGetLines(source: RuntimeLogGetSource, temp: string, conte
     }
 
     const object = emitObjectValueReference(field.objectName, context)
-    const key = cStringLiteral(field.key)
-
-    const lines = [`${temp} = inox::get(${object}, ${key});`]
+    const lines = [
+      `auto ${temp} = inox::object_value_at(${object}, ${field.index}, ${cStringLiteral(field.key)});`
+    ]
     pushAll(lines, emitThrownCheckLines(context))
 
     return lines
@@ -6616,9 +6677,9 @@ function emitRuntimeLogGetLines(source: RuntimeLogGetSource, temp: string, conte
   }
 
   const object = emitObjectValueReference(member.objectName, context)
-  const key = knownObjectMemberKey(member)
-
-  const lines = [`${temp} = inox::get(${object}, ${cStringLiteral(key)});`]
+  const lines = [
+    `auto ${temp} = inox::object_value_at(${object}, ${member.index}, ${cStringLiteral(knownObjectMemberKey(member))});`
+  ]
   pushAll(lines, emitThrownCheckLines(context))
 
   return lines

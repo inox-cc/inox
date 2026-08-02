@@ -63,7 +63,8 @@ import {
   isRuntimeNullableType,
   libraryNativeBoundaryCppType,
   libraryNativeCppType,
-  libraryNativeValueAdapter
+  libraryNativeValueAdapter,
+  managedRaiiReturnCppType
 } from '../value-types.ts'
 import {
   cClassNameFromValueType,
@@ -1314,7 +1315,7 @@ export function emitRuntimeValueVariableDeclaration(
 
   const lines: string[] = []
   pushAllLines(lines, value.lines)
-  lines.push(emitLocalRuntimeValueDeclaration(statement, value))
+  lines.push(emitLocalRuntimeValueDeclaration(statement, value, context))
   pushRuntimeValueFunctionCompanionDeclarations(lines, statement, value, context)
 
   if (shouldSkipRuntimeValueDeclarationCheck(statement, value, valueType)) {
@@ -1429,20 +1430,26 @@ function replacePreparedCppDeclaredName(line: string, declaredName: string, name
   return line.split(declaredName).join(name)
 }
 
-function emitLocalRuntimeValueDeclaration(statement: StatementNode, value: PreparedExpression): string {
+function emitLocalRuntimeValueDeclaration(
+  statement: StatementNode,
+  value: PreparedExpression,
+  context: CFunctionContext
+): string {
   const name = emitCIdentifier(statement.name)
   const cppType = value.cppType ?? 'inox::Value'
   let declarationType = `${constPrefix(statement.kind === 'const')}${cppType}`
+  const predeclared = context.ownedValues.includes(statement.name)
 
   if (cppType !== 'inox::Value') {
     declarationType = 'auto'
   }
 
   if (value.owned === true) {
-    return `${declarationType} ${name} = inox::adopt(${value.expression}.release());`
+    const expression = `inox::adopt(${value.expression}.release())`
+    return predeclared ? `${name} = ${expression};` : `${declarationType} ${name} = ${expression};`
   }
 
-  return `${declarationType} ${name} = ${value.expression};`
+  return predeclared ? `${name} = ${value.expression};` : `${declarationType} ${name} = ${value.expression};`
 }
 
 function registerCppValueType(
@@ -3167,6 +3174,10 @@ export function emitReturnStatement(statement: StatementNode, context: CFunction
     return emitLibraryNativeReturnStatement(returnStatement, context)
   }
 
+  if (managedRaiiReturnCppType(context.returnType, context.returnNullable === true, context.returnShape) !== null) {
+    return emitManagedRaiiReturnStatement(returnStatement, context)
+  }
+
   if (isRuntimeValueReturnType(context.returnType)) {
     return emitRuntimeValueReturnStatement(returnStatement, context)
   }
@@ -3213,6 +3224,42 @@ export function emitReturnStatement(statement: StatementNode, context: CFunction
 
   const expression: string = statementDeps(context).emitCExpression(argument, context)
   return [`return ${expression};`]
+}
+
+function emitManagedRaiiReturnStatement(statement: StatementNode, context: CFunctionContext): string[] {
+  if (statement.argument === null || typeof statement.argument === 'undefined') {
+    return emitReturnJump(context)
+  }
+
+  const returnCppType = managedRaiiReturnCppType(
+    context.returnType,
+    context.returnNullable === true,
+    context.returnShape
+  )
+  const value =
+    returnCppType === 'inox::ObjectValue' && context.returnType === 'object'
+      ? emitRuntimeReturnValueExpression(statement.argument, context, context.returnType, context.returnShape)
+      : statementDeps(context).emitCValueExpression(statement.argument, context)
+  const lines: string[] = []
+  let expression = value.expression
+
+  pushAllLines(lines, value.lines)
+
+  if (returnCppType === null) {
+    return emitReturnJump(context)
+  }
+
+  if (value.cppType === 'inox::Value') {
+    expression = `${returnCppType}(std::move(${expression}))`
+  } else if (returnCppType === 'inox::Value') {
+    expression = `inox::Value(${expression})`
+  } else if (value.cppType !== returnCppType) {
+    expression = `${returnCppType}(inox::Value(${expression}))`
+  }
+
+  lines.push(`inox_return = ${expression};`)
+  pushAllLines(lines, emitReturnJump(context))
+  return lines
 }
 
 function emitLibraryNativeReturnStatement(statement: StatementNode, context: CFunctionContext): string[] {
@@ -3893,6 +3940,10 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
       return call.lines
     }
 
+    if (call.cppDeclaredName === call.expression) {
+      return emitDiscardedPreparedValueLines(call)
+    }
+
     const lines: string[] = []
     pushAllLines(lines, call.lines)
     lines.push(`${call.expression};`)
@@ -3902,7 +3953,7 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
   if (expression.type === 'AwaitExpression') {
     const value = deps.emitCAwaitValueExpression(expression, context)
 
-    return emitDiscardedAwaitValueLines(value)
+    return emitDiscardedPreparedValueLines(value)
   }
 
   if (expression.type === 'UpdateExpression') {
@@ -4003,7 +4054,7 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
   return []
 }
 
-function emitDiscardedAwaitValueLines(value: PreparedExpression): string[] {
+function emitDiscardedPreparedValueLines(value: PreparedExpression): string[] {
   const declaredName = value.cppDeclaredName
 
   if (declaredName === null || typeof declaredName === 'undefined') {

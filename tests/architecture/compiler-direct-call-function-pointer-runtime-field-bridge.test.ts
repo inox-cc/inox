@@ -39,7 +39,7 @@ use({ dependencies })
 
   assert.ok(source)
   assert.doesNotMatch(source.code, /inox_objfn_|inox_function_pointer_callback/)
-  assert.match(source.code, /static inox_value use\(inox_value context\)/)
+  assert.match(source.code, /static inox::String use\(inox_value context\)/)
   assert.match(source.code, /inox_callback_\d+ = inox::get\(inox_value_\d+, "pick"\);/)
   assert.match(source.code, /inox_callback_call\(inox_callback_\d+, inox_callback_args_\d+, 1,/)
   assert.match(source.code, /inox_callback_new\(&inox_default_allocator, inox_callback_pick_\d+, 0, 0,/)

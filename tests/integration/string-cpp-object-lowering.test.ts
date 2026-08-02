@@ -72,8 +72,8 @@ console.log(strNum, strBool, strNull, strTpl, numText, hexText)
     source,
     /auto inox_library_result_\d+ = inox::String\(inox_library_receiver_\d+->bytes, inox_library_receiver_\d+->len\)\.slice\(0, 4\);/
   )
-  assert.match(source, /auto inox_return_value_\d+ = inox_library_result_\d+;/)
-  assert.match(source, /inox_return = inox_return_value_\d+;/)
+  assert.match(source, /return inox_library_result_\d+;/)
+  assert.doesNotMatch(source, /inox_return_value_\d+|inox::String inox_return/)
   assert.doesNotMatch(source, /inox_return = inox::String\([^\n]+\)\.slice\([^\n]*\);/)
   assert.match(source, /static Array words\(inox_value inox_param_value\)/)
   assert.match(

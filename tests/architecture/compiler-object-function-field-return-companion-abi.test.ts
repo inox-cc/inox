@@ -17,7 +17,7 @@ apply(make())
     { libraries: defaultCompilerLibrarySet, target: 'cc' }
   )
 
-  assert.match(result.code, /inox_value make\(\)/)
+  assert.match(result.code, /inox::ObjectValue make\(\)/)
   assert.match(result.code, /inox_object_\d+\.init\(0, inox_callback_\d+\)/)
   assert.match(result.code, /inox::get\(carrier, "work"\)/)
   assert.match(result.code, /inox_callback_call\(/)

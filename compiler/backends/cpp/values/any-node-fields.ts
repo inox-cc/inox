@@ -56,6 +56,7 @@ export const compilerAnyNodeStringFields: readonly string[] = [
   'className',
   'constraint',
   'param',
+  'functionStorage',
   'functionTypeOwnership',
   'shapeOwnership',
   'syntheticValueImportName'

@@ -279,6 +279,7 @@ export function resolveDeclaredType(
     info.shape = {
       kind: 'object',
       baseTypes: nativeType.baseTypeIds,
+      dynamic: false,
       fields,
       libraryCValueAdapter: nativeType.cValueAdapter ?? null,
       libraryTypeId: nativeType.typeId,

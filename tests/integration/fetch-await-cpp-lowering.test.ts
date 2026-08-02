@@ -68,7 +68,10 @@ await checkFetch()
   )
   assert.match(checkFetch, /auto inox_object_\d+ = inox::ObjectValue::create\(&inox_shape_value_\d+\);/)
   assert.match(checkFetch, /\.init\(0, inox::String\("POST", 4\)\);/)
-  assert.match(checkFetch, /\.init\(0, inox::String\("text\/plain", 10\)\);/)
+  assert.match(
+    checkFetch,
+    /auto inox_object_\d+ = inox::ObjectValue::from\(&inox_shape_value_\d+, \{ inox::String\("text\/plain", 10\) \}\);/
+  )
   assert.match(
     checkFetch,
     /auto post = inox::FetchResponse\(co_await inox::fetch\("http:\/\/example.com\/post", inox_object_\d+\)\);\n    if \(inox::thrown\(\)\) goto catch_0;/
@@ -84,7 +87,7 @@ await checkFetch()
   assert.doesNotMatch(checkFetch, /auto txt = inox_res_\d+\.value\(\);/)
   assert.match(checkFetch, /console\.log\("Text %s", txt\);/)
   assert.match(checkFetch, /console\.log\("Post %d", post\.ok\);\n    goto end_0;\n  \} catch_0: \{/)
-  assert.match(checkFetch, /\n  \} end_0:;\n  co_return inox::Value\(inox_undefined_value\(\)\);\n\}/)
+  assert.match(checkFetch, /\n  \} end_0:;\n  co_return \{\};\n\}/)
   assert.doesNotMatch(checkFetch, /\n  end_0:;/)
   assert.doesNotMatch(checkFetch, /end_0: ;/)
   assert.doesNotMatch(checkFetch, /end_\d+:\n\s+;/)

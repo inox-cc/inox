@@ -55,6 +55,7 @@ public:
   bool valid() const;
   size_t length() const;
   inox::Value get(size_t index) const;
+  bool every(inox::Callback predicate) const;
   Array filter(inox::Callback predicate) const;
   inox::Value find(inox::Callback predicate) const;
   bool includes(const inox::Value& value) const;

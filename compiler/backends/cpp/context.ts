@@ -25,6 +25,7 @@ import {
   isNullableScalarType,
   isOpaqueRuntimeValueType,
   libraryNativeCppType,
+  managedRaiiReturnCppType,
   compilerLibraryIntrinsicNativeCppType,
   compilerLibraryNativeRuntimeValueExpressionForId,
   requireCompilerLibraryAsyncResultCppType
@@ -48,6 +49,20 @@ export type CAsyncResultConstructorHandlerMap = Map<string, CAsyncResultConstruc
 export type CStringMap = Map<string, string>
 export type CStringNullableMap = Map<string, string | null>
 export type CStringSet = Set<string>
+
+type CClassReturnShapeContext = {
+  classInfos: Map<string, CClassInfo>
+  functionReturnDeclaredTypes: CStringNullableMap
+  functionReturnShapes: Map<string, CObjectShape | null>
+}
+
+export function normalizeClassReturnShapes(context: CClassReturnShapeContext): void {
+  for (const [name, declaredReturnType] of context.functionReturnDeclaredTypes) {
+    if (declaredReturnType !== null && context.classInfos.has(declaredReturnType)) {
+      context.functionReturnShapes.set(name, null)
+    }
+  }
+}
 
 function emitCLocalName(name: string): string {
   return emitCIdentifier(name)
@@ -465,7 +480,7 @@ export function emitFailureStatement(context: CFailureContext): string {
   }
 
   if (context.coroutine === true) {
-    return 'co_return inox::Value(inox_undefined_value());'
+    return 'co_return {};'
   }
 
   if (context.returnType === 'void') {
@@ -659,6 +674,12 @@ export function emitReturnValueDeclarations(context: CReturnValueDeclarationCont
 
   if (context.returnNullable === true && isNullableScalarType(returnType)) {
     return ['inox_value inox_return = inox_undefined_value();']
+  }
+
+  const raiiType = managedRaiiReturnCppType(returnType, context.returnNullable === true, context.returnShape)
+
+  if (raiiType !== null) {
+    return [`${raiiType} inox_return;`]
   }
 
   if (
@@ -874,7 +895,7 @@ export function emitCleanupReturn(context: CFunctionContext): string[] {
 
 export function emitCoroutineReturnStatement(context: CFunctionContext): string {
   if (context.returnType === 'void') {
-    return 'co_return inox::Value(inox_undefined_value());'
+    return 'co_return {};'
   }
 
   if (context.returnNullable !== true && context.returnType === 'boolean') {
@@ -883,6 +904,10 @@ export function emitCoroutineReturnStatement(context: CFunctionContext): string 
 
   if (context.returnNullable !== true && context.returnType === 'number') {
     return 'co_return inox::Value(inox_number_value(inox_return));'
+  }
+
+  if (managedRaiiReturnCppType(context.returnType, context.returnNullable === true, context.returnShape) !== null) {
+    return 'co_return std::move(inox_return);'
   }
 
   const libraryTypeId = context.returnShape?.libraryTypeId

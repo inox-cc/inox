@@ -939,6 +939,10 @@ function collectEscapingThrowValueTypesFromExpression(
   }
 
   if (expression.type === 'ArrayLiteral') {
+    if (!hasErrorTarget) {
+      types.push('pending-exception')
+    }
+
     pushExpressionListThrowValueTypes(
       types,
       nodeList(expression.elements),
@@ -954,6 +958,10 @@ function collectEscapingThrowValueTypesFromExpression(
   }
 
   if (expression.type === 'ObjectLiteral') {
+    if (!hasErrorTarget) {
+      types.push('pending-exception')
+    }
+
     const properties = propertyList(expression.properties)
 
     for (let index = 0; index < properties.length; index = index + 1) {

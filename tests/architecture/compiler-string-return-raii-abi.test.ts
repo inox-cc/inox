@@ -5,13 +5,20 @@ import { compileFileToCppModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
-test('module header включает только зависимости exported declarations', () => {
+test('гарантированный string возвращается через RAII ABI', () => {
   const host = createMemoryCompilerHost(
     [
       {
         path: '/pkg/index.ts',
-        source:
-          'const values = [1]\nconsole.log(values.length)\nexport function echo(value: string): string { return value }\n'
+        source: `
+const settings = { status: 'ready' }
+
+export function status(): string {
+  return settings.status
+}
+
+console.log(status())
+`
       }
     ],
     { root: '/' }
@@ -27,11 +34,9 @@ test('module header включает только зависимости exporte
 
   assert.ok(header)
   assert.ok(source)
-  assert.match(header.code, /#include "inox\/value\.h"/)
-  assert.match(header.code, /#include "inox\/string\.h"/)
-  assert.doesNotMatch(header.code, /#include "inox\/(?:array|console|loop)\.h"/)
-  assert.match(header.code, /inox::String inox_mod_index_ts_[a-f0-9]+_echo\(inox_value inox_param_value\);/)
-  assert.equal(source.code.match(/#include "inox\/value\.h"/g)?.length ?? 0, 0)
-  assert.match(source.code, /#include "inox\/array\.h"/)
-  assert.match(source.code, /#include "inox\/console\.h"/)
+  assert.match(header.code, /inox::String inox_mod_index_ts_[a-f0-9]+_status\(\);/)
+  assert.match(source.code, /inox::String inox_mod_index_ts_[a-f0-9]+_status\(\)/)
+  assert.match(source.code, /console\.log\("%s", inox_mod_index_ts_[a-f0-9]+_status\(\)\);/)
+  assert.doesNotMatch(source.code, /status\(\);\n\s+if \([^\n]*tag != INOX_TAG_STRING/)
+  assert.doesNotMatch(source.code, /inox::String inox_return/)
 })

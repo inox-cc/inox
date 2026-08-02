@@ -39,7 +39,7 @@ useResult()
   const source = files.find((file) => file.path === 'index.cc')
 
   assert.ok(source)
-  assert.match(source.code, /auto inox_value_\d+ = inox::get\(result, "requirements"\);/)
+  assert.match(source.code, /auto inox_value_\d+ = inox::object_value_at\(result, 0, "requirements"\);/)
   assert.match(source.code, /auto requirements = Set\(inox_value_\d+\);/)
   assert.match(source.code, /requirements\.has/)
   assert.doesNotMatch(source.code, /requirements\.tag != INOX_TAG_OBJECT/)

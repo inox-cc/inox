@@ -71,6 +71,8 @@ void inox_object_dispose_fields(inox_object* object);
 #endif
 
 #ifdef __cplusplus
+#include <initializer_list>
+
 #include "inox/string.h"
 
 namespace inox {
@@ -84,12 +86,16 @@ public:
   using Value::operator=;
 
   static ObjectValue create(const inox_shape* shape);
+  static ObjectValue from(const inox_shape* shape, std::initializer_list<Value> values);
   bool valid() const;
   void init(uint32_t index, inox_value value) const;
   void set(uint32_t index, inox_value value) const;
 };
 
 Value object_value_at(inox_value object, size_t index);
+Value object_value_at(inox_value object, size_t index, const char* name);
+void set_object_value_at(inox_value object, size_t index, inox_value value);
+void set_object_value_at(inox_value object, size_t index, const char* name, inox_value value);
 Value object_entry_at(inox_value object, size_t index);
 void throw_property_read_type_error(StringView name, const char* receiver);
 Value get(inox_value object, StringView name);

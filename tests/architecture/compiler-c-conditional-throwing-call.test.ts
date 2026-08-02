@@ -11,8 +11,8 @@ test('conditional expression переносит pending exception effects обе
     { libraries: defaultCompilerLibrarySet, target: 'cc' }
   )
 
-  assert.match(result.code, /inox_value choose\(double flag\)/)
-  assert.equal(result.code.match(/if \(inox::thrown\(\)\) return inox_return;/g)?.length, 2)
+  assert.match(result.code, /inox::String choose\(double flag\)/)
+  assert.equal(result.code.match(/if \(inox::thrown\(\)\) return \{\};/g)?.length, 2)
   assert.doesNotMatch(result.code, /\binox_status\b/)
   assert.doesNotMatch(result.code, /\binox_error_out\b/)
 })

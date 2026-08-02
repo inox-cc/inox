@@ -7,6 +7,7 @@ declare global {
     static from(value: string): Array<string>;
     static isArray(value: unknown): boolean;
 
+    every(predicate: (value: T, index: number) => boolean): boolean;
     filter(predicate: (value: T, index: number) => boolean): Array<T>;
     find(predicate: (value: T, index: number) => boolean): T | undefined;
     includes(value: T): boolean;
