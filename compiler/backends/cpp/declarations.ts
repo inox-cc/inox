@@ -14,7 +14,6 @@ import {
   resolveFunctionParameterRuntimeType
 } from './async/callbacks.ts'
 import { functionTakesEventLoopParam } from './async/async-results.ts'
-import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
 import type { CEmitContextWithDependencies, CFunctionContextWithDependencies } from './context.ts'
 import {
   createFunctionContext,
@@ -105,14 +104,12 @@ import type { StatementLoweringDependencies } from './values/statements.ts'
 import type { StringLoweringDependencies } from './values/strings.ts'
 
 type CEmitContext = CEmitContextWithDependencies<
-  AsyncTaskLoweringDependencies,
   ClassLoweringDependencies,
   NullableLoweringDependencies,
   StatementLoweringDependencies,
   StringLoweringDependencies
 >
 type CFunctionContext = CFunctionContextWithDependencies<
-  AsyncTaskLoweringDependencies,
   ClassLoweringDependencies,
   NullableLoweringDependencies,
   StatementLoweringDependencies,
@@ -148,7 +145,6 @@ type NativeClassConstructorInitializer = {
 }
 
 export type CDeclarationEmissionDependencies = {
-  asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
   emitPreparedNumberExpression: (expression: CNode, context: CFunctionContext) => PreparedExpression
   emitStatementList: (statements: CNode[], context: CFunctionContext) => string[]
 }
@@ -226,6 +222,18 @@ function pushScopedDeclarationBody(target: string[], lines: string[]): void {
   target.push('  {')
   pushIndentedDeclarationLines(target, lines)
   target.push('  }')
+}
+
+function declarationBodyEndsWith(lines: string[], statement: string): boolean {
+  for (let index = lines.length - 1; index >= 0; index = index - 1) {
+    const line = lines[index].trim()
+
+    if (line !== '') {
+      return line === statement
+    }
+  }
+
+  return false
 }
 
 function emitCLocalName(name: string): string {
@@ -322,7 +330,7 @@ export function emitFunctionDeclaration(
   context.returnLibraryNative = hasPhysicalNativeReturn(statement, context)
 
   context.externalEventLoop = context.coroutine || functionTakesEventLoopParam(statement.name, context)
-  if (returnType === 'void' && context.externalEventLoop) {
+  if (returnType === 'void' && context.externalEventLoop && !context.coroutine) {
     context.cleanupEnabled = false
   }
 
@@ -364,7 +372,12 @@ export function emitFunctionDeclaration(
         : 'return inox_return;'
     const directReturnBody = replaceCleanupGotosWithReturn(bodyLines, returnStatement)
 
-    if (context.coroutine || context.returnType !== 'void') {
+    if (context.coroutine) {
+      pushDeclarationLines(lines, directReturnBody)
+      if (!declarationBodyEndsWith(directReturnBody, returnStatement)) {
+        lines.push(`  ${returnStatement}`)
+      }
+    } else if (context.returnType !== 'void') {
       pushScopedDeclarationBody(lines, directReturnBody)
       lines.push(`  ${returnStatement}`)
     } else {
@@ -391,6 +404,10 @@ function registerFunctionParamsInContext(
     context.objectDeclaredTypes.delete(param.name)
     context.runtimeValueStorageNames.delete(param.name)
     registerFunctionParamObjectDeclaredType(context, param)
+
+    if (registerCoroutineStorageParam(param, context)) {
+      continue
+    }
 
     if (isNullableScalarParam(param)) {
       context.nullableVariables.add(param.name)
@@ -457,6 +474,34 @@ function registerFunctionParamsInContext(
       context.variables.set(param.name, param.valueType)
     }
   }
+}
+
+function registerCoroutineStorageParam(
+  param: CFunctionParam,
+  context: CDeclarationFunctionContext
+): boolean {
+  const storageKind = param.coroutineStorageKind
+
+  if (storageKind === null || typeof storageKind === 'undefined') {
+    return false
+  }
+
+  context.variables.set(param.name, param.valueType)
+
+  if (storageKind === 'boxed-number' || storageKind === 'boxed-value') {
+    context.boxedVariables.add(param.name)
+  }
+
+  if (param.valueType === 'string') {
+    context.runtimeStrings.add(param.name)
+  } else if (param.valueType === 'object') {
+    registerObjectShape(context, param.name, physicalParamShape(param, context))
+  } else if (param.valueType === 'function') {
+    context.runtimeCallbacks.add(param.name)
+    context.functionTypes.set(param.name, normalizeFunctionType(param.functionType))
+  }
+
+  return true
 }
 
 function registerFunctionParamObjectDeclaredType(context: CDeclarationFunctionContext, param: CFunctionParam): void {
@@ -624,10 +669,7 @@ function isContextDeclaredType(value: string): boolean {
     value === 'NullableFunctionContext' ||
     value === 'AsyncResultEmitContext' ||
     value === 'AsyncResultFunctionContext' ||
-    value === 'StringCContext' ||
-    value === 'AsyncTaskEmitContext' ||
-    value === 'AsyncTaskFunctionContext' ||
-    value === 'AsyncTaskPlannerContext'
+    value === 'StringCContext'
   )
 }
 
@@ -635,7 +677,6 @@ function isDependencyCarrierDeclaredType(value: string): boolean {
   return (
     value === 'CModuleEmissionDependencies' ||
     value === 'CDeclarationEmissionDependencies' ||
-    value === 'AsyncTaskLoweringDependencies' ||
     value === 'CallbackLoweringDependencies' ||
     value === 'ClassLoweringDependencies' ||
     value === 'NullableLoweringDependencies' ||
@@ -701,6 +742,18 @@ function emitObjectFunctionFieldParam(
 }
 
 function emitFunctionHeadParam(param: CFunctionParam, index: number, statement: CNode, context: CEmitContext): string {
+  if (param.coroutineStorageKind === 'boxed-number') {
+    return `inox::SharedNumberBox ${emitCLocalName(param.name)}`
+  }
+
+  if (param.coroutineStorageKind === 'boxed-value') {
+    return `inox::SharedValueBox ${emitCLocalName(param.name)}`
+  }
+
+  if (param.coroutineStorageKind === 'runtime-value') {
+    return `inox::Value ${emitCoroutineStorageParamName(param)}`
+  }
+
   const nativeClassDeclaration = emitNativeClassParamDeclaration(param, context)
 
   if (nativeClassDeclaration !== null) {
@@ -1370,6 +1423,24 @@ function emitRuntimeParamPreludeForParam(
   const lines: string[] = []
   const localName = emitCLocalName(param.name)
 
+  if (param.coroutineStorageKind === 'boxed-number' || param.coroutineStorageKind === 'boxed-value') {
+    lines.push(emitRuntimeTypeCheck(`!${localName}.valid()`, context))
+    return lines
+  }
+
+  if (param.coroutineStorageKind === 'runtime-value') {
+    const storageName = emitCoroutineStorageParamName(param)
+
+    if (param.valueType === 'string') {
+      lines.push(emitRuntimeTypeCheck(`${storageName}.tag != INOX_TAG_STRING || ${storageName}.as.ref == 0`, context))
+      lines.push(`inox_string* ${localName} = (inox_string*)${storageName}.as.ref;`)
+    } else {
+      lines.push(`inox_value ${localName} = ${storageName}.raw();`)
+    }
+
+    return lines
+  }
+
   if (libraryNativeParamCppType(param, context) !== null || isNativeClassParam(param, context)) {
     return lines
   }
@@ -1505,6 +1576,10 @@ function emitRuntimeParamPreludeForParam(
   }
 
   return lines
+}
+
+function emitCoroutineStorageParamName(param: CFunctionParam): string {
+  return `inox_coroutine_${emitCLocalName(param.name)}`
 }
 
 function emitRuntimeParamValueName(

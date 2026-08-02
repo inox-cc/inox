@@ -1,5 +1,6 @@
 #include "inox/callback.h"
 
+#include <memory>
 #include <new>
 #include <utility>
 #include <vector>
@@ -74,6 +75,98 @@ Value Callback::call(std::span<const Value> args) const {
   }
 
   return result;
+}
+
+SharedNumberBox::SharedNumberBox() : box_(nullptr) {}
+
+SharedNumberBox::SharedNumberBox(inox_shared_number_box* box) : box_(box) {
+  inox_shared_number_box_retain(box_);
+}
+
+SharedNumberBox::SharedNumberBox(const SharedNumberBox& other) : box_(other.box_) {
+  inox_shared_number_box_retain(box_);
+}
+
+SharedNumberBox::SharedNumberBox(SharedNumberBox&& other) noexcept : box_(other.box_) {
+  other.box_ = nullptr;
+}
+
+SharedNumberBox& SharedNumberBox::operator=(const SharedNumberBox& other) {
+  if (this != std::addressof(other)) {
+    inox_shared_number_box_retain(other.box_);
+    inox_shared_number_box_release(box_);
+    box_ = other.box_;
+  }
+
+  return *this;
+}
+
+SharedNumberBox& SharedNumberBox::operator=(SharedNumberBox&& other) noexcept {
+  if (this != std::addressof(other)) {
+    inox_shared_number_box_release(box_);
+    box_ = other.box_;
+    other.box_ = nullptr;
+  }
+
+  return *this;
+}
+
+SharedNumberBox::~SharedNumberBox() {
+  inox_shared_number_box_release(box_);
+}
+
+inox_shared_number_box* SharedNumberBox::operator->() const {
+  return box_;
+}
+
+bool SharedNumberBox::valid() const {
+  return box_ != nullptr;
+}
+
+SharedValueBox::SharedValueBox() : box_(nullptr) {}
+
+SharedValueBox::SharedValueBox(inox_shared_value_box* box) : box_(box) {
+  inox_shared_value_box_retain(box_);
+}
+
+SharedValueBox::SharedValueBox(const SharedValueBox& other) : box_(other.box_) {
+  inox_shared_value_box_retain(box_);
+}
+
+SharedValueBox::SharedValueBox(SharedValueBox&& other) noexcept : box_(other.box_) {
+  other.box_ = nullptr;
+}
+
+SharedValueBox& SharedValueBox::operator=(const SharedValueBox& other) {
+  if (this != std::addressof(other)) {
+    inox_shared_value_box_retain(other.box_);
+    inox_shared_value_box_release(box_);
+    box_ = other.box_;
+  }
+
+  return *this;
+}
+
+SharedValueBox& SharedValueBox::operator=(SharedValueBox&& other) noexcept {
+  if (this != std::addressof(other)) {
+    inox_shared_value_box_release(box_);
+    box_ = other.box_;
+    other.box_ = nullptr;
+  }
+
+  return *this;
+}
+
+SharedValueBox::~SharedValueBox() {
+  inox_shared_value_box_release(box_);
+}
+
+inox_shared_value_box* SharedValueBox::operator->() const {
+  return box_;
+}
+
+bool SharedValueBox::valid() const {
+  return box_ != nullptr;
 }
 
 } // namespace inox

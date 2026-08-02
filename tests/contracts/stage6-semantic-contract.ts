@@ -164,14 +164,19 @@ function checkSequenceProvider(libraries: CompilerLibrarySet, failures: string[]
 function checkFutureProvider(libraries: CompilerLibrarySet, failures: string[]): void {
   const result = compileSource(futureContractSource, { libraries, target: 'cc' })
 
-  requireText(result.code, 'FixtureFuture::start', 'renamed async-result create operation was not selected', failures)
+  requireText(result.code, 'FixtureFuture advance(', 'renamed coroutine return type was not selected', failures)
   requireText(
     result.code,
     'FixtureFuture::completed',
     'renamed async-result fulfill operation was not selected',
     failures
   )
-  requireText(result.code, 'FixtureFuture::bridgeWatch(', 'renamed await bridge was not selected', failures)
+  requireText(
+    result.code,
+    'co_await FixtureFuture::bridgeAwait(',
+    'renamed coroutine await expression was not selected',
+    failures
+  )
   requireText(result.code, '.transformValue(', 'renamed map operation was not selected', failures)
   requireText(result.code, 'FixtureFuture::failed(', 'renamed async-result reject operation was not selected', failures)
   requireText(result.code, '.recoverFailure(', 'renamed recovery operation was not selected', failures)
@@ -182,6 +187,7 @@ function checkFutureProvider(libraries: CompilerLibrarySet, failures: string[]):
     failures
   )
   rejectText(result.code, 'Promise', 'renamed async-result lowering retained a Promise tail', failures)
+  rejectText(result.code, 'frame->', 'renamed async-result lowering retained a manual coroutine frame', failures)
   rejectRequirementPrefix(
     result.ir.runtimeRequirements,
     'global:promise',
@@ -537,13 +543,9 @@ function futureLibrary(): CompilerLibraryDescriptor {
         cValueAdapter: 'FixtureFuture::fromRuntime($value)',
         baseTypeIds: [],
         runtimeRequirements: [futureRuntimeRequirement],
+        cValidExpression: 'FixtureFuture::bridgeReady($value)',
         cAwaitExpression: '$value.takeValue()',
-        cAsyncTaskBridge: {
-          cValidExpression: 'FixtureFuture::bridgeReady($source)',
-          cObserveExpression: 'FixtureFuture::bridgeWatch($source, $onFulfilled, $onRejected, $context, $finalizer)',
-          cFulfillExpression: 'FixtureFuture::bridgeComplete($target, $value)',
-          cRejectExpression: 'FixtureFuture::bridgeAbort($target, $value)'
-        },
+        cCoroutineAwaitExpression: 'co_await FixtureFuture::bridgeAwait($value)',
         typeParameters: ['T'],
         traits: [{ traitId: 'awaitable', args: [elementTypeRef, unknownTypeRef] }]
       }

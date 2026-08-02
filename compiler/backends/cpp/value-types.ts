@@ -17,8 +17,6 @@ import type {
   CompilerLibrarySet,
   IntrinsicRole,
   LibraryAsyncResultOperationKind,
-  LibraryCAsyncTaskBridgeDescriptor,
-  LibraryCAsyncTaskBridgeRenderRequest,
   LibraryCSequenceMaterializationDescriptor,
   LibraryNativeIterationDescriptor,
   TypeRef
@@ -464,53 +462,21 @@ export function compilerLibraryIntrinsicNativeCAwaitHandlesInvalidSource(
   )
 }
 
-export function compilerLibraryIntrinsicNativeCAsyncTaskBridge(
-  libraries: CCompilerLibrarySet,
-  role: IntrinsicRole
-): LibraryCAsyncTaskBridgeDescriptor | null {
-  return (
-    compilerLibraryNativeTypeForIntrinsic(cCompilerLibrarySetValue(libraries), role, 'construct')?.cAsyncTaskBridge ??
-    null
-  )
-}
-
 export function compilerLibraryIntrinsicAsyncResultCValidExpression(
   libraries: CCompilerLibrarySet,
   source: string
 ): string {
-  const bridge = compilerLibraryIntrinsicNativeCAsyncTaskBridge(libraries, 'async-result')
+  const expression = compilerLibraryNativeTypeForIntrinsic(
+    cCompilerLibrarySetValue(libraries),
+    'async-result',
+    'construct'
+  )?.cValidExpression
 
-  if (bridge === null) {
+  if (typeof expression !== 'string' || expression.length === 0) {
     return 'false'
   }
 
-  return renderCompilerLibraryCAsyncTaskBridgeExpression(bridge, { kind: 'valid', source })
-}
-
-export function renderCompilerLibraryCAsyncTaskBridgeExpression(
-  bridge: LibraryCAsyncTaskBridgeDescriptor,
-  request: LibraryCAsyncTaskBridgeRenderRequest
-): string {
-  if (request.kind === 'valid') {
-    return bridge.cValidExpression.split('$source').join(request.source)
-  }
-
-  if (request.kind === 'observe') {
-    return bridge.cObserveExpression
-      .split('$source')
-      .join(request.source)
-      .split('$onFulfilled')
-      .join(request.onFulfilled)
-      .split('$onRejected')
-      .join(request.onRejected)
-      .split('$context')
-      .join(request.context)
-      .split('$finalizer')
-      .join(request.finalizer)
-  }
-
-  const expression = request.kind === 'fulfill' ? bridge.cFulfillExpression : bridge.cRejectExpression
-  return expression.split('$target').join(request.target).split('$value').join(request.value)
+  return expression.split('$value').join(source)
 }
 
 export function resolveCCompilerLibrarySet(

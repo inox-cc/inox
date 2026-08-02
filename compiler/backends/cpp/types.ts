@@ -220,6 +220,7 @@ export type CFunctionParam = {
   shape?: CObjectShape | null
   typeRef?: CTypeRef | null
   valueType: string
+  coroutineStorageKind?: 'boxed-number' | 'boxed-value' | 'runtime-value' | null
 }
 
 export type CRuntimeTypeAlternative = {
@@ -339,86 +340,8 @@ export type CAsyncResultChainWrapper = {
 
 export type CCallbackContextWrapper = CRuntimeArrowCallbackWrapper | CAsyncResultChainWrapper
 
-export type CAsyncTaskParam = CFunctionParam & {
-  argName: string
-  fieldName: string
-  cppType?: string | null
-  storageKind?: 'boxed-number' | 'boxed-value' | 'native' | 'runtime-value' | null
-}
-
-export type CAsyncTaskFrameLocalKind = 'prefix' | 'await'
-
-export type CAsyncTaskPrefixLocal = {
-  name: string
-  type: string
-  fieldName: string
-  initializeAtStart?: boolean
-  forceRuntimeStringDeclaration?: boolean
-  shape?: CObjectShape | null
-  typeRef?: CTypeRef | null
-}
-
-export type CAsyncTaskPrefixFrameLocal = CAsyncTaskPrefixLocal & {
-  kind: 'prefix'
-}
-
-export type CAsyncTaskAwaitStep = {
-  index: number
-  name: string | null
-  type: string
-  fieldName: string | null
-  awaitedExpression: AnyNode | null
-  awaitedAsyncResultExpression: AnyNode | null
-  successNextIndex?: number | null
-  rejectNextIndex?: number | null
-  rejectParamFieldName?: string | null
-  shape?: CObjectShape | null
-  typeRef?: CTypeRef | null
-}
-
-export type CAsyncTaskAwaitFrameLocal = CAsyncTaskAwaitStep & {
-  kind: 'await'
-  fieldName: string
-  name: string
-}
-
-export type CAsyncTaskFrameLocal = CAsyncTaskAwaitFrameLocal | CAsyncTaskPrefixFrameLocal
-
-export type CAsyncTaskSuccessPhaseKind = 'pre-finalizer' | 'prefix-finalizer' | 'body'
-
-export type CAsyncTaskTryPhaseKind = 'success-finalizer' | 'reject-finalizer' | 'handler-prelude' | 'handler-finalizer'
-
-export type CAsyncTaskPhaseKind = CAsyncTaskSuccessPhaseKind | CAsyncTaskTryPhaseKind
-
-export type CAsyncTaskPhase = {
-  kind: CAsyncTaskPhaseKind
-  statements: AnyNode[]
-}
-
-export type CAsyncTaskTryHandlerPlan = {
-  param: string | null
-  statements: AnyNode[]
-  returnExpression: AnyNode | null
-}
-
-export type CAsyncTaskWrapper = {
-  key: string
-  functionName: string
-  frameTypeName: string
-  startName: string
-  resumeName: string
-  rejectName: string
-  finalizerName: string
-  params: CAsyncTaskParam[]
-  awaits: CAsyncTaskAwaitStep[]
-  frameLocals: CAsyncTaskFrameLocal[]
-  hasTryRegion: boolean
-  prefixStatements: AnyNode[]
-  returnExpression: AnyNode | null
-  returnType: string
-  successPhases: CAsyncTaskPhase[]
-  tryHandler: CAsyncTaskTryHandlerPlan | null
-  tryPhases: CAsyncTaskPhase[]
+export type CAsyncCoroutineWrapper = {
+  coroutineNode: AnyNode
 }
 
 export type CAsyncResultConstructorHandler = {

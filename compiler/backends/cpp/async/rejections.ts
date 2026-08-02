@@ -4,10 +4,8 @@ import type { ClassLoweringDependencies } from '../values/classes.ts'
 import type { NullableLoweringDependencies } from '../values/nullable.ts'
 import type { StatementLoweringDependencies } from '../values/statements.ts'
 import type { StringLoweringDependencies } from '../values/strings.ts'
-import type { AsyncTaskLoweringDependencies } from './tasks.ts'
 
 type CFunctionContext = CFunctionContextWithDependencies<
-  AsyncTaskLoweringDependencies,
   ClassLoweringDependencies,
   NullableLoweringDependencies,
   StatementLoweringDependencies,

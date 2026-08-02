@@ -3,7 +3,6 @@ import {
   compilerLibraryNativeCppTypeIsAssignableToTypeId,
   compilerLibraryNativeTypeForId
 } from '../../extensions/library-set.ts'
-import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
 import {
   emitRuntimeTypeCheck,
   nextCName,
@@ -33,7 +32,6 @@ import {
 } from './value-types.ts'
 
 type CFunctionContext = CFunctionContextWithDependencies<
-  AsyncTaskLoweringDependencies,
   ClassLoweringDependencies,
   NullableLoweringDependencies,
   StatementLoweringDependencies,

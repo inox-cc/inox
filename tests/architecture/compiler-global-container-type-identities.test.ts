@@ -120,14 +120,10 @@ test('Array, Set и Promise принадлежат discoverable global packages 
       cValueAdapter: 'inox::Promise($value)',
       baseTypeIds: [],
       runtimeRequirements: ['global:promise#promise'],
+      cValidExpression: '$value.valid()',
       cAwaitExpression: '$value.awaitValue()',
+      cCoroutineAwaitExpression: 'co_await $value',
       cAwaitHandlesInvalidSource: true,
-      cAsyncTaskBridge: {
-        cValidExpression: '$source.valid()',
-        cObserveExpression: '$source.observe($onFulfilled, $onRejected, $context, $finalizer)',
-        cFulfillExpression: '$target.fulfill($value)',
-        cRejectExpression: '$target.rejectWith($value)'
-      },
       typeParameters: ['T'],
       traits: [
         {

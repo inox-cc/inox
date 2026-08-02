@@ -52,15 +52,9 @@ import {
   emitAsyncResultChainCallbackWrapperDeclaration,
   emitAsyncResultChainCallbackWrapperHead
 } from './async/async-results.ts'
-import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
-import {
-  collectAsyncTaskWrappers,
-  emitAsyncTaskFrameType,
-  emitAsyncTaskWrapperDeclaration,
-  emitAsyncTaskWrapperPrototypes
-} from './async/tasks.ts'
+import { collectAsyncCoroutineWrappers } from './async/coroutines.ts'
 import type {
-  CAsyncTaskWrapperMap,
+  CAsyncCoroutineWrapperMap,
   CCallbackWrapperMap,
   CEmitContextWithDependencies,
   CAsyncResultChainWrapperMap
@@ -128,7 +122,6 @@ import type { StatementLoweringDependencies } from './values/statements.ts'
 import type { StringLoweringDependencies } from './values/strings.ts'
 
 type CEmitContext = CEmitContextWithDependencies<
-  AsyncTaskLoweringDependencies,
   ClassLoweringDependencies,
   NullableLoweringDependencies,
   StatementLoweringDependencies,
@@ -136,7 +129,6 @@ type CEmitContext = CEmitContextWithDependencies<
 >
 
 export type CUnitDependencies = {
-  asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
   callbackLoweringDependencies: CallbackLoweringDependencies
   classLoweringDependencies: ClassLoweringDependencies
   collectExternalEventLoopFunctions: (functions: AnyNode[], seedNames?: Set<string>) => Set<string>
@@ -1535,10 +1527,8 @@ export function emitCUnit(
     baseContext,
     deps.asyncResultChainLoweringDependencies
   )
-  baseContext.asyncTaskWrappers = collectAsyncTaskWrappers(
-    functionEntries,
+  baseContext.asyncCoroutineWrappers = collectAsyncCoroutineWrappers(
     baseContext,
-    deps.asyncTaskLoweringDependencies,
     baseContext.callbackWrappers
   )
   const classMethods = collectClassMethods(baseContext)
@@ -1652,7 +1642,7 @@ export function emitCUnit(
   const asyncResultChainCallbackWrappers: CAsyncResultChainWrapper[] = []
   const callbackWrappers: CCallbackWrapperMap = baseContext.callbackWrappers
   const asyncResultChainWrappers: CAsyncResultChainWrapperMap = baseContext.asyncResultChainWrappers
-  const asyncTaskWrappers: CAsyncTaskWrapperMap = baseContext.asyncTaskWrappers
+  const asyncCoroutineWrappers: CAsyncCoroutineWrapperMap = baseContext.asyncCoroutineWrappers
 
   if (callbackWrappers.size > 0) {
     for (const wrapper of callbackWrappers.values()) {
@@ -1670,13 +1660,6 @@ export function emitCUnit(
     }
   }
 
-  if (asyncTaskWrappers.size > 0) {
-    for (const wrapper of asyncTaskWrappers.values()) {
-      pushUnitLines(lines, emitAsyncTaskFrameType(wrapper, baseContext.libraries))
-      lines.push('')
-    }
-  }
-
   for (const wrapper of arrowCallbackWrappers) {
     pushUnitLines(lines, emitRuntimeArrowCallbackContextType(wrapper))
     lines.push('')
@@ -1690,12 +1673,6 @@ export function emitCUnit(
   for (const classMethod of classMethods) {
     if (!classMethod.info.native) {
       lines.push(emitClassMethodPrototype(classMethod.info, classMethod.method, baseContext))
-    }
-  }
-
-  if (asyncTaskWrappers.size > 0) {
-    for (const wrapper of asyncTaskWrappers.values()) {
-      pushUnitLines(lines, emitAsyncTaskWrapperPrototypes(wrapper, baseContext.libraries))
     }
   }
 
@@ -1728,7 +1705,7 @@ export function emitCUnit(
   if (
     functions.length > 0 ||
     classMethods.length > 0 ||
-    asyncTaskWrappers.size > 0 ||
+    asyncCoroutineWrappers.size > 0 ||
     callbackWrappers.size > 0 ||
     asyncResultChainWrappers.size > 0
   ) {
@@ -1777,9 +1754,12 @@ export function emitCUnit(
   emitCUnitUnhandledRejectionFlagDefinition(lines, baseContext)
   emitCUnitValueDefinitions(lines, runtimeValueDeclarations, baseContext)
 
-  if (asyncTaskWrappers.size > 0) {
-    for (const wrapper of asyncTaskWrappers.values()) {
-      pushUnitLines(lines, emitAsyncTaskWrapperDeclaration(wrapper, baseContext, deps.asyncTaskLoweringDependencies))
+  if (asyncCoroutineWrappers.size > 0) {
+    for (const wrapper of asyncCoroutineWrappers.values()) {
+      pushUnitLines(
+        lines,
+        emitFunctionDeclaration(wrapper.coroutineNode, baseContext, deps.declarationEmissionDependencies)
+      )
       lines.push('')
     }
   }

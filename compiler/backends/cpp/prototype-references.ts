@@ -84,6 +84,7 @@ function collectCReferencedFunctionPrototypeChildNames(
   collectCReferencedFunctionPrototypeNamesFromValue(item.successPhases, functionNames, target)
   collectCReferencedFunctionPrototypeNamesFromValue(item.tryHandler, functionNames, target)
   collectCReferencedFunctionPrototypeNamesFromValue(item.tryPhases, functionNames, target)
+  collectCReferencedFunctionPrototypeNamesFromValue(item.coroutineNode, functionNames, target)
   collectCReferencedFunctionPrototypeNamesFromValue(item.statements, functionNames, target)
 }
 

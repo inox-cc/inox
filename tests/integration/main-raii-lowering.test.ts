@@ -133,16 +133,17 @@ async function checkFetch() {
 
 await checkFetch()
 `)
-  const checkFetch = functionSource(source, 'static void checkFetch() {')
+  const checkFetch = functionSource(source, 'static inox::Promise checkFetch() {')
   const main = mainFunctionSource(source)
 
-  assert.match(source, /static void checkFetch\(\)/)
+  assert.match(source, /static inox::Promise checkFetch\(\)/)
+  assert.match(checkFetch, /co_await inox::Promise::resolve\(inox::String\("ok", 2\)\)/)
   assert.doesNotMatch(checkFetch, /inox::Loop/)
   assert.doesNotMatch(checkFetch, /while \(inox_loop_has_work/)
   assert.doesNotMatch(checkFetch, /\ncleanup:/)
   assert.doesNotMatch(checkFetch, /inox_loop/)
   assert.doesNotMatch(source, /\.has_unhandled_rejection\(\)/)
-  assert.match(appMainFunctionSource(source), /checkFetch\(\);/)
+  assert.match(appMainFunctionSource(source), /\(void\)\(checkFetch\(\)\.awaitValue\(\)\);/)
   assert.match(main, /return inox::main\(inox_main\);/)
 }
 

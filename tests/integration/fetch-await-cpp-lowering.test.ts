@@ -52,30 +52,30 @@ await checkFetch()
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
-  const checkFetch = functionSource(source, 'static void checkFetch() {')
+  const checkFetch = functionSource(source, 'static inox::Promise checkFetch() {')
 
-  assert.doesNotMatch(source, /^static void checkFetch\(\);$/m)
-  assert.match(checkFetch, /static void checkFetch\(\) \{\n  \{ \/\/ try_0\n/)
+  assert.doesNotMatch(source, /^static inox::Promise checkFetch\(\);$/m)
+  assert.match(checkFetch, /static inox::Promise checkFetch\(\) \{\n  \{ \/\/ try_0\n/)
   assert.doesNotMatch(checkFetch, /\n  \{\n    \{/)
   assert.match(
     checkFetch,
-    /auto res = inox::FetchResponse\(inox::fetch\("http:\/\/example.com\/"\)\.awaitValue\(\)\);\n    if \(inox::thrown\(\)\) goto catch_0;/
+    /auto res = inox::FetchResponse\(co_await inox::fetch\("http:\/\/example.com\/"\)\);\n    if \(inox::thrown\(\)\) goto catch_0;/
   )
   assert.match(checkFetch, /console\.log\("Status %\.17g", static_cast<double>\(res\.status\)\);/)
   assert.match(
     checkFetch,
-    /auto txt = inox::String\(res\.text\(\)\.awaitValue\(\)\);\n    if \(inox::thrown\(\)\) goto catch_0;/
+    /auto txt = inox::String\(co_await res\.text\(\)\);\n    if \(inox::thrown\(\)\) goto catch_0;/
   )
   assert.match(checkFetch, /auto inox_object_\d+ = inox::ObjectValue::create\(&inox_shape_value_\d+\);/)
   assert.match(checkFetch, /\.init\(0, inox::String\("POST", 4\)\);/)
   assert.match(checkFetch, /\.init\(0, inox::String\("text\/plain", 10\)\);/)
   assert.match(
     checkFetch,
-    /auto post = inox::FetchResponse\(inox::fetch\("http:\/\/example.com\/post", inox_object_\d+\)\.awaitValue\(\)\);\n    if \(inox::thrown\(\)\) goto catch_0;/
+    /auto post = inox::FetchResponse\(co_await inox::fetch\("http:\/\/example.com\/post", inox_object_\d+\)\);\n    if \(inox::thrown\(\)\) goto catch_0;/
   )
   assert.match(
     checkFetch,
-    /auto txt = inox::String\(res\.text\(\)\.awaitValue\(\)\);\n\s+if \(inox::thrown\(\)\) goto catch_0;\n\n\s+console\.log\("Text %s", txt\);/
+    /auto txt = inox::String\(co_await res\.text\(\)\);\n\s+if \(inox::thrown\(\)\) goto catch_0;\n\s+console\.log\("Text %s", txt\);/
   )
   assert.match(checkFetch, /auto error = inox::take_exception\(\);\n\s+console\.log\("#error:", error\);/)
   assert.doesNotMatch(checkFetch, /auto inox_error = inox::take_exception\(\);/)
@@ -84,7 +84,7 @@ await checkFetch()
   assert.doesNotMatch(checkFetch, /auto txt = inox_res_\d+\.value\(\);/)
   assert.match(checkFetch, /console\.log\("Text %s", txt\);/)
   assert.match(checkFetch, /console\.log\("Post %d", post\.ok\);\n    goto end_0;\n  \} catch_0: \{/)
-  assert.match(checkFetch, /\n  \} end_0:;\n\}/)
+  assert.match(checkFetch, /\n  \} end_0:;\n  co_return inox::Value\(inox_undefined_value\(\)\);\n\}/)
   assert.doesNotMatch(checkFetch, /\n  end_0:;/)
   assert.doesNotMatch(checkFetch, /end_0: ;/)
   assert.doesNotMatch(checkFetch, /end_\d+:\n\s+;/)
@@ -154,10 +154,11 @@ await checkFetchFacade()
   assert.match(source, /auto controller = inox::AbortController\(\);/)
   assert.match(source, /controller\.abort\(\);/)
   assert.match(source, /\.init\(0, controller\.signal\);/)
-  assert.match(source, /frame->awaited = inox::fetch\("http:\/\/example\.com\/", inox_object_\d+\);/)
-  assert.match(source, /auto inox_value_\d+ = inox::get\(res, "headers"\);/)
-  assert.match(source, /inox::FetchHeaders\(inox_value_\d+\)\.has\("content-type"\)/)
-  assert.match(source, /inox::FetchHeaders\(inox_value_\d+\)\.get\("content-type"\)/)
+  assert.match(source, /auto res = inox::FetchResponse\(co_await inox::fetch\("http:\/\/example\.com\/", inox_object_\d+\)\);/)
+  assert.doesNotMatch(source, /frame->|\.observe\(/)
+  assert.match(source, /res\.headers\.has\("content-type"\)/)
+  assert.match(source, /res\.headers\.get\("content-type"\)/)
+  assert.doesNotMatch(source, /inox::get\(res, "headers"\)/)
   assert.doesNotMatch(source, /inox::AbortController\(controller\)/)
   assert.doesNotMatch(source, /fetch_abort_controller/)
   assert.doesNotMatch(source, /fetch_headers_(?:get|has)/)

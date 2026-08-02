@@ -997,8 +997,8 @@ function validateNativeTypes(nativeTypes: LibraryNativeTypeDescriptor[]): void {
     validateNativeTypeValueAdapter(nativeType)
     validateNativeTypeRuntimeValueExpression(nativeType)
     validateNativeTypeRuntimeValueValidExpression(nativeType)
+    validateNativeTypeValidExpression(nativeType)
     validateNativeTypeAwaitExpression(nativeType)
-    validateNativeTypeAsyncTaskBridge(nativeType)
     validateNativeTypeIteration(nativeType)
     validateNativeTypeFields(nativeType)
 
@@ -1080,11 +1080,23 @@ function validateNativeTypeRuntimeValueValidExpression(nativeType: LibraryNative
   }
 }
 
+function validateNativeTypeValidExpression(nativeType: LibraryNativeTypeDescriptor): void {
+  const expression = nativeType.cValidExpression
+
+  if (
+    expression !== null &&
+    typeof expression !== 'undefined' &&
+    !cExpressionHasValuePlaceholder(expression)
+  ) {
+    throw new Error(`native type ${nativeType.typeId} C++ validity expression requires $value`)
+  }
+}
+
 function validateNativeTypeAwaitExpression(nativeType: LibraryNativeTypeDescriptor): void {
   const expression = nativeType.cAwaitExpression
   const coroutineExpression = nativeType.cCoroutineAwaitExpression
 
-  if (typeof expression === 'string' && !expression.includes('$value')) {
+  if (typeof expression === 'string' && !cExpressionHasValuePlaceholder(expression)) {
     throw new Error(`native type ${nativeType.typeId} C++ await expression requires $value`)
   }
 
@@ -1092,96 +1104,35 @@ function validateNativeTypeAwaitExpression(nativeType: LibraryNativeTypeDescript
     throw new Error(`native type ${nativeType.typeId} C++ await invalid-source contract requires cAwaitExpression`)
   }
 
-  if (typeof coroutineExpression === 'string' && !coroutineExpression.includes('$value')) {
+  if (typeof coroutineExpression === 'string' && !cExpressionHasValuePlaceholder(coroutineExpression)) {
     throw new Error(`native type ${nativeType.typeId} C++ coroutine await expression requires $value`)
   }
 }
 
-function validateNativeTypeAsyncTaskBridge(nativeType: LibraryNativeTypeDescriptor): void {
-  const bridge = nativeType.cAsyncTaskBridge
+function cExpressionHasValuePlaceholder(expression: string): boolean {
+  const placeholder = '$value'
+  let index = expression.indexOf(placeholder)
 
-  if (bridge === null || typeof bridge === 'undefined') {
-    return
+  while (index !== -1) {
+    const nextIndex = index + placeholder.length
+
+    if (nextIndex >= expression.length || !cIdentifierPartCode(expression.charCodeAt(nextIndex))) {
+      return true
+    }
+
+    index = expression.indexOf(placeholder, index + 1)
   }
 
-  validateNativeTypeAsyncTaskBridgeExpression(nativeType, 'valid', bridge.cValidExpression, ['source'])
-  validateNativeTypeAsyncTaskBridgeExpression(nativeType, 'observe', bridge.cObserveExpression, [
-    'source',
-    'onFulfilled',
-    'onRejected',
-    'context',
-    'finalizer'
-  ])
-  validateNativeTypeAsyncTaskBridgeExpression(nativeType, 'fulfill', bridge.cFulfillExpression, ['target', 'value'])
-  validateNativeTypeAsyncTaskBridgeExpression(nativeType, 'reject', bridge.cRejectExpression, ['target', 'value'])
+  return false
 }
 
-function validateNativeTypeAsyncTaskBridgeExpression(
-  nativeType: LibraryNativeTypeDescriptor,
-  kind: string,
-  expression: string | null | undefined,
-  requiredPlaceholders: string[]
-): void {
-  const label = `native type ${nativeType.typeId} async-task ${kind} expression`
-
-  if (typeof expression !== 'string' || expression.trim().length === 0) {
-    throw new Error(`${label} must not be empty`)
-  }
-
-  const placeholders = nativeTypeAsyncTaskBridgePlaceholders(expression)
-
-  for (let index = 0; index < requiredPlaceholders.length; index = index + 1) {
-    const placeholder = `$${requiredPlaceholders[index]}`
-
-    if (!placeholders.includes(placeholder)) {
-      throw new Error(`${label} requires ${placeholder}`)
-    }
-  }
-
-  for (let index = 0; index < placeholders.length; index = index + 1) {
-    const placeholder = placeholders[index]
-
-    if (!requiredPlaceholders.includes(placeholder.slice(1))) {
-      throw new Error(`${label} has unknown placeholder ${placeholder}`)
-    }
-  }
-}
-
-function nativeTypeAsyncTaskBridgePlaceholders(expression: string): string[] {
-  const result: string[] = []
-  let index = 0
-
-  while (index < expression.length) {
-    if (expression.charCodeAt(index) !== 36 || index + 1 >= expression.length) {
-      index = index + 1
-      continue
-    }
-
-    const start = index
-    index = index + 1
-
-    if (!nativeTypeAsyncTaskBridgePlaceholderStart(expression.charCodeAt(index))) {
-      continue
-    }
-
-    index = index + 1
-
-    while (index < expression.length && nativeTypeAsyncTaskBridgePlaceholderPart(expression.charCodeAt(index))) {
-      index = index + 1
-    }
-
-    result.push(expression.slice(start, index))
-  }
-
-  return result
-}
-
-function nativeTypeAsyncTaskBridgePlaceholderStart(code: number): boolean {
-  return (code >= 65 && code <= 90) || code === 95 || (code >= 97 && code <= 122)
-}
-
-function nativeTypeAsyncTaskBridgePlaceholderPart(code: number): boolean {
-  return nativeTypeAsyncTaskBridgePlaceholderStart(code) || (code >= 48 && code <= 57)
+function cIdentifierPartCode(code: number): boolean {
+  return (
+    (code >= 48 && code <= 57) ||
+    (code >= 65 && code <= 90) ||
+    code === 95 ||
+    (code >= 97 && code <= 122)
+  )
 }
 
 function validateNativeTypeIteration(nativeType: LibraryNativeTypeDescriptor): void {
@@ -2199,9 +2150,18 @@ function validateAsyncResultIntrinsicNativeType(
       )
     }
 
-    if (nativeType.cAsyncTaskBridge === null || typeof nativeType.cAsyncTaskBridge === 'undefined') {
+    if (typeof nativeType.cValidExpression !== 'string' || nativeType.cValidExpression.trim().length === 0) {
       throw new Error(
-        `Compiler library intrinsic provider async-result native type ${nativeType.typeId} requires an async-task bridge`
+        `Compiler library intrinsic provider async-result native type ${nativeType.typeId} requires cValidExpression`
+      )
+    }
+
+    if (
+      typeof nativeType.cCoroutineAwaitExpression !== 'string' ||
+      nativeType.cCoroutineAwaitExpression.trim().length === 0
+    ) {
+      throw new Error(
+        `Compiler library intrinsic provider async-result native type ${nativeType.typeId} requires cCoroutineAwaitExpression`
       )
     }
 
@@ -2500,14 +2460,14 @@ function compilerLibrarySetFingerprint(
           (item.cRuntimeValueExpression ?? '') +
           ':runtime-value-valid-expression=' +
           (item.cRuntimeValueValidExpression ?? '') +
+          ':valid-expression=' +
+          (item.cValidExpression ?? '') +
           ':await-expression=' +
           (item.cAwaitExpression ?? '') +
           ':coroutine-await-expression=' +
           (item.cCoroutineAwaitExpression ?? '') +
           ':await-handles-invalid-source=' +
           (item.cAwaitHandlesInvalidSource === true ? '1' : '') +
-          ':async-task-bridge=' +
-          nativeAsyncTaskBridgeFingerprint(item) +
           ':parameters=' +
           (item.typeParameters ?? []).map(fingerprintAtom).join(',') +
           ':traits=' +
@@ -2589,25 +2549,6 @@ function libraryOptionDescriptorFingerprint(item: LibraryOptionDescriptor): stri
     (item.minimum ?? '') +
     ':' +
     (item.maximum ?? '')
-  )
-}
-
-function nativeAsyncTaskBridgeFingerprint(nativeType: LibraryNativeTypeDescriptor): string {
-  const bridge = nativeType.cAsyncTaskBridge
-
-  if (bridge === null || typeof bridge === 'undefined') {
-    return ''
-  }
-
-  return (
-    'valid=' +
-    fingerprintAtom(bridge.cValidExpression) +
-    ':observe=' +
-    fingerprintAtom(bridge.cObserveExpression) +
-    ':fulfill=' +
-    fingerprintAtom(bridge.cFulfillExpression) +
-    ':reject=' +
-    fingerprintAtom(bridge.cRejectExpression)
   )
 }
 

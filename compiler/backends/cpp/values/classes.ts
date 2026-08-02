@@ -55,7 +55,7 @@ import {
 import { emitObjectValueReference, resolveCObjectExpressionName } from './objects.ts'
 import { collectTemplatePlaceholderExpressions } from './strings.ts'
 
-type CEmitContext = CEmitContextWithDependencies<object, object, object, object, object>
+type CEmitContext = CEmitContextWithDependencies<object, object, object, object>
 
 export type ClassLoweringDependencies = {
   emitCFieldFlags(field: CObjectShapeField): string

@@ -46,7 +46,7 @@ export function assertFutureValidityContract(source: string, cppType = 'FixtureF
   assert.doesNotMatch(source, /\.valid\(\)/)
 }
 
-export function futureLibrarySet(cppType = 'fixture::FutureTask', withAsyncTaskBridge = true) {
+export function futureLibrarySet(cppType = 'fixture::FutureTask', withCoroutineContract = true) {
   const library: CompilerLibraryDescriptor = {
     id: futureLibraryId,
     dependencies: [],
@@ -87,17 +87,9 @@ declare global {
         cValueAdapter: `${cppType}::fromRuntime($value)`,
         baseTypeIds: [],
         runtimeRequirements: [futureRuntimeRequirement],
+        cValidExpression: withCoroutineContract ? `${cppType}::bridgeReady($value)` : null,
         cAwaitExpression: '$value.takeValue()',
-        cCoroutineAwaitExpression: `co_await ${cppType}::bridgeAwait($value)`,
-        cAsyncTaskBridge: withAsyncTaskBridge
-          ? {
-              cValidExpression: `${cppType}::bridgeReady($source)`,
-              cObserveExpression:
-                `${cppType}::bridgeWatch($source, ` + '$onFulfilled, $onRejected, $context, $finalizer)',
-              cFulfillExpression: `${cppType}::bridgeComplete($target, $value)`,
-              cRejectExpression: `${cppType}::bridgeAbort($target, $value)`
-            }
-          : null,
+        cCoroutineAwaitExpression: withCoroutineContract ? `co_await ${cppType}::bridgeAwait($value)` : null,
         typeParameters: ['T'],
         traits: [{ traitId: 'awaitable', args: [fulfilledParameterTypeRef, unknownTypeRef] }]
       }

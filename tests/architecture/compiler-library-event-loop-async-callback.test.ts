@@ -17,7 +17,9 @@ test('event-loop package callback поддерживает async без знан
     { libraries, target: 'cc' }
   )
 
-  assert.match(result.code, /inox_async_task_inox_callback_arrow_/)
+  assert.match(result.code, /inox::Promise inox_callback_arrow_\d+_coroutine\(\)/)
+  assert.match(result.code, /co_await/)
+  assert.doesNotMatch(result.code, /inox_async_task_/)
   assert.match(result.code, /bridge\.schedule\(/)
   assert.doesNotMatch(result.code, /timer/i)
 })

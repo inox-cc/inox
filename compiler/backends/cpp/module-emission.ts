@@ -54,13 +54,7 @@ import {
   emitAsyncResultChainCallbackWrapperDeclaration,
   emitAsyncResultChainCallbackWrapperHead
 } from './async/async-results.ts'
-import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
-import {
-  collectAsyncTaskWrappers,
-  emitAsyncTaskFrameType,
-  emitAsyncTaskWrapperDeclaration,
-  emitAsyncTaskWrapperPrototypes
-} from './async/tasks.ts'
+import { collectAsyncCoroutineWrappers } from './async/coroutines.ts'
 import type { CEmitContextWithDependencies, CFunctionContextWithDependencies } from './context.ts'
 import {
   createFunctionContext,
@@ -143,14 +137,12 @@ import type { StatementLoweringDependencies } from './values/statements.ts'
 import type { StringLoweringDependencies } from './values/strings.ts'
 
 type CEmitContext = CEmitContextWithDependencies<
-  AsyncTaskLoweringDependencies,
   ClassLoweringDependencies,
   NullableLoweringDependencies,
   StatementLoweringDependencies,
   StringLoweringDependencies
 >
 type CFunctionContext = CFunctionContextWithDependencies<
-  AsyncTaskLoweringDependencies,
   ClassLoweringDependencies,
   NullableLoweringDependencies,
   StatementLoweringDependencies,
@@ -323,7 +315,6 @@ function collectCModuleClassMethodPrototypes(
 }
 
 export type CModuleEmissionDependencies = {
-  asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
   callbackLoweringDependencies: CallbackLoweringDependencies
   classLoweringDependencies: ClassLoweringDependencies
   collectExternalEventLoopFunctions(functions: AnyNode[], seedNames?: Set<string>): Set<string>
@@ -548,8 +539,11 @@ export function emitCModuleSource(
   emitCModuleUnhandledRejectionFlagDefinition(bodyLines, context)
   emitCModuleValueDefinitions(bodyLines, runtimeModuleValues, context)
 
-  for (const wrapper of context.asyncTaskWrappers.values()) {
-    pushCModuleLines(bodyLines, emitAsyncTaskWrapperDeclaration(wrapper, context, deps.asyncTaskLoweringDependencies))
+  for (const wrapper of context.asyncCoroutineWrappers.values()) {
+    pushCModuleLines(
+      bodyLines,
+      deps.emitFunctionDeclaration(wrapper.coroutineNode, context, deps.declarationEmissionDependencies)
+    )
     bodyLines.push('')
   }
 
@@ -1364,11 +1358,6 @@ function emitCModuleDeclarations(
     }
   }
 
-  for (const wrapper of context.asyncTaskWrappers.values()) {
-    pushCModuleLines(lines, emitAsyncTaskFrameType(wrapper, context.libraries))
-    lines.push('')
-  }
-
   for (let wrapperIndex = 0; wrapperIndex < arrowCallbackWrappers.length; wrapperIndex = wrapperIndex + 1) {
     const wrapper = arrowCallbackWrappers[wrapperIndex]
 
@@ -1405,10 +1394,6 @@ function emitCModuleDeclarations(
     }
   }
 
-  for (const wrapper of context.asyncTaskWrappers.values()) {
-    pushCModuleLines(lines, emitAsyncTaskWrapperPrototypes(wrapper, context.libraries))
-  }
-
   for (const wrapper of context.callbackWrappers.values()) {
     if (wrapper.kind === 'plain-arrow') {
       lines.push(`${emitPlainArrowCallbackWrapperHead(wrapper)};`)
@@ -1433,7 +1418,7 @@ function emitCModuleDeclarations(
   if (
     functionPrototypeNames.size > 0 ||
     emittedClassMethodPrototype ||
-    context.asyncTaskWrappers.size > 0 ||
+    context.asyncCoroutineWrappers.size > 0 ||
     context.callbackWrappers.size > 0 ||
     context.asyncResultChainWrappers.size > 0
   ) {
@@ -1458,7 +1443,7 @@ function collectCModuleNeededFunctionPrototypeNames(
     }
   }
 
-  for (const wrapper of context.asyncTaskWrappers.values()) {
+  for (const wrapper of context.asyncCoroutineWrappers.values()) {
     collectCReferencedFunctionPrototypeNames(wrapper, functionNames, prototypeNames)
   }
 
@@ -2360,10 +2345,8 @@ function createCModuleBaseContext(
     context,
     deps.asyncResultChainLoweringDependencies
   )
-  context.asyncTaskWrappers = collectAsyncTaskWrappers(
-    functionEntries,
+  context.asyncCoroutineWrappers = collectAsyncCoroutineWrappers(
     context,
-    deps.asyncTaskLoweringDependencies,
     context.callbackWrappers
   )
 

@@ -63,7 +63,6 @@ import {
 } from './async/async-results.ts'
 import { collectLocalAwaitRejectionValueTypes, inferRejectedValueType } from './async/rejections.ts'
 import type { RejectionValueTypeDependencies } from './async/rejections.ts'
-import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
 import type { CEmitContextWithDependencies, CFunctionContextWithDependencies } from './context.ts'
 import {
   createFunctionContext,
@@ -307,14 +306,12 @@ import {
 export type { CppModuleOutputFile } from './types.ts'
 
 type CEmitContext = CEmitContextWithDependencies<
-  AsyncTaskLoweringDependencies,
   ClassLoweringDependencies,
   NullableLoweringDependencies,
   StatementLoweringDependencies,
   StringLoweringDependencies
 >
 type CFunctionContext = CFunctionContextWithDependencies<
-  AsyncTaskLoweringDependencies,
   ClassLoweringDependencies,
   NullableLoweringDependencies,
   StatementLoweringDependencies,
@@ -852,45 +849,7 @@ function isRuntimeStringReference(expression: AnyNode, context: CFunctionContext
   return resolveRuntimeStringReference(expression, context) !== null
 }
 
-const asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies = {
-  createFunctionContext,
-  emitCallee,
-  emitCValueExpression,
-  emitFunctionHead: (statement, context) => emitFunctionHead(statement, context as CFunctionContext),
-  emitOwnedValueCleanup,
-  emitOwnedValueDeclarations,
-  emitPreparedCallArgs,
-  emitPreparedCallExpression,
-  emitPreparedCompilerLibraryCallExpression,
-  emitPreparedAsyncResultConstructorExpression: (expression, context, options) =>
-    emitPreparedAsyncResultConstructorExpression(
-      expression,
-      context as CFunctionContext,
-      asyncResultLoweringDependencies,
-      options
-    ),
-  emitPreparedNumberExpression,
-  emitPreparedStringBytesOperand,
-  emitRuntimeArrowCaptureStoreLines,
-  emitStatementList,
-  inferExpressionType,
-  isCompilerLibraryAsyncResultExpression,
-  isIndexAccessExpression,
-  isMemberAccessExpression,
-  isRuntimeStringReference,
-  isRuntimeProducedStringExpression,
-  isThrowingFunctionCallee: (callee, context) => isThrowingFunctionCallee(callee, context as CFunctionContext),
-  pushVariableScope: (context) => pushVariableScope(context as CFunctionContext) as any,
-  registerObjectShape,
-  registerRuntimeValueMetadata,
-  resolveFunctionParams: (callee, context) => resolveFunctionParams(callee, context as CFunctionContext),
-  resolveKnownObjectIndex,
-  resolveKnownObjectMember,
-  restoreVariableScope: (context, snapshot) => restoreVariableScope(context as CFunctionContext, snapshot as any)
-}
-
 const declarationEmissionDependencies = {
-  asyncTaskLoweringDependencies,
   emitPreparedNumberExpression,
   emitStatementList
 }
@@ -1033,7 +992,6 @@ const cValueExpressionDependencies = {
 }
 
 const cUnitDependencies: CUnitDependencies = {
-  asyncTaskLoweringDependencies,
   callbackLoweringDependencies,
   classLoweringDependencies,
   collectExternalEventLoopFunctions,
@@ -1046,7 +1004,6 @@ const cUnitDependencies: CUnitDependencies = {
 }
 
 const cModuleEmissionDependencies = {
-  asyncTaskLoweringDependencies,
   callbackLoweringDependencies,
   classLoweringDependencies,
   collectExternalEventLoopFunctions,
@@ -1279,7 +1236,6 @@ function createBaseContext(
     classInfos: new Map(),
     callbackArrowWrappers: new Map(),
     callbackWrappers: new Map(),
-    asyncTaskLoweringDependencies,
     statementLoweringDependencies,
     classLoweringDependencies,
     nullableLoweringDependencies,
@@ -1302,7 +1258,7 @@ function createBaseContext(
     functionReturnTypeRefs,
     functionReturnTypes,
     functionAsyncFlags,
-    asyncTaskWrappers: new Map(),
+    asyncCoroutineWrappers: new Map(),
     jsGlobalRoots,
     libraries: resolveCCompilerLibrarySet(libraries),
     runtimeInitializerDefinitions: [],
@@ -6894,7 +6850,24 @@ function emitPreparedAwaitAsyncResultExpression(
     return immediateLibraryAsyncResult
   }
 
-  const asyncResultExpression = emitPreparedAsyncResultExpression(expression, context, asyncResultLoweringDependencies)
+  let asyncResultExpression: PreparedExpression | null = null
+
+  if (context.coroutine) {
+    asyncResultExpression = emitPreparedAsyncResultStaticExpression(
+      expression,
+      context,
+      asyncResultLoweringDependencies,
+      { owned: false }
+    )
+  }
+
+  if (asyncResultExpression === null) {
+    asyncResultExpression = emitPreparedAsyncResultExpression(
+      expression,
+      context,
+      asyncResultLoweringDependencies
+    )
+  }
 
   if (asyncResultExpression !== null && typeof asyncResultExpression !== 'undefined') {
     const valueType = firstKnownValueTypeOrUnknown(
@@ -6972,7 +6945,7 @@ function emitAwaitValueVariableDeclaration(statement: AnyNode, context: CFunctio
     expression === null ||
     typeof expression === 'undefined' ||
     expression.type !== 'AwaitExpression' ||
-    !shouldAwaitReadRejectedAsyncResult(context)
+    (!context.coroutine && !shouldAwaitReadRejectedAsyncResult(context))
   ) {
     return null
   }
@@ -7035,8 +7008,6 @@ function emitAwaitValueVariableDeclaration(statement: AnyNode, context: CFunctio
     lines.push(`auto ${name} = ${valueInfo.valueExpression};`)
     cppType = valueInfo.cppType
   }
-
-  lines.push('')
 
   if (cppType === 'inox::String') {
     context.variables.set(statement.name, 'string')

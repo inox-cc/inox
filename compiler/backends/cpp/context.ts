@@ -1,7 +1,7 @@
 import type { AnyNode, Diagnostic, IrFunctionEffect } from '../../types.ts'
 import type { RuntimeEntrypointAdapterDescriptor } from '../../extensions/types.ts'
 import type {
-  CAsyncTaskWrapper,
+  CAsyncCoroutineWrapper,
   CCallbackWrapper,
   CClassInfo,
   CFunctionParam,
@@ -36,7 +36,7 @@ export type CLoopFlowTarget = {
   used?: boolean
 }
 
-export type CAsyncTaskWrapperMap = Map<string, CAsyncTaskWrapper>
+export type CAsyncCoroutineWrapperMap = Map<string, CAsyncCoroutineWrapper>
 export type CBooleanMap = Map<string, boolean>
 export type CCallbackWrapperMap = Map<string, CCallbackWrapper>
 export type CFunctionTypeMap = Map<string, CFunctionType>
@@ -102,14 +102,12 @@ export function cloneCAsyncResultConstructorHandlerMap(
 }
 
 export type CEmitContextWithDependencies<
-  AsyncTaskDependencies,
   ClassDependencies,
   NullableDependencies,
   StatementDependencies,
   StringDependencies
 > = {
-  asyncTaskLoweringDependencies: AsyncTaskDependencies
-  asyncTaskWrappers: CAsyncTaskWrapperMap
+  asyncCoroutineWrappers: CAsyncCoroutineWrapperMap
   boxedMutableCaptureDeclarations: Set<AnyNode>
   callbackArrowWrappers: Map<AnyNode, CCallbackWrapper>
   callbackWrappers: CCallbackWrapperMap
@@ -159,7 +157,7 @@ export type CEmitContextWithDependencies<
   unhandledRejectionFlag: string | null
 }
 
-export type CEmitContext = CEmitContextWithDependencies<object, object, object, object, object>
+export type CEmitContext = CEmitContextWithDependencies<object, object, object, object>
 
 export type CFailureContext = {
   cleanupEnabled: boolean
@@ -227,13 +225,11 @@ type CVariableScopeContext = {
 }
 
 export type CFunctionContextWithDependencies<
-  AsyncTaskDependencies,
   ClassDependencies,
   NullableDependencies,
   StatementDependencies,
   StringDependencies
 > = CEmitContextWithDependencies<
-  AsyncTaskDependencies,
   ClassDependencies,
   NullableDependencies,
   StatementDependencies,
@@ -296,7 +292,7 @@ export type CFunctionContextWithDependencies<
   variables: CStringMap
 }
 
-export type CFunctionContext = CFunctionContextWithDependencies<object, object, object, object, object>
+export type CFunctionContext = CFunctionContextWithDependencies<object, object, object, object>
 
 export type CVariableScopeSnapshot = {
   boxedVariables: CStringSet
@@ -327,14 +323,12 @@ export type CNullableScalarNarrowingSnapshot = {
 }
 
 export function createFunctionContext<
-  AsyncTaskDependencies,
   ClassDependencies,
   NullableDependencies,
   StatementDependencies,
   StringDependencies
 >(
   baseContext: CEmitContextWithDependencies<
-    AsyncTaskDependencies,
     ClassDependencies,
     NullableDependencies,
     StatementDependencies,
@@ -343,15 +337,13 @@ export function createFunctionContext<
   returnType: string,
   returnNullable: boolean
 ): CFunctionContextWithDependencies<
-  AsyncTaskDependencies,
   ClassDependencies,
   NullableDependencies,
   StatementDependencies,
   StringDependencies
 > {
   return {
-    asyncTaskLoweringDependencies: baseContext.asyncTaskLoweringDependencies,
-    asyncTaskWrappers: baseContext.asyncTaskWrappers,
+    asyncCoroutineWrappers: baseContext.asyncCoroutineWrappers,
     boxedMutableCaptureDeclarations: baseContext.boxedMutableCaptureDeclarations,
     callbackArrowWrappers: baseContext.callbackArrowWrappers,
     callbackWrappers: baseContext.callbackWrappers,

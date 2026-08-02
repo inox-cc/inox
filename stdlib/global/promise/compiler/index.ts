@@ -176,15 +176,10 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       cValueAdapter: 'inox::Promise($value)',
       baseTypeIds: [],
       runtimeRequirements: [promiseRuntimeRequirement],
+      cValidExpression: '$value.valid()',
       cAwaitExpression: '$value.awaitValue()',
       cCoroutineAwaitExpression: 'co_await $value',
       cAwaitHandlesInvalidSource: true,
-      cAsyncTaskBridge: {
-        cValidExpression: '$source.valid()',
-        cObserveExpression: '$source.observe($onFulfilled, $onRejected, $context, $finalizer)',
-        cFulfillExpression: '$target.fulfill($value)',
-        cRejectExpression: '$target.rejectWith($value)'
-      },
       typeParameters: ['T'],
       traits: [{ traitId: 'awaitable', args: [fulfilledParameterTypeRef, unknownTypeRef] }]
     }

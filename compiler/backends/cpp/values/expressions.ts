@@ -9,7 +9,6 @@ import {
   isRuntimeFunctionType,
   isSupportedRuntimeCallbackType
 } from '../async/callbacks.ts'
-import type { AsyncTaskLoweringDependencies } from '../async/tasks.ts'
 import type { CEmitContextWithDependencies, CFunctionContextWithDependencies } from '../context.ts'
 import {
   cloneCStringSet,
@@ -141,14 +140,12 @@ type CDynamicObjectFieldAccess = {
 }
 
 type CEmitContext = CEmitContextWithDependencies<
-  AsyncTaskLoweringDependencies,
   ClassLoweringDependencies,
   NullableLoweringDependencies,
   StatementLoweringDependencies,
   StringLoweringDependencies
 >
 type CFunctionContext = CFunctionContextWithDependencies<
-  AsyncTaskLoweringDependencies,
   ClassLoweringDependencies,
   NullableLoweringDependencies,
   StatementLoweringDependencies,
@@ -1799,10 +1796,7 @@ function isContextDeclaredType(value: string): boolean {
     value === 'NullableFunctionContext' ||
     value === 'AsyncResultEmitContext' ||
     value === 'AsyncResultFunctionContext' ||
-    value === 'StringCContext' ||
-    value === 'AsyncTaskEmitContext' ||
-    value === 'AsyncTaskFunctionContext' ||
-    value === 'AsyncTaskPlannerContext'
+    value === 'StringCContext'
   )
 }
 
@@ -1810,7 +1804,6 @@ function isDependencyCarrierDeclaredType(value: string): boolean {
   return (
     value === 'CModuleEmissionDependencies' ||
     value === 'CDeclarationEmissionDependencies' ||
-    value === 'AsyncTaskLoweringDependencies' ||
     value === 'CallbackLoweringDependencies' ||
     value === 'ClassLoweringDependencies' ||
     value === 'NullableLoweringDependencies' ||

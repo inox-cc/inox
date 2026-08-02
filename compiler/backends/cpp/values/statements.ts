@@ -117,7 +117,6 @@ type CCompilerLibraryIteration = {
 }
 
 type CFunctionContext = CFunctionContextWithDependencies<
-  object,
   ClassLoweringDependencies,
   NullableLoweringDependencies,
   StatementLoweringDependencies,
@@ -2757,7 +2756,7 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
       context,
       diagnostic(
         'INOX_C_ASYNC',
-        'nested async try/catch state-machine lowering is not supported by the current C++ backend slice',
+        'nested try/catch around top-level await is not supported by the current C++ backend slice',
         statement.loc
       )
     )
@@ -3209,7 +3208,7 @@ export function emitReturnStatement(statement: StatementNode, context: CFunction
       return lines
     }
 
-    return ['return;']
+    return [context.coroutine ? emitCoroutineReturnStatement(context) : 'return;']
   }
 
   const expression: string = statementDeps(context).emitCExpression(argument, context)

@@ -16,7 +16,7 @@ type CFunctionContextWithDependencies<Dependencies> = {
 }
 
 type CFunctionContext = CFunctionContextWithDependencies<StatementDependencies>
-type AsyncTaskFunctionContext = CFunctionContextWithDependencies<StatementDependencies>
+type CoroutineFunctionContext = CFunctionContextWithDependencies<StatementDependencies>
 
 type StringContext = {
   phase: string
@@ -30,7 +30,7 @@ function statementDeps(context: CFunctionContext): StatementDependencies {
   return context.statementLoweringDependencies
 }
 
-function emit(expression: Expression, context: AsyncTaskFunctionContext): string {
+function emit(expression: Expression, context: CoroutineFunctionContext): string {
   const dependencies = statementDeps(context)
 
   return dependencies.resolveRuntimeStringReference(expression, context) ?? 'missing'

@@ -11,13 +11,13 @@ test('recursive unresolved context preserves the established function companion 
       {
         name: 'expression',
         valueType: 'object',
-        declaredType: 'AsyncTaskAstNode',
+        declaredType: 'AsyncResultAstNode',
         shape: { fields: [] }
       },
       {
         name: 'context',
         valueType: 'unknown',
-        declaredType: 'AsyncTaskFunctionContext',
+        declaredType: 'AsyncResultFunctionContext',
         shape: null
       }
     ],
@@ -26,5 +26,5 @@ test('recursive unresolved context preserves the established function companion 
   }
 
   assert.equal(isPlainFunctionPointerType(functionType), false)
-  assert.equal(isPlainFunctionPointerType(functionType, ['AsyncTaskFunctionContext']), true)
+  assert.equal(isPlainFunctionPointerType(functionType, ['AsyncResultFunctionContext']), true)
 })

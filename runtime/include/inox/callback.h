@@ -96,6 +96,40 @@ public:
   Value call(std::span<const Value> args) const;
 };
 
+class SharedNumberBox {
+private:
+  inox_shared_number_box* box_;
+
+public:
+  SharedNumberBox();
+  explicit SharedNumberBox(inox_shared_number_box* box);
+  SharedNumberBox(const SharedNumberBox& other);
+  SharedNumberBox(SharedNumberBox&& other) noexcept;
+  SharedNumberBox& operator=(const SharedNumberBox& other);
+  SharedNumberBox& operator=(SharedNumberBox&& other) noexcept;
+  ~SharedNumberBox();
+
+  inox_shared_number_box* operator->() const;
+  bool valid() const;
+};
+
+class SharedValueBox {
+private:
+  inox_shared_value_box* box_;
+
+public:
+  SharedValueBox();
+  explicit SharedValueBox(inox_shared_value_box* box);
+  SharedValueBox(const SharedValueBox& other);
+  SharedValueBox(SharedValueBox&& other) noexcept;
+  SharedValueBox& operator=(const SharedValueBox& other);
+  SharedValueBox& operator=(SharedValueBox&& other) noexcept;
+  ~SharedValueBox();
+
+  inox_shared_value_box* operator->() const;
+  bool valid() const;
+};
+
 } // namespace inox
 
 #endif

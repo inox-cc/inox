@@ -6,7 +6,7 @@ import type { LibraryAsyncResultOperationKind } from '../../compiler/extensions/
 import { compilerLibraryPackage as promiseCompilerLibraryPackage } from '../../stdlib/global/promise/compiler/index.ts'
 import { compilerLibraryPackageWithGlobalDeclaration } from './helpers/compiler-library-fixtures.ts'
 
-test('async-result provider не допускает неоднозначные операции async task', () => {
+test('async-result provider не допускает неоднозначные операции', () => {
   for (const kind of ['create', 'fulfill', 'reject', 'map-fulfilled'] as LibraryAsyncResultOperationKind[]) {
     const library = compilerLibraryPackageWithGlobalDeclaration(
       promiseCompilerLibraryPackage,

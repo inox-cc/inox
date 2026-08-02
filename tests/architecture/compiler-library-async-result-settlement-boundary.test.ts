@@ -6,7 +6,7 @@ import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 import type { ModuleDeclarationImport } from '../../compiler/types.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
-test('imported throwing async calls settle through provider C++ operations', () => {
+test('imported async result forwards the provider facade without a second settlement layer', () => {
   const host = createMemoryCompilerHost(
     [
       {
@@ -62,11 +62,11 @@ export function forward(fail: boolean): Promise<string> {
   const source = result.files.find((file) => file.path === 'consumer.cc')
 
   assert.ok(source)
-  assert.match(source.code, /inox_async_result_\d+ = inox_mod_provider_ts_[a-f0-9]+_load\(fail\);/)
-  assert.match(source.code, /if \(inox::thrown\(\)\) \{\s+inox_error = inox::take_exception\(\);/)
-  assert.match(source.code, /inox::Promise::reject\(inox_error\)/)
-  assert.match(source.code, /inox::Promise::resolve\(inox_async_result_\d+\)/)
+  assert.match(source.code, /inox_return = inox_mod_provider_ts_[a-f0-9]+_load\(fail\);/)
+  assert.doesNotMatch(source.code, /inox::take_exception\(\)/)
+  assert.doesNotMatch(source.code, /inox::Promise::(?:reject|resolve)\(/)
   assert.doesNotMatch(source.code, /\binox_async_status\b/)
   assert.doesNotMatch(source.code, /\binox_error_out\b/)
   assert.doesNotMatch(source.code, /\binox_promise_(?:resolved|rejected)\b/)
+  assert.doesNotMatch(source.code, /inox_async_task_|frame->/)
 })

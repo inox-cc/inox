@@ -1,5 +1,6 @@
 #include "inox/promise.h"
 
+#include <limits>
 #include <memory>
 
 #include "inox/loop.h"
@@ -10,6 +11,11 @@ namespace inox {
 static inox_promise* rawPromise(void* promise) {
   return static_cast<inox_promise*>(promise);
 }
+
+struct alignas(std::max_align_t) PromiseCoroutineAllocation {
+  inox_allocator* allocator;
+  std::size_t size;
+};
 
 Promise::Promise() : promise_(nullptr) {}
 
@@ -253,6 +259,62 @@ inox_status Promise::Awaiter::settle(inox_value value, bool rejected) {
 }
 
 Promise::promise_type::promise_type() : result_(Promise::create()) {}
+
+void* Promise::promise_type::operator new(std::size_t size) noexcept {
+  inox_loop* currentLoop = loop();
+
+  if (currentLoop == nullptr || currentLoop->allocator == nullptr || currentLoop->allocator->alloc == nullptr) {
+    throw_value(Value());
+    return nullptr;
+  }
+
+  if (size > std::numeric_limits<std::size_t>::max() - sizeof(PromiseCoroutineAllocation)) {
+    throw_out_of_memory();
+    return nullptr;
+  }
+
+  const std::size_t allocationSize = sizeof(PromiseCoroutineAllocation) + size;
+  inox_allocator* allocator = currentLoop->allocator;
+  void* memory = allocator->alloc(
+    allocator->user,
+    allocationSize,
+    alignof(PromiseCoroutineAllocation)
+  );
+
+  if (memory == nullptr) {
+    throw_out_of_memory();
+    return nullptr;
+  }
+
+  PromiseCoroutineAllocation* allocation = static_cast<PromiseCoroutineAllocation*>(memory);
+  allocation->allocator = allocator;
+  allocation->size = allocationSize;
+  return allocation + 1;
+}
+
+void Promise::promise_type::operator delete(void* pointer, std::size_t size) noexcept {
+  (void)size;
+
+  if (pointer == nullptr) {
+    return;
+  }
+
+  PromiseCoroutineAllocation* allocation = static_cast<PromiseCoroutineAllocation*>(pointer) - 1;
+  inox_allocator* allocator = allocation->allocator;
+
+  if (allocator != nullptr && allocator->free != nullptr) {
+    allocator->free(
+      allocator->user,
+      allocation,
+      allocation->size,
+      alignof(PromiseCoroutineAllocation)
+    );
+  }
+}
+
+Promise Promise::promise_type::get_return_object_on_allocation_failure() noexcept {
+  return {};
+}
 
 Promise Promise::promise_type::get_return_object() const {
   return result_;

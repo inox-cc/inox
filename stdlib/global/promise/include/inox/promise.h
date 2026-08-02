@@ -1,6 +1,7 @@
 #ifndef INOX_STDLIB_PROMISE_H
 #define INOX_STDLIB_PROMISE_H
 
+#include <cstddef>
 #include <coroutine>
 
 #include "inox/value.h"
@@ -88,6 +89,10 @@ private:
 
 public:
   promise_type();
+
+  static void* operator new(std::size_t size) noexcept;
+  static void operator delete(void* pointer, std::size_t size) noexcept;
+  static Promise get_return_object_on_allocation_failure() noexcept;
 
   Promise get_return_object() const;
   std::suspend_never initial_suspend() const noexcept;

@@ -516,24 +516,36 @@ export function emitPreparedAsyncResultStaticExpression(
 
   registerEventLoop(context)
 
-  const out = preparedAsyncResultOut(options, context, 'inox_async_result')
   const rejectionValueType = asyncResultStaticRejectionValueType(method, expression, context, dependencies)
-
-  if (options.owned !== false) {
-    registerOwnedAsyncResult(context, out, expressionAsyncResultValueType(expression), rejectionValueType)
-  }
   const target = expression.libraryCExpression
   const argument = expression.args[0]
   const value = emitPreparedAsyncResultArgumentValue(argument, context, dependencies)
   const lines: string[] = []
+  let call = `${target}()`
 
   if (argument !== null && typeof argument !== 'undefined') {
     appendLines(lines, value.lines)
-    lines.push(`${out} = ${target}(${value.expression});`)
-  } else {
-    lines.push(`${out} = ${target}();`)
+    call = `${target}(${value.expression})`
   }
 
+  if (
+    options.owned === false &&
+    (options.out === null || typeof options.out === 'undefined')
+  ) {
+    return {
+      lines,
+      expression: call,
+      rejectionValueType
+    }
+  }
+
+  const out = preparedAsyncResultOut(options, context, 'inox_async_result')
+
+  if (options.owned !== false) {
+    registerOwnedAsyncResult(context, out, expressionAsyncResultValueType(expression), rejectionValueType)
+  }
+
+  lines.push(`${out} = ${call};`)
   lines.push(emitAsyncResultRuntimeTypeCheck(out, context))
 
   return {

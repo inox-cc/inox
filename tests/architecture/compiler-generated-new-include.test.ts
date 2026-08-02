@@ -9,16 +9,17 @@ test('C++20 coroutine не требует ручного placement new в genera
     libraries: defaultCompilerLibrarySet,
     target: 'cc'
   })
-  const asyncTask = compileSource(
+  const coroutine = compileSource(
     'async function run(): Promise<number> { const value = await Promise.resolve(1); return value }\nrun()\n',
     { libraries: defaultCompilerLibrarySet, target: 'cc' }
   )
 
   assert.doesNotMatch(callback.code, /#include <new>/)
   assert.doesNotMatch(callback.code, /new \(/)
-  assert.doesNotMatch(asyncTask.code, /#include <new>/)
-  assert.doesNotMatch(asyncTask.code, /new \(frame_memory\)/)
-  assert.match(asyncTask.code, /inox::Promise run\(\)/)
-  assert.match(asyncTask.code, /co_await/)
-  assert.doesNotMatch(asyncTask.code, /inox_async_task_/)
+  assert.doesNotMatch(coroutine.code, /#include <new>/)
+  assert.doesNotMatch(coroutine.code, /new \(frame_memory\)/)
+  assert.match(coroutine.code, /inox::Promise run\(\)/)
+  assert.match(coroutine.code, /co_await/)
+  assert.doesNotMatch(coroutine.code, /co_return ([^;\n]+);\n\s+co_return \1;/)
+  assert.doesNotMatch(coroutine.code, /inox_async_task_/)
 })

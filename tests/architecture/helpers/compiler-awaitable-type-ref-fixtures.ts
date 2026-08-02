@@ -32,12 +32,8 @@ export function neutralAwaitableLibrarySet(): CompilerLibrarySet {
         cppType: 'FixtureCompletion',
         baseTypeIds: [],
         runtimeRequirements: [],
-        cAsyncTaskBridge: {
-          cValidExpression: '$source.valid()',
-          cObserveExpression: '$source.observe($onFulfilled, $onRejected, $context, $finalizer)',
-          cFulfillExpression: '$target.fulfill($value)',
-          cRejectExpression: '$target.reject($value)'
-        }
+        cValidExpression: '$value.valid()',
+        cCoroutineAwaitExpression: 'co_await $value'
       }
     ],
     operations: [
@@ -53,9 +49,9 @@ export function neutralAwaitableLibrarySet(): CompilerLibrarySet {
         cExpression: 'FixtureCompletion',
         resultTypeRef: completionTypeRef()
       },
-      asyncTaskOperation('fulfill', 'resolve'),
-      asyncTaskOperation('reject'),
-      asyncTaskOperation('map-fulfilled', 'then'),
+      asyncResultOperation('fulfill', 'resolve'),
+      asyncResultOperation('reject'),
+      asyncResultOperation('map-fulfilled', 'then'),
       awaitableOperation('global:readTypedCompletion', `${libraryId}#read-typed`),
       {
         libraryId,
@@ -76,7 +72,7 @@ export function neutralAwaitableLibrarySet(): CompilerLibrarySet {
   return createCompilerLibrarySet([library])
 }
 
-function asyncTaskOperation(
+function asyncResultOperation(
   kind: 'fulfill' | 'reject' | 'map-fulfilled',
   configuredCName?: 'resolve' | 'reject' | 'then'
 ): LibraryOperationDescriptor {

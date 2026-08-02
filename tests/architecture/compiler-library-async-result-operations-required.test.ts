@@ -6,26 +6,18 @@ import type { LibraryAsyncResultOperationKind } from '../../compiler/extensions/
 import { compilerLibraryPackage as promiseCompilerLibraryPackage } from '../../stdlib/global/promise/compiler/index.ts'
 import { compilerLibraryPackageWithGlobalDeclaration } from './helpers/compiler-library-fixtures.ts'
 
-test('async-result provider требует C++ expression для каждой операции async task', () => {
-  for (const kind of ['create', 'fulfill', 'reject', 'map-fulfilled'] as LibraryAsyncResultOperationKind[]) {
+test('async-result provider требует все обязательные операции', () => {
+  for (const kind of ['fulfill', 'reject', 'map-fulfilled'] as LibraryAsyncResultOperationKind[]) {
     const library = compilerLibraryPackageWithGlobalDeclaration(
       promiseCompilerLibraryPackage,
       'stdlib/global/promise/index.d.ts'
     )
-    library.operations = library.operations.map((operation) => ({ ...operation }))
-    const operation = library.operations.find((candidate) => candidate.asyncResultOperation === kind)
 
-    assert.notEqual(operation, undefined)
-
-    if (typeof operation === 'undefined') {
-      continue
-    }
-
-    operation.cExpression = '   '
+    library.operations = library.operations.filter((operation) => operation.asyncResultOperation !== kind)
 
     assert.throws(
       () => createCompilerLibrarySet([library]),
-      new RegExp(`Compiler library intrinsic provider async-result ${kind} operation .* requires a C\\+\\+ expression`)
+      new RegExp(`Compiler library intrinsic provider async-result requires exactly one ${kind} C\\+\\+ operation`)
     )
   }
 })
