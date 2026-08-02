@@ -1082,6 +1082,7 @@ function validateNativeTypeRuntimeValueValidExpression(nativeType: LibraryNative
 
 function validateNativeTypeAwaitExpression(nativeType: LibraryNativeTypeDescriptor): void {
   const expression = nativeType.cAwaitExpression
+  const coroutineExpression = nativeType.cCoroutineAwaitExpression
 
   if (typeof expression === 'string' && !expression.includes('$value')) {
     throw new Error(`native type ${nativeType.typeId} C++ await expression requires $value`)
@@ -1089,6 +1090,10 @@ function validateNativeTypeAwaitExpression(nativeType: LibraryNativeTypeDescript
 
   if (nativeType.cAwaitHandlesInvalidSource === true && (typeof expression !== 'string' || expression.length === 0)) {
     throw new Error(`native type ${nativeType.typeId} C++ await invalid-source contract requires cAwaitExpression`)
+  }
+
+  if (typeof coroutineExpression === 'string' && !coroutineExpression.includes('$value')) {
+    throw new Error(`native type ${nativeType.typeId} C++ coroutine await expression requires $value`)
   }
 }
 
@@ -2497,6 +2502,8 @@ function compilerLibrarySetFingerprint(
           (item.cRuntimeValueValidExpression ?? '') +
           ':await-expression=' +
           (item.cAwaitExpression ?? '') +
+          ':coroutine-await-expression=' +
+          (item.cCoroutineAwaitExpression ?? '') +
           ':await-handles-invalid-source=' +
           (item.cAwaitHandlesInvalidSource === true ? '1' : '') +
           ':async-task-bridge=' +

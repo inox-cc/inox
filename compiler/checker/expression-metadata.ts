@@ -39,6 +39,7 @@ export function applyTypeRefMetadataToExpression(
   expression.shape = metadata.shape
   expression.libraryCppType = metadata.libraryCppType
   expression.libraryCAwaitExpression = metadata.libraryCAwaitExpression
+  expression.libraryCCoroutineAwaitExpression = metadata.libraryCCoroutineAwaitExpression
   expression.asyncResultValueType = metadata.asyncResultValueType
   expression.asyncResultRejectionValueType = metadata.asyncResultRejectionValueType
   expression.asyncResultRejectionIntrinsicRole = metadata.asyncResultRejectionIntrinsicRole

@@ -177,6 +177,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       baseTypeIds: [],
       runtimeRequirements: [promiseRuntimeRequirement],
       cAwaitExpression: '$value.awaitValue()',
+      cCoroutineAwaitExpression: 'co_await $value',
       cAwaitHandlesInvalidSource: true,
       cAsyncTaskBridge: {
         cValidExpression: '$source.valid()',

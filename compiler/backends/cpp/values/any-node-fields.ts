@@ -40,6 +40,7 @@ export const compilerAnyNodeStringFields: readonly string[] = [
   'libraryCIteratorNextFailureMode',
   'libraryCExpression',
   'libraryCAwaitExpression',
+  'libraryCCoroutineAwaitExpression',
   'libraryCAsyncFulfillExpression',
   'libraryCAsyncRejectExpression',
   'libraryCClassFormatExpression',

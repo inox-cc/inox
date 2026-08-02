@@ -136,7 +136,6 @@ import {
 } from './runtime-values.ts'
 import { cUnsupportedExpressionCode, isCoalesceExpression } from './syntax.ts'
 import type {
-  CAsyncTaskWrapper,
   CppEmitOptions,
   CFunctionParam,
   CFunctionType,
@@ -169,9 +168,9 @@ import {
   cRuntimeValueAdapterInfo,
   cRuntimeValueTag,
   applyLibraryNativeValueAdapter,
-  compilerLibraryIntrinsicAsyncResultCExpression,
   compilerLibraryIntrinsicAsyncResultCValidExpression,
   compilerLibraryIntrinsicNativeCAwaitExpression,
+  compilerLibraryIntrinsicNativeCCoroutineAwaitExpression,
   compilerLibraryIntrinsicNativeCAwaitHandlesInvalidSource,
   compilerLibraryIntrinsicNativeCppType,
   compilerLibraryIntrinsicSequenceMaterialization,
@@ -283,7 +282,6 @@ import {
   emitVariableDeclarationStatement,
   emitWhileStatement,
   registerErrorChannel,
-  registerErrorValue,
   registerRuntimeValueMetadata
 } from './values/statements.ts'
 import type { StringLoweringDependencies } from './values/strings.ts'
@@ -2482,43 +2480,6 @@ function nodeOrEmpty(node: AnyNode | null): AnyNode {
   }
 
   return {}
-}
-
-function asyncTaskWrapperOrEmpty(wrapper: CAsyncTaskWrapper | null): CAsyncTaskWrapper {
-  if (wrapper !== null && typeof wrapper !== 'undefined') {
-    return wrapper
-  }
-
-  return {
-    key: '',
-    functionName: '',
-    frameTypeName: '',
-    startName: '',
-    resumeName: '',
-    rejectName: '',
-    finalizerName: '',
-    params: [],
-    awaits: [],
-    frameLocals: [],
-    hasTryRegion: false,
-    prefixStatements: [],
-    returnExpression: null,
-    returnType: 'void',
-    successPhases: [],
-    tryHandler: null,
-    tryPhases: []
-  }
-}
-
-function asyncTaskWrapperFunctionParams(wrapper: CAsyncTaskWrapper | null): CFunctionParam[] {
-  const resolvedWrapper = asyncTaskWrapperOrEmpty(wrapper)
-  const params: CFunctionParam[] = []
-
-  for (const param of resolvedWrapper.params) {
-    params.push(param)
-  }
-
-  return params
 }
 
 function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
@@ -6852,332 +6813,45 @@ function emitPreparedAsyncFunctionAsyncResultCallExpression(
     }
   }
 
-  const taskCall = emitPreparedAsyncTaskAsyncResultCallExpression(expression, valueType, context, options)
-
-  if (taskCall !== null && typeof taskCall !== 'undefined') {
-    return taskCall
-  }
-
-  if (isThrowingFunctionCallee(expression.callee, context)) {
-    return emitPreparedThrowingAsyncFunctionAsyncResultCallExpression(expression, valueType, context, options)
-  }
-
-  if (!isSupportedAsyncFunctionAsyncResultValueType(valueType)) {
-    pushDiagnostic(
-      context,
-      diagnostic(
-        'INOX_C_ASYNC',
-        'async function calls as AsyncResult values currently support only number, boolean, string, bytes, object, array and void values in C',
-        expression.loc
-      )
-    )
-
-    return {
-      lines: [],
-      expression: '0',
-      valueType,
-      rejectionValueType: 'unknown'
-    }
-  }
-
-  registerEventLoop(context)
-
-  let out = nextCName(context, 'inox_async_result')
-
-  if (options.out !== null && typeof options.out !== 'undefined') {
-    out = options.out
-  }
-
-  const call = emitPreparedCallExpression(expression, context)
-  let managedValue: string | null = null
-  let value = 'inox_undefined_value()'
-  let valueCheck = ''
-  const lines: string[] = []
-
-  if (isManagedRuntimeReturnType(valueType)) {
-    const runtimeManagedValue = nextCName(context, 'inox_async_value')
-
-    managedValue = runtimeManagedValue
-    value = runtimeManagedValue
-  } else if (valueType === 'boolean') {
-    value = `inox_bool_value((${call.expression}) != 0)`
-  } else if (valueType === 'number') {
-    value = `inox_number_value(${call.expression})`
-  }
-
-  if (managedValue !== null && typeof managedValue !== 'undefined') {
-    valueCheck = emitRuntimeValueCheck(managedValue, cRuntimeValueTag(valueType), context)
-  }
-
-  if (managedValue !== null && typeof managedValue !== 'undefined') {
-    registerOwnedValue(context, managedValue)
-  }
-
-  if (options.owned !== false) {
-    registerOwnedAsyncResult(context, out, valueType, 'unknown')
-  }
-
-  const resolveExpression = compilerLibraryIntrinsicAsyncResultCExpression(context.libraries, 'fulfill')
-
-  if (resolveExpression === null) {
-    pushDiagnostic(
-      context,
-      diagnostic(
-        'INOX_C_ASYNC',
-        'the configured async-result provider does not define C++ resolve lowering',
-        expression.loc
-      )
-    )
-
-    return {
-      lines: call.lines,
-      expression: out,
-      valueType,
-      rejectionValueType: 'unknown'
-    }
-  }
-
-  pushAll(lines, call.lines)
-
-  if (managedValue !== null && typeof managedValue !== 'undefined') {
-    lines.push(`${managedValue} = ${call.expression};`)
-
-    if (valueCheck !== '') {
-      lines.push(valueCheck)
-    }
-
-    lines.push(`${out} = ${resolveExpression}(${value});`)
-    lines.push(emitAsyncResultRuntimeTypeCheck(out, context))
-    pushAll(lines, emitPrepareOwnedValueWrite(managedValue))
-  } else {
-    lines.push(`${out} = ${resolveExpression}(${value});`)
-    lines.push(emitAsyncResultRuntimeTypeCheck(out, context))
-  }
-
-  return {
-    lines,
-    expression: out,
-    valueType,
-    rejectionValueType: 'unknown'
-  }
-}
-
-function emitPreparedAsyncTaskAsyncResultCallExpression(
-  expression: AnyNode,
-  valueType: string,
-  context: CFunctionContext,
-  options: PreparedCallOptions = {}
-): PreparedExpression | null {
-  if (
-    expression.callee === null ||
-    typeof expression.callee === 'undefined' ||
-    expression.callee.type !== 'Reference' ||
-    expression.callee.path.length !== 1
-  ) {
-    return null
-  }
-
-  const path: string[] = expression.callee.path
-  const name = path[0]
-
-  if (name === null || typeof name === 'undefined') {
-    return null
-  }
-
-  const wrapper = context.asyncTaskWrappers.get(name)
-
-  if (wrapper === null || typeof wrapper === 'undefined') {
-    return null
-  }
-
-  registerEventLoop(context)
-
-  let out = nextCName(context, 'inox_async_result')
-
-  if (options.out !== null && typeof options.out !== 'undefined') {
-    out = options.out
-  }
-
-  const prepared = emitPreparedCallArgs(expression, asyncTaskWrapperFunctionParams(wrapper), context)
-  const args: string[] = [emitEventLoopReference(context)]
-  const rejectionValueType = resolveCFunctionRejectionValueType(expression.callee, context)
-  const lines: string[] = []
-
-  pushAll(args, prepared.args)
-  args.push(out)
-
-  if (options.owned !== false) {
-    registerOwnedAsyncResult(context, out, valueType, rejectionValueType)
-  }
-
-  pushAll(lines, prepared.lines)
-  lines.push(emitStatusCheck(`${wrapper.startName}(${joinStrings(args, ', ')})`, context))
-
-  return {
-    lines,
-    expression: out,
-    valueType,
-    rejectionValueType
-  }
-}
-
-function emitPreparedThrowingAsyncFunctionAsyncResultCallExpression(
-  expression: AnyNode,
-  valueType: string,
-  context: CFunctionContext,
-  options: PreparedCallOptions = {}
-): PreparedExpression | null {
-  if (!isSupportedAsyncFunctionAsyncResultValueType(valueType)) {
-    pushDiagnostic(
-      context,
-      diagnostic(
-        'INOX_C_ASYNC',
-        'throwing async function calls as AsyncResult values currently support only number, boolean, string, bytes, object, array and void values in C',
-        expression.loc
-      )
-    )
-
-    return {
-      lines: [],
-      expression: '0',
-      valueType,
-      rejectionValueType: resolveCFunctionRejectionValueType(expression.callee, context)
-    }
-  }
-
   const params = resolveFunctionParams(expression.callee, context)
+  let call: PreparedExpression
 
   if (params === null || typeof params === 'undefined') {
-    pushDiagnostic(
-      context,
-      diagnostic(
-        'INOX_C_ASYNC',
-        'this async function call is not supported as a AsyncResult value in the current C++ backend slice',
-        expression.loc
-      )
-    )
-
-    return {
+    call = {
       lines: [],
-      expression: '0',
-      valueType,
-      rejectionValueType: 'unknown'
+      expression: emitCallExpression(expression, context)
+    }
+  } else {
+    const prepared = emitPreparedCallArgs(expression, params, context)
+    call = {
+      lines: prepared.lines,
+      expression: `${emitCallee(expression.callee, context)}(${joinStrings(prepared.args, ', ')})`
     }
   }
-
-  const callParams = functionParamsOrEmpty(params)
 
   registerEventLoop(context)
-  registerErrorValue(context)
-
-  let out = nextCName(context, 'inox_async_result')
-
-  if (options.out !== null && typeof options.out !== 'undefined') {
-    out = options.out
-  }
-
-  const prepared = emitPreparedCallArgs(expression, callParams, context)
-  let result: string | null = null
-  if (valueType !== 'void') {
-    result = nextCName(context, 'inox_async_result')
-  }
-  const managedResult = result !== null && typeof result !== 'undefined' && isManagedRuntimeReturnType(valueType)
   const rejectionValueType = resolveCFunctionRejectionValueType(expression.callee, context)
-  let fulfilledValue = 'inox_undefined_value()'
-  let valueCheck = ''
+  const out = options.out
 
-  if (result !== null && typeof result !== 'undefined') {
-    if (valueType === 'boolean') {
-      fulfilledValue = `inox_bool_value((${result}) != 0)`
-    } else if (valueType === 'number') {
-      fulfilledValue = `inox_number_value(${result})`
-    } else {
-      fulfilledValue = result
-    }
-  }
-
-  if (managedResult && result !== null && typeof result !== 'undefined') {
-    valueCheck = emitRuntimeValueCheck(result, cRuntimeValueTag(valueType), context)
-  }
-
-  if (options.owned !== false) {
-    registerOwnedAsyncResult(context, out, valueType, rejectionValueType)
-  }
-
-  if (managedResult && result !== null && typeof result !== 'undefined') {
-    registerOwnedValue(context, result)
-  }
-
-  const managedResultResetLines: string[] = []
-  if (managedResult && result !== null && typeof result !== 'undefined') {
-    const resetLines: string[] = emitPrepareOwnedValueWrite(result)
-
-    for (const line of resetLines) {
-      managedResultResetLines.push(`  ${line}`)
-    }
-  }
-
-  const rejectExpression = compilerLibraryIntrinsicAsyncResultCExpression(context.libraries, 'reject')
-  const resolveExpression = compilerLibraryIntrinsicAsyncResultCExpression(context.libraries, 'fulfill')
-
-  if (rejectExpression === null || resolveExpression === null) {
-    pushDiagnostic(
-      context,
-      diagnostic(
-        'INOX_C_ASYNC',
-        'the configured async-result provider does not define C++ settlement lowering',
-        expression.loc
-      )
-    )
-
+  if (out === null || typeof out === 'undefined') {
     return {
-      lines: prepared.lines,
-      expression: out,
+      ...call,
       valueType,
       rejectionValueType
     }
   }
 
-  const lines: string[] = []
-  const call = `${emitCallee(expression.callee, context)}(${joinStrings(prepared.args, ', ')})`
-
-  pushAll(lines, prepared.lines)
-  if (result === null || typeof result === 'undefined') {
-    lines.push(`${call};`)
-  } else if (managedResult) {
-    lines.push(`${result} = ${call};`)
-  } else {
-    lines.push(`auto ${result} = ${call};`)
+  if (options.owned !== false) {
+    registerOwnedAsyncResult(context, out, valueType, rejectionValueType)
   }
-
-  lines.push('if (inox::thrown()) {')
-  lines.push('  inox_error = inox::take_exception();')
-  lines.push(`  ${out} = ${rejectExpression}(inox_error);`)
-  lines.push(`  ${emitAsyncResultRuntimeTypeCheck(out, context)}`)
-  pushIndented(lines, emitPrepareOwnedValueWrite('inox_error'), '  ')
-  lines.push('} else {')
-
-  if (valueCheck !== '') {
-    lines.push(`  ${valueCheck}`)
-  }
-
-  lines.push(`  ${out} = ${resolveExpression}(${fulfilledValue});`)
-  lines.push(`  ${emitAsyncResultRuntimeTypeCheck(out, context)}`)
-  pushAll(lines, managedResultResetLines)
-  lines.push('}')
 
   return {
-    lines,
+    lines: [...call.lines, `${out} = ${call.expression};`],
     expression: out,
+    cppDeclaredName: out,
     valueType,
     rejectionValueType
   }
-}
-
-function isSupportedAsyncFunctionAsyncResultValueType(valueType: string): boolean {
-  return (
-    valueType === 'void' || valueType === 'number' || valueType === 'boolean' || isManagedRuntimeReturnType(valueType)
-  )
 }
 
 function emitAsyncResultRuntimeTypeCheck(source: string, context: CFunctionContext): string {
@@ -7379,12 +7053,6 @@ function emitAwaitValueVariableDeclaration(statement: AnyNode, context: CFunctio
 }
 
 function emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
-  const asyncCall = emitCAsyncFunctionAwaitExpression(expression, context)
-
-  if (asyncCall !== null && typeof asyncCall !== 'undefined') {
-    return asyncCall
-  }
-
   const asyncResult = emitPreparedAwaitAsyncResultExpression(expression.argument, context)
 
   if (asyncResult === null || typeof asyncResult === 'undefined') {
@@ -7627,11 +7295,15 @@ function emitAsyncResultAwaitExpression(
   value: string,
   context: CFunctionContext
 ): string | null {
-  const configuredExpression = expression?.libraryCAwaitExpression
+  const configuredExpression = context.coroutine
+    ? expression?.libraryCCoroutineAwaitExpression
+    : expression?.libraryCAwaitExpression
   const template =
     typeof configuredExpression === 'string'
       ? configuredExpression
-      : compilerLibraryIntrinsicNativeCAwaitExpression(context.libraries, 'async-result')
+      : context.coroutine
+        ? compilerLibraryIntrinsicNativeCCoroutineAwaitExpression(context.libraries, 'async-result')
+        : compilerLibraryIntrinsicNativeCAwaitExpression(context.libraries, 'async-result')
 
   if (template === null || !template.includes('$value')) {
     return null
@@ -7667,95 +7339,6 @@ function shouldAwaitReadRejectedAsyncResult(context: CFunctionContext): boolean 
   const target = currentErrorTarget(context) ?? ''
 
   return target !== ''
-}
-
-function emitCAsyncFunctionAwaitExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null {
-  const callExpression = expression.argument
-
-  if (
-    callExpression === null ||
-    typeof callExpression === 'undefined' ||
-    callExpression.type !== 'CallExpression' ||
-    !isAsyncFunctionCallee(callExpression.callee, context)
-  ) {
-    return null
-  }
-
-  if (callExpression.callee.type === 'Reference') {
-    const path: string[] = callExpression.callee.path
-    const name = path[0]
-
-    if (name !== null && typeof name !== 'undefined' && context.asyncTaskWrappers.has(name)) {
-      return null
-    }
-  }
-
-  const valueType = firstKnownValueTypeOrUnknown(
-    expression.valueType,
-    resolveCAsyncFunctionAwaitValueType(callExpression.callee, context),
-    null
-  )
-
-  const call = emitPreparedCallExpression(callExpression, context)
-
-  if (valueType === 'void') {
-    const lines: string[] = []
-
-    pushAll(lines, call.lines)
-    if (call.expression !== '') {
-      lines.push(`${call.expression};`)
-    }
-
-    return {
-      lines,
-      expression: 'inox_undefined_value()'
-    }
-  }
-
-  const valueTag = cRuntimeValueTag(valueType)
-  const valueTagName = valueTag ?? ''
-
-  if (valueTagName === '' && valueType !== 'number' && valueType !== 'boolean') {
-    pushDiagnostic(
-      context,
-      diagnostic(
-        'INOX_C_ASYNC',
-        'this async function return value is not supported by the current C++ backend slice',
-        expression.loc
-      )
-    )
-
-    return {
-      lines: [],
-      expression: 'inox_undefined_value()'
-    }
-  }
-
-  const value = nextCName(context, 'inox_await_value')
-  let resultExpression = call.expression
-  const lines: string[] = []
-
-  registerOwnedValue(context, value)
-
-  if (valueType === 'boolean') {
-    resultExpression = `inox_bool_value((${call.expression}) != 0)`
-  } else if (valueType === 'number') {
-    resultExpression = `inox_number_value(${call.expression})`
-  }
-
-  const valueCheck = emitRuntimeValueCheck(value, valueTag, context)
-
-  pushAll(lines, call.lines)
-  lines.push(`${value} = ${resultExpression};`)
-
-  if (valueCheck !== '') {
-    lines.push(valueCheck)
-  }
-
-  return {
-    lines,
-    expression: value
-  }
 }
 
 function isThrowingFunctionCallee(callee: AnyNode, context: CEmitContext): boolean {

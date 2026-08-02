@@ -231,6 +231,7 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('nullableCppCondition', 'string', null, true, loc),
       anyNodeField('libraryCExpression', 'string', null, true, loc),
       anyNodeField('libraryCAwaitExpression', 'string', null, true, loc),
+      anyNodeField('libraryCCoroutineAwaitExpression', 'string', null, true, loc),
       anyNodeField('libraryCAsyncFulfillExpression', 'string', null, true, loc),
       anyNodeField('libraryCAsyncRejectExpression', 'string', null, true, loc),
       anyNodeField('libraryCClassFormatExpression', 'string', null, true, loc),

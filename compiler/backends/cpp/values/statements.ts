@@ -8,6 +8,7 @@ import type { AnyNode, SourceLocation } from '../../../types.ts'
 import { isRuntimeFunctionType, normalizeFunctionType } from '../async/callbacks.ts'
 import type { CFunctionContextWithDependencies } from '../context.ts'
 import {
+  emitCoroutineReturnStatement,
   emitRuntimeTypeCheck,
   emitStatusCheck,
   narrowNullableScalars,
@@ -2746,6 +2747,7 @@ function isSwitchCaseUnaryOperator(operator: string): boolean {
 
 export function emitTryStatement(statement: StatementNode, context: CFunctionContext): string[] {
   if (
+    !context.coroutine &&
     statement.handler !== null &&
     typeof statement.handler !== 'undefined' &&
     currentErrorTarget(context) &&
@@ -4543,6 +4545,10 @@ export function emitReturnCleanupStatement(context: CFunctionContext): string {
 
   if (context.cleanupEnabled) {
     return 'goto cleanup;'
+  }
+
+  if (context.coroutine) {
+    return emitCoroutineReturnStatement(context)
   }
 
   if (context.returnType === 'void') {

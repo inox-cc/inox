@@ -444,6 +444,16 @@ export function compilerLibraryIntrinsicNativeCAwaitExpression(
   )
 }
 
+export function compilerLibraryIntrinsicNativeCCoroutineAwaitExpression(
+  libraries: CCompilerLibrarySet,
+  role: IntrinsicRole
+): string | null {
+  return (
+    compilerLibraryNativeTypeForIntrinsic(cCompilerLibrarySetValue(libraries), role, 'construct')
+      ?.cCoroutineAwaitExpression ?? null
+  )
+}
+
 export function compilerLibraryIntrinsicNativeCAwaitHandlesInvalidSource(
   libraries: CCompilerLibrarySet,
   role: IntrinsicRole

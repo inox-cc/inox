@@ -197,6 +197,7 @@ export type LibraryNativeTypeDescriptor = {
   cRuntimeValueExpression?: string | null
   cRuntimeValueValidExpression?: string | null
   cAwaitExpression?: string | null
+  cCoroutineAwaitExpression?: string | null
   cAwaitHandlesInvalidSource?: boolean
   cAsyncTaskBridge?: LibraryCAsyncTaskBridgeDescriptor | null
   typeParameters?: string[]

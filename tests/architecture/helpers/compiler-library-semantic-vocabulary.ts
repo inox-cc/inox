@@ -160,6 +160,7 @@ const nativeDescriptorKeys = new Set([
   'cAsyncFulfillExpression',
   'cAsyncRejectExpression',
   'cAwaitExpression',
+  'cCoroutineAwaitExpression',
   'cAwaitHandlesInvalidSource',
   'cClassFormatExpression',
   'cEntrypointAdapter',

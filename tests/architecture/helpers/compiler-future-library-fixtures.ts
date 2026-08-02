@@ -88,6 +88,7 @@ declare global {
         baseTypeIds: [],
         runtimeRequirements: [futureRuntimeRequirement],
         cAwaitExpression: '$value.takeValue()',
+        cCoroutineAwaitExpression: `co_await ${cppType}::bridgeAwait($value)`,
         cAsyncTaskBridge: withAsyncTaskBridge
           ? {
               cValidExpression: `${cppType}::bridgeReady($source)`,

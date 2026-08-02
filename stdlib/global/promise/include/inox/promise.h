@@ -1,6 +1,8 @@
 #ifndef INOX_STDLIB_PROMISE_H
 #define INOX_STDLIB_PROMISE_H
 
+#include <coroutine>
+
 #include "inox/value.h"
 
 namespace inox {
@@ -20,6 +22,9 @@ private:
   void* promise_;
 
 public:
+  class Awaiter;
+  class promise_type;
+
   Promise();
   Promise(const Promise& other);
   Promise(Promise&& other) noexcept;
@@ -54,6 +59,41 @@ public:
   inox_status rejectWith(Value error) const;
 
   bool valid() const;
+  Awaiter operator co_await() const;
+};
+
+class Promise::Awaiter {
+private:
+  Promise source_;
+  std::coroutine_handle<> continuation_;
+  Value result_;
+  bool rejected_;
+  bool failed_;
+
+  static inox_status fulfill(void* context, inox_value value);
+  static inox_status reject(void* context, inox_value value);
+  inox_status settle(inox_value value, bool rejected);
+
+public:
+  explicit Awaiter(Promise source);
+
+  bool await_ready() const noexcept;
+  bool await_suspend(std::coroutine_handle<> continuation) noexcept;
+  Value await_resume();
+};
+
+class Promise::promise_type {
+private:
+  Promise result_;
+
+public:
+  promise_type();
+
+  Promise get_return_object() const;
+  std::suspend_never initial_suspend() const noexcept;
+  std::suspend_never final_suspend() const noexcept;
+  void return_value(Value value);
+  void unhandled_exception() noexcept;
 };
 
 } // namespace inox

@@ -26,6 +26,7 @@ import {
   isOpaqueRuntimeValueType,
   libraryNativeCppType,
   compilerLibraryIntrinsicNativeCppType,
+  compilerLibraryNativeRuntimeValueExpressionForId,
   requireCompilerLibraryAsyncResultCppType
 } from './value-types.ts'
 
@@ -162,6 +163,7 @@ export type CEmitContext = CEmitContextWithDependencies<object, object, object, 
 
 export type CFailureContext = {
   cleanupEnabled: boolean
+  coroutine?: boolean
   failureStatement?: string | null
   failureStatementUsed?: boolean
   returnNullable?: boolean
@@ -244,6 +246,7 @@ export type CFunctionContextWithDependencies<
   boxedVariables: CStringSet
   classInstanceTypes: CStringMap
   cleanupEnabled: boolean
+  coroutine: boolean
   continueFlowUsed: boolean
   continueTargets: CLoopFlowTarget[]
   cppStringValues: CStringSet
@@ -408,6 +411,7 @@ export function createFunctionContext<
     deferredThrownCheckDepth: 0,
     deferredThrownCheckCount: 0,
     cleanupEnabled: true,
+    coroutine: false,
     errorChannelUsed: false,
     exceptionValueNames: new Set(),
     errorTargets: [],
@@ -466,6 +470,10 @@ export function emitFailureStatement(context: CFailureContext): string {
 
   if (context.cleanupEnabled) {
     return 'goto cleanup;'
+  }
+
+  if (context.coroutine === true) {
+    return 'co_return inox::Value(inox_undefined_value());'
   }
 
   if (context.returnType === 'void') {
@@ -857,6 +865,10 @@ export function isRuntimeBoxedValueType(valueType: string | null | undefined): b
 }
 
 export function emitCleanupReturn(context: CFunctionContext): string[] {
+  if (context.coroutine) {
+    return [emitCoroutineReturnStatement(context)]
+  }
+
   if (isManagedRuntimeReturnType(context.returnType)) {
     return ['return inox_return;']
   }
@@ -866,6 +878,36 @@ export function emitCleanupReturn(context: CFunctionContext): string[] {
   }
 
   return ['return;']
+}
+
+export function emitCoroutineReturnStatement(context: CFunctionContext): string {
+  if (context.returnType === 'void') {
+    return 'co_return inox::Value(inox_undefined_value());'
+  }
+
+  if (context.returnNullable !== true && context.returnType === 'boolean') {
+    return 'co_return inox::Value(inox_bool_value(inox_return != 0));'
+  }
+
+  if (context.returnNullable !== true && context.returnType === 'number') {
+    return 'co_return inox::Value(inox_number_value(inox_return));'
+  }
+
+  const libraryTypeId = context.returnShape?.libraryTypeId
+
+  if (libraryTypeId !== null && typeof libraryTypeId !== 'undefined') {
+    const expression = compilerLibraryNativeRuntimeValueExpressionForId(context.libraries, libraryTypeId)
+
+    if (expression !== null) {
+      return `co_return inox::Value(${expression.split('$value').join('inox_return')});`
+    }
+
+    if (libraryNativeCppType(context.returnShape) !== null) {
+      return 'co_return inox::Value(inox_return);'
+    }
+  }
+
+  return 'co_return inox::adopt(inox_return);'
 }
 
 export function nextCName(context: CNameContext, prefix: string): string {

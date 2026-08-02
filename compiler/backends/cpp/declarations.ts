@@ -15,13 +15,13 @@ import {
 } from './async/callbacks.ts'
 import { functionTakesEventLoopParam } from './async/async-results.ts'
 import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
-import { emitAsyncTaskFunctionStubDeclaration } from './async/tasks.ts'
 import type { CEmitContextWithDependencies, CFunctionContextWithDependencies } from './context.ts'
 import {
   createFunctionContext,
   emitBoxedValueCleanup,
   emitBoxedValueDeclarations,
   emitCleanupReturn,
+  emitCoroutineReturnStatement,
   emitErrorChannelDeclarations,
   emitEventLoopCleanup,
   emitEventLoopDeclarations,
@@ -309,6 +309,7 @@ export function emitFunctionDeclaration(
   const returnNullable = returnInfo.returnNullable
   const params = resolveFunctionDeclarationParams(statement.name, statement.params, baseContext)
   const context: CDeclarationFunctionContext = createFunctionContext(baseContext, returnType, returnNullable)
+  context.coroutine = cBooleanValueIsTrue(statement.async)
   context.returnFunctionType = cFunctionTypeFromTypeRef(statement.returnTypeRef, context.libraries, statement.loc)
   context.returnShape = physicalReturnShape(statement, context.functionReturnShapes.get(statement.name), context)
   context.returnFunctionCompanions = functionReturnCompanions(
@@ -320,13 +321,9 @@ export function emitFunctionDeclaration(
   )
   context.returnLibraryNative = hasPhysicalNativeReturn(statement, context)
 
-  context.externalEventLoop = functionTakesEventLoopParam(statement.name, context)
+  context.externalEventLoop = context.coroutine || functionTakesEventLoopParam(statement.name, context)
   if (returnType === 'void' && context.externalEventLoop) {
     context.cleanupEnabled = false
-  }
-
-  if (baseContext.asyncTaskWrappers.has(statement.name)) {
-    return emitAsyncTaskFunctionStubDeclaration(statement, context, deps.asyncTaskLoweringDependencies)
   }
 
   registerFunctionParamsInContext(statement, params, context)
@@ -360,12 +357,16 @@ export function emitFunctionDeclaration(
     pushIndentedDeclarationLines(lines, emitBoxedValueCleanup(context))
     pushIndentedDeclarationLines(lines, emitCleanupReturn(context))
   } else {
-    const returnStatement = context.returnType === 'void' ? 'return;' : 'return inox_return;'
+    const returnStatement = context.coroutine
+      ? emitCoroutineReturnStatement(context)
+      : context.returnType === 'void'
+        ? 'return;'
+        : 'return inox_return;'
     const directReturnBody = replaceCleanupGotosWithReturn(bodyLines, returnStatement)
 
-    if (context.returnType !== 'void') {
+    if (context.coroutine || context.returnType !== 'void') {
       pushScopedDeclarationBody(lines, directReturnBody)
-      lines.push('  return inox_return;')
+      lines.push(`  ${returnStatement}`)
     } else {
       pushDeclarationLines(lines, directReturnBody)
     }
@@ -475,10 +476,13 @@ export function emitFunctionHead(statement: CNode, context: CEmitContext): strin
   }
 
   const returnInfo = resolveCFunctionReturnInfo(statement, context)
-  const returnType = returnInfo.returnType
-  const returnNullable = returnInfo.returnNullable
+  const coroutine = cBooleanValueIsTrue(statement.async)
+  const returnType = coroutine ? 'async-result' : returnInfo.returnType
+  const returnNullable = coroutine ? false : returnInfo.returnNullable
   const functionParams = resolveFunctionDeclarationParams(statement.name, statement.params, context)
-  const returnShape = physicalReturnShape(statement, context.functionReturnShapes.get(statement.name), context)
+  const returnShape = coroutine
+    ? null
+    : physicalReturnShape(statement, context.functionReturnShapes.get(statement.name), context)
   const returnCompanions = functionReturnCompanions(
     returnShape,
     statement.declaredReturnType === null || typeof statement.declaredReturnType === 'undefined'
@@ -498,7 +502,11 @@ export function emitFunctionHead(statement: CNode, context: CEmitContext): strin
 
   pushFunctionReturnCompanionParams(params, returnCompanions)
 
-  return `${emitCReturnType(returnType, returnNullable, returnShape)} ${name}(${declarationParamList(params)})`
+  const cppReturnType = coroutine
+    ? requireCompilerLibraryAsyncResultCppType(context.libraries, statement.loc)
+    : emitCReturnType(returnType, returnNullable, returnShape)
+
+  return `${cppReturnType} ${name}(${declarationParamList(params)})`
 }
 
 function functionReturnCompanions(

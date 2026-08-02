@@ -360,31 +360,13 @@ function asAsyncTaskPlannerContext(context: AsyncTaskEmitContext): AsyncTaskPlan
 }
 
 export function collectAsyncTaskWrappers(
-  functions: AsyncTaskFunctionNodeEntry[],
+  _functions: AsyncTaskFunctionNodeEntry[],
   context: AsyncTaskEmitContext,
   dependencies: AsyncTaskLoweringDependencies,
   callbackWrappers: Map<string, CCallbackWrapper> | null = null
 ): Map<string, CAsyncTaskWrapper> {
   context.asyncTaskLoweringDependencies = dependencies
   const wrappers: Map<string, CAsyncTaskWrapper> = new Map()
-
-  for (const entry of functions) {
-    const plannerContext = asAsyncTaskPlannerContext(dependencies.createFunctionContext(context, 'void', false))
-    const declaration = entry.declaration
-    const item = entry.node
-    const params = resolveAsyncTaskWrapperParams(declaration, plannerContext)
-
-    if (params === null || typeof params === 'undefined') {
-      continue
-    }
-
-    const wrapperParams = asyncTaskParamsOrEmpty(params)
-    const wrapper = createAsyncTaskWrapperFromBodyPlan(item, declaration, plannerContext, wrapperParams)
-
-    if (wrapper !== null && typeof wrapper !== 'undefined') {
-      wrappers.set(declaration.name, wrapper)
-    }
-  }
 
   if (callbackWrappers !== null) {
     for (const callback of callbackWrappers.values()) {

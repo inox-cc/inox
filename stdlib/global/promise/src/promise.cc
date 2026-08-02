@@ -182,4 +182,109 @@ bool Promise::valid() const {
   return promise_ != nullptr;
 }
 
+Promise::Awaiter Promise::operator co_await() const {
+  return Awaiter(*this);
+}
+
+Promise::Awaiter::Awaiter(Promise source)
+  : source_(std::move(source)), continuation_(), result_(), rejected_(false), failed_(false) {}
+
+bool Promise::Awaiter::await_ready() const noexcept {
+  return false;
+}
+
+bool Promise::Awaiter::await_suspend(std::coroutine_handle<> continuation) noexcept {
+  continuation_ = continuation;
+
+  if (!source_.valid()) {
+    failed_ = true;
+    return false;
+  }
+
+  const inox_status status = source_.observe(fulfill, reject, this, nullptr);
+
+  if (status == INOX_OK) {
+    return true;
+  }
+
+  failed_ = true;
+
+  if (status == INOX_ERR_OOM) {
+    throw_out_of_memory();
+  } else if (!thrown()) {
+    throw_value(Value());
+  }
+
+  return false;
+}
+
+Value Promise::Awaiter::await_resume() {
+  if (failed_) {
+    if (!thrown()) {
+      throw_value(Value());
+    }
+
+    return {};
+  }
+
+  if (rejected_) {
+    throw_value(result_);
+    return {};
+  }
+
+  return std::move(result_);
+}
+
+inox_status Promise::Awaiter::fulfill(void* context, inox_value value) {
+  return static_cast<Awaiter*>(context)->settle(value, false);
+}
+
+inox_status Promise::Awaiter::reject(void* context, inox_value value) {
+  return static_cast<Awaiter*>(context)->settle(value, true);
+}
+
+inox_status Promise::Awaiter::settle(inox_value value, bool rejected) {
+  result_ = value;
+  rejected_ = rejected;
+  const std::coroutine_handle<> continuation = continuation_;
+  continuation_ = {};
+  continuation.resume();
+  return INOX_OK;
+}
+
+Promise::promise_type::promise_type() : result_(Promise::create()) {}
+
+Promise Promise::promise_type::get_return_object() const {
+  return result_;
+}
+
+std::suspend_never Promise::promise_type::initial_suspend() const noexcept {
+  return {};
+}
+
+std::suspend_never Promise::promise_type::final_suspend() const noexcept {
+  return {};
+}
+
+void Promise::promise_type::return_value(Value value) {
+  if (!result_.valid()) {
+    return;
+  }
+
+  if (thrown()) {
+    result_.rejectWith(take_exception());
+    return;
+  }
+
+  if (result_.fulfill(std::move(value)) != INOX_OK && !thrown()) {
+    throw_value(Value());
+  }
+}
+
+void Promise::promise_type::unhandled_exception() noexcept {
+  if (result_.valid()) {
+    result_.rejectWith(Value());
+  }
+}
+
 } // namespace inox

@@ -434,6 +434,11 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.libraryCAwaitExpression = libraryCAwaitExpression
   }
 
+  const libraryCCoroutineAwaitExpression = nullableString(source.libraryCCoroutineAwaitExpression)
+  if (libraryCCoroutineAwaitExpression !== null && typeof libraryCCoroutineAwaitExpression !== 'undefined') {
+    target.libraryCCoroutineAwaitExpression = libraryCCoroutineAwaitExpression
+  }
+
   const libraryCAsyncFulfillExpression = nullableString(source.libraryCAsyncFulfillExpression)
   if (libraryCAsyncFulfillExpression !== null && typeof libraryCAsyncFulfillExpression !== 'undefined') {
     target.libraryCAsyncFulfillExpression = libraryCAsyncFulfillExpression

@@ -7,17 +7,20 @@ import type { CompilerLibraryDescriptor, LibraryNativeTypeDescriptor } from '../
 test('native await и value adapter contracts валидируются и входят в fingerprint', () => {
   const baseline = createCompilerLibrarySet([fixtureLibrary(nativeType())]).fingerprint
   const awaitChanged = nativeType()
+  const coroutineAwaitChanged = nativeType()
   const failureBaseline = nativeType()
   const failureChanged = nativeType()
   const preservationChanged = nativeType()
 
   awaitChanged.cAwaitHandlesInvalidSource = false
+  coroutineAwaitChanged.cCoroutineAwaitExpression = 'co_await fixture::awaitValue($value)'
   failureBaseline.cValueAdapterPreservesPendingException = false
   failureChanged.cValueAdapterFailureMode = null
   failureChanged.cValueAdapterPreservesPendingException = false
   preservationChanged.cValueAdapterPreservesPendingException = false
 
   assert.notEqual(createCompilerLibrarySet([fixtureLibrary(awaitChanged)]).fingerprint, baseline)
+  assert.notEqual(createCompilerLibrarySet([fixtureLibrary(coroutineAwaitChanged)]).fingerprint, baseline)
   assert.notEqual(
     createCompilerLibrarySet([fixtureLibrary(failureChanged)]).fingerprint,
     createCompilerLibrarySet([fixtureLibrary(failureBaseline)]).fingerprint
@@ -56,6 +59,7 @@ function nativeType(): LibraryNativeTypeDescriptor {
     cValueAdapterFailureMode: 'thrown',
     cValueAdapterPreservesPendingException: true,
     cAwaitExpression: '$value.awaitValue()',
+    cCoroutineAwaitExpression: 'co_await $value',
     cAwaitHandlesInvalidSource: true
   }
 }
