@@ -7,13 +7,12 @@ export type HostCommandResult = {
 }
 
 export function runHostCommand(command: string, args: string[], cwd: string): HostCommandResult {
-  const result = spawnSync(command, args, { cwd, encoding: 'utf8' })
-  const error = result.error?.message ?? ''
+  const result = spawnSync(command, args, { cwd, stdio: 'inherit' })
 
   return {
     code: result.status ?? 1,
-    stderr: (result.stderr ?? '') + (error.length > 0 ? `${error}\n` : ''),
-    stdout: result.stdout ?? ''
+    stderr: result.error?.message ?? '',
+    stdout: ''
   }
 }
 

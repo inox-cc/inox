@@ -140,11 +140,11 @@ export function renderCompilerLibraryRegistry(
     '  mkdirSync: (path: string) => fs.mkdirSync(path, { recursive: true }),\n' +
     '  resolvePath: (value: string) => path.resolve(process.cwd(), value),\n' +
     '  runCommand: (command: string, args: string[], cwd: string) => {\n' +
-    "    const result = childProcess.spawnSync(command, args, { cwd, encoding: 'utf8' })\n\n" +
+    "    const result = childProcess.spawnSync(command, args, { cwd, encoding: 'utf8', stdio: 'inherit' })\n\n" +
     '    return {\n' +
     '      code: result.status,\n' +
-    '      stderr: result.stderr,\n' +
-    '      stdout: result.stdout\n' +
+    "      stderr: '',\n" +
+    "      stdout: ''\n" +
     '    }\n' +
     '  },\n' +
     '  runProgram: (command: string, args: string[], cwd: string) => {\n' +
