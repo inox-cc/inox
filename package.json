@@ -10,9 +10,9 @@
   "scripts": {
     "build": "node --max-old-space-size=6144 --expose-gc scripts/build.ts",
     "example:simple": "pnpm run example:simple:libuv-boringssl",
-    "example:simple:inox": "pnpm run libuv:bootstrap && pnpm run boringssl:bootstrap && ./dist/inox run examples/simple/src/index.ts --out-dir dist/examples/simple/native-libuv-boringssl --name inox-simple --loop-backend libuv --tls-backend boringssl",
-    "example:simple:libuv": "pnpm run libuv:bootstrap && node compiler/index.ts run examples/simple/src/index.ts --out-dir dist/examples/simple/hosted-libuv --name inox-simple --loop-backend libuv --tls-backend none",
-    "example:simple:libuv-boringssl": "pnpm run libuv:bootstrap && pnpm run boringssl:bootstrap && node compiler/index.ts run examples/simple/src/index.ts --out-dir dist/examples/simple/hosted-libuv-boringssl --name inox-simple --loop-backend libuv --tls-backend boringssl",
+    "example:simple:inox": "pnpm run libuv:bootstrap && pnpm run boringssl:bootstrap && ./dist/inox run examples/simple/index.ts --out-dir dist/examples/simple/native-libuv-boringssl --name inox-simple --loop-backend libuv --tls-backend boringssl",
+    "example:simple:libuv": "pnpm run libuv:bootstrap && node compiler/index.ts run examples/simple/index.ts --out-dir dist/examples/simple/hosted-libuv --name inox-simple --loop-backend libuv --tls-backend none",
+    "example:simple:libuv-boringssl": "pnpm run libuv:bootstrap && pnpm run boringssl:bootstrap && node compiler/index.ts run examples/simple/index.ts --out-dir dist/examples/simple/hosted-libuv-boringssl --name inox-simple --loop-backend libuv --tls-backend boringssl",
     "example:http-server": "pnpm run libuv:bootstrap && node compiler/index.ts run examples/http-server/index.ts --out-dir dist/examples/http-server/hosted --name http-server --loop-backend libuv --tls-backend none -- 8080 manual examples/http-server/public",
     "example:http-server:inox": "pnpm run libuv:bootstrap && ./dist/inox run examples/http-server/index.ts --out-dir dist/examples/http-server/native --name http-server --loop-backend libuv --tls-backend none -- 8080 manual examples/http-server/public",
     "test:example:http-server": "node scripts/check-http-server-example.ts",
