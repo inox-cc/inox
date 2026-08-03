@@ -119,7 +119,6 @@ set(INOX_RUNTIME_SOURCES
   "${INOX_RUNTIME_DIR}/src/core/value.c"
   "${INOX_RUNTIME_DIR}/src/core/value_bridge.cc"
   "${INOX_RUNTIME_DIR}/src/objects/object.cc"
-  ${INOX_STDLIB_SOURCES}
 )
 
 if(INOX_LOOP_BACKEND STREQUAL "embedded")
@@ -208,42 +207,58 @@ else()
   message(FATAL_ERROR "Unsupported INOX_TLS_BACKEND=${INOX_TLS_BACKEND}. Expected none, boringssl or openssl.")
 endif()
 
-add_library(inox_runtime STATIC ${INOX_RUNTIME_SOURCES})
-if(INOX_THIRD_PARTY_TARGETS)
-  add_dependencies(inox_runtime ${INOX_THIRD_PARTY_TARGETS})
-endif()
-target_include_directories(inox_runtime PUBLIC
+add_library(inox_runtime_configuration INTERFACE)
+target_include_directories(inox_runtime_configuration INTERFACE
   "${INOX_RUNTIME_DIR}/include"
   "${INOX_RUNTIME_DIR}/src/async"
   ${INOX_STDLIB_INCLUDE_DIRS}
   ${INOX_TLS_INCLUDE_DIRS}
 )
-target_compile_definitions(inox_runtime PUBLIC ${INOX_TLS_COMPILE_DEFINITION} INOX_PACKAGE_VERSION=\"${INOX_PACKAGE_VERSION}\")
+target_compile_definitions(
+  inox_runtime_configuration
+  INTERFACE
+  ${INOX_TLS_COMPILE_DEFINITION}
+  INOX_PACKAGE_VERSION=\"${INOX_PACKAGE_VERSION}\"
+)
 
 if(INOX_TLS_LIBRARIES)
-  target_link_libraries(inox_runtime PUBLIC ${INOX_TLS_LIBRARIES})
+  target_link_libraries(inox_runtime_configuration INTERFACE ${INOX_TLS_LIBRARIES})
 endif()
 
 if(INOX_TLS_CA_BUNDLE)
-  target_compile_definitions(inox_runtime PUBLIC INOX_TLS_CA_BUNDLE="${INOX_TLS_CA_BUNDLE}")
+  target_compile_definitions(inox_runtime_configuration INTERFACE INOX_TLS_CA_BUNDLE="${INOX_TLS_CA_BUNDLE}")
 endif()
 
 if(INOX_TLS_CA_PATH)
-  target_compile_definitions(inox_runtime PUBLIC INOX_TLS_CA_PATH="${INOX_TLS_CA_PATH}")
+  target_compile_definitions(inox_runtime_configuration INTERFACE INOX_TLS_CA_PATH="${INOX_TLS_CA_PATH}")
 endif()
 
 if(INOX_DEBUG_MEMORY)
-  target_compile_definitions(inox_runtime PUBLIC INOX_DEBUG_MEMORY=1)
+  target_compile_definitions(inox_runtime_configuration INTERFACE INOX_DEBUG_MEMORY=1)
+endif()
+
+if(INOX_ENABLE_WEAK)
+  target_compile_definitions(inox_runtime_configuration INTERFACE INOX_ENABLE_WEAK=1)
+endif()
+
+if(INOX_LOOP_BACKEND STREQUAL "libuv")
+  target_link_libraries(inox_runtime_configuration INTERFACE uv_a)
+  target_compile_definitions(inox_runtime_configuration INTERFACE INOX_LOOP_BACKEND_LIBUV=1)
+else()
+  target_compile_definitions(inox_runtime_configuration INTERFACE INOX_LOOP_BACKEND_EMBEDDED=1)
+endif()
+
+add_subdirectory("${INOX_REPO_ROOT}/stdlib" "${CMAKE_CURRENT_BINARY_DIR}/stdlib")
+
+add_library(inox_runtime STATIC ${INOX_RUNTIME_SOURCES} $<TARGET_OBJECTS:inox_stdlib_objects>)
+target_link_libraries(inox_runtime PUBLIC inox_runtime_configuration)
+target_link_libraries(inox_stdlib_objects PRIVATE inox_runtime_configuration)
+
+if(INOX_THIRD_PARTY_TARGETS)
+  add_dependencies(inox_runtime ${INOX_THIRD_PARTY_TARGETS})
+  add_dependencies(inox_stdlib_objects ${INOX_THIRD_PARTY_TARGETS})
 endif()
 
 if(INOX_ENABLE_WEAK)
   target_sources(inox_runtime PRIVATE "${INOX_RUNTIME_DIR}/src/core/weak.c")
-  target_compile_definitions(inox_runtime PUBLIC INOX_ENABLE_WEAK=1)
-endif()
-
-if(INOX_LOOP_BACKEND STREQUAL "libuv")
-  target_link_libraries(inox_runtime PUBLIC uv_a)
-  target_compile_definitions(inox_runtime PUBLIC INOX_LOOP_BACKEND_LIBUV=1)
-else()
-  target_compile_definitions(inox_runtime PUBLIC INOX_LOOP_BACKEND_EMBEDDED=1)
 endif()

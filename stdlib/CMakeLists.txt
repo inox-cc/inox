@@ -1,0 +1,29 @@
+cmake_minimum_required(VERSION 3.20)
+
+set(INOX_STDLIB_RELATIVE_SOURCES)
+
+foreach(INOX_STDLIB_SOURCE IN LISTS INOX_STDLIB_SOURCES)
+  get_filename_component(
+    INOX_STDLIB_SOURCE_ABSOLUTE
+    "${INOX_STDLIB_SOURCE}"
+    ABSOLUTE
+    BASE_DIR "${INOX_REPO_ROOT}"
+  )
+  file(
+    RELATIVE_PATH
+    INOX_STDLIB_RELATIVE_SOURCE
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${INOX_STDLIB_SOURCE_ABSOLUTE}"
+  )
+
+  if(
+    INOX_STDLIB_RELATIVE_SOURCE STREQUAL ".." OR
+    INOX_STDLIB_RELATIVE_SOURCE MATCHES "^\\.\\./"
+  )
+    message(FATAL_ERROR "stdlib native source is outside the stdlib root: ${INOX_STDLIB_SOURCE}")
+  endif()
+
+  list(APPEND INOX_STDLIB_RELATIVE_SOURCES "${INOX_STDLIB_RELATIVE_SOURCE}")
+endforeach()
+
+add_library(inox_stdlib_objects OBJECT ${INOX_STDLIB_RELATIVE_SOURCES})
