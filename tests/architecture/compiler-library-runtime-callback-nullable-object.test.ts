@@ -12,8 +12,8 @@ test('library callback descriptor поддерживает nullable object па�
   const source = "bridge.run((error) => { if (error) console.log(error.message) })\n"
   const result = compileSource(source, { libraries: createCompilerLibrarySetWithConsole([bridgeLibrary()]), target: 'cc' })
 
-  assert.match(result.code, /args\[0\]\.tag != INOX_TAG_NULL &&/)
-  assert.match(result.code, /inox_value error = args\[0\];/)
+  assert.match(result.code, /inox_callback_args\[0\]\.tag != INOX_TAG_NULL &&/)
+  assert.match(result.code, /inox_value error = inox_callback_args\[0\];/)
 })
 
 function bridgeLibrary(): CompilerLibraryDescriptor {

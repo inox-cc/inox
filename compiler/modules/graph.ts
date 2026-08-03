@@ -349,7 +349,7 @@ function visitModuleGraphFile(
     }
 
     if (types.length > 0) {
-      importTypeDeclarations.set(declarationIndex, types)
+      mergeImportTypeDeclarations(importTypeDeclarations, declarationIndex, types)
     }
   }
 
@@ -737,7 +737,7 @@ function prepareModuleTypeImportDeclarations(
     }
 
     const types: AnyNode[] = []
-    const typeNames: Set<string> = new Set()
+    const typeIndexes: Map<string, number> = new Map()
 
     for (const specifier of item.specifiers) {
       if (!item.typeOnly && !specifier.typeOnly) {
@@ -767,15 +767,22 @@ function prepareModuleTypeImportDeclarations(
       )
 
       for (const declaration of declarations) {
-        if (!typeNames.has(declaration.name)) {
-          typeNames.add(declaration.name)
+        const existingIndex = typeIndexes.get(declaration.name)
+
+        if (existingIndex === null || typeof existingIndex === 'undefined') {
+          typeIndexes.set(declaration.name, types.length)
           types.push(declaration)
+        } else if (
+          declaration.syntheticTypeImportDirect === true &&
+          !syntheticTypeImportIsDirect(types[existingIndex])
+        ) {
+          types[existingIndex] = declaration
         }
       }
     }
 
     if (types.length > 0) {
-      module.typeImportDeclarations.set(declarationIndex, types)
+      mergeImportTypeDeclarations(module.typeImportDeclarations, declarationIndex, types)
     }
   }
 }
@@ -841,8 +848,45 @@ function prepareLibraryRuntimeImportDeclarations(
   }
 
   if (types.length > 0) {
-    importTypeDeclarations.set(declarationIndex, types)
+    mergeImportTypeDeclarations(importTypeDeclarations, declarationIndex, types)
   }
+}
+
+function mergeImportTypeDeclarations(
+  declarationsByImport: Map<number, AnyNode[]>,
+  importIndex: number,
+  declarations: AnyNode[]
+): void {
+  const merged = (declarationsByImport.get(importIndex) ?? []).slice()
+  const indexes: Map<string, number> = new Map()
+
+  for (let index = 0; index < merged.length; index = index + 1) {
+    indexes.set(merged[index].name, index)
+  }
+
+  for (const declaration of declarations) {
+    const existingIndex = indexes.get(declaration.name)
+
+    if (existingIndex === null || typeof existingIndex === 'undefined') {
+      indexes.set(declaration.name, merged.length)
+      merged.push(declaration)
+    } else if (
+      declaration.syntheticTypeImportDirect === true &&
+      !syntheticTypeImportIsDirect(merged[existingIndex])
+    ) {
+      merged[existingIndex] = declaration
+    }
+  }
+
+  declarationsByImport.set(importIndex, merged)
+}
+
+function syntheticTypeImportIsDirect(declaration: AnyNode | null | undefined): boolean {
+  return (
+    declaration !== null &&
+    typeof declaration !== 'undefined' &&
+    declaration.syntheticTypeImportDirect === true
+  )
 }
 
 function libraryRuntimeImportDeclarationProgram(context: ModuleGraphContext, source: string): ProgramNode | null {

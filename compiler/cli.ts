@@ -3,6 +3,11 @@
 import { compileFileSync, compileFileToCppModulesSync } from './compiler.ts'
 import type { CppModuleCompileOptions } from './core.ts'
 import type { CppModuleOutputFile } from './backends/cpp/types.ts'
+import {
+  executeCliBuild,
+  type CliBuildConfiguration,
+  type CliBuildPlan
+} from './cli/build.ts'
 import { formatDiagnostics } from './diagnostics.ts'
 import { compilerLibraryOptionForCliAlias, parseCompilerLibraryOptionCliValue } from './extensions/library-options.ts'
 import type {
@@ -24,15 +29,25 @@ export type CliArguments = string[]
 
 export type CliEnvironment = {
   args: CliArguments
+  build?: CliBuildConfiguration
   cwd: string
   error(message: string): void
   log(message: string): void
   mkdirSync(path: string): void
+  resolvePath?(path: string): string
+  runCommand?(command: string, args: string[], cwd: string): CliCommandResult
   setExitCode(code: number): void
   writeFileSync(path: string, source: string): void
 }
 
-type CliPlan = {
+export type CliCommandResult = {
+  code: number
+  stderr: string
+  stdout: string
+}
+
+type CliCompilePlan = {
+  command: 'compile'
   buildManifest: string
   emitCc: boolean
   entryMode: boolean
@@ -44,6 +59,8 @@ type CliPlan = {
   outDir: string
   output: string
 }
+
+type CliPlan = CliBuildPlan | CliCompilePlan
 
 type CliParseResult =
   | {
@@ -71,7 +88,7 @@ function defaultOutputPath(input: string): string {
 
 function usage(libraries: CompilerLibrarySet): string {
   let source =
-    'Usage:\n  inox --help\n  inox input.ts [output.cc]\n  inox input.ts --emit cc [-o output.cc]\n  inox input.ts --emit cc --out-dir generated --entry [--build-manifest manifest.json]\n\nCompiles a TypeScript entry file to C++ source.\nIf output.cc is omitted, inox writes input.cc.'
+    'Usage:\n  inox --help\n  inox build input.ts [--out-dir directory] [--name executable] [--release]\n  inox run input.ts [--out-dir directory] [--name executable] [--release] [-- program arguments]\n  inox input.ts [output.cc]\n  inox input.ts --emit cc [-o output.cc]\n  inox input.ts --emit cc --out-dir generated --entry [--build-manifest manifest.json]\n\nBuilds or runs an Inox executable, or emits C++ source.\nBuild output defaults to dist/<name>. Low-level C++ output defaults to input.cc.'
   const options = libraries.options ?? []
 
   if (options.length > 0) {
@@ -95,6 +112,10 @@ function parseCliArgs(args: string[], libraries: CompilerLibrarySet): CliParseRe
   }
 
   for (let index = 0; index < args.length; index = index + 1) {
+    if (args[index] === '--') {
+      break
+    }
+
     if (isHelpArgument(args[index])) {
       return {
         ok: true,
@@ -104,6 +125,14 @@ function parseCliArgs(args: string[], libraries: CompilerLibrarySet): CliParseRe
     }
   }
 
+  if (args[0] === 'build' || args[0] === 'run') {
+    return parseCliBuildArgs(args[0], args.slice(1), libraries)
+  }
+
+  return parseCliCompileArgs(args, libraries)
+}
+
+function parseCliCompileArgs(args: string[], libraries: CompilerLibrarySet): CliParseResult {
   let emitCc = false
   let entryMode = false
   let hasBuildManifest = false
@@ -224,6 +253,7 @@ function parseCliArgs(args: string[], libraries: CompilerLibrarySet): CliParseRe
     help: false,
     plan: {
       buildManifest,
+      command: 'compile',
       emitCc,
       entryMode,
       hasBuildManifest,
@@ -237,6 +267,106 @@ function parseCliArgs(args: string[], libraries: CompilerLibrarySet): CliParseRe
   }
 }
 
+function parseCliBuildArgs(
+  command: 'build' | 'run',
+  args: string[],
+  libraries: CompilerLibrarySet
+): CliParseResult {
+  let hasName = false
+  let hasOutDir = false
+  let input: string | null = null
+  const libraryOptions: CompilerLibraryOptionValue[] = []
+  let name = ''
+  let outDir = ''
+  const programArgs: string[] = []
+  let release = false
+  let readingProgramArgs = false
+
+  for (let index = 0; index < args.length; index = index + 1) {
+    const arg = args[index]
+
+    if (readingProgramArgs) {
+      programArgs.push(arg)
+    } else if (arg === '--') {
+      if (command !== 'run') {
+        return failCliParse('only inox run accepts program arguments after --')
+      }
+
+      readingProgramArgs = true
+    } else if (arg === '--out-dir') {
+      const value = args[index + 1]
+      index = index + 1
+
+      if (value === null || typeof value === 'undefined' || value.length === 0 || value.startsWith('-')) {
+        return failCliParse('--out-dir expects a path')
+      }
+
+      if (hasOutDir) {
+        return failCliParse('output directory was specified more than once')
+      }
+
+      hasOutDir = true
+      outDir = value
+    } else if (arg === '--name') {
+      const value = args[index + 1]
+      index = index + 1
+
+      if (value === null || typeof value === 'undefined' || value.length === 0 || value.startsWith('-')) {
+        return failCliParse('--name expects a value')
+      }
+
+      if (hasName) {
+        return failCliParse('executable name was specified more than once')
+      }
+
+      hasName = true
+      name = value
+    } else if (arg === '--release') {
+      release = true
+    } else if (arg.startsWith('-')) {
+      const descriptor = compilerLibraryOptionForCliAlias(libraries, arg)
+
+      if (descriptor === null) {
+        return failCliParse(`unknown option ${arg}`)
+      }
+
+      const value = args[index + 1]
+      index = index + 1
+
+      if (value === null || typeof value === 'undefined' || value.length === 0) {
+        return failCliParse(`${arg} expects a value`)
+      }
+
+      libraryOptions.push({
+        optionId: descriptor.optionId,
+        value: parseCompilerLibraryOptionCliValue(descriptor, value)
+      })
+    } else if (input === null) {
+      input = arg
+    } else {
+      return failCliParse(`unexpected argument ${arg}`)
+    }
+  }
+
+  if (input === null) {
+    return failCliParse(`inox ${command} requires an input file`)
+  }
+
+  return {
+    ok: true,
+    help: false,
+    plan: {
+      command,
+      input,
+      libraryOptions,
+      name,
+      outDir,
+      programArgs,
+      release
+    }
+  }
+}
+
 function failCliParse(error: string): CliParseResult {
   return {
     ok: false,
@@ -244,7 +374,7 @@ function failCliParse(error: string): CliParseResult {
   }
 }
 
-function outputDir(plan: CliPlan): string {
+function outputDir(plan: CliCompilePlan): string {
   if (plan.hasOutDir) {
     return plan.outDir
   }
@@ -252,7 +382,7 @@ function outputDir(plan: CliPlan): string {
   return ''
 }
 
-function compileOptions(plan: CliPlan, libraries: CompilerLibrarySet): CompileOptions {
+function compileOptions(plan: CliCompilePlan, libraries: CompilerLibrarySet): CompileOptions {
   const options: CompileOptions = {
     target: 'cc',
     libraries
@@ -264,7 +394,7 @@ function compileOptions(plan: CliPlan, libraries: CompilerLibrarySet): CompileOp
 }
 
 function cppModuleCompileOptions(
-  plan: CliPlan,
+  plan: CliCompilePlan,
   libraries: CompilerLibrarySet,
   environment: CliEnvironment
 ): CppModuleCompileOptions {
@@ -281,7 +411,7 @@ function cppModuleCompileOptions(
 }
 
 function writeBundledCpp(
-  plan: CliPlan,
+  plan: CliCompilePlan,
   libraries: CompilerLibrarySet,
   environment: CliEnvironment,
   libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null
@@ -295,7 +425,7 @@ function writeBundledCpp(
 }
 
 function writeCppModules(
-  plan: CliPlan,
+  plan: CliCompilePlan,
   libraries: CompilerLibrarySet,
   environment: CliEnvironment,
   libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null
@@ -338,7 +468,7 @@ type CppBuildManifest = {
 }
 
 function writeCppBuildManifest(
-  plan: CliPlan,
+  plan: CliCompilePlan,
   modules: CppBuildManifestModule[],
   files: CppModuleOutputFile[],
   environment: CliEnvironment
@@ -479,6 +609,8 @@ function executeCompilerCli(
       return false
     } else if (parsed.help) {
       environment.log(usage(libraries))
+    } else if (parsed.plan !== null && parsed.plan.command !== 'compile') {
+      return executeCliBuild(parsed.plan, libraries, environment)
     } else if (parsed.plan !== null && parsed.plan.hasOutDir) {
       writeCppModules(parsed.plan, libraries, environment, libraryLiteralTypeInference)
     } else if (parsed.plan !== null) {

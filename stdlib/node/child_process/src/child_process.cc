@@ -10,6 +10,8 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <vector>
+#include "inox/array.h"
 #include "inox/loop.h"
 #include "inox/string.h"
 
@@ -191,17 +193,42 @@ inox::String child_process::execFileSync(
 
 inox::Value child_process::spawnSync(
   inox::StringView file,
-  const inox::StringView* args,
-  size_t arg_count,
+  const inox::Value& args,
   const inox::Value& options
 ) const {
   inox_allocator* allocator = &inox_default_allocator;
+  Array arguments(args);
+
+  if (inox::thrown()) {
+    return inox::Value();
+  }
+
+  std::vector<inox::StringView> argument_views;
+  argument_views.reserve(arguments.length());
+
+  for (size_t index = 0; index < arguments.length(); ++index) {
+    inox::String argument(arguments.get(index));
+
+    if (inox::thrown()) {
+      return inox::Value();
+    }
+
+    argument_views.push_back(argument);
+  }
+
   inox_value raw_options = options.raw();
   ChildProcessResult result;
   inox_status status = inox_child_process_result_init(allocator, &result);
 
   if (status == INOX_OK) {
-    status = inox_child_process_run_file(allocator, file, args, arg_count, raw_options, &result);
+    status = inox_child_process_run_file(
+      allocator,
+      file,
+      argument_views.data(),
+      argument_views.size(),
+      raw_options,
+      &result
+    );
   }
 
   inox_value out = inox_undefined_value();

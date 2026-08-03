@@ -61,6 +61,9 @@ type CallbackStringSet = Set<string>
 type CallbackWrapperMap = Map<string, CCallbackWrapper>
 type RuntimeArrowCaptureMap = Map<string, CRuntimeArrowCapture>
 
+const runtimeCallbackArgsName = 'inox_callback_args'
+const runtimeCallbackArgCountName = 'inox_callback_arg_count'
+
 export type FunctionPointerParamInfo = {
   functionType: CFunctionType | null
   name: string
@@ -2681,7 +2684,8 @@ function visitCallbackCallExpression(
     if (
       (param === null || typeof param === 'undefined') &&
       (arg.type === 'ArrowFunctionExpression' || arg.valueType === 'function') &&
-      expression.libraryCArgumentKinds?.includes('runtime-value')
+      (expression.libraryCArgumentKinds?.includes('runtime-value') === true ||
+        expression.libraryCArgumentKinds?.includes('variadic-runtime-value-array') === true)
     ) {
       registerRuntimeCallbackExpression(arg, arg.functionType, scopes, wrappers, context, deps)
     }
@@ -3322,7 +3326,8 @@ export function emitRuntimeCallbackWrapperHead(wrapper: CRuntimeCallbackWrapper)
   return (
     prefix +
     wrapper.name +
-    `(void* inox_context, const inox_value* args, size_t arg_count, ${outType} inox_callback_out)`
+    `(void* inox_context, const inox_value* ${runtimeCallbackArgsName}, ` +
+    `size_t ${runtimeCallbackArgCountName}, ${outType} inox_callback_out)`
   )
 }
 
@@ -3576,8 +3581,8 @@ function emitIndentedRuntimeArgCountCheck(params: CFunctionParam[]): string {
   const requiredCount = runtimeCallbackRequiredParamCount(params)
 
   return (
-    `  if (inox_callback_out == 0 || arg_count < ${requiredCount} || ` +
-    '(arg_count > 0 && args == 0)) return INOX_ERR_TYPE;'
+    `  if (inox_callback_out == 0 || ${runtimeCallbackArgCountName} < ${requiredCount} || ` +
+    `(${runtimeCallbackArgCountName} > 0 && ${runtimeCallbackArgsName} == 0)) return INOX_ERR_TYPE;`
   )
 }
 
@@ -3590,15 +3595,15 @@ function emitIndentedRuntimeArgsPadding(params: CFunctionParam[]): string[] {
 
   return [
     `  inox_value inox_callback_padded_args[${params.length}];`,
-    `  if (arg_count < ${params.length}) {`,
+    `  if (${runtimeCallbackArgCountName} < ${params.length}) {`,
     '    size_t inox_callback_arg_index = 0;',
-    '    for (; inox_callback_arg_index < arg_count; inox_callback_arg_index = inox_callback_arg_index + 1) {',
-    '      inox_callback_padded_args[inox_callback_arg_index] = args[inox_callback_arg_index];',
+    `    for (; inox_callback_arg_index < ${runtimeCallbackArgCountName}; inox_callback_arg_index = inox_callback_arg_index + 1) {`,
+    `      inox_callback_padded_args[inox_callback_arg_index] = ${runtimeCallbackArgsName}[inox_callback_arg_index];`,
     '    }',
     `    for (; inox_callback_arg_index < ${params.length}; inox_callback_arg_index = inox_callback_arg_index + 1) {`,
     '      inox_callback_padded_args[inox_callback_arg_index] = inox_undefined_value();',
     '    }',
-    '    args = inox_callback_padded_args;',
+    `    ${runtimeCallbackArgsName} = inox_callback_padded_args;`,
     '  }'
   ]
 }
@@ -3702,8 +3707,8 @@ function emitNamedAsyncRuntimeCallbackWrapperDeclaration(
 
   if (providerCppType === null || providerCppType.length === 0) {
     lines.push('  (void)inox_context;')
-    lines.push('  (void)args;')
-    lines.push('  (void)arg_count;')
+    lines.push(`  (void)${runtimeCallbackArgsName};`)
+    lines.push(`  (void)${runtimeCallbackArgCountName};`)
     lines.push('  (void)inox_callback_out;')
     lines.push('  return INOX_ERR_TYPE;')
     lines.push('}')
@@ -3773,8 +3778,8 @@ export function emitFunctionPointerRuntimeAdapterDefinition(
     '',
     `static inox_status ${adapter.callbackName}(`,
     '  void* inox_context,',
-    '  const inox_value* args,',
-    '  size_t arg_count,',
+    `  const inox_value* ${runtimeCallbackArgsName},`,
+    `  size_t ${runtimeCallbackArgCountName},`,
     '  inox_value* inox_callback_out',
     ') {',
     '  if (inox_context == 0) return INOX_ERR_TYPE;',
@@ -4382,7 +4387,7 @@ function runtimeArrowCoroutineArgs(wrapper: CRuntimeArrowCallbackWrapper): strin
     if (nativeCppType !== null || !isManagedRuntimeCallbackParamValueType(param.valueType)) {
       args.push(runtimeArrowCallbackParamName(wrapper, index))
     } else {
-      args.push(`inox::Value(args[${index}])`)
+      args.push(`inox::Value(${runtimeCallbackArg(index)})`)
     }
   }
 
@@ -4554,6 +4559,7 @@ function emitRuntimeArrowCallbackParamPrelude(
 
   for (const param of wrapper.functionType.params) {
     const name = runtimeArrowCallbackParamName(wrapper, index)
+    const value = runtimeCallbackArg(index)
 
     pushLines(lines, emitRuntimeCallbackWrapperArgChecks(param, index, context.libraries))
     context.variables.set(name, param.valueType)
@@ -4569,7 +4575,7 @@ function emitRuntimeArrowCallbackParamPrelude(
       context.cppValueTypes.set(name, nativeCppType)
       lines.push(
         `${nativeCppType} ${name} = ${applyLibraryNativeValueAdapter(
-          `args[${index}]`,
+          value,
           libraryNativeValueAdapter(param.shape)
         )};`
       )
@@ -4578,27 +4584,27 @@ function emitRuntimeArrowCallbackParamPrelude(
     }
 
     if (param.nullable === true && isNullableScalarType(param.valueType)) {
-      lines.push(`inox_value ${name} = args[${index}];`)
+      lines.push(`inox_value ${name} = ${value};`)
       index = index + 1
       continue
     }
 
     if (param.valueType === 'string') {
       context.runtimeStrings.add(name)
-      lines.push(`inox_string* ${name} = (inox_string*)args[${index}].as.ref;`)
+      lines.push(`inox_string* ${name} = (inox_string*)${value}.as.ref;`)
       index = index + 1
       continue
     }
 
     if (param.valueType === 'object') {
       deps.registerObjectShape(context, name, param.shape)
-      lines.push(`inox_value ${name} = args[${index}];`)
+      lines.push(`inox_value ${name} = ${value};`)
       index = index + 1
       continue
     }
 
     if (param.valueType === 'bytes') {
-      lines.push(`inox_value ${name} = args[${index}];`)
+      lines.push(`inox_value ${name} = ${value};`)
       index = index + 1
       continue
     }
@@ -4606,19 +4612,19 @@ function emitRuntimeArrowCallbackParamPrelude(
     if (param.valueType === 'function') {
       context.runtimeCallbacks.add(name)
       context.functionTypes.set(name, normalizeFunctionType(param.functionType))
-      lines.push(`inox_value ${name} = args[${index}];`)
+      lines.push(`inox_value ${name} = ${value};`)
       index = index + 1
       continue
     }
 
     if (param.valueType === 'number') {
-      lines.push(`double ${name} = args[${index}].as.number;`)
+      lines.push(`double ${name} = ${value}.as.number;`)
       index = index + 1
       continue
     }
 
     if (param.valueType === 'boolean') {
-      lines.push(`double ${name} = args[${index}].as.boolean ? 1 : 0;`)
+      lines.push(`double ${name} = ${value}.as.boolean ? 1 : 0;`)
     }
 
     index = index + 1
@@ -4723,9 +4729,9 @@ function emitRuntimeCallbackWrapperArgChecks(
 ): string[] {
   const omittable = runtimeCallbackParamIsOmittable(param)
   const nativeValidExpression = compilerLibraryNativeRuntimeValueValidExpressionForTypeRef(libraries, param.typeRef)
+  const value = runtimeCallbackArg(index)
 
   if (nativeValidExpression !== null) {
-    const value = `args[${index}]`
     const valid = nativeValidExpression.split('$value').join(value)
     let mismatch = `!(${valid})`
 
@@ -4741,71 +4747,69 @@ function emitRuntimeCallbackWrapperArgChecks(
   }
 
   if (omittable && param.valueType === 'string') {
-    const nullCheck = param.nullable === true ? `args[${index}].tag != INOX_TAG_NULL && ` : ''
+    const nullCheck = param.nullable === true ? `${value}.tag != INOX_TAG_NULL && ` : ''
     return [
-      `if (args[${index}].tag != INOX_TAG_UNDEFINED && ${nullCheck}` +
-        `(args[${index}].tag != INOX_TAG_STRING || args[${index}].as.ref == 0)) return INOX_ERR_TYPE;`
+      `if (${value}.tag != INOX_TAG_UNDEFINED && ${nullCheck}` +
+        `(${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0)) return INOX_ERR_TYPE;`
     ]
   }
 
   if (omittable && param.valueType === 'object') {
-    const nullCheck = param.nullable === true ? `args[${index}].tag != INOX_TAG_NULL && ` : ''
+    const nullCheck = param.nullable === true ? `${value}.tag != INOX_TAG_NULL && ` : ''
     return [
-      `if (args[${index}].tag != INOX_TAG_UNDEFINED && ${nullCheck}` +
-        `(${runtimeObjectLikeValueMismatchCondition(`args[${index}]`)})) return INOX_ERR_TYPE;`
+      `if (${value}.tag != INOX_TAG_UNDEFINED && ${nullCheck}` +
+        `(${runtimeObjectLikeValueMismatchCondition(value)})) return INOX_ERR_TYPE;`
     ]
   }
 
   if (omittable && param.valueType === 'bytes') {
-    const nullCheck = param.nullable === true ? `args[${index}].tag != INOX_TAG_NULL && ` : ''
+    const nullCheck = param.nullable === true ? `${value}.tag != INOX_TAG_NULL && ` : ''
     return [
-      `if (args[${index}].tag != INOX_TAG_UNDEFINED && ${nullCheck}` +
-        `(args[${index}].tag != INOX_TAG_BYTES || args[${index}].as.ref == 0)) return INOX_ERR_TYPE;`
+      `if (${value}.tag != INOX_TAG_UNDEFINED && ${nullCheck}` +
+        `(${value}.tag != INOX_TAG_BYTES || ${value}.as.ref == 0)) return INOX_ERR_TYPE;`
     ]
   }
 
   if (omittable && param.valueType === 'function') {
     return [
-      `if (args[${index}].tag != INOX_TAG_UNDEFINED && ` +
-        `(args[${index}].tag != INOX_TAG_FUNCTION || args[${index}].as.ref == 0)) return INOX_ERR_TYPE;`
+      `if (${value}.tag != INOX_TAG_UNDEFINED && ` +
+        `(${value}.tag != INOX_TAG_FUNCTION || ${value}.as.ref == 0)) return INOX_ERR_TYPE;`
     ]
   }
 
   if (param.valueType === 'function') {
-    return [
-      `if (args[${index}].tag != INOX_TAG_FUNCTION || args[${index}].as.ref == 0) return INOX_ERR_TYPE;`
-    ]
+    return [`if (${value}.tag != INOX_TAG_FUNCTION || ${value}.as.ref == 0) return INOX_ERR_TYPE;`]
   }
 
   if (omittable && isNullableScalarType(param.valueType)) {
     const tag = cRuntimeValueTag(param.valueType)
-    const nullCheck = param.nullable === true ? `args[${index}].tag != INOX_TAG_NULL && ` : ''
+    const nullCheck = param.nullable === true ? `${value}.tag != INOX_TAG_NULL && ` : ''
 
     if (tag !== null && typeof tag !== 'undefined') {
       return [
-        `if (args[${index}].tag != INOX_TAG_UNDEFINED && ${nullCheck}args[${index}].tag != ${tag}) return INOX_ERR_TYPE;`
+        `if (${value}.tag != INOX_TAG_UNDEFINED && ${nullCheck}${value}.tag != ${tag}) return INOX_ERR_TYPE;`
       ]
     }
   }
 
   if (param.nullable === true && param.valueType === 'string') {
     return [
-      `if (args[${index}].tag != INOX_TAG_NULL && ` +
-        `(args[${index}].tag != INOX_TAG_STRING || args[${index}].as.ref == 0)) return INOX_ERR_TYPE;`
+      `if (${value}.tag != INOX_TAG_NULL && ` +
+        `(${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0)) return INOX_ERR_TYPE;`
     ]
   }
 
   if (param.nullable === true && param.valueType === 'object') {
     return [
-      `if (args[${index}].tag != INOX_TAG_NULL && ` +
-        `(${runtimeObjectLikeValueMismatchCondition(`args[${index}]`)})) return INOX_ERR_TYPE;`
+      `if (${value}.tag != INOX_TAG_NULL && ` +
+        `(${runtimeObjectLikeValueMismatchCondition(value)})) return INOX_ERR_TYPE;`
     ]
   }
 
   if (param.nullable === true && param.valueType === 'bytes') {
     return [
-      `if (args[${index}].tag != INOX_TAG_NULL && ` +
-        `(args[${index}].tag != INOX_TAG_BYTES || args[${index}].as.ref == 0)) return INOX_ERR_TYPE;`
+      `if (${value}.tag != INOX_TAG_NULL && ` +
+        `(${value}.tag != INOX_TAG_BYTES || ${value}.as.ref == 0)) return INOX_ERR_TYPE;`
     ]
   }
 
@@ -4813,51 +4817,57 @@ function emitRuntimeCallbackWrapperArgChecks(
     const tag = cRuntimeValueTag(param.valueType)
 
     if (tag !== null && typeof tag !== 'undefined') {
-      return [`if (args[${index}].tag != INOX_TAG_NULL && args[${index}].tag != ${tag}) return INOX_ERR_TYPE;`]
+      return [`if (${value}.tag != INOX_TAG_NULL && ${value}.tag != ${tag}) return INOX_ERR_TYPE;`]
     }
   }
 
   if (param.valueType === 'string') {
-    return [`if (args[${index}].tag != INOX_TAG_STRING || args[${index}].as.ref == 0) return INOX_ERR_TYPE;`]
+    return [`if (${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0) return INOX_ERR_TYPE;`]
   }
 
   if (param.valueType === 'object') {
-    return [`if (${runtimeObjectLikeValueMismatchCondition(`args[${index}]`)}) return INOX_ERR_TYPE;`]
+    return [`if (${runtimeObjectLikeValueMismatchCondition(value)}) return INOX_ERR_TYPE;`]
   }
 
   if (param.valueType === 'bytes') {
-    return [`if (args[${index}].tag != INOX_TAG_BYTES || args[${index}].as.ref == 0) return INOX_ERR_TYPE;`]
+    return [`if (${value}.tag != INOX_TAG_BYTES || ${value}.as.ref == 0) return INOX_ERR_TYPE;`]
   }
 
   if (param.valueType === 'number') {
-    return [`if (args[${index}].tag != INOX_TAG_NUMBER) return INOX_ERR_TYPE;`]
+    return [`if (${value}.tag != INOX_TAG_NUMBER) return INOX_ERR_TYPE;`]
   }
 
   if (param.valueType === 'boolean') {
-    return [`if (args[${index}].tag != INOX_TAG_BOOL) return INOX_ERR_TYPE;`]
+    return [`if (${value}.tag != INOX_TAG_BOOL) return INOX_ERR_TYPE;`]
   }
 
   return []
 }
 
 function emitRuntimeCallbackWrapperArg(param: CFunctionParam, index: number): string {
+  const value = runtimeCallbackArg(index)
+
   if (isLibraryNativeRuntimeCallbackParam(param)) {
-    return applyLibraryNativeValueAdapter(`args[${index}]`, libraryNativeValueAdapter(param.shape))
+    return applyLibraryNativeValueAdapter(value, libraryNativeValueAdapter(param.shape))
   }
 
   if ((param.nullable === true || param.optional === true) && isNullableScalarType(param.valueType)) {
-    return `args[${index}]`
+    return value
   }
 
   if (param.valueType === 'number') {
-    return `args[${index}].as.number`
+    return `${value}.as.number`
   }
 
   if (param.valueType === 'boolean') {
-    return `(args[${index}].as.boolean ? 1 : 0)`
+    return `(${value}.as.boolean ? 1 : 0)`
   }
 
-  return `args[${index}]`
+  return value
+}
+
+function runtimeCallbackArg(index: number): string {
+  return `${runtimeCallbackArgsName}[${index}]`
 }
 
 export function emitFunctionPointerReturnType(functionType: CFunctionType | null | undefined): string {

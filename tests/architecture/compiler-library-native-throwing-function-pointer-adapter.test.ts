@@ -37,7 +37,10 @@ consume(dependencies)
   const source = files.find((file) => file.path === 'index.cc')
 
   assert.ok(source)
-  assert.match(source.code, /FixtureBridge inox_callback_result = pass\(FixtureBridge\(args\[0\]\)\);/)
+  assert.match(
+    source.code,
+    /FixtureBridge inox_callback_result = pass\(FixtureBridge\(inox_callback_args\[0\]\)\);/
+  )
   assert.match(source.code, /if \(inox::thrown\(\)\) return INOX_ERR_THROW;/)
   assert.match(source.code, /\*inox_callback_out = inox_callback_result\.release\(\);/)
   assert.doesNotMatch(source.code, /inox_adapter_result/)

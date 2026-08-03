@@ -7581,7 +7581,13 @@ function emitRuntimeCallbackValueInto(
     !context.classInstanceTypes.has(objectField.objectName) &&
     isRuntimeObjectFunctionField(objectField.field, objectFunctionFieldSeenTypes(objectField.objectName, context))
   ) {
-    return emitRuntimeCallbackReferenceValueInto(objectField.name, out, context)
+    const object = emitCValueExpression(expression.object, context)
+    const lines: string[] = []
+
+    pushAll(lines, object.lines)
+    lines.push(`${out} = inox::get(${object.expression}, ${cStringLiteral(objectField.fieldName)});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+    return lines
   }
 
   if (expression.type === 'CallExpression') {

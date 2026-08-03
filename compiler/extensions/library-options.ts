@@ -18,8 +18,10 @@ const reservedCompilerCliAliases = [
   '--entry',
   '--build-manifest',
   '--help',
+  '--name',
   '--out',
   '--out-dir',
+  '--release',
   '-h',
   '-o'
 ]

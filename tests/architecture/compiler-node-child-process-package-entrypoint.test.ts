@@ -31,7 +31,7 @@ test('entrypoint package node:child_process владеет sync operations и ru
   assert.equal(exec?.diagnosticCode, 'INOX_NOT_IMPLEMENTED')
   assert.deepEqual(childProcessPackage.compilerPackage.runtimeRequirements[0], {
     id: 'node:child_process',
-    dependencies: ['managed-values', 'objects', 'string-bytes'],
+    dependencies: ['global:collections#array', 'managed-values', 'objects', 'string-bytes'],
     cPreludeIncludes: ['inox/child_process.h'],
     capabilities: []
   })

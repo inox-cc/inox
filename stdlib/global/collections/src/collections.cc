@@ -1789,6 +1789,24 @@ size_t Array::push(const inox::Value& value) const {
   return instance->length;
 }
 
+size_t Array::push(const inox::Value* values, size_t count) const {
+  size_t result = length();
+
+  if (inox::thrown()) {
+    return 0;
+  }
+
+  for (size_t index = 0; index < count; index += 1) {
+    result = push(values[index]);
+
+    if (inox::thrown()) {
+      return 0;
+    }
+  }
+
+  return result;
+}
+
 inox::Value Array::reduce(inox::Callback callback, const inox::Value& initial) const {
   inox_value array = inox::Value::raw();
 

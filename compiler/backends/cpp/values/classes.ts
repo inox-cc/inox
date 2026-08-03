@@ -1788,7 +1788,10 @@ function hasClassDescriptorRuntimeValueArguments(expression: AnyNode): boolean {
     return false
   }
 
-  return argumentKinds.includes('runtime-value')
+  return (
+    argumentKinds.includes('runtime-value') ||
+    argumentKinds.includes('variadic-runtime-value-array')
+  )
 }
 
 function isClassDescriptorAsyncResultValueCall(expression: AnyNode): boolean {

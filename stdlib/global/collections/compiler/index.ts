@@ -154,10 +154,7 @@ const arrayOperations: LibraryOperationDescriptor[] = [
     cPreservesPendingException: true
   },
   arrayReceiverCall('pop', nullableParameterTypeRef(), [], [], { cppType: 'inox::Value', fields: [] }),
-  {
-    ...arrayReceiverCall('push', numberTypeRef, ['runtime-value'], [{ valueTypes: [], typeRef: parameterTypeRef }]),
-    cResultAdapter: 'static_cast<double>($value)'
-  },
+  arrayPushOperation(),
   arrayReduceOperation(),
   arrayReceiverCall(
     'slice',
@@ -541,6 +538,35 @@ function arrayReceiverCall(
     minArgs,
     maxArgs: argumentChecks.length,
     argumentChecks
+  }
+}
+
+function arrayPushOperation(): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: `${arrayNativeTypeId}.push`,
+    operationId: `${arrayNativeTypeId}.push`,
+    kind: 'call',
+    runtimeRequirements: [arrayRuntimeRequirement],
+    receiverTypeId: arrayNativeTypeId,
+    typeParameters: arrayTypeParameters(),
+    variants: [
+      {
+        minArgs: 1,
+        maxArgs: 1,
+        cArgumentKinds: ['receiver', 'runtime-value']
+      }
+    ],
+    cExpression: 'push',
+    cArgumentKinds: ['receiver', 'variadic-runtime-value-array', 'variadic-count'],
+    cCallStyle: 'member',
+    cFailureMode: 'thrown',
+    cResultMode: 'value',
+    cResultAdapter: 'static_cast<double>($value)',
+    resultTypeRef: numberTypeRef,
+    minArgs: 0,
+    maxArgs: null,
+    argumentChecks: [{ valueTypes: [], typeRef: parameterTypeRef }]
   }
 }
 

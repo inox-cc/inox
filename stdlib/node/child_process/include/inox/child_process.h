@@ -14,8 +14,7 @@ public:
   inox::String execFileSync(inox::StringView file, const inox::StringView* args, size_t arg_count, const inox::Value& options) const;
   inox::Value spawnSync(
     inox::StringView file,
-    const inox::StringView* args,
-    size_t arg_count,
+    const inox::Value& args,
     const inox::Value& options
   ) const;
 };

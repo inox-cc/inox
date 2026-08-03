@@ -94,6 +94,10 @@ function isReservedCIdentifier(value: string): boolean {
     value === 'if' ||
     value === 'index' ||
     value === 'inline' ||
+    value === 'inox_callback_args' ||
+    value === 'inox_callback_arg_count' ||
+    value === 'inox_callback_out' ||
+    value === 'inox_context' ||
     value === 'inox_main' ||
     value === 'inox_user_main' ||
     value === 'int' ||

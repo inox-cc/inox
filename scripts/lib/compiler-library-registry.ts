@@ -11,7 +11,11 @@ import type {
   TypeRef
 } from '../../compiler/extensions/types.ts'
 import { discoverCompilerLibraries, type DiscoveredCompilerLibrary } from './compiler-library-discovery.ts'
-import { defaultCompilerTargetOptions } from './compiler-target-profile.ts'
+import {
+  compilerTargetCMakeOptionMappings,
+  defaultCompilerTargetOptions,
+  nativeCompilerTargetProfile
+} from './compiler-target-profile.ts'
 import { rootDir } from './repo-root.ts'
 
 export type RenderedCompilerLibraryRegistry = {
@@ -95,7 +99,9 @@ export function renderCompilerLibraryRegistry(
   const nativePlanSource = jsonSource(nativePlan)
   const nativePlanCMakeSource = renderNativePlanCMake(nativePlan)
   const nativeEntrySource =
+    "import childProcess from 'node:child_process'\n" +
     "import fs from 'node:fs'\n" +
+    "import path from 'node:path'\n" +
     "import process from 'node:process'\n" +
     "import { runCompilerCli } from '../../compiler/cli.ts'\n" +
     "import { defaultCompilerLibraryLiteralTypeInference, defaultCompilerLibrarySet } from './default-registry.ts'\n\n" +
@@ -103,12 +109,35 @@ export function renderCompilerLibraryRegistry(
     'for (let index = 0; index < process.argv.length; index = index + 1) {\n' +
     '  compilerArgs.push(process.argv[index])\n' +
     '}\n\n' +
+    "const configuredHome = process.env.INOX_HOME ?? ''\n" +
+    'const compilerExecutable = path.resolve(process.execPath)\n' +
+    'const toolchainRoot = configuredHome.length > 0\n' +
+    '  ? configuredHome\n' +
+    '  : path.dirname(path.dirname(compilerExecutable))\n\n' +
     'runCompilerCli(defaultCompilerLibrarySet, {\n' +
     '  args: compilerArgs,\n' +
+    '  build: {\n' +
+    "    cmakeCommand: 'cmake',\n" +
+    `    cmakeOptionMappings: ${JSON.stringify(compilerTargetCMakeOptionMappings)},\n` +
+    '    compilerCommand: [compilerExecutable],\n' +
+    '    compilerDependencies: [compilerExecutable],\n' +
+    `    defaultLibraryOptions: ${JSON.stringify(nativeCompilerTargetProfile.optionValues)},\n` +
+    "    executableSuffix: process.platform === 'win32' ? '.exe' : '',\n" +
+    '    toolchainRoot\n' +
+    '  },\n' +
     '  cwd: process.cwd(),\n' +
     '  error: (message: string) => console.error(message),\n' +
     '  log: (message: string) => console.log(message),\n' +
     '  mkdirSync: (path: string) => fs.mkdirSync(path, { recursive: true }),\n' +
+    '  resolvePath: (value: string) => path.resolve(process.cwd(), value),\n' +
+    '  runCommand: (command: string, args: string[], cwd: string) => {\n' +
+    "    const result = childProcess.spawnSync(command, args, { cwd, encoding: 'utf8' })\n\n" +
+    '    return {\n' +
+    '      code: result.status,\n' +
+    '      stderr: result.stderr,\n' +
+    '      stdout: result.stdout\n' +
+    '    }\n' +
+    '  },\n' +
     '  setExitCode: (code: number) => { process.exitCode = code },\n' +
     '  writeFileSync: (path: string, source: string) => fs.writeFileSync(path, source)\n' +
     '}, defaultCompilerLibraryLiteralTypeInference)\n'

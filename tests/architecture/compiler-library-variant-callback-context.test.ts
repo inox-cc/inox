@@ -25,10 +25,13 @@ channel.on('close', (hadError) => console.log(hadError))
     }
   )
 
-  assert.match(result.code, /args\[0\]\.tag != INOX_TAG_STRING/)
-  assert.match(result.code, /inox_string\* chunk = \(inox_string\*\)args\[0\]\.as\.ref;/)
-  assert.match(result.code, /args\[0\]\.tag != INOX_TAG_BOOL/)
-  assert.match(result.code, /double hadError = args\[0\]\.as\.boolean \? 1 : 0;/)
+  assert.match(result.code, /inox_callback_args\[0\]\.tag != INOX_TAG_STRING/)
+  assert.match(
+    result.code,
+    /inox_string\* chunk = \(inox_string\*\)inox_callback_args\[0\]\.as\.ref;/
+  )
+  assert.match(result.code, /inox_callback_args\[0\]\.tag != INOX_TAG_BOOL/)
+  assert.match(result.code, /double hadError = inox_callback_args\[0\]\.as\.boolean \? 1 : 0;/)
   assert.match(result.code, /channel\.on\("data",/)
   assert.match(result.code, /channel\.on\("close",/)
   assert.doesNotMatch(result.code, /BridgeChannel\(channel\)\.on/)

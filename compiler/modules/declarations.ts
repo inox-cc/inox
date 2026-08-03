@@ -125,7 +125,7 @@ export function createModuleDeclarationProgram(program: ProgramNode): ProgramNod
   const promotedTypeImportNames = collectPromotedTypeImportNames(program)
 
   for (const item of program.body) {
-    if (item.type === 'ImportDeclaration' && item.typeOnly === true) {
+    if (item.type === 'ImportDeclaration' && importDeclarationHasTypeOnlySpecifiers(item)) {
       const declaration = createModuleDeclarationImportNode(item, promotedTypeImportNames)
 
       if (declaration !== null) {
@@ -176,6 +176,10 @@ function createModuleDeclarationImportNode(item: AnyNode, omittedNames: Set<stri
   const specifiers: AnyNode[] = []
 
   for (const specifier of item.specifiers) {
+    if (item.typeOnly !== true && specifier.typeOnly !== true) {
+      continue
+    }
+
     if (omittedNames.has(specifier.local)) {
       continue
     }
@@ -194,6 +198,20 @@ function createModuleDeclarationImportNode(item: AnyNode, omittedNames: Set<stri
     source: item.source,
     loc: item.loc
   }
+}
+
+function importDeclarationHasTypeOnlySpecifiers(item: AnyNode): boolean {
+  if (item.typeOnly === true) {
+    return true
+  }
+
+  for (const specifier of item.specifiers) {
+    if (specifier.typeOnly === true) {
+      return true
+    }
+  }
+
+  return false
 }
 
 export function emitModuleDeclarationContract(program: ProgramNode): string {

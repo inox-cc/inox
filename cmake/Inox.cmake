@@ -26,10 +26,25 @@ function(inox_default_compiler_command output dependency_output toolchain_root)
     return()
   endif()
 
-  if(EXISTS "${toolchain_root}/dist/inox")
+  if(NOT DEFINED INOX_COMPILER_MODE OR INOX_COMPILER_MODE STREQUAL "")
+    set(INOX_SELECTED_COMPILER_MODE "auto")
+  else()
+    set(INOX_SELECTED_COMPILER_MODE "${INOX_COMPILER_MODE}")
+  endif()
+
+  if(INOX_SELECTED_COMPILER_MODE STREQUAL "native" OR
+     (INOX_SELECTED_COMPILER_MODE STREQUAL "auto" AND EXISTS "${toolchain_root}/dist/inox"))
+    if(NOT EXISTS "${toolchain_root}/dist/inox")
+      message(FATAL_ERROR "Native Inox compiler was not found under ${toolchain_root}. Run pnpm run build first.")
+    endif()
+
     set(${output} "${toolchain_root}/dist/inox" PARENT_SCOPE)
     set(${dependency_output} "${toolchain_root}/dist/inox" PARENT_SCOPE)
     return()
+  endif()
+
+  if(NOT INOX_SELECTED_COMPILER_MODE STREQUAL "node" AND NOT INOX_SELECTED_COMPILER_MODE STREQUAL "auto")
+    message(FATAL_ERROR "INOX_COMPILER_MODE must be auto, node or native.")
   endif()
 
   find_program(INOX_NODE_EXECUTABLE node REQUIRED)
@@ -44,7 +59,7 @@ endfunction()
 
 function(inox_add_executable target)
   set(INOX_OPTIONS)
-  set(INOX_ONE_VALUE_ARGS ENTRY GENERATED_DIR MANIFEST ROOT)
+  set(INOX_ONE_VALUE_ARGS ENTRY GENERATED_DIR MANIFEST ROOT SOURCE_ROOT)
   set(INOX_MULTI_VALUE_ARGS COMPILER_COMMAND COMPILER_DEPENDS COMPILER_OPTIONS)
   cmake_parse_arguments(INOX "${INOX_OPTIONS}" "${INOX_ONE_VALUE_ARGS}" "${INOX_MULTI_VALUE_ARGS}" ${ARGN})
 
@@ -74,6 +89,12 @@ function(inox_add_executable target)
     get_filename_component(INOX_TARGET_MANIFEST "${INOX_MANIFEST}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_BINARY_DIR}")
   else()
     set(INOX_TARGET_MANIFEST "${CMAKE_CURRENT_BINARY_DIR}/inox/${target}/build-manifest.json")
+  endif()
+
+  if(INOX_SOURCE_ROOT)
+    get_filename_component(INOX_TARGET_SOURCE_ROOT "${INOX_SOURCE_ROOT}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+  else()
+    set(INOX_TARGET_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
   endif()
 
   if(INOX_COMPILER_COMMAND)
@@ -112,7 +133,7 @@ function(inox_add_executable target)
 
   execute_process(
     COMMAND ${INOX_TARGET_COMPILER_COMMAND} ${INOX_TARGET_COMPILER_ARGS}
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    WORKING_DIRECTORY "${INOX_TARGET_SOURCE_ROOT}"
     RESULT_VARIABLE INOX_TARGET_CODEGEN_RESULT
     OUTPUT_VARIABLE INOX_TARGET_CODEGEN_OUTPUT
     ERROR_VARIABLE INOX_TARGET_CODEGEN_ERROR
@@ -152,7 +173,7 @@ function(inox_add_executable target)
     COMMAND "${CMAKE_COMMAND}" -E make_directory "${INOX_TARGET_GENERATED_DIR}"
     COMMAND ${INOX_TARGET_COMPILER_COMMAND} ${INOX_TARGET_COMPILER_ARGS}
     DEPENDS ${INOX_TARGET_INPUT_FILES} ${INOX_TARGET_COMPILER_DEPENDS}
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    WORKING_DIRECTORY "${INOX_TARGET_SOURCE_ROOT}"
     VERBATIM
   )
 
@@ -177,6 +198,7 @@ function(inox_add_executable target)
   set_property(TARGET ${target} PROPERTY LINKER_LANGUAGE CXX)
 
   set_property(TARGET ${target} PROPERTY INOX_ENTRY "${INOX_ENTRY}")
+  set_property(TARGET ${target} PROPERTY INOX_SOURCE_ROOT "${INOX_TARGET_SOURCE_ROOT}")
   set_property(TARGET ${target} PROPERTY INOX_GENERATED_DIR "${INOX_TARGET_GENERATED_DIR}")
   set_property(TARGET ${target} PROPERTY INOX_BUILD_MANIFEST "${INOX_TARGET_MANIFEST}")
 endfunction()

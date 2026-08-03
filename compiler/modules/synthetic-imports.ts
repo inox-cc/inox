@@ -46,6 +46,7 @@ export function insertImportSyntheticDeclarations(
 
   const body: AnyNode[] = []
   const sourceDeclaredTypes = collectProgramTypeDeclarationNames(program)
+  const sourceTypeImportNames = collectProgramTypeImportNames(program)
   const declaredTypes: Map<string, number> = new Map()
   let importIndex = 0
 
@@ -66,6 +67,14 @@ export function insertImportSyntheticDeclarations(
           declarationIndex = declarationIndex + 1
         ) {
           const declaration = declarations[declarationIndex]
+
+          if (
+            declaration.type === 'TypeAliasDeclaration' &&
+            sourceTypeImportNames.has(declaration.name) &&
+            declaration.syntheticTypeImportDirect !== true
+          ) {
+            continue
+          }
 
           if (importDeclarationHasTypeOnlySpecifiers(item)) {
             declaration.syntheticTypeImportSourceTypeOnly = true
@@ -109,6 +118,24 @@ export function insertImportSyntheticDeclarations(
     loc: program.loc,
     body
   }
+}
+
+function collectProgramTypeImportNames(program: ProgramNode): Set<string> {
+  const names: Set<string> = new Set()
+
+  for (const item of program.body) {
+    if (item.type !== 'ImportDeclaration') {
+      continue
+    }
+
+    for (const specifier of item.specifiers) {
+      if (item.typeOnly === true || specifier.typeOnly === true) {
+        names.add(specifier.local)
+      }
+    }
+  }
+
+  return names
 }
 
 function importDeclarationHasTypeOnlySpecifiers(item: AnyNode): boolean {

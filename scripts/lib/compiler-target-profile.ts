@@ -8,6 +8,11 @@ export type CompilerTargetCMakeCacheEntry = {
   value: string
 }
 
+export type CompilerTargetCMakeOptionMapping = {
+  optionId: string
+  cacheName: string
+}
+
 export type CompilerTargetProfile = {
   optionDescriptors: LibraryOptionDescriptor[]
   optionValues: CompilerLibraryOptionValue[]
@@ -17,6 +22,11 @@ export type CompilerTargetProfile = {
 const targetId = 'target:runtime'
 const loopBackendOptionId = `${targetId}#loop-backend`
 const tlsBackendOptionId = `${targetId}#tls-backend`
+
+export const compilerTargetCMakeOptionMappings: CompilerTargetCMakeOptionMapping[] = [
+  { optionId: loopBackendOptionId, cacheName: 'INOX_LOOP_BACKEND' },
+  { optionId: tlsBackendOptionId, cacheName: 'INOX_TLS_BACKEND' }
+]
 
 export const defaultCompilerTargetOptions: LibraryOptionDescriptor[] = [
   {

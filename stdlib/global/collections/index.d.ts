@@ -14,7 +14,7 @@ declare global {
     join(separator?: string): string;
     map<U>(callback: (value: T, index: number) => U): Array<U>;
     pop(): T | undefined;
-    push(value: T): number;
+    push(...values: T[]): number;
     reduce<U>(callback: (accumulator: U, value: T, index: number) => U, initialValue: U): U;
     slice(start?: number, end?: number): Array<T>;
     some(predicate: (value: T, index: number) => boolean): boolean;

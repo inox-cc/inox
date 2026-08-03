@@ -828,6 +828,18 @@ export function emitPreparedCompilerLibraryCallExpression(
       continue
     }
 
+    if (kind === 'variadic-runtime-value-array') {
+      const variadicArrayExpression = emitCompilerLibraryVariadicRuntimeValueArray(
+        sourceArguments,
+        context,
+        dependencies,
+        lines,
+        item.libraryCFailureMode === 'thrown' && item.libraryCPreservesPendingException === true
+      )
+      argumentsList.push(variadicArrayExpression)
+      continue
+    }
+
     if (kind === 'variadic-count') {
       argumentsList.push(`${sourceArguments.length}`)
       continue
@@ -1600,6 +1612,43 @@ function emitCompilerLibraryVariadicStringArray(
 
   const name = nextCName(context, 'inox_library_args')
   lines.push(`const inox::StringView ${name}[] = { ${joinStrings(values, ', ')} };`)
+  return name
+}
+
+function emitCompilerLibraryVariadicRuntimeValueArray(
+  sourceArguments: AnyNode[],
+  context: CFunctionContext,
+  dependencies: CompilerLibraryLoweringDependencies,
+  lines: string[],
+  preservePendingException: boolean
+): string {
+  if (sourceArguments.length === 0) {
+    return 'nullptr'
+  }
+
+  const values: string[] = []
+
+  for (let index = 0; index < sourceArguments.length; index = index + 1) {
+    const prepared = dependencies.emitPreparedRuntimeValueArgumentExpression(
+      sourceArguments[index],
+      context,
+      preservePendingException
+    )
+    const classInstance = dependencies.emitPreparedClassInstanceRefValueExpression(prepared, context)
+
+    if (classInstance !== null) {
+      pushLines(lines, prepared.lines)
+      pushLines(lines, classInstance.lines)
+      values.push(classInstance.expression)
+      continue
+    }
+
+    pushLines(lines, prepared.lines)
+    values.push(emitCompilerLibraryRuntimeValueArgument(prepared))
+  }
+
+  const name = nextCName(context, 'inox_library_args')
+  lines.push(`const inox::Value ${name}[] = { ${joinStrings(values, ', ')} };`)
   return name
 }
 

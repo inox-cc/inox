@@ -40,7 +40,7 @@ export function implementation(value: object, label?: string): object | null {
   assert.ok(source)
   assert.match(
     source.code,
-    /inox_value inox_callback_result = inox_mod_implementation_ts_[a-f0-9]+_implementation\(args\[0\], args\[1\]\);/
+    /inox_value inox_callback_result = inox_mod_implementation_ts_[a-f0-9]+_implementation\(\s*inox_callback_args\[0\],\s*inox_callback_args\[1\]\s*\);/
   )
   assert.match(source.code, /if \(inox::thrown\(\)\) return INOX_ERR_THROW;/)
   assert.match(source.code, /\*inox_callback_out = inox_callback_result;/)

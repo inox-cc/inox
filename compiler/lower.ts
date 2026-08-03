@@ -42,9 +42,7 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
     const specifiers: AnyNode[] = []
 
     for (const specifier of item.specifiers) {
-      if (!specifier.typeOnly) {
-        specifiers.push(specifier)
-      }
+      specifiers.push(specifier)
     }
 
     return [

@@ -5027,12 +5027,15 @@ class Checker {
     }
 
     const checks = variant?.argumentChecks ?? operation.argumentChecks ?? []
+    const variantMaxArgs = variant?.maxArgs
+    const checkMaxArgs =
+      typeof variantMaxArgs !== 'undefined' ? variantMaxArgs : operation.maxArgs
     const argInfos: CheckedCallArgInfo[] = knownArgInfos ?? []
 
     if (knownArgInfos === null) {
       for (let index = 0; index < expression.args.length; index = index + 1) {
         const argument = expression.args[index]
-        const check = checks[index]
+        const check = compilerLibraryArgumentCheck(checks, index, checkMaxArgs)
         const contextualCallback =
           argument.type === 'ArrowFunctionExpression' &&
           check !== null &&
@@ -5044,9 +5047,13 @@ class Checker {
       }
     }
 
-    for (let index = 0; index < checks.length && index < expression.args.length; index = index + 1) {
+    for (let index = 0; index < expression.args.length; index = index + 1) {
       const argument = expression.args[index]
-      const check = checks[index]
+      const check = compilerLibraryArgumentCheck(checks, index, checkMaxArgs)
+
+      if (check === null) {
+        continue
+      }
 
       if (
         argument.type === 'ArrowFunctionExpression' &&
@@ -5073,10 +5080,15 @@ class Checker {
 
     for (
       let index = 0;
-      index < checks.length && index < argInfos.length && index < expression.args.length;
+      index < argInfos.length && index < expression.args.length;
       index = index + 1
     ) {
-      const check = checks[index]
+      const check = compilerLibraryArgumentCheck(checks, index, checkMaxArgs)
+
+      if (check === null) {
+        continue
+      }
+
       const info = argInfos[index]
       const argument = expression.args[index]
       const typeRefTemplate = check.typeRef
@@ -10966,6 +10978,24 @@ class Checker {
     const diagnostics = this.diagnostics
     diagnostics.push(item)
   }
+}
+
+function compilerLibraryArgumentCheck(
+  checks: LibraryArgumentCheckDescriptor[],
+  index: number,
+  maxArgs: number | null | undefined
+): LibraryArgumentCheckDescriptor | null {
+  const direct = checks[index]
+
+  if (direct !== null && typeof direct !== 'undefined') {
+    return direct
+  }
+
+  if (maxArgs === null && checks.length > 0) {
+    return checks[checks.length - 1]
+  }
+
+  return null
 }
 
 function isUnknownTypeRef(typeRef: TypeRef | null | undefined): boolean {

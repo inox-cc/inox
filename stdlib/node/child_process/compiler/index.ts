@@ -49,7 +49,7 @@ const operations: LibraryOperationDescriptor[] = [
   ),
   callOperation(
     'spawnSync',
-    ['string-view', 'string-view-array', 'string-view-array-count', 'value'],
+    ['string-view', 'value', 'value'],
     spawnSyncTypeRef,
     spawnSyncCResultMapping,
     3,
@@ -64,13 +64,13 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: [],
+  dependencies: ['global:collections'],
   operations,
   intrinsicBindings: [],
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: ['managed-values', 'objects', 'string-bytes'],
+      dependencies: ['global:collections#array', 'managed-values', 'objects', 'string-bytes'],
       cPreludeIncludes: ['inox/child_process.h'],
       capabilities: []
     }
@@ -130,7 +130,6 @@ function objectArgument(): LibraryArgumentCheckDescriptor {
 function stringArrayArgument(): LibraryArgumentCheckDescriptor {
   return {
     valueTypes: ['object'],
-    arrayLiteralRequired: true,
     arrayElementValueTypes: ['string']
   }
 }

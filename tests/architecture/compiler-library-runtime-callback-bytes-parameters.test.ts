@@ -19,9 +19,9 @@ bridge.listen((data: Uint8Array, info: CallbackInfo) => {
 `
   const result = compileSource(source, { libraries, target: 'cc' })
 
-  assert.match(result.code, /args\[0\]\.tag != INOX_TAG_BYTES/)
-  assert.match(result.code, /inox_value data = args\[0\];/)
-  assert.match(result.code, /inox_value info = args\[1\];/)
+  assert.match(result.code, /inox_callback_args\[0\]\.tag != INOX_TAG_BYTES/)
+  assert.match(result.code, /inox_value data = inox_callback_args\[0\];/)
+  assert.match(result.code, /inox_value info = inox_callback_args\[1\];/)
 })
 
 function bridgeLibrary(): CompilerLibraryDescriptor {

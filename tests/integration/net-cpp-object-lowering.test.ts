@@ -57,10 +57,13 @@ client.end()
   assert.match(source, /#include "inox\/net\.h"/)
   assert.match(
     source,
-    /static inox_status inox_callback_arrow_\d+\(\s*void\* inox_context,\s*const inox_value\* args,\s*size_t arg_count,\s*inox_value\* inox_callback_out\s*\)/
+    /static inox_status inox_callback_arrow_\d+\(\s*void\* inox_context,\s*const inox_value\* inox_callback_args,\s*size_t inox_callback_arg_count,\s*inox_value\* inox_callback_out\s*\)/
   )
-  assert.match(source, /args\[0\]\.tag != INOX_TAG_OBJECT && args\[0\]\.tag != INOX_TAG_CLASS_INSTANCE/)
-  assert.match(source, /NetSocket socket = args\[0\];/)
+  assert.match(
+    source,
+    /inox_callback_args\[0\]\.tag != INOX_TAG_OBJECT && inox_callback_args\[0\]\.tag != INOX_TAG_CLASS_INSTANCE/
+  )
+  assert.match(source, /NetSocket socket = inox_callback_args\[0\];/)
   assert.match(source, /socket\.end\("ok"\)/)
   assert.match(source, /auto server = net\.createServer\(inox_callback_\d+\);/)
   assert.match(source, /server\.on\("listening", inox_callback_\d+\);/)
@@ -72,10 +75,10 @@ client.end()
   assert.match(source, /server\.close\(inox_callback_\d+\);/)
   assert.match(source, /auto client = net\.connect\(NetConnectionOptions\(/)
   assert.match(source, /client\.on\("data", inox_callback_\d+\);/)
-  assert.match(source, /args\[0\]\.tag != INOX_TAG_STRING/)
-  assert.match(source, /inox_string\* chunk = \(inox_string\*\)args\[0\]\.as\.ref;/)
+  assert.match(source, /inox_callback_args\[0\]\.tag != INOX_TAG_STRING/)
+  assert.match(source, /inox_string\* chunk = \(inox_string\*\)inox_callback_args\[0\]\.as\.ref;/)
   assert.match(source, /client\.on\("close", inox_callback_\d+\);/)
-  assert.match(source, /args\[0\]\.tag != INOX_TAG_BOOL/)
+  assert.match(source, /inox_callback_args\[0\]\.tag != INOX_TAG_BOOL/)
   assert.match(source, /client\.write\("ping", inox_callback_\d+\)/)
   assert.doesNotMatch(source, /inox_net_|Net(?:Connection|Data|Close|Socket|Server|Connect)Fn/)
   assert.doesNotMatch(source, /inox_net_(?:connection|socket|server)_handler_/)

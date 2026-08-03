@@ -24,6 +24,9 @@ test('node:child_process проходит через generic operation и runtim
   assert.match(result.code, /child_process\.execFileSync\([^;]+nullptr, 0,/)
   assert.match(result.code, /child_process\.spawnSync\(/)
   assert.doesNotMatch(result.code, /inox_shape_spawn_sync/)
-  assert.match(result.code, /const inox::StringView inox_library_args_\d+\[\]/)
+  assert.match(
+    result.code,
+    /child_process\.spawnSync\("\/bin\/echo", inox_array_\d+, inox_object_\d+\)/
+  )
   assert.match(result.code, /if \(inox::thrown\(\)\)/)
 })
