@@ -40,6 +40,7 @@ test('target profile подключает backend options независимо �
       true
     )
     assert.match(registry, /target:runtime#loop-backend/)
+    assert.match(registry, /automaticStringValue/)
     assert.doesNotMatch(registry, /stdlib\/global\/platform|global:platform/)
     assert.equal(missing.exitCode, 1)
     assert.equal(missing.errors[0], 'unknown option --loop-backend')

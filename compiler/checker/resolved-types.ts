@@ -1,7 +1,7 @@
 import { commonValueType } from './assignability.ts'
 import { compilerAnyNodeSyntaxChildFields } from '../any-node-fields.ts'
 import { expressionNarrowingPath } from '../member-paths.ts'
-import type { TypeRef } from '../extensions/types.ts'
+import type { CompilerLibraryOptionValue, TypeRef } from '../extensions/types.ts'
 import type { AnyNode, ObjectShapeInfo, ProgramNode, SourceLocation, TypeAliasInfo, ValueType } from '../types.ts'
 
 export type ResolvedTypeInfo = {
@@ -94,6 +94,7 @@ export type ObjectShapeBases = {
 
 export type CheckProgramResult = {
   ast: ProgramNode
+  automaticLibraryOptions: CompilerLibraryOptionValue[]
 }
 
 export type RuntimeCallInfo = {

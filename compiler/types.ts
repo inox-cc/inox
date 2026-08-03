@@ -240,6 +240,7 @@ export type ModuleRecord = {
   path: string
   source: string
   ast: ProgramNode
+  automaticLibraryOptions: CompilerLibraryOptionValue[]
   declarationProgram: ProgramNode | null
   external?: boolean
   externalFunctionEffects?: IrFunctionEffect[]

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { compileFileSync, compileFileToCppModulesSync } from './compiler.ts'
+import { compileFileSync, compileFileToCppModulesSync, compileGraphToIrModulesSync } from './compiler.ts'
 import type { CppModuleCompileOptions } from './core.ts'
 import type { CppModuleOutputFile } from './backends/cpp/types.ts'
 import {
@@ -9,7 +9,14 @@ import {
   type CliBuildPlan
 } from './cli/build.ts'
 import { formatDiagnostics } from './diagnostics.ts'
-import { compilerLibraryOptionForCliAlias, parseCompilerLibraryOptionCliValue } from './extensions/library-options.ts'
+import {
+  compilerLibraryAutomaticOptionValues,
+  compilerLibraryOptionForCliAlias,
+  compilerLibraryOptionScalarText,
+  mergeCompilerLibraryOptionValues,
+  parseCompilerLibraryOptionCliValue,
+  resolveCompilerLibraryOptions
+} from './extensions/library-options.ts'
 import type {
   CompilerLibraryLiteralTypeInference,
   CompilerLibraryOptionValue,
@@ -32,6 +39,7 @@ export type CliEnvironment = {
   build?: CliBuildConfiguration
   cwd: string
   error(message: string): void
+  fileExists?(path: string): boolean
   log(message: string): void
   mkdirSync(path: string): void
   resolvePath?(path: string): string
@@ -448,7 +456,7 @@ function writeCppModules(
   }
 
   if (plan.hasBuildManifest) {
-    writeCppBuildManifest(plan, compiled.graph.modules, files, environment)
+    writeCppBuildManifest(plan, compiled.graph.modules, files, libraries, environment)
   }
 
   environment.log(outDir)
@@ -466,12 +474,14 @@ type CppBuildManifest = {
   sourceFiles: string[]
   headerFiles: string[]
   declarationFiles: string[]
+  cmakeCacheEntries: Array<{ name: string; value: string }>
 }
 
 function writeCppBuildManifest(
   plan: CliCompilePlan,
   modules: CppBuildManifestModule[],
   files: CppModuleOutputFile[],
+  libraries: CompilerLibrarySet,
   environment: CliEnvironment
 ): void {
   const inputFiles: string[] = []
@@ -506,11 +516,37 @@ function writeCppBuildManifest(
     inputFiles,
     sourceFiles,
     headerFiles,
-    declarationFiles
+    declarationFiles,
+    cmakeCacheEntries: cppBuildManifestCMakeCacheEntries(plan, libraries, environment)
   }
 
   ensureParentDirectory(plan.buildManifest, environment)
   environment.writeFileSync(plan.buildManifest, `${JSON.stringify(manifest, null, 2)}\n`)
+}
+
+function cppBuildManifestCMakeCacheEntries(
+  plan: CliCompilePlan,
+  libraries: CompilerLibrarySet,
+  environment: CliEnvironment
+): Array<{ name: string; value: string }> {
+  const mappings = environment.build?.cmakeOptionMappings ?? []
+  const resolved = resolveCompilerLibraryOptions(libraries, plan.libraryOptions)
+  const result: Array<{ name: string; value: string }> = []
+
+  for (let optionIndex = 0; optionIndex < resolved.length; optionIndex = optionIndex + 1) {
+    const option = resolved[optionIndex]
+
+    for (let mappingIndex = 0; mappingIndex < mappings.length; mappingIndex = mappingIndex + 1) {
+      const mapping = mappings[mappingIndex]
+
+      if (mapping.optionId === option.descriptor.optionId) {
+        result.push({ name: mapping.cacheName, value: compilerLibraryOptionScalarText(option.value) })
+        break
+      }
+    }
+  }
+
+  return result
 }
 
 function ensureParentDirectory(path: string, environment: CliEnvironment): void {
@@ -610,12 +646,21 @@ function executeCompilerCli(
       return false
     } else if (parsed.help) {
       environment.log(usage(libraries))
-    } else if (parsed.plan !== null && parsed.plan.command !== 'compile') {
-      return executeCliBuild(parsed.plan, libraries, environment)
-    } else if (parsed.plan !== null && parsed.plan.hasOutDir) {
-      writeCppModules(parsed.plan, libraries, environment, libraryLiteralTypeInference)
     } else if (parsed.plan !== null) {
-      writeBundledCpp(parsed.plan, libraries, environment, libraryLiteralTypeInference)
+      parsed.plan.libraryOptions = inferCliLibraryOptions(
+        parsed.plan,
+        libraries,
+        environment,
+        libraryLiteralTypeInference
+      )
+
+      if (parsed.plan.command !== 'compile') {
+        return executeCliBuild(parsed.plan, libraries, environment)
+      } else if (parsed.plan.hasOutDir) {
+        writeCppModules(parsed.plan, libraries, environment, libraryLiteralTypeInference)
+      } else {
+        writeBundledCpp(parsed.plan, libraries, environment, libraryLiteralTypeInference)
+      }
     }
 
     return true
@@ -636,6 +681,43 @@ function executeCompilerCli(
 
     return false
   }
+}
+
+function inferCliLibraryOptions(
+  plan: CliPlan,
+  libraries: CompilerLibrarySet,
+  environment: CliEnvironment,
+  libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null
+): CompilerLibraryOptionValue[] {
+  const automatic = compilerLibraryAutomaticOptionValues(libraries)
+  const defaults = plan.command === 'compile' ? [] : environment.build?.defaultLibraryOptions ?? []
+  const selected = mergeCompilerLibraryOptionValues([defaults, plan.libraryOptions])
+
+  if (automatic.length === 0) {
+    return selected
+  }
+
+  const optimistic = mergeCompilerLibraryOptionValues([automatic, selected])
+  const compiled = compileGraphToIrModulesSync(
+    plan.input,
+    {
+      target: 'cc',
+      libraries,
+      libraryOptions: optimistic
+    },
+    libraryLiteralTypeInference
+  )
+  const inferred: CompilerLibraryOptionValue[] = []
+
+  for (let moduleIndex = 0; moduleIndex < compiled.graph.modules.length; moduleIndex = moduleIndex + 1) {
+    const module = compiled.graph.modules[moduleIndex]
+
+    for (let optionIndex = 0; optionIndex < module.automaticLibraryOptions.length; optionIndex = optionIndex + 1) {
+      inferred.push(module.automaticLibraryOptions[optionIndex])
+    }
+  }
+
+  return mergeCompilerLibraryOptionValues([inferred, selected])
 }
 
 export function runCompilerCli(

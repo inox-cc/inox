@@ -19,6 +19,25 @@ function(inox_json_array output json key)
   set(${output} "${INOX_JSON_ARRAY_VALUES}" PARENT_SCOPE)
 endfunction()
 
+function(inox_apply_manifest_cmake_cache_entries json)
+  string(JSON INOX_CMAKE_CACHE_ENTRY_COUNT LENGTH "${json}" cmakeCacheEntries)
+
+  if(INOX_CMAKE_CACHE_ENTRY_COUNT GREATER 0)
+    math(EXPR INOX_CMAKE_CACHE_ENTRY_LAST "${INOX_CMAKE_CACHE_ENTRY_COUNT} - 1")
+
+    foreach(INOX_CMAKE_CACHE_ENTRY_INDEX RANGE 0 ${INOX_CMAKE_CACHE_ENTRY_LAST})
+      string(JSON INOX_CMAKE_CACHE_ENTRY_NAME GET "${json}" cmakeCacheEntries ${INOX_CMAKE_CACHE_ENTRY_INDEX} name)
+      string(JSON INOX_CMAKE_CACHE_ENTRY_VALUE GET "${json}" cmakeCacheEntries ${INOX_CMAKE_CACHE_ENTRY_INDEX} value)
+
+      if(INOX_CMAKE_CACHE_ENTRY_NAME STREQUAL "")
+        message(FATAL_ERROR "Inox build manifest contains an empty CMake cache entry name.")
+      endif()
+
+      set(${INOX_CMAKE_CACHE_ENTRY_NAME} "${INOX_CMAKE_CACHE_ENTRY_VALUE}" CACHE STRING "" FORCE)
+    endforeach()
+  endif()
+endfunction()
+
 function(inox_default_compiler_command output dependency_output toolchain_root)
   if(INOX_COMPILER_COMMAND)
     set(${output} "${INOX_COMPILER_COMMAND}" PARENT_SCOPE)
@@ -58,6 +77,8 @@ function(inox_default_compiler_command output dependency_output toolchain_root)
 endfunction()
 
 function(inox_add_executable target)
+  set(INOX_CONFIGURED_COMPILER_COMMAND ${INOX_COMPILER_COMMAND})
+  set(INOX_CONFIGURED_COMPILER_DEPENDS ${INOX_COMPILER_DEPENDS})
   set(INOX_OPTIONS)
   set(INOX_ONE_VALUE_ARGS ENTRY GENERATED_DIR MANIFEST ROOT SOURCE_ROOT)
   set(INOX_MULTI_VALUE_ARGS COMPILER_COMMAND COMPILER_DEPENDS COMPILER_OPTIONS)
@@ -100,6 +121,9 @@ function(inox_add_executable target)
   if(INOX_COMPILER_COMMAND)
     set(INOX_TARGET_COMPILER_COMMAND ${INOX_COMPILER_COMMAND})
     set(INOX_TARGET_COMPILER_DEPENDS ${INOX_COMPILER_DEPENDS})
+  elseif(INOX_CONFIGURED_COMPILER_COMMAND)
+    set(INOX_TARGET_COMPILER_COMMAND ${INOX_CONFIGURED_COMPILER_COMMAND})
+    set(INOX_TARGET_COMPILER_DEPENDS ${INOX_CONFIGURED_COMPILER_DEPENDS})
   else()
     inox_default_compiler_command(
       INOX_TARGET_COMPILER_COMMAND
@@ -152,6 +176,8 @@ function(inox_add_executable target)
   if(NOT INOX_TARGET_MANIFEST_VERSION EQUAL 1)
     message(FATAL_ERROR "Unsupported Inox build manifest version ${INOX_TARGET_MANIFEST_VERSION}.")
   endif()
+
+  inox_apply_manifest_cmake_cache_entries("${INOX_TARGET_BUILD_MANIFEST}")
 
   inox_json_array(INOX_TARGET_INPUT_FILES "${INOX_TARGET_BUILD_MANIFEST}" inputFiles)
   inox_json_array(INOX_TARGET_SOURCE_FILES "${INOX_TARGET_BUILD_MANIFEST}" sourceFiles)

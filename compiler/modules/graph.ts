@@ -185,6 +185,7 @@ function visitModuleGraphFile(
     path,
     source,
     ast,
+    automaticLibraryOptions: [],
     declarationProgram: seedDeclarationProgram,
     hir: null,
     ir: null,
@@ -472,6 +473,7 @@ function visitModuleGraphFile(
     context.options,
     libraryLiteralTypeInference
   )
+  module.automaticLibraryOptions = checked.automaticLibraryOptions
   module.hir = appendSyntheticDeclarations(
     insertImportSyntheticDeclarations(lowerProgram(checked.ast, context.options.libraries), importAliasDeclarations),
     reexportAliasDeclarations
@@ -538,6 +540,7 @@ function visitModuleGraphDeclarationImport(
     path,
     source: source ?? '',
     ast: program,
+    automaticLibraryOptions: [],
     declarationProgram: program,
     external: true,
     externalFunctionEffects: moduleGraphDeclarationImportFunctionEffects(context, declarationImport),
@@ -566,6 +569,7 @@ function visitModuleGraphDeclarationImport(
     context.options,
     libraryLiteralTypeInference
   )
+  module.automaticLibraryOptions = checked.automaticLibraryOptions
   module.hir = lowerProgram(checked.ast, context.options.libraries)
   module.declarationProgram = createModuleDeclarationProgram(module.hir)
   module.exports = collectExports(module.declarationProgram)

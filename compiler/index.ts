@@ -9,8 +9,8 @@ import { generateCompilerLibraryRegistry } from '../scripts/lib/compiler-library
 import { runHostCommand, runHostProgram } from '../scripts/lib/compiler-cli-host.ts'
 import { rootDir } from '../scripts/lib/repo-root.ts'
 import {
+  compilerTargetBuildPreparations,
   compilerTargetCMakeOptionMappings,
-  nativeCompilerTargetProfile
 } from '../scripts/lib/compiler-target-profile.ts'
 import { runCompilerCli } from './cli.ts'
 import type { CompilerLibraryLiteralTypeInference, CompilerLibrarySet } from './extensions/types.ts'
@@ -35,12 +35,14 @@ runCompilerCli(
       cmakeOptionMappings: compilerTargetCMakeOptionMappings,
       compilerCommand: [process.execPath, join(rootDir, 'compiler/index.ts')],
       compilerDependencies: [join(rootDir, 'compiler/index.ts')],
-      defaultLibraryOptions: nativeCompilerTargetProfile.optionValues,
+      defaultLibraryOptions: [],
       executableSuffix: process.platform === 'win32' ? '.exe' : '',
+      preparations: compilerTargetBuildPreparations,
       toolchainRoot: rootDir
     },
     cwd: process.cwd(),
     error: (message: string) => console.error(message),
+    fileExists: (path: string) => fs.existsSync(path),
     log: (message: string) => console.log(message),
     mkdirSync: (path: string) => fs.mkdirSync(path, { recursive: true }),
     resolvePath: (path: string) => resolve(process.cwd(), path),

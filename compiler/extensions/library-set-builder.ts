@@ -49,6 +49,12 @@ const compilerCoreRuntimeRequirementIds = [
   'weak-references'
 ]
 
+type LibraryAutomaticOptionDescriptor = {
+  automaticStringValue?: string
+  automaticNumberValue?: number
+  automaticBooleanValue?: boolean
+}
+
 export function createCompilerLibrarySet(
   libraries: CompilerLibraryDescriptor[],
   targetOptions: LibraryOptionDescriptor[] = [],
@@ -2531,6 +2537,17 @@ function compilerLibrarySetFingerprint(
 }
 
 function libraryOptionDescriptorFingerprint(item: LibraryOptionDescriptor): string {
+  const automaticDescriptor = item as LibraryAutomaticOptionDescriptor
+  let automaticValue: LibraryOptionScalar | null = null
+
+  if (typeof automaticDescriptor.automaticStringValue === 'string') {
+    automaticValue = automaticDescriptor.automaticStringValue
+  } else if (typeof automaticDescriptor.automaticNumberValue === 'number') {
+    automaticValue = automaticDescriptor.automaticNumberValue
+  } else if (typeof automaticDescriptor.automaticBooleanValue === 'boolean') {
+    automaticValue = automaticDescriptor.automaticBooleanValue
+  }
+
   return (
     item.libraryId +
     ':' +
@@ -2541,6 +2558,10 @@ function libraryOptionDescriptorFingerprint(item: LibraryOptionDescriptor): stri
     item.valueType +
     ':' +
     compilerLibraryOptionScalarText(item.defaultValue) +
+    ':' +
+    (automaticValue === null
+      ? ''
+      : compilerLibraryOptionScalarText(automaticValue)) +
     ':' +
     sortedOptionScalars(item.allowedValues ?? []).join(',') +
     ':' +

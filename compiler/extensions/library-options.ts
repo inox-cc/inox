@@ -13,6 +13,12 @@ export type ResolvedCompilerLibraryOption = {
   value: LibraryOptionScalar
 }
 
+type LibraryAutomaticOptionDescriptor = {
+  automaticStringValue?: string
+  automaticNumberValue?: number
+  automaticBooleanValue?: boolean
+}
+
 const reservedCompilerCliAliases = [
   '--emit',
   '--entry',
@@ -75,6 +81,72 @@ export function compilerLibraryOptionScalarsEqual(
   }
 
   return (left as boolean) === (right as boolean)
+}
+
+export function compilerLibraryAutomaticOptionValues(
+  libraries: CompilerLibrarySet
+): CompilerLibraryOptionValue[] {
+  const descriptors = libraries.options ?? []
+  const result: CompilerLibraryOptionValue[] = []
+
+  for (let index = 0; index < descriptors.length; index = index + 1) {
+    const descriptor = descriptors[index]
+    const value = libraryAutomaticOptionValue(descriptor)
+
+    if (value !== null) {
+      result.push({ optionId: descriptor.optionId, value })
+    }
+  }
+
+  return result
+}
+
+export function compilerLibraryAutomaticOptionValue(
+  libraries: CompilerLibrarySet,
+  optionId: string
+): CompilerLibraryOptionValue | null {
+  const descriptor = compilerLibraryOptionDescriptor(libraries.options ?? [], optionId)
+
+  if (descriptor === null) {
+    return null
+  }
+
+  const value = libraryAutomaticOptionValue(descriptor)
+
+  if (value === null) {
+    return null
+  }
+
+  return { optionId, value }
+}
+
+export function mergeCompilerLibraryOptionValues(
+  groups: CompilerLibraryOptionValue[][]
+): CompilerLibraryOptionValue[] {
+  const result: CompilerLibraryOptionValue[] = []
+
+  for (let groupIndex = 0; groupIndex < groups.length; groupIndex = groupIndex + 1) {
+    const group = groups[groupIndex]
+
+    for (let optionIndex = 0; optionIndex < group.length; optionIndex = optionIndex + 1) {
+      const option = group[optionIndex]
+      let replaced = false
+
+      for (let resultIndex = 0; resultIndex < result.length; resultIndex = resultIndex + 1) {
+        if (result[resultIndex].optionId === option.optionId) {
+          result[resultIndex] = option
+          replaced = true
+          break
+        }
+      }
+
+      if (!replaced) {
+        result.push(option)
+      }
+    }
+  }
+
+  return result
 }
 
 export function compilerLibraryOptionsFingerprint(
@@ -168,6 +240,12 @@ export function validateCompilerLibraryOptionDescriptors(
     validateCompilerLibraryOptionDescriptorShape(descriptor)
     validateCompilerLibraryOptionAllowedValues(descriptor)
     validateCompilerLibraryOptionValue(descriptor, descriptor.defaultValue)
+
+    const automaticValue = libraryAutomaticOptionValue(descriptor)
+
+    if (automaticValue !== null) {
+      validateCompilerLibraryOptionValue(descriptor, automaticValue)
+    }
 
     for (let aliasIndex = 0; aliasIndex < descriptor.cliAliases.length; aliasIndex = aliasIndex + 1) {
       const alias = descriptor.cliAliases[aliasIndex]
@@ -523,6 +601,33 @@ function compilerLibraryOptionDescriptor(
   }
 
   return null
+}
+
+function libraryAutomaticOptionValue(descriptor: LibraryOptionDescriptor): LibraryOptionScalar | null {
+  const automaticDescriptor = descriptor as LibraryAutomaticOptionDescriptor
+  let value: LibraryOptionScalar | null = null
+  let valueCount = 0
+
+  if (typeof automaticDescriptor.automaticStringValue === 'string') {
+    value = automaticDescriptor.automaticStringValue
+    valueCount = valueCount + 1
+  }
+
+  if (typeof automaticDescriptor.automaticNumberValue === 'number') {
+    value = automaticDescriptor.automaticNumberValue
+    valueCount = valueCount + 1
+  }
+
+  if (typeof automaticDescriptor.automaticBooleanValue === 'boolean') {
+    value = automaticDescriptor.automaticBooleanValue
+    valueCount = valueCount + 1
+  }
+
+  if (valueCount > 1) {
+    throw new Error(`${descriptor.optionId} has multiple automatic values`)
+  }
+
+  return value
 }
 
 function compilerLibraryOptionSelection(

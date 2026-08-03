@@ -48,6 +48,7 @@ import {
   type ParsedCompilerLibraryGlobalDeclaration
 } from './extensions/global-declarations.ts'
 import {
+  compilerLibraryAutomaticOptionValue,
   compilerLibraryCapabilities,
   compilerLibraryOptionScalarsEqual,
   resolveCompilerLibraryOptionValue
@@ -55,6 +56,7 @@ import {
 import type {
   ArgumentNarrowingDescriptor,
   ConcreteTypeRef,
+  CompilerLibraryOptionValue,
   CompilerLibrarySet,
   CompilerLibraryLiteralTypeInference,
   IntrinsicRole,
@@ -419,7 +421,8 @@ export function checkProgram(
   checker.check()
 
   return {
-    ast: program
+    ast: program,
+    automaticLibraryOptions: checker.automaticLibraryOptions
   }
 }
 
@@ -474,6 +477,7 @@ class Checker {
   topLevelConstDeclarations: Map<string, AnyNode>
   resolvedTopLevelConstSymbols: Map<string, SymbolInfo>
   libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null
+  automaticLibraryOptions: CompilerLibraryOptionValue[]
 
   constructor(
     program: ProgramNode,
@@ -516,6 +520,7 @@ class Checker {
     this.topLevelConstDeclarations = new Map()
     this.resolvedTopLevelConstSymbols = new Map()
     this.libraryLiteralTypeInference = libraryLiteralTypeInference
+    this.automaticLibraryOptions = []
   }
 
   check(): void {
@@ -5672,6 +5677,8 @@ class Checker {
         continue
       }
 
+      this.recordCompilerLibraryAutomaticOption(constraint)
+
       if (!this.compilerLibraryOptionConstraintAllows(constraint)) {
         this.report(constraint.diagnosticCode, constraint.diagnosticMessage, argument.loc)
       }
@@ -5704,6 +5711,8 @@ class Checker {
         for (let constraintIndex = 0; constraintIndex < constraints.length; constraintIndex = constraintIndex + 1) {
           const constraint = constraints[constraintIndex]
 
+          this.recordCompilerLibraryAutomaticOption(constraint)
+
           if (!this.compilerLibraryOptionConstraintAllows(constraint)) {
             this.report(constraint.diagnosticCode, constraint.diagnosticMessage, expression.loc)
           }
@@ -5727,6 +5736,23 @@ class Checker {
     }
 
     return false
+  }
+
+  recordCompilerLibraryAutomaticOption(constraint: LibraryOptionConstraintDescriptor): void {
+    const libraries = resolveCompilerLibrarySet(this.options.libraries)
+    const automatic = compilerLibraryAutomaticOptionValue(libraries, constraint.optionId)
+
+    if (automatic === null) {
+      return
+    }
+
+    for (let index = 0; index < this.automaticLibraryOptions.length; index = index + 1) {
+      if (this.automaticLibraryOptions[index].optionId === automatic.optionId) {
+        return
+      }
+    }
+
+    this.automaticLibraryOptions.push(automatic)
   }
 
   checkCompilerLibrarySingleArgument(

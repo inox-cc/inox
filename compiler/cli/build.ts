@@ -1,11 +1,13 @@
 import {
+  compilerLibraryOptionScalarsEqual,
   compilerLibraryOptionScalarText,
   resolveCompilerLibraryOptions
 } from '../extensions/library-options.ts'
 import type {
   CompilerLibraryOptionValue,
   CompilerLibrarySet,
-  LibraryOptionDescriptor
+  LibraryOptionDescriptor,
+  LibraryOptionScalar
 } from '../extensions/types.ts'
 import type { CliEnvironment } from '../cli.ts'
 
@@ -23,7 +25,16 @@ export type CliBuildConfiguration = {
   compilerDependencies: string[]
   defaultLibraryOptions: CompilerLibraryOptionValue[]
   executableSuffix: string
+  preparations?: CliBuildPreparation[]
   toolchainRoot: string
+}
+
+export type CliBuildPreparation = {
+  optionId: string
+  values: LibraryOptionScalar[]
+  requiredPath: string
+  command: string
+  args: string[]
 }
 
 export type CliBuildPlan = {
@@ -48,6 +59,7 @@ type CliBuildPaths = {
 type CliBuildOptionPlan = {
   cacheEntries: Array<{ name: string; value: string }>
   compilerArgs: string[]
+  options: CompilerLibraryOptionValue[]
 }
 
 export function executeCliBuild(
@@ -77,6 +89,10 @@ export function executeCliBuild(
   const input = resolvePath(plan.input)
   const paths = cliBuildPaths(output, name, configuration.executableSuffix)
   const optionPlan = cliBuildOptionPlan(plan, libraries, configuration)
+
+  if (!prepareCliBuild(optionPlan.options, configuration, environment)) {
+    return false
+  }
 
   environment.mkdirSync(paths.project)
   environment.writeFileSync(
@@ -170,10 +186,12 @@ function cliBuildOptionPlan(
   const resolved = resolveCompilerLibraryOptions(libraries, selected)
   const cacheEntries: Array<{ name: string; value: string }> = []
   const compilerArgs: string[] = []
+  const options: CompilerLibraryOptionValue[] = []
 
   for (let index = 0; index < resolved.length; index = index + 1) {
     const option = resolved[index]
     const mapping = cmakeOptionMapping(configuration.cmakeOptionMappings, option.descriptor.optionId)
+    options.push({ optionId: option.descriptor.optionId, value: option.value })
 
     if (mapping !== null) {
       cacheEntries.push({
@@ -185,7 +203,68 @@ function cliBuildOptionPlan(
     }
   }
 
-  return { cacheEntries, compilerArgs }
+  return { cacheEntries, compilerArgs, options }
+}
+
+function prepareCliBuild(
+  options: CompilerLibraryOptionValue[],
+  configuration: CliBuildConfiguration,
+  environment: CliEnvironment
+): boolean {
+  const preparations = configuration.preparations ?? []
+
+  for (let index = 0; index < preparations.length; index = index + 1) {
+    const preparation = preparations[index]
+    const selected = selectedPreparationOption(options, preparation)
+
+    if (!selected) {
+      continue
+    }
+
+    const requiredPath = joinPath(configuration.toolchainRoot, preparation.requiredPath)
+
+    if (environment.fileExists?.(requiredPath) === true) {
+      continue
+    }
+
+    const result = environment.runCommand?.(
+      preparation.command,
+      preparation.args,
+      configuration.toolchainRoot
+    )
+
+    if (result === null || typeof result === 'undefined' || !reportCommandResult(result, environment)) {
+      return false
+    }
+
+    if (environment.fileExists?.(requiredPath) === false) {
+      environment.error(`native dependency preparation did not produce ${requiredPath}`)
+      return false
+    }
+  }
+
+  return true
+}
+
+function selectedPreparationOption(
+  options: CompilerLibraryOptionValue[],
+  preparation: CliBuildPreparation
+): boolean {
+  for (let optionIndex = 0; optionIndex < options.length; optionIndex = optionIndex + 1) {
+    const option = options[optionIndex]
+
+    if (option.optionId !== preparation.optionId) {
+      continue
+    }
+
+    for (let valueIndex = 0; valueIndex < preparation.values.length; valueIndex = valueIndex + 1) {
+      if (compilerLibraryOptionScalarsEqual(option.value, preparation.values[valueIndex])) {
+        return true
+      }
+    }
+  }
+
+  return false
 }
 
 function mergeLibraryOptions(

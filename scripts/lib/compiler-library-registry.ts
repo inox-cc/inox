@@ -12,9 +12,9 @@ import type {
 } from '../../compiler/extensions/types.ts'
 import { discoverCompilerLibraries, type DiscoveredCompilerLibrary } from './compiler-library-discovery.ts'
 import {
+  compilerTargetBuildPreparations,
   compilerTargetCMakeOptionMappings,
-  defaultCompilerTargetOptions,
-  nativeCompilerTargetProfile
+  defaultCompilerTargetOptions
 } from './compiler-target-profile.ts'
 import { rootDir } from './repo-root.ts'
 
@@ -121,12 +121,21 @@ export function renderCompilerLibraryRegistry(
     `    cmakeOptionMappings: ${JSON.stringify(compilerTargetCMakeOptionMappings)},\n` +
     '    compilerCommand: [compilerExecutable],\n' +
     '    compilerDependencies: [compilerExecutable],\n' +
-    `    defaultLibraryOptions: ${JSON.stringify(nativeCompilerTargetProfile.optionValues)},\n` +
+    '    defaultLibraryOptions: [],\n' +
     "    executableSuffix: process.platform === 'win32' ? '.exe' : '',\n" +
+    `    preparations: ${JSON.stringify(compilerTargetBuildPreparations)},\n` +
     '    toolchainRoot\n' +
     '  },\n' +
     '  cwd: process.cwd(),\n' +
     '  error: (message: string) => console.error(message),\n' +
+    '  fileExists: (value: string) => {\n' +
+    '    try {\n' +
+    '      fs.accessSync(value)\n' +
+    '      return true\n' +
+    '    } catch {\n' +
+    '      return false\n' +
+    '    }\n' +
+    '  },\n' +
     '  log: (message: string) => console.log(message),\n' +
     '  mkdirSync: (path: string) => fs.mkdirSync(path, { recursive: true }),\n' +
     '  resolvePath: (value: string) => path.resolve(process.cwd(), value),\n' +

@@ -88,6 +88,9 @@ export type LibraryOptionDescriptor = {
   cliAliases: string[]
   valueType: 'string' | 'number' | 'boolean'
   defaultValue: LibraryOptionScalar
+  automaticStringValue?: string
+  automaticNumberValue?: number
+  automaticBooleanValue?: boolean
   allowedValues?: LibraryOptionScalar[]
   integer?: boolean
   minimum?: number

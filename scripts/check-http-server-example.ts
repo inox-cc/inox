@@ -71,7 +71,6 @@ async function main(): Promise<void> {
 
 async function buildFreshExecutable(): Promise<void> {
   await rm(buildRoot, { recursive: true, force: true })
-  await requireCommand('pnpm', ['run', 'libuv:bootstrap'])
   const command = compilerMode === 'node' ? 'node' : join(repoRoot, 'dist/inox')
   const args = compilerMode === 'node' ? ['compiler/index.ts'] : []
 
@@ -81,11 +80,7 @@ async function buildFreshExecutable(): Promise<void> {
     '--out-dir',
     buildRoot,
     '--name',
-    'http-server',
-    '--loop-backend',
-    'libuv',
-    '--tls-backend',
-    'none'
+    'http-server'
   )
   await requireCommand(command, args)
 }

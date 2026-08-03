@@ -9,6 +9,8 @@ test('CMake package owns Inox code generation and runtime wiring', async () => {
   assert.match(config, /include\("\$\{CMAKE_CURRENT_LIST_DIR\}\/Inox\.cmake"\)/)
   assert.match(source, /function\(inox_add_executable target\)/)
   assert.match(source, /--build-manifest/)
+  assert.match(source, /inox_apply_manifest_cmake_cache_entries/)
+  assert.match(source, /INOX_CONFIGURED_COMPILER_COMMAND/)
   assert.match(source, /CMAKE_CONFIGURE_DEPENDS/)
   assert.match(source, /add_custom_command\(/)
   assert.match(source, /add_subdirectory\([\s\S]*\/runtime/)

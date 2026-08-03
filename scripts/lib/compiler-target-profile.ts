@@ -2,6 +2,7 @@ import type {
   CompilerLibraryOptionValue,
   LibraryOptionDescriptor
 } from '../../compiler/extensions/types.ts'
+import type { CliBuildPreparation } from '../../compiler/cli/build.ts'
 
 export type CompilerTargetCMakeCacheEntry = {
   name: string
@@ -35,6 +36,7 @@ export const defaultCompilerTargetOptions: LibraryOptionDescriptor[] = [
     cliAliases: ['--loop-backend'],
     valueType: 'string',
     defaultValue: 'embedded',
+    automaticStringValue: 'libuv',
     allowedValues: ['embedded', 'libuv']
   },
   {
@@ -43,7 +45,25 @@ export const defaultCompilerTargetOptions: LibraryOptionDescriptor[] = [
     cliAliases: ['--tls-backend'],
     valueType: 'string',
     defaultValue: 'none',
+    automaticStringValue: 'boringssl',
     allowedValues: ['none', 'boringssl', 'openssl']
+  }
+]
+
+export const compilerTargetBuildPreparations: CliBuildPreparation[] = [
+  {
+    optionId: loopBackendOptionId,
+    values: ['libuv'],
+    requiredPath: 'third_party/libuv/include/uv.h',
+    command: 'git',
+    args: ['submodule', 'update', '--init', '--recursive', '--depth', '1', '--progress', 'third_party/libuv']
+  },
+  {
+    optionId: tlsBackendOptionId,
+    values: ['boringssl'],
+    requiredPath: 'third_party/boringssl/include/openssl/ssl.h',
+    command: 'git',
+    args: ['submodule', 'update', '--init', '--recursive', '--depth', '1', '--progress', 'third_party/boringssl']
   }
 ]
 

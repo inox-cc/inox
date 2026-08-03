@@ -42,9 +42,11 @@ test('CLI emits an exact C++ build manifest for the compiled module graph', asyn
       sourceFiles: string[]
       headerFiles: string[]
       declarationFiles: string[]
+      cmakeCacheEntries: Array<{ name: string; value: string }>
     }
 
     assert.equal(manifest.version, 1)
+    assert.deepEqual(manifest.cmakeCacheEntries, [])
     assert.deepEqual(manifest.inputFiles.sort(), [entry, dependency].sort())
     assert.deepEqual(manifest.sourceFiles.sort(), [join(outDir, 'src/index.cc'), join(outDir, 'src/value.cc')].sort())
     assert.deepEqual(manifest.headerFiles.sort(), [join(outDir, 'src/index.h'), join(outDir, 'src/value.h')].sort())
