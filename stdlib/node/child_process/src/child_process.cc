@@ -17,6 +17,7 @@
 
 struct ChildProcessOptions {
   int ignore_stdio;
+  int inherit_stdio;
   int has_timeout;
   long timeout_ms;
   inox_value cwd_value;
@@ -282,6 +283,7 @@ static inox_status inox_child_process_options_init(
   ChildProcessOptions* out
 ) {
   out->ignore_stdio = 0;
+  out->inherit_stdio = 0;
   out->has_timeout = 0;
   out->timeout_ms = 0;
   out->cwd_value = inox_undefined_value();
@@ -339,8 +341,14 @@ static inox_status inox_child_process_options_init(
     size_t len = 0;
     status = inox_child_process_string(value, &bytes, &len);
 
-    if (status == INOX_OK && len == 6 && strncmp(bytes, "ignore", 6) == 0) {
-      out->ignore_stdio = 1;
+    if (status == INOX_OK) {
+      if (len == 6 && strncmp(bytes, "ignore", 6) == 0) {
+        out->ignore_stdio = 1;
+      } else if (len == 7 && strncmp(bytes, "inherit", 7) == 0) {
+        out->inherit_stdio = 1;
+      } else if (len != 4 || strncmp(bytes, "pipe", 4) != 0) {
+        status = INOX_ERR_TYPE;
+      }
     }
 
     inox_release(value);
@@ -569,7 +577,9 @@ static inox_status inox_child_process_run_argv(
   int stdout_pipe[2] = { -1, -1 };
   int stderr_pipe[2] = { -1, -1 };
 
-  if (!options.ignore_stdio && (pipe(stdout_pipe) != 0 || pipe(stderr_pipe) != 0)) {
+  int capture_stdio = !options.ignore_stdio && !options.inherit_stdio;
+
+  if (capture_stdio && (pipe(stdout_pipe) != 0 || pipe(stderr_pipe) != 0)) {
     inox_child_process_options_dispose(allocator, &options);
     return INOX_ERR_UNSUPPORTED;
   }
@@ -601,7 +611,7 @@ static inox_status inox_child_process_run_argv(
         dup2(devnull, STDERR_FILENO);
         close(devnull);
       }
-    } else {
+    } else if (!options.inherit_stdio) {
       close(stdout_pipe[0]);
       close(stderr_pipe[0]);
       dup2(stdout_pipe[1], STDOUT_FILENO);
@@ -613,13 +623,13 @@ static inox_status inox_child_process_run_argv(
     inox_child_process_exec_child(argv, &options);
   }
 
-  if (!options.ignore_stdio) {
+  if (capture_stdio) {
     close(stdout_pipe[1]);
     close(stderr_pipe[1]);
   }
 
-  int stdout_open = !options.ignore_stdio;
-  int stderr_open = !options.ignore_stdio;
+  int stdout_open = capture_stdio;
+  int stderr_open = capture_stdio;
   int exited = 0;
   int child_status = 0;
   long start = inox_child_process_now_ms();

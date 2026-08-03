@@ -138,6 +138,14 @@ export function renderCompilerLibraryRegistry(
     '      stdout: result.stdout\n' +
     '    }\n' +
     '  },\n' +
+    '  runProgram: (command: string, args: string[], cwd: string) => {\n' +
+    "    const result = childProcess.spawnSync(command, args, { cwd, encoding: 'utf8', stdio: 'inherit' })\n\n" +
+    '    return {\n' +
+    '      code: result.status,\n' +
+    "      stderr: '',\n" +
+    "      stdout: ''\n" +
+    '    }\n' +
+    '  },\n' +
     '  setExitCode: (code: number) => { process.exitCode = code },\n' +
     '  writeFileSync: (path: string, source: string) => fs.writeFileSync(path, source)\n' +
     '}, defaultCompilerLibraryLiteralTypeInference)\n'

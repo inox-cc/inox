@@ -111,7 +111,14 @@ export function executeCliBuild(
   environment.log(paths.binary)
 
   if (plan.command === 'run') {
-    const executed = runCommand(paths.binary, plan.programArgs, environment.cwd)
+    const runProgram = environment.runProgram
+
+    if (runProgram === null || typeof runProgram === 'undefined') {
+      environment.error('this Inox driver does not provide native program execution services')
+      return false
+    }
+
+    const executed = runProgram(paths.binary, plan.programArgs, environment.cwd)
     return reportCommandResult(executed, environment)
   }
 

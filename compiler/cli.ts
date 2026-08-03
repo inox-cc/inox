@@ -36,6 +36,7 @@ export type CliEnvironment = {
   mkdirSync(path: string): void
   resolvePath?(path: string): string
   runCommand?(command: string, args: string[], cwd: string): CliCommandResult
+  runProgram?(command: string, args: string[], cwd: string): CliCommandResult
   setExitCode(code: number): void
   writeFileSync(path: string, source: string): void
 }

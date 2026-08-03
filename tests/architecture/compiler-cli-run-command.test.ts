@@ -6,6 +6,7 @@ import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-
 
 test('inox run builds and executes the inferred application binary', () => {
   const commands: Array<{ command: string; args: string[] }> = []
+  const programs: Array<{ command: string; args: string[] }> = []
   const success: CliCommandResult = { code: 0, stderr: '', stdout: '' }
   const environment: CliEnvironment = {
     args: ['node', 'inox', 'run', 'project/src/index.ts', '--out-dir', 'out', '--', '--flag', 'value'],
@@ -27,15 +28,21 @@ test('inox run builds and executes the inferred application binary', () => {
       commands.push({ command, args })
       return success
     },
+    runProgram: (command, args) => {
+      programs.push({ command, args })
+      return success
+    },
     setExitCode() {},
     writeFileSync() {}
   }
 
   runCompilerCli(createCompilerLibrarySet([]), environment)
 
-  assert.equal(commands.length, 3)
-  assert.deepEqual(commands[2], {
-    command: '/work/out/bin/project',
-    args: ['--flag', 'value']
-  })
+  assert.equal(commands.length, 2)
+  assert.deepEqual(programs, [
+    {
+      command: '/work/out/bin/project',
+      args: ['--flag', 'value']
+    }
+  ])
 })

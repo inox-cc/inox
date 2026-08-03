@@ -2,8 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 
-test('hosted и self-hosted HTTP acceptance владеют своими executable и server process', async () => {
-  const cmake = await readFile('cmake/InoxCompilerLibraries.cmake', 'utf8')
+test('hosted и self-hosted HTTP acceptance используют CLI и владеют своими executable', async () => {
   const checker = await readFile('scripts/check-http-server-example.ts', 'utf8')
   const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
     scripts: Record<string, string>
@@ -11,16 +10,16 @@ test('hosted и self-hosted HTTP acceptance владеют своими executab
   const hosted = packageJson.scripts['example:http-server']
   const selfHosted = packageJson.scripts['example:http-server:inox']
 
-  assert.match(
-    cmake,
-    /set\(CMAKE_RUNTIME_OUTPUT_DIRECTORY "\$\{output_dir\}\/\$\{INOX_COMPILER_MODE\}" PARENT_SCOPE\)/
-  )
-  assert.match(hosted, /dist\/http-server\/out\/node\/http-server/)
-  assert.match(selfHosted, /dist\/http-server\/out\/native\/http-server/)
+  assert.match(hosted, /node compiler\/index\.ts run examples\/http-server\/index\.ts/)
+  assert.match(selfHosted, /\.\/dist\/inox run examples\/http-server\/index\.ts/)
+  assert.match(hosted, /dist\/examples\/http-server\/hosted/)
+  assert.match(selfHosted, /dist\/examples\/http-server\/native/)
   assert.notEqual(hosted, selfHosted)
   assert.match(checker, /process\.argv\[2\]/)
-  assert.match(checker, /join\(outputRoot, compilerMode, 'http-server'\)/)
-  assert.match(checker, /-DINOX_OUTPUT_DIR=\$\{outputRoot\}/)
+  assert.match(checker, /join\(buildRoot, 'bin', 'http-server'\)/)
+  assert.match(checker, /compilerMode === 'node' \? 'node' : join\(repoRoot, 'dist\/inox'\)/)
+  assert.match(checker, /'build',\n    'examples\/http-server\/index\.ts'/)
+  assert.doesNotMatch(checker, /requireCommand\('cmake'/)
   assert.match(checker, /spawn\(executable, \[String\(port\), nonce, staticRoot\]/)
   assert.match(checker, /INOX_HTTP_READY \$\{nonce\} \$\{port\}/)
   assert.match(checker, /assert\.deepEqual\(await health\.json\(\), \{ ok: true, nonce \}\)/)

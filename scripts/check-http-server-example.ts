@@ -14,9 +14,8 @@ const compilerMode = process.argv[2] ?? 'node'
 assert.ok(compilerMode === 'node' || compilerMode === 'native', `Неизвестный режим compiler: ${compilerMode}`)
 
 const buildRoot = join(repoRoot, 'dist/http-server', `acceptance-${compilerMode}-${process.pid}`)
-const outputRoot = join(buildRoot, 'out')
-const executable = join(outputRoot, compilerMode, 'http-server')
-const staticRoot = join(outputRoot, 'static')
+const executable = join(buildRoot, 'bin', 'http-server')
+const staticRoot = join(repoRoot, 'examples/http-server/public')
 
 async function main(): Promise<void> {
   const port = await reservePort()
@@ -39,7 +38,13 @@ async function main(): Promise<void> {
   })
 
   try {
-    await waitForServer(server, nonce, port, () => stdout, () => stderr)
+    await waitForServer(
+      server,
+      nonce,
+      port,
+      () => stdout,
+      () => stderr
+    )
 
     const health = await fetchWithTimeout(`http://127.0.0.1:${port}/health`, 2_000)
     assert.equal(health.status, 200)
@@ -67,15 +72,22 @@ async function main(): Promise<void> {
 async function buildFreshExecutable(): Promise<void> {
   await rm(buildRoot, { recursive: true, force: true })
   await requireCommand('pnpm', ['run', 'libuv:bootstrap'])
-  await requireCommand('cmake', [
-    '-S',
-    'examples/http-server',
-    '-B',
+  const command = compilerMode === 'node' ? 'node' : join(repoRoot, 'dist/inox')
+  const args = compilerMode === 'node' ? ['compiler/index.ts'] : []
+
+  args.push(
+    'build',
+    'examples/http-server/index.ts',
+    '--out-dir',
     buildRoot,
-    `-DINOX_COMPILER_MODE=${compilerMode}`,
-    `-DINOX_OUTPUT_DIR=${outputRoot}`
-  ])
-  await requireCommand('cmake', ['--build', buildRoot, '--target', 'http-server'])
+    '--name',
+    'http-server',
+    '--loop-backend',
+    'libuv',
+    '--tls-backend',
+    'none'
+  )
+  await requireCommand(command, args)
 }
 
 async function requireCommand(command: string, args: string[]): Promise<void> {
@@ -158,10 +170,7 @@ async function waitForExit(server: ChildProcessWithoutNullStreams, milliseconds:
     return true
   }
 
-  return Promise.race([
-    once(server, 'exit').then(() => true),
-    delay(milliseconds).then(() => false)
-  ])
+  return Promise.race([once(server, 'exit').then(() => true), delay(milliseconds).then(() => false)])
 }
 
 function assertServerIsAlive(server: ChildProcessWithoutNullStreams, stdout: string, stderr: string): void {

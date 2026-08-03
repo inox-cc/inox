@@ -2,7 +2,7 @@ export interface ChildProcessSyncOptions {
   readonly encoding: 'utf8';
   readonly cwd?: string;
   readonly env?: Record<string, string>;
-  readonly stdio?: 'pipe' | 'ignore';
+  readonly stdio?: 'pipe' | 'ignore' | 'inherit';
   readonly timeout?: number;
 }
 

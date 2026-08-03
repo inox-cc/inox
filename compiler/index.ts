@@ -6,7 +6,7 @@ import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 
 import { generateCompilerLibraryRegistry } from '../scripts/lib/compiler-library-registry.ts'
-import { runHostCommand } from '../scripts/lib/compiler-cli-host.ts'
+import { runHostCommand, runHostProgram } from '../scripts/lib/compiler-cli-host.ts'
 import { rootDir } from '../scripts/lib/repo-root.ts'
 import {
   compilerTargetCMakeOptionMappings,
@@ -45,6 +45,7 @@ runCompilerCli(
     mkdirSync: (path: string) => fs.mkdirSync(path, { recursive: true }),
     resolvePath: (path: string) => resolve(process.cwd(), path),
     runCommand: runHostCommand,
+    runProgram: runHostProgram,
     setExitCode: (code: number) => {
       process.exitCode = code
     },
