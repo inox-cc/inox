@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
-import { compileFileSync, compileFileToCppModuleTextsSync } from './compiler.ts'
+import { compileFileSync, compileFileToCppModulesSync } from './compiler.ts'
 import type { CppModuleCompileOptions } from './core.ts'
+import type { CppModuleOutputFile } from './backends/cpp/types.ts'
 import { formatDiagnostics } from './diagnostics.ts'
 import { compilerLibraryOptionForCliAlias, parseCompilerLibraryOptionCliValue } from './extensions/library-options.ts'
 import type {
@@ -32,8 +33,10 @@ export type CliEnvironment = {
 }
 
 type CliPlan = {
+  buildManifest: string
   emitCc: boolean
   entryMode: boolean
+  hasBuildManifest: boolean
   hasOutDir: boolean
   hasOutput: boolean
   input: string
@@ -68,7 +71,7 @@ function defaultOutputPath(input: string): string {
 
 function usage(libraries: CompilerLibrarySet): string {
   let source =
-    'Usage:\n  inox --help\n  inox input.ts [output.cc]\n  inox input.ts --emit cc [-o output.cc]\n  inox input.ts --emit cc --out-dir generated --entry\n\nCompiles a TypeScript entry file to C++ source.\nIf output.cc is omitted, inox writes input.cc.'
+    'Usage:\n  inox --help\n  inox input.ts [output.cc]\n  inox input.ts --emit cc [-o output.cc]\n  inox input.ts --emit cc --out-dir generated --entry [--build-manifest manifest.json]\n\nCompiles a TypeScript entry file to C++ source.\nIf output.cc is omitted, inox writes input.cc.'
   const options = libraries.options ?? []
 
   if (options.length > 0) {
@@ -103,12 +106,14 @@ function parseCliArgs(args: string[], libraries: CompilerLibrarySet): CliParseRe
 
   let emitCc = false
   let entryMode = false
+  let hasBuildManifest = false
   let hasOutDir = false
   let hasOutput = false
   let input: string | null = null
   const libraryOptions: CompilerLibraryOptionValue[] = []
   let outDir = ''
   let output = ''
+  let buildManifest = ''
 
   for (let index = 0; index < args.length; index = index + 1) {
     const arg = args[index]
@@ -146,6 +151,20 @@ function parseCliArgs(args: string[], libraries: CompilerLibrarySet): CliParseRe
 
       hasOutDir = true
       outDir = value
+    } else if (arg === '--build-manifest') {
+      const value = args[index + 1]
+      index = index + 1
+
+      if (value === null || typeof value === 'undefined' || value.length === 0 || value.startsWith('-')) {
+        return failCliParse('--build-manifest expects a path')
+      }
+
+      if (hasBuildManifest) {
+        return failCliParse('build manifest path was specified more than once')
+      }
+
+      hasBuildManifest = true
+      buildManifest = value
     } else if (arg === '--entry') {
       entryMode = true
     } else if (arg.startsWith('-')) {
@@ -196,12 +215,18 @@ function parseCliArgs(args: string[], libraries: CompilerLibrarySet): CliParseRe
     return failCliParse('use either -o/--out or --out-dir')
   }
 
+  if (hasBuildManifest && !hasOutDir) {
+    return failCliParse('--build-manifest requires --out-dir')
+  }
+
   return {
     ok: true,
     help: false,
     plan: {
+      buildManifest,
       emitCc,
       entryMode,
+      hasBuildManifest,
       hasOutDir,
       hasOutput,
       input,
@@ -276,11 +301,12 @@ function writeCppModules(
   libraryLiteralTypeInference: CompilerLibraryLiteralTypeInference | null
 ): void {
   const outDir = outputDir(plan)
-  const files = compileFileToCppModuleTextsSync(
+  const compiled = compileFileToCppModulesSync(
     plan.input,
     cppModuleCompileOptions(plan, libraries, environment),
     libraryLiteralTypeInference
   )
+  const files = compiled.files
 
   for (let index = 0; index < files.length; index = index + 1) {
     const file = files[index]
@@ -290,7 +316,70 @@ function writeCppModules(
     environment.writeFileSync(output, file.code)
   }
 
+  if (plan.hasBuildManifest) {
+    writeCppBuildManifest(plan, compiled.graph.modules, files, environment)
+  }
+
   environment.log(outDir)
+}
+
+type CppBuildManifestModule = {
+  external?: boolean
+  path: string
+}
+
+type CppBuildManifest = {
+  version: 1
+  entry: string
+  inputFiles: string[]
+  sourceFiles: string[]
+  headerFiles: string[]
+  declarationFiles: string[]
+}
+
+function writeCppBuildManifest(
+  plan: CliPlan,
+  modules: CppBuildManifestModule[],
+  files: CppModuleOutputFile[],
+  environment: CliEnvironment
+): void {
+  const inputFiles: string[] = []
+  const sourceFiles: string[] = []
+  const headerFiles: string[] = []
+  const declarationFiles: string[] = []
+
+  for (let index = 0; index < modules.length; index = index + 1) {
+    const module = modules[index]
+
+    if (module.external !== true) {
+      inputFiles.push(module.path)
+    }
+  }
+
+  for (let index = 0; index < files.length; index = index + 1) {
+    const file = files[index]
+    const output = joinPath(plan.outDir, file.path)
+
+    if (file.kind === 'source') {
+      sourceFiles.push(output)
+    } else if (file.kind === 'header') {
+      headerFiles.push(output)
+    } else {
+      declarationFiles.push(output)
+    }
+  }
+
+  const manifest: CppBuildManifest = {
+    version: 1,
+    entry: plan.input,
+    inputFiles,
+    sourceFiles,
+    headerFiles,
+    declarationFiles
+  }
+
+  ensureParentDirectory(plan.buildManifest, environment)
+  environment.writeFileSync(plan.buildManifest, `${JSON.stringify(manifest, null, 2)}\n`)
 }
 
 function ensureParentDirectory(path: string, environment: CliEnvironment): void {

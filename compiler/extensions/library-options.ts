@@ -16,6 +16,7 @@ export type ResolvedCompilerLibraryOption = {
 const reservedCompilerCliAliases = [
   '--emit',
   '--entry',
+  '--build-manifest',
   '--help',
   '--out',
   '--out-dir',
