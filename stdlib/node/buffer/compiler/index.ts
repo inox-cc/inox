@@ -13,7 +13,9 @@ import type {
 
 const libraryId = 'node:buffer'
 const binaryLibraryId = 'global:binary'
+const collectionsLibraryId = 'global:collections'
 const runtimeRequirement = libraryId
+const arrayTypeId = `${collectionsLibraryId}#Array`
 const uint8ArrayTypeId = `${binaryLibraryId}#Uint8Array`
 const bufferTypeId = `${libraryId}#Buffer`
 const bufferTypeRef: NominalTypeRef = {
@@ -41,6 +43,7 @@ const operations: LibraryOperationDescriptor[] = [
   staticCall('alloc', ['number'], 'Buffer::alloc', bufferTypeRef, null, 1, 1, [numberArgument()]),
   bufferByteLengthOperation(),
   bufferStaticCompareOperation(),
+  bufferConcatOperation(),
   {
     ...staticCall('isBuffer', ['value'], 'Buffer::isBuffer', booleanTypeRef, null, 1, 1, []),
     cFailureMode: null
@@ -50,6 +53,7 @@ const operations: LibraryOperationDescriptor[] = [
   receiverIndexRead(),
   receiverIndexWrite(),
   bufferReceiverBytesOperation('compare', 'compare', numberTypeRef),
+  bufferCopyOperation(),
   bufferReceiverBytesOperation('equals', 'equals', booleanTypeRef),
   receiverCall('slice', ['receiver', 'number', 'optional-number'], 'slice', bufferTypeRef, null, 1, 2, [
     numberArgument(),
@@ -64,7 +68,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: [binaryLibraryId],
+  dependencies: [binaryLibraryId, collectionsLibraryId],
   nativeTypes: [
     {
       libraryId,
@@ -165,6 +169,53 @@ function bufferStaticCompareOperation(): LibraryOperationDescriptor {
     cArgumentAdapters: ['Uint8Array($value)', 'Uint8Array($value)'],
     cArgumentAdapterTypeIds: [uint8ArrayTypeId, uint8ArrayTypeId],
     cFailureMode: null
+  }
+}
+
+function bufferConcatOperation(): LibraryOperationDescriptor {
+  return {
+    ...staticCall('concat', ['value', 'optional-number'], 'Buffer::concat', bufferTypeRef, null, 1, 2, [
+      { valueTypes: [], typeRef: arrayTypeRef(uint8ArrayTypeRef()) },
+      numberArgument()
+    ]),
+    cArgumentAdapters: ['Array($value)', ''],
+    cArgumentAdapterTypeIds: [arrayTypeId, ''],
+    variants: [
+      {
+        minArgs: 1,
+        maxArgs: 1,
+        cExpression: 'Buffer::concat',
+        cArgumentKinds: ['value'],
+        cArgumentAdapters: ['Array($value)'],
+        cArgumentAdapterTypeIds: [arrayTypeId]
+      },
+      {
+        minArgs: 2,
+        maxArgs: 2,
+        cExpression: 'Buffer::concat',
+        cArgumentKinds: ['value', 'number'],
+        cArgumentAdapters: ['Array($value)', ''],
+        cArgumentAdapterTypeIds: [arrayTypeId, '']
+      }
+    ]
+  }
+}
+
+function bufferCopyOperation(): LibraryOperationDescriptor {
+  return {
+    ...receiverCall(
+      'copy',
+      ['receiver', 'value', 'optional-number', 'optional-number', 'optional-number'],
+      'copy',
+      numberTypeRef,
+      null,
+      1,
+      4,
+      [bytesArgument(), numberArgument(), numberArgument(), numberArgument()]
+    ),
+    cArgumentAdapters: ['Uint8Array($value)', '', '', ''],
+    cArgumentAdapterTypeIds: [uint8ArrayTypeId, '', '', ''],
+    cHasObservableSideEffects: true
   }
 }
 
@@ -379,6 +430,28 @@ function stringArgument(): LibraryArgumentCheckDescriptor {
 
 function bytesArgument(): LibraryArgumentCheckDescriptor {
   return { valueTypes: ['bytes'] }
+}
+
+function arrayTypeRef(elementType: TypeRef): NominalTypeRef {
+  return {
+    kind: 'nominal',
+    typeId: arrayTypeId,
+    args: [elementType],
+    nullable: false,
+    ownership: 'value',
+    traits: [{ traitId: 'iterable', args: [elementType] }]
+  }
+}
+
+function uint8ArrayTypeRef(): NominalTypeRef {
+  return {
+    kind: 'nominal',
+    typeId: uint8ArrayTypeId,
+    args: [],
+    nullable: false,
+    ownership: 'value',
+    traits: []
+  }
 }
 
 function utf8Argument(label: string): LibraryArgumentCheckDescriptor {

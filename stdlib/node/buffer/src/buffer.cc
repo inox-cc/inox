@@ -1,7 +1,9 @@
 #include "inox/buffer.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
+#include <limits>
 #include <span>
 #include <utility>
 
@@ -47,11 +49,92 @@ double compareBytes(std::span<const std::uint8_t> first, std::span<const std::ui
   return first.size() > second.size() ? 1 : 0;
 }
 
+bool bufferIndex(double value, std::size_t limit, std::size_t& result) {
+  if (std::isnan(value)) {
+    result = 0;
+    return true;
+  }
+
+  const double integer = std::trunc(value);
+
+  if (integer < 0) {
+    return false;
+  }
+
+  if (integer >= static_cast<double>(limit) || integer == std::numeric_limits<double>::infinity()) {
+    result = limit;
+    return true;
+  }
+
+  result = static_cast<std::size_t>(integer);
+  return true;
+}
+
+Buffer concatBuffers(const Array& list, bool hasTotalLength, double totalLength) {
+  std::size_t length = 0;
+  const std::size_t maximum = static_cast<std::size_t>(Buffer::maximumLength());
+
+  if (hasTotalLength) {
+    if (
+      !std::isfinite(totalLength) ||
+      totalLength < 0 ||
+      std::trunc(totalLength) != totalLength ||
+      totalLength > static_cast<double>(maximum)
+    ) {
+      throwBufferError("RangeError: Buffer.concat totalLength is invalid");
+      return Buffer();
+    }
+
+    length = static_cast<std::size_t>(totalLength);
+  } else {
+    for (std::size_t index = 0; index < list.length(); index += 1) {
+      Uint8Array item(list.get(index));
+
+      if (!item.valid() || inox::thrown()) {
+        return Buffer();
+      }
+
+      if (item.length() > maximum - length) {
+        throwBufferError("RangeError: Buffer.concat result is too large");
+        return Buffer();
+      }
+
+      length += item.length();
+    }
+  }
+
+  Buffer result = Buffer::alloc(static_cast<double>(length));
+
+  if (!result.valid() || inox::thrown()) {
+    return Buffer();
+  }
+
+  std::size_t offset = 0;
+
+  for (std::size_t index = 0; index < list.length() && offset < length; index += 1) {
+    Uint8Array item(list.get(index));
+
+    if (!item.valid() || inox::thrown()) {
+      return Buffer();
+    }
+
+    const auto source = item.bytes();
+    const std::size_t count = std::min(source.size(), length - offset);
+
+    if (count > 0) {
+      std::memcpy(result.bytes().data() + offset, source.data(), count);
+      offset += count;
+    }
+  }
+
+  return result;
+}
+
 } // namespace
 
 Buffer::Buffer() : Uint8Array() {}
 
-Buffer::Buffer(std::span<const std::uint8_t> values) : Uint8Array(copy(values, true)) {}
+Buffer::Buffer(std::span<const std::uint8_t> values) : Uint8Array(Uint8Array::copy(values, true)) {}
 
 Buffer::Buffer(const inox::Value& value) : Uint8Array(value) {}
 
@@ -90,6 +173,14 @@ double Buffer::compare(const Uint8Array& first, const Uint8Array& second) {
   return compareBytes(first.bytes(), second.bytes());
 }
 
+Buffer Buffer::concat(const Array& list) {
+  return concatBuffers(list, false, 0);
+}
+
+Buffer Buffer::concat(const Array& list, double totalLength) {
+  return concatBuffers(list, true, totalLength);
+}
+
 double Buffer::maximumLength() {
   return static_cast<double>(Uint8Array::maximumLength());
 }
@@ -117,6 +208,38 @@ bool Buffer::isBuffer(const inox::Value& value) {
 
 double Buffer::compare(const Uint8Array& target) const {
   return compareBytes(bytes(), target.bytes());
+}
+
+double Buffer::copy(
+  Uint8Array target,
+  double targetStart,
+  double sourceStart,
+  double sourceEnd
+) const {
+  if (!valid() || !target.valid()) {
+    inox::fatal("Buffer.copy native facade invariant failed");
+  }
+
+  std::size_t targetOffset = 0;
+  std::size_t sourceOffset = 0;
+  std::size_t sourceLimit = 0;
+
+  if (
+    !bufferIndex(targetStart, target.length(), targetOffset) ||
+    !bufferIndex(sourceStart, length(), sourceOffset) ||
+    !bufferIndex(sourceEnd, length(), sourceLimit)
+  ) {
+    throwBufferError("RangeError: Buffer.copy offset is invalid");
+    return 0;
+  }
+
+  if (sourceLimit <= sourceOffset || targetOffset >= target.length()) {
+    return 0;
+  }
+
+  const std::size_t count = std::min(sourceLimit - sourceOffset, target.length() - targetOffset);
+  std::memmove(target.bytes().data() + targetOffset, bytes().data() + sourceOffset, count);
+  return static_cast<double>(count);
 }
 
 bool Buffer::equals(const Uint8Array& otherBuffer) const {
