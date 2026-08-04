@@ -3069,7 +3069,7 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
   if (target !== null && typeof target !== 'undefined') {
     lines.push(`goto ${target};`)
   } else {
-    lines.push('goto cleanup;')
+    lines.push(emitReturnCleanupStatement(context))
   }
 
   return lines

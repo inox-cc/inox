@@ -531,6 +531,12 @@ static inox_status inox_promise_run_chain_reaction(inox_promise_reaction_task* t
     return resolve_status;
   }
 
+  if (status == INOX_ERR_THROW) {
+    inox_status reject_status = inox_promise_reject(task->reaction->child, next);
+    inox_release(next);
+    return reject_status;
+  }
+
   inox_status reject_status = inox_promise_reject(task->reaction->child, inox_number_value((inox_number)status));
 
   return reject_status == INOX_OK ? INOX_OK : reject_status;

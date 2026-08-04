@@ -65,6 +65,8 @@ type AsyncResultFunctionContext = AsyncResultEmitContext & {
   cleanupEnabled: boolean
   cppValueTypes: AsyncResultStringMap
   eventLoopUsed: boolean
+  errorTargetActiveFlags: boolean[]
+  errorTargets: string[]
   explicitEventLoop: boolean
   externalEventLoop: boolean
   failureStatement?: string | null
@@ -624,12 +626,30 @@ export function emitPreparedAsyncResultConstructorExpression(
     fulfillExpression,
     rejectExpression
   )
+  const executorId = context.nextId
+  context.nextId = context.nextId + 1
+  const rejectLabel = `inox_async_result_executor_reject_${executorId}`
+  const endLabel = `inox_async_result_executor_end_${executorId}`
+  let executorLines: string[] = []
 
   try {
-    appendLines(lines, dependencies.emitStatementList(statements, context))
+    context.errorTargets.push(rejectLabel)
+    context.errorTargetActiveFlags.push(false)
+    executorLines = dependencies.emitStatementList(statements, context)
   } finally {
+    context.errorTargetActiveFlags.pop()
+    context.errorTargets.pop()
     restoreAsyncResultConstructorHandlers(context, handlerSnapshots)
   }
+
+  lines.push('{')
+  appendIndentedLines(lines, executorLines, '  ')
+  lines.push(`  goto ${endLabel};`)
+  lines.push('}')
+  lines.push(`${rejectLabel}: {`)
+  lines.push('  auto inox_executor_error = inox::take_exception();')
+  lines.push(`  ${out}.${rejectExpression}(inox_executor_error);`)
+  lines.push(`} ${endLabel}:;`)
 
   return {
     lines,
@@ -2243,6 +2263,9 @@ export function emitAsyncResultChainCallbackWrapperDeclaration(
   context.runtimeCallbackReturnShape = wrapper.returnShape
   context.runtimeCallbackReturnOut = '(*out)'
   context.runtimeCallbackCleanupLabel = 'inox_async_result_callback_cleanup'
+  context.failureStatement =
+    `{ inox_callback_status = inox::thrown() ? INOX_ERR_THROW : INOX_ERR_TYPE; ` +
+    `goto ${context.runtimeCallbackCleanupLabel}; }`
   const bodyLines: string[] = []
   appendLines(
     bodyLines,
@@ -2261,21 +2284,34 @@ export function emitAsyncResultChainCallbackWrapperDeclaration(
 
   lines.push('  if (out == 0) return INOX_ERR_TYPE;')
   lines.push('  *out = inox_undefined_value();')
-  appendIndentedLines(lines, bodyLines, '  ')
   appendIndentedLines(lines, deps.emitLoopFlowDeclarations(context), '  ')
   appendIndentedLines(lines, deps.emitReturnFlowDeclarations(context), '  ')
   appendIndentedLines(lines, deps.emitOwnedValueDeclarations(context), '  ')
   appendIndentedLines(lines, deps.emitErrorChannelDeclarations(context), '  ')
   appendIndentedLines(lines, deps.emitBoxedValueDeclarations(context), '  ')
-  appendIndentedLines(lines, statementLines, '  ')
+  lines.push('  inox_status inox_callback_status = INOX_OK;')
 
-  if (context.usedRuntimeCallbackCleanupGoto === true) {
+  const cleanupUsed = context.usedRuntimeCallbackCleanupGoto === true || context.failureStatementUsed === true
+
+  if (cleanupUsed) {
+    lines.push('  {')
+    appendIndentedLines(lines, bodyLines, '    ')
+    appendIndentedLines(lines, statementLines, '    ')
+    lines.push('  }')
     lines.push(`${context.runtimeCallbackCleanupLabel}:`)
+  } else {
+    appendIndentedLines(lines, bodyLines, '  ')
+    appendIndentedLines(lines, statementLines, '  ')
   }
 
   appendIndentedLines(lines, deps.emitOwnedValueCleanup(context), '  ')
   appendIndentedLines(lines, deps.emitBoxedValueCleanup(context), '  ')
-  lines.push('  return INOX_OK;')
+  lines.push('  if (inox::thrown()) {')
+  lines.push('    auto inox_callback_error = inox::take_exception();')
+  lines.push('    *out = inox_callback_error.release();')
+  lines.push('    return INOX_ERR_THROW;')
+  lines.push('  }')
+  lines.push('  return inox_callback_status;')
   lines.push('}')
 
   return lines
