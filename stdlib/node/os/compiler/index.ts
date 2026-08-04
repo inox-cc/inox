@@ -2,9 +2,14 @@ import type {
   CompilerLibraryPackageDescriptor,
   LibraryCResultMappingDescriptor,
   LibraryOperationDescriptor,
-  PrimitiveTypeRef
+  NominalTypeRef,
+  PrimitiveTypeRef,
+  TypeRef
 } from '../../../../compiler/extensions/types.ts'
 const nodeOsLibraryId = 'node:os'
+const collectionsLibraryId = 'global:collections'
+const arrayRuntimeRequirement = `${collectionsLibraryId}#array`
+const arrayTypeId = `${collectionsLibraryId}#Array`
 const nodeOsRuntimeRequirement = 'node:os'
 const stringTypeRef: PrimitiveTypeRef = {
   kind: 'primitive',
@@ -26,13 +31,9 @@ const stringCResultMapping: LibraryCResultMappingDescriptor = {
 }
 const unsupportedOsRuntimeMethods = [
   'cpus',
-  'freemem',
   'getPriority',
-  'loadavg',
   'networkInterfaces',
   'setPriority',
-  'totalmem',
-  'uptime',
   'userInfo'
 ]
 
@@ -42,13 +43,20 @@ const operations: LibraryOperationDescriptor[] = [
   operation('availableParallelism', 'call', numberTypeRef),
   operation('arch', 'call'),
   operation('endianness', 'call'),
+  operation('freemem', 'call', numberTypeRef),
   operation('homedir', 'call'),
   operation('hostname', 'call'),
+  {
+    ...operation('loadavg', 'call', arrayTypeRef(numberTypeRef)),
+    cFailureMode: 'thrown'
+  },
   operation('machine', 'call'),
   operation('platform', 'call'),
   operation('release', 'call'),
   operation('tmpdir', 'call'),
+  operation('totalmem', 'call', numberTypeRef),
   operation('type', 'call'),
+  operation('uptime', 'call', numberTypeRef),
   operation('version', 'call')
 ]
 
@@ -58,13 +66,13 @@ for (const name of unsupportedOsRuntimeMethods) {
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: nodeOsLibraryId,
-  dependencies: [],
+  dependencies: [collectionsLibraryId],
   operations,
   intrinsicBindings: [],
   runtimeRequirements: [
     {
       id: nodeOsRuntimeRequirement,
-      dependencies: ['managed-values', 'string-bytes'],
+      dependencies: [arrayRuntimeRequirement, 'managed-values', 'string-bytes'],
       cPreludeIncludes: ['inox/os.h'],
       capabilities: ['node:os']
     }
@@ -74,10 +82,10 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
 function operation(
   name: string,
   kind: 'call' | 'member-read',
-  resultTypeRef: PrimitiveTypeRef = stringTypeRef
+  resultTypeRef: TypeRef = stringTypeRef
 ): LibraryOperationDescriptor {
   const cExpression = `os.${name}`
-  const returnsString = resultTypeRef.name === 'string'
+  const returnsString = resultTypeRef.kind === 'primitive' && resultTypeRef.name === 'string'
 
   const descriptor: LibraryOperationDescriptor = {
     libraryId: nodeOsLibraryId,
@@ -99,6 +107,17 @@ function operation(
   }
 
   return descriptor
+}
+
+function arrayTypeRef(elementType: TypeRef): NominalTypeRef {
+  return {
+    kind: 'nominal',
+    typeId: arrayTypeId,
+    args: [elementType],
+    nullable: false,
+    ownership: 'value',
+    traits: [{ traitId: 'iterable', args: [elementType] }]
+  }
 }
 
 function unsupportedOperation(name: string): LibraryOperationDescriptor {

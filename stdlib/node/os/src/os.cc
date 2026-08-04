@@ -3,8 +3,11 @@
 #include <bit>
 #include <stdlib.h>
 #include <thread>
-#ifndef _WIN32
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <sys/utsname.h>
+#include <time.h>
 #include <unistd.h>
 #endif
 
@@ -48,6 +51,24 @@ inox::String os::endianness() const {
   return inox::String("LE");
 }
 
+double os::freemem() const {
+#ifdef _WIN32
+  MEMORYSTATUSEX status = {};
+  status.dwLength = sizeof(status);
+  return GlobalMemoryStatusEx(&status) ? static_cast<double>(status.ullAvailPhys) : 0;
+#else
+#if defined(_SC_AVPHYS_PAGES) && defined(_SC_PAGESIZE)
+  const long pages = sysconf(_SC_AVPHYS_PAGES);
+  const long page_size = sysconf(_SC_PAGESIZE);
+  return pages > 0 && page_size > 0
+    ? static_cast<double>(pages) * static_cast<double>(page_size)
+    : 0;
+#else
+  return 0;
+#endif
+#endif
+}
+
 inox::String os::homedir() const {
   const char* home = getenv("HOME");
 
@@ -73,6 +94,30 @@ inox::String os::hostname() const {
   name[sizeof(name) - 1] = 0;
   return inox::String(name);
 #endif
+}
+
+Array os::loadavg() const {
+  double values[3] = { 0, 0, 0 };
+
+#ifndef _WIN32
+  const int count = getloadavg(values, 3);
+
+  if (count < 0) {
+    values[0] = 0;
+    values[1] = 0;
+    values[2] = 0;
+  } else {
+    for (int index = count; index < 3; index += 1) {
+      values[index] = 0;
+    }
+  }
+#endif
+
+  return Array::from({
+    inox::Value(inox_number_value(values[0])),
+    inox::Value(inox_number_value(values[1])),
+    inox::Value(inox_number_value(values[2]))
+  });
 }
 
 inox::String os::machine() const {
@@ -155,6 +200,24 @@ inox::String os::tmpdir() const {
   return inox::String(value);
 }
 
+double os::totalmem() const {
+#ifdef _WIN32
+  MEMORYSTATUSEX status = {};
+  status.dwLength = sizeof(status);
+  return GlobalMemoryStatusEx(&status) ? static_cast<double>(status.ullTotalPhys) : 0;
+#else
+#if defined(_SC_PHYS_PAGES) && defined(_SC_PAGESIZE)
+  const long pages = sysconf(_SC_PHYS_PAGES);
+  const long page_size = sysconf(_SC_PAGESIZE);
+  return pages > 0 && page_size > 0
+    ? static_cast<double>(pages) * static_cast<double>(page_size)
+    : 0;
+#else
+  return 0;
+#endif
+#endif
+}
+
 inox::String os::type() const {
 #ifdef _WIN32
   return inox::String("Windows_NT");
@@ -166,6 +229,28 @@ inox::String os::type() const {
   }
 
   return inox::String(info.sysname);
+#endif
+}
+
+double os::uptime() const {
+#ifdef _WIN32
+  return static_cast<double>(GetTickCount64()) / 1000.0;
+#else
+  struct timespec value = {};
+
+#if defined(CLOCK_BOOTTIME)
+  if (clock_gettime(CLOCK_BOOTTIME, &value) != 0) {
+    return 0;
+  }
+#elif defined(CLOCK_MONOTONIC)
+  if (clock_gettime(CLOCK_MONOTONIC, &value) != 0) {
+    return 0;
+  }
+#else
+  return 0;
+#endif
+
+  return static_cast<double>(value.tv_sec) + static_cast<double>(value.tv_nsec) / 1000000000.0;
 #endif
 }
 
