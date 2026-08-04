@@ -313,6 +313,8 @@ export type LibraryOperationTypeParameterSourceDescriptor =
   | {
       source: 'argument-function-return' | 'argument-type'
       argumentIndex: number
+      unwrapTraitId?: TypeTraitId
+      unwrapTraitArgumentIndex?: number
     }
   | {
       source: 'argument-array-literal-column'
@@ -324,6 +326,14 @@ export type LibraryOperationTypeParameterSourceDescriptor =
       argumentIndex: number
       traitId: TypeTraitId
       traitArgumentIndex: number
+      unwrapTraitId?: TypeTraitId
+      unwrapTraitArgumentIndex?: number
+    }
+  | {
+      source: 'argument-array-literal-elements'
+      argumentIndex: number
+      unwrapTraitId?: TypeTraitId
+      unwrapTraitArgumentIndex?: number
     }
   | {
       source: 'receiver-trait'

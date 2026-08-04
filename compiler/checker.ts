@@ -6694,6 +6694,7 @@ class Checker {
     const argumentTypeRefs: TypeRef[] = []
     const argumentFunctionReturnTypeRefs: TypeRef[] = []
     const argumentArrayLiteralColumns: TypeRef[][] = []
+    const argumentArrayLiteralElementTypeRefs: TypeRef[][] = []
     const args: AnyNode[] = expression.args ?? []
     const checkedArgInfos = argInfos ?? []
 
@@ -6704,6 +6705,7 @@ class Checker {
     for (let index = 0; index < args.length; index = index + 1) {
       argumentFunctionReturnTypeRefs.push(this.compilerLibraryFunctionReturnTypeRef(args[index]))
       argumentArrayLiteralColumns.push(this.compilerLibraryArrayLiteralColumnTypeRefs(args[index]))
+      argumentArrayLiteralElementTypeRefs.push(this.compilerLibraryArrayLiteralElementTypeRefs(args[index]))
     }
 
     let receiverTypeRef: TypeRef | null = null
@@ -6719,7 +6721,8 @@ class Checker {
       contextualTypeRef: contextualResult?.typeRef ?? null,
       argumentTypeRefs,
       argumentFunctionReturnTypeRefs,
-      argumentArrayLiteralColumns
+      argumentArrayLiteralColumns,
+      argumentArrayLiteralElementTypeRefs
     }
   }
 
@@ -6806,6 +6809,31 @@ class Checker {
     }
 
     return columns
+  }
+
+  compilerLibraryArrayLiteralElementTypeRefs(expression: AnyNode): TypeRef[] {
+    if (expression.type !== 'ArrayLiteral') {
+      return []
+    }
+
+    const libraries = resolveCompilerLibrarySet(this.options.libraries)
+    const elements: TypeRef[] = []
+
+    for (let index = 0; index < expression.elements.length; index = index + 1) {
+      const element = expression.elements[index]
+
+      if (element.type !== 'SpreadElement') {
+        elements.push(this.compilerLibraryExpressionTypeRef(element))
+        continue
+      }
+
+      const spreadTypeRef = this.compilerLibraryExpressionTypeRef(element.argument)
+      const traits = spreadTypeRef.kind === 'parameter' ? [] : typeRefTraits(spreadTypeRef, libraries)
+      const iterable = traits.find((trait) => trait.traitId === 'iterable')
+      elements.push(iterable?.args[0] ?? this.compilerLibraryUnknownTypeRef())
+    }
+
+    return elements
   }
 
   compilerLibraryOperationReceiverExpression(expression: AnyNode): AnyNode | null {

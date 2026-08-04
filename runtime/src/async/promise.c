@@ -161,6 +161,10 @@ inox_status inox_promise_await(
     return INOX_ERR_TYPE;
   }
 
+  if (read_rejection) {
+    promise->handled = true;
+  }
+
   while (promise->state == INOX_PROMISE_PENDING && inox_loop_has_work(loop)) {
     inox_status status = inox_loop_run_once(loop);
 

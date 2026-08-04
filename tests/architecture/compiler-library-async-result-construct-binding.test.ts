@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
 import { compilerLibraryPackage as promiseCompilerLibraryPackage } from '../../stdlib/global/promise/compiler/index.ts'
-import { compilerLibraryPackageWithGlobalDeclaration } from './helpers/compiler-library-fixtures.ts'
+import {
+  compilerLibraryPackageWithGlobalDeclaration,
+  createCompilerLibrarySetWithCollections as createCompilerLibrarySet
+} from './helpers/compiler-library-fixtures.ts'
 
 test('async-result construct binding совпадает с operation role', () => {
   const library = compilerLibraryPackageWithGlobalDeclaration(

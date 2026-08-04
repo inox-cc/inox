@@ -1,4 +1,4 @@
-import { typeRefTraits } from './type-ref-compatibility.ts'
+import { commonTypeRef, typeRefTraits } from './type-ref-compatibility.ts'
 import { substituteTypeRef } from './type-ref-substitution.ts'
 import type {
   CompilerLibrarySet,
@@ -15,6 +15,7 @@ export type LibraryOperationTypeRefContext = {
   argumentTypeRefs: TypeRef[]
   argumentFunctionReturnTypeRefs: TypeRef[]
   argumentArrayLiteralColumns: TypeRef[][]
+  argumentArrayLiteralElementTypeRefs: TypeRef[][]
 }
 
 /** Resolves a data-only operation TypeRef template for one call site. */
@@ -106,7 +107,9 @@ function resolveOperationTypeParameterSource(
       return null
     }
 
-    return typeRefAt(context.argumentTypeRefs, argumentIndex)
+    const result = typeRefAt(context.argumentTypeRefs, argumentIndex)
+
+    return result === null ? null : unwrapTraitArgumentOrSelf(result, source, libraries)
   }
 
   if (source.source === 'argument-array-literal-column') {
@@ -124,6 +127,23 @@ function resolveOperationTypeParameterSource(
     }
 
     return typeRefAt(columns, elementIndex)
+  }
+
+  if (source.source === 'argument-array-literal-elements') {
+    const elements = typeRefListAt(context.argumentArrayLiteralElementTypeRefs, source.argumentIndex)
+
+    if (elements === null || elements.length === 0) {
+      return null
+    }
+
+    let result: TypeRef | null = null
+
+    for (let index = 0; index < elements.length; index = index + 1) {
+      const candidate = unwrapTraitArgumentOrSelf(elements[index], source, libraries)
+      result = commonTypeRef(result, candidate) ?? unknownTypeRef()
+    }
+
+    return result
   }
 
   if (source.source === 'receiver-trait') {
@@ -155,7 +175,24 @@ function resolveOperationTypeParameterSource(
 
   const argumentTypeRef = typeRefAt(context.argumentTypeRefs, argumentIndex)
 
-  return traitArgument(argumentTypeRef, traitId, traitArgumentIndex, libraries)
+  const result = traitArgument(argumentTypeRef, traitId, traitArgumentIndex, libraries)
+
+  return result === null ? null : unwrapTraitArgumentOrSelf(result, source, libraries)
+}
+
+function unwrapTraitArgumentOrSelf(
+  typeRef: TypeRef,
+  source: { unwrapTraitId?: TypeTraitId; unwrapTraitArgumentIndex?: number },
+  libraries: CompilerLibrarySet
+): TypeRef {
+  const traitId = source.unwrapTraitId
+  const traitArgumentIndex = source.unwrapTraitArgumentIndex
+
+  if (typeof traitId !== 'string' || typeof traitArgumentIndex !== 'number') {
+    return typeRef
+  }
+
+  return traitArgument(typeRef, traitId, traitArgumentIndex, libraries) ?? typeRef
 }
 
 function traitArgument(

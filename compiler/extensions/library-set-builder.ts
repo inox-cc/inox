@@ -1496,11 +1496,39 @@ function validateOperationTypeParameterSource(
     return
   }
 
+  if (source.source === 'argument-array-literal-elements') {
+    validateOperationOptionalTraitUnwrap(operationId, parameterName, source)
+    return
+  }
+
   if (source.source !== 'argument-trait') {
+    if (source.source === 'argument-type') {
+      validateOperationOptionalTraitUnwrap(operationId, parameterName, source)
+    }
     return
   }
 
   validateOperationTraitArgumentIndex(operationId, parameterName, source.traitArgumentIndex)
+  validateOperationOptionalTraitUnwrap(operationId, parameterName, source)
+}
+
+function validateOperationOptionalTraitUnwrap(
+  operationId: string,
+  parameterName: string,
+  source: { unwrapTraitId?: string; unwrapTraitArgumentIndex?: number }
+): void {
+  const traitId = source.unwrapTraitId
+  const traitArgumentIndex = source.unwrapTraitArgumentIndex
+
+  if (typeof traitId === 'undefined' && typeof traitArgumentIndex === 'undefined') {
+    return
+  }
+
+  if (typeof traitId !== 'string' || traitId.length === 0 || typeof traitArgumentIndex !== 'number') {
+    throw new Error(`operation ${operationId} type parameter ${parameterName} has incomplete trait unwrap`)
+  }
+
+  validateOperationTraitArgumentIndex(operationId, parameterName, traitArgumentIndex)
 }
 
 function validateOperationTraitArgumentIndex(
@@ -2690,6 +2718,15 @@ function operationTypeParametersFingerprint(operation: LibraryOperationDescripto
         row = row + ':' + source.traitId + ':' + source.traitArgumentIndex
       } else if (source.source === 'argument-array-literal-column') {
         row = row + ':' + (source.elementIndex ?? '')
+      }
+
+      if (
+        (source.source === 'argument-type' ||
+          source.source === 'argument-trait' ||
+          source.source === 'argument-array-literal-elements') &&
+        typeof source.unwrapTraitId === 'string'
+      ) {
+        row = row + ':unwrap:' + source.unwrapTraitId + ':' + source.unwrapTraitArgumentIndex
       }
 
       sources.push(row)

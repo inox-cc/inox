@@ -18,6 +18,7 @@ test('global Promise использует package-local declarations-only C++ fa
   assert.match(header, /inox_status fulfill\(Value value\) const;/)
   assert.match(header, /inox_status rejectWith\(Value error\) const;/)
   assert.match(header, /Value awaitValue\(\) const;/)
+  assert.match(header, /Value raw\(\) const;/)
   assert.doesNotMatch(header, /\binline\b/)
   assert.doesNotMatch(header, /\btemplate\s*</)
   assert.doesNotMatch(header, /\)\s*(?:const\s*)?\{/)
@@ -25,7 +26,7 @@ test('global Promise использует package-local declarations-only C++ fa
   assert.doesNotMatch(header, /\binox_promise_(?:new|resolved|rejected|resolve|reject|then|catch|chain|await)\b/)
   assert.doesNotMatch(header, /\bstruct inox_promise\b/)
   assert.doesNotMatch(header, /\binox_promise\s*\*/)
-  assert.doesNotMatch(header, /\b(?:adopt|raw|out|reset|release|hasUnhandledRejection)\s*\(/)
+  assert.doesNotMatch(header, /\b(?:adopt|out|reset|release|hasUnhandledRejection)\s*\(/)
   assert.doesNotMatch(header, /operator\s+inox_promise\s*\*/)
   assert.doesNotMatch(header, /operator&\s*\(/)
   assert.match(header, /void\* promise_;/)
@@ -36,6 +37,7 @@ test('global Promise использует package-local declarations-only C++ fa
   assert.match(source, /inox_status Promise::fulfill\(Value value\) const/)
   assert.match(source, /inox_status Promise::rejectWith\(Value error\) const/)
   assert.match(source, /Value Promise::awaitValue\(\) const/)
+  assert.match(source, /Value Promise::raw\(\) const/)
   assert.match(
     source,
     /Value Promise::awaitValue\(\) const \{\n  if \(thrown\(\)\) \{\n    return \{\};\n  \}\n\n  if \(!valid\(\)\) \{\n    throw_value\(Value\(\)\);\n    return \{\};\n  \}/

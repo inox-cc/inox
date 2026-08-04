@@ -24,6 +24,9 @@ test('global:binary operations describe results only through TypeRef', async () 
       'global:binary#Uint8Array#read:length',
       'global:binary#Uint8Array#index-read',
       'global:binary#Uint8Array#index-write',
+      'global:binary#Uint8Array#at',
+      'global:binary#Uint8Array#fill',
+      'global:binary#Uint8Array#set',
       'global:binary#Uint8Array#slice',
       'global:binary#Uint8Array#subarray',
       'global:binary#Uint8Array#toString'
@@ -34,10 +37,13 @@ test('global:binary operations describe results only through TypeRef', async () 
   assert.deepEqual(operations[1]?.resultTypeRef, primitiveTypeRef('number'))
   assert.deepEqual(operations[2]?.resultTypeRef, nullablePrimitiveTypeRef('number'))
   assert.deepEqual(operations[3]?.resultTypeRef, primitiveTypeRef('number'))
-  assert.deepEqual(operations[4]?.resultTypeRef, nominalUint8Array)
+  assert.deepEqual(operations[4]?.resultTypeRef, nullablePrimitiveTypeRef('number'))
   assert.deepEqual(operations[5]?.resultTypeRef, nominalUint8Array)
-  assert.deepEqual(operations[6]?.resultTypeRef, primitiveTypeRef('string'))
-  assert.deepEqual(operations[6]?.cResultMapping, {
+  assert.deepEqual(operations[6]?.resultTypeRef, primitiveTypeRef('void'))
+  assert.deepEqual(operations[7]?.resultTypeRef, nominalUint8Array)
+  assert.deepEqual(operations[8]?.resultTypeRef, nominalUint8Array)
+  assert.deepEqual(operations[9]?.resultTypeRef, primitiveTypeRef('string'))
+  assert.deepEqual(operations[9]?.cResultMapping, {
     cppType: 'inox::String',
     fields: []
   })
@@ -50,7 +56,7 @@ test('global:binary operations describe results only through TypeRef', async () 
   }
 })
 
-function primitiveTypeRef(name: 'number' | 'string') {
+function primitiveTypeRef(name: 'number' | 'string' | 'void') {
   return {
     kind: 'primitive',
     name,
@@ -60,7 +66,7 @@ function primitiveTypeRef(name: 'number' | 'string') {
   }
 }
 
-function nullablePrimitiveTypeRef(name: 'number' | 'string') {
+function nullablePrimitiveTypeRef(name: 'number' | 'string' | 'void') {
   return {
     ...primitiveTypeRef(name),
     nullable: true

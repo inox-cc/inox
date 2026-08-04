@@ -6,12 +6,12 @@ import { compileSource } from '../../compiler/core.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
 import { compilerLibraryPackage as promisePackage } from '../../stdlib/global/promise/compiler/index.ts'
 import {
-  createCompilerLibrarySetWithSyntheticGlobalDeclarations,
+  createCompilerLibrarySetWithCollections,
   fixturePrimitiveTypeRef
 } from './helpers/compiler-library-fixtures.ts'
 
 test('event-loop package callback поддерживает async без знания package name в compiler core', () => {
-  const libraries = createCompilerLibrarySetWithSyntheticGlobalDeclarations([bridgeLibrary(), promiseLibrary()])
+  const libraries = createCompilerLibrarySetWithCollections([bridgeLibrary(), promiseLibrary()])
   const result = compileSource(
     'bridge.schedule(async () => { await Promise.resolve(1) })\n',
     { libraries, target: 'cc' }

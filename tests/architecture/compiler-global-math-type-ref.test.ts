@@ -4,17 +4,32 @@ import { test } from 'node:test'
 import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
 
 const operationIds = [
+  'E',
+  'PI',
   'abs',
+  'acos',
+  'asin',
+  'atan',
+  'atan2',
+  'cbrt',
   'ceil',
   'cos',
+  'exp',
   'floor',
   'fround',
+  'hypot',
+  'log',
+  'log10',
+  'log2',
   'max',
   'min',
+  'pow',
   'random',
   'round',
+  'sign',
   'sin',
   'sqrt',
+  'tan',
   'trunc'
 ]
 

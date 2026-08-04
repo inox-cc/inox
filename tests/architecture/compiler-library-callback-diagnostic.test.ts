@@ -5,7 +5,7 @@ import { test } from 'node:test'
 import { compileSource } from '../../compiler/core.ts'
 import { CompileError } from '../../compiler/diagnostics.ts'
 import {
-  createCompilerLibrarySetWithSyntheticGlobalDeclarations as createCompilerLibrarySet,
+  createCompilerLibrarySetWithCollections as createCompilerLibrarySet,
   fixturePrimitiveTypeRef
 } from './helpers/compiler-library-fixtures.ts'
 import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'

@@ -7,6 +7,9 @@ import type {
 } from '../../../../compiler/extensions/types.ts'
 
 const libraryId = 'global:promise'
+const collectionsLibraryId = 'global:collections'
+const arrayRuntimeRequirement = `${collectionsLibraryId}#array`
+const arrayTypeId = `${collectionsLibraryId}#Array`
 export const promiseRuntimeRequirement = `${libraryId}#promise`
 
 export const promiseNativeTypeId = `${libraryId}#Promise`
@@ -91,6 +94,8 @@ const operations: LibraryOperationDescriptor[] = [
       }
     ]
   },
+  promiseCombinatorOperation('all', promiseTypeRef(arrayTypeRef(fulfilledParameterTypeRef), unknownTypeRef)),
+  promiseCombinatorOperation('race', promiseTypeRef(fulfilledParameterTypeRef, unknownTypeRef)),
   {
     libraryId,
     bindingId: 'global:Promise.resolve',
@@ -98,7 +103,20 @@ const operations: LibraryOperationDescriptor[] = [
     kind: 'call',
     asyncResultOperation: 'fulfill',
     runtimeRequirements: [promiseRuntimeRequirement],
-    typeParameters: [{ name: 'T', sources: [{ source: 'argument-type', argumentIndex: 0 }] }],
+    typeParameters: [
+      {
+        name: 'T',
+        sources: [
+          { source: 'explicit-type-argument', argumentIndex: 0 },
+          {
+            source: 'argument-type',
+            argumentIndex: 0,
+            unwrapTraitId: 'awaitable',
+            unwrapTraitArgumentIndex: 0
+          }
+        ]
+      }
+    ],
     cExpression: 'inox::Promise::resolve',
     cCallStyle: 'function',
     cResultMode: 'value',
@@ -117,7 +135,12 @@ const operations: LibraryOperationDescriptor[] = [
         minArgs: 1,
         maxArgs: 1,
         cArgumentKinds: ['runtime-value'],
-        argumentChecks: [{ valueTypes: [], typeRef: fulfilledParameterTypeRef }]
+        argumentChecks: [
+          {
+            valueTypes: [],
+            typeRefs: [fulfilledParameterTypeRef, promiseTypeRef(fulfilledParameterTypeRef, unknownTypeRef)]
+          }
+        ]
       }
     ]
   },
@@ -160,12 +183,40 @@ const operations: LibraryOperationDescriptor[] = [
     promiseTypeRef(fulfilledParameterTypeRef, unknownTypeRef),
     rejectedParameterTypeRef,
     true
-  )
+  ),
+  {
+    libraryId,
+    bindingId: `${promiseNativeTypeId}.finally`,
+    operationId: `${promiseNativeTypeId}.finally`,
+    kind: 'call',
+    runtimeRequirements: [promiseRuntimeRequirement],
+    receiverTypeId: promiseNativeTypeId,
+    typeParameters: [
+      { name: 'T', sources: [{ source: 'receiver-type-argument', argumentIndex: 0 }] },
+      { name: 'E', sources: [{ source: 'receiver-trait', traitId: 'awaitable', traitArgumentIndex: 1 }] }
+    ],
+    cExpression: 'finallyDo',
+    cArgumentKinds: ['receiver', 'optional-runtime-callback'],
+    cCallStyle: 'member',
+    cResultMode: 'value',
+    resultTypeRef: promiseTypeRef(fulfilledParameterTypeRef, rejectedParameterTypeRef),
+    minArgs: 0,
+    maxArgs: 1,
+    argumentChecks: [
+      {
+        valueTypes: ['function'],
+        functionParameters: [],
+        functionReturnType: 'void',
+        functionAsync: false
+      }
+    ],
+    callbackLifetime: 'event-loop'
+  }
 ]
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: [],
+  dependencies: [collectionsLibraryId],
   nativeTypes: [
     {
       libraryId,
@@ -173,7 +224,10 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       declarationNames: ['Promise'],
       valueType: 'async-result',
       cppType: 'inox::Promise',
-      cValueAdapter: 'inox::Promise($value)',
+      cValueAdapter: 'inox::Promise(inox::Value($value))',
+      cValueAdapterFailureMode: 'thrown',
+      cRuntimeValueExpression: '$value.raw()',
+      cRuntimeValueValidExpression: 'inox::Promise::isPromise(inox::Value($value))',
       baseTypeIds: [],
       runtimeRequirements: [promiseRuntimeRequirement],
       cValidExpression: '$value.valid()',
@@ -189,11 +243,62 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: promiseRuntimeRequirement,
-      dependencies: ['async-runtime', 'managed-values'],
+      dependencies: [arrayRuntimeRequirement, 'async-runtime', 'callback-values', 'managed-values'],
       cPreludeIncludes: ['inox/promise.h'],
       capabilities: []
     }
   ]
+}
+
+function promiseCombinatorOperation(name: 'all' | 'race', resultTypeRef: TypeRef): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: `global:Promise.${name}`,
+    operationId: `${promiseNativeTypeId}.${name}`,
+    kind: 'call',
+    runtimeRequirements: [promiseRuntimeRequirement],
+    typeParameters: [
+      {
+        name: 'T',
+        sources: [
+          { source: 'explicit-type-argument', argumentIndex: 0 },
+          {
+            source: 'argument-array-literal-elements',
+            argumentIndex: 0,
+            unwrapTraitId: 'awaitable',
+            unwrapTraitArgumentIndex: 0
+          },
+          {
+            source: 'argument-trait',
+            argumentIndex: 0,
+            traitId: 'iterable',
+            traitArgumentIndex: 0,
+            unwrapTraitId: 'awaitable',
+            unwrapTraitArgumentIndex: 0
+          }
+        ]
+      }
+    ],
+    cExpression: `inox::Promise::${name}`,
+    cArgumentKinds: ['runtime-value'],
+    cCallStyle: 'function',
+    cResultMode: 'value',
+    resultTypeRef,
+    minArgs: 1,
+    maxArgs: 1,
+    argumentChecks: [{ valueTypes: ['object'], objectTypeIds: [arrayTypeId] }]
+  }
+}
+
+function arrayTypeRef(elementType: TypeRef): NominalTypeRef {
+  return {
+    kind: 'nominal',
+    typeId: arrayTypeId,
+    args: [elementType],
+    nullable: false,
+    ownership: 'value',
+    traits: [{ traitId: 'iterable', args: [elementType] }]
+  }
 }
 
 function promiseReceiverOperation(

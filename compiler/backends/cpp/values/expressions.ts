@@ -4965,6 +4965,38 @@ export function emitCValueExpression(
   context: CFunctionContext,
   deps: CValueExpressionDependencies
 ): PreparedExpression {
+  const prepared = emitCValueExpressionUnadapted(expression, context, deps)
+
+  if (deps.inferExpressionType(expression, context) !== 'async-result') {
+    return prepared
+  }
+
+  const runtimeValueExpression = compilerLibraryNativeRuntimeValueExpressionForTypeRef(
+    context.libraries,
+    expression.typeRef
+  )
+
+  if (
+    runtimeValueExpression === null ||
+    prepared.cppType === 'inox::Value' ||
+    prepared.cppType === 'inox_value'
+  ) {
+    return prepared
+  }
+
+  return {
+    ...prepared,
+    expression: runtimeValueExpression.split('$value').join(prepared.expression),
+    cppType: 'inox::Value',
+    valueType: 'async-result'
+  }
+}
+
+function emitCValueExpressionUnadapted(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CValueExpressionDependencies
+): PreparedExpression {
   if (isCoalesceExpression(expression)) {
     return deps.emitCNullishCoalescingValueExpression(expression, context)
   }
@@ -5354,6 +5386,10 @@ export function emitCValueExpression(
       context.libraries,
       expression.typeRef
     )
+    const nativeRuntimeValueExpression = compilerLibraryNativeRuntimeValueExpressionForTypeRef(
+      context.libraries,
+      expression.typeRef
+    )
     const returnRuntimeTypeAlternatives = callExpressionReturnRuntimeTypeAlternatives(expression, context)
     const call = deps.emitPreparedCallExpression(expression, context)
 
@@ -5365,7 +5401,11 @@ export function emitCValueExpression(
     const lines: string[] = []
 
     appendLines(lines, call.lines)
-    lines.push(`${temp} = ${call.expression};`)
+    const callExpression =
+      nativeRuntimeValueExpression === null
+        ? call.expression
+        : nativeRuntimeValueExpression.split('$value').join(call.expression)
+    lines.push(`${temp} = ${callExpression};`)
 
     if (nativeValidExpression !== null) {
       const valid = nativeValidExpression.split('$value').join(temp)
@@ -5401,6 +5441,8 @@ export function emitCValueExpression(
     return {
       lines,
       expression: temp,
+      cppType: 'inox::Value',
+      valueType,
       functionCompanions: call.functionCompanions
     }
   }

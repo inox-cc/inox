@@ -2,13 +2,15 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
-import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
 import {
   emitModuleFunctionEffectsContract,
   parseModuleFunctionEffectsContract
 } from '../../compiler/modules/function-effects.ts'
 import { fixtureExceptionLibrary } from './helpers/compiler-exception-library-fixtures.ts'
-import { compilerLibraryPackageWithGlobalDeclaration } from './helpers/compiler-library-fixtures.ts'
+import {
+  compilerLibraryPackageWithGlobalDeclaration,
+  createCompilerLibrarySetWithCollections as createCompilerLibrarySet
+} from './helpers/compiler-library-fixtures.ts'
 import { compilerLibraryPackage as promiseCompilerLibraryPackage } from '../../stdlib/global/promise/compiler/index.ts'
 
 test('метаданные exception provider проходят через async function, await и try/catch', () => {

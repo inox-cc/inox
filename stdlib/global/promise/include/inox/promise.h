@@ -27,6 +27,7 @@ public:
   class promise_type;
 
   Promise();
+  explicit Promise(const Value& value);
   Promise(const Promise& other);
   Promise(Promise&& other) noexcept;
   Promise& operator=(const Promise& other);
@@ -34,6 +35,8 @@ public:
   ~Promise();
 
   static Promise create();
+  static Promise all(const Value& values);
+  static Promise race(const Value& values);
   static Promise resolve();
   static Promise resolve(Value value);
   static Promise reject();
@@ -49,6 +52,7 @@ public:
     void* context,
     PromiseCallbackFinalizer finalizer
   ) const;
+  Promise finallyDo(const Value& callback) const;
   inox_status observe(
     PromiseReactionCallback onFulfilled,
     PromiseReactionCallback onRejected,
@@ -58,6 +62,9 @@ public:
   Value awaitValue() const;
   inox_status fulfill(Value value) const;
   inox_status rejectWith(Value error) const;
+
+  Value raw() const;
+  static bool isPromise(const Value& value);
 
   bool valid() const;
   Awaiter operator co_await() const;

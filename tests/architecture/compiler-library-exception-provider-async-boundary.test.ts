@@ -3,9 +3,11 @@ import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
-import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
 import { fixtureExceptionLibrary } from './helpers/compiler-exception-library-fixtures.ts'
-import { compilerLibraryPackageWithGlobalDeclaration } from './helpers/compiler-library-fixtures.ts'
+import {
+  compilerLibraryPackageWithGlobalDeclaration,
+  createCompilerLibrarySetWithCollections as createCompilerLibrarySet
+} from './helpers/compiler-library-fixtures.ts'
 import { compilerLibraryPackage as promiseCompilerLibraryPackage } from '../../stdlib/global/promise/compiler/index.ts'
 
 test('portable async lowering получает exception shape от выбранного provider', async () => {

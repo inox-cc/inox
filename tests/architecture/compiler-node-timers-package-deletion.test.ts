@@ -85,6 +85,7 @@ async function createFixture(): Promise<void> {
   await rm(fixture, { recursive: true, force: true })
   await mkdir(resolve(fixture, 'stdlib/global'), { recursive: true })
   await mkdir(resolve(fixture, 'stdlib/node'), { recursive: true })
+  await cp(resolve('stdlib/global/collections'), resolve(fixture, 'stdlib/global/collections'), { recursive: true })
   await cp(resolve('stdlib/global/promise'), resolve(fixture, 'stdlib/global/promise'), { recursive: true })
   await cp(resolve('stdlib/node/os'), resolve(fixture, 'stdlib/node/os'), { recursive: true })
   await cp(resolve('stdlib/node/timers'), resolve(fixture, 'stdlib/node/timers'), { recursive: true })

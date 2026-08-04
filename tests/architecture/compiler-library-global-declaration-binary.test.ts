@@ -17,6 +17,6 @@ test('global declaration reader сохраняет binary constructors и numeri
   assert.equal(declaration.indexSignatures[0].valueType, 'nullable<number>')
   assert.equal(
     declaration.methods.filter((method: AnyNode) => method.name === 'constructor').length,
-    2
+    3
   )
 })

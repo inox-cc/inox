@@ -8,12 +8,14 @@ const bufferOperationIds = [
   'node:buffer#Buffer.alloc',
   'node:buffer#Buffer.byteLength',
   'node:buffer#Buffer.compare',
+  'node:buffer#Buffer.concat',
   'node:buffer#Buffer.isBuffer',
   'node:buffer#constants.MAX_LENGTH',
   'node:buffer#Buffer#read:length',
   'node:buffer#Buffer#index-read',
   'node:buffer#Buffer#index-write',
   'node:buffer#Buffer#compare',
+  'node:buffer#Buffer#copy',
   'node:buffer#Buffer#equals',
   'node:buffer#Buffer#slice',
   'node:buffer#Buffer#subarray',
@@ -22,6 +24,7 @@ const bufferOperationIds = [
 const nominalResultIds = [
   'node:buffer#Buffer.from',
   'node:buffer#Buffer.alloc',
+  'node:buffer#Buffer.concat',
   'node:buffer#Buffer#slice',
   'node:buffer#Buffer#subarray'
 ]
@@ -31,7 +34,8 @@ const numberResultIds = [
   'node:buffer#constants.MAX_LENGTH',
   'node:buffer#Buffer#read:length',
   'node:buffer#Buffer#index-write',
-  'node:buffer#Buffer#compare'
+  'node:buffer#Buffer#compare',
+  'node:buffer#Buffer#copy'
 ]
 const booleanResultIds = [
   'node:buffer#Buffer.isBuffer',
@@ -69,7 +73,7 @@ test('node:buffer operations describe results only through TypeRef', async () =>
   }
 
   const variants = operations.flatMap((operation) => operation.variants ?? [])
-  assert.equal(variants.length, 7)
+  assert.equal(variants.length, 9)
 
   for (const variant of variants) {
     assert.equal(variant.resultTypeRef, undefined)

@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
 import type { LibraryAsyncResultOperationKind } from '../../compiler/extensions/types.ts'
 import { compilerLibraryPackage as promiseCompilerLibraryPackage } from '../../stdlib/global/promise/compiler/index.ts'
-import { compilerLibraryPackageWithGlobalDeclaration } from './helpers/compiler-library-fixtures.ts'
+import {
+  compilerLibraryPackageWithGlobalDeclaration,
+  createCompilerLibrarySetWithCollections as createCompilerLibrarySet
+} from './helpers/compiler-library-fixtures.ts'
 
 test('async-result provider требует C++ expression для каждой операции', () => {
   for (const kind of ['create', 'fulfill', 'reject', 'map-fulfilled'] as LibraryAsyncResultOperationKind[]) {

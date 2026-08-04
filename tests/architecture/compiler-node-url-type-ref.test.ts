@@ -10,6 +10,7 @@ import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-di
 
 const stringTypeRef = primitiveTypeRef('string')
 const stringCResultMapping = cResultMapping('inox::String')
+const searchParamsEntryTypeRef = arrayTypeRef(stringTypeRef)
 const urlFields = [
   stringField('href', true),
   stringField('protocol', true),
@@ -28,13 +29,17 @@ const expectedResults = [
   result('node:url#URLSearchParams', nominalTypeRef('node:url#URLSearchParams')),
   result('node:url#URLSearchParams#append', primitiveTypeRef('void')),
   result('node:url#URLSearchParams#delete', primitiveTypeRef('void')),
+  result('node:url#URLSearchParams#entries', searchParamsIteratorTypeRef(searchParamsEntryTypeRef)),
+  result('node:url#URLSearchParams#forEach', primitiveTypeRef('void')),
   result('node:url#URLSearchParams#get', primitiveTypeRef('string', true), cResultMapping('inox::Value')),
   result('node:url#URLSearchParams#getAll', arrayTypeRef(stringTypeRef)),
   result('node:url#URLSearchParams#has', primitiveTypeRef('boolean')),
+  result('node:url#URLSearchParams#keys', searchParamsIteratorTypeRef(stringTypeRef)),
   result('node:url#URLSearchParams#read:size', primitiveTypeRef('number')),
   result('node:url#URLSearchParams#set', primitiveTypeRef('void')),
   result('node:url#URLSearchParams#sort', primitiveTypeRef('void')),
   result('node:url#URLSearchParams#toString', stringTypeRef, stringCResultMapping),
+  result('node:url#URLSearchParams#values', searchParamsIteratorTypeRef(stringTypeRef)),
   result('node:url#URL#write:pathname', stringTypeRef, cResultMapping('void')),
   result('node:url#URL#write:search', stringTypeRef, cResultMapping('void')),
   result('node:url#URL#write:hash', stringTypeRef, cResultMapping('void'))
@@ -64,7 +69,40 @@ test('node:url declares native types and operation results through TypeRef', asy
       valueType: 'object',
       cppType: 'URLSearchParams',
       baseTypeIds: [],
-      runtimeRequirements: ['node:url']
+      runtimeRequirements: ['node:url'],
+      cValueAdapter: 'URLSearchParams($value)',
+      cValueAdapterFailureMode: 'thrown',
+      cValueAdapterPreservesPendingException: true,
+      cRuntimeValueExpression: '$value.raw()',
+      traits: [{ traitId: 'iterable', args: [searchParamsEntryTypeRef] }],
+      cIteration: {
+        iteratorMethod: 'entries',
+        nextMethod: 'next',
+        doneMember: 'done',
+        valueMember: 'value',
+        receiverAdapter: 'URLSearchParams($value)',
+        valueAdapter: '$value.raw()',
+        nextFailureMode: 'thrown'
+      }
+    },
+    {
+      libraryId: 'node:url',
+      typeId: 'node:url#URLSearchParamsIterator',
+      declarationNames: [],
+      valueType: 'object',
+      cppType: 'URLSearchParamsIterator',
+      baseTypeIds: [],
+      runtimeRequirements: ['node:url'],
+      typeParameters: ['T'],
+      traits: [{ traitId: 'iterable', args: [{ kind: 'parameter', name: 'T' }] }],
+      cIteration: {
+        iteratorMethod: null,
+        nextMethod: 'next',
+        doneMember: 'done',
+        valueMember: 'value',
+        valueAdapter: '$value.raw()',
+        nextFailureMode: 'thrown'
+      }
     }
   ])
 
@@ -105,6 +143,17 @@ function arrayTypeRef(elementType: TypeRef): TypeRef {
   return {
     kind: 'nominal',
     typeId: 'global:collections#Array',
+    args: [elementType],
+    nullable: false,
+    ownership: 'value',
+    traits: [{ traitId: 'iterable', args: [elementType] }]
+  }
+}
+
+function searchParamsIteratorTypeRef(elementType: TypeRef): TypeRef {
+  return {
+    kind: 'nominal',
+    typeId: 'node:url#URLSearchParamsIterator',
     args: [elementType],
     nullable: false,
     ownership: 'value',

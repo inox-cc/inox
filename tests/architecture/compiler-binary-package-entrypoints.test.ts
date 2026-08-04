@@ -30,7 +30,7 @@ test('binary packages expose generic native types, operations and runtime requir
       cRuntimeValueValidExpression: 'Uint8Array(inox::Value($value)).valid()'
     }
   ])
-  assert.deepEqual(buffer.compilerPackage.dependencies, ['global:binary'])
+  assert.deepEqual(buffer.compilerPackage.dependencies, ['global:binary', 'global:collections'])
   assert.deepEqual(buffer.compilerPackage.nativeTypes, [
     {
       libraryId: 'node:buffer',
