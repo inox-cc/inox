@@ -1447,7 +1447,23 @@ SetIterator Set::values() const {
     inox::fatal("Set.values native facade invariant failed");
   }
 
-  return SetIterator(*this);
+  return SetIterator(*this, 0);
+}
+
+SetIterator Set::keys() const {
+  if (!valid()) {
+    inox::fatal("Set.keys native facade invariant failed");
+  }
+
+  return SetIterator(*this, 0);
+}
+
+SetIterator Set::entries() const {
+  if (!valid()) {
+    inox::fatal("Set.entries native facade invariant failed");
+  }
+
+  return SetIterator(*this, 1);
 }
 
 void Set::forEach(inox::Callback callback) const {
@@ -1476,9 +1492,9 @@ void Set::forEach(inox::Callback callback) const {
   }
 }
 
-SetIterator::SetIterator() : owner_(), index_(0), done_(false) {}
+SetIterator::SetIterator() : owner_(), index_(0), mode_(0), done_(false) {}
 
-SetIterator::SetIterator(const Set& value) : owner_(value), index_(0), done_(false) {}
+SetIterator::SetIterator(const Set& value, uint8_t mode) : owner_(value), index_(0), mode_(mode), done_(false) {}
 
 SetIterationResult SetIterator::next() {
   if (done_) {
@@ -1503,6 +1519,19 @@ SetIterationResult SetIterator::next() {
     }
 
     SetEntry* entry = &instance->entries[slot_index];
+
+    if (mode_ == 1) {
+      Array pair = Array::create(0);
+      pair.push(inox::Value(entry->value));
+      pair.push(inox::Value(entry->value));
+
+      if (inox::thrown()) {
+        return { true, inox::Value() };
+      }
+
+      return { false, pair };
+    }
+
     return { false, inox::Value(entry->value) };
   }
 

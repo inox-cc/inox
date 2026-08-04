@@ -18,6 +18,8 @@ export const setNativeTypeId = `${libraryId}#Set`
 const mapEntryIteratorNativeTypeId = `${libraryId}#MapEntryIterator`
 const mapKeyIteratorNativeTypeId = `${libraryId}#MapKeyIterator`
 const mapValueIteratorNativeTypeId = `${libraryId}#MapValueIterator`
+const setEntryIteratorNativeTypeId = `${libraryId}#SetEntryIterator`
+const setValueIteratorNativeTypeId = `${libraryId}#SetValueIterator`
 
 const parameterTypeRef: TypeRef = { kind: 'parameter', name: 'T' }
 const mappedParameterTypeRef: TypeRef = { kind: 'parameter', name: 'U' }
@@ -277,12 +279,14 @@ const setOperations: LibraryOperationDescriptor[] = [
   setReceiverCall('add', 'add', setTypeRef(parameterTypeRef), true),
   setReceiverCall('clear', 'clear', voidTypeRef, false),
   setReceiverCall('delete', 'erase', booleanTypeRef, true),
+  setIteratorOperation('entries', setEntryIteratorNativeTypeId),
   {
     ...setReceiverCall('has', 'has', booleanTypeRef, true),
     cFailureMode: null,
     cPreservesPendingException: true
   },
   setForEachOperation(),
+  setIteratorOperation('keys', setValueIteratorNativeTypeId),
   {
     libraryId,
     bindingId: `${setNativeTypeId}.size`,
@@ -297,7 +301,8 @@ const setOperations: LibraryOperationDescriptor[] = [
     cPreservesPendingException: true,
     cResultAdapter: 'static_cast<double>($value)',
     resultTypeRef: numberTypeRef
-  }
+  },
+  setIteratorOperation('values', setValueIteratorNativeTypeId)
 ]
 
 const mapOperations: LibraryOperationDescriptor[] = [
@@ -455,6 +460,8 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
     mapIteratorNativeType(mapEntryIteratorNativeTypeId, [], mapEntryTypeRef()),
     mapIteratorNativeType(mapKeyIteratorNativeTypeId, ['K'], keyParameterTypeRef),
     mapIteratorNativeType(mapValueIteratorNativeTypeId, ['V'], valueParameterTypeRef),
+    setIteratorNativeType(setEntryIteratorNativeTypeId, arrayTypeRef(parameterTypeRef)),
+    setIteratorNativeType(setValueIteratorNativeTypeId, parameterTypeRef),
     {
       libraryId,
       typeId: setNativeTypeId,
@@ -875,6 +882,28 @@ function mapIteratorNativeType(typeId: string, typeParameters: string[], element
   }
 }
 
+function setIteratorNativeType(typeId: string, elementType: TypeRef) {
+  return {
+    libraryId,
+    typeId,
+    declarationNames: [],
+    valueType: 'object',
+    cppType: 'SetIterator',
+    baseTypeIds: [],
+    runtimeRequirements: [setRuntimeRequirement],
+    typeParameters: ['T'],
+    traits: [{ traitId: 'iterable' as const, args: [elementType] }],
+    cIteration: {
+      iteratorMethod: null,
+      nextMethod: 'next',
+      doneMember: 'done',
+      valueMember: 'value',
+      valueAdapter: '$value.raw()',
+      nextFailureMode: 'thrown' as const
+    }
+  }
+}
+
 function mapReceiverCall(
   sourceName: string,
   cName: string,
@@ -975,6 +1004,28 @@ function setReceiverCall(
     minArgs: argumentChecks.length,
     maxArgs: argumentChecks.length,
     argumentChecks
+  }
+}
+
+function setIteratorOperation(name: string, typeId: string): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: `${setNativeTypeId}.${name}`,
+    operationId: `${setNativeTypeId}.${name}`,
+    kind: 'call',
+    runtimeRequirements: [setRuntimeRequirement],
+    receiverTypeId: setNativeTypeId,
+    typeParameters: [{ name: 'T', sources: [{ source: 'receiver-type-argument', argumentIndex: 0 }] }],
+    cExpression: name,
+    cArgumentKinds: ['receiver'],
+    cCallStyle: 'member',
+    cFailureMode: null,
+    cPreservesPendingException: true,
+    cResultMode: 'value',
+    resultTypeRef: mapIteratorTypeRef(typeId, [parameterTypeRef]),
+    minArgs: 0,
+    maxArgs: 0,
+    argumentChecks: []
   }
 }
 

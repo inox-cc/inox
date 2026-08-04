@@ -2,6 +2,7 @@ export {}
 
 declare global {
   interface MapIterator<T> {}
+  interface SetIterator<T> {}
 
   class Array<T> {
     readonly length: number
@@ -58,7 +59,10 @@ declare global {
     add(value: T): Set<T>
     clear(): void
     delete(value: T): boolean
+    entries(): SetIterator<Array<T>>
     forEach(callback: (value: T, key: T, set: Set<T>) => void): void
     has(value: T): boolean
+    keys(): SetIterator<T>
+    values(): SetIterator<T>
   }
 }
