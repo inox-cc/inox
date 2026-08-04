@@ -4,4 +4,4 @@
 // @stdout 1
 
 console.log(process.version.startsWith('v'))
-console.log(process.versions.node === process.version.slice(1))
+console.log(process.versions.inox === process.version.slice(1))

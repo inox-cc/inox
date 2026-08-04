@@ -8,7 +8,7 @@ import { createCompilerLibrarySetFromDiscovered } from '../../scripts/lib/compil
 test('node:process проходит через generic global, receiver и result operation plan', async () => {
   const libraries = createCompilerLibrarySetFromDiscovered(await discoverCompilerLibraries())
   const result = compileSource(
-    "import proc, { cwd, hrtime, memoryUsage } from 'node:process'\nconst first = proc.argv[0]\nconst path = process.env.PATH\nconst start = hrtime()\nconst delta = proc.hrtime(start)\nconst usage = memoryUsage()\nprocess.exitCode = 0\nconsole.log(first, path, cwd(), delta[0], usage.rss, proc.versions.node)\n",
+    "import proc, { cwd, hrtime, memoryUsage } from 'node:process'\nconst first = proc.argv[0]\nconst path = process.env.PATH\nconst start = hrtime()\nconst delta = proc.hrtime(start)\nconst usage = memoryUsage()\nprocess.exitCode = 0\nconsole.log(first, path, cwd(), delta[0], usage.rss, proc.versions.inox)\n",
     { libraries, profile: 'embedded', target: 'cc' }
   )
   const first = result.ir.body[1].init

@@ -57,7 +57,7 @@ private:
   friend class Process;
 
 public:
-  inox::String node;
+  inox::String inoxVersion;
 };
 
 class ProcessMemoryUsage : public inox::Value {

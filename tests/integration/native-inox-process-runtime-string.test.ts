@@ -22,7 +22,7 @@ export async function assertNativeInoxProcessRuntimeString(compilerPath: string)
     })
     await writeFile(
       input,
-      ['const snapshot = process', 'console.log(snapshot.versions.node === process.version.slice(1))', ''].join('\n')
+      ['const snapshot = process', 'console.log(snapshot.versions.inox === process.version.slice(1))', ''].join('\n')
     )
 
     const emit = await runCommand(compilerPath, [input, outputCc])

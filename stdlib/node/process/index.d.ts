@@ -21,7 +21,7 @@ export interface ProcessMemoryUsage {
 }
 
 export interface ProcessVersions {
-  readonly node: string
+  readonly inox: string
 }
 
 export interface ProcessModule {
@@ -85,7 +85,7 @@ declare global {
   }
 
   interface ProcessVersions {
-    readonly node: string
+    readonly inox: string
   }
 
   interface Process {

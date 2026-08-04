@@ -32,7 +32,7 @@ const expectedResults = new Map<string, [TypeRef, LibraryCResultMappingDescripto
   ['node:process#read:platform', [stringTypeRef, stringMapping]],
   ['node:process#read:version', [stringTypeRef, stringMapping]],
   ['node:process#read:versions', [nominalTypeRef(versionsTypeId), null]],
-  ['node:process#read:versions.node', [stringTypeRef, stringMapping]],
+  ['node:process#read:versions.inox', [stringTypeRef, stringMapping]],
   ['node:process#cwd', [stringTypeRef, stringMapping]],
   ['node:process#exit', [voidTypeRef, null]],
   ['node:process#hrtime', [arrayTypeRef(numberTypeRef), null]],
@@ -66,7 +66,7 @@ test('node:process implemented results принадлежат TypeRef и package
 })
 
 function expectedNativeTypes(): LibraryNativeTypeDescriptor[] {
-  const versionsFields = [resultField('node', 'string', 'node', 'inox::String')]
+  const versionsFields = [resultField('inox', 'string', 'inoxVersion', 'inox::String')]
   const argvFields = [resultField('length', 'number', 'length', 'double')]
 
   return [

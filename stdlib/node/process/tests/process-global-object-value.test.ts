@@ -6,4 +6,4 @@
 const snapshot = process
 
 console.log(snapshot.version === process.version)
-console.log(snapshot.versions.node === process.version.slice(1))
+console.log(snapshot.versions.inox === process.version.slice(1))

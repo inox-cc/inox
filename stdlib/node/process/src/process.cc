@@ -42,7 +42,7 @@ static const inox_field_info process_memory_usage_fields[] = {
 static const inox_shape process_memory_usage_shape = { 5, process_memory_usage_fields };
 
 static const inox_field_info process_versions_fields[] = {
-  { "node", INOX_FIELD_READONLY }
+  { "inox", INOX_FIELD_READONLY }
 };
 
 static const inox_shape process_versions_shape = { 1, process_versions_fields };
@@ -291,10 +291,10 @@ inox::String ProcessEnv::operator[](inox::StringView name) const {
 }
 
 void ProcessVersions::init() {
-  node = inox::String(INOX_PACKAGE_VERSION);
+  inoxVersion = inox::String(INOX_PACKAGE_VERSION);
   inox::Value object;
 
-  if (!node.valid()) {
+  if (!inoxVersion.valid()) {
     static_cast<inox::Value&>(*this) = inox::Value();
     return;
   }
@@ -304,7 +304,7 @@ void ProcessVersions::init() {
     return;
   }
 
-  if (inox_object_init_known(object, 0, node) != INOX_OK) {
+  if (inox_object_init_known(object, 0, inoxVersion) != INOX_OK) {
     static_cast<inox::Value&>(*this) = inox::Value();
     return;
   }

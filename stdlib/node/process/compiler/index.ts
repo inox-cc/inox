@@ -28,7 +28,9 @@ const numberTypeRef = primitiveTypeRef('number')
 const voidTypeRef = primitiveTypeRef('void')
 const stringResultMapping = cResultMapping('inox::String')
 
-const versionsFields: LibraryResultShapeFieldDescriptor[] = [resultField('node', 'string', 'node', 'inox::String')]
+const versionsFields: LibraryResultShapeFieldDescriptor[] = [
+  resultField('inox', 'string', 'inoxVersion', 'inox::String')
+]
 const argvFields: LibraryResultShapeFieldDescriptor[] = [resultField('length', 'number', 'length', 'double')]
 const processFields: LibraryResultShapeFieldDescriptor[] = [
   resultField('arch', 'string', 'arch', 'inox::String'),
@@ -63,7 +65,7 @@ const operations: LibraryOperationDescriptor[] = [
   propertyRead('platform', 'process.platform', stringTypeRef, stringResultMapping),
   propertyRead('version', 'process.version', stringTypeRef, stringResultMapping),
   objectRead('versions', 'process.versions', nominalTypeRef(versionsTypeId)),
-  propertyRead('versions.node', 'process.versions.node', stringTypeRef, stringResultMapping),
+  propertyRead('versions.inox', 'process.versions.inoxVersion', stringTypeRef, stringResultMapping),
   callOperation('cwd', [], 'process.cwd', stringTypeRef, 0, 0, [], {
     cResultMapping: stringResultMapping
   }),

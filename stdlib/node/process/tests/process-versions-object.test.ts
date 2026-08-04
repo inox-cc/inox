@@ -4,4 +4,4 @@
 
 const versions = process.versions
 
-console.log(versions.node === process.version.slice(1))
+console.log(versions.inox === process.version.slice(1))
