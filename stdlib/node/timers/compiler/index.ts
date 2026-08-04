@@ -10,6 +10,13 @@ import type {
 const libraryId = 'node:timers'
 const runtimeRequirement = libraryId
 const runtimeRequirements = [runtimeRequirement]
+const booleanTypeRef: PrimitiveTypeRef = {
+  kind: 'primitive',
+  name: 'boolean',
+  nullable: false,
+  ownership: 'value',
+  traits: []
+}
 const voidTypeRef: PrimitiveTypeRef = {
   kind: 'primitive',
   name: 'void',
@@ -34,8 +41,9 @@ const operations: LibraryOperationDescriptor[] = [
 ]
 
 for (const [handleName] of handleTypes) {
-  operations.push(unsupportedHandleOperation(handleName, 'ref'))
-  operations.push(unsupportedHandleOperation(handleName, 'unref'))
+  operations.push(handleOperation(handleName, 'ref'))
+  operations.push(handleOperation(handleName, 'unref'))
+  operations.push(handleOperation(handleName, 'hasRef'))
 }
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
@@ -146,9 +154,9 @@ function clearOperation(
   }
 }
 
-function unsupportedHandleOperation(
+function handleOperation(
   handleName: 'ImmediateHandle' | 'IntervalHandle' | 'TimeoutHandle',
-  name: 'ref' | 'unref'
+  name: 'hasRef' | 'ref' | 'unref'
 ): LibraryOperationDescriptor {
   const typeId = handleTypeId(handleName)
 
@@ -157,15 +165,16 @@ function unsupportedHandleOperation(
     bindingId: `${typeId}.${name}`,
     operationId: `${typeId}.${name}`,
     kind: 'call',
-    runtimeRequirements: [],
+    runtimeRequirements,
     receiverTypeId: typeId,
-    cExpression: null,
+    cExpression: name,
+    cArgumentKinds: ['receiver'],
+    cCallStyle: 'member',
+    cFailureMode: null,
     minArgs: 0,
     maxArgs: 0,
     argumentChecks: [],
-    diagnosticCode: 'INOX_TIMER_REF_UNREF',
-    diagnosticMessage:
-      'timer handle ref() and unref() are not supported in the MVP; timer handles are referenced by default'
+    resultTypeRef: name === 'hasRef' ? booleanTypeRef : handleTypeRef(handleName)
   }
 }
 

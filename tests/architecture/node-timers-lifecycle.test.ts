@@ -5,6 +5,8 @@ import test from 'node:test'
 
 test('node:timers владеет callback lifecycle и future-turn scheduling внутри native facade', async () => {
   const source = await readFile('stdlib/node/timers/src/timers.cc', 'utf8')
+  const embeddedLoop = await readFile('runtime/src/async/loop.c', 'utf8')
+  const libuvLoop = await readFile('runtime/src/async/loop-libuv.c', 'utf8')
   const compiler = await compilerTypeScriptSource('compiler')
 
   assert.match(source, /namespace\s*\{/)
@@ -17,6 +19,13 @@ test('node:timers владеет callback lifecycle и future-turn scheduling в
   assert.match(source, /inox_loop_set_timeout\(/)
   assert.match(source, /inox_loop_set_interval\(/)
   assert.match(source, /inox_loop_clear_timer\(/)
+  assert.match(source, /inox_loop_ref_timer\(/)
+  assert.match(source, /inox_loop_unref_timer\(/)
+  assert.match(source, /inox_loop_timer_has_ref\(/)
+  assert.match(embeddedLoop, /int\s+referenced\s*;/)
+  assert.match(embeddedLoop, /inox_loop_has_referenced_handle\(/)
+  assert.match(libuvLoop, /uv_ref\(/)
+  assert.match(libuvLoop, /uv_unref\(/)
 
   assert.match(source, /bool\s+(?:active|cleared|cancelled)_?\s*;/)
   assert.match(source, /if\s*\([^)]*(?:active|cleared|cancelled)_?[^)]*\)\s*\{\s*return;/)

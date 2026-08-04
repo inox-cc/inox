@@ -74,6 +74,7 @@ test('node:timers объявляет global, named, default и handle operations
   for (const typeId of ['node:timers#ImmediateHandle', 'node:timers#IntervalHandle', 'node:timers#TimeoutHandle']) {
     expectedOperationIds.push(`${typeId}.ref`)
     expectedOperationIds.push(`${typeId}.unref`)
+    expectedOperationIds.push(`${typeId}.hasRef`)
   }
 
   assert.deepEqual(operations.map((item) => item.operationId).sort(), expectedOperationIds.sort())
@@ -150,19 +151,37 @@ test('node:timers объявляет global, named, default и handle operations
   }
 
   for (const typeId of ['node:timers#ImmediateHandle', 'node:timers#IntervalHandle', 'node:timers#TimeoutHandle']) {
-    for (const method of ['ref', 'unref']) {
+    for (const method of ['ref', 'unref', 'hasRef']) {
       const descriptor = operation(operations, `${typeId}.${method}`)
 
       assert.equal(descriptor.bindingId, `${typeId}.${method}`)
       assert.equal(descriptor.kind, 'call')
       assert.equal(descriptor.receiverTypeId, typeId)
-      assert.deepEqual(descriptor.runtimeRequirements, [])
-      assert.equal(descriptor.cExpression, null)
-      assert.equal(descriptor.diagnosticCode, 'INOX_TIMER_REF_UNREF')
-      assert.equal(
-        descriptor.diagnosticMessage,
-        'timer handle ref() and unref() are not supported in the MVP; timer handles are referenced by default'
-      )
+      assert.deepEqual(descriptor.runtimeRequirements, ['node:timers'])
+      assert.equal(descriptor.cExpression, method)
+      assert.deepEqual(descriptor.cArgumentKinds, ['receiver'])
+      assert.equal(descriptor.cCallStyle, 'member')
+      assert.equal(descriptor.cFailureMode, null)
+      assert.equal(descriptor.diagnosticCode, undefined)
+
+      if (method === 'hasRef') {
+        assert.deepEqual(descriptor.resultTypeRef, {
+          kind: 'primitive',
+          name: 'boolean',
+          nullable: false,
+          ownership: 'value',
+          traits: []
+        })
+      } else {
+        assert.deepEqual(descriptor.resultTypeRef, {
+          kind: 'nominal',
+          typeId,
+          args: [],
+          nullable: false,
+          ownership: 'value',
+          traits: []
+        })
+      }
     }
   }
 })

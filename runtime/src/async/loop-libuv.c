@@ -34,6 +34,7 @@ struct inox_timer_handle {
   inox_loop_callback_finalizer_fn finalizer;
   inox_number interval_ms;
   int active;
+  int referenced;
   int finalized;
   int running;
   int closing;
@@ -326,6 +327,34 @@ void inox_loop_clear_timer(inox_timer_handle* handle) {
   }
 }
 
+void inox_loop_ref_timer(inox_timer_handle* handle) {
+  if (handle == 0 || handle->referenced) {
+    return;
+  }
+
+  handle->referenced = 1;
+
+  if (!handle->closing && !handle->closed) {
+    uv_ref((uv_handle_t*)&handle->timer);
+  }
+}
+
+void inox_loop_unref_timer(inox_timer_handle* handle) {
+  if (handle == 0 || !handle->referenced) {
+    return;
+  }
+
+  handle->referenced = 0;
+
+  if (!handle->closing && !handle->closed) {
+    uv_unref((uv_handle_t*)&handle->timer);
+  }
+}
+
+int inox_loop_timer_has_ref(const inox_timer_handle* handle) {
+  return handle != 0 && handle->referenced;
+}
+
 inox_status inox_loop_poll(inox_loop* loop, inox_number now_ms) {
   if (loop == 0) {
     return INOX_ERR_TYPE;
@@ -378,8 +407,7 @@ int inox_loop_has_work(const inox_loop* loop) {
   inox_libuv_loop_backend* backend = inox_libuv_backend(loop);
 
   return loop != 0 &&
-         (loop->priority_microtask_count > 0 || loop->microtask_count > 0 || loop->immediate_count > 0 ||
-          loop->timer_count > 0 ||
+         (loop->priority_microtask_count > 0 || loop->microtask_count > 0 ||
           (backend != 0 && (backend->request_count > 0 || uv_loop_alive(&backend->uv_loop))));
 }
 
@@ -578,6 +606,7 @@ static inox_status inox_libuv_new_handle(
   handle->finalizer = finalizer;
   handle->interval_ms = delay_ms;
   handle->active = 1;
+  handle->referenced = 1;
   handle->finalized = 0;
   handle->running = 0;
   handle->closing = 0;

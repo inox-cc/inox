@@ -162,6 +162,25 @@ void clearTimer(const inox::Value& handle) {
   inox_loop_clear_timer(raw);
 }
 
+void setTimerReferenced(const inox::Value& handle, bool referenced) {
+  const std::shared_ptr<TimerHandleState> state = timerState(handle);
+
+  if (!state || state->handle_ == nullptr) {
+    return;
+  }
+
+  if (referenced) {
+    inox_loop_ref_timer(state->handle_);
+  } else {
+    inox_loop_unref_timer(state->handle_);
+  }
+}
+
+bool timerHasRef(const inox::Value& handle) {
+  const std::shared_ptr<TimerHandleState> state = timerState(handle);
+  return state && state->handle_ != nullptr && inox_loop_timer_has_ref(state->handle_);
+}
+
 } // namespace
 
 TimeoutHandle::TimeoutHandle() : inox::Value() {}
@@ -179,6 +198,20 @@ TimeoutHandle& TimeoutHandle::operator=(TimeoutHandle&& other) noexcept {
 }
 TimeoutHandle::~TimeoutHandle() {}
 
+TimeoutHandle TimeoutHandle::ref() const {
+  setTimerReferenced(*this, true);
+  return TimeoutHandle(*this);
+}
+
+TimeoutHandle TimeoutHandle::unref() const {
+  setTimerReferenced(*this, false);
+  return TimeoutHandle(*this);
+}
+
+bool TimeoutHandle::hasRef() const {
+  return timerHasRef(*this);
+}
+
 IntervalHandle::IntervalHandle() : inox::Value() {}
 IntervalHandle::IntervalHandle(const inox::Value& value) : inox::Value(value) {}
 IntervalHandle::IntervalHandle(inox::Value&& value) : inox::Value(std::move(value)) {}
@@ -194,6 +227,20 @@ IntervalHandle& IntervalHandle::operator=(IntervalHandle&& other) noexcept {
 }
 IntervalHandle::~IntervalHandle() {}
 
+IntervalHandle IntervalHandle::ref() const {
+  setTimerReferenced(*this, true);
+  return IntervalHandle(*this);
+}
+
+IntervalHandle IntervalHandle::unref() const {
+  setTimerReferenced(*this, false);
+  return IntervalHandle(*this);
+}
+
+bool IntervalHandle::hasRef() const {
+  return timerHasRef(*this);
+}
+
 ImmediateHandle::ImmediateHandle() : inox::Value() {}
 ImmediateHandle::ImmediateHandle(const inox::Value& value) : inox::Value(value) {}
 ImmediateHandle::ImmediateHandle(inox::Value&& value) : inox::Value(std::move(value)) {}
@@ -208,6 +255,20 @@ ImmediateHandle& ImmediateHandle::operator=(ImmediateHandle&& other) noexcept {
   return *this;
 }
 ImmediateHandle::~ImmediateHandle() {}
+
+ImmediateHandle ImmediateHandle::ref() const {
+  setTimerReferenced(*this, true);
+  return ImmediateHandle(*this);
+}
+
+ImmediateHandle ImmediateHandle::unref() const {
+  setTimerReferenced(*this, false);
+  return ImmediateHandle(*this);
+}
+
+bool ImmediateHandle::hasRef() const {
+  return timerHasRef(*this);
+}
 
 TimeoutHandle TimersModule::setTimeout(inox::Callback callback, double delay) const {
   inox_loop* loop = inox::loop();

@@ -13,6 +13,10 @@ public:
   TimeoutHandle& operator=(const TimeoutHandle& other);
   TimeoutHandle& operator=(TimeoutHandle&& other) noexcept;
   ~TimeoutHandle();
+
+  TimeoutHandle ref() const;
+  TimeoutHandle unref() const;
+  bool hasRef() const;
 };
 
 class IntervalHandle : public inox::Value {
@@ -25,6 +29,10 @@ public:
   IntervalHandle& operator=(const IntervalHandle& other);
   IntervalHandle& operator=(IntervalHandle&& other) noexcept;
   ~IntervalHandle();
+
+  IntervalHandle ref() const;
+  IntervalHandle unref() const;
+  bool hasRef() const;
 };
 
 class ImmediateHandle : public inox::Value {
@@ -37,6 +45,10 @@ public:
   ImmediateHandle& operator=(const ImmediateHandle& other);
   ImmediateHandle& operator=(ImmediateHandle&& other) noexcept;
   ~ImmediateHandle();
+
+  ImmediateHandle ref() const;
+  ImmediateHandle unref() const;
+  bool hasRef() const;
 };
 
 class TimersModule {

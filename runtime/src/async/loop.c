@@ -20,6 +20,7 @@ struct inox_timer_handle {
   inox_number interval_ms;
   uint64_t created_turn;
   int active;
+  int referenced;
   int finalized;
   int running;
   struct inox_timer_handle* next;
@@ -40,6 +41,7 @@ static void inox_loop_deactivate_handle(inox_timer_handle* handle);
 static inox_status inox_loop_run_handle(inox_timer_handle* handle, inox_number now_ms);
 static inox_status inox_loop_run_immediates(inox_loop* loop, uint64_t turn);
 static inox_status inox_loop_run_timers(inox_loop* loop, uint64_t turn, inox_number now_ms);
+static int inox_loop_has_referenced_handle(const inox_timer_handle* handle);
 static inox_status inox_loop_keep_first_error(inox_status current, inox_status next);
 static inox_status inox_loop_queue_microtask_list(
   inox_loop* loop,
@@ -293,6 +295,22 @@ void inox_loop_clear_timer(inox_timer_handle* handle) {
   }
 }
 
+void inox_loop_ref_timer(inox_timer_handle* handle) {
+  if (handle != 0) {
+    handle->referenced = 1;
+  }
+}
+
+void inox_loop_unref_timer(inox_timer_handle* handle) {
+  if (handle != 0) {
+    handle->referenced = 0;
+  }
+}
+
+int inox_loop_timer_has_ref(const inox_timer_handle* handle) {
+  return handle != 0 && handle->referenced;
+}
+
 inox_status inox_loop_poll(inox_loop* loop, inox_number now_ms) {
   if (loop == 0) {
     return INOX_ERR_TYPE;
@@ -345,8 +363,9 @@ inox_status inox_loop_run(inox_loop* loop) {
 
 int inox_loop_has_work(const inox_loop* loop) {
   return loop != 0 &&
-         (loop->priority_microtask_count > 0 || loop->microtask_count > 0 || loop->immediate_count > 0 ||
-          loop->timer_count > 0);
+         (loop->priority_microtask_count > 0 || loop->microtask_count > 0 ||
+          inox_loop_has_referenced_handle((const inox_timer_handle*)loop->immediate_head) ||
+          inox_loop_has_referenced_handle((const inox_timer_handle*)loop->timer_head));
 }
 
 size_t inox_loop_pending_microtasks(const inox_loop* loop) {
@@ -423,6 +442,7 @@ static inox_status inox_loop_new_handle(
   handle->interval_ms = delay;
   handle->created_turn = loop->turn;
   handle->active = 1;
+  handle->referenced = 1;
   handle->finalized = 0;
   handle->running = 0;
   handle->next = 0;
@@ -454,6 +474,18 @@ static inox_status inox_loop_new_handle(
   }
 
   return INOX_OK;
+}
+
+static int inox_loop_has_referenced_handle(const inox_timer_handle* handle) {
+  while (handle != 0) {
+    if (handle->active && handle->referenced) {
+      return 1;
+    }
+
+    handle = handle->next;
+  }
+
+  return 0;
 }
 
 static void inox_loop_finalize_handle(inox_timer_handle* handle) {

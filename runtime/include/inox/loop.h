@@ -73,6 +73,9 @@ inox_status inox_loop_set_interval(
   inox_timer_handle** out
 );
 void inox_loop_clear_timer(inox_timer_handle* handle);
+void inox_loop_ref_timer(inox_timer_handle* handle);
+void inox_loop_unref_timer(inox_timer_handle* handle);
+int inox_loop_timer_has_ref(const inox_timer_handle* handle);
 inox_status inox_loop_poll(inox_loop* loop, inox_number now_ms);
 inox_status inox_loop_run_once(inox_loop* loop);
 inox_status inox_loop_run(inox_loop* loop);

@@ -9,7 +9,16 @@ const expectedResults = [
   ['node:timers#setTimeout', 'node:timers#TimeoutHandle'],
   ['node:timers#clearImmediate', null],
   ['node:timers#clearInterval', null],
-  ['node:timers#clearTimeout', null]
+  ['node:timers#clearTimeout', null],
+  ['node:timers#ImmediateHandle.ref', 'node:timers#ImmediateHandle'],
+  ['node:timers#ImmediateHandle.unref', 'node:timers#ImmediateHandle'],
+  ['node:timers#ImmediateHandle.hasRef', 'boolean'],
+  ['node:timers#IntervalHandle.ref', 'node:timers#IntervalHandle'],
+  ['node:timers#IntervalHandle.unref', 'node:timers#IntervalHandle'],
+  ['node:timers#IntervalHandle.hasRef', 'boolean'],
+  ['node:timers#TimeoutHandle.ref', 'node:timers#TimeoutHandle'],
+  ['node:timers#TimeoutHandle.unref', 'node:timers#TimeoutHandle'],
+  ['node:timers#TimeoutHandle.hasRef', 'boolean']
 ] as const
 
 test('node:timers operations describe results only through TypeRef', async () => {
@@ -25,7 +34,15 @@ test('node:timers operations describe results only through TypeRef', async () =>
   for (let index = 0; index < operations.length; index = index + 1) {
     const typeId = expectedResults[index][1]
 
-    if (typeId) {
+    if (typeId === 'boolean') {
+      assert.deepEqual(operations[index].resultTypeRef, {
+        kind: 'primitive',
+        name: 'boolean',
+        nullable: false,
+        ownership: 'value',
+        traits: []
+      })
+    } else if (typeId) {
       assert.deepEqual(operations[index].resultTypeRef, {
         kind: 'nominal',
         typeId,

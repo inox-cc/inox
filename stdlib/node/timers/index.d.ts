@@ -1,6 +1,20 @@
-export interface TimeoutHandle {}
-export interface IntervalHandle {}
-export interface ImmediateHandle {}
+export interface TimeoutHandle {
+  ref(): TimeoutHandle
+  unref(): TimeoutHandle
+  hasRef(): boolean
+}
+
+export interface IntervalHandle {
+  ref(): IntervalHandle
+  unref(): IntervalHandle
+  hasRef(): boolean
+}
+
+export interface ImmediateHandle {
+  ref(): ImmediateHandle
+  unref(): ImmediateHandle
+  hasRef(): boolean
+}
 
 export interface TimersModule {
   setTimeout(callback: () => void, delay?: number): TimeoutHandle
@@ -24,9 +38,23 @@ declare const timers: TimersModule
 export default timers
 
 declare global {
-  interface TimeoutHandle {}
-  interface IntervalHandle {}
-  interface ImmediateHandle {}
+  interface TimeoutHandle {
+    ref(): TimeoutHandle
+    unref(): TimeoutHandle
+    hasRef(): boolean
+  }
+
+  interface IntervalHandle {
+    ref(): IntervalHandle
+    unref(): IntervalHandle
+    hasRef(): boolean
+  }
+
+  interface ImmediateHandle {
+    ref(): ImmediateHandle
+    unref(): ImmediateHandle
+    hasRef(): boolean
+  }
 
   function setTimeout(callback: () => void, delay?: number): TimeoutHandle
   function clearTimeout(handle: TimeoutHandle): void
