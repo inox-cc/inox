@@ -130,7 +130,13 @@ function resolveOperationTypeParameterSource(
   }
 
   if (source.source === 'argument-array-literal-elements') {
-    const elements = typeRefListAt(context.argumentArrayLiteralElementTypeRefs, source.argumentIndex)
+    const argumentIndex = source.argumentIndex
+
+    if (typeof argumentIndex !== 'number') {
+      return null
+    }
+
+    const elements = typeRefListAt(context.argumentArrayLiteralElementTypeRefs, argumentIndex)
 
     if (elements === null || elements.length === 0) {
       return null

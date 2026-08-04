@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 import { CompileError, formatDiagnostics } from '../../compiler/diagnostics.ts'
 import { compileFile } from '../../compiler/compiler.ts'
+import type { CompilerLibrarySet } from '../../compiler/extensions/types.ts'
 import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
 import {
   createCompilerLibraryLiteralTypeInferenceFromDiscovered,
@@ -580,9 +581,11 @@ async function compileFeatureTestWithBinary(
 ): Promise<string> {
   const dir = await createTestTempDir('inox-feature-compiler-')
   const outputPath = join(dir, `${sanitizePath(featureFile.name)}.cc`)
+  const profile = await defaultCompilerLibraryProfilePromise
+  const libraryOptionArgs = binaryAutomaticLibraryOptionDefaultArgs(profile.libraries)
 
   try {
-    const compile = await runCommand(compiler.path, [featureFile.path, outputPath])
+    const compile = await runCommand(compiler.path, [featureFile.path, outputPath, ...libraryOptionArgs])
 
     if (compile.code !== 0) {
       throw new FeatureBinaryCompilerError(featureFile.name, compiler.path, featureFile.path, outputPath, compile)
@@ -592,6 +595,29 @@ async function compileFeatureTestWithBinary(
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
+}
+
+function binaryAutomaticLibraryOptionDefaultArgs(libraries: CompilerLibrarySet): string[] {
+  const args: string[] = []
+  const options = libraries.options ?? []
+
+  for (let index = 0; index < options.length; index = index + 1) {
+    const option = options[index]
+
+    if (typeof option.automaticStringValue !== 'string' || typeof option.defaultValue !== 'string') {
+      continue
+    }
+
+    const alias = option.cliAliases[0]
+
+    if (typeof alias !== 'string') {
+      continue
+    }
+
+    args.push(alias, option.defaultValue)
+  }
+
+  return args
 }
 
 function formatCompileError(error: unknown): string {
