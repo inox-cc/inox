@@ -2615,7 +2615,8 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
   }
 
   if (statement.init === null || typeof statement.init === 'undefined') {
-    return [`${name} = ${moduleValueDefaultExpression(inferred)};`]
+    const defaultValue = moduleValueDefaultExpression(inferred, context.moduleValueCppTypes.get(statement.name))
+    return [`${name} = ${defaultValue};`]
   }
 
   const libraryObject = emitPreparedCompilerLibraryCallExpression(
@@ -3548,7 +3549,11 @@ function emitModuleObjectFunctionFieldDefaultAssignments(objectName: string, fie
   return lines
 }
 
-function moduleValueDefaultExpression(valueType: string): string {
+function moduleValueDefaultExpression(valueType: string, cppType?: string): string {
+  if (typeof cppType === 'string' && cppType !== 'inox::Value') {
+    return `${cppType}{}`
+  }
+
   if (valueType === 'string') {
     return '""'
   }
