@@ -10,7 +10,6 @@
 #include "inox/value.h"
 
 class Buffer;
-class BufferConstants;
 
 class Uint8Array : public inox::Value {
 public:
@@ -58,7 +57,6 @@ private:
   void write(double index, double value);
 
   friend class Buffer;
-  friend class BufferConstants;
 };
 
 #endif

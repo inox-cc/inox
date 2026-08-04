@@ -5,9 +5,6 @@
 #include "inox/string.h"
 #include "inox/string_view.h"
 
-class BufferConstructor;
-class BufferConstants;
-
 class Buffer : public Uint8Array {
 public:
   Buffer();
@@ -20,6 +17,7 @@ public:
   static double byteLength(inox::StringView value);
   static double byteLength(inox::StringView value, inox::StringView encoding);
   static double compare(const Uint8Array& first, const Uint8Array& second);
+  static double maximumLength();
   static Buffer from(inox::StringView value);
   static Buffer from(inox::StringView value, inox::StringView encoding);
   static bool isBuffer(const inox::Value& value);
@@ -32,37 +30,7 @@ public:
 
 private:
   explicit Buffer(Uint8Array&& value);
-  static Buffer allocate(double size);
   static Buffer fromUtf8(inox::StringView value);
-  static bool hasBufferIdentity(const inox::Value& value);
-
-  friend class BufferConstructor;
 };
-
-class BufferConstructor {
-public:
-  Buffer alloc(double size) const;
-  double byteLength(inox::StringView value) const;
-  double byteLength(inox::StringView value, inox::StringView encoding) const;
-  double compare(const Uint8Array& first, const Uint8Array& second) const;
-  Buffer from(inox::StringView value) const;
-  Buffer from(inox::StringView value, inox::StringView encoding) const;
-  bool isBuffer(const inox::Value& value) const;
-};
-
-class BufferConstants {
-public:
-  const double MAX_LENGTH;
-
-  BufferConstants();
-};
-
-class BufferModule {
-public:
-  BufferConstructor Buffer;
-  BufferConstants constants;
-};
-
-extern const BufferModule buffer;
 
 #endif

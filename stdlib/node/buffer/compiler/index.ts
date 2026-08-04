@@ -318,7 +318,7 @@ function constantOperation(): LibraryOperationDescriptor {
     operationId: `${libraryId}#constants.MAX_LENGTH`,
     kind: 'member-read',
     runtimeRequirements: [runtimeRequirement],
-    cExpression: 'buffer.constants.MAX_LENGTH',
+    cExpression: 'Buffer::maximumLength()',
     resultTypeRef: numberTypeRef
   }
 }

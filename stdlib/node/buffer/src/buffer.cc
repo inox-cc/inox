@@ -64,7 +64,13 @@ bool Buffer::valid() const {
 }
 
 Buffer Buffer::alloc(double size) {
-  return allocate(size);
+  auto value = Uint8Array::allocate(size, true);
+
+  if (!value.valid()) {
+    return Buffer();
+  }
+
+  return Buffer(std::move(value));
 }
 
 double Buffer::byteLength(inox::StringView value) {
@@ -84,6 +90,10 @@ double Buffer::compare(const Uint8Array& first, const Uint8Array& second) {
   return compareBytes(first.bytes(), second.bytes());
 }
 
+double Buffer::maximumLength() {
+  return static_cast<double>(Uint8Array::maximumLength());
+}
+
 Buffer Buffer::from(inox::StringView value) {
   return fromUtf8(value);
 }
@@ -98,7 +108,7 @@ Buffer Buffer::from(inox::StringView value, inox::StringView encoding) {
 }
 
 bool Buffer::isBuffer(const inox::Value& value) {
-  return hasBufferIdentity(value);
+  return valueHasBufferIdentity(value);
 }
 
 double Buffer::compare(const Uint8Array& target) const {
@@ -145,16 +155,6 @@ inox::String Buffer::toString(inox::StringView encoding) const {
   return toString();
 }
 
-Buffer Buffer::allocate(double size) {
-  auto value = Uint8Array::allocate(size, true);
-
-  if (!value.valid()) {
-    return Buffer();
-  }
-
-  return Buffer(std::move(value));
-}
-
 Buffer Buffer::fromUtf8(inox::StringView value) {
   if (value.bytes == nullptr && value.len != 0) {
     throwBufferError("TypeError: Buffer.from value is invalid");
@@ -173,44 +173,3 @@ Buffer Buffer::fromUtf8(inox::StringView value) {
 
   return Buffer(std::move(result));
 }
-
-bool Buffer::hasBufferIdentity(const inox::Value& value) {
-  return valueHasBufferIdentity(value);
-}
-
-Buffer BufferConstructor::alloc(double size) const {
-  return Buffer::allocate(size);
-}
-
-double BufferConstructor::byteLength(inox::StringView value) const {
-  return Buffer::byteLength(value);
-}
-
-double BufferConstructor::byteLength(inox::StringView value, inox::StringView encoding) const {
-  return Buffer::byteLength(value, encoding);
-}
-
-double BufferConstructor::compare(const Uint8Array& first, const Uint8Array& second) const {
-  return Buffer::compare(first, second);
-}
-
-Buffer BufferConstructor::from(inox::StringView value) const {
-  return Buffer::fromUtf8(value);
-}
-
-Buffer BufferConstructor::from(inox::StringView value, inox::StringView encoding) const {
-  if (!isUtf8(encoding)) {
-    throwBufferError("TypeError: Buffer.from only supports utf8 encoding");
-    return ::Buffer();
-  }
-
-  return Buffer::fromUtf8(value);
-}
-
-bool BufferConstructor::isBuffer(const inox::Value& value) const {
-  return Buffer::hasBufferIdentity(value);
-}
-
-BufferConstants::BufferConstants() : MAX_LENGTH(static_cast<double>(Uint8Array::maximumLength())) {}
-
-const BufferModule buffer;
