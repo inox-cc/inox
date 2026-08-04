@@ -13,6 +13,8 @@ import type {
 } from '../../../../compiler/extensions/types.ts'
 
 const libraryId = 'global:fetch'
+const binaryLibraryId = 'global:binary'
+const jsonLibraryId = 'global:json'
 const errorTypeId = 'global:error#Error'
 const promiseTypeId = 'global:promise#Promise'
 const runtimeRequirement = libraryId
@@ -20,6 +22,7 @@ const abortControllerTypeId = `${libraryId}#AbortController`
 const abortSignalTypeId = `${libraryId}#AbortSignal`
 const headersTypeId = `${libraryId}#Headers`
 const responseTypeId = `${libraryId}#Response`
+const uint8ArrayTypeId = `${binaryLibraryId}#Uint8Array`
 const runtimeRequirements = [runtimeRequirement]
 const responseTypeRef = nominalTypeRef(responseTypeId)
 const booleanTypeRef = primitiveTypeRef('boolean')
@@ -65,20 +68,32 @@ const operations: LibraryOperationDescriptor[] = [
     cResultMode: 'value'
   },
   receiverCall(abortControllerTypeId, 'abort', 'inox::AbortController($value)', [], voidTypeRef),
+  receiverCall(
+    responseTypeId,
+    'bytes',
+    'inox::FetchResponse(inox::Value($value))',
+    [],
+    promiseTypeRef(nominalTypeRef(uint8ArrayTypeId), errorTypeRef())
+  ),
+  receiverCall(
+    responseTypeId,
+    'json',
+    'inox::FetchResponse(inox::Value($value))',
+    [],
+    promiseTypeRef(unknownTypeRef(), errorTypeRef())
+  ),
   receiverCall(responseTypeId, 'text', 'inox::FetchResponse(inox::Value($value))', [], promiseTypeRef(stringTypeRef, errorTypeRef())),
   receiverCall(headersTypeId, 'get', 'inox::FetchHeaders(inox::Value($value))', [stringArgument()], nullableStringTypeRef, valueCResultMapping),
   receiverCall(headersTypeId, 'has', 'inox::FetchHeaders(inox::Value($value))', [stringArgument()], booleanTypeRef),
   unsupportedResponseMember('body', 'member-read'),
   unsupportedResponseCall('arrayBuffer'),
   unsupportedResponseCall('blob'),
-  unsupportedResponseCall('bytes'),
-  unsupportedResponseCall('formData'),
-  unsupportedResponseCall('json')
+  unsupportedResponseCall('formData')
 ]
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:binary', 'global:error', 'global:promise'],
+  dependencies: [binaryLibraryId, 'global:error', jsonLibraryId, 'global:promise'],
   nativeTypes: [
     {
       libraryId,
@@ -137,7 +152,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: ['async-runtime', 'managed-values', 'objects', 'string-bytes'],
+      dependencies: ['async-runtime', binaryLibraryId, jsonLibraryId, 'managed-values', 'objects', 'string-bytes'],
       cPreludeIncludes: ['inox/fetch.h'],
       capabilities: ['tcp'],
       optionConstraints: [
@@ -297,6 +312,15 @@ function nominalTypeRef(typeId: string): NominalTypeRef {
 
 function errorTypeRef(): NominalTypeRef {
   return nominalTypeRef(errorTypeId)
+}
+
+function unknownTypeRef(): TypeRef {
+  return {
+    kind: 'unknown',
+    nullable: false,
+    ownership: 'value',
+    traits: []
+  }
 }
 
 function promiseTypeRef(fulfilledType: TypeRef, rejectedType: TypeRef): NominalTypeRef {

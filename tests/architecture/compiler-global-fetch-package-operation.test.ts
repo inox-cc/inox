@@ -28,6 +28,8 @@ test('global:fetch владеет declarations, native types, operations и runt
   assert.ok(operationIds.includes('global:fetch#fetch'))
   assert.ok(operationIds.includes('global:fetch#AbortController.construct'))
   assert.ok(operationIds.includes('global:fetch#AbortController.abort'))
+  assert.ok(operationIds.includes('global:fetch#Response.bytes'))
+  assert.ok(operationIds.includes('global:fetch#Response.json'))
   assert.ok(operationIds.includes('global:fetch#Response.text'))
   assert.ok(operationIds.includes('global:fetch#Headers.get'))
   assert.ok(operationIds.includes('global:fetch#Headers.has'))

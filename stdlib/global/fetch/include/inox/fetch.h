@@ -53,6 +53,8 @@ public:
   FetchResponse();
   explicit FetchResponse(Value value);
 
+  Promise bytes() const;
+  Promise json() const;
   Promise text() const;
 };
 

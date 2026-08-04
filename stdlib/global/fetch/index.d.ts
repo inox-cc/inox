@@ -17,7 +17,7 @@ declare global {
 
     arrayBuffer(): Promise<unknown>;
     blob(): Promise<unknown>;
-    bytes(): Promise<unknown>;
+    bytes(): Promise<Uint8Array>;
     formData(): Promise<unknown>;
     json(): Promise<unknown>;
     text(): Promise<string>;

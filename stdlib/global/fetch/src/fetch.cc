@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "inox/binary.h"
+#include "inox/json.h"
 #include "inox/loop.h"
 #include "inox/promise_runtime.h"
 
@@ -1946,6 +1947,59 @@ static int fetch_prepare_init(
 }
 
 namespace inox {
+
+Promise FetchResponse::bytes() const {
+  if (!fetch_is_object(value_.raw())) {
+    return Promise();
+  }
+
+  Value body;
+
+  if (
+    inox_object_get_known(value_, INOX_FETCH_RESPONSE_BODY_INDEX, body.out()) != INOX_OK ||
+    body.tag != INOX_TAG_STRING ||
+    body.as.ref == nullptr
+  ) {
+    return Promise();
+  }
+
+  const auto* string = reinterpret_cast<const inox_string*>(body.as.ref);
+  Uint8Array result(std::span<const std::uint8_t>(
+    reinterpret_cast<const std::uint8_t*>(string->bytes),
+    string->len
+  ));
+
+  if (!result.valid() || thrown()) {
+    return Promise();
+  }
+
+  return Promise::resolve(result);
+}
+
+Promise FetchResponse::json() const {
+  if (!fetch_is_object(value_.raw())) {
+    return Promise();
+  }
+
+  Value body;
+
+  if (
+    inox_object_get_known(value_, INOX_FETCH_RESPONSE_BODY_INDEX, body.out()) != INOX_OK ||
+    body.tag != INOX_TAG_STRING ||
+    body.as.ref == nullptr
+  ) {
+    return Promise();
+  }
+
+  const auto* string = reinterpret_cast<const inox_string*>(body.as.ref);
+  Value result = JSON.parse(StringView(string->bytes, string->len));
+
+  if (thrown()) {
+    return Promise::reject(take_exception());
+  }
+
+  return Promise::resolve(result);
+}
 
 Promise FetchResponse::text() const {
   if (!fetch_is_object(value_.raw())) {
