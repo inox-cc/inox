@@ -267,25 +267,32 @@ inox::String ProcessArgv::operator[](int index) const {
   return inox::String(value);
 }
 
-inox::String ProcessEnv::operator[](inox::StringView name) const {
-  if (name.bytes == 0) {
-    return inox::String();
-  }
-
+inox::Value ProcessEnv::operator[](inox::StringView name) const {
   inox_allocator* allocator = &inox_default_allocator;
   char* key = (char*)allocator->alloc(allocator->user, name.len + 1, alignof(char));
 
   if (key == 0) {
-    return inox::String();
+    inox::throw_out_of_memory();
+    return {};
   }
 
-  memcpy(key, name.bytes, name.len);
+  if (name.len != 0) {
+    memcpy(key, name.bytes, name.len);
+  }
   key[name.len] = 0;
 
   const char* value = getenv(key);
-  inox::String out(value == 0 ? "" : value);
-
   allocator->free(allocator->user, key, name.len + 1, alignof(char));
+
+  if (value == 0) {
+    return {};
+  }
+
+  inox::String out(value);
+
+  if (!out.valid()) {
+    inox::throw_out_of_memory();
+  }
 
   return out;
 }

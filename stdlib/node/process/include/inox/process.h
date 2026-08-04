@@ -48,7 +48,7 @@ public:
 
 class ProcessEnv {
 public:
-  inox::String operator[](inox::StringView name) const;
+  inox::Value operator[](inox::StringView name) const;
 };
 
 class ProcessVersions : public inox::Value {

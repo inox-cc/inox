@@ -4,7 +4,7 @@ export interface ProcessArgv {
 }
 
 export interface ProcessEnv {
-  [key: string]: string
+  [key: string]: string | undefined
 }
 
 export interface ProcessHrtime {
@@ -68,7 +68,7 @@ declare global {
   }
 
   interface ProcessEnv {
-    [key: string]: string
+    [key: string]: string | undefined
   }
 
   interface ProcessHrtime {

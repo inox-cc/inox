@@ -3,4 +3,4 @@
 // @stdout 1
 
 import process from 'node:process'
-console.log(process.env.PATH.length > 0)
+console.log((process.env.PATH ?? '').length > 0)

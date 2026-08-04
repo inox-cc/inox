@@ -24,6 +24,10 @@ const envTypeId = `${libraryId}#ProcessEnv`
 const versionsTypeId = `${libraryId}#ProcessVersions`
 const memoryUsageTypeId = `${libraryId}#ProcessMemoryUsage`
 const stringTypeRef = primitiveTypeRef('string')
+const nullableStringTypeRef: PrimitiveTypeRef = {
+  ...stringTypeRef,
+  nullable: true
+}
 const numberTypeRef = primitiveTypeRef('number')
 const voidTypeRef = primitiveTypeRef('void')
 const stringResultMapping = cResultMapping('inox::String')
@@ -118,8 +122,9 @@ const operations: LibraryOperationDescriptor[] = [
     cExpression: 'operator[]',
     cArgumentKinds: ['receiver', 'member-name-string-view'],
     cCallStyle: 'index',
-    resultTypeRef: stringTypeRef,
-    cResultMapping: stringResultMapping
+    resultTypeRef: nullableStringTypeRef,
+    cResultMapping: cResultMapping('inox::Value'),
+    cFailureMode: 'thrown'
   },
   {
     libraryId,
@@ -134,8 +139,9 @@ const operations: LibraryOperationDescriptor[] = [
     minArgs: 1,
     maxArgs: 1,
     argumentChecks: [{ valueTypes: ['string'] }],
-    resultTypeRef: stringTypeRef,
-    cResultMapping: stringResultMapping
+    resultTypeRef: nullableStringTypeRef,
+    cResultMapping: cResultMapping('inox::Value'),
+    cFailureMode: 'thrown'
   },
   ...unsupportedMethods().map((name) => unsupportedOperation(name, 'call')),
   ...unsupportedProperties().map((name) => unsupportedOperation(name, 'member-read'))

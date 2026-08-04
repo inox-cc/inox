@@ -15,9 +15,11 @@ const envTypeId = 'node:process#ProcessEnv'
 const versionsTypeId = 'node:process#ProcessVersions'
 const memoryUsageTypeId = 'node:process#ProcessMemoryUsage'
 const stringTypeRef = primitiveTypeRef('string')
+const nullableStringTypeRef = { ...stringTypeRef, nullable: true }
 const numberTypeRef = primitiveTypeRef('number')
 const voidTypeRef = primitiveTypeRef('void')
 const stringMapping = cResultMapping('inox::String')
+const valueMapping = cResultMapping('inox::Value')
 
 const expectedResults = new Map<string, [TypeRef, LibraryCResultMappingDescriptor | null]>([
   ['node:process#read:process', [nominalTypeRef(processTypeId), null]],
@@ -39,8 +41,8 @@ const expectedResults = new Map<string, [TypeRef, LibraryCResultMappingDescripto
   ['node:process#memoryUsage', [nominalTypeRef(memoryUsageTypeId), null]],
   ['node:process#write:exitCode', [numberTypeRef, null]],
   [`${argvTypeId}#index-read`, [stringTypeRef, stringMapping]],
-  [`${envTypeId}#member-read`, [stringTypeRef, stringMapping]],
-  [`${envTypeId}#index-read`, [stringTypeRef, stringMapping]]
+  [`${envTypeId}#member-read`, [nullableStringTypeRef, valueMapping]],
+  [`${envTypeId}#index-read`, [nullableStringTypeRef, valueMapping]]
 ])
 
 test('node:process implemented results принадлежат TypeRef и package-owned identities', () => {
