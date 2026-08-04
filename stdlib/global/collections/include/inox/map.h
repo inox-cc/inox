@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "inox/callback.h"
 #include "inox/value.h"
 
 #ifdef __cplusplus
@@ -44,6 +45,7 @@ public:
   void clear() const;
   bool erase(const inox::Value& key) const;
   MapIterator entries() const;
+  void forEach(inox::Callback callback) const;
   inox::Value get(const inox::Value& key) const;
   bool has(const inox::Value& key) const;
   MapIterator keys() const;

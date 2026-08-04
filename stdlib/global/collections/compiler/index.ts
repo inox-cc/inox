@@ -282,6 +282,7 @@ const setOperations: LibraryOperationDescriptor[] = [
     cFailureMode: null,
     cPreservesPendingException: true
   },
+  setForEachOperation(),
   {
     libraryId,
     bindingId: `${setNativeTypeId}.size`,
@@ -352,6 +353,7 @@ const mapOperations: LibraryOperationDescriptor[] = [
     ...mapReceiverCall('get', 'get', nullableValueParameterTypeRef, [keyParameterTypeRef]),
     cResultMapping: { cppType: 'inox::Value', fields: [] }
   },
+  mapForEachOperation(),
   {
     ...mapReceiverCall('has', 'has', booleanTypeRef, [keyParameterTypeRef]),
     cFailureMode: null,
@@ -910,6 +912,41 @@ function mapReceiverCall(
   }
 }
 
+function mapForEachOperation(): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: `${mapNativeTypeId}.forEach`,
+    operationId: `${mapNativeTypeId}.forEach`,
+    kind: 'call',
+    runtimeRequirements: [mapRuntimeRequirement, arrayCallbackRuntimeRequirement],
+    receiverTypeId: mapNativeTypeId,
+    typeParameters: [
+      { name: 'K', sources: [{ source: 'receiver-type-argument', argumentIndex: 0 }] },
+      { name: 'V', sources: [{ source: 'receiver-type-argument', argumentIndex: 1 }] }
+    ],
+    cExpression: 'forEach',
+    cArgumentKinds: ['receiver', 'runtime-callback'],
+    cCallStyle: 'member',
+    cFailureMode: 'thrown',
+    cResultMode: 'value',
+    resultTypeRef: voidTypeRef,
+    minArgs: 1,
+    maxArgs: 1,
+    argumentChecks: [
+      {
+        valueTypes: ['function'],
+        functionParameters: [
+          { name: 'value', valueType: 'unknown', typeRef: valueParameterTypeRef },
+          { name: 'key', valueType: 'unknown', typeRef: keyParameterTypeRef },
+          { name: 'map', valueType: 'object', typeRef: mapTypeRef(keyParameterTypeRef, valueParameterTypeRef) }
+        ],
+        functionReturnType: 'void',
+        functionAsync: false
+      }
+    ]
+  }
+}
+
 function setReceiverCall(
   sourceName: string,
   cName: string,
@@ -938,6 +975,38 @@ function setReceiverCall(
     minArgs: argumentChecks.length,
     maxArgs: argumentChecks.length,
     argumentChecks
+  }
+}
+
+function setForEachOperation(): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: `${setNativeTypeId}.forEach`,
+    operationId: `${setNativeTypeId}.forEach`,
+    kind: 'call',
+    runtimeRequirements: [setRuntimeRequirement, arrayCallbackRuntimeRequirement],
+    receiverTypeId: setNativeTypeId,
+    typeParameters: [{ name: 'T', sources: [{ source: 'receiver-type-argument', argumentIndex: 0 }] }],
+    cExpression: 'forEach',
+    cArgumentKinds: ['receiver', 'runtime-callback'],
+    cCallStyle: 'member',
+    cFailureMode: 'thrown',
+    cResultMode: 'value',
+    resultTypeRef: voidTypeRef,
+    minArgs: 1,
+    maxArgs: 1,
+    argumentChecks: [
+      {
+        valueTypes: ['function'],
+        functionParameters: [
+          { name: 'value', valueType: 'unknown', typeRef: parameterTypeRef },
+          { name: 'key', valueType: 'unknown', typeRef: parameterTypeRef },
+          { name: 'set', valueType: 'object', typeRef: setTypeRef(parameterTypeRef) }
+        ],
+        functionReturnType: 'void',
+        functionAsync: false
+      }
+    ]
   }
 }
 

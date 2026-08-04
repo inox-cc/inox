@@ -785,6 +785,36 @@ MapIterator Map::values() const {
   return MapIterator(*this, 2);
 }
 
+void Map::forEach(inox::Callback callback) const {
+  if (!valid()) {
+    inox::fatal("Map.forEach native facade invariant failed");
+  }
+
+  MapStorage* instance = map_data(*this);
+  size_t index = 0;
+
+  while (index < instance->order_length) {
+    const size_t slot_index = instance->order[index];
+    index += 1;
+
+    if (slot_index == inox_collection_no_index) {
+      continue;
+    }
+
+    MapEntry* entry = &instance->entries[slot_index];
+    inox::Value arguments[] = {
+      inox::Value(entry->value),
+      inox::Value(entry->key),
+      inox::Value(raw())
+    };
+    callback.call(std::span<const inox::Value>(arguments, 3));
+
+    if (inox::thrown()) {
+      return;
+    }
+  }
+}
+
 MapIterator::MapIterator() : owner_(), index_(0), mode_(0), done_(false) {}
 
 MapIterator::MapIterator(const Map& value, uint8_t mode)
@@ -1418,6 +1448,32 @@ SetIterator Set::values() const {
   }
 
   return SetIterator(*this);
+}
+
+void Set::forEach(inox::Callback callback) const {
+  if (!valid()) {
+    inox::fatal("Set.forEach native facade invariant failed");
+  }
+
+  SetStorage* instance = set_data(*this);
+  size_t index = 0;
+
+  while (index < instance->order_length) {
+    const size_t slot_index = instance->order[index];
+    index += 1;
+
+    if (slot_index == inox_collection_no_index) {
+      continue;
+    }
+
+    inox::Value item(instance->entries[slot_index].value);
+    inox::Value arguments[] = { item, item, inox::Value(raw()) };
+    callback.call(std::span<const inox::Value>(arguments, 3));
+
+    if (inox::thrown()) {
+      return;
+    }
+  }
 }
 
 SetIterator::SetIterator() : owner_(), index_(0), done_(false) {}

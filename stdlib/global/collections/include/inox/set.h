@@ -2,6 +2,7 @@
 #define INOX_SET_H
 
 #include <stddef.h>
+#include "inox/callback.h"
 #include "inox/value.h"
 
 #ifdef __cplusplus
@@ -39,6 +40,7 @@ public:
   Set add(const inox::Value& value) const;
   void clear() const;
   bool erase(const inox::Value& value) const;
+  void forEach(inox::Callback callback) const;
   bool has(const inox::Value& value) const;
   size_t size() const;
   bool valid() const;

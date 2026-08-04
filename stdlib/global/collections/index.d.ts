@@ -41,6 +41,7 @@ declare global {
     clear(): void
     delete(key: K): boolean
     entries(): MapIterator<Array<K | V>>
+    forEach(callback: (value: V, key: K, map: Map<K, V>) => void): void
     get(key: K): V | undefined
     has(key: K): boolean
     keys(): MapIterator<K>
@@ -57,6 +58,7 @@ declare global {
     add(value: T): Set<T>
     clear(): void
     delete(value: T): boolean
+    forEach(callback: (value: T, key: T, set: Set<T>) => void): void
     has(value: T): boolean
   }
 }
