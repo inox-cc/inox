@@ -61,6 +61,7 @@ type CompilerLibraryExpressionNode = AnyNode & {
   libraryCCallStyle?: string | null
   libraryCFailureMode?: string | null
   libraryCPreservesPendingException?: boolean | null
+  libraryCHasObservableSideEffects?: boolean | null
   libraryCResultMode?: string | null
   libraryCReceiverAdapter?: string | null
   libraryCResultAdapter?: string | null
@@ -1042,7 +1043,10 @@ export function emitPreparedCompilerLibraryCallExpression(
     )
   }
 
-  if (item.libraryCFailureMode !== null && typeof item.libraryCFailureMode !== 'undefined') {
+  if (
+    (item.libraryCFailureMode !== null && typeof item.libraryCFailureMode !== 'undefined') ||
+    item.libraryCHasObservableSideEffects === true
+  ) {
     const directOut = compilerLibraryDirectResultOut(item, cppType, options, resultAdapter)
     const out = directOut ?? nextCName(context, 'inox_library_result')
     lines.push(`auto ${out} = ${callExpression};`)

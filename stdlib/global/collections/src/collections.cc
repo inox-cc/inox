@@ -49,7 +49,7 @@ static void inox_map_dispose_ref(inox_ref* ref);
 static inox::Value inox_map_create_value();
 static uint64_t inox_hash_mix(uint64_t hash, const void* bytes, size_t len);
 static bool inox_hash_value(inox_value value, uint64_t& out);
-static bool inox_value_equal(inox_value left, inox_value right);
+static bool inox_value_equal(inox_value left, inox_value right, bool nan_equal);
 
 static void inox_collection_throw(const char* message) {
   inox::throw_value(inox::String(message));
@@ -342,7 +342,7 @@ static inox_status inox_map_find(MapStorage* map, inox_value key, uint64_t hash,
       if (first_tombstone == (size_t)-1) {
         first_tombstone = current;
       }
-    } else if (entry->hash == hash && inox_value_equal(entry->key, key)) {
+    } else if (entry->hash == hash && inox_value_equal(entry->key, key, true)) {
       *index = current;
       *found = true;
       return INOX_OK;
@@ -1068,7 +1068,7 @@ static inox_status inox_set_find(SetStorage* set, inox_value value, uint64_t has
       if (first_tombstone == (size_t)-1) {
         first_tombstone = current;
       }
-    } else if (entry->hash == hash && inox_value_equal(entry->value, value)) {
+    } else if (entry->hash == hash && inox_value_equal(entry->value, value, true)) {
       *index = current;
       *found = true;
       return INOX_OK;
@@ -1524,7 +1524,7 @@ static bool inox_hash_value(inox_value value, uint64_t& out) {
   return false;
 }
 
-static bool inox_value_equal(inox_value left, inox_value right) {
+static bool inox_value_equal(inox_value left, inox_value right, bool nan_equal) {
   if (left.tag != right.tag) {
     return false;
   }
@@ -1541,7 +1541,7 @@ static bool inox_value_equal(inox_value left, inox_value right) {
   }
 
   if (left.tag == INOX_TAG_NUMBER) {
-    if (left.as.number != left.as.number && right.as.number != right.as.number) {
+    if (nan_equal && left.as.number != left.as.number && right.as.number != right.as.number) {
       return true;
     }
 
@@ -1842,6 +1842,31 @@ inox::Value Array::get(size_t index) const {
   return inox::Value(instance->items[index]);
 }
 
+inox::Value Array::at(double index) const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox::fatal("Array.at native facade invariant failed");
+  }
+
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
+  double integer = std::isnan(index) ? 0 : std::trunc(index);
+
+  if (!std::isfinite(integer)) {
+    return inox::Value();
+  }
+
+  if (integer < 0) {
+    integer += static_cast<double>(instance->length);
+  }
+
+  if (integer < 0 || integer >= static_cast<double>(instance->length)) {
+    return inox::Value();
+  }
+
+  return inox::Value(instance->items[static_cast<size_t>(integer)]);
+}
+
 bool Array::includes(const inox::Value& value) const {
   if (inox::thrown()) {
     return false;
@@ -1857,12 +1882,87 @@ bool Array::includes(const inox::Value& value) const {
   inox_value raw_value = value.raw();
 
   for (size_t index = 0; index < instance->length; ++index) {
-    if (inox_value_equal(instance->items[index], raw_value)) {
+    if (inox_value_equal(instance->items[index], raw_value, true)) {
       return true;
     }
   }
 
   return false;
+}
+
+double Array::indexOf(const inox::Value& value, double from) const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox::fatal("Array.indexOf native facade invariant failed");
+  }
+
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
+  double integer = std::isnan(from) ? 0 : std::trunc(from);
+
+  if (integer == std::numeric_limits<double>::infinity()) {
+    return -1;
+  }
+
+  if (integer < 0) {
+    integer += static_cast<double>(instance->length);
+  }
+
+  if (integer >= static_cast<double>(instance->length)) {
+    return -1;
+  }
+
+  size_t start = integer <= 0 ? 0 : static_cast<size_t>(integer);
+  const inox_value target = value.raw();
+
+  for (size_t index = start; index < instance->length; index += 1) {
+    if (inox_value_equal(instance->items[index], target, false)) {
+      return static_cast<double>(index);
+    }
+  }
+
+  return -1;
+}
+
+double Array::lastIndexOf(const inox::Value& value, double from) const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox::fatal("Array.lastIndexOf native facade invariant failed");
+  }
+
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
+
+  if (instance->length == 0 || from == -std::numeric_limits<double>::infinity()) {
+    return -1;
+  }
+
+  double integer = std::isnan(from) ? 0 : std::trunc(from);
+
+  if (integer < 0) {
+    integer += static_cast<double>(instance->length);
+  }
+
+  if (integer < 0) {
+    return -1;
+  }
+
+  size_t index = integer >= static_cast<double>(instance->length)
+    ? instance->length - 1
+    : static_cast<size_t>(integer);
+  const inox_value target = value.raw();
+
+  while (true) {
+    if (inox_value_equal(instance->items[index], target, false)) {
+      return static_cast<double>(index);
+    }
+
+    if (index == 0) {
+      return -1;
+    }
+
+    index -= 1;
+  }
 }
 
 Array Array::create(size_t len) {
@@ -2061,6 +2161,23 @@ inox::Value Array::pop() const {
   return inox::adopt(std::exchange(instance->items[instance->length], inox_undefined_value()));
 }
 
+Array Array::reverse() const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox::fatal("Array.reverse native facade invariant failed");
+  }
+
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
+
+  for (size_t left = 0; left < instance->length / 2; left += 1) {
+    const size_t right = instance->length - left - 1;
+    std::swap(instance->items[left], instance->items[right]);
+  }
+
+  return Array(*this);
+}
+
 void Array::appendAll(const Array& values) const {
   size_t count = values.length();
 
@@ -2215,6 +2332,30 @@ Array Array::slice(double start_value, double end_value) const {
   }
 
   return Array(inox::adopt(inox_array_adopt_storage(target)));
+}
+
+inox::Value Array::shift() const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox::fatal("Array.shift native facade invariant failed");
+  }
+
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
+
+  if (instance->length == 0) {
+    return inox::Value();
+  }
+
+  inox_value result = instance->items[0];
+  instance->length -= 1;
+
+  if (instance->length != 0) {
+    memmove(instance->items, instance->items + 1, instance->length * sizeof(inox_value));
+  }
+
+  instance->items[instance->length] = inox_undefined_value();
+  return inox::adopt(result);
 }
 
 bool Array::every(inox::Callback predicate) const {

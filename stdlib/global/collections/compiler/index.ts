@@ -129,11 +129,31 @@ const arrayOperations: LibraryOperationDescriptor[] = [
     cPreservesPendingException: true
   },
   {
+    ...arrayReceiverCall('at', nullableParameterTypeRef(), ['number'], [{ valueTypes: ['number'] }], {
+      cppType: 'inox::Value',
+      fields: []
+    }),
+    cFailureMode: null,
+    cPreservesPendingException: true
+  },
+  {
     ...arrayReceiverCall(
       'includes',
       booleanTypeRef,
       ['runtime-value'],
       [{ valueTypes: [], typeRef: parameterTypeRef }]
+    ),
+    cFailureMode: null,
+    cPreservesPendingException: true
+  },
+  {
+    ...arrayReceiverCall(
+      'indexOf',
+      numberTypeRef,
+      ['runtime-value', 'optional-number'],
+      [{ valueTypes: [], typeRef: parameterTypeRef }, { valueTypes: ['number'] }],
+      null,
+      1
     ),
     cFailureMode: null,
     cPreservesPendingException: true
@@ -152,6 +172,12 @@ const arrayOperations: LibraryOperationDescriptor[] = [
   arrayReceiverCall('pop', nullableParameterTypeRef(), [], [], { cppType: 'inox::Value', fields: [] }),
   arrayPushOperation(),
   arrayReduceOperation(),
+  {
+    ...arrayReceiverCall('reverse', arrayTypeRef(parameterTypeRef), [], []),
+    cFailureMode: null,
+    cPreservesPendingException: true,
+    cHasObservableSideEffects: true
+  },
   arrayReceiverCall(
     'slice',
     arrayTypeRef(parameterTypeRef),
@@ -160,6 +186,24 @@ const arrayOperations: LibraryOperationDescriptor[] = [
     null,
     0
   ),
+  {
+    ...arrayReceiverCall('shift', nullableParameterTypeRef(), [], [], { cppType: 'inox::Value', fields: [] }),
+    cFailureMode: null,
+    cPreservesPendingException: true,
+    cHasObservableSideEffects: true
+  },
+  {
+    ...arrayReceiverCall(
+      'lastIndexOf',
+      numberTypeRef,
+      ['runtime-value', 'optional-number'],
+      [{ valueTypes: [], typeRef: parameterTypeRef }, { valueTypes: ['number'] }],
+      null,
+      1
+    ),
+    cFailureMode: null,
+    cPreservesPendingException: true
+  },
   arrayCallbackReceiverCall('every', booleanTypeRef, [...arrayPredicateParameters()], 'boolean'),
   arrayCallbackReceiverCall('filter', arrayTypeRef(parameterTypeRef), arrayPredicateParameters(), 'boolean'),
   arrayCallbackReceiverCall('find', nullableParameterTypeRef(), arrayPredicateParameters(), 'boolean', {
@@ -511,7 +555,7 @@ function arrayMemberRead(
 function arrayReceiverCall(
   name: string,
   resultTypeRef: TypeRef,
-  cArgumentKinds: Array<'optional-number' | 'optional-string-view' | 'runtime-value'>,
+  cArgumentKinds: Array<'number' | 'optional-number' | 'optional-string-view' | 'runtime-value'>,
   argumentChecks: Array<{ valueTypes: string[]; typeRef?: TypeRef }>,
   cResultMapping: { cppType: string; fields: [] } | null = null,
   minArgs: number = argumentChecks.length

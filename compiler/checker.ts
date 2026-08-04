@@ -6091,6 +6091,8 @@ class Checker {
     expression.libraryCCallStyle = operation.cCallStyle ?? null
     expression.libraryCFailureMode = operation.cFailureMode ?? null
     expression.libraryCPreservesPendingException = operation.cPreservesPendingException === true
+    expression.libraryCHasObservableSideEffects =
+      (variant?.cHasObservableSideEffects ?? operation.cHasObservableSideEffects) === true
   }
 
   compilerLibraryDefaultReceiverAdapter(operation: LibraryOperationDescriptor): string | null {

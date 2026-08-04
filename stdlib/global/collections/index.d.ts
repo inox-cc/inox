@@ -9,15 +9,20 @@ declare global {
     static from(value: string): Array<string>
     static isArray(value: unknown): boolean
 
+    at(index: number): T | undefined
     every(predicate: (value: T, index: number, array: Array<T>) => boolean): boolean
     filter(predicate: (value: T, index: number, array: Array<T>) => boolean): Array<T>
     find(predicate: (value: T, index: number, array: Array<T>) => boolean): T | undefined
     includes(value: T): boolean
+    indexOf(value: T, fromIndex?: number): number
     join(separator?: string): string
+    lastIndexOf(value: T, fromIndex?: number): number
     map<U>(callback: (value: T, index: number, array: Array<T>) => U): Array<U>
     pop(): T | undefined
     push(...values: T[]): number
     reduce<U>(callback: (accumulator: U, value: T, index: number, array: Array<T>) => U, initialValue: U): U
+    reverse(): Array<T>
+    shift(): T | undefined
     slice(start?: number, end?: number): Array<T>
     some(predicate: (value: T, index: number, array: Array<T>) => boolean): boolean
     sort(compare?: (left: T, right: T) => number): Array<T>

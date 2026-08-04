@@ -382,6 +382,7 @@ export type LibraryOperationVariantDescriptor = {
   cResultAdapter?: string | null
   cResultMode?: LibraryCResultMode | null
   cResultMapping?: LibraryCResultMappingDescriptor | null
+  cHasObservableSideEffects?: boolean
   resultTypeRef?: TypeRef | null
   resultInference?: LibraryResultInferenceDescriptor | null
   callbackLifetime?: LibraryCallbackLifetime | null
@@ -444,6 +445,7 @@ export type LibraryOperationDescriptor = {
   cCallStyle?: 'function' | 'member' | 'index' | 'index-assignment' | 'member-assignment' | null
   cFailureMode?: 'thrown' | 'invalid-result' | null
   cPreservesPendingException?: boolean
+  cHasObservableSideEffects?: boolean
   minArgs?: number | null
   maxArgs?: number | null
   argumentChecks?: LibraryArgumentCheckDescriptor[]

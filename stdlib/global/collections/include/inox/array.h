@@ -56,18 +56,26 @@ public:
   bool valid() const;
   size_t length() const;
   inox::Value get(size_t index) const;
+  inox::Value at(double index) const;
   bool every(inox::Callback predicate) const;
   Array filter(inox::Callback predicate) const;
   inox::Value find(inox::Callback predicate) const;
   bool includes(const inox::Value& value) const;
+  double indexOf(const inox::Value& value, double from = 0) const;
+  double lastIndexOf(
+    const inox::Value& value,
+    double from = std::numeric_limits<double>::infinity()
+  ) const;
   Array map(inox::Callback callback) const;
   inox::Value pop() const;
+  Array reverse() const;
   void appendAll(const Array& values) const;
   size_t push(const inox::Value& value) const;
   size_t push(const inox::Value* values, size_t count) const;
   inox::Value reduce(inox::Callback callback, const inox::Value& initial) const;
   inox::Value set(size_t index, const inox::Value& value) const;
   Array slice(double start = 0, double end = std::numeric_limits<double>::infinity()) const;
+  inox::Value shift() const;
   bool some(inox::Callback predicate) const;
   Array sort() const;
   Array sort(inox::Callback compare) const;

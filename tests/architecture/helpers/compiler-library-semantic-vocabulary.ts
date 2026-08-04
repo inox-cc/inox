@@ -119,6 +119,7 @@ const universalDescriptorKeys = new Set([
   'cArgumentKinds',
   'cCallStyle',
   'cFailureMode',
+  'cHasObservableSideEffects',
   'cResultMode',
   'cValueKind',
   'failureMode',

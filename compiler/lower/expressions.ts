@@ -484,6 +484,10 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.libraryCPreservesPendingException = true
   }
 
+  if (source.libraryCHasObservableSideEffects === true) {
+    target.libraryCHasObservableSideEffects = true
+  }
+
   if (source.templatePlaceholder === true) {
     target.templatePlaceholder = true
   }

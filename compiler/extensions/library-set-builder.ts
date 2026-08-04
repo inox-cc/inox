@@ -2371,6 +2371,8 @@ function compilerLibrarySetFingerprint(
           ':' +
           (item.cPreservesPendingException === true ? 'preserves-pending-exception' : '') +
           ':' +
+          (item.cHasObservableSideEffects === true ? 'observable-side-effects' : '') +
+          ':' +
           (item.minArgs ?? '') +
           ':' +
           (item.maxArgs ?? '') +
@@ -2766,6 +2768,8 @@ function operationVariantsFingerprint(operation: LibraryOperationDescriptor): st
         (variant.cReceiverAdapter ?? '') +
         ':' +
         (variant.cResultAdapter ?? '') +
+        ':' +
+        (variant.cHasObservableSideEffects === true ? 'observable-side-effects' : '') +
         ':' +
         typeRefFingerprintOrEmpty(variant.resultTypeRef) +
         ':' +

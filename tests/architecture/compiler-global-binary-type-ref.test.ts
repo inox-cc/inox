@@ -25,6 +25,7 @@ test('global:binary operations describe results only through TypeRef', async () 
       'global:binary#Uint8Array#index-read',
       'global:binary#Uint8Array#index-write',
       'global:binary#Uint8Array#slice',
+      'global:binary#Uint8Array#subarray',
       'global:binary#Uint8Array#toString'
     ]
   )
@@ -34,8 +35,9 @@ test('global:binary operations describe results only through TypeRef', async () 
   assert.deepEqual(operations[2]?.resultTypeRef, nullablePrimitiveTypeRef('number'))
   assert.deepEqual(operations[3]?.resultTypeRef, primitiveTypeRef('number'))
   assert.deepEqual(operations[4]?.resultTypeRef, nominalUint8Array)
-  assert.deepEqual(operations[5]?.resultTypeRef, primitiveTypeRef('string'))
-  assert.deepEqual(operations[5]?.cResultMapping, {
+  assert.deepEqual(operations[5]?.resultTypeRef, nominalUint8Array)
+  assert.deepEqual(operations[6]?.resultTypeRef, primitiveTypeRef('string'))
+  assert.deepEqual(operations[6]?.cResultMapping, {
     cppType: 'inox::String',
     fields: []
   })

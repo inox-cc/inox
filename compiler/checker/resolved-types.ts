@@ -241,6 +241,7 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('libraryCallbackLifetime', 'string', null, true, loc),
       anyNodeField('libraryOwned', 'boolean', null, false, loc),
       anyNodeField('libraryCPreservesPendingException', 'boolean', null, false, loc),
+      anyNodeField('libraryCHasObservableSideEffects', 'boolean', null, false, loc),
       anyNodeField('libraryCapabilities', 'unknown', 'array<string>', false, loc),
       anyNodeField('libraryCArgumentAdapters', 'unknown', 'array<string>', true, loc),
       anyNodeField('libraryCArgumentAdapterTypeIds', 'unknown', 'array<string>', true, loc),
