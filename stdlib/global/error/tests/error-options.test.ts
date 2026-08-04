@@ -1,13 +1,12 @@
 // @targets cc
 // @expect pass
 // @stdout 1
-// @stdout E_TEST
+// @stdout 1
 // @stdout boom
 
 const plain = new Error()
-const cause = new Error('root')
-const error = new Error('boom', { code: 'E_TEST', cause })
+const error = new Error('boom', { cause: 'root' })
 
 console.log(plain.message === '')
-console.log(error.code)
+console.log(error.cause === 'root')
 console.log(error.message)

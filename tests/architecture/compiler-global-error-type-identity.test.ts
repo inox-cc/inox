@@ -22,10 +22,9 @@ test('Error identity принадлежит discoverable global package и им�
       fields: [
         { name: 'name', valueType: 'string', readonly: true, cMember: 'name', cppType: 'inox::String' },
         { name: 'message', valueType: 'string', readonly: true, cMember: 'message', cppType: 'inox::String' },
-        { name: 'code', valueType: 'string', readonly: true, cMember: 'code', cppType: 'inox::String' },
         {
           name: 'cause',
-          valueType: 'object',
+          valueType: 'unknown',
           nullable: true,
           readonly: true,
           cMember: 'cause',

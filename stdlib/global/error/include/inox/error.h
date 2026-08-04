@@ -13,7 +13,6 @@ public:
 
   inox::String name;
   inox::String message;
-  inox::String code;
   inox::Value cause;
 };
 

@@ -1,14 +1,15 @@
-export {};
+export {}
 
 declare global {
-  class Error {
-    readonly name: string;
-    readonly message: string;
-    readonly code: string;
-    readonly cause: object | null;
+  interface ErrorOptions {
+    cause?: unknown
+  }
 
-    constructor();
-    constructor(message: string);
-    constructor(message: string, options: { code?: string; cause?: object | null });
+  class Error {
+    readonly name: string
+    readonly message: string
+    readonly cause: unknown
+
+    constructor(message?: string, options?: ErrorOptions)
   }
 }

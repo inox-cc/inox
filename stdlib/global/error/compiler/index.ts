@@ -36,8 +36,14 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       fields: [
         { name: 'name', valueType: 'string', readonly: true, cMember: 'name', cppType: 'inox::String' },
         { name: 'message', valueType: 'string', readonly: true, cMember: 'message', cppType: 'inox::String' },
-        { name: 'code', valueType: 'string', readonly: true, cMember: 'code', cppType: 'inox::String' },
-        { name: 'cause', valueType: 'object', nullable: true, readonly: true, cMember: 'cause', cppType: 'inox::Value' }
+        {
+          name: 'cause',
+          valueType: 'unknown',
+          nullable: true,
+          readonly: true,
+          cMember: 'cause',
+          cppType: 'inox::Value'
+        }
       ]
     }
   ],
@@ -56,8 +62,24 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
         {
           valueTypes: ['object'],
           objectLiteralFields: [
-            { name: 'code', valueTypes: ['string'], optional: true },
-            { name: 'cause', valueTypes: ['object', 'null'], optional: true }
+            {
+              name: 'cause',
+              valueTypes: [
+                'array',
+                'async-result',
+                'boolean',
+                'bytes',
+                'class',
+                'function',
+                'null',
+                'number',
+                'object',
+                'string',
+                'unknown',
+                'void'
+              ],
+              optional: true
+            }
           ]
         }
       ],
