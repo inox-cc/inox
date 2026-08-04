@@ -73,7 +73,7 @@ export function tokenize(source: string, options: TokenizeOptions): Token[] {
       continue
     }
 
-    if (isDigit(unit)) {
+    if (isDigit(unit) || (unit === '.' && isDigit(lexerNextChar(state)))) {
       state.tokens.push(readNumberToken(state))
       continue
     }
@@ -339,6 +339,36 @@ function readNumberToken(state: LexerState): Token {
   if (lexerCurrentChar(state) === '.') {
     value = value + '.'
     advanceLexer(state, '.')
+
+    while (state.index < state.source.length && isDigit(lexerCurrentChar(state))) {
+      const unit = lexerCurrentChar(state)
+      value = value + unit
+      advanceLexer(state, unit)
+    }
+  }
+
+  const exponent = lexerCurrentChar(state)
+
+  if (exponent === 'e' || exponent === 'E') {
+    value = value + exponent
+    advanceLexer(state, exponent)
+
+    const sign = lexerCurrentChar(state)
+
+    if (sign === '+' || sign === '-') {
+      value = value + sign
+      advanceLexer(state, sign)
+    }
+
+    if (!isDigit(lexerCurrentChar(state))) {
+      state.diagnostics.push(
+        diagnostic(
+          'INOX_INVALID_NUMBER',
+          'scientific notation exponent requires a digit',
+          lexerLocation(state, startLine, startColumn)
+        )
+      )
+    }
 
     while (state.index < state.source.length && isDigit(lexerCurrentChar(state))) {
       const unit = lexerCurrentChar(state)
