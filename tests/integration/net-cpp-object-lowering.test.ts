@@ -19,7 +19,7 @@ export async function assertNetUsesCppObjectFacade(): Promise<void> {
       {
         path: '/pkg/src/index.ts',
         source: `
-import net from 'node:net'
+import net, { connect, createConnection } from 'node:net'
 
 const server = net.createServer((socket) => {
   socket.end('ok')
@@ -46,6 +46,17 @@ client.setNoDelay()
 client.setKeepAlive(true, 10)
 client.write('ping', () => console.log('written'))
 client.end()
+
+net.connect(1).destroy()
+net.connect(1, () => {}).destroy()
+net.connect(1, '127.0.0.1').destroy()
+net.connect(1, '127.0.0.1', () => {}).destroy()
+net.connect({ port: 1 }).destroy()
+net.connect({ port: 1, host: '127.0.0.1' }, () => {}).destroy()
+net.createConnection(1).destroy()
+net.createConnection({ port: 1 }, () => {}).destroy()
+connect(1, '127.0.0.1').setNoDelay().destroy()
+createConnection(1, () => {}).setKeepAlive().destroy()
 `
       }
     ],
@@ -98,6 +109,13 @@ client.end()
   assert.match(source, /client\.on\("close", inox_callback_\d+\);/)
   assert.match(source, /inox_callback_args\[0\]\.tag != INOX_TAG_BOOL/)
   assert.match(source, /client\.write\("ping", inox_callback_\d+\)/)
+  assert.match(source, /net\.connect\(1\)/)
+  assert.match(source, /net\.connect\(1, inox_callback_\d+\)/)
+  assert.match(source, /net\.connect\(1, "127\.0\.0\.1"\)/)
+  assert.match(source, /net\.connect\(1, "127\.0\.0\.1", inox_callback_\d+\)/)
+  assert.match(source, /net\.connect\(NetConnectionOptions\(/)
+  assert.match(source, /\.setNoDelay\(\)/)
+  assert.match(source, /\.setKeepAlive\(\)/)
   assert.doesNotMatch(source, /inox_net_|Net(?:Connection|Data|Close|Socket|Server|Connect)Fn/)
   assert.doesNotMatch(source, /inox_net_(?:connection|socket|server)_handler_/)
   assert.doesNotMatch(source, /NetServer\(server\)\.|NetSocket\(client\)\./)
