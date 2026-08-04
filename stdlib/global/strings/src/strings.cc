@@ -1100,6 +1100,35 @@ String String::slice(double start, double end) const {
   return string_result_or_oom(String(bytes() + start_byte, end_byte - start_byte));
 }
 
+String String::substring(double start, double end) const {
+  if (!valid()) {
+    throw_out_of_memory();
+    return String();
+  }
+
+  const size_t code_unit_length = string_code_unit_length(bytes(), length());
+  size_t start_index = non_negative_index(start);
+  size_t end_index = non_negative_index(end);
+
+  if (start_index > code_unit_length) {
+    start_index = code_unit_length;
+  }
+
+  if (end_index > code_unit_length) {
+    end_index = code_unit_length;
+  }
+
+  if (start_index > end_index) {
+    const size_t temporary = start_index;
+    start_index = end_index;
+    end_index = temporary;
+  }
+
+  const size_t start_byte = string_code_unit_to_byte_offset_ceiling(bytes(), length(), start_index);
+  const size_t end_byte = string_code_unit_to_byte_offset_ceiling(bytes(), length(), end_index);
+  return string_result_or_oom(String(bytes() + start_byte, end_byte - start_byte));
+}
+
 static uint32_t string_split_limit(double raw) {
   if (!isfinite(raw) || raw == 0) {
     return 0;

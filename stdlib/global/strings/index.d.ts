@@ -19,6 +19,7 @@ declare global {
     slice(start?: number, end?: number): string
     split(separator?: string, limit?: number): Array<string>
     startsWith(value: string, position?: number): boolean
+    substring(start: number, end?: number): string
     toUpperCase(): string
     trim(): string
     trimEnd(): string

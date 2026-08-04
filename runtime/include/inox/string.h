@@ -14,6 +14,8 @@ typedef struct inox_string {
 
 #ifdef __cplusplus
 
+#include <limits>
+
 #include "inox/string_view.h"
 
 class Array;
@@ -60,6 +62,7 @@ public:
   String slice() const;
   String slice(double start) const;
   String slice(double start, double end) const;
+  String substring(double start, double end = std::numeric_limits<double>::infinity()) const;
   ::Array split() const;
   ::Array split(StringView separator) const;
   ::Array split(StringView separator, double limit) const;

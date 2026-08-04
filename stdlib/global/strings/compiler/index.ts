@@ -91,7 +91,14 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
     stringCall('trimRight', stringTypeRef, [], []),
     stringCall('trimStart', stringTypeRef, [], []),
     stringIndexRead(),
-    unsupportedSubstring()
+    stringCall(
+      'substring',
+      stringTypeRef,
+      ['number', 'optional-number'],
+      [numberArgument(), numberArgument()],
+      'thrown',
+      1
+    )
   ],
   intrinsicBindings: [],
   runtimeRequirements: [
@@ -244,24 +251,6 @@ function stringIndexRead(): LibraryOperationDescriptor {
     cArgumentSources: [null, { argumentIndex: 0 }, { argumentIndex: 0 }],
     cArgumentAdapters: ['', '($value + 1)'],
     maxArgs: 1
-  }
-}
-
-function unsupportedSubstring(): LibraryOperationDescriptor {
-  return {
-    libraryId,
-    bindingId: receiverBinding('substring'),
-    acceptsUnknownReceiver: true,
-    operationId: `${libraryId}#String.substring`,
-    kind: 'call',
-    runtimeRequirements: [],
-    receiverTypeId,
-    resultTypeRef: stringTypeRef,
-    minArgs: 0,
-    maxArgs: 2,
-    argumentChecks: [numberArgument(), numberArgument()],
-    diagnosticCode: 'INOX_C_UNSUPPORTED_EXPR',
-    diagnosticMessage: 'string.substring is not supported by the current C++ backend slice'
   }
 }
 
