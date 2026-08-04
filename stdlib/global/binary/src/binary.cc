@@ -393,6 +393,10 @@ Uint8Array Uint8Array::slice(double start, double end) const {
   return copy({ storageBytes(value) + first, count }, false);
 }
 
+Uint8Array Uint8Array::subarray(double start, double end) const {
+  return view(start, end, false);
+}
+
 inox::String Uint8Array::toString() const {
   const auto values = bytes();
 

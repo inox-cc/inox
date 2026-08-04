@@ -69,7 +69,7 @@ test('node:buffer operations describe results only through TypeRef', async () =>
   }
 
   const variants = operations.flatMap((operation) => operation.variants ?? [])
-  assert.equal(variants.length, 10)
+  assert.equal(variants.length, 7)
 
   for (const variant of variants) {
     assert.equal(variant.resultTypeRef, undefined)

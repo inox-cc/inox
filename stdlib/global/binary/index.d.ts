@@ -9,6 +9,7 @@ declare global {
     constructor(values: number[]);
 
     slice(start: number, end?: number): Uint8Array;
+    subarray(start?: number, end?: number): Uint8Array;
     toString(): string;
   }
 }

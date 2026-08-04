@@ -135,14 +135,6 @@ Buffer Buffer::slice(double start, double end) const {
   return Buffer(view(start, end, true));
 }
 
-Buffer Buffer::subarray() const {
-  return subarray(0);
-}
-
-Buffer Buffer::subarray(double start) const {
-  return subarray(start, static_cast<double>(length()));
-}
-
 Buffer Buffer::subarray(double start, double end) const {
   if (!valid()) {
     inox::fatal("Buffer.subarray native facade invariant failed");

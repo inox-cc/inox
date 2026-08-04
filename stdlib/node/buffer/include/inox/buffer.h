@@ -26,9 +26,10 @@ public:
   bool equals(const Uint8Array& otherBuffer) const;
   Buffer slice(double start) const;
   Buffer slice(double start, double end) const;
-  Buffer subarray() const;
-  Buffer subarray(double start) const;
-  Buffer subarray(double start, double end) const;
+  Buffer subarray(
+    double start = 0,
+    double end = std::numeric_limits<double>::infinity()
+  ) const;
   inox::String toString() const;
   inox::String toString(inox::StringView encoding) const;
 

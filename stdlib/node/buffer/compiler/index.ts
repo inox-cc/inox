@@ -121,17 +121,16 @@ function bufferFromOperation(): LibraryOperationDescriptor {
 }
 
 function bufferSubarrayOperation(): LibraryOperationDescriptor {
-  return {
-    ...receiverCall('subarray', ['receiver'], 'subarray', bufferTypeRef, null, 0, 2, [
-      numberArgument(),
-      numberArgument()
-    ]),
-    variants: [
-      bufferReceiverVariant('subarray', 0, []),
-      bufferReceiverVariant('subarray', 1, ['number']),
-      bufferReceiverVariant('subarray', 2, ['number', 'number'])
-    ]
-  }
+  return receiverCall(
+    'subarray',
+    ['receiver', 'optional-number', 'optional-number'],
+    'subarray',
+    bufferTypeRef,
+    null,
+    0,
+    2,
+    [numberArgument(), numberArgument()]
+  )
 }
 
 function bufferByteLengthOperation(): LibraryOperationDescriptor {
@@ -299,21 +298,6 @@ function receiverVariant(
     cExpression: 'toString',
     cArgumentKinds,
     cReceiverAdapter: 'Buffer($value)'
-  }
-}
-
-function bufferReceiverVariant(
-  cExpression: string,
-  argumentCount: number,
-  argumentKinds: LibraryCArgumentKind[]
-): LibraryOperationVariantDescriptor {
-  return {
-    minArgs: argumentCount,
-    maxArgs: argumentCount,
-    cExpression,
-    cArgumentKinds: ['receiver', ...argumentKinds],
-    cReceiverAdapter: 'Buffer($value)',
-    cResultMode: 'value'
   }
 }
 

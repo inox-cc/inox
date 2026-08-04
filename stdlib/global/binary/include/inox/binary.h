@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
+#include <limits>
 #include <span>
 
 #include "inox/string.h"
@@ -44,6 +45,10 @@ public:
   double operator[](double index) const;
   Uint8Array slice(double start) const;
   Uint8Array slice(double start, double end) const;
+  Uint8Array subarray(
+    double start = 0,
+    double end = std::numeric_limits<double>::infinity()
+  ) const;
   inox::String toString() const;
 
 private:

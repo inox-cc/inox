@@ -41,6 +41,17 @@ const operations: LibraryOperationDescriptor[] = [
     numberArgument()
   ]),
   receiverCall(
+    'subarray',
+    ['receiver', 'optional-number', 'optional-number'],
+    'subarray',
+    uint8ArrayTypeRef,
+    null,
+    'value',
+    0,
+    2,
+    [numberArgument(), numberArgument()]
+  ),
+  receiverCall(
     'toString',
     ['receiver'],
     'toString',
