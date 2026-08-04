@@ -11,7 +11,11 @@ test('entrypoint package node:http владеет native API и runtime plan', a
   assert.equal(httpPackage.compilerEntrypoint, 'stdlib/node/http/compiler/index.ts')
   assert.ok(httpPackage.compilerPackage)
   assert.equal(httpPackage.compilerPackage.id, 'node:http')
-  assert.deepEqual(httpPackage.compilerPackage.dependencies, ['global:binary', 'node:net'])
+  assert.deepEqual(httpPackage.compilerPackage.dependencies, [
+    'global:binary',
+    'global:collections',
+    'node:net'
+  ])
   assert.deepEqual(httpPackage.nativeSources, ['stdlib/node/http/src/http.cc'])
   assert.deepEqual(httpPackage.nativeIncludeDirs, ['stdlib/node/http/include'])
 
@@ -39,6 +43,7 @@ test('entrypoint package node:http владеет native API и runtime plan', a
   assert.deepEqual(runtime.capabilities, ['tcp'])
   assert.deepEqual(runtime.dependencies, [
     'async-runtime',
+    'global:collections#array',
     'callback-values',
     'global:binary',
     'managed-values',
