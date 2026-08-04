@@ -107,6 +107,10 @@ Buffer Buffer::from(inox::StringView value, inox::StringView encoding) {
   return fromUtf8(value);
 }
 
+Buffer Buffer::from(const Uint8Array& value) {
+  return Buffer(value.bytes());
+}
+
 bool Buffer::isBuffer(const inox::Value& value) {
   return valueHasBufferIdentity(value);
 }
@@ -126,6 +130,22 @@ Buffer Buffer::slice(double start) const {
 Buffer Buffer::slice(double start, double end) const {
   if (!valid()) {
     inox::fatal("Buffer.slice native facade invariant failed");
+  }
+
+  return Buffer(view(start, end, true));
+}
+
+Buffer Buffer::subarray() const {
+  return subarray(0);
+}
+
+Buffer Buffer::subarray(double start) const {
+  return subarray(start, static_cast<double>(length()));
+}
+
+Buffer Buffer::subarray(double start, double end) const {
+  if (!valid()) {
+    inox::fatal("Buffer.subarray native facade invariant failed");
   }
 
   return Buffer(view(start, end, true));

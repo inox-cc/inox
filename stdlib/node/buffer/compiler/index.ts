@@ -55,6 +55,7 @@ const operations: LibraryOperationDescriptor[] = [
     numberArgument(),
     numberArgument()
   ]),
+  bufferSubarrayOperation(),
   bufferToStringOperation(),
   ...unsupportedCalls().map((name) => unsupportedOperation(name, 'call')),
   ...unsupportedConstructors().map((name) => unsupportedOperation(name, 'construct')),
@@ -93,11 +94,43 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
 
 function bufferFromOperation(): LibraryOperationDescriptor {
   return {
-    ...staticCall('from', ['string-view'], 'Buffer::from', bufferTypeRef, null, 1, 2, [
-      stringArgument(),
+    ...staticCall('from', ['value'], 'Buffer::from', bufferTypeRef, null, 1, 2, [
+      { valueTypes: ['bytes', 'string'] },
       utf8Argument('Buffer.from')
     ]),
-    variants: [staticVariant(1, 1, ['string-view']), staticVariant(2, 2, ['string-view', 'string-view'])]
+    variants: [
+      {
+        ...staticVariant(1, 1, ['string-view']),
+        argumentIndex: 0,
+        argumentValueTypes: ['string']
+      },
+      {
+        ...staticVariant(1, 1, ['value']),
+        argumentIndex: 0,
+        argumentValueTypes: ['bytes'],
+        cArgumentAdapters: ['Uint8Array($value)'],
+        cArgumentAdapterTypeIds: [uint8ArrayTypeId]
+      },
+      {
+        ...staticVariant(2, 2, ['string-view', 'string-view']),
+        argumentIndex: 0,
+        argumentValueTypes: ['string']
+      }
+    ]
+  }
+}
+
+function bufferSubarrayOperation(): LibraryOperationDescriptor {
+  return {
+    ...receiverCall('subarray', ['receiver'], 'subarray', bufferTypeRef, null, 0, 2, [
+      numberArgument(),
+      numberArgument()
+    ]),
+    variants: [
+      bufferReceiverVariant('subarray', 0, []),
+      bufferReceiverVariant('subarray', 1, ['number']),
+      bufferReceiverVariant('subarray', 2, ['number', 'number'])
+    ]
   }
 }
 
@@ -266,6 +299,21 @@ function receiverVariant(
     cExpression: 'toString',
     cArgumentKinds,
     cReceiverAdapter: 'Buffer($value)'
+  }
+}
+
+function bufferReceiverVariant(
+  cExpression: string,
+  argumentCount: number,
+  argumentKinds: LibraryCArgumentKind[]
+): LibraryOperationVariantDescriptor {
+  return {
+    minArgs: argumentCount,
+    maxArgs: argumentCount,
+    cExpression,
+    cArgumentKinds: ['receiver', ...argumentKinds],
+    cReceiverAdapter: 'Buffer($value)',
+    cResultMode: 'value'
   }
 }
 

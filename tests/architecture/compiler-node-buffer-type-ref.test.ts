@@ -16,12 +16,14 @@ const bufferOperationIds = [
   'node:buffer#Buffer#compare',
   'node:buffer#Buffer#equals',
   'node:buffer#Buffer#slice',
+  'node:buffer#Buffer#subarray',
   'node:buffer#Buffer#toString'
 ]
 const nominalResultIds = [
   'node:buffer#Buffer.from',
   'node:buffer#Buffer.alloc',
-  'node:buffer#Buffer#slice'
+  'node:buffer#Buffer#slice',
+  'node:buffer#Buffer#subarray'
 ]
 const numberResultIds = [
   'node:buffer#Buffer.byteLength',
@@ -67,7 +69,7 @@ test('node:buffer operations describe results only through TypeRef', async () =>
   }
 
   const variants = operations.flatMap((operation) => operation.variants ?? [])
-  assert.equal(variants.length, 6)
+  assert.equal(variants.length, 10)
 
   for (const variant of variants) {
     assert.equal(variant.resultTypeRef, undefined)

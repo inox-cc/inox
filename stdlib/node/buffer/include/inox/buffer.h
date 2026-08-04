@@ -20,11 +20,15 @@ public:
   static double maximumLength();
   static Buffer from(inox::StringView value);
   static Buffer from(inox::StringView value, inox::StringView encoding);
+  static Buffer from(const Uint8Array& value);
   static bool isBuffer(const inox::Value& value);
   double compare(const Uint8Array& target) const;
   bool equals(const Uint8Array& otherBuffer) const;
   Buffer slice(double start) const;
   Buffer slice(double start, double end) const;
+  Buffer subarray() const;
+  Buffer subarray(double start) const;
+  Buffer subarray(double start, double end) const;
   inox::String toString() const;
   inox::String toString(inox::StringView encoding) const;
 
