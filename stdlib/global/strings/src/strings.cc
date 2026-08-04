@@ -432,6 +432,195 @@ static void string_throw_range_error(const char* message) {
   throw_value(error);
 }
 
+static bool string_emit_bytes(char* out, size_t* offset, const char* bytes, size_t len) {
+  if (offset == nullptr || len > ((size_t)-1) - *offset) {
+    return false;
+  }
+
+  if (out != nullptr && len != 0) {
+    memcpy(out + *offset, bytes, len);
+  }
+
+  *offset += len;
+  return true;
+}
+
+static size_t string_find_match(StringView source, StringView search, size_t start) {
+  if (start > source.len) {
+    return (size_t)-1;
+  }
+
+  if (search.len == 0) {
+    return start;
+  }
+
+  if (search.len > source.len - start) {
+    return (size_t)-1;
+  }
+
+  const size_t last = source.len - search.len;
+
+  for (size_t index = start; index <= last;) {
+    if (memcmp(source.bytes + index, search.bytes, search.len) == 0) {
+      return index;
+    }
+
+    size_t step = utf8_next_len(source.bytes, source.len, index);
+    index += step == 0 ? 1 : step;
+  }
+
+  return (size_t)-1;
+}
+
+static bool string_emit_replacement(
+  char* out,
+  size_t* offset,
+  StringView source,
+  StringView search,
+  StringView replacement,
+  size_t match
+) {
+  for (size_t index = 0; index < replacement.len; index += 1) {
+    const char value = replacement.bytes[index];
+
+    if (value != '$' || index + 1 >= replacement.len) {
+      if (!string_emit_bytes(out, offset, replacement.bytes + index, 1)) {
+        return false;
+      }
+      continue;
+    }
+
+    const char token = replacement.bytes[index + 1];
+    const char* bytes = nullptr;
+    size_t len = 0;
+
+    if (token == '$') {
+      bytes = "$";
+      len = 1;
+    } else if (token == '&') {
+      bytes = search.bytes;
+      len = search.len;
+    } else if (token == '`') {
+      bytes = source.bytes;
+      len = match;
+    } else if (token == '\'') {
+      bytes = source.bytes + match + search.len;
+      len = source.len - match - search.len;
+    } else {
+      if (!string_emit_bytes(out, offset, replacement.bytes + index, 1)) {
+        return false;
+      }
+      continue;
+    }
+
+    if (!string_emit_bytes(out, offset, bytes, len)) {
+      return false;
+    }
+
+    index += 1;
+  }
+
+  return true;
+}
+
+static bool string_replace_pass(
+  char* out,
+  size_t* output_len,
+  bool* matched_out,
+  StringView source,
+  StringView search,
+  StringView replacement,
+  bool all
+) {
+  size_t offset = 0;
+  size_t cursor = 0;
+  size_t scan = 0;
+  bool matched = false;
+
+  while (scan <= source.len) {
+    const size_t match = string_find_match(source, search, scan);
+
+    if (match == (size_t)-1) {
+      break;
+    }
+
+    matched = true;
+
+    if (!string_emit_bytes(out, &offset, source.bytes + cursor, match - cursor) ||
+        !string_emit_replacement(out, &offset, source, search, replacement, match)) {
+      return false;
+    }
+
+    cursor = match + search.len;
+
+    if (!all) {
+      break;
+    }
+
+    if (search.len != 0) {
+      scan = cursor;
+      continue;
+    }
+
+    if (match == source.len) {
+      scan = source.len + 1;
+      break;
+    }
+
+    size_t step = utf8_next_len(source.bytes, source.len, match);
+    scan = match + (step == 0 ? 1 : step);
+  }
+
+  if (!string_emit_bytes(out, &offset, source.bytes + cursor, source.len - cursor)) {
+    return false;
+  }
+
+  *output_len = offset;
+  *matched_out = matched;
+  return true;
+}
+
+static String string_replace(const String& value, StringView search, StringView replacement, bool all) {
+  if (!value.valid()) {
+    throw_out_of_memory();
+    return String();
+  }
+
+  const StringView source = value;
+  size_t len = 0;
+  bool matched = false;
+
+  if (!string_replace_pass(nullptr, &len, &matched, source, search, replacement, all)) {
+    throw_out_of_memory();
+    return String();
+  }
+
+  if (!matched) {
+    return value;
+  }
+
+  inox_string* result = string_alloc_storage(&inox_default_allocator, len);
+
+  if (result == nullptr) {
+    throw_out_of_memory();
+    return String();
+  }
+
+  size_t emitted = 0;
+
+  if (!string_replace_pass(result->bytes, &emitted, &matched, source, search, replacement, all)) {
+    inox_value failed = { INOX_TAG_STRING };
+    failed.as.ref = &result->header;
+    inox_release(failed);
+    throw_out_of_memory();
+    return String();
+  }
+
+  inox_value out = { INOX_TAG_STRING };
+  out.as.ref = &result->header;
+  return String(adopt(out));
+}
+
 static bool string_next_utf16_code_unit(
   StringView value,
   size_t* index,
@@ -1125,6 +1314,14 @@ String String::repeat(double raw_count) const {
   value.as.ref = &string->header;
 
   return String(adopt(value));
+}
+
+String String::replace(StringView search, StringView replacement) const {
+  return string_replace(*this, search, replacement, false);
+}
+
+String String::replaceAll(StringView search, StringView replacement) const {
+  return string_replace(*this, search, replacement, true);
 }
 
 String String::slice() const {

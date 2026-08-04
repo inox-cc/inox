@@ -20,6 +20,8 @@ declare global {
     padEnd(targetLength: number, pad?: string): string
     padStart(targetLength: number, pad?: string): string
     repeat(count: number): string
+    replace(searchValue: string, replaceValue: string): string
+    replaceAll(searchValue: string, replaceValue: string): string
     slice(start?: number, end?: number): string
     split(separator?: string, limit?: number): Array<string>
     startsWith(value: string, position?: number): boolean

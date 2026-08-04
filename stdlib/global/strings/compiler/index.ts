@@ -80,6 +80,18 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
     ),
     stringCall('repeat', stringTypeRef, ['number'], [numberArgument()]),
     stringCall(
+      'replace',
+      stringTypeRef,
+      ['string-view', 'string-view'],
+      [stringArgument(), stringArgument()]
+    ),
+    stringCall(
+      'replaceAll',
+      stringTypeRef,
+      ['string-view', 'string-view'],
+      [stringArgument(), stringArgument()]
+    ),
+    stringCall(
       'slice',
       stringTypeRef,
       ['optional-number', 'optional-number'],

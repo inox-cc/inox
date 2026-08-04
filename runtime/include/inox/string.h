@@ -65,6 +65,8 @@ public:
   String padStart(double target_len) const;
   String padStart(double target_len, StringView pad) const;
   String repeat(double count) const;
+  String replace(StringView search, StringView replacement) const;
+  String replaceAll(StringView search, StringView replacement) const;
   String slice() const;
   String slice(double start) const;
   String slice(double start, double end) const;
