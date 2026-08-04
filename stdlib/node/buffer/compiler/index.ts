@@ -39,6 +39,8 @@ const stringCResultMapping: LibraryCResultMappingDescriptor = {
 const operations: LibraryOperationDescriptor[] = [
   bufferFromOperation(),
   staticCall('alloc', ['number'], 'Buffer::alloc', bufferTypeRef, null, 1, 1, [numberArgument()]),
+  bufferByteLengthOperation(),
+  bufferStaticCompareOperation(),
   {
     ...staticCall('isBuffer', ['value'], 'Buffer::isBuffer', booleanTypeRef, null, 1, 1, []),
     cFailureMode: null
@@ -47,6 +49,8 @@ const operations: LibraryOperationDescriptor[] = [
   receiverMemberRead('length', 'length', numberTypeRef, null),
   receiverIndexRead(),
   receiverIndexWrite(),
+  bufferReceiverBytesOperation('compare', 'compare', numberTypeRef),
+  bufferReceiverBytesOperation('equals', 'equals', booleanTypeRef),
   receiverCall('slice', ['receiver', 'number', 'optional-number'], 'slice', bufferTypeRef, null, 1, 2, [
     numberArgument(),
     numberArgument()
@@ -94,6 +98,54 @@ function bufferFromOperation(): LibraryOperationDescriptor {
       utf8Argument('Buffer.from')
     ]),
     variants: [staticVariant(1, 1, ['string-view']), staticVariant(2, 2, ['string-view', 'string-view'])]
+  }
+}
+
+function bufferByteLengthOperation(): LibraryOperationDescriptor {
+  return {
+    ...staticCall('byteLength', ['string-view'], 'Buffer::byteLength', numberTypeRef, null, 1, 2, [
+      stringArgument(),
+      utf8Argument('Buffer.byteLength')
+    ]),
+    variants: [
+      {
+        minArgs: 1,
+        maxArgs: 1,
+        cExpression: 'Buffer::byteLength',
+        cArgumentKinds: ['string-view']
+      },
+      {
+        minArgs: 2,
+        maxArgs: 2,
+        cExpression: 'Buffer::byteLength',
+        cArgumentKinds: ['string-view', 'string-view']
+      }
+    ]
+  }
+}
+
+function bufferStaticCompareOperation(): LibraryOperationDescriptor {
+  return {
+    ...staticCall('compare', ['value', 'value'], 'Buffer::compare', numberTypeRef, null, 2, 2, [
+      bytesArgument(),
+      bytesArgument()
+    ]),
+    cArgumentAdapters: ['Uint8Array($value)', 'Uint8Array($value)'],
+    cArgumentAdapterTypeIds: [uint8ArrayTypeId, uint8ArrayTypeId],
+    cFailureMode: null
+  }
+}
+
+function bufferReceiverBytesOperation(
+  sourceName: 'compare' | 'equals',
+  cName: 'compare' | 'equals',
+  resultTypeRef: TypeRef
+): LibraryOperationDescriptor {
+  return {
+    ...receiverCall(sourceName, ['receiver', 'value'], cName, resultTypeRef, null, 1, 1, [bytesArgument()]),
+    cArgumentAdapters: ['', 'Uint8Array($value)'],
+    cArgumentAdapterTypeIds: ['', uint8ArrayTypeId],
+    cFailureMode: null
   }
 }
 
@@ -291,6 +343,10 @@ function numberArgument(): LibraryArgumentCheckDescriptor {
 
 function stringArgument(): LibraryArgumentCheckDescriptor {
   return { valueTypes: ['string'] }
+}
+
+function bytesArgument(): LibraryArgumentCheckDescriptor {
+  return { valueTypes: ['bytes'] }
 }
 
 function utf8Argument(label: string): LibraryArgumentCheckDescriptor {

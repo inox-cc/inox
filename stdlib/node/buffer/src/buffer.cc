@@ -1,5 +1,7 @@
 #include "inox/buffer.h"
 
+#include <algorithm>
+#include <cstring>
 #include <span>
 #include <utility>
 
@@ -26,6 +28,25 @@ bool isUtf8(inox::StringView encoding) {
          encoding.bytes[3] == '8';
 }
 
+double compareBytes(std::span<const std::uint8_t> first, std::span<const std::uint8_t> second) {
+  const std::size_t commonLength = std::min(first.size(), second.size());
+  const int order = commonLength == 0 ? 0 : std::memcmp(first.data(), second.data(), commonLength);
+
+  if (order < 0) {
+    return -1;
+  }
+
+  if (order > 0) {
+    return 1;
+  }
+
+  if (first.size() < second.size()) {
+    return -1;
+  }
+
+  return first.size() > second.size() ? 1 : 0;
+}
+
 } // namespace
 
 Buffer::Buffer() : Uint8Array() {}
@@ -46,6 +67,23 @@ Buffer Buffer::alloc(double size) {
   return allocate(size);
 }
 
+double Buffer::byteLength(inox::StringView value) {
+  return static_cast<double>(value.len);
+}
+
+double Buffer::byteLength(inox::StringView value, inox::StringView encoding) {
+  if (!isUtf8(encoding)) {
+    throwBufferError("TypeError: Buffer.byteLength only supports utf8 encoding");
+    return 0;
+  }
+
+  return byteLength(value);
+}
+
+double Buffer::compare(const Uint8Array& first, const Uint8Array& second) {
+  return compareBytes(first.bytes(), second.bytes());
+}
+
 Buffer Buffer::from(inox::StringView value) {
   return fromUtf8(value);
 }
@@ -61,6 +99,14 @@ Buffer Buffer::from(inox::StringView value, inox::StringView encoding) {
 
 bool Buffer::isBuffer(const inox::Value& value) {
   return hasBufferIdentity(value);
+}
+
+double Buffer::compare(const Uint8Array& target) const {
+  return compareBytes(bytes(), target.bytes());
+}
+
+bool Buffer::equals(const Uint8Array& otherBuffer) const {
+  return compare(otherBuffer) == 0;
 }
 
 Buffer Buffer::slice(double start) const {
@@ -134,6 +180,18 @@ bool Buffer::hasBufferIdentity(const inox::Value& value) {
 
 Buffer BufferConstructor::alloc(double size) const {
   return Buffer::allocate(size);
+}
+
+double BufferConstructor::byteLength(inox::StringView value) const {
+  return Buffer::byteLength(value);
+}
+
+double BufferConstructor::byteLength(inox::StringView value, inox::StringView encoding) const {
+  return Buffer::byteLength(value, encoding);
+}
+
+double BufferConstructor::compare(const Uint8Array& first, const Uint8Array& second) const {
+  return Buffer::compare(first, second);
 }
 
 Buffer BufferConstructor::from(inox::StringView value) const {

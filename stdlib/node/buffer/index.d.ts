@@ -4,6 +4,8 @@ export interface BufferConstants {
 
 export interface BufferConstructor {
   alloc(size: number): Buffer;
+  byteLength(value: string, encoding?: string): number;
+  compare(first: Uint8Array, second: Uint8Array): number;
   from(value: string, encoding?: string): Buffer;
   isBuffer(value: unknown): boolean;
 }
@@ -17,9 +19,13 @@ export class Buffer extends Uint8Array {
   readonly length: number;
 
   static alloc(size: number): Buffer;
+  static byteLength(value: string, encoding?: string): number;
+  static compare(first: Uint8Array, second: Uint8Array): number;
   static from(value: string, encoding?: string): Buffer;
   static isBuffer(value: unknown): boolean;
 
+  compare(target: Uint8Array): number;
+  equals(otherBuffer: Uint8Array): boolean;
   slice(start: number, end?: number): Buffer;
   toString(encoding?: string): string;
 }

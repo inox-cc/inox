@@ -17,9 +17,14 @@ public:
 
   bool valid() const;
   static Buffer alloc(double size);
+  static double byteLength(inox::StringView value);
+  static double byteLength(inox::StringView value, inox::StringView encoding);
+  static double compare(const Uint8Array& first, const Uint8Array& second);
   static Buffer from(inox::StringView value);
   static Buffer from(inox::StringView value, inox::StringView encoding);
   static bool isBuffer(const inox::Value& value);
+  double compare(const Uint8Array& target) const;
+  bool equals(const Uint8Array& otherBuffer) const;
   Buffer slice(double start) const;
   Buffer slice(double start, double end) const;
   inox::String toString() const;
@@ -37,6 +42,9 @@ private:
 class BufferConstructor {
 public:
   Buffer alloc(double size) const;
+  double byteLength(inox::StringView value) const;
+  double byteLength(inox::StringView value, inox::StringView encoding) const;
+  double compare(const Uint8Array& first, const Uint8Array& second) const;
   Buffer from(inox::StringView value) const;
   Buffer from(inox::StringView value, inox::StringView encoding) const;
   bool isBuffer(const inox::Value& value) const;
