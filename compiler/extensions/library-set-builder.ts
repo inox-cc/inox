@@ -1531,9 +1531,23 @@ function validateOperationArgumentTypeRefs(
   for (let index = 0; index < values.length; index = index + 1) {
     const check = values[index]
     const typeRef = check.typeRef
+    const typeRefs = check.typeRefs ?? []
+
+    if (typeRef !== null && typeof typeRef !== 'undefined' && typeRefs.length > 0) {
+      throw new Error(`operation ${label} argument ${index} cannot combine typeRef and typeRefs`)
+    }
 
     if (typeRef !== null && typeof typeRef !== 'undefined') {
       validateTypeRef(`operation ${label} argument ${index}`, typeRef, nativeTypes, typeParameters)
+    }
+
+    for (let typeIndex = 0; typeIndex < typeRefs.length; typeIndex = typeIndex + 1) {
+      validateTypeRef(
+        `operation ${label} argument ${index} alternative ${typeIndex}`,
+        typeRefs[typeIndex],
+        nativeTypes,
+        typeParameters
+      )
     }
 
     const functionReturnTypeRef = check.functionReturnTypeRef
@@ -2615,6 +2629,9 @@ function operationArgumentChecksFingerprint(operation: { argumentChecks?: Librar
       sortedStrings(check.valueTypes).join(',') +
         ':' +
         typeRefFingerprintOrEmpty(check.typeRef) +
+        ((check.typeRefs?.length ?? 0) > 0
+          ? ':alternatives[' + typeRefListFingerprint(check.typeRefs ?? []) + ']'
+          : '') +
         ':' +
         sortedStrings(check.objectTypeIds ?? []).join(',') +
         ':' +

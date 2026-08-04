@@ -5126,7 +5126,7 @@ class Checker {
 
       const info = argInfos[index]
       const argument = expression.args[index]
-      const typeRefTemplate = check.typeRef
+      const typeRefTemplates = compilerLibraryArgumentTypeRefs(check)
       let runtimeCallbackFunctionType: AnyNode | null = null
 
       if (check.functionParameters !== null && typeof check.functionParameters !== 'undefined') {
@@ -5160,22 +5160,23 @@ class Checker {
         argument.libraryRuntimeCallbackFunctionType = runtimeCallbackFunctionType
       }
 
-      if (typeRefTemplate !== null && typeof typeRefTemplate !== 'undefined') {
-        const libraries = resolveCompilerLibrarySet(this.options.libraries)
-        let expectedTypeRef = typeRefTemplate
-
-        if ((operation.typeParameters ?? []).length > 0) {
-          expectedTypeRef = instantiateLibraryOperationTypeRef(
+      if (typeRefTemplates.length > 0) {
+        if (
+          !this.compilerLibraryArgumentMatchesTypeRefs(
+            info,
+            typeRefTemplates,
             operation,
-            typeRefTemplate,
-            this.compilerLibraryOperationTypeRefContext(expression, contextualResult, argInfos),
-            libraries
+            expression,
+            contextualResult,
+            argInfos
+          )
+        ) {
+          this.report(
+            'INOX_TYPE_MISMATCH',
+            `library operation ${operation.operationId} does not accept ${info.valueType}`,
+            info.loc
           )
         }
-        const expected = typeRefCompatibilityMetadata(expectedTypeRef, libraries, info.loc)
-
-        this.checkAssignableType(info.valueType, expected.valueType, info.loc, expected.nullable, info.nullable)
-        this.checkAssignableLibraryNativeType(info.shape, expected.shape, info.loc, info.valueType)
       }
 
       if (
@@ -5188,7 +5189,7 @@ class Checker {
       }
 
       if (
-        (typeRefTemplate === null || typeof typeRefTemplate === 'undefined') &&
+        typeRefTemplates.length === 0 &&
         !check.valueTypes.includes(info.valueType)
       ) {
         this.report(
@@ -5785,6 +5786,56 @@ class Checker {
     this.automaticLibraryOptions.push(automatic)
   }
 
+  compilerLibraryArgumentMatchesTypeRefs(
+    info: CheckedCallArgInfo,
+    typeRefTemplates: TypeRef[],
+    operation: LibraryOperationDescriptor,
+    operationExpression: AnyNode,
+    contextualResult: ResolvedTypeInfo | null,
+    argInfos: CheckedCallArgInfo[]
+  ): boolean {
+    const libraries = resolveCompilerLibrarySet(this.options.libraries)
+    const context = this.compilerLibraryOperationTypeRefContext(
+      operationExpression,
+      contextualResult,
+      argInfos
+    )
+
+    for (let index = 0; index < typeRefTemplates.length; index = index + 1) {
+      let expectedTypeRef = typeRefTemplates[index]
+
+      if ((operation.typeParameters ?? []).length > 0) {
+        expectedTypeRef = instantiateLibraryOperationTypeRef(
+          operation,
+          expectedTypeRef,
+          context,
+          libraries
+        )
+      }
+
+      const expected = typeRefCompatibilityMetadata(expectedTypeRef, libraries, info.loc)
+
+      if (!isAssignableType(info.valueType, expected.valueType, expected.nullable, info.nullable)) {
+        continue
+      }
+
+      const expectedTypeId = expected.shape?.libraryTypeId
+      const actualTypeId = info.shape?.libraryTypeId
+
+      if (
+        typeof expectedTypeId === 'string' &&
+        (info.valueType === 'object' || typeof actualTypeId === 'string') &&
+        !compilerLibraryNativeTypeIsAssignable(libraries, actualTypeId, expectedTypeId)
+      ) {
+        continue
+      }
+
+      return true
+    }
+
+    return false
+  }
+
   checkCompilerLibrarySingleArgument(
     expression: AnyNode,
     valueType: ValueType,
@@ -5800,25 +5851,25 @@ class Checker {
     }
 
     const info = argInfos?.[argumentIndex] ?? this.checkedCallArgInfo(expression, valueType)
-    const typeRefTemplate = check.typeRef
+    const typeRefTemplates = compilerLibraryArgumentTypeRefs(check)
 
-    if (typeRefTemplate !== null && typeof typeRefTemplate !== 'undefined') {
-      const libraries = resolveCompilerLibrarySet(this.options.libraries)
-      let expectedTypeRef = typeRefTemplate
-
-      if ((operation.typeParameters ?? []).length > 0) {
-        expectedTypeRef = instantiateLibraryOperationTypeRef(
+    if (typeRefTemplates.length > 0) {
+      if (
+        !this.compilerLibraryArgumentMatchesTypeRefs(
+          info,
+          typeRefTemplates,
           operation,
-          typeRefTemplate,
-          this.compilerLibraryOperationTypeRefContext(operationExpression, null, argInfos ?? [info]),
-          libraries
+          operationExpression,
+          null,
+          argInfos ?? [info]
+        )
+      ) {
+        this.report(
+          'INOX_TYPE_MISMATCH',
+          `library operation ${operation.operationId} does not accept ${info.valueType}`,
+          info.loc
         )
       }
-
-      const expected = typeRefCompatibilityMetadata(expectedTypeRef, libraries, info.loc)
-
-      this.checkAssignableType(info.valueType, expected.valueType, info.loc, expected.nullable, info.nullable)
-      this.checkAssignableLibraryNativeType(info.shape, expected.shape, info.loc, info.valueType)
       return
     }
 
@@ -5911,27 +5962,41 @@ class Checker {
     for (let index = 0; index < checks.length && index < argInfos.length; index = index + 1) {
       const check = checks[index]
       const info = argInfos[index]
-      const typeRef = check.typeRef
+      const typeRefs = compilerLibraryArgumentTypeRefs(check)
 
-      if (typeRef !== null && typeof typeRef !== 'undefined') {
-        if (typeRef.kind === 'parameter') {
-          continue
+      if (typeRefs.length > 0) {
+        let matched = false
+
+        for (let typeIndex = 0; typeIndex < typeRefs.length; typeIndex = typeIndex + 1) {
+          const typeRef = typeRefs[typeIndex]
+
+          if (typeRef.kind === 'parameter') {
+            matched = true
+            break
+          }
+
+          const expected = typeRefCompatibilityMetadata(typeRef, libraries, info.loc)
+
+          if (!isAssignableType(info.valueType, expected.valueType, expected.nullable, info.nullable)) {
+            continue
+          }
+
+          const expectedTypeId = expected.shape?.libraryTypeId
+          const actualTypeId = info.shape?.libraryTypeId
+
+          if (
+            typeof expectedTypeId === 'string' &&
+            typeof actualTypeId === 'string' &&
+            !compilerLibraryNativeTypeIsAssignable(libraries, actualTypeId, expectedTypeId)
+          ) {
+            continue
+          }
+
+          matched = true
+          break
         }
 
-        const expected = typeRefCompatibilityMetadata(typeRef, libraries, info.loc)
-
-        if (!isAssignableType(info.valueType, expected.valueType, expected.nullable, info.nullable)) {
-          return false
-        }
-
-        const expectedTypeId = expected.shape?.libraryTypeId
-        const actualTypeId = info.shape?.libraryTypeId
-
-        if (
-          typeof expectedTypeId === 'string' &&
-          typeof actualTypeId === 'string' &&
-          !compilerLibraryNativeTypeIsAssignable(libraries, actualTypeId, expectedTypeId)
-        ) {
+        if (!matched) {
           return false
         }
 
@@ -11062,6 +11127,22 @@ function compilerLibraryArgumentCheck(
   }
 
   return null
+}
+
+function compilerLibraryArgumentTypeRefs(check: LibraryArgumentCheckDescriptor): TypeRef[] {
+  const alternatives = check.typeRefs ?? []
+
+  if (alternatives.length > 0) {
+    return alternatives
+  }
+
+  const typeRef = check.typeRef
+
+  if (typeRef === null || typeof typeRef === 'undefined') {
+    return []
+  }
+
+  return [typeRef]
 }
 
 function isUnknownTypeRef(typeRef: TypeRef | null | undefined): boolean {

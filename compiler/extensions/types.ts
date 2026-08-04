@@ -285,6 +285,7 @@ export type LibraryNestedResultShapeFieldDescriptor = {
 export type LibraryArgumentCheckDescriptor = {
   valueTypes: string[]
   typeRef?: TypeRef | null
+  typeRefs?: TypeRef[]
   objectMethods?: LibraryObjectMethodCheckDescriptor[]
   objectTypeIds?: LibraryObjectTypeId[]
   objectFieldValueType?: string | null
