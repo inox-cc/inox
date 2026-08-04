@@ -5,5 +5,6 @@ declare global {
     static keys(value: unknown): Array<string>;
     static values(value: unknown): Array<unknown>;
     static entries(value: unknown): Array<Array<unknown>>;
+    static hasOwn(value: unknown, property: string | number): boolean;
   }
 }

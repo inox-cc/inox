@@ -9,6 +9,8 @@ public:
   Array keys(inox_value value) const;
   Array values(inox_value value) const;
   Array entries(inox_value value) const;
+  bool hasOwn(inox_value value, inox::StringView property) const;
+  bool hasOwn(inox_value value, double property) const;
 };
 
 extern Object Object;

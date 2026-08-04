@@ -11,6 +11,7 @@ const arrayRuntimeRequirement = `${collectionsLibraryId}#array`
 const arrayTypeId = `${collectionsLibraryId}#Array`
 const runtimeRequirement = `${libraryId}#object`
 const stringTypeRef = primitiveTypeRef('string')
+const booleanTypeRef = primitiveTypeRef('boolean')
 const unknownTypeRef: TypeRef = {
   kind: 'unknown',
   nullable: false,
@@ -24,7 +25,8 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   operations: [
     objectOperation('keys', arrayTypeRef(stringTypeRef)),
     objectOperation('values', arrayTypeRef(unknownTypeRef)),
-    objectOperation('entries', arrayTypeRef(arrayTypeRef(unknownTypeRef)))
+    objectOperation('entries', arrayTypeRef(arrayTypeRef(unknownTypeRef))),
+    objectHasOwnOperation()
   ],
   intrinsicBindings: [],
   runtimeRequirements: [
@@ -35,6 +37,45 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       capabilities: []
     }
   ]
+}
+
+function objectHasOwnOperation(): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: 'global:Object.hasOwn',
+    operationId: `${libraryId}#Object.hasOwn`,
+    kind: 'call',
+    runtimeRequirements: [runtimeRequirement],
+    variants: [
+      {
+        minArgs: 2,
+        maxArgs: 2,
+        argumentIndex: 1,
+        argumentValueTypes: ['string'],
+        cArgumentKinds: ['runtime-value', 'string-view'],
+        argumentChecks: [{ valueTypes: objectInputValueTypes() }, { valueTypes: ['string'] }]
+      },
+      {
+        minArgs: 2,
+        maxArgs: 2,
+        argumentIndex: 1,
+        argumentValueTypes: ['number'],
+        cArgumentKinds: ['runtime-value', 'number'],
+        argumentChecks: [{ valueTypes: objectInputValueTypes() }, { valueTypes: ['number'] }]
+      }
+    ],
+    cExpression: 'Object.hasOwn',
+    cFailureMode: 'thrown',
+    cPreservesPendingException: true,
+    cResultMode: 'value',
+    resultTypeRef: booleanTypeRef,
+    minArgs: 2,
+    maxArgs: 2
+  }
+}
+
+function objectInputValueTypes(): string[] {
+  return ['boolean', 'null', 'number', 'object', 'string', 'unknown']
 }
 
 function arrayTypeRef(elementType: TypeRef): NominalTypeRef {
@@ -67,7 +108,7 @@ function objectOperation(name: string, resultTypeRef: TypeRef): LibraryOperation
   }
 }
 
-function primitiveTypeRef(name: 'string'): TypeRef {
+function primitiveTypeRef(name: 'boolean' | 'string'): TypeRef {
   return {
     kind: 'primitive',
     name,
