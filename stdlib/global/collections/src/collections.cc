@@ -140,6 +140,10 @@ static bool inox_array_call_predicate(
   return true;
 }
 
+static inox_value inox_array_item_or_undefined(ArrayStorage* array, size_t index) {
+  return index < array->length ? array->items[index] : inox_undefined_value();
+}
+
 static void inox_map_init_entries(MapEntry* entries, size_t cap) {
   for (size_t index = 0; index < cap; index += 1) {
     entries[index].key = inox_undefined_value();
@@ -2202,13 +2206,15 @@ inox::Value Array::find(inox::Callback predicate) const {
   }
 
   ArrayStorage* instance = (ArrayStorage*)array.as.ref;
+  const size_t length = instance->length;
 
-  for (size_t index = 0; index < instance->length; index += 1) {
+  for (size_t index = 0; index < length; index += 1) {
     bool match = false;
+    inox::Value item(inox_array_item_or_undefined(instance, index));
 
     if (!inox_array_call_predicate(
           predicate,
-          instance->items[index],
+          item.raw(),
           index,
           array,
           "TypeError: Array.find callback must return boolean",
@@ -2218,7 +2224,7 @@ inox::Value Array::find(inox::Callback predicate) const {
     }
 
     if (match) {
-      return inox::Value(instance->items[index]);
+      return item;
     }
   }
 
@@ -2241,10 +2247,79 @@ double Array::findIndex(inox::Callback predicate) const {
 
     if (!inox_array_call_predicate(
           predicate,
-          instance->items[index],
+          inox_array_item_or_undefined(instance, index),
           index,
           array,
           "TypeError: Array.findIndex callback must return boolean",
+          &match
+        )) {
+      return -1;
+    }
+
+    if (match) {
+      return static_cast<double>(index);
+    }
+  }
+
+  return -1;
+}
+
+inox::Value Array::findLast(inox::Callback predicate) const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox_collection_throw("TypeError: Array.findLast receiver is not an Array");
+    return inox::Value();
+  }
+
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
+  size_t index = instance->length;
+
+  while (index > 0) {
+    index -= 1;
+    bool match = false;
+    inox::Value item(inox_array_item_or_undefined(instance, index));
+
+    if (!inox_array_call_predicate(
+          predicate,
+          item.raw(),
+          index,
+          array,
+          "TypeError: Array.findLast callback must return boolean",
+          &match
+        )) {
+      return inox::Value();
+    }
+
+    if (match) {
+      return item;
+    }
+  }
+
+  return inox::Value(inox_undefined_value());
+}
+
+double Array::findLastIndex(inox::Callback predicate) const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox_collection_throw("TypeError: Array.findLastIndex receiver is not an Array");
+    return -1;
+  }
+
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
+  size_t index = instance->length;
+
+  while (index > 0) {
+    index -= 1;
+    bool match = false;
+
+    if (!inox_array_call_predicate(
+          predicate,
+          inox_array_item_or_undefined(instance, index),
+          index,
+          array,
+          "TypeError: Array.findLastIndex callback must return boolean",
           &match
         )) {
       return -1;

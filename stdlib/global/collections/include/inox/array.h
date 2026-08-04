@@ -67,6 +67,8 @@ public:
   Array filter(inox::Callback predicate) const;
   inox::Value find(inox::Callback predicate) const;
   double findIndex(inox::Callback predicate) const;
+  inox::Value findLast(inox::Callback predicate) const;
+  double findLastIndex(inox::Callback predicate) const;
   void forEach(inox::Callback callback) const;
   bool includes(const inox::Value& value) const;
   double indexOf(const inox::Value& value, double from = 0) const;
