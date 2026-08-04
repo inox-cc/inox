@@ -829,6 +829,17 @@ export function emitPreparedCompilerLibraryCallExpression(
       continue
     }
 
+    if (kind === 'variadic-number-array') {
+      const variadicArrayExpression = emitCompilerLibraryVariadicNumberArray(
+        sourceArguments,
+        context,
+        dependencies,
+        lines
+      )
+      argumentsList.push(variadicArrayExpression)
+      continue
+    }
+
     if (kind === 'variadic-runtime-value-array') {
       const variadicArrayExpression = emitCompilerLibraryVariadicRuntimeValueArray(
         sourceArguments,
@@ -1616,6 +1627,29 @@ function emitCompilerLibraryVariadicStringArray(
 
   const name = nextCName(context, 'inox_library_args')
   lines.push(`const inox::StringView ${name}[] = { ${joinStrings(values, ', ')} };`)
+  return name
+}
+
+function emitCompilerLibraryVariadicNumberArray(
+  sourceArguments: AnyNode[],
+  context: CFunctionContext,
+  dependencies: CompilerLibraryLoweringDependencies,
+  lines: string[]
+): string {
+  if (sourceArguments.length === 0) {
+    return 'nullptr'
+  }
+
+  const values: string[] = []
+
+  for (let index = 0; index < sourceArguments.length; index = index + 1) {
+    const prepared = dependencies.emitPreparedNumberExpression(sourceArguments[index], context)
+    pushLines(lines, prepared.lines)
+    values.push(prepared.expression)
+  }
+
+  const name = nextCName(context, 'inox_library_args')
+  lines.push(`const double ${name}[] = { ${joinStrings(values, ', ')} };`)
   return name
 }
 

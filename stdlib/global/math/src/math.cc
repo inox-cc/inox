@@ -4,6 +4,9 @@
 
 #include "inox/math.h"
 
+#include <cmath>
+#include <limits>
+
 #if defined(_WIN32)
 #include <stdlib.h>
 #elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__)
@@ -21,21 +24,6 @@ MathObject::MathObject(uint32_t seed, bool seed_configured, MathRandomBackend ba
     random_backend_(backend == MathRandomBackend::Auto
       ? (seed_configured ? MathRandomBackend::Simple : MathRandomBackend::Os)
       : backend) {}
-
-static double math_reduce_radians(double value) {
-  const double pi = 3.14159265358979323846;
-  const double tau = 6.28318530717958647692;
-
-  while (value > pi) {
-    value -= tau;
-  }
-
-  while (value < -pi) {
-    value += tau;
-  }
-
-  return value;
-}
 
 static double math_simple_random(uint32_t* state) {
   *state = *state * 1664525u + 1013904223u;
@@ -107,78 +95,179 @@ static int math_os_random_bytes(uint8_t* out, size_t len) {
 }
 
 double MathObject::abs(double value) const {
-  return value < 0 ? -value : value;
+  return std::fabs(value);
+}
+
+double MathObject::acos(double value) const {
+  return std::acos(value);
+}
+
+double MathObject::asin(double value) const {
+  return std::asin(value);
+}
+
+double MathObject::atan(double value) const {
+  return std::atan(value);
+}
+
+double MathObject::atan2(double y, double x) const {
+  return std::atan2(y, x);
+}
+
+double MathObject::cbrt(double value) const {
+  return std::cbrt(value);
 }
 
 double MathObject::floor(double value) const {
-  long long truncated = (long long)value;
-  return (double)truncated > value ? (double)(truncated - 1) : (double)truncated;
+  return std::floor(value);
 }
 
 double MathObject::ceil(double value) const {
-  long long truncated = (long long)value;
-  return (double)truncated < value ? (double)(truncated + 1) : (double)truncated;
+  return std::ceil(value);
 }
 
 double MathObject::round(double value) const {
-  double shifted = value + 0.5;
-  long long truncated = (long long)shifted;
+  if (!std::isfinite(value) || value == 0) {
+    return value;
+  }
 
-  return (double)truncated > shifted ? (double)(truncated - 1) : (double)truncated;
+  const double rounded = std::floor(value + 0.5);
+
+  return rounded == 0 && value < 0 ? -0.0 : rounded;
 }
 
 double MathObject::trunc(double value) const {
-  return (double)((long long)value);
+  return std::trunc(value);
 }
 
 double MathObject::fround(double value) const {
-  return (double)((float)value);
+  return static_cast<double>(static_cast<float>(value));
+}
+
+double MathObject::exp(double value) const {
+  return std::exp(value);
+}
+
+double MathObject::hypot() const {
+  return 0;
+}
+
+double MathObject::hypot(double value) const {
+  return std::fabs(value);
+}
+
+double MathObject::hypot(double left, double right) const {
+  return std::hypot(left, right);
+}
+
+double MathObject::hypot(const double* values, size_t count) const {
+  double result = 0;
+
+  for (size_t index = 0; index < count; index += 1) {
+    result = std::hypot(result, values[index]);
+  }
+
+  return result;
+}
+
+double MathObject::log(double value) const {
+  return std::log(value);
+}
+
+double MathObject::log10(double value) const {
+  return std::log10(value);
+}
+
+double MathObject::log2(double value) const {
+  return std::log2(value);
+}
+
+double MathObject::min() const {
+  return std::numeric_limits<double>::infinity();
+}
+
+double MathObject::min(double value) const {
+  return value;
 }
 
 double MathObject::min(double left, double right) const {
+  if (std::isnan(left) || std::isnan(right)) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+
+  if (left == right) {
+    return left == 0 && (std::signbit(left) || std::signbit(right)) ? -0.0 : left;
+  }
+
   return left < right ? left : right;
 }
 
+double MathObject::min(const double* values, size_t count) const {
+  double result = min();
+
+  for (size_t index = 0; index < count; index += 1) {
+    result = min(result, values[index]);
+  }
+
+  return result;
+}
+
+double MathObject::max() const {
+  return -std::numeric_limits<double>::infinity();
+}
+
+double MathObject::max(double value) const {
+  return value;
+}
+
 double MathObject::max(double left, double right) const {
+  if (std::isnan(left) || std::isnan(right)) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+
+  if (left == right) {
+    return left == 0 && (!std::signbit(left) || !std::signbit(right)) ? 0.0 : left;
+  }
+
   return left > right ? left : right;
 }
 
-double MathObject::sqrt(double value) const {
-  if (value < 0) return 0.0/0.0;
-  if (value == 0) return 0;
+double MathObject::max(const double* values, size_t count) const {
+  double result = max();
 
-  double estimate = value < 1 ? 1 : value;
-
-  for (int index = 0; index < 24; ++index) {
-    estimate = 0.5 * (estimate + value/estimate);
+  for (size_t index = 0; index < count; index += 1) {
+    result = max(result, values[index]);
   }
 
-  return estimate;
+  return result;
+}
+
+double MathObject::pow(double base, double exponent) const {
+  return std::pow(base, exponent);
+}
+
+double MathObject::sign(double value) const {
+  if (std::isnan(value) || value == 0) {
+    return value;
+  }
+
+  return value < 0 ? -1 : 1;
+}
+
+double MathObject::sqrt(double value) const {
+  return std::sqrt(value);
 }
 
 double MathObject::sin(double value) const {
-  double x = math_reduce_radians(value);
-  double x2 = x * x;
-
-  return x * (
-    1 -
-    x2/6 +
-    (x2 * x2)/120 -
-    (x2 * x2 * x2)/5040 +
-    (x2 * x2 * x2 * x2)/362880
-  );
+  return std::sin(value);
 }
 
 double MathObject::cos(double value) const {
-  double x = math_reduce_radians(value);
-  double x2 = x * x;
+  return std::cos(value);
+}
 
-  return
-    1 -
-    x2/2 +
-    (x2 * x2)/24 -
-    (x2 * x2 * x2)/720 +
-    (x2 * x2 * x2 * x2)/40320;
+double MathObject::tan(double value) const {
+  return std::tan(value);
 }
 
 double MathObject::random() const {

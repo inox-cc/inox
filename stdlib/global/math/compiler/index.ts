@@ -11,17 +11,32 @@ const randomBackendOptionId = `${libraryId}#random-backend`
 const randomSeedOptionId = `${libraryId}#random-seed`
 
 const operations: LibraryOperationDescriptor[] = [
+  constantOperation('E'),
+  constantOperation('PI'),
   unaryOperation('abs'),
+  unaryOperation('acos'),
+  unaryOperation('asin'),
+  unaryOperation('atan'),
+  binaryOperation('atan2'),
+  unaryOperation('cbrt'),
   unaryOperation('ceil'),
   unaryOperation('cos'),
+  unaryOperation('exp'),
   unaryOperation('floor'),
   unaryOperation('fround'),
-  binaryOperation('max'),
-  binaryOperation('min'),
+  variadicOperation('hypot'),
+  unaryOperation('log'),
+  unaryOperation('log10'),
+  unaryOperation('log2'),
+  variadicOperation('max'),
+  variadicOperation('min'),
+  binaryOperation('pow'),
   nullaryOperation('random'),
   unaryOperation('round'),
+  unaryOperation('sign'),
   unaryOperation('sin'),
   unaryOperation('sqrt'),
+  unaryOperation('tan'),
   unaryOperation('trunc')
 ]
 
@@ -133,12 +148,38 @@ function nullaryOperation(name: string): LibraryOperationDescriptor {
   return operation(name, [], runtimeRequirements)
 }
 
+function constantOperation(name: string): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: `global:Math.${name}`,
+    operationId: `${libraryId}#${name}`,
+    kind: 'member-read',
+    runtimeRequirements: [runtimeRequirement],
+    cExpression: `Math.${name}`,
+    resultTypeRef: numberTypeRef()
+  }
+}
+
 function unaryOperation(name: string): LibraryOperationDescriptor {
   return operation(name, ['number'], [runtimeRequirement])
 }
 
 function binaryOperation(name: string): LibraryOperationDescriptor {
   return operation(name, ['number', 'number'], [runtimeRequirement])
+}
+
+function variadicOperation(name: string): LibraryOperationDescriptor {
+  return {
+    ...operation(name, ['variadic-number-array', 'variadic-count'], [runtimeRequirement]),
+    variants: [
+      { minArgs: 0, maxArgs: 0, cArgumentKinds: [] },
+      { minArgs: 1, maxArgs: 1, cArgumentKinds: ['number'] },
+      { minArgs: 2, maxArgs: 2, cArgumentKinds: ['number', 'number'] }
+    ],
+    minArgs: 0,
+    maxArgs: null,
+    argumentChecks: [{ valueTypes: ['number'] }]
+  }
 }
 
 function operation(
@@ -163,12 +204,16 @@ function operation(
     minArgs: cArgumentKinds.length,
     maxArgs: cArgumentKinds.length,
     argumentChecks,
-    resultTypeRef: {
-      kind: 'primitive',
-      name: 'number',
-      nullable: false,
-      ownership: 'value',
-      traits: []
-    }
+    resultTypeRef: numberTypeRef()
+  }
+}
+
+function numberTypeRef() {
+  return {
+    kind: 'primitive' as const,
+    name: 'number' as const,
+    nullable: false,
+    ownership: 'value' as const,
+    traits: []
   }
 }

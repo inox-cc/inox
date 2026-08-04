@@ -203,6 +203,7 @@ export type LibraryCArgumentKind =
   | 'optional-string-view-array'
   | 'string-view-array-count'
   | 'variadic-string-view-array'
+  | 'variadic-number-array'
   | 'variadic-runtime-value-array'
   | 'variadic-format-values'
   | 'variadic-count'
