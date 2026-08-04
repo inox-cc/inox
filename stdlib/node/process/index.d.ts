@@ -20,6 +20,11 @@ export interface ProcessMemoryUsage {
   readonly arrayBuffers: number
 }
 
+export interface ProcessCpuUsage {
+  readonly user: number
+  readonly system: number
+}
+
 export interface ProcessVersions {
   readonly inox: string
 }
@@ -38,6 +43,7 @@ export interface ProcessModule {
 
   cwd(): string
   chdir(directory: string): void
+  cpuUsage(previousValue?: ProcessCpuUsage): ProcessCpuUsage
   exit(code?: number): void
   hrtime(time?: ProcessHrtime): ProcessHrtime
   memoryUsage(): ProcessMemoryUsage
@@ -58,6 +64,7 @@ export const versions: ProcessVersions
 
 export function cwd(): string
 export function chdir(directory: string): void
+export function cpuUsage(previousValue?: ProcessCpuUsage): ProcessCpuUsage
 export function exit(code?: number): void
 export function hrtime(time?: ProcessHrtime): ProcessHrtime
 export function memoryUsage(): ProcessMemoryUsage
@@ -90,6 +97,11 @@ declare global {
     readonly arrayBuffers: number
   }
 
+  interface ProcessCpuUsage {
+    readonly user: number
+    readonly system: number
+  }
+
   interface ProcessVersions {
     readonly inox: string
   }
@@ -108,6 +120,7 @@ declare global {
 
     cwd(): string
     chdir(directory: string): void
+    cpuUsage(previousValue?: ProcessCpuUsage): ProcessCpuUsage
     exit(code?: number): void
     hrtime(time?: ProcessHrtime): ProcessHrtime
     memoryUsage(): ProcessMemoryUsage

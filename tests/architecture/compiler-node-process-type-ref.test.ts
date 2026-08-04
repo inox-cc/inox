@@ -14,6 +14,7 @@ const argvTypeId = 'node:process#ProcessArgv'
 const envTypeId = 'node:process#ProcessEnv'
 const versionsTypeId = 'node:process#ProcessVersions'
 const memoryUsageTypeId = 'node:process#ProcessMemoryUsage'
+const cpuUsageTypeId = 'node:process#ProcessCpuUsage'
 const stringTypeRef = primitiveTypeRef('string')
 const nullableStringTypeRef = { ...stringTypeRef, nullable: true }
 const numberTypeRef = primitiveTypeRef('number')
@@ -37,6 +38,7 @@ const expectedResults = new Map<string, [TypeRef, LibraryCResultMappingDescripto
   ['node:process#read:versions.inox', [stringTypeRef, stringMapping]],
   ['node:process#cwd', [stringTypeRef, stringMapping]],
   ['node:process#chdir', [voidTypeRef, null]],
+  ['node:process#cpuUsage', [nominalTypeRef(cpuUsageTypeId), null]],
   ['node:process#exit', [voidTypeRef, null]],
   ['node:process#hrtime', [arrayTypeRef(numberTypeRef), null]],
   ['node:process#memoryUsage', [nominalTypeRef(memoryUsageTypeId), null]],
@@ -90,6 +92,10 @@ function expectedNativeTypes(): LibraryNativeTypeDescriptor[] {
     nativeType(argvTypeId, ['ProcessArgv'], 'ProcessArgv', argvFields),
     nativeType(envTypeId, ['ProcessEnv'], 'ProcessEnv', []),
     nativeType(versionsTypeId, ['ProcessVersions'], 'ProcessVersions', versionsFields),
+    nativeType(cpuUsageTypeId, ['ProcessCpuUsage'], 'ProcessCpuUsage', [
+      resultField('user', 'number', 'user', 'double'),
+      resultField('system', 'number', 'system', 'double')
+    ]),
     nativeType(memoryUsageTypeId, ['ProcessMemoryUsage'], 'ProcessMemoryUsage', [
       resultField('rss', 'number', 'rss', 'double'),
       resultField('heapTotal', 'number', 'heapTotal', 'double'),

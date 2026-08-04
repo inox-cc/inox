@@ -72,6 +72,14 @@ public:
   double arrayBuffers;
 };
 
+class ProcessCpuUsage : public inox::Value {
+public:
+  ProcessCpuUsage();
+
+  double user;
+  double system;
+};
+
 class Process : public inox::Value {
 private:
   void init();
@@ -94,6 +102,8 @@ public:
 
   inox::String cwd() const;
   void chdir(inox::StringView directory) const;
+  ProcessCpuUsage cpuUsage() const;
+  ProcessCpuUsage cpuUsage(const inox::Value& previous) const;
   void exit(int code = 0) const;
   Array hrtime() const;
   Array hrtime(const inox::Value& previous) const;

@@ -23,6 +23,7 @@ const argvTypeId = `${libraryId}#ProcessArgv`
 const envTypeId = `${libraryId}#ProcessEnv`
 const versionsTypeId = `${libraryId}#ProcessVersions`
 const memoryUsageTypeId = `${libraryId}#ProcessMemoryUsage`
+const cpuUsageTypeId = `${libraryId}#ProcessCpuUsage`
 const stringTypeRef = primitiveTypeRef('string')
 const nullableStringTypeRef: PrimitiveTypeRef = {
   ...stringTypeRef,
@@ -55,6 +56,10 @@ const memoryUsageFields: LibraryResultShapeFieldDescriptor[] = [
   resultField('external', 'number', 'external', 'double'),
   resultField('arrayBuffers', 'number', 'arrayBuffers', 'double')
 ]
+const cpuUsageFields: LibraryResultShapeFieldDescriptor[] = [
+  resultField('user', 'number', 'user', 'double'),
+  resultField('system', 'number', 'system', 'double')
+]
 
 const operations: LibraryOperationDescriptor[] = [
   objectRead('process', 'process', nominalTypeRef(processTypeId), rootBindings()),
@@ -76,6 +81,16 @@ const operations: LibraryOperationDescriptor[] = [
   callOperation('chdir', ['string-view'], 'process.chdir', voidTypeRef, 1, 1, [stringArgument()], {
     cFailureMode: 'thrown'
   }),
+  callOperation(
+    'cpuUsage',
+    ['optional-argument'],
+    'process.cpuUsage',
+    nominalTypeRef(cpuUsageTypeId),
+    0,
+    1,
+    [nominalArgument(cpuUsageTypeId)],
+    { cFailureMode: 'thrown' }
+  ),
   callOperation('exit', ['optional-number'], 'process.exit', voidTypeRef, 0, 1, [numberArgument()]),
   callOperation('hrtime', ['optional-argument'], 'process.hrtime', arrayTypeRef(numberTypeRef), 0, 1, [
     arrayArgument()
@@ -163,6 +178,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
     nativeType(argvTypeId, ['ProcessArgv'], 'ProcessArgv', argvFields),
     nativeType(envTypeId, ['ProcessEnv'], 'ProcessEnv', []),
     nativeType(versionsTypeId, ['ProcessVersions'], 'ProcessVersions', versionsFields),
+    nativeType(cpuUsageTypeId, ['ProcessCpuUsage'], 'ProcessCpuUsage', cpuUsageFields),
     nativeType(memoryUsageTypeId, ['ProcessMemoryUsage'], 'ProcessMemoryUsage', memoryUsageFields)
   ],
   operations,
@@ -360,6 +376,10 @@ function numberArgument(): LibraryArgumentCheckDescriptor {
   return { valueTypes: ['number'] }
 }
 
+function nominalArgument(typeId: string): LibraryArgumentCheckDescriptor {
+  return { valueTypes: ['object'], typeRef: nominalTypeRef(typeId) }
+}
+
 function arrayArgument(): LibraryArgumentCheckDescriptor {
   return { valueTypes: ['object'] }
 }
@@ -405,7 +425,6 @@ function unsupportedMethods(): string[] {
   return [
     'abort',
     'addListener',
-    'cpuUsage',
     'emit',
     'kill',
     'listenerCount',

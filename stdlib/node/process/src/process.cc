@@ -81,6 +81,13 @@ static const inox_field_info process_memory_usage_fields[] = {
 
 static const inox_shape process_memory_usage_shape = { 5, process_memory_usage_fields };
 
+static const inox_field_info process_cpu_usage_fields[] = {
+  { "user", INOX_FIELD_READONLY },
+  { "system", INOX_FIELD_READONLY }
+};
+
+static const inox_shape process_cpu_usage_shape = { 2, process_cpu_usage_fields };
+
 static const inox_field_info process_versions_fields[] = {
   { "inox", INOX_FIELD_READONLY }
 };
@@ -249,6 +256,61 @@ static inox_number process_rss_bytes(void) {
 #endif
 }
 
+static bool process_read_cpu_usage(double* user, double* system) {
+  if (user == nullptr || system == nullptr) {
+    return false;
+  }
+
+#if defined(_WIN32)
+  FILETIME creation_time = {};
+  FILETIME exit_time = {};
+  FILETIME kernel_time = {};
+  FILETIME user_time = {};
+
+  if (!GetProcessTimes(GetCurrentProcess(), &creation_time, &exit_time, &kernel_time, &user_time)) {
+    return false;
+  }
+
+  ULARGE_INTEGER kernel_ticks = {};
+  kernel_ticks.LowPart = kernel_time.dwLowDateTime;
+  kernel_ticks.HighPart = kernel_time.dwHighDateTime;
+  ULARGE_INTEGER user_ticks = {};
+  user_ticks.LowPart = user_time.dwLowDateTime;
+  user_ticks.HighPart = user_time.dwHighDateTime;
+  *user = static_cast<double>(user_ticks.QuadPart) / 10.0;
+  *system = static_cast<double>(kernel_ticks.QuadPart) / 10.0;
+  return true;
+#else
+  struct rusage usage = {};
+
+  if (getrusage(RUSAGE_SELF, &usage) != 0) {
+    return false;
+  }
+
+  *user = static_cast<double>(usage.ru_utime.tv_sec) * 1000000.0 +
+          static_cast<double>(usage.ru_utime.tv_usec);
+  *system = static_cast<double>(usage.ru_stime.tv_sec) * 1000000.0 +
+            static_cast<double>(usage.ru_stime.tv_usec);
+  return true;
+#endif
+}
+
+static bool process_read_cpu_usage_field(const inox::Value& value, const char* name, double* out) {
+  inox::Value field;
+
+  if (
+    out == nullptr ||
+    inox_object_get(value.raw(), name, strlen(name), field.out()) != INOX_OK ||
+    field.raw().tag != INOX_TAG_NUMBER
+  ) {
+    process_throw_error("TypeError: process.cpuUsage previousValue must contain numeric user and system fields");
+    return false;
+  }
+
+  *out = field.raw().as.number;
+  return true;
+}
+
 static int process_pid(void) {
 #ifdef _WIN32
   return 0;
@@ -368,6 +430,39 @@ void ProcessVersions::init() {
 ProcessMemoryUsage::ProcessMemoryUsage()
     : inox::Value(), rss(0), heapTotal(0), heapUsed(0), external(0), arrayBuffers(0) {}
 
+ProcessCpuUsage::ProcessCpuUsage() : inox::Value(), user(0), system(0) {}
+
+static ProcessCpuUsage process_make_cpu_usage(double user, double system) {
+  ProcessCpuUsage result;
+  result.user = user;
+  result.system = system;
+  inox_value value = inox_undefined_value();
+  inox_status status = inox_object_new(&inox_default_allocator, &process_cpu_usage_shape, &value);
+
+  if (status == INOX_OK) {
+    status = inox_object_init_known(value, 0, inox_number_value(result.user));
+  }
+
+  if (status == INOX_OK) {
+    status = inox_object_init_known(value, 1, inox_number_value(result.system));
+  }
+
+  if (status != INOX_OK) {
+    inox_release(value);
+
+    if (status == INOX_ERR_OOM) {
+      inox::throw_out_of_memory();
+    } else {
+      inox::fatal("process.cpuUsage native facade invariant failed");
+    }
+
+    return {};
+  }
+
+  static_cast<inox::Value&>(result) = inox::adopt(value);
+  return result;
+}
+
 Process::Process() : pid(process_number_reader::pid) {}
 
 void Process::init() {
@@ -438,6 +533,38 @@ void Process::chdir(inox::StringView directory) const {
   if (status != 0) {
     process_throw_error("Error: process.chdir failed");
   }
+}
+
+ProcessCpuUsage Process::cpuUsage() const {
+  double user = 0;
+  double system = 0;
+
+  if (!process_read_cpu_usage(&user, &system)) {
+    process_throw_error("Error: process.cpuUsage failed");
+    return {};
+  }
+
+  return process_make_cpu_usage(user, system);
+}
+
+ProcessCpuUsage Process::cpuUsage(const inox::Value& previous) const {
+  double user = 0;
+  double system = 0;
+  double previous_user = 0;
+  double previous_system = 0;
+
+  if (
+    !process_read_cpu_usage(&user, &system) ||
+    !process_read_cpu_usage_field(previous, "user", &previous_user) ||
+    !process_read_cpu_usage_field(previous, "system", &previous_system)
+  ) {
+    if (!inox::thrown()) {
+      process_throw_error("Error: process.cpuUsage failed");
+    }
+    return {};
+  }
+
+  return process_make_cpu_usage(user - previous_user, system - previous_system);
 }
 
 void Process::exit(int code) const {

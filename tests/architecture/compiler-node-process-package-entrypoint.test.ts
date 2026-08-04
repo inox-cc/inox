@@ -15,6 +15,7 @@ test('entrypoint package node:process владеет global/import operations и
   const operations = processPackage.compilerPackage.operations
   const root = operations.find((operation) => operation.operationId === 'node:process#read:process')
   const hrtime = operations.find((operation) => operation.operationId === 'node:process#hrtime')
+  const cpuUsage = operations.find((operation) => operation.operationId === 'node:process#cpuUsage')
   const nextTick = operations.find((operation) => operation.operationId === 'node:process#nextTick')
   const envIndex = operations.find((operation) => operation.operationId === 'node:process#ProcessEnv#index-read')
   const envMember = operations.find((operation) => operation.operationId === 'node:process#ProcessEnv#member-read')
@@ -67,6 +68,15 @@ test('entrypoint package node:process владеет global/import operations и
     ]
   })
   assert.deepEqual(hrtime?.cArgumentKinds, ['optional-argument'])
+  assert.deepEqual(cpuUsage?.cArgumentKinds, ['optional-argument'])
+  assert.deepEqual(cpuUsage?.argumentChecks?.[0].typeRef, {
+    kind: 'nominal',
+    typeId: 'node:process#ProcessCpuUsage',
+    args: [],
+    nullable: false,
+    ownership: 'value',
+    traits: []
+  })
   assert.deepEqual(nextTick?.cArgumentKinds, ['runtime-callback'])
   assert.equal(nextTick?.callbackLifetime, 'event-loop')
   assert.equal(envIndex?.bindingId, 'node:process#ProcessEnv.*')
