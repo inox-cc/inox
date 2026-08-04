@@ -11,6 +11,8 @@
 #include <limits>
 
 class Array;
+class MapIterator;
+class SetIterator;
 
 struct ArrayIterationResult {
   bool done;
@@ -50,6 +52,10 @@ public:
 
   static Array create(size_t len);
   static Array from(std::initializer_list<inox::Value> values);
+  static Array from(const Array& values);
+  static Array from(ArrayIterator values);
+  static Array from(MapIterator values);
+  static Array from(SetIterator values);
   static Array from(inox::StringView value);
   static bool isArray(const inox::Value& value);
 

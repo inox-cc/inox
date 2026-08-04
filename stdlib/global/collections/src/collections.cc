@@ -2123,6 +2123,49 @@ Array Array::from(std::initializer_list<inox::Value> values) {
   return result;
 }
 
+namespace {
+
+template <typename Iterator>
+Array arrayFromIterator(Iterator iterator) {
+  Array result = Array::create(0);
+
+  if (!result.valid() || inox::thrown()) {
+    return result;
+  }
+
+  while (true) {
+    auto step = iterator.next();
+
+    if (inox::thrown() || step.done) {
+      return result;
+    }
+
+    result.push(step.value);
+
+    if (inox::thrown()) {
+      return result;
+    }
+  }
+}
+
+} // namespace
+
+Array Array::from(const Array& values) {
+  return arrayFromIterator(values.values());
+}
+
+Array Array::from(ArrayIterator values) {
+  return arrayFromIterator(std::move(values));
+}
+
+Array Array::from(MapIterator values) {
+  return arrayFromIterator(std::move(values));
+}
+
+Array Array::from(SetIterator values) {
+  return arrayFromIterator(std::move(values));
+}
+
 Array Array::from(inox::StringView value) {
   size_t count = 0;
 

@@ -77,7 +77,8 @@ export function compilerLibraryNativeTypeFields(
   typeId: string
 ): LibraryResultShapeFieldDescriptor[] {
   const fields = new Map<string, LibraryResultShapeFieldDescriptor>()
-  collectCompilerLibraryNativeTypeFields(libraries, typeId, fields, new Set())
+  const visited: Set<string> = new Set<string>()
+  collectCompilerLibraryNativeTypeFields(libraries, typeId, fields, visited)
   return Array.from(fields.values())
 }
 
@@ -87,11 +88,15 @@ function collectCompilerLibraryNativeTypeFields(
   fields: Map<string, LibraryResultShapeFieldDescriptor>,
   visited: Set<string>
 ): void {
-  if (visited.has(typeId)) return
+  if (visited.has(typeId)) {
+    return
+  }
   visited.add(typeId)
 
   const nativeType = compilerLibraryNativeTypeForId(libraries, typeId)
-  if (nativeType === null) return
+  if (nativeType === null) {
+    return
+  }
 
   for (let index = 0; index < nativeType.baseTypeIds.length; index = index + 1) {
     collectCompilerLibraryNativeTypeFields(libraries, nativeType.baseTypeIds[index], fields, visited)

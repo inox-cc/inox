@@ -2,6 +2,7 @@ import type {
   CompilerLibraryPackageDescriptor,
   LibraryOperationDescriptor,
   LibraryOperationTypeParameterDescriptor,
+  LibraryOperationVariantDescriptor,
   NominalTypeRef,
   TypeRef
 } from '../../../../compiler/extensions/types.ts'
@@ -110,13 +111,7 @@ const arrayIntrinsicOperation: LibraryOperationDescriptor = {
 }
 
 const arrayOperations: LibraryOperationDescriptor[] = [
-  arrayStaticCall(
-    'from',
-    'Array::from',
-    arrayTypeRef(primitiveTypeRef('string')),
-    ['string-view'],
-    [{ valueTypes: ['string'] }]
-  ),
+  arrayFromOperation(),
   {
     ...arrayStaticCall('isArray', 'Array::isArray', booleanTypeRef, ['runtime-value'], [], 1, 1, {
       argumentIndex: 0,
@@ -247,6 +242,56 @@ const arrayOperations: LibraryOperationDescriptor[] = [
   arrayIndexRead(),
   arrayIndexWrite()
 ]
+
+function arrayFromOperation(): LibraryOperationDescriptor {
+  const iterableTypeIds = [
+    arrayNativeTypeId,
+    mapEntryIteratorNativeTypeId,
+    mapKeyIteratorNativeTypeId,
+    mapValueIteratorNativeTypeId,
+    setEntryIteratorNativeTypeId,
+    setValueIteratorNativeTypeId
+  ]
+
+  return {
+    ...arrayStaticCall(
+      'from',
+      'Array::from',
+      arrayTypeRef(parameterTypeRef),
+      ['runtime-value'],
+      [{ valueTypes: ['string', 'object'] }]
+    ),
+    typeParameters: [
+      {
+        name: 'T',
+        sources: [{ source: 'argument-trait', argumentIndex: 0, traitId: 'iterable', traitArgumentIndex: 0 }]
+      }
+    ],
+    argumentChecks: [{ valueTypes: ['string', 'object'], objectTypeIds: iterableTypeIds }],
+    variants: [
+      {
+        minArgs: 1,
+        maxArgs: 1,
+        argumentIndex: 0,
+        argumentValueTypes: ['string'],
+        cArgumentKinds: ['string-view'],
+        resultTypeRef: arrayTypeRef(primitiveTypeRef('string'))
+      },
+      arrayFromIterableVariant()
+    ]
+  }
+}
+
+function arrayFromIterableVariant(): LibraryOperationVariantDescriptor {
+  return {
+    minArgs: 1,
+    maxArgs: 1,
+    argumentIndex: 0,
+    argumentValueTypes: ['object'],
+    cArgumentKinds: ['value'],
+    cArgumentAdapters: ['$value']
+  }
+}
 
 const setOperations: LibraryOperationDescriptor[] = [
   {

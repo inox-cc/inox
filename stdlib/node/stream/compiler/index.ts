@@ -5,6 +5,7 @@ import type {
   LibraryOperationDescriptor,
   LibraryOperationKind,
   LibraryOperationVariantDescriptor,
+  LibraryResultShapeFieldDescriptor,
   TypeRef
 } from '../../../../compiler/extensions/types.ts'
 
@@ -354,7 +355,7 @@ function nativeType(
   declarationNames: string[],
   cppType: string,
   baseTypeIds: string[],
-  fields: Array<ReturnType<typeof booleanField> | ReturnType<typeof numberField>> = []
+  fields: LibraryResultShapeFieldDescriptor[] = []
 ) {
   return {
     libraryId,

@@ -8,6 +8,7 @@ declare global {
     readonly length: number
 
     static from(value: string): Array<string>
+    static from<T>(value: Array<T> | MapIterator<T> | SetIterator<T>): Array<T>
     static isArray(value: unknown): boolean
 
     at(index: number): T | undefined
