@@ -17,6 +17,7 @@ const arrayTypeId = `${collectionsLibraryId}#Array`
 const runtimeRequirement = 'node:url'
 const urlTypeId = `${libraryId}#URL`
 const searchParamsTypeId = `${libraryId}#URLSearchParams`
+const searchParamsIteratorTypeId = `${libraryId}#URLSearchParamsIterator`
 const runtimeRequirements = [runtimeRequirement]
 const urlFields: LibraryResultShapeFieldDescriptor[] = [
   stringField('href', true),
@@ -37,6 +38,8 @@ const voidTypeRef = primitiveTypeRef('void')
 const stringCResultMapping = cResultMapping('inox::String')
 const valueCResultMapping = cResultMapping('inox::Value')
 const voidCResultMapping = cResultMapping('void')
+const iteratorParameterTypeRef: TypeRef = { kind: 'parameter', name: 'T' }
+const searchParamsEntryTypeRef = arrayTypeRef(stringTypeRef)
 
 const operations: LibraryOperationDescriptor[] = [
   moduleCall('fileURLToPath', ['value'], 'url.fileURLToPath', {
@@ -82,6 +85,8 @@ const operations: LibraryOperationDescriptor[] = [
     [stringArgument(), stringArgument()]
   ),
   searchParamsValueFilterOperation('delete', 'remove', voidTypeRef),
+  searchParamsIteratorOperation('entries', searchParamsEntryTypeRef),
+  searchParamsForEachOperation(),
   receiverCall(
     searchParamsTypeId,
     'get',
@@ -101,6 +106,7 @@ const operations: LibraryOperationDescriptor[] = [
     [stringArgument()]
   ),
   searchParamsValueFilterOperation('has', 'has', booleanTypeRef),
+  searchParamsIteratorOperation('keys', stringTypeRef),
   receiverMemberRead(searchParamsTypeId, 'size', 'size', numberTypeRef),
   receiverCall(searchParamsTypeId, 'set', ['receiver', 'string-view', 'string-view'], 'set', voidTypeRef, undefined, [
     stringArgument(),
@@ -108,6 +114,7 @@ const operations: LibraryOperationDescriptor[] = [
   ]),
   receiverCall(searchParamsTypeId, 'sort', ['receiver'], 'sort', voidTypeRef, undefined),
   receiverCall(searchParamsTypeId, 'toString', ['receiver'], 'toString', stringTypeRef, stringCResultMapping, []),
+  searchParamsIteratorOperation('values', stringTypeRef),
   receiverMemberWrite(urlTypeId, 'pathname', 'setPathname'),
   receiverMemberWrite(urlTypeId, 'search', 'setSearch'),
   receiverMemberWrite(urlTypeId, 'hash', 'setHash'),
@@ -140,7 +147,40 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       valueType: 'object',
       cppType: 'URLSearchParams',
       baseTypeIds: [],
-      runtimeRequirements
+      runtimeRequirements,
+      cValueAdapter: 'URLSearchParams($value)',
+      cValueAdapterFailureMode: 'thrown',
+      cValueAdapterPreservesPendingException: true,
+      cRuntimeValueExpression: '$value.raw()',
+      traits: [{ traitId: 'iterable', args: [searchParamsEntryTypeRef] }],
+      cIteration: {
+        iteratorMethod: 'entries',
+        nextMethod: 'next',
+        doneMember: 'done',
+        valueMember: 'value',
+        receiverAdapter: 'URLSearchParams($value)',
+        valueAdapter: '$value.raw()',
+        nextFailureMode: 'thrown'
+      }
+    },
+    {
+      libraryId,
+      typeId: searchParamsIteratorTypeId,
+      declarationNames: [],
+      valueType: 'object',
+      cppType: 'URLSearchParamsIterator',
+      baseTypeIds: [],
+      runtimeRequirements,
+      typeParameters: ['T'],
+      traits: [{ traitId: 'iterable', args: [iteratorParameterTypeRef] }],
+      cIteration: {
+        iteratorMethod: null,
+        nextMethod: 'next',
+        doneMember: 'done',
+        valueMember: 'value',
+        valueAdapter: '$value.raw()',
+        nextFailureMode: 'thrown'
+      }
     }
   ],
   operations,
@@ -148,7 +188,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: [arrayRuntimeRequirement, 'managed-values', 'objects', 'string-bytes'],
+      dependencies: [arrayRuntimeRequirement, 'callback-values', 'managed-values', 'objects', 'string-bytes'],
       cPreludeIncludes: ['inox/url.h'],
       capabilities: []
     }
@@ -284,6 +324,49 @@ function searchParamsValueFilterOperation(
   }
 }
 
+function searchParamsIteratorOperation(name: 'entries' | 'keys' | 'values', elementType: TypeRef) {
+  return {
+    ...receiverCall(
+      searchParamsTypeId,
+      name,
+      ['receiver'],
+      name,
+      searchParamsIteratorTypeRef(elementType),
+      undefined
+    ),
+    cFailureMode: null,
+    cPreservesPendingException: true,
+    cResultMode: 'value' as const
+  }
+}
+
+function searchParamsForEachOperation(): LibraryOperationDescriptor {
+  return {
+    ...receiverCall(
+      searchParamsTypeId,
+      'forEach',
+      ['receiver', 'runtime-callback'],
+      'forEach',
+      voidTypeRef,
+      undefined,
+      [
+        {
+          valueTypes: ['function'],
+          functionParameters: [
+            { name: 'value', valueType: 'string', typeRef: stringTypeRef },
+            { name: 'key', valueType: 'string', typeRef: stringTypeRef },
+            { name: 'searchParams', valueType: 'object', typeRef: searchParamsTypeRef }
+          ],
+          functionReturnType: 'void',
+          functionAsync: false
+        }
+      ]
+    ),
+    cResultMode: 'value',
+    cHasObservableSideEffects: true
+  }
+}
+
 function urlStringMethod(name: 'toJSON' | 'toString'): LibraryOperationDescriptor {
   return {
     ...receiverCall(urlTypeId, name, ['receiver'], name, stringTypeRef, stringCResultMapping),
@@ -295,6 +378,17 @@ function arrayTypeRef(elementType: TypeRef): NominalTypeRef {
   return {
     kind: 'nominal',
     typeId: arrayTypeId,
+    args: [elementType],
+    nullable: false,
+    ownership: 'value',
+    traits: [{ traitId: 'iterable', args: [elementType] }]
+  }
+}
+
+function searchParamsIteratorTypeRef(elementType: TypeRef): NominalTypeRef {
+  return {
+    kind: 'nominal',
+    typeId: searchParamsIteratorTypeId,
     args: [elementType],
     nullable: false,
     ownership: 'value',

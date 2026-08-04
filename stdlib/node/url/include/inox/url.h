@@ -5,9 +5,11 @@
 #include "inox/value.h"
 
 #ifdef __cplusplus
+#include <cstdint>
 #include <initializer_list>
 
 #include "inox/array.h"
+#include "inox/callback.h"
 #include "inox/string.h"
 #include "inox/string_view.h"
 
@@ -39,6 +41,30 @@ private:
   void setField(uint32_t field_index, const inox::Value& value);
 };
 
+class URLSearchParams;
+
+struct URLSearchParamsIterationResult {
+  bool done;
+  inox::Value value;
+};
+
+class URLSearchParamsIterator {
+public:
+  URLSearchParamsIterator();
+
+  URLSearchParamsIterationResult next();
+
+private:
+  friend class URLSearchParams;
+
+  URLSearchParamsIterator(const URLSearchParams& value, std::uint8_t mode);
+
+  inox::Value owner_;
+  std::size_t index_;
+  std::uint8_t mode_;
+  bool done_;
+};
+
 class URLSearchParams : public inox::Value {
 public:
   struct Entry {
@@ -58,14 +84,18 @@ public:
 
   bool valid() const;
   void append(inox::StringView name, inox::StringView value);
+  URLSearchParamsIterator entries() const;
+  void forEach(inox::Callback callback) const;
   inox::Value get(inox::StringView name) const;
   Array getAll(inox::StringView name) const;
   bool has(inox::StringView name, inox::StringView value, bool has_value) const;
+  URLSearchParamsIterator keys() const;
   double size() const;
   void remove(inox::StringView name, inox::StringView value, bool has_value);
   void set(inox::StringView name, inox::StringView value);
   void sort();
   inox::String toString() const;
+  URLSearchParamsIterator values() const;
 };
 
 class url {

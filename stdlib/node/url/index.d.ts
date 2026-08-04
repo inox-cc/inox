@@ -1,6 +1,8 @@
 export type UrlInput = string | URL;
 export type URLSearchParamsInit = string | Record<string, string>;
 
+export interface URLSearchParamsIterator<T> {}
+
 export interface URLModule {
   readonly URL: typeof URL;
   readonly URLSearchParams: typeof URLSearchParams;
@@ -37,12 +39,16 @@ export class URLSearchParams {
 
   append(name: string, value: string): void;
   delete(name: string, value?: string): void;
+  entries(): URLSearchParamsIterator<string[]>;
+  forEach(callback: (value: string, key: string, searchParams: URLSearchParams) => void): void;
   get(name: string): string | null;
   getAll(name: string): string[];
   has(name: string, value?: string): boolean;
+  keys(): URLSearchParamsIterator<string>;
   set(name: string, value: string): void;
   sort(): void;
   toString(): string;
+  values(): URLSearchParamsIterator<string>;
 }
 
 export function fileURLToPath(url: UrlInput): string;

@@ -667,6 +667,187 @@ bool URLSearchParams::valid() const {
   return value.tag == INOX_TAG_OBJECT && value.as.ref != 0;
 }
 
+URLSearchParamsIterator::URLSearchParamsIterator()
+  : owner_(), index_(0), mode_(0), done_(false) {}
+
+URLSearchParamsIterator::URLSearchParamsIterator(const URLSearchParams& value, std::uint8_t mode)
+  : owner_(value), index_(0), mode_(mode), done_(false) {}
+
+URLSearchParamsIterationResult URLSearchParamsIterator::next() {
+  if (done_) {
+    return { true, inox::Value() };
+  }
+
+  inox_value retained = inox_undefined_value();
+  const char* query = 0;
+  size_t query_len = 0;
+  inox_status status = inox_url_value_string(
+    owner_,
+    INOX_URL_SEARCH_PARAMS_QUERY_INDEX,
+    &retained,
+    &query,
+    &query_len
+  );
+  size_t cursor = 0;
+  size_t pair_index = 0;
+  size_t pair_start = 0;
+  size_t pair_end = 0;
+  bool found = false;
+
+  while (status == INOX_OK && cursor < query_len) {
+    pair_start = cursor;
+
+    while (cursor < query_len && query[cursor] != '&') {
+      cursor += 1;
+    }
+
+    pair_end = cursor;
+
+    if (pair_end != pair_start) {
+      if (pair_index == index_) {
+        found = true;
+        break;
+      }
+
+      pair_index += 1;
+    }
+
+    if (cursor < query_len) {
+      cursor += 1;
+    }
+  }
+
+  if (status != INOX_OK || !found) {
+    inox_release(retained);
+    done_ = true;
+
+    if (status != INOX_OK) {
+      inox_url_throw_failed("URLSearchParams iterator failed");
+    }
+
+    return { true, inox::Value() };
+  }
+
+  size_t key_end = pair_start;
+
+  while (key_end < pair_end && query[key_end] != '=') {
+    key_end += 1;
+  }
+
+  const size_t value_start = key_end < pair_end ? key_end + 1 : pair_end;
+  char* decoded_key = 0;
+  size_t decoded_key_len = 0;
+  char* decoded_value = 0;
+  size_t decoded_value_len = 0;
+
+  status = inox_url_decode_query_component(
+    &inox_default_allocator,
+    query + pair_start,
+    key_end - pair_start,
+    &decoded_key,
+    &decoded_key_len
+  );
+
+  if (status == INOX_OK) {
+    status = inox_url_decode_query_component(
+      &inox_default_allocator,
+      query + value_start,
+      pair_end - value_start,
+      &decoded_value,
+      &decoded_value_len
+    );
+  }
+
+  inox::String key;
+  inox::String value;
+
+  if (status == INOX_OK) {
+    key = inox::String(decoded_key, decoded_key_len);
+    value = inox::String(decoded_value, decoded_value_len);
+
+    if (!key.valid() || !value.valid()) {
+      status = INOX_ERR_OOM;
+    }
+  }
+
+  if (decoded_key != 0) {
+    inox_default_allocator.free(
+      inox_default_allocator.user,
+      decoded_key,
+      decoded_key_len + 1,
+      alignof(char)
+    );
+  }
+
+  if (decoded_value != 0) {
+    inox_default_allocator.free(
+      inox_default_allocator.user,
+      decoded_value,
+      decoded_value_len + 1,
+      alignof(char)
+    );
+  }
+
+  inox_release(retained);
+
+  if (status != INOX_OK) {
+    done_ = true;
+    inox_url_throw_failed("URLSearchParams iterator failed");
+    return { true, inox::Value() };
+  }
+
+  index_ += 1;
+
+  if (mode_ == 1) {
+    return { false, key };
+  }
+
+  if (mode_ == 2) {
+    return { false, value };
+  }
+
+  Array entry = Array::from({ key, value });
+
+  if (inox::thrown()) {
+    done_ = true;
+    return { true, inox::Value() };
+  }
+
+  return { false, entry };
+}
+
+URLSearchParamsIterator URLSearchParams::entries() const {
+  return URLSearchParamsIterator(*this, 0);
+}
+
+void URLSearchParams::forEach(inox::Callback callback) const {
+  URLSearchParamsIterator iterator = entries();
+
+  while (true) {
+    URLSearchParamsIterationResult step = iterator.next();
+
+    if (inox::thrown() || step.done) {
+      return;
+    }
+
+    Array entry(step.value);
+    inox::Value arguments[] = { entry.get(1), entry.get(0), inox::Value(raw()) };
+    callback.call(std::span<const inox::Value>(arguments, 3));
+
+    if (inox::thrown()) {
+      return;
+    }
+  }
+}
+
+URLSearchParamsIterator URLSearchParams::keys() const {
+  return URLSearchParamsIterator(*this, 1);
+}
+
+URLSearchParamsIterator URLSearchParams::values() const {
+  return URLSearchParamsIterator(*this, 2);
+}
+
 void URLSearchParams::append(inox::StringView name, inox::StringView value) {
   inox_value retained = inox_undefined_value();
   const char* query_bytes = 0;
