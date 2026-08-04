@@ -26,8 +26,15 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
     numberToString(),
     memberRead('length', 'codeUnitLength', numberTypeRef, 'static_cast<double>($value)'),
     stringCall('charCodeAt', numberTypeRef, ['number'], [numberArgument()], null),
-    stringCall('concat', stringTypeRef, ['string-view'], [stringArgument()]),
-    stringCall('endsWith', booleanTypeRef, ['string-view'], [stringArgument()], null),
+    stringConcat(),
+    stringCall(
+      'endsWith',
+      booleanTypeRef,
+      ['string-view', 'optional-number'],
+      [stringArgument(), numberArgument()],
+      null,
+      1
+    ),
     stringCall(
       'includes',
       booleanTypeRef,
@@ -63,13 +70,20 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
     stringCall(
       'slice',
       stringTypeRef,
-      ['number', 'optional-number'],
+      ['optional-number', 'optional-number'],
       [numberArgument(), numberArgument()],
       'thrown',
+      0
+    ),
+    stringSplit(),
+    stringCall(
+      'startsWith',
+      booleanTypeRef,
+      ['string-view', 'optional-number'],
+      [stringArgument(), numberArgument()],
+      null,
       1
     ),
-    stringCall('split', arrayTypeRef(stringTypeRef), ['string-view'], [stringArgument()]),
-    stringCall('startsWith', booleanTypeRef, ['string-view'], [stringArgument()], null),
     stringCall('toUpperCase', stringTypeRef, [], []),
     stringCall('trim', stringTypeRef, [], []),
     stringCall('trimEnd', stringTypeRef, [], []),
@@ -187,6 +201,38 @@ function stringCall(
   }
 
   return operation
+}
+
+function stringConcat(): LibraryOperationDescriptor {
+  return {
+    ...stringCall('concat', stringTypeRef, ['variadic-string-view-array', 'variadic-count'], [stringArgument()]),
+    minArgs: 0,
+    maxArgs: null,
+    variants: [
+      {
+        minArgs: 1,
+        maxArgs: 1,
+        cArgumentKinds: ['receiver', 'string-view']
+      }
+    ]
+  }
+}
+
+function stringSplit(): LibraryOperationDescriptor {
+  return {
+    ...stringCall(
+      'split',
+      arrayTypeRef(stringTypeRef),
+      ['string-view', 'number'],
+      [stringArgument(), numberArgument()],
+      'thrown',
+      0
+    ),
+    variants: [
+      { minArgs: 0, maxArgs: 0, cArgumentKinds: ['receiver'] },
+      { minArgs: 1, maxArgs: 1, cArgumentKinds: ['receiver', 'string-view'] }
+    ]
+  }
 }
 
 function stringIndexRead(): LibraryOperationDescriptor {

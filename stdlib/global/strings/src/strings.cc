@@ -1059,6 +1059,10 @@ String String::padStart(double target_len, StringView pad) const {
   return String(adopt(value));
 }
 
+String String::slice() const {
+  return slice(0);
+}
+
 String String::slice(double start) const {
   if (!valid()) {
     throw_out_of_memory();
@@ -1096,7 +1100,21 @@ String String::slice(double start, double end) const {
   return string_result_or_oom(String(bytes() + start_byte, end_byte - start_byte));
 }
 
-Array String::split(StringView separator) const {
+static uint32_t string_split_limit(double raw) {
+  if (!isfinite(raw) || raw == 0) {
+    return 0;
+  }
+
+  double value = fmod(trunc(raw), 4294967296.0);
+
+  if (value < 0) {
+    value += 4294967296.0;
+  }
+
+  return static_cast<uint32_t>(value);
+}
+
+Array String::split() const {
   if (!valid()) {
     return Array();
   }
@@ -1107,8 +1125,35 @@ Array String::split(StringView separator) const {
     return Array();
   }
 
+  out.push(raw());
+  return inox::thrown() ? Array() : out;
+}
+
+Array String::split(StringView separator) const {
+  return split(separator, 4294967295.0);
+}
+
+Array String::split(StringView separator, double raw_limit) const {
+  if (!valid()) {
+    return Array();
+  }
+
+  Array out = Array::create(0);
+
+  if (inox::thrown() || !out.valid()) {
+    return Array();
+  }
+
+  const uint32_t limit = string_split_limit(raw_limit);
+
+  if (limit == 0) {
+    return out;
+  }
+
+  uint32_t count = 0;
+
   if (separator.len == 0) {
-    for (size_t index = 0; index < length();) {
+    for (size_t index = 0; index < length() && count < limit;) {
       size_t step = utf8_next_len(bytes(), length(), index);
 
       if (step == 0) {
@@ -1127,6 +1172,7 @@ Array String::split(StringView separator) const {
         return Array();
       }
 
+      count += 1;
       index += step;
     }
 
@@ -1154,6 +1200,12 @@ Array String::split(StringView separator) const {
       return Array();
     }
 
+    count += 1;
+
+    if (count >= limit) {
+      return out;
+    }
+
     index += separator.len;
     start = index;
   }
@@ -1164,7 +1216,9 @@ Array String::split(StringView separator) const {
     return Array();
   }
 
-  out.push(item.raw());
+  if (count < limit) {
+    out.push(item.raw());
+  }
 
   if (inox::thrown()) {
     return Array();
@@ -1174,12 +1228,26 @@ Array String::split(StringView separator) const {
 }
 
 String String::concat(StringView right) const {
-  if (!valid() || length() > ((size_t)-1) - right.len) {
+  return concat(&right, 1);
+}
+
+String String::concat(const StringView* values, size_t count) const {
+  if (!valid() || (count != 0 && values == 0)) {
     throw_out_of_memory();
     return String();
   }
 
-  const size_t len = length() + right.len;
+  size_t len = length();
+
+  for (size_t index = 0; index < count; index += 1) {
+    if (len > ((size_t)-1) - values[index].len) {
+      throw_out_of_memory();
+      return String();
+    }
+
+    len += values[index].len;
+  }
+
   inox_string* string = string_alloc_storage(&inox_default_allocator, len);
 
   if (string == 0) {
@@ -1191,8 +1259,13 @@ String String::concat(StringView right) const {
     memcpy(string->bytes, bytes(), length());
   }
 
-  if (right.len != 0) {
-    memcpy(string->bytes + length(), right.bytes, right.len);
+  size_t offset = length();
+
+  for (size_t index = 0; index < count; index += 1) {
+    if (values[index].len != 0) {
+      memcpy(string->bytes + offset, values[index].bytes, values[index].len);
+      offset += values[index].len;
+    }
   }
 
   inox_value value = { INOX_TAG_STRING };
@@ -1304,19 +1377,53 @@ bool String::includes(StringView search, double start) const {
 }
 
 bool String::startsWith(StringView search) const {
-  if (!valid() || search.len > length()) {
+  return startsWith(search, 0);
+}
+
+bool String::startsWith(StringView search, double position) const {
+  if (!valid()) {
     return false;
   }
 
-  return search.len == 0 || memcmp(bytes(), search.bytes, search.len) == 0;
+  const size_t code_unit_length = string_code_unit_length(bytes(), length());
+  size_t start_index = non_negative_index(position);
+
+  if (start_index > code_unit_length) {
+    start_index = code_unit_length;
+  }
+
+  const size_t start_byte = string_code_unit_to_byte_offset_ceiling(bytes(), length(), start_index);
+
+  if (search.len > length() - start_byte) {
+    return false;
+  }
+
+  return search.len == 0 || memcmp(bytes() + start_byte, search.bytes, search.len) == 0;
 }
 
 bool String::endsWith(StringView search) const {
-  if (!valid() || search.len > length()) {
+  return endsWith(search, static_cast<double>(codeUnitLength()));
+}
+
+bool String::endsWith(StringView search, double end_position) const {
+  if (!valid()) {
     return false;
   }
 
-  return search.len == 0 || memcmp(bytes() + length() - search.len, search.bytes, search.len) == 0;
+  const size_t code_unit_length = string_code_unit_length(bytes(), length());
+  size_t end_index = non_negative_index(end_position);
+
+  if (end_index > code_unit_length) {
+    end_index = code_unit_length;
+  }
+
+  const size_t end_byte = string_code_unit_to_byte_offset_ceiling(bytes(), length(), end_index);
+
+  if (search.len > end_byte) {
+    return false;
+  }
+
+  return search.len == 0 || memcmp(bytes() + end_byte - search.len, search.bytes, search.len) == 0;
 }
 
 double String::indexOf(StringView search) const {

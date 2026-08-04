@@ -1,6 +1,9 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
+#include <cmath>
+#include <limits>
+#include <memory>
 #include <utility>
 
 #include "inox/array.h"
@@ -46,18 +49,77 @@ static void inox_collection_throw(const char* message) {
   inox::throw_value(inox::String(message));
 }
 
+static size_t inox_collection_utf8_next_length(const char* bytes, size_t length, size_t index) {
+  if (bytes == 0 || index >= length) {
+    return 0;
+  }
+
+  const unsigned char first = static_cast<unsigned char>(bytes[index]);
+
+  if ((first & 0x80u) == 0) {
+    return 1;
+  }
+
+  size_t expected = 1;
+
+  if ((first & 0xe0u) == 0xc0u) {
+    expected = 2;
+  } else if ((first & 0xf0u) == 0xe0u) {
+    expected = 3;
+  } else if ((first & 0xf8u) == 0xf0u) {
+    expected = 4;
+  }
+
+  if (index + expected > length) {
+    return 1;
+  }
+
+  for (size_t offset = 1; offset < expected; offset += 1) {
+    if ((static_cast<unsigned char>(bytes[index + offset]) & 0xc0u) != 0x80u) {
+      return 1;
+    }
+  }
+
+  return expected;
+}
+
+static size_t inox_array_slice_index(double value, size_t length) {
+  if (std::isnan(value)) {
+    return 0;
+  }
+
+  if (value == std::numeric_limits<double>::infinity()) {
+    return length;
+  }
+
+  if (value == -std::numeric_limits<double>::infinity()) {
+    return 0;
+  }
+
+  const double integer = std::trunc(value);
+
+  if (integer < 0) {
+    const double relative = static_cast<double>(length) + integer;
+    return relative <= 0 ? 0 : static_cast<size_t>(relative);
+  }
+
+  return integer >= static_cast<double>(length) ? length : static_cast<size_t>(integer);
+}
+
 static bool inox_array_call_predicate(
   inox::Callback& predicate,
   inox_value item,
   size_t index,
+  inox_value array,
   const char* method,
   bool* match
 ) {
   inox::Value arguments[] = {
     inox::Value(item),
-    inox::Value(inox_number_value((double)index))
+    inox::Value(inox_number_value((double)index)),
+    inox::Value(array)
   };
-  inox::Value result = predicate.call(std::span<const inox::Value>(arguments, 2));
+  inox::Value result = predicate.call(std::span<const inox::Value>(arguments, 3));
 
   if (inox::thrown()) {
     return false;
@@ -1608,18 +1670,33 @@ Array Array::from(std::initializer_list<inox::Value> values) {
 }
 
 Array Array::from(inox::StringView value) {
-  Array result = Array::create(value.len);
+  size_t count = 0;
+
+  for (size_t index = 0; index < value.len;) {
+    const size_t step = inox_collection_utf8_next_length(value.bytes, value.len, index);
+    index += step == 0 ? 1 : step;
+    count += 1;
+  }
+
+  Array result = Array::create(count);
 
   if (!result.valid() || inox::thrown()) {
     return result;
   }
 
-  for (size_t index = 0; index < value.len; index += 1) {
-    result.set(index, inox::String(value.bytes + index, 1));
+  size_t output_index = 0;
+
+  for (size_t index = 0; index < value.len;) {
+    const size_t step = inox_collection_utf8_next_length(value.bytes, value.len, index);
+    const size_t item_length = step == 0 ? 1 : step;
+    result.set(output_index, inox::String(value.bytes + index, item_length));
 
     if (inox::thrown()) {
       return result;
     }
+
+    index += item_length;
+    output_index += 1;
   }
 
   return result;
@@ -1647,6 +1724,7 @@ Array Array::filter(inox::Callback predicate) const {
           predicate,
           instance->items[index],
           index,
+          array,
           "TypeError: Array.filter callback must return boolean",
           &match
         )) {
@@ -1682,6 +1760,7 @@ inox::Value Array::find(inox::Callback predicate) const {
           predicate,
           instance->items[index],
           index,
+          array,
           "TypeError: Array.find callback must return boolean",
           &match
         )) {
@@ -1693,7 +1772,7 @@ inox::Value Array::find(inox::Callback predicate) const {
     }
   }
 
-  return inox::Value(inox_null_value());
+  return inox::Value(inox_undefined_value());
 }
 
 Array Array::map(inox::Callback callback) const {
@@ -1714,9 +1793,10 @@ Array Array::map(inox::Callback callback) const {
   for (size_t index = 0; index < instance->length; index += 1) {
     inox::Value arguments[] = {
       inox::Value(instance->items[index]),
-      inox::Value(inox_number_value((double)index))
+      inox::Value(inox_number_value((double)index)),
+      inox::Value(array)
     };
-    inox::Value mapped = callback.call(std::span<const inox::Value>(arguments, 2));
+    inox::Value mapped = callback.call(std::span<const inox::Value>(arguments, 3));
 
     if (inox::thrown()) {
       return Array();
@@ -1743,7 +1823,7 @@ inox::Value Array::pop() const {
   ArrayStorage* instance = (ArrayStorage*)array.as.ref;
 
   if (instance->length == 0) {
-    return inox::Value(inox_null_value());
+    return inox::Value(inox_undefined_value());
   }
 
   instance->length -= 1;
@@ -1822,9 +1902,10 @@ inox::Value Array::reduce(inox::Callback callback, const inox::Value& initial) c
     inox::Value arguments[] = {
       accumulator,
       inox::Value(instance->items[index]),
-      inox::Value(inox_number_value((double)index))
+      inox::Value(inox_number_value((double)index)),
+      inox::Value(array)
     };
-    accumulator = callback.call(std::span<const inox::Value>(arguments, 3));
+    accumulator = callback.call(std::span<const inox::Value>(arguments, 4));
 
     if (inox::thrown()) {
       return inox::Value();
@@ -1844,9 +1925,24 @@ inox::Value Array::set(size_t index, const inox::Value& value) const {
 
   ArrayStorage* instance = (ArrayStorage*)array.as.ref;
 
-  if (index >= instance->length) {
+  if (index == std::numeric_limits<size_t>::max()) {
     inox_collection_throw("TypeError: Array assignment failed");
     return inox::Value();
+  }
+
+  if (index >= instance->length) {
+    const inox_status status = inox_array_reserve(instance, index + 1);
+
+    if (status != INOX_OK) {
+      inox_collection_throw("TypeError: Array assignment failed");
+      return inox::Value();
+    }
+
+    for (size_t fill = instance->length; fill <= index; fill += 1) {
+      instance->items[fill] = inox_undefined_value();
+    }
+
+    instance->length = index + 1;
   }
 
   inox_value item = value.raw();
@@ -1856,7 +1952,7 @@ inox::Value Array::set(size_t index, const inox::Value& value) const {
   return value;
 }
 
-Array Array::slice(size_t start, size_t end) const {
+Array Array::slice(double start_value, double end_value) const {
   inox_value array = inox::Value::raw();
 
   if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
@@ -1865,14 +1961,8 @@ Array Array::slice(size_t start, size_t end) const {
   }
 
   ArrayStorage* source = (ArrayStorage*)array.as.ref;
-
-  if (start > source->length) {
-    start = source->length;
-  }
-
-  if (end > source->length) {
-    end = source->length;
-  }
+  const size_t start = inox_array_slice_index(start_value, source->length);
+  size_t end = inox_array_slice_index(end_value, source->length);
 
   if (end < start) {
     end = start;
@@ -1913,6 +2003,7 @@ bool Array::every(inox::Callback predicate) const {
           predicate,
           instance->items[index],
           index,
+          array,
           "TypeError: Array.every callback must return boolean",
           &match
         )) {
@@ -1944,6 +2035,7 @@ bool Array::some(inox::Callback predicate) const {
           predicate,
           instance->items[index],
           index,
+          array,
           "TypeError: Array.some callback must return boolean",
           &match
         )) {
@@ -2031,7 +2123,11 @@ Array Array::sort(inox::Callback compare) const {
   return Array(*this);
 }
 
-double Array::unshift(const inox::Value& value) const {
+size_t Array::unshift(const inox::Value& value) const {
+  return unshift(std::addressof(value), 1);
+}
+
+size_t Array::unshift(const inox::Value* values, size_t count) const {
   inox_value array = inox::Value::raw();
 
   if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
@@ -2040,23 +2136,32 @@ double Array::unshift(const inox::Value& value) const {
   }
 
   ArrayStorage* instance = (ArrayStorage*)array.as.ref;
-  inox_status status = inox_array_reserve(instance, instance->length + 1);
+
+  if (count > std::numeric_limits<size_t>::max() - instance->length) {
+    inox_collection_throw("TypeError: Array unshift failed");
+    return 0;
+  }
+
+  inox_status status = inox_array_reserve(instance, instance->length + count);
 
   if (status != INOX_OK) {
     inox_collection_throw("TypeError: Array unshift failed");
     return 0;
   }
 
-  for (size_t index = instance->length; index > 0; index -= 1) {
-    instance->items[index] = instance->items[index - 1];
+  if (count != 0 && instance->length != 0) {
+    memmove(instance->items + count, instance->items, instance->length * sizeof(inox_value));
   }
 
-  inox_value item = value.raw();
-  inox_retain(item);
-  instance->items[0] = item;
-  instance->length += 1;
+  for (size_t index = 0; index < count; index += 1) {
+    inox_value item = values[index].raw();
+    inox_retain(item);
+    instance->items[index] = item;
+  }
 
-  return (double)instance->length;
+  instance->length += count;
+
+  return instance->length;
 }
 
 inox::String Array::join(inox::StringView separator) const {

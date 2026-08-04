@@ -7,6 +7,8 @@ import {
   arrayRuntimeRequirement,
   arrayTypeRef,
   compilerLibraryPackage as collectionsPackage,
+  mapNativeTypeId,
+  mapTypeRef,
   setNativeTypeId,
   setTypeRef
 } from '../../stdlib/global/collections/compiler/index.ts'
@@ -99,6 +101,49 @@ test('Array, Set и Promise принадлежат discoverable global packages 
       ?.cRuntimeValueValidExpression,
     '$value.tag == INOX_TAG_MAP && $value.as.ref != 0'
   )
+  assert.deepEqual((collectionsPackage.nativeTypes ?? []).find((item) => item.typeId === mapNativeTypeId)?.traits, [
+    {
+      traitId: 'iterable',
+      args: [
+        {
+          kind: 'nominal',
+          typeId: arrayNativeTypeId,
+          args: [
+            {
+              kind: 'unknown',
+              nullable: false,
+              ownership: 'value',
+              traits: []
+            }
+          ],
+          nullable: false,
+          ownership: 'value',
+          traits: [
+            {
+              traitId: 'indexable',
+              args: [primitiveTypeRef('number'), { kind: 'unknown', nullable: false, ownership: 'value', traits: [] }]
+            },
+            {
+              traitId: 'iterable',
+              args: [{ kind: 'unknown', nullable: false, ownership: 'value', traits: [] }]
+            }
+          ]
+        }
+      ]
+    }
+  ])
+  assert.equal(
+    collectionsPackage.operations.some(
+      (operation) => operation.receiverTypeId === mapNativeTypeId && operation.kind === 'index-read'
+    ),
+    false
+  )
+  assert.equal(
+    collectionsPackage.operations.some(
+      (operation) => operation.receiverTypeId === mapNativeTypeId && operation.kind === 'index-write'
+    ),
+    false
+  )
   assert.deepEqual(collectionsPackage.intrinsicBindings, [
     { role: 'array-literal', bindingId: 'global:collections#Array.intrinsic' }
   ])
@@ -158,6 +203,45 @@ test('Array, Set и Promise принадлежат discoverable global packages 
     nullable: false,
     ownership: 'value',
     traits: [{ traitId: 'iterable', args: [fulfilled] }]
+  })
+  assert.equal(mapNativeTypeId, 'global:collections#Map')
+  assert.deepEqual(mapTypeRef(fulfilled, rejected), {
+    kind: 'nominal',
+    typeId: mapNativeTypeId,
+    args: [fulfilled, rejected],
+    nullable: false,
+    ownership: 'value',
+    traits: [
+      {
+        traitId: 'iterable',
+        args: [
+          {
+            kind: 'nominal',
+            typeId: arrayNativeTypeId,
+            args: [
+              {
+                kind: 'unknown',
+                nullable: false,
+                ownership: 'value',
+                traits: []
+              }
+            ],
+            nullable: false,
+            ownership: 'value',
+            traits: [
+              {
+                traitId: 'indexable',
+                args: [primitiveTypeRef('number'), { kind: 'unknown', nullable: false, ownership: 'value', traits: [] }]
+              },
+              {
+                traitId: 'iterable',
+                args: [{ kind: 'unknown', nullable: false, ownership: 'value', traits: [] }]
+              }
+            ]
+          }
+        ]
+      }
+    ]
   })
   assert.equal(promiseNativeTypeId, 'global:promise#Promise')
   assert.deepEqual(promiseTypeRef(fulfilled, rejected), {

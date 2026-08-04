@@ -8,6 +8,7 @@
 
 #ifdef __cplusplus
 #include <initializer_list>
+#include <limits>
 
 class Array;
 
@@ -66,11 +67,12 @@ public:
   size_t push(const inox::Value* values, size_t count) const;
   inox::Value reduce(inox::Callback callback, const inox::Value& initial) const;
   inox::Value set(size_t index, const inox::Value& value) const;
-  Array slice(size_t start = 0, size_t end = static_cast<size_t>(-1)) const;
+  Array slice(double start = 0, double end = std::numeric_limits<double>::infinity()) const;
   bool some(inox::Callback predicate) const;
   Array sort() const;
   Array sort(inox::Callback compare) const;
-  double unshift(const inox::Value& value) const;
+  size_t unshift(const inox::Value& value) const;
+  size_t unshift(const inox::Value* values, size_t count) const;
   ArrayIterator values() const;
 
   inox::String join(inox::StringView separator) const;

@@ -64,16 +64,7 @@ export function mapTypeRef(keyType: TypeRef, valueType: TypeRef): NominalTypeRef
     args: [keyType, valueType],
     nullable: false,
     ownership: 'value',
-    traits: [
-      {
-        traitId: 'indexable',
-        args: [keyType, valueType]
-      },
-      {
-        traitId: 'iterable',
-        args: [mapEntryTypeRef()]
-      }
-    ]
+    traits: [{ traitId: 'iterable', args: [mapEntryTypeRef()] }]
   }
 }
 
@@ -138,7 +129,12 @@ const arrayOperations: LibraryOperationDescriptor[] = [
     cPreservesPendingException: true
   },
   {
-    ...arrayReceiverCall('includes', booleanTypeRef, ['runtime-value'], [{ valueTypes: [], typeRef: parameterTypeRef }]),
+    ...arrayReceiverCall(
+      'includes',
+      booleanTypeRef,
+      ['runtime-value'],
+      [{ valueTypes: [], typeRef: parameterTypeRef }]
+    ),
     cFailureMode: null,
     cPreservesPendingException: true
   },
@@ -176,7 +172,7 @@ const arrayOperations: LibraryOperationDescriptor[] = [
   ]),
   arrayCallbackReceiverCall('some', booleanTypeRef, [...arrayPredicateParameters()], 'boolean'),
   arraySortOperation(),
-  arrayReceiverCall('unshift', numberTypeRef, ['runtime-value'], [{ valueTypes: [], typeRef: parameterTypeRef }]),
+  arrayUnshiftOperation(),
   arrayIndexRead(),
   arrayIndexWrite()
 ]
@@ -289,8 +285,6 @@ const mapOperations: LibraryOperationDescriptor[] = [
     cFailureMode: null,
     cPreservesPendingException: true
   },
-  mapIndexRead(),
-  mapIndexWrite(),
   {
     ...mapReceiverCall('get', 'get', nullableValueParameterTypeRef, [keyParameterTypeRef]),
     cResultMapping: { cppType: 'inox::Value', fields: [] }
@@ -325,7 +319,12 @@ const mapOperations: LibraryOperationDescriptor[] = [
     resultTypeRef: numberTypeRef
   },
   {
-    ...mapReceiverCall('values', 'values', mapIteratorTypeRef(mapValueIteratorNativeTypeId, [valueParameterTypeRef]), []),
+    ...mapReceiverCall(
+      'values',
+      'values',
+      mapIteratorTypeRef(mapValueIteratorNativeTypeId, [valueParameterTypeRef]),
+      []
+    ),
     cFailureMode: null,
     cPreservesPendingException: true
   }
@@ -377,10 +376,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       cRuntimeValueExpression: '$value.raw()',
       cRuntimeValueValidExpression: '$value.tag == INOX_TAG_MAP && $value.as.ref != 0',
       typeParameters: ['K', 'V'],
-      traits: [
-        { traitId: 'indexable', args: [keyParameterTypeRef, valueParameterTypeRef] },
-        { traitId: 'iterable', args: [mapEntryTypeRef()] }
-      ],
+      traits: [{ traitId: 'iterable', args: [mapEntryTypeRef()] }],
       cIteration: {
         iteratorMethod: 'entries',
         nextMethod: 'next',
@@ -570,6 +566,35 @@ function arrayPushOperation(): LibraryOperationDescriptor {
   }
 }
 
+function arrayUnshiftOperation(): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: `${arrayNativeTypeId}.unshift`,
+    operationId: `${arrayNativeTypeId}.unshift`,
+    kind: 'call',
+    runtimeRequirements: [arrayRuntimeRequirement],
+    receiverTypeId: arrayNativeTypeId,
+    typeParameters: arrayTypeParameters(),
+    variants: [
+      {
+        minArgs: 1,
+        maxArgs: 1,
+        cArgumentKinds: ['receiver', 'runtime-value']
+      }
+    ],
+    cExpression: 'unshift',
+    cArgumentKinds: ['receiver', 'variadic-runtime-value-array', 'variadic-count'],
+    cCallStyle: 'member',
+    cFailureMode: 'thrown',
+    cResultMode: 'value',
+    cResultAdapter: 'static_cast<double>($value)',
+    resultTypeRef: numberTypeRef,
+    minArgs: 0,
+    maxArgs: null,
+    argumentChecks: [{ valueTypes: [], typeRef: parameterTypeRef }]
+  }
+}
+
 function arrayCallbackReceiverCall(
   name: string,
   resultTypeRef: TypeRef,
@@ -617,7 +642,8 @@ function arrayPredicateParameters(): Array<{
 }> {
   return [
     { name: 'value', valueType: 'unknown', typeRef: parameterTypeRef },
-    { name: 'index', valueType: 'number', typeRef: numberTypeRef }
+    { name: 'index', valueType: 'number', typeRef: numberTypeRef },
+    { name: 'array', valueType: 'array', typeRef: arrayTypeRef(parameterTypeRef) }
   ]
 }
 
@@ -690,7 +716,8 @@ function arrayReduceOperation(): LibraryOperationDescriptor {
         functionParameters: [
           { name: 'accumulator', valueType: 'unknown', typeRef: mappedParameterTypeRef },
           { name: 'value', valueType: 'unknown', typeRef: parameterTypeRef },
-          { name: 'index', valueType: 'number', typeRef: numberTypeRef }
+          { name: 'index', valueType: 'number', typeRef: numberTypeRef },
+          { name: 'array', valueType: 'array', typeRef: arrayTypeRef(parameterTypeRef) }
         ],
         functionReturnTypeRef: mappedParameterTypeRef,
         functionAsync: false
@@ -818,57 +845,6 @@ function mapReceiverCall(
     maxArgs: argumentChecks.length,
     argumentChecks
   }
-}
-
-function mapIndexRead(): LibraryOperationDescriptor {
-  return {
-    libraryId,
-    bindingId: `${mapNativeTypeId}.*`,
-    operationId: `${mapNativeTypeId}#index-read`,
-    kind: 'index-read',
-    runtimeRequirements: [mapRuntimeRequirement],
-    receiverTypeId: mapNativeTypeId,
-    typeParameters: mapReceiverTypeParameters(),
-    cExpression: 'get',
-    cArgumentKinds: ['receiver', 'runtime-value'],
-    cCallStyle: 'member',
-    cFailureMode: 'thrown',
-    resultTypeRef: nullableValueParameterTypeRef,
-    cResultMapping: { cppType: 'inox::Value', fields: [] },
-    minArgs: 1,
-    maxArgs: 1,
-    argumentChecks: [{ valueTypes: [], typeRef: keyParameterTypeRef }]
-  }
-}
-
-function mapIndexWrite(): LibraryOperationDescriptor {
-  return {
-    libraryId,
-    bindingId: `${mapNativeTypeId}.*`,
-    operationId: `${mapNativeTypeId}#index-write`,
-    kind: 'index-write',
-    runtimeRequirements: [mapRuntimeRequirement],
-    receiverTypeId: mapNativeTypeId,
-    typeParameters: mapReceiverTypeParameters(),
-    cExpression: 'set',
-    cArgumentKinds: ['receiver', 'runtime-value', 'runtime-value'],
-    cCallStyle: 'member',
-    cFailureMode: 'thrown',
-    resultTypeRef: mapTypeRef(keyParameterTypeRef, valueParameterTypeRef),
-    minArgs: 2,
-    maxArgs: 2,
-    argumentChecks: [
-      { valueTypes: [], typeRef: keyParameterTypeRef },
-      { valueTypes: [], typeRef: valueParameterTypeRef }
-    ]
-  }
-}
-
-function mapReceiverTypeParameters(): LibraryOperationTypeParameterDescriptor[] {
-  return [
-    { name: 'K', sources: [{ source: 'receiver-type-argument' as const, argumentIndex: 0 }] },
-    { name: 'V', sources: [{ source: 'receiver-type-argument' as const, argumentIndex: 1 }] }
-  ]
 }
 
 function setReceiverCall(
