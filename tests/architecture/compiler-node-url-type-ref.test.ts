@@ -23,6 +23,8 @@ const expectedResults = [
   result('node:url#fileURLToPath', stringTypeRef, stringCResultMapping),
   result('node:url#pathToFileURL', nominalTypeRef('node:url#URL')),
   result('node:url#URL', nominalTypeRef('node:url#URL')),
+  result('node:url#URL#toJSON', stringTypeRef, stringCResultMapping),
+  result('node:url#URL#toString', stringTypeRef, stringCResultMapping),
   result('node:url#URLSearchParams', nominalTypeRef('node:url#URLSearchParams')),
   result('node:url#URLSearchParams#append', primitiveTypeRef('void')),
   result('node:url#URLSearchParams#delete', primitiveTypeRef('void')),

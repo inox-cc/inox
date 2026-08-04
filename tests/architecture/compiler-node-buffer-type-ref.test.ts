@@ -6,11 +6,15 @@ import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-di
 const bufferOperationIds = [
   'node:buffer#Buffer.from',
   'node:buffer#Buffer.alloc',
+  'node:buffer#Buffer.byteLength',
+  'node:buffer#Buffer.compare',
   'node:buffer#Buffer.isBuffer',
   'node:buffer#constants.MAX_LENGTH',
   'node:buffer#Buffer#read:length',
   'node:buffer#Buffer#index-read',
   'node:buffer#Buffer#index-write',
+  'node:buffer#Buffer#compare',
+  'node:buffer#Buffer#equals',
   'node:buffer#Buffer#slice',
   'node:buffer#Buffer#toString'
 ]
@@ -20,9 +24,16 @@ const nominalResultIds = [
   'node:buffer#Buffer#slice'
 ]
 const numberResultIds = [
+  'node:buffer#Buffer.byteLength',
+  'node:buffer#Buffer.compare',
   'node:buffer#constants.MAX_LENGTH',
   'node:buffer#Buffer#read:length',
-  'node:buffer#Buffer#index-write'
+  'node:buffer#Buffer#index-write',
+  'node:buffer#Buffer#compare'
+]
+const booleanResultIds = [
+  'node:buffer#Buffer.isBuffer',
+  'node:buffer#Buffer#equals'
 ]
 
 test('node:buffer operations describe results only through TypeRef', async () => {
@@ -42,7 +53,7 @@ test('node:buffer operations describe results only through TypeRef', async () =>
       assert.deepEqual(operation.resultTypeRef, nullablePrimitiveTypeRef('number'))
     } else if (numberResultIds.includes(operation.operationId)) {
       assert.deepEqual(operation.resultTypeRef, primitiveTypeRef('number'))
-    } else if (operation.operationId === 'node:buffer#Buffer.isBuffer') {
+    } else if (booleanResultIds.includes(operation.operationId)) {
       assert.deepEqual(operation.resultTypeRef, primitiveTypeRef('boolean'))
     } else {
       assert.equal(operation.operationId, 'node:buffer#Buffer#toString')
@@ -56,7 +67,7 @@ test('node:buffer operations describe results only through TypeRef', async () =>
   }
 
   const variants = operations.flatMap((operation) => operation.variants ?? [])
-  assert.equal(variants.length, 4)
+  assert.equal(variants.length, 6)
 
   for (const variant of variants) {
     assert.equal(variant.resultTypeRef, undefined)

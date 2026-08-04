@@ -105,6 +105,17 @@ static inox_status inox_url_search_params_remove_name(
   size_t* out_len,
   int* removed
 );
+static inox_status inox_url_search_params_set_pair(
+  inox_allocator* allocator,
+  const char* query,
+  size_t query_len,
+  const char* name,
+  size_t name_len,
+  const char* value,
+  size_t value_len,
+  char** out,
+  size_t* out_len
+);
 static int inox_url_search_params_has_encoded_name(
   const char* query,
   size_t query_len,
@@ -773,43 +784,30 @@ void URLSearchParams::remove(inox::StringView name) {
 }
 
 void URLSearchParams::set(inox::StringView name, inox::StringView value) {
-  char* encoded_name = 0;
-  size_t encoded_name_len = 0;
-  inox_status status = inox_url_encode_query_component(&inox_default_allocator, name.bytes, name.len, &encoded_name, &encoded_name_len);
-
-  if (status != INOX_OK) {
-    inox_url_throw_failed("URLSearchParams.set failed");
-    return;
-  }
-
   inox_value retained = inox_undefined_value();
   const char* query_bytes = 0;
   size_t query_len = 0;
-
-  status = inox_url_value_string(raw(), INOX_URL_SEARCH_PARAMS_QUERY_INDEX, &retained, &query_bytes, &query_len);
+  inox_status status = inox_url_value_string(raw(), INOX_URL_SEARCH_PARAMS_QUERY_INDEX, &retained, &query_bytes, &query_len);
 
   char* query = 0;
   size_t next_len = 0;
 
   if (status == INOX_OK) {
-    status = inox_url_search_params_remove_name(
+    status = inox_url_search_params_set_pair(
       &inox_default_allocator,
       query_bytes,
       query_len,
-      encoded_name,
-      encoded_name_len,
+      name.bytes,
+      name.len,
+      value.bytes,
+      value.len,
       &query,
-      &next_len,
-      0
+      &next_len
     );
   }
 
   inox_release(retained);
   query_len = next_len;
-
-  if (status == INOX_OK) {
-    status = inox_url_search_params_append_pair(&inox_default_allocator, &query, &query_len, name.bytes, name.len, value.bytes, value.len);
-  }
 
   if (status == INOX_OK) {
     status = inox_url_search_params_store_query(&inox_default_allocator, raw(), query, query_len);
@@ -818,8 +816,6 @@ void URLSearchParams::set(inox::StringView name, inox::StringView value) {
   if (query != 0) {
     inox_default_allocator.free(inox_default_allocator.user, query, query_len + 1, alignof(char));
   }
-
-  inox_default_allocator.free(inox_default_allocator.user, encoded_name, encoded_name_len + 1, alignof(char));
 
   if (status != INOX_OK) {
     inox_url_throw_failed("URLSearchParams.set failed");
@@ -1566,6 +1562,149 @@ static inox_status inox_url_search_params_remove_name(
     *removed = did_remove;
   }
 
+  return INOX_OK;
+}
+
+static inox_status inox_url_search_params_set_pair(
+  inox_allocator* allocator,
+  const char* query,
+  size_t query_len,
+  const char* name,
+  size_t name_len,
+  const char* value,
+  size_t value_len,
+  char** out,
+  size_t* out_len
+) {
+  char* encoded_name = 0;
+  size_t encoded_name_len = 0;
+  inox_status status = inox_url_encode_query_component(allocator, name, name_len, &encoded_name, &encoded_name_len);
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  char* encoded_value = 0;
+  size_t encoded_value_len = 0;
+  status = inox_url_encode_query_component(allocator, value, value_len, &encoded_value, &encoded_value_len);
+
+  if (status != INOX_OK) {
+    allocator->free(allocator->user, encoded_name, encoded_name_len + 1, alignof(char));
+    return status;
+  }
+
+  const size_t replacement_len = encoded_name_len + 1 + encoded_value_len;
+  size_t result_len = 0;
+  size_t result_count = 0;
+  size_t cursor = 0;
+  int found = 0;
+
+  while (cursor < query_len) {
+    const size_t pair_start = cursor;
+
+    while (cursor < query_len && query[cursor] != '&') {
+      cursor += 1;
+    }
+
+    const size_t pair_end = cursor;
+    size_t key_end = pair_start;
+
+    while (key_end < pair_end && query[key_end] != '=') {
+      key_end += 1;
+    }
+
+    const size_t key_len = key_end - pair_start;
+    const int matches =
+      key_len == encoded_name_len && strncmp(query + pair_start, encoded_name, encoded_name_len) == 0;
+
+    if (!matches || !found) {
+      result_len += (result_count == 0 ? 0 : 1) + (matches ? replacement_len : pair_end - pair_start);
+      result_count += 1;
+    }
+
+    if (matches) {
+      found = 1;
+    }
+
+    if (cursor < query_len) {
+      cursor += 1;
+    }
+  }
+
+  if (!found) {
+    result_len += (result_count == 0 ? 0 : 1) + replacement_len;
+  }
+
+  char* result = inox_url_alloc(allocator, result_len);
+
+  if (result == 0) {
+    allocator->free(allocator->user, encoded_name, encoded_name_len + 1, alignof(char));
+    allocator->free(allocator->user, encoded_value, encoded_value_len + 1, alignof(char));
+    return INOX_ERR_OOM;
+  }
+
+  size_t offset = 0;
+  cursor = 0;
+  int wrote_replacement = 0;
+
+  while (cursor < query_len) {
+    const size_t pair_start = cursor;
+
+    while (cursor < query_len && query[cursor] != '&') {
+      cursor += 1;
+    }
+
+    const size_t pair_end = cursor;
+    size_t key_end = pair_start;
+
+    while (key_end < pair_end && query[key_end] != '=') {
+      key_end += 1;
+    }
+
+    const size_t key_len = key_end - pair_start;
+    const int matches =
+      key_len == encoded_name_len && strncmp(query + pair_start, encoded_name, encoded_name_len) == 0;
+
+    if (!matches || !wrote_replacement) {
+      if (offset != 0) {
+        result[offset++] = '&';
+      }
+
+      if (matches) {
+        memcpy(result + offset, encoded_name, encoded_name_len);
+        offset += encoded_name_len;
+        result[offset++] = '=';
+        memcpy(result + offset, encoded_value, encoded_value_len);
+        offset += encoded_value_len;
+        wrote_replacement = 1;
+      } else {
+        const size_t segment_len = pair_end - pair_start;
+        memcpy(result + offset, query + pair_start, segment_len);
+        offset += segment_len;
+      }
+    }
+
+    if (cursor < query_len) {
+      cursor += 1;
+    }
+  }
+
+  if (!wrote_replacement) {
+    if (offset != 0) {
+      result[offset++] = '&';
+    }
+
+    memcpy(result + offset, encoded_name, encoded_name_len);
+    offset += encoded_name_len;
+    result[offset++] = '=';
+    memcpy(result + offset, encoded_value, encoded_value_len);
+    offset += encoded_value_len;
+  }
+
+  allocator->free(allocator->user, encoded_name, encoded_name_len + 1, alignof(char));
+  allocator->free(allocator->user, encoded_value, encoded_value_len + 1, alignof(char));
+  *out = result;
+  *out_len = offset;
   return INOX_OK;
 }
 
