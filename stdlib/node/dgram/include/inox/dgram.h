@@ -8,6 +8,7 @@
 #include "inox/callback.h"
 #include "inox/string.h"
 #include "inox/string_view.h"
+#include "inox/value.h"
 
 struct DgramAddress {
   inox::String address;
@@ -50,23 +51,18 @@ private:
   friend class DgramSocket;
 };
 
-class DgramSocket {
-private:
-  class Impl;
-  std::shared_ptr<Impl> impl_;
-
-  explicit DgramSocket(std::shared_ptr<Impl> impl);
-
-  friend class DgramModule;
-
+class DgramSocket : public inox::Value {
 public:
-  DgramSocket();
-  DgramSocket(const DgramSocket& other);
-  DgramSocket(DgramSocket&& other) noexcept;
-  DgramSocket& operator=(const DgramSocket& other);
-  DgramSocket& operator=(DgramSocket&& other) noexcept;
-  ~DgramSocket();
+  class Impl;
 
+  DgramSocket();
+  explicit DgramSocket(const inox::Value& value);
+  explicit DgramSocket(inox::Value&& value);
+
+  using inox::Value::operator=;
+
+  DgramSocket& addMembership(inox::StringView multicast_address);
+  DgramSocket& addMembership(inox::StringView multicast_address, inox::StringView multicast_interface);
   DgramAddress address() const;
   DgramSocket& bind();
   DgramSocket& bind(double port);
@@ -80,8 +76,12 @@ public:
   DgramSocket& connect(double port, inox::StringView address);
   DgramSocket& connect(double port, inox::StringView address, inox::Callback callback);
   DgramSocket& disconnect();
+  DgramSocket& dropMembership(inox::StringView multicast_address);
+  DgramSocket& dropMembership(inox::StringView multicast_address, inox::StringView multicast_interface);
   double getRecvBufferSize() const;
   double getSendBufferSize() const;
+  double getSendQueueCount() const;
+  double getSendQueueSize() const;
   DgramSocket& on(inox::StringView event_name, inox::Callback listener);
   DgramSocket& ref();
   DgramAddress remoteAddress() const;
@@ -94,6 +94,9 @@ public:
   void send(const Uint8Array& message, double port, inox::StringView address);
   void send(const Uint8Array& message, double port, inox::StringView address, inox::Callback callback);
   DgramSocket& setBroadcast(bool enabled);
+  DgramSocket& setMulticastInterface(inox::StringView multicast_interface);
+  DgramSocket& setMulticastLoopback(bool enabled);
+  DgramSocket& setMulticastTTL(double ttl);
   DgramSocket& setRecvBufferSize(double size);
   DgramSocket& setSendBufferSize(double size);
   DgramSocket& setTTL(double ttl);

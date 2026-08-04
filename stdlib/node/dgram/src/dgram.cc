@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "inox/class_descriptor.h"
 #include "inox/loop.h"
 #include "inox/object.h"
 
@@ -38,6 +39,10 @@ void throwDgramUvError(const char* operation, int status) {
 bool hasText(inox::StringView value, const char* expected) {
   const std::size_t length = std::strlen(expected);
   return value.len == length && std::memcmp(value.bytes, expected, length) == 0;
+}
+
+bool containsNull(inox::StringView value) {
+  return value.len > 0 && std::memchr(value.bytes, 0, value.len) != nullptr;
 }
 
 bool checkedInteger(double value, int minimum, int maximum, int& out, const char* message) {
@@ -130,7 +135,7 @@ inox::Value materializeRemoteInfo(const DgramRemoteInfo& info) {
   return object;
 }
 
-inox::Value materializeDgramError(const char* message) {
+inox::Value materializeDgramError(inox::StringView message) {
   static const inox_field_info fields[] = {
     {"message", INOX_FIELD_READONLY},
   };
@@ -142,7 +147,7 @@ inox::Value materializeDgramError(const char* message) {
     return inox::Value();
   }
 
-  inox::String error_message(message == nullptr ? "dgram send failed" : message);
+  inox::String error_message(message.len == 0 ? inox::StringView("dgram operation failed") : message);
   object.init(0, error_message.raw());
 
   if (inox::thrown()) {
@@ -244,12 +249,18 @@ public:
   void close(inox::Callback callback);
   void connect(double port, inox::StringView address, inox::Callback callback);
   void disconnect();
+  void membership(inox::StringView multicast_address, inox::StringView multicast_interface, bool join);
   double getBufferSize(bool receive) const;
+  double getSendQueueCount() const;
+  double getSendQueueSize() const;
   void on(inox::StringView event_name, inox::Callback listener);
   void ref();
   void send(std::span<const std::uint8_t> message, const double* port, inox::StringView address, inox::Callback callback);
   void setBroadcast(bool enabled);
   void setBufferSize(bool receive, double size);
+  void setMulticastInterface(inox::StringView multicast_interface);
+  void setMulticastLoopback(bool enabled);
+  void setMulticastTTL(double ttl);
   void setTTL(double ttl);
   void unref();
 
@@ -261,6 +272,9 @@ private:
   inox_loop* loop_;
   uv_udp_t handle_;
   std::vector<inox::Callback> message_listeners_;
+  std::vector<inox::Callback> listening_listeners_;
+  std::vector<inox::Callback> connect_listeners_;
+  std::vector<inox::Callback> error_listeners_;
   std::vector<inox::Callback> close_callbacks_;
   std::shared_ptr<Impl> native_owner_;
   bool initialized_;
@@ -271,6 +285,7 @@ private:
   bool reuse_addr_;
 
   bool startReceiving();
+  void emitError(const char* operation, int status);
   bool resolveAddress(inox::StringView address, double port, bool bind_address, sockaddr_in& out) const;
   void queueCallback(inox::Callback callback);
   void closeFromLoop();
@@ -289,6 +304,100 @@ private:
   static void closeExternalHandle(void* context);
 #endif
 };
+
+namespace {
+
+struct DgramSocketHolder {
+  std::shared_ptr<DgramSocket::Impl> impl;
+};
+
+inox_status copyDgramSocketHolder(inox_allocator* allocator, const void* instance, void** out) {
+  if (allocator == nullptr || allocator->alloc == nullptr || instance == nullptr || out == nullptr) {
+    return INOX_ERR_TYPE;
+  }
+
+  void* memory = allocator->alloc(allocator->user, sizeof(DgramSocketHolder), alignof(DgramSocketHolder));
+
+  if (memory == nullptr) {
+    *out = nullptr;
+    return INOX_ERR_OOM;
+  }
+
+  try {
+    *out = new (memory) DgramSocketHolder(*static_cast<const DgramSocketHolder*>(instance));
+  } catch (const std::bad_alloc&) {
+    allocator->free(allocator->user, memory, sizeof(DgramSocketHolder), alignof(DgramSocketHolder));
+    *out = nullptr;
+    return INOX_ERR_OOM;
+  }
+
+  return INOX_OK;
+}
+
+void destroyDgramSocketHolder(inox_allocator* allocator, void* instance) {
+  if (allocator == nullptr || allocator->free == nullptr || instance == nullptr) {
+    return;
+  }
+
+  static_cast<DgramSocketHolder*>(instance)->~DgramSocketHolder();
+  allocator->free(allocator->user, instance, sizeof(DgramSocketHolder), alignof(DgramSocketHolder));
+}
+
+inox_status readDgramSocketField(const void* instance, std::uint32_t index, inox_value* out) {
+  (void)instance;
+  (void)index;
+  (void)out;
+  return INOX_ERR_FIELD;
+}
+
+const inox_class_descriptor dgramSocketDescriptor = {
+  "Socket",
+  0,
+  nullptr,
+  readDgramSocketField,
+  copyDgramSocketHolder,
+  destroyDgramSocketHolder,
+};
+
+DgramSocket materializeDgramSocket(const std::shared_ptr<DgramSocket::Impl>& impl) {
+  if (!impl) {
+    return DgramSocket();
+  }
+
+  const DgramSocketHolder holder = {impl};
+  inox_value value = inox_undefined_value();
+  const inox_status status = inox_class_instance_ref_copy(
+    &inox_default_allocator,
+    &dgramSocketDescriptor,
+    &holder,
+    &value
+  );
+
+  if (status != INOX_OK) {
+    throwDgramError("TypeError: DgramSocket materialization failed");
+    return DgramSocket();
+  }
+
+  return DgramSocket(inox::adopt(value));
+}
+
+std::shared_ptr<DgramSocket::Impl> dgramSocketImpl(const DgramSocket& socket) {
+  const inox_value raw = socket.raw();
+
+  if (raw.tag != INOX_TAG_CLASS_INSTANCE || raw.as.ref == nullptr) {
+    return {};
+  }
+
+  const auto* ref = reinterpret_cast<const inox_class_instance_ref*>(raw.as.ref);
+
+  if (ref->descriptor != &dgramSocketDescriptor || ref->instance == nullptr) {
+    return {};
+  }
+
+  return static_cast<const DgramSocketHolder*>(ref->instance)->impl;
+}
+
+} // namespace
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
 
@@ -311,6 +420,9 @@ DgramSocket::Impl::Impl()
   : loop_(nullptr),
     handle_(),
     message_listeners_(),
+    listening_listeners_(),
+    connect_listeners_(),
+    error_listeners_(),
     close_callbacks_(),
     native_owner_(),
     initialized_(false),
@@ -518,6 +630,14 @@ void DgramSocket::Impl::bind(double port, inox::StringView address, inox::Callba
     return;
   }
 
+  for (const inox::Callback& listener : listening_listeners_) {
+    queueCallback(listener);
+
+    if (inox::thrown()) {
+      return;
+    }
+  }
+
   queueCallback(std::move(callback));
 }
 
@@ -544,6 +664,14 @@ void DgramSocket::Impl::connect(double port, inox::StringView address, inox::Cal
     return;
   }
 
+  for (const inox::Callback& listener : connect_listeners_) {
+    queueCallback(listener);
+
+    if (inox::thrown()) {
+      return;
+    }
+  }
+
   queueCallback(std::move(callback));
 }
 
@@ -561,15 +689,67 @@ void DgramSocket::Impl::disconnect() {
 }
 
 void DgramSocket::Impl::on(inox::StringView event_name, inox::Callback listener) {
-  if (!initialized_ || closing_ || closed_ || !hasText(event_name, "message") || !listener.valid()) {
-    throwDgramError("TypeError: DgramSocket.on supports only a callable message listener");
+  if (!initialized_ || closing_ || closed_ || !listener.valid()) {
+    throwDgramError("TypeError: DgramSocket.on requires a callable listener");
+    return;
+  }
+
+  std::vector<inox::Callback>* listeners = nullptr;
+
+  if (hasText(event_name, "message")) listeners = &message_listeners_;
+  else if (hasText(event_name, "listening")) listeners = &listening_listeners_;
+  else if (hasText(event_name, "connect")) listeners = &connect_listeners_;
+  else if (hasText(event_name, "error")) listeners = &error_listeners_;
+  else if (hasText(event_name, "close")) listeners = &close_callbacks_;
+  else {
+    throwDgramError("TypeError: unsupported DgramSocket event");
     return;
   }
 
   try {
-    message_listeners_.push_back(std::move(listener));
+    listeners->push_back(std::move(listener));
   } catch (const std::bad_alloc&) {
     throwDgramError("TypeError: DgramSocket listener allocation failed");
+  }
+}
+
+void DgramSocket::Impl::emitError(const char* operation, int status) {
+  if (error_listeners_.empty()) {
+    inox_libuv_loop_report_status(loop_, INOX_ERR_FIELD);
+    return;
+  }
+
+  inox::String message = inox::String::fromFormat(
+    "%s failed: %s",
+    operation == nullptr ? "dgram operation" : operation,
+    uv_strerror(status)
+  );
+  inox::Value error = materializeDgramError(message);
+
+  if (inox::thrown()) {
+    inox_libuv_loop_report_status(loop_, INOX_ERR_OOM);
+    return;
+  }
+
+  std::vector<inox::Callback> listeners;
+
+  try {
+    listeners = error_listeners_;
+  } catch (const std::bad_alloc&) {
+    inox_libuv_loop_report_status(loop_, INOX_ERR_OOM);
+    return;
+  }
+
+  const std::array<inox::Value, 1> arguments = {error};
+
+  for (const inox::Callback& listener : listeners) {
+    inox::Value result = listener.call(std::span<const inox::Value>(arguments));
+    (void)result;
+
+    if (inox::thrown()) {
+      inox_libuv_loop_report_status(loop_, INOX_ERR_THROW);
+      return;
+    }
   }
 }
 
@@ -647,13 +827,13 @@ void DgramSocket::Impl::completeSend(uv_udp_send_t* request, int status) {
   delete send;
 
   if (status != 0 && !callback.valid()) {
-    inox_libuv_loop_report_status(socket->loop_, INOX_ERR_FIELD);
+    socket->emitError("DgramSocket.send", status);
   }
 
   if (callback.valid()) {
     inox::Value error = status == 0
       ? inox::Value(inox_null_value())
-      : materializeDgramError(uv_strerror(status));
+      : materializeDgramError(inox::StringView(uv_strerror(status)));
 
     if (inox::thrown()) {
       inox_libuv_loop_report_status(socket->loop_, INOX_ERR_TYPE);
@@ -673,6 +853,58 @@ void DgramSocket::Impl::completeSend(uv_udp_send_t* request, int status) {
   inox_libuv_loop_release_request(socket->loop_);
 }
 
+void DgramSocket::Impl::membership(
+  inox::StringView multicast_address,
+  inox::StringView multicast_interface,
+  bool join
+) {
+  if (!initialized_ || closing_ || closed_ || multicast_address.len == 0 ||
+      containsNull(multicast_address) || containsNull(multicast_interface)) {
+    throwDgramError("TypeError: DgramSocket membership operation failed");
+    return;
+  }
+
+  std::string group;
+  std::string interface_address;
+
+  try {
+    group.assign(multicast_address.bytes, multicast_address.len);
+    interface_address.assign(multicast_interface.bytes, multicast_interface.len);
+  } catch (const std::bad_alloc&) {
+    throwDgramError("TypeError: DgramSocket membership allocation failed");
+    return;
+  }
+
+  const int status = uv_udp_set_membership(
+    &handle_,
+    group.c_str(),
+    interface_address.empty() ? nullptr : interface_address.c_str(),
+    join ? UV_JOIN_GROUP : UV_LEAVE_GROUP
+  );
+
+  if (status != 0) {
+    throwDgramUvError(join ? "DgramSocket.addMembership" : "DgramSocket.dropMembership", status);
+  }
+}
+
+double DgramSocket::Impl::getSendQueueCount() const {
+  if (!initialized_ || closing_ || closed_) {
+    throwDgramError("TypeError: DgramSocket.getSendQueueCount failed");
+    return 0;
+  }
+
+  return static_cast<double>(uv_udp_get_send_queue_count(&handle_));
+}
+
+double DgramSocket::Impl::getSendQueueSize() const {
+  if (!initialized_ || closing_ || closed_) {
+    throwDgramError("TypeError: DgramSocket.getSendQueueSize failed");
+    return 0;
+  }
+
+  return static_cast<double>(uv_udp_get_send_queue_size(&handle_));
+}
+
 void DgramSocket::Impl::setBroadcast(bool enabled) {
   if (!initialized_ || closing_ || closed_) {
     throwDgramError("TypeError: DgramSocket.setBroadcast failed");
@@ -683,6 +915,60 @@ void DgramSocket::Impl::setBroadcast(bool enabled) {
 
   if (status != 0) {
     throwDgramUvError("DgramSocket.setBroadcast", status);
+  }
+}
+
+void DgramSocket::Impl::setMulticastInterface(inox::StringView multicast_interface) {
+  if (!initialized_ || closing_ || closed_ || multicast_interface.len == 0 ||
+      containsNull(multicast_interface)) {
+    throwDgramError("TypeError: DgramSocket.setMulticastInterface failed");
+    return;
+  }
+
+  std::string interface_address;
+
+  try {
+    interface_address.assign(multicast_interface.bytes, multicast_interface.len);
+  } catch (const std::bad_alloc&) {
+    throwDgramError("TypeError: DgramSocket multicast interface allocation failed");
+    return;
+  }
+
+  const int status = uv_udp_set_multicast_interface(&handle_, interface_address.c_str());
+
+  if (status != 0) {
+    throwDgramUvError("DgramSocket.setMulticastInterface", status);
+  }
+}
+
+void DgramSocket::Impl::setMulticastLoopback(bool enabled) {
+  if (!initialized_ || closing_ || closed_) {
+    throwDgramError("TypeError: DgramSocket.setMulticastLoopback failed");
+    return;
+  }
+
+  const int status = uv_udp_set_multicast_loop(&handle_, enabled ? 1 : 0);
+
+  if (status != 0) {
+    throwDgramUvError("DgramSocket.setMulticastLoopback", status);
+  }
+}
+
+void DgramSocket::Impl::setMulticastTTL(double ttl) {
+  int value = 0;
+
+  if (!initialized_ || closing_ || closed_ ||
+      !checkedInteger(ttl, 0, 255, value, "TypeError: DgramSocket.setMulticastTTL failed")) {
+    if (!inox::thrown()) {
+      throwDgramError("TypeError: DgramSocket.setMulticastTTL failed");
+    }
+    return;
+  }
+
+  const int status = uv_udp_set_multicast_ttl(&handle_, value);
+
+  if (status != 0) {
+    throwDgramUvError("DgramSocket.setMulticastTTL", status);
   }
 }
 
@@ -823,7 +1109,7 @@ void DgramSocket::Impl::receiveDatagram(
   }
 
   if (size < 0) {
-    inox_libuv_loop_report_status(socket->loop_, INOX_ERR_FIELD);
+    socket->emitError("DgramSocket.receive", static_cast<int>(size));
   } else if (address != nullptr && !socket->message_listeners_.empty()) {
     std::vector<inox::Callback> listeners;
 
@@ -911,6 +1197,9 @@ void DgramSocket::Impl::closeExternalHandle(void* context) {
   if (socket != nullptr) {
     socket->close_callbacks_.clear();
     socket->message_listeners_.clear();
+    socket->listening_listeners_.clear();
+    socket->connect_listeners_.clear();
+    socket->error_listeners_.clear();
     socket->closeFromLoop();
   }
 }
@@ -928,6 +1217,9 @@ void DgramSocket::Impl::dgram_close_cb(uv_handle_t* handle) {
   inox_libuv_loop_unregister_external_handle(socket->loop_, socket);
   std::vector<inox::Callback> callbacks = std::move(socket->close_callbacks_);
   socket->message_listeners_.clear();
+  socket->listening_listeners_.clear();
+  socket->connect_listeners_.clear();
+  socket->error_listeners_.clear();
 
   for (const inox::Callback& callback : callbacks) {
     inox::Value result = callback.call();
@@ -986,8 +1278,26 @@ void DgramSocket::Impl::connect(double port, inox::StringView address, inox::Cal
 }
 
 void DgramSocket::Impl::disconnect() { throwDgramError("TypeError: node:dgram is unsupported without libuv"); }
+void DgramSocket::Impl::membership(
+  inox::StringView multicast_address,
+  inox::StringView multicast_interface,
+  bool join
+) {
+  (void)multicast_address;
+  (void)multicast_interface;
+  (void)join;
+  throwDgramError("TypeError: node:dgram is unsupported without libuv");
+}
 double DgramSocket::Impl::getBufferSize(bool receive) const {
   (void)receive;
+  throwDgramError("TypeError: node:dgram is unsupported without libuv");
+  return 0;
+}
+double DgramSocket::Impl::getSendQueueCount() const {
+  throwDgramError("TypeError: node:dgram is unsupported without libuv");
+  return 0;
+}
+double DgramSocket::Impl::getSendQueueSize() const {
   throwDgramError("TypeError: node:dgram is unsupported without libuv");
   return 0;
 }
@@ -1018,6 +1328,18 @@ void DgramSocket::Impl::setBufferSize(bool receive, double size) {
   (void)size;
   throwDgramError("TypeError: node:dgram is unsupported without libuv");
 }
+void DgramSocket::Impl::setMulticastInterface(inox::StringView multicast_interface) {
+  (void)multicast_interface;
+  throwDgramError("TypeError: node:dgram is unsupported without libuv");
+}
+void DgramSocket::Impl::setMulticastLoopback(bool enabled) {
+  (void)enabled;
+  throwDgramError("TypeError: node:dgram is unsupported without libuv");
+}
+void DgramSocket::Impl::setMulticastTTL(double ttl) {
+  (void)ttl;
+  throwDgramError("TypeError: node:dgram is unsupported without libuv");
+}
 void DgramSocket::Impl::setTTL(double ttl) {
   (void)ttl;
   throwDgramError("TypeError: node:dgram is unsupported without libuv");
@@ -1040,35 +1362,42 @@ std::span<const std::uint8_t> stringBytes(inox::StringView value) {
 
 } // namespace
 
-DgramSocket::DgramSocket() : impl_() {}
-DgramSocket::DgramSocket(std::shared_ptr<Impl> impl) : impl_(std::move(impl)) {}
-DgramSocket::DgramSocket(const DgramSocket& other) : impl_(other.impl_) {}
-DgramSocket::DgramSocket(DgramSocket&& other) noexcept : impl_(std::move(other.impl_)) {}
-DgramSocket& DgramSocket::operator=(const DgramSocket& other) {
-  impl_ = other.impl_;
+DgramSocket::DgramSocket() : inox::Value() {}
+DgramSocket::DgramSocket(const inox::Value& value) : inox::Value(value) {}
+DgramSocket::DgramSocket(inox::Value&& value) : inox::Value(std::move(value)) {}
+
+DgramSocket& DgramSocket::addMembership(inox::StringView multicast_address) {
+  return addMembership(multicast_address, inox::StringView());
+}
+
+DgramSocket& DgramSocket::addMembership(
+  inox::StringView multicast_address,
+  inox::StringView multicast_interface
+) {
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.addMembership failed");
+  if (impl) impl->membership(multicast_address, multicast_interface, true);
   return *this;
 }
-DgramSocket& DgramSocket::operator=(DgramSocket&& other) noexcept {
-  impl_ = std::move(other.impl_);
-  return *this;
-}
-DgramSocket::~DgramSocket() {}
 
 DgramAddress DgramSocket::address() const {
-  requireSocket(static_cast<bool>(impl_), "TypeError: DgramSocket.address failed");
-  return impl_ ? impl_->address(false) : DgramAddress{inox::String(""), inox::String(""), 0};
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.address failed");
+  return impl ? impl->address(false) : DgramAddress{inox::String(""), inox::String(""), 0};
 }
 
 DgramSocket& DgramSocket::bind() { return bind(0, inox::StringView("0.0.0.0")); }
 DgramSocket& DgramSocket::bind(double port) { return bind(port, inox::StringView("0.0.0.0")); }
 DgramSocket& DgramSocket::bind(double port, inox::StringView address) {
-  requireSocket(static_cast<bool>(impl_), "TypeError: DgramSocket.bind failed");
-  if (impl_) impl_->bind(port, address, inox::Callback());
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.bind failed");
+  if (impl) impl->bind(port, address, inox::Callback());
   return *this;
 }
 DgramSocket& DgramSocket::bind(double port, inox::StringView address, inox::Callback callback) {
-  requireSocket(static_cast<bool>(impl_), "TypeError: DgramSocket.bind failed");
-  if (impl_) impl_->bind(port, address, std::move(callback));
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.bind failed");
+  if (impl) impl->bind(port, address, std::move(callback));
   return *this;
 }
 DgramSocket& DgramSocket::bind(const DgramBindOptions& options) {
@@ -1082,95 +1411,160 @@ DgramSocket& DgramSocket::bind(const DgramBindOptions& options, inox::Callback c
 }
 DgramSocket& DgramSocket::close() { return close(inox::Callback()); }
 DgramSocket& DgramSocket::close(inox::Callback callback) {
-  requireSocket(static_cast<bool>(impl_), "TypeError: DgramSocket.close failed");
-  if (impl_) impl_->close(std::move(callback));
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.close failed");
+  if (impl) impl->close(std::move(callback));
   return *this;
 }
 DgramSocket& DgramSocket::connect(double port) { return connect(port, inox::StringView("127.0.0.1")); }
 DgramSocket& DgramSocket::connect(double port, inox::StringView address) {
-  requireSocket(static_cast<bool>(impl_), "TypeError: DgramSocket.connect failed");
-  if (impl_) impl_->connect(port, address, inox::Callback());
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.connect failed");
+  if (impl) impl->connect(port, address, inox::Callback());
   return *this;
 }
 DgramSocket& DgramSocket::connect(double port, inox::StringView address, inox::Callback callback) {
-  requireSocket(static_cast<bool>(impl_), "TypeError: DgramSocket.connect failed");
-  if (impl_) impl_->connect(port, address, std::move(callback));
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.connect failed");
+  if (impl) impl->connect(port, address, std::move(callback));
   return *this;
 }
 DgramSocket& DgramSocket::disconnect() {
-  requireSocket(static_cast<bool>(impl_), "TypeError: DgramSocket.disconnect failed");
-  if (impl_) impl_->disconnect();
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.disconnect failed");
+  if (impl) impl->disconnect();
+  return *this;
+}
+
+DgramSocket& DgramSocket::dropMembership(inox::StringView multicast_address) {
+  return dropMembership(multicast_address, inox::StringView());
+}
+
+DgramSocket& DgramSocket::dropMembership(
+  inox::StringView multicast_address,
+  inox::StringView multicast_interface
+) {
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.dropMembership failed");
+  if (impl) impl->membership(multicast_address, multicast_interface, false);
   return *this;
 }
 double DgramSocket::getRecvBufferSize() const {
-  requireSocket(static_cast<bool>(impl_), "TypeError: DgramSocket.getRecvBufferSize failed");
-  return impl_ ? impl_->getBufferSize(true) : 0;
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.getRecvBufferSize failed");
+  return impl ? impl->getBufferSize(true) : 0;
 }
 double DgramSocket::getSendBufferSize() const {
-  requireSocket(static_cast<bool>(impl_), "TypeError: DgramSocket.getSendBufferSize failed");
-  return impl_ ? impl_->getBufferSize(false) : 0;
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.getSendBufferSize failed");
+  return impl ? impl->getBufferSize(false) : 0;
+}
+
+double DgramSocket::getSendQueueCount() const {
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.getSendQueueCount failed");
+  return impl ? impl->getSendQueueCount() : 0;
+}
+
+double DgramSocket::getSendQueueSize() const {
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.getSendQueueSize failed");
+  return impl ? impl->getSendQueueSize() : 0;
 }
 DgramSocket& DgramSocket::on(inox::StringView event_name, inox::Callback listener) {
-  requireSocket(static_cast<bool>(impl_), "TypeError: DgramSocket.on failed");
-  if (impl_) impl_->on(event_name, std::move(listener));
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.on failed");
+  if (impl) impl->on(event_name, std::move(listener));
   return *this;
 }
 DgramSocket& DgramSocket::ref() {
-  requireSocket(static_cast<bool>(impl_), "TypeError: DgramSocket.ref failed");
-  if (impl_) impl_->ref();
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.ref failed");
+  if (impl) impl->ref();
   return *this;
 }
 DgramAddress DgramSocket::remoteAddress() const {
-  requireSocket(static_cast<bool>(impl_), "TypeError: DgramSocket.remoteAddress failed");
-  return impl_ ? impl_->address(true) : DgramAddress{inox::String(""), inox::String(""), 0};
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.remoteAddress failed");
+  return impl ? impl->address(true) : DgramAddress{inox::String(""), inox::String(""), 0};
 }
 void DgramSocket::send(inox::StringView message) { send(message, inox::Callback()); }
 void DgramSocket::send(inox::StringView message, inox::Callback callback) {
-  requireSocket(static_cast<bool>(impl_), "TypeError: DgramSocket.send failed");
-  if (impl_) impl_->send(stringBytes(message), nullptr, inox::StringView(), std::move(callback));
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.send failed");
+  if (impl) impl->send(stringBytes(message), nullptr, inox::StringView(), std::move(callback));
 }
 void DgramSocket::send(inox::StringView message, double port, inox::StringView address) {
   send(message, port, address, inox::Callback());
 }
 void DgramSocket::send(inox::StringView message, double port, inox::StringView address, inox::Callback callback) {
-  requireSocket(static_cast<bool>(impl_), "TypeError: DgramSocket.send failed");
-  if (impl_) impl_->send(stringBytes(message), &port, address, std::move(callback));
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.send failed");
+  if (impl) impl->send(stringBytes(message), &port, address, std::move(callback));
 }
 void DgramSocket::send(const Uint8Array& message) { send(message, inox::Callback()); }
 void DgramSocket::send(const Uint8Array& message, inox::Callback callback) {
-  requireSocket(static_cast<bool>(impl_), "TypeError: DgramSocket.send failed");
-  if (impl_) impl_->send(message.bytes(), nullptr, inox::StringView(), std::move(callback));
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.send failed");
+  if (impl) impl->send(message.bytes(), nullptr, inox::StringView(), std::move(callback));
 }
 void DgramSocket::send(const Uint8Array& message, double port, inox::StringView address) {
   send(message, port, address, inox::Callback());
 }
 void DgramSocket::send(const Uint8Array& message, double port, inox::StringView address, inox::Callback callback) {
-  requireSocket(static_cast<bool>(impl_), "TypeError: DgramSocket.send failed");
-  if (impl_) impl_->send(message.bytes(), &port, address, std::move(callback));
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.send failed");
+  if (impl) impl->send(message.bytes(), &port, address, std::move(callback));
 }
 DgramSocket& DgramSocket::setBroadcast(bool enabled) {
-  requireSocket(static_cast<bool>(impl_), "TypeError: DgramSocket.setBroadcast failed");
-  if (impl_) impl_->setBroadcast(enabled);
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.setBroadcast failed");
+  if (impl) impl->setBroadcast(enabled);
+  return *this;
+}
+
+DgramSocket& DgramSocket::setMulticastInterface(inox::StringView multicast_interface) {
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.setMulticastInterface failed");
+  if (impl) impl->setMulticastInterface(multicast_interface);
+  return *this;
+}
+
+DgramSocket& DgramSocket::setMulticastLoopback(bool enabled) {
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.setMulticastLoopback failed");
+  if (impl) impl->setMulticastLoopback(enabled);
+  return *this;
+}
+
+DgramSocket& DgramSocket::setMulticastTTL(double ttl) {
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.setMulticastTTL failed");
+  if (impl) impl->setMulticastTTL(ttl);
   return *this;
 }
 DgramSocket& DgramSocket::setRecvBufferSize(double size) {
-  requireSocket(static_cast<bool>(impl_), "TypeError: DgramSocket.setRecvBufferSize failed");
-  if (impl_) impl_->setBufferSize(true, size);
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.setRecvBufferSize failed");
+  if (impl) impl->setBufferSize(true, size);
   return *this;
 }
 DgramSocket& DgramSocket::setSendBufferSize(double size) {
-  requireSocket(static_cast<bool>(impl_), "TypeError: DgramSocket.setSendBufferSize failed");
-  if (impl_) impl_->setBufferSize(false, size);
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.setSendBufferSize failed");
+  if (impl) impl->setBufferSize(false, size);
   return *this;
 }
 DgramSocket& DgramSocket::setTTL(double ttl) {
-  requireSocket(static_cast<bool>(impl_), "TypeError: DgramSocket.setTTL failed");
-  if (impl_) impl_->setTTL(ttl);
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.setTTL failed");
+  if (impl) impl->setTTL(ttl);
   return *this;
 }
 DgramSocket& DgramSocket::unref() {
-  requireSocket(static_cast<bool>(impl_), "TypeError: DgramSocket.unref failed");
-  if (impl_) impl_->unref();
+  std::shared_ptr<Impl> impl = dgramSocketImpl(*this);
+  requireSocket(impl != nullptr, "TypeError: DgramSocket.unref failed");
+  if (impl) impl->unref();
   return *this;
 }
 
@@ -1178,14 +1572,14 @@ DgramSocket DgramModule::createSocket(inox::StringView type) const {
   return createSocket(type, inox::Callback());
 }
 DgramSocket DgramModule::createSocket(inox::StringView type, inox::Callback listener) const {
-  return DgramSocket(DgramSocket::Impl::create(type, false, {}, {}, std::move(listener)));
+  return materializeDgramSocket(DgramSocket::Impl::create(type, false, {}, {}, std::move(listener)));
 }
 DgramSocket DgramModule::createSocket(const DgramSocketOptions& options) const {
   return createSocket(options, inox::Callback());
 }
 DgramSocket DgramModule::createSocket(const DgramSocketOptions& options, inox::Callback listener) const {
   if (inox::thrown() || !options.valid_) return DgramSocket();
-  return DgramSocket(DgramSocket::Impl::create(
+  return materializeDgramSocket(DgramSocket::Impl::create(
     options.type_,
     options.reuse_addr_,
     options.recv_buffer_size_,

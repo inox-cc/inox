@@ -11,6 +11,6 @@ test('dgram send callback получает nullable error после uv completi
   assert.match(descriptor, /function sendCallbackArgument\(\)/)
   assert.match(descriptor, /name: 'error',[\s\S]*valueType: 'object',[\s\S]*nullable: true/)
   assert.match(descriptor, /name: 'bytes', valueType: 'number'/)
-  assert.match(implementation, /materializeDgramError\(uv_strerror\(status\)\)/)
+  assert.match(implementation, /materializeDgramError\(inox::StringView\(uv_strerror\(status\)\)\)/)
   assert.match(implementation, /callback\.call\(std::span<const inox::Value>\(arguments\)\)/)
 })

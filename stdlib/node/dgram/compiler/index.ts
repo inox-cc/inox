@@ -21,18 +21,25 @@ const voidTypeRef = primitiveTypeRef('void')
 
 const operations: LibraryOperationDescriptor[] = [
   createSocketOperation(),
+  membershipOperation('addMembership'),
   socketResultOperation('address', addressTypeRef),
   bindOperation(),
   closeOperation(),
   connectOperation(),
   socketResultOperation('disconnect', socketBorrowedTypeRef, true),
+  membershipOperation('dropMembership'),
   socketResultOperation('getRecvBufferSize', numberTypeRef),
   socketResultOperation('getSendBufferSize', numberTypeRef),
+  socketResultOperation('getSendQueueCount', numberTypeRef),
+  socketResultOperation('getSendQueueSize', numberTypeRef),
   onOperation(),
   socketResultOperation('ref', socketBorrowedTypeRef, true),
   socketResultOperation('remoteAddress', addressTypeRef),
   sendOperation(),
   scalarSocketOperation('setBroadcast', 'number', booleanArgument()),
+  scalarSocketOperation('setMulticastInterface', 'string-view', stringArgument()),
+  scalarSocketOperation('setMulticastLoopback', 'number', booleanArgument()),
+  scalarSocketOperation('setMulticastTTL', 'number', numberArgument()),
   scalarSocketOperation('setRecvBufferSize', 'number', numberArgument()),
   scalarSocketOperation('setSendBufferSize', 'number', numberArgument()),
   scalarSocketOperation('setTTL', 'number', numberArgument()),
@@ -215,9 +222,28 @@ function onOperation(): LibraryOperationDescriptor {
     cResultMode: 'borrowed',
     minArgs: 2,
     maxArgs: 2,
-    argumentChecks: [messageEventArgument(), messageCallbackArgument()],
+    argumentChecks: [socketEventArgument(), callbackArgument()],
+    variants: [
+      eventVariant(['message'], messageCallbackArgument()),
+      eventVariant(['close', 'connect', 'listening'], callbackArgument()),
+      eventVariant(['error'], errorCallbackArgument())
+    ],
     resultTypeRef: socketBorrowedTypeRef,
     callbackLifetime: 'event-loop'
+  }
+}
+
+function membershipOperation(name: 'addMembership' | 'dropMembership'): LibraryOperationDescriptor {
+  return {
+    ...receiverOperation(name),
+    minArgs: 1,
+    maxArgs: 2,
+    argumentChecks: [stringArgument(), stringArgument()],
+    variants: [
+      memberVariant(1, 1, ['receiver', 'string-view']),
+      memberVariant(2, 2, ['receiver', 'string-view', 'string-view'])
+    ],
+    resultTypeRef: socketBorrowedTypeRef
   }
 }
 
@@ -361,8 +387,10 @@ function receiverOperation(name: string): LibraryOperationDescriptor {
 }
 
 type VariantOptions = {
+  argumentChecks?: LibraryArgumentCheckDescriptor[]
   argumentIndex?: number
   argumentValueTypes?: string[]
+  stringLiterals?: string[]
   cArgumentAdapters?: string[]
   cArgumentSources?: Array<{ argumentIndex: number } | null>
   callbackLifetime?: 'call' | 'event-loop'
@@ -379,6 +407,8 @@ function callVariant(
     maxArgs,
     argumentIndex: options.argumentIndex,
     argumentValueTypes: options.argumentValueTypes,
+    stringLiterals: options.stringLiterals,
+    argumentChecks: options.argumentChecks,
     cExpression: 'dgram.createSocket',
     cArgumentKinds,
     cArgumentAdapters: options.cArgumentAdapters,
@@ -398,6 +428,8 @@ function memberVariant(
     maxArgs,
     argumentIndex: options.argumentIndex,
     argumentValueTypes: options.argumentValueTypes,
+    stringLiterals: options.stringLiterals,
+    argumentChecks: options.argumentChecks,
     cArgumentKinds,
     cArgumentAdapters: options.cArgumentAdapters,
     cArgumentSources: options.cArgumentSources,
@@ -451,6 +483,20 @@ function callbackArgument(): LibraryArgumentCheckDescriptor {
   }
 }
 
+function errorCallbackArgument(): LibraryArgumentCheckDescriptor {
+  return {
+    valueTypes: ['function'],
+    functionParameters: [
+      {
+        name: 'error',
+        valueType: 'object',
+        shapeFields: [{ name: 'message', valueType: 'string', readonly: true }]
+      }
+    ],
+    functionReturnType: 'void'
+  }
+}
+
 function sendCallbackArgument(): LibraryArgumentCheckDescriptor {
   return {
     valueTypes: ['function'],
@@ -487,7 +533,6 @@ function messageCallbackArgument(): LibraryArgumentCheckDescriptor {
       {
         name: 'remoteInfo',
         valueType: 'object',
-        resultTypeId: remoteInfoTypeId,
         shapeFields: [
           { name: 'address', valueType: 'string', readonly: true },
           { name: 'family', valueType: 'string', readonly: true },
@@ -500,13 +545,34 @@ function messageCallbackArgument(): LibraryArgumentCheckDescriptor {
   }
 }
 
-function messageEventArgument(): LibraryArgumentCheckDescriptor {
+function socketEventArgument(): LibraryArgumentCheckDescriptor {
   return {
     valueTypes: ['string'],
-    stringLiterals: ['message'],
+    stringLiterals: ['close', 'connect', 'error', 'listening', 'message'],
     literalDiagnosticCode: 'INOX_DGRAM_SOCKET',
-    literalDiagnosticMessage: "node:dgram Socket.on currently supports only the 'message' event"
+    literalDiagnosticMessage: 'node:dgram does not support this Socket event'
   }
+}
+
+function eventVariant(
+  eventNames: string[],
+  callback: LibraryArgumentCheckDescriptor
+): LibraryOperationVariantDescriptor {
+  return memberVariant(2, 2, ['receiver', 'string-view', 'runtime-callback'], {
+    argumentIndex: 0,
+    stringLiterals: eventNames,
+    argumentChecks: [
+      {
+        valueTypes: ['string'],
+        stringLiterals: eventNames,
+        literalDiagnosticCode: 'INOX_DGRAM_SOCKET',
+        literalDiagnosticMessage: 'node:dgram does not support this Socket event'
+      },
+      callback
+    ],
+    cArgumentSources: [null, null, { argumentIndex: 1 }],
+    callbackLifetime: 'event-loop'
+  })
 }
 
 function socketOptionsArgument(): LibraryArgumentCheckDescriptor {

@@ -1,10 +1,11 @@
 import type { Buffer, Uint8Array } from 'node:buffer';
 
 export type SocketType = 'udp4';
-export type SocketEventName = 'message';
+export type SocketEventName = 'close' | 'connect' | 'error' | 'listening' | 'message';
 export type SocketMessage = string | Buffer | Uint8Array;
 export type SocketMessageListener = (message: Buffer, remoteInfo: RemoteInfo) => void;
 export type SocketCallback = () => void;
+export type SocketErrorListener = (error: Error) => void;
 export type SocketSendCallback = (error: Error | null, bytes: number) => void;
 
 export interface AddressInfo {
@@ -34,20 +35,29 @@ export interface DgramModule {
 }
 
 export class Socket {
+  addMembership(multicastAddress: string, multicastInterface?: string): Socket;
   address(): AddressInfo;
   bind(port?: number, address?: string, callback?: SocketCallback): Socket;
   bind(options: BindOptions, callback?: SocketCallback): Socket;
   close(callback?: SocketCallback): Socket;
   connect(port: number, address?: string, callback?: SocketCallback): Socket;
   disconnect(): Socket;
+  dropMembership(multicastAddress: string, multicastInterface?: string): Socket;
   getRecvBufferSize(): number;
   getSendBufferSize(): number;
-  on(eventName: SocketEventName, listener: SocketMessageListener): Socket;
+  getSendQueueCount(): number;
+  getSendQueueSize(): number;
+  on(eventName: 'message', listener: SocketMessageListener): Socket;
+  on(eventName: 'close' | 'connect' | 'listening', listener: SocketCallback): Socket;
+  on(eventName: 'error', listener: SocketErrorListener): Socket;
   ref(): Socket;
   remoteAddress(): AddressInfo;
   send(message: SocketMessage, callback?: SocketSendCallback): void;
   send(message: SocketMessage, port: number, address: string, callback?: SocketSendCallback): void;
   setBroadcast(flag: boolean): Socket;
+  setMulticastInterface(multicastInterface: string): Socket;
+  setMulticastLoopback(flag: boolean): Socket;
+  setMulticastTTL(ttl: number): Socket;
   setRecvBufferSize(size: number): Socket;
   setSendBufferSize(size: number): Socket;
   setTTL(ttl: number): Socket;

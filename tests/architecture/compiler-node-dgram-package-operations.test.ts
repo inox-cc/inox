@@ -14,18 +14,25 @@ test('node:dgram объявляет module и Socket operations через packa
   const ids = operations.map((operation) => operation.operationId).sort()
 
   assert.deepEqual(ids, [
+    'node:dgram#Socket.addMembership',
     'node:dgram#Socket.address',
     'node:dgram#Socket.bind',
     'node:dgram#Socket.close',
     'node:dgram#Socket.connect',
     'node:dgram#Socket.disconnect',
+    'node:dgram#Socket.dropMembership',
     'node:dgram#Socket.getRecvBufferSize',
     'node:dgram#Socket.getSendBufferSize',
+    'node:dgram#Socket.getSendQueueCount',
+    'node:dgram#Socket.getSendQueueSize',
     'node:dgram#Socket.on',
     'node:dgram#Socket.ref',
     'node:dgram#Socket.remoteAddress',
     'node:dgram#Socket.send',
     'node:dgram#Socket.setBroadcast',
+    'node:dgram#Socket.setMulticastInterface',
+    'node:dgram#Socket.setMulticastLoopback',
+    'node:dgram#Socket.setMulticastTTL',
     'node:dgram#Socket.setRecvBufferSize',
     'node:dgram#Socket.setSendBufferSize',
     'node:dgram#Socket.setTTL',
@@ -56,6 +63,11 @@ test('node:dgram объявляет module и Socket operations через packa
   assert.equal(on.cResultMode, 'borrowed')
   assert.equal(on.callbackLifetime, 'event-loop')
   assert.deepEqual(on.cArgumentKinds, ['receiver', 'string-view', 'runtime-callback'])
+  assert.deepEqual(on.variants?.map((variant) => variant.stringLiterals), [
+    ['message'],
+    ['close', 'connect', 'listening'],
+    ['error']
+  ])
 
   const address = operation(operations, 'node:dgram#Socket.address')
   const remoteAddress = operation(operations, 'node:dgram#Socket.remoteAddress')

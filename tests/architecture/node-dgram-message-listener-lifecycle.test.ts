@@ -26,9 +26,10 @@ test('dgram on(message) накапливает listeners и вызывает и�
     'void DgramSocket::Impl::close('
   )
 
-  assert.match(source, /std::vector<inox::Callback>\s+message_listeners_;/);
+  assert.match(source, /std::vector<inox::Callback>\s+message_listeners_;/)
   assert.doesNotMatch(source, /inox::Callback\s+message_listener_;/)
-  assert.match(on, /message_listeners_\.push_back\(std::move\(listener\)\);/)
+  assert.match(on, /hasText\(event_name, "message"\)\) listeners = &message_listeners_;/)
+  assert.match(on, /listeners->push_back\(std::move\(listener\)\);/)
   assert.match(receiveDatagram, /std::vector<inox::Callback>\s+listeners;/)
   assert.match(receiveDatagram, /listeners\s*=\s*socket->message_listeners_;/)
   assert.match(receiveDatagram, /for\s*\(const inox::Callback& listener : listeners\)/)

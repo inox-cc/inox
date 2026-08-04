@@ -10,7 +10,8 @@ test('node:dgram использует JS-shaped RAII C++ facade без legacy wr
   assert.match(header, /class DgramBindOptions/)
   assert.match(header, /inox::String address;/)
   assert.match(header, /struct DgramRemoteInfo : DgramAddress/)
-  assert.match(header, /class DgramSocket[\s\S]*class Impl;[\s\S]*std::shared_ptr<Impl> impl_;/)
+  assert.match(header, /class DgramSocket : public inox::Value/)
+  assert.match(header, /class Impl;/)
   assert.match(header, /DgramSocket& on\(inox::StringView event_name, inox::Callback listener\);/)
   assert.match(header, /class DgramModule[\s\S]*DgramSocket createSocket\(/)
   assert.match(header, /extern const DgramModule dgram;/)
@@ -20,6 +21,8 @@ test('node:dgram использует JS-shaped RAII C++ facade без legacy wr
   assert.doesNotMatch(header, /static DgramSocket create\(|INOX_DGRAM_BIND_REUSEADDR/)
 
   assert.match(implementation, /class DgramSocket::Impl/)
+  assert.match(implementation, /inox_class_instance_ref_copy\(/)
+  assert.match(implementation, /std::shared_ptr<DgramSocket::Impl>/)
   assert.match(implementation, /uv_udp_send_cb/)
   assert.match(implementation, /uv_close\([^;]+dgram_close_cb\)/)
   assert.match(implementation, /inox_loop_queue_immediate\(/)
