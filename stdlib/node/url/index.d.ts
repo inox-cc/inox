@@ -25,6 +25,9 @@ export class URL {
   hash: string;
 
   constructor(input: string, base?: UrlInput);
+
+  toJSON(): string;
+  toString(): string;
 }
 
 export class URLSearchParams {

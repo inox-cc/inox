@@ -56,6 +56,8 @@ const operations: LibraryOperationDescriptor[] = [
     2,
     [stringArgument(), { valueTypes: ['string', 'object'], objectTypeIds: [urlTypeId] }]
   ),
+  urlStringMethod('toJSON'),
+  urlStringMethod('toString'),
   constructorOperation(
     'URLSearchParams',
     ['optional-string-record-or-value'],
@@ -226,6 +228,13 @@ function receiverCall(
     argumentChecks,
     resultTypeRef,
     cResultMapping
+  }
+}
+
+function urlStringMethod(name: 'toJSON' | 'toString'): LibraryOperationDescriptor {
+  return {
+    ...receiverCall(urlTypeId, name, ['receiver'], name, stringTypeRef, stringCResultMapping),
+    cFailureMode: null
   }
 }
 

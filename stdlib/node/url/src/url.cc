@@ -195,6 +195,14 @@ inox::String URL::hash() const {
   return inox_url_read_string_field(*this, INOX_URL_HASH_INDEX);
 }
 
+inox::String URL::toJSON() const {
+  return href();
+}
+
+inox::String URL::toString() const {
+  return href();
+}
+
 inox::String url::fileURLToPath(const inox::Value& value) const {
   inox_value raw_value = value.raw();
   const char* bytes = 0;

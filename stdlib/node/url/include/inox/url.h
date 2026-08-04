@@ -28,6 +28,8 @@ public:
   inox::String pathname() const;
   inox::String search() const;
   inox::String hash() const;
+  inox::String toJSON() const;
+  inox::String toString() const;
   void setPathname(const inox::Value& value);
   void setSearch(const inox::Value& value);
   void setHash(const inox::Value& value);
