@@ -178,13 +178,7 @@ type NullableScalarNarrowingSnapshot = {
   narrowedNullableScalars: CStringSet
 }
 
-type TypeofOperandStorage =
-  | 'runtime-value'
-  | 'cpp-string'
-  | 'raw-string'
-  | 'raw-number'
-  | 'raw-boolean'
-  | 'raw-pointer'
+type TypeofOperandStorage = 'runtime-value' | 'cpp-string' | 'raw-string' | 'raw-number' | 'raw-boolean' | 'raw-pointer'
 
 type PreparedTypeofOperand = {
   lines: string[]
@@ -3166,6 +3160,13 @@ export function emitPreparedNumberExpression(
       }
     }
 
+    if (expression.operator === '/') {
+      return {
+        lines,
+        expression: `(static_cast<double>(${left.expression}) / ${right.expression})`
+      }
+    }
+
     return {
       lines,
       expression: `(${left.expression} ${emitCOperator(expression.operator)} ${right.expression})`
@@ -5149,9 +5150,7 @@ export function emitCValueExpression(
       }
 
       return {
-        lines: [
-          emitRuntimeTypeCheck(`${reference}->value.tag != ${tag} || ${reference}->value.as.ref == 0`, context)
-        ],
+        lines: [emitRuntimeTypeCheck(`${reference}->value.tag != ${tag} || ${reference}->value.as.ref == 0`, context)],
         expression: `${reference}->value`
       }
     }
