@@ -110,6 +110,7 @@ const operations: LibraryOperationDescriptor[] = [
     stringArgument(),
     stringArgument()
   ]),
+  receiverCall(searchParamsTypeId, 'sort', ['receiver'], 'sort', voidTypeRef, undefined),
   receiverCall(searchParamsTypeId, 'toString', ['receiver'], 'toString', stringTypeRef, stringCResultMapping, []),
   receiverMemberWrite(urlTypeId, 'pathname', 'setPathname'),
   receiverMemberWrite(urlTypeId, 'search', 'setSearch'),

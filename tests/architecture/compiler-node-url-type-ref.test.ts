@@ -33,6 +33,7 @@ const expectedResults = [
   result('node:url#URLSearchParams#has', primitiveTypeRef('boolean')),
   result('node:url#URLSearchParams#read:size', primitiveTypeRef('number')),
   result('node:url#URLSearchParams#set', primitiveTypeRef('void')),
+  result('node:url#URLSearchParams#sort', primitiveTypeRef('void')),
   result('node:url#URLSearchParams#toString', stringTypeRef, stringCResultMapping),
   result('node:url#URL#write:pathname', stringTypeRef, cResultMapping('void')),
   result('node:url#URL#write:search', stringTypeRef, cResultMapping('void')),

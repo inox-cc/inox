@@ -1,9 +1,11 @@
 #include "inox/url.h"
 
 #include <ctype.h>
+#include <new>
 #include <string.h>
 #include <unistd.h>
 #include <utility>
+#include <vector>
 #include "inox/loop.h"
 #include "inox/string.h"
 
@@ -966,6 +968,136 @@ void URLSearchParams::set(inox::StringView name, inox::StringView value) {
 
   if (status != INOX_OK) {
     inox_url_throw_failed("URLSearchParams.set failed");
+  }
+}
+
+void URLSearchParams::sort() {
+  struct SortEntry {
+    size_t pair_start;
+    size_t pair_end;
+    inox::String name;
+  };
+
+  inox_value retained = inox_undefined_value();
+  const char* query = 0;
+  size_t query_len = 0;
+  inox_status status = inox_url_value_string(
+    raw(),
+    INOX_URL_SEARCH_PARAMS_QUERY_INDEX,
+    &retained,
+    &query,
+    &query_len
+  );
+  std::vector<SortEntry> entries;
+
+  if (status == INOX_OK) {
+    size_t cursor = 0;
+
+    try {
+      while (status == INOX_OK && cursor < query_len) {
+        const size_t pair_start = cursor;
+
+        while (cursor < query_len && query[cursor] != '&') {
+          cursor += 1;
+        }
+
+        const size_t pair_end = cursor;
+
+        if (pair_end != pair_start) {
+          size_t key_end = pair_start;
+
+          while (key_end < pair_end && query[key_end] != '=') {
+            key_end += 1;
+          }
+
+          char* decoded = 0;
+          size_t decoded_len = 0;
+          status = inox_url_decode_query_component(
+            &inox_default_allocator,
+            query + pair_start,
+            key_end - pair_start,
+            &decoded,
+            &decoded_len
+          );
+
+          if (status == INOX_OK) {
+            inox::String name(decoded, decoded_len);
+
+            if (!name.valid()) {
+              status = INOX_ERR_OOM;
+            } else {
+              entries.push_back({ pair_start, pair_end, std::move(name) });
+            }
+          }
+
+          if (decoded != 0) {
+            inox_default_allocator.free(
+              inox_default_allocator.user,
+              decoded,
+              decoded_len + 1,
+              alignof(char)
+            );
+          }
+        }
+
+        if (cursor < query_len) {
+          cursor += 1;
+        }
+      }
+    } catch (const std::bad_alloc&) {
+      status = INOX_ERR_OOM;
+    }
+  }
+
+  if (status == INOX_OK) {
+    for (size_t index = 1; index < entries.size(); index += 1) {
+      SortEntry entry = std::move(entries[index]);
+      size_t scan = index;
+
+      while (scan > 0 && inox::compareStrings(entries[scan - 1].name, entry.name) > 0) {
+        entries[scan] = std::move(entries[scan - 1]);
+        scan -= 1;
+      }
+
+      entries[scan] = std::move(entry);
+    }
+  }
+
+  char* sorted = 0;
+  size_t sorted_len = 0;
+
+  if (status == INOX_OK) {
+    sorted = inox_url_alloc(&inox_default_allocator, query_len);
+
+    if (sorted == 0) {
+      status = INOX_ERR_OOM;
+    }
+  }
+
+  if (status == INOX_OK) {
+    for (size_t index = 0; index < entries.size(); index += 1) {
+      if (index != 0) {
+        sorted[sorted_len++] = '&';
+      }
+
+      const size_t pair_len = entries[index].pair_end - entries[index].pair_start;
+      memcpy(sorted + sorted_len, query + entries[index].pair_start, pair_len);
+      sorted_len += pair_len;
+    }
+  }
+
+  inox_release(retained);
+
+  if (status == INOX_OK) {
+    status = inox_url_search_params_store_query(&inox_default_allocator, raw(), sorted, sorted_len);
+  }
+
+  if (sorted != 0) {
+    inox_default_allocator.free(inox_default_allocator.user, sorted, query_len + 1, alignof(char));
+  }
+
+  if (status != INOX_OK) {
+    inox_url_throw_failed("URLSearchParams.sort failed");
   }
 }
 

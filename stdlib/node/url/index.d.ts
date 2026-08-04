@@ -41,6 +41,7 @@ export class URLSearchParams {
   getAll(name: string): string[];
   has(name: string): boolean;
   set(name: string, value: string): void;
+  sort(): void;
   toString(): string;
 }
 

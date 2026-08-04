@@ -64,6 +64,7 @@ public:
   double size() const;
   void remove(inox::StringView name);
   void set(inox::StringView name, inox::StringView value);
+  void sort();
   inox::String toString() const;
 };
 
