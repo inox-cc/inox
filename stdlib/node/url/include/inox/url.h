@@ -7,6 +7,7 @@
 #ifdef __cplusplus
 #include <initializer_list>
 
+#include "inox/array.h"
 #include "inox/string.h"
 #include "inox/string_view.h"
 
@@ -58,7 +59,9 @@ public:
   bool valid() const;
   void append(inox::StringView name, inox::StringView value);
   inox::Value get(inox::StringView name) const;
+  Array getAll(inox::StringView name) const;
   bool has(inox::StringView name) const;
+  double size() const;
   void remove(inox::StringView name);
   void set(inox::StringView name, inox::StringView value);
   inox::String toString() const;

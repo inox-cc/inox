@@ -6,10 +6,14 @@ import type {
   LibraryOperationDescriptor,
   LibraryOperationKind,
   LibraryResultShapeFieldDescriptor,
+  NominalTypeRef,
   TypeRef
 } from '../../../../compiler/extensions/types.ts'
 
 const libraryId = 'node:url'
+const collectionsLibraryId = 'global:collections'
+const arrayRuntimeRequirement = `${collectionsLibraryId}#array`
+const arrayTypeId = `${collectionsLibraryId}#Array`
 const runtimeRequirement = 'node:url'
 const urlTypeId = `${libraryId}#URL`
 const searchParamsTypeId = `${libraryId}#URLSearchParams`
@@ -26,6 +30,7 @@ const urlFields: LibraryResultShapeFieldDescriptor[] = [
 const urlTypeRef = nominalTypeRef(urlTypeId)
 const searchParamsTypeRef = nominalTypeRef(searchParamsTypeId)
 const booleanTypeRef = primitiveTypeRef('boolean')
+const numberTypeRef = primitiveTypeRef('number')
 const stringTypeRef = primitiveTypeRef('string')
 const nullableStringTypeRef = primitiveTypeRef('string', true)
 const voidTypeRef = primitiveTypeRef('void')
@@ -88,9 +93,19 @@ const operations: LibraryOperationDescriptor[] = [
     valueCResultMapping,
     [stringArgument()]
   ),
+  receiverCall(
+    searchParamsTypeId,
+    'getAll',
+    ['receiver', 'string-view'],
+    'getAll',
+    arrayTypeRef(stringTypeRef),
+    undefined,
+    [stringArgument()]
+  ),
   receiverCall(searchParamsTypeId, 'has', ['receiver', 'string-view'], 'has', booleanTypeRef, undefined, [
     stringArgument()
   ]),
+  receiverMemberRead(searchParamsTypeId, 'size', 'size', numberTypeRef),
   receiverCall(searchParamsTypeId, 'set', ['receiver', 'string-view', 'string-view'], 'set', voidTypeRef, undefined, [
     stringArgument(),
     stringArgument()
@@ -109,7 +124,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: [],
+  dependencies: [collectionsLibraryId],
   nativeTypes: [
     {
       libraryId,
@@ -136,7 +151,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: ['managed-values', 'objects', 'string-bytes'],
+      dependencies: [arrayRuntimeRequirement, 'managed-values', 'objects', 'string-bytes'],
       cPreludeIncludes: ['inox/url.h'],
       capabilities: []
     }
@@ -231,10 +246,42 @@ function receiverCall(
   }
 }
 
+function receiverMemberRead(
+  receiverTypeId: string,
+  name: string,
+  cExpression: string,
+  resultTypeRef: TypeRef
+): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: receiverBinding(receiverTypeId, name),
+    operationId: `${receiverTypeId}#read:${name}`,
+    kind: 'member-read',
+    runtimeRequirements,
+    receiverTypeId,
+    cExpression,
+    cArgumentKinds: ['receiver'],
+    cCallStyle: 'member',
+    cFailureMode: 'thrown',
+    resultTypeRef
+  }
+}
+
 function urlStringMethod(name: 'toJSON' | 'toString'): LibraryOperationDescriptor {
   return {
     ...receiverCall(urlTypeId, name, ['receiver'], name, stringTypeRef, stringCResultMapping),
     cFailureMode: null
+  }
+}
+
+function arrayTypeRef(elementType: TypeRef): NominalTypeRef {
+  return {
+    kind: 'nominal',
+    typeId: arrayTypeId,
+    args: [elementType],
+    nullable: false,
+    ownership: 'value',
+    traits: [{ traitId: 'iterable', args: [elementType] }]
   }
 }
 
@@ -293,7 +340,7 @@ function nominalTypeRef(typeId: string): TypeRef {
   }
 }
 
-function primitiveTypeRef(name: 'boolean' | 'string' | 'void', nullable = false): TypeRef {
+function primitiveTypeRef(name: 'boolean' | 'number' | 'string' | 'void', nullable = false): TypeRef {
   return {
     kind: 'primitive',
     name,

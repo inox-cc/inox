@@ -29,7 +29,9 @@ const expectedResults = [
   result('node:url#URLSearchParams#append', primitiveTypeRef('void')),
   result('node:url#URLSearchParams#delete', primitiveTypeRef('void')),
   result('node:url#URLSearchParams#get', primitiveTypeRef('string', true), cResultMapping('inox::Value')),
+  result('node:url#URLSearchParams#getAll', arrayTypeRef(stringTypeRef)),
   result('node:url#URLSearchParams#has', primitiveTypeRef('boolean')),
+  result('node:url#URLSearchParams#read:size', primitiveTypeRef('number')),
   result('node:url#URLSearchParams#set', primitiveTypeRef('void')),
   result('node:url#URLSearchParams#toString', stringTypeRef, stringCResultMapping),
   result('node:url#URL#write:pathname', stringTypeRef, cResultMapping('void')),
@@ -98,7 +100,18 @@ function nominalTypeRef(typeId: string): TypeRef {
   }
 }
 
-function primitiveTypeRef(name: 'boolean' | 'string' | 'void', nullable = false): TypeRef {
+function arrayTypeRef(elementType: TypeRef): TypeRef {
+  return {
+    kind: 'nominal',
+    typeId: 'global:collections#Array',
+    args: [elementType],
+    nullable: false,
+    ownership: 'value',
+    traits: [{ traitId: 'iterable', args: [elementType] }]
+  }
+}
+
+function primitiveTypeRef(name: 'boolean' | 'number' | 'string' | 'void', nullable = false): TypeRef {
   return {
     kind: 'primitive',
     name,

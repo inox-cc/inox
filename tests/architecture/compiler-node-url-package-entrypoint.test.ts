@@ -30,7 +30,7 @@ test('entrypoint package node:url владеет object operations и runtime pl
   assert.equal(parse?.diagnosticCode, 'INOX_NOT_IMPLEMENTED')
   assert.deepEqual(urlPackage.compilerPackage.runtimeRequirements[0], {
     id: 'node:url',
-    dependencies: ['managed-values', 'objects', 'string-bytes'],
+    dependencies: ['global:collections#array', 'managed-values', 'objects', 'string-bytes'],
     cPreludeIncludes: ['inox/url.h'],
     capabilities: []
   })

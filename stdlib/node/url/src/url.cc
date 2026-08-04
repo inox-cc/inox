@@ -711,6 +711,112 @@ inox::Value URLSearchParams::get(inox::StringView name) const {
   return out;
 }
 
+Array URLSearchParams::getAll(inox::StringView name) const {
+  Array out = Array::create(0);
+
+  if (inox::thrown() || !out.valid()) {
+    inox_url_throw_failed("URLSearchParams.getAll failed");
+    return Array();
+  }
+
+  char* encoded_name = 0;
+  size_t encoded_name_len = 0;
+  inox_status status = inox_url_encode_query_component(
+    &inox_default_allocator,
+    name.bytes,
+    name.len,
+    &encoded_name,
+    &encoded_name_len
+  );
+  inox_value retained = inox_undefined_value();
+  const char* query = 0;
+  size_t query_len = 0;
+
+  if (status == INOX_OK) {
+    status = inox_url_value_string(
+      raw(),
+      INOX_URL_SEARCH_PARAMS_QUERY_INDEX,
+      &retained,
+      &query,
+      &query_len
+    );
+  }
+
+  size_t cursor = 0;
+
+  while (status == INOX_OK && cursor < query_len) {
+    const size_t pair_start = cursor;
+
+    while (cursor < query_len && query[cursor] != '&') {
+      cursor += 1;
+    }
+
+    const size_t pair_end = cursor;
+    size_t key_end = pair_start;
+
+    while (key_end < pair_end && query[key_end] != '=') {
+      key_end += 1;
+    }
+
+    const size_t key_len = key_end - pair_start;
+    const bool matches =
+      key_len == encoded_name_len && strncmp(query + pair_start, encoded_name, encoded_name_len) == 0;
+
+    if (matches) {
+      const size_t value_start = key_end < pair_end ? key_end + 1 : pair_end;
+      char* decoded = 0;
+      size_t decoded_len = 0;
+      status = inox_url_decode_query_component(
+        &inox_default_allocator,
+        query + value_start,
+        pair_end - value_start,
+        &decoded,
+        &decoded_len
+      );
+
+      if (status == INOX_OK) {
+        inox::String value(decoded, decoded_len);
+
+        if (!value.valid()) {
+          status = INOX_ERR_OOM;
+        } else {
+          out.push(value);
+
+          if (inox::thrown()) {
+            status = INOX_ERR_THROW;
+          }
+        }
+      }
+
+      if (decoded != 0) {
+        inox_default_allocator.free(inox_default_allocator.user, decoded, decoded_len + 1, alignof(char));
+      }
+    }
+
+    if (cursor < query_len) {
+      cursor += 1;
+    }
+  }
+
+  inox_release(retained);
+
+  if (encoded_name != 0) {
+    inox_default_allocator.free(
+      inox_default_allocator.user,
+      encoded_name,
+      encoded_name_len + 1,
+      alignof(char)
+    );
+  }
+
+  if (status != INOX_OK) {
+    inox_url_throw_failed("URLSearchParams.getAll failed");
+    return Array();
+  }
+
+  return out;
+}
+
 bool URLSearchParams::has(inox::StringView name) const {
   char* encoded_name = 0;
   size_t encoded_name_len = 0;
@@ -741,6 +847,47 @@ bool URLSearchParams::has(inox::StringView name) const {
   }
 
   return found;
+}
+
+double URLSearchParams::size() const {
+  inox_value retained = inox_undefined_value();
+  const char* query = 0;
+  size_t query_len = 0;
+  inox_status status = inox_url_value_string(
+    raw(),
+    INOX_URL_SEARCH_PARAMS_QUERY_INDEX,
+    &retained,
+    &query,
+    &query_len
+  );
+
+  size_t count = 0;
+  size_t cursor = 0;
+
+  while (status == INOX_OK && cursor < query_len) {
+    const size_t pair_start = cursor;
+
+    while (cursor < query_len && query[cursor] != '&') {
+      cursor += 1;
+    }
+
+    if (cursor != pair_start) {
+      count += 1;
+    }
+
+    if (cursor < query_len) {
+      cursor += 1;
+    }
+  }
+
+  inox_release(retained);
+
+  if (status != INOX_OK) {
+    inox_url_throw_failed("URLSearchParams.size failed");
+    return 0;
+  }
+
+  return static_cast<double>(count);
 }
 
 void URLSearchParams::remove(inox::StringView name) {
