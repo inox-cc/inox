@@ -2452,6 +2452,27 @@ bool Array::every(inox::Callback predicate) const {
   return true;
 }
 
+Array Array::fill(const inox::Value& value, double start_value, double end_value) const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox::fatal("Array.fill native facade invariant failed");
+  }
+
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
+  const size_t start = inox_array_slice_index(start_value, instance->length);
+  const size_t end = inox_array_slice_index(end_value, instance->length);
+  inox_value item = value.raw();
+
+  for (size_t index = start; index < end; index += 1) {
+    inox_retain(item);
+    inox_release(instance->items[index]);
+    instance->items[index] = item;
+  }
+
+  return *this;
+}
+
 bool Array::some(inox::Callback predicate) const {
   inox_value array = inox::Value::raw();
 

@@ -58,6 +58,11 @@ public:
   inox::Value get(size_t index) const;
   inox::Value at(double index) const;
   bool every(inox::Callback predicate) const;
+  Array fill(
+    const inox::Value& value,
+    double start = 0,
+    double end = std::numeric_limits<double>::infinity()
+  ) const;
   Array filter(inox::Callback predicate) const;
   inox::Value find(inox::Callback predicate) const;
   double findIndex(inox::Callback predicate) const;

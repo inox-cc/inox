@@ -11,6 +11,7 @@ declare global {
 
     at(index: number): T | undefined
     every(predicate: (value: T, index: number, array: Array<T>) => boolean): boolean
+    fill(value: T, start?: number, end?: number): Array<T>
     filter(predicate: (value: T, index: number, array: Array<T>) => boolean): Array<T>
     find(predicate: (value: T, index: number, array: Array<T>) => boolean): T | undefined
     findIndex(predicate: (value: T, index: number, array: Array<T>) => boolean): number

@@ -138,6 +138,23 @@ const arrayOperations: LibraryOperationDescriptor[] = [
   },
   {
     ...arrayReceiverCall(
+      'fill',
+      arrayTypeRef(parameterTypeRef),
+      ['runtime-value', 'optional-number', 'optional-number'],
+      [
+        { valueTypes: [], typeRef: parameterTypeRef },
+        { valueTypes: ['number'] },
+        { valueTypes: ['number'] }
+      ],
+      null,
+      1
+    ),
+    cFailureMode: null,
+    cPreservesPendingException: true,
+    cHasObservableSideEffects: true
+  },
+  {
+    ...arrayReceiverCall(
       'includes',
       booleanTypeRef,
       ['runtime-value'],
