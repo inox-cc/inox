@@ -363,9 +363,79 @@ inox::Value Uint8Array::get(double index) const {
   return inox::Value(inox_number_value(storageBytes(value)[converted]));
 }
 
+inox::Value Uint8Array::at(double index) const {
+  auto* value = storage(*this);
+
+  if (value == nullptr) {
+    inox::fatal("Uint8Array.at native facade invariant failed");
+  }
+
+  double integer = std::isnan(index) ? 0 : std::trunc(index);
+
+  if (!std::isfinite(integer)) {
+    return inox::Value();
+  }
+
+  if (integer < 0) {
+    integer += static_cast<double>(value->length);
+  }
+
+  return get(integer);
+}
+
+Uint8Array Uint8Array::fill(double item, double start, double end) const {
+  auto* value = storage(*this);
+
+  if (value == nullptr) {
+    inox::fatal("Uint8Array.fill native facade invariant failed");
+  }
+
+  const std::size_t first = sliceIndex(start, value->length);
+  const std::size_t last = sliceIndex(end, value->length);
+
+  if (last > first) {
+    std::memset(storageBytes(value) + first, toUint8(item), last - first);
+  }
+
+  return *this;
+}
+
 double Uint8Array::set(double index, double value) {
   write(index, value);
   return value;
+}
+
+void Uint8Array::set(const inox::Value& values, double offset) const {
+  auto* target = storage(*this);
+
+  if (target == nullptr) {
+    inox::fatal("Uint8Array.set native facade invariant failed");
+  }
+
+  const double integer = std::trunc(offset);
+  std::size_t first = 0;
+
+  if (!numberToLength(integer, target->length, first)) {
+    throwBytesError("RangeError: Uint8Array.set offset is invalid");
+    return;
+  }
+
+  Uint8Array source(values);
+
+  if (!source.valid() || inox::thrown()) {
+    return;
+  }
+
+  const auto sourceBytes = source.bytes();
+
+  if (sourceBytes.size() > target->length - first) {
+    throwBytesError("RangeError: Uint8Array.set source is too large");
+    return;
+  }
+
+  if (!sourceBytes.empty()) {
+    std::memmove(storageBytes(target) + first, sourceBytes.data(), sourceBytes.size());
+  }
 }
 
 Uint8Array::Reference Uint8Array::operator[](double index) {

@@ -40,7 +40,14 @@ public:
   std::span<const std::uint8_t> bytes() const;
   std::span<std::uint8_t> bytes();
   inox::Value get(double index) const;
+  inox::Value at(double index) const;
+  Uint8Array fill(
+    double value,
+    double start = 0,
+    double end = std::numeric_limits<double>::infinity()
+  ) const;
   double set(double index, double value);
+  void set(const inox::Value& values, double offset = 0) const;
   Reference operator[](double index);
   double operator[](double index) const;
   Uint8Array slice(double start) const;

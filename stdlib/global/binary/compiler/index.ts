@@ -14,6 +14,7 @@ import type {
 const libraryId = 'global:binary'
 const collectionsLibraryId = 'global:collections'
 const arrayRuntimeRequirement = `${collectionsLibraryId}#array`
+const arrayTypeId = `${collectionsLibraryId}#Array`
 const runtimeRequirement = libraryId
 const uint8ArrayTypeId = `${libraryId}#Uint8Array`
 const uint8ArrayTypeRef: NominalTypeRef = {
@@ -36,6 +37,38 @@ const operations: LibraryOperationDescriptor[] = [
   receiverMemberRead('length', 'length', numberTypeRef),
   receiverIndexRead(),
   receiverIndexWrite(),
+  {
+    ...receiverCall(
+      'at',
+      ['receiver', 'number'],
+      'at',
+      nullableNumberTypeRef,
+      valueResultMapping(),
+      'value',
+      1,
+      1,
+      [numberArgument()]
+    ),
+    cFailureMode: null,
+    cPreservesPendingException: true
+  },
+  {
+    ...receiverCall(
+      'fill',
+      ['receiver', 'number', 'optional-number', 'optional-number'],
+      'fill',
+      uint8ArrayTypeRef,
+      null,
+      'value',
+      1,
+      3,
+      [numberArgument(), numberArgument(), numberArgument()]
+    ),
+    cFailureMode: null,
+    cPreservesPendingException: true,
+    cHasObservableSideEffects: true
+  },
+  uint8ArraySetOperation(),
   receiverCall('slice', ['receiver', 'number', 'optional-number'], 'slice', uint8ArrayTypeRef, null, 'value', 1, 2, [
     numberArgument(),
     numberArgument()
@@ -106,28 +139,47 @@ function uint8ArrayConstructor(): LibraryOperationDescriptor {
     maxArgs: 1,
     argumentChecks: [
       {
-        valueTypes: ['number', 'object'],
-        arrayLiteralRequired: true,
-        arrayElementValueTypes: ['number']
+        valueTypes: [],
+        typeRefs: [numberTypeRef, uint8ArrayTypeRef, arrayTypeRef(numberTypeRef)]
       }
     ],
-    variants: [constructorVariant('number', ['number']), constructorVariant('object', ['value'])],
+    variants: [constructorVariant(['number'], ['number']), constructorVariant(['object', 'bytes'], ['value'])],
     resultTypeRef: uint8ArrayTypeRef
   }
 }
 
 function constructorVariant(
-  valueType: string,
+  valueTypes: string[],
   cArgumentKinds: LibraryCArgumentKind[]
 ): LibraryOperationVariantDescriptor {
   return {
     minArgs: 1,
     maxArgs: 1,
     argumentIndex: 0,
-    argumentValueTypes: [valueType],
+    argumentValueTypes: valueTypes,
     cExpression: 'Uint8Array',
     cArgumentKinds,
     cResultMode: 'value'
+  }
+}
+
+function uint8ArraySetOperation(): LibraryOperationDescriptor {
+  return {
+    ...receiverCall(
+      'set',
+      ['receiver', 'runtime-value', 'optional-number'],
+      'set',
+      primitiveTypeRef('void'),
+      null,
+      null,
+      1,
+      2,
+      [
+        { valueTypes: [], typeRefs: [uint8ArrayTypeRef, arrayTypeRef(numberTypeRef)] },
+        numberArgument()
+      ]
+    ),
+    cHasObservableSideEffects: true
   }
 }
 
@@ -225,7 +277,22 @@ function numberArgument(): LibraryArgumentCheckDescriptor {
   return { valueTypes: ['number'] }
 }
 
-function primitiveTypeRef(name: 'number' | 'string'): PrimitiveTypeRef {
+function arrayTypeRef(elementType: TypeRef): NominalTypeRef {
+  return {
+    kind: 'nominal',
+    typeId: arrayTypeId,
+    args: [elementType],
+    nullable: false,
+    ownership: 'value',
+    traits: [{ traitId: 'iterable', args: [elementType] }]
+  }
+}
+
+function valueResultMapping(): LibraryCResultMappingDescriptor {
+  return { cppType: 'inox::Value', fields: [] }
+}
+
+function primitiveTypeRef(name: 'number' | 'string' | 'void'): PrimitiveTypeRef {
   return {
     kind: 'primitive',
     name,
