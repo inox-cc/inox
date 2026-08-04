@@ -33,6 +33,7 @@ test('node:fs и node:fs/promises описывают все implemented results 
     ['node:fs#accessSync', repeated(voidType, 2)],
     ['node:fs#appendFileSync', repeated(voidType, 2)],
     ['node:fs#copyFileSync', [result(voidType)]],
+    ['node:fs#existsSync', [result(booleanType)]],
     ['node:fs#lstatSync', [result(statsType)]],
     ['node:fs#mkdirSync', [result(voidType)]],
     ['node:fs#readFileSync', [result(bufferType), result(stringType, stringMapping)]],
@@ -85,7 +86,7 @@ test('node:fs и node:fs/promises описывают все implemented results 
     ...fsPromisesPackage.operations.filter((operation) => !operation.diagnosticCode)
   ]
 
-  assert.equal(operations.length, 38)
+  assert.equal(operations.length, 39)
   assert.deepEqual(
     operations.map((operation) => operation.operationId),
     [...expected.keys()]

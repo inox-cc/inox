@@ -39,6 +39,7 @@ const operations: LibraryOperationDescriptor[] = [
   accessOperation('accessSync', false, libraryId),
   writeOperation('appendFileSync', false, libraryId),
   twoPathOperation('copyFileSync', false, libraryId),
+  existsOperation(),
   statsOperation('lstatSync', false, libraryId),
   mkdirOperation('mkdirSync', false, libraryId),
   readFileOperation('readFileSync', false, libraryId),
@@ -149,6 +150,23 @@ function accessOperation(name: string, promise: boolean, ownerLibraryId: string)
       variant(name, promise, 2, 2, ['string-view', 'number'], fsResultTypeRef(promise, voidTypeRef))
     ]
   )
+}
+
+function existsOperation(): LibraryOperationDescriptor {
+  return {
+    ...callOperation(
+      'existsSync',
+      false,
+      libraryId,
+      ['string-view'],
+      booleanTypeRef,
+      null,
+      1,
+      1,
+      [stringArgument()]
+    ),
+    cFailureMode: null
+  }
 }
 
 function mkdirOperation(name: string, promise: boolean, ownerLibraryId: string): LibraryOperationDescriptor {

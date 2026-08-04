@@ -696,6 +696,21 @@ void fs::accessSync(inox::StringView path, int mode) {
   }
 }
 
+bool fs::existsSync(inox::StringView path) {
+  if (path.bytes == 0 && path.len != 0) {
+    return false;
+  }
+
+  inox_status status = INOX_ERR_UNSUPPORTED;
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  status = inox_fs_libuv_access(0, path.bytes, path.len, 0);
+#elif !defined(INOX_FS_DISABLE_HOST)
+  status = inox_fs_default_access(0, path.bytes, path.len, 0);
+#endif
+
+  return status == INOX_OK;
+}
+
 void fs::mkdirSync(inox::StringView path, bool recursive) {
   if (path.bytes == 0 && path.len != 0) {
     inox_fs_throw_status_if_needed(INOX_ERR_TYPE);

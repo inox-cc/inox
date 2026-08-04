@@ -71,6 +71,7 @@ export interface FsModule {
   accessSync(path: FsPath, mode?: number): void;
   appendFileSync(path: FsPath, data: FsData, encoding?: FsEncoding): void;
   copyFileSync(src: FsPath, dest: FsPath): void;
+  existsSync(path: FsPath): boolean;
   lstatSync(path: FsPath): Stats;
   mkdirSync(path: FsPath, options?: MakeDirectoryOptions): void;
   readFileSync(path: FsPath): Buffer;
@@ -93,6 +94,7 @@ export const promises: FsPromises;
 export function accessSync(path: FsPath, mode?: number): void;
 export function appendFileSync(path: FsPath, data: FsData, encoding?: FsEncoding): void;
 export function copyFileSync(src: FsPath, dest: FsPath): void;
+export function existsSync(path: FsPath): boolean;
 export function lstatSync(path: FsPath): Stats;
 export function mkdirSync(path: FsPath, options?: MakeDirectoryOptions): void;
 export function readFileSync(path: FsPath): Buffer;

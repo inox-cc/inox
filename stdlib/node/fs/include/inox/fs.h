@@ -84,6 +84,7 @@ public:
   void appendFileSync(inox::StringView path, inox::StringView bytes);
   void appendFileSync(inox::StringView path, Uint8Array bytes);
   void copyFileSync(inox::StringView src_path, inox::StringView dest_path);
+  bool existsSync(inox::StringView path);
   void symlinkSync(inox::StringView target, inox::StringView path);
   void renameSync(inox::StringView old_path, inox::StringView new_path);
   void writeFileSync(inox::StringView path, inox::StringView bytes);
