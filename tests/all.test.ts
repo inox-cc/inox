@@ -452,8 +452,8 @@ async function runHostedIntegrationTests(): Promise<void> {
       assertPathLowersToCppObject()
     })
 
-    await t.test('net-cpp-object-lowering', () => {
-      assertNetUsesCppObjectFacade()
+    await t.test('net-cpp-object-lowering', async () => {
+      await assertNetUsesCppObjectFacade()
     })
 
     await t.test('http-cpp-object-lowering', async () => {

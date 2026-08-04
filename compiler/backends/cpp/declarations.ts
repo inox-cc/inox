@@ -867,7 +867,7 @@ function emitFunctionHeadParam(param: CFunctionParam, index: number, statement: 
   }
 
   if (isBoxedFunctionParam(param, index, statement, context) && isBoxedScalarParamValueType(param.valueType)) {
-    return `${emitCType(param.valueType)} ${emitCLocalName(param.name)}`
+    return `${emitCType(param.valueType)} ${emitCScalarParamName(param.name)}`
   }
 
   return `${emitCType(param.valueType)} ${emitCLocalName(param.name)}`

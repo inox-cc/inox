@@ -74,7 +74,9 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       valueType: 'object',
       cppType: 'NetServer',
       baseTypeIds: [],
-      runtimeRequirements
+      runtimeRequirements,
+      cValueAdapter: 'NetServer(inox::Value($value))',
+      cValueAdapterPreservesPendingException: true
     },
     {
       libraryId,
@@ -83,7 +85,9 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       valueType: 'object',
       cppType: 'NetSocket',
       baseTypeIds: [],
-      runtimeRequirements
+      runtimeRequirements,
+      cValueAdapter: 'NetSocket(inox::Value($value))',
+      cValueAdapterPreservesPendingException: true
     },
     {
       libraryId,

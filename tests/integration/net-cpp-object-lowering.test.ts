@@ -1,16 +1,19 @@
 import assert from 'node:assert/strict'
+import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { compileFileToCppModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
+import { collectStdlibNativeIncludeArgs } from '../../scripts/lib/stdlib-native-files.ts'
 import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
+import { createTestTempDir, join, mkdir, rm, runCommand, writeFile } from '../helpers/runtime-c.ts'
 
 type GeneratedTextFile = {
   path: string
   code: string
 }
 
-export function assertNetUsesCppObjectFacade(): void {
+export async function assertNetUsesCppObjectFacade(): Promise<void> {
   const host = createMemoryCompilerHost(
     [
       {
@@ -68,7 +71,7 @@ client.end()
     source,
     /inox_callback_args\[0\]\.tag != INOX_TAG_OBJECT && inox_callback_args\[0\]\.tag != INOX_TAG_CLASS_INSTANCE/
   )
-  assert.match(source, /NetSocket socket = inox_callback_args\[0\];/)
+  assert.match(source, /NetSocket socket = NetSocket\(inox::Value\(inox_callback_args\[0\]\)\);/)
   assert.match(source, /socket\.end\("ok"\)/)
   assert.match(source, /auto server = net\.createServer\(inox_callback_\d+\);/)
   assert.match(source, /server\.on\("listening", inox_callback_\d+\);/)
@@ -98,6 +101,38 @@ client.end()
   assert.doesNotMatch(source, /inox_net_|Net(?:Connection|Data|Close|Socket|Server|Connect)Fn/)
   assert.doesNotMatch(source, /inox_net_(?:connection|socket|server)_handler_/)
   assert.doesNotMatch(source, /NetServer\(server\)\.|NetSocket\(client\)\./)
+
+  await assertGeneratedCppCompiles(files, 'src/index.cc')
+}
+
+async function assertGeneratedCppCompiles(files: GeneratedTextFile[], source: string): Promise<void> {
+  const directory = await createTestTempDir('net-cpp-object-lowering-')
+  const sourcePath = join(directory, source)
+
+  for (const file of files) {
+    const outputPath = join(directory, file.path)
+    await mkdir(dirname(outputPath), { recursive: true })
+    await writeFile(outputPath, file.code)
+  }
+
+  const compile = await runCommand('c++', [
+    '-std=c++20',
+    '-fsyntax-only',
+    '-Iruntime/include',
+    '-Iruntime/src/async',
+    ...(await collectStdlibNativeIncludeArgs()),
+    sourcePath
+  ])
+
+  if (compile.code === 0) {
+    await rm(directory, { recursive: true, force: true })
+  }
+
+  assert.equal(
+    compile.code,
+    0,
+    `net generated C++ compile failed\nsource: ${sourcePath}\nstdout: ${compile.stdout}\nstderr: ${compile.stderr}`
+  )
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {
@@ -111,5 +146,5 @@ function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedT
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  assertNetUsesCppObjectFacade()
+  await assertNetUsesCppObjectFacade()
 }

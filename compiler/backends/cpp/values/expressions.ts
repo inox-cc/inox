@@ -5253,16 +5253,20 @@ function emitCValueExpressionUnadapted(
     }
 
     if (valueType === 'number') {
+      const scalarReference = context.boxedVariables.has(name) ? `${reference}->value` : reference
+
       return {
         lines: [],
-        expression: `inox_number_value(${reference})`
+        expression: `inox_number_value(${scalarReference})`
       }
     }
 
     if (valueType === 'boolean') {
+      const scalarReference = context.boxedVariables.has(name) ? `${reference}->value` : reference
+
       return {
         lines: [],
-        expression: `inox_bool_value(${reference})`
+        expression: `inox_bool_value(${scalarReference})`
       }
     }
   }
@@ -5293,7 +5297,7 @@ function emitCValueExpressionUnadapted(
     }
 
     if (libraryNativeField !== null) {
-      return libraryNativeField
+      return boxPreparedRuntimeScalarValue(libraryNativeField)
     }
 
     const nativeClassField = emitPreparedNativeClassFieldValueExpression(expression, context)
