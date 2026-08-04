@@ -16,6 +16,7 @@ const runtimeRequirement = `${libraryId}#strings`
 const receiverTypeId = 'core:primitive:string'
 const booleanTypeRef = primitiveTypeRef('boolean')
 const numberTypeRef = primitiveTypeRef('number')
+const nullableStringTypeRef = primitiveTypeRef('string', true)
 const stringTypeRef = primitiveTypeRef('string')
 const stringResultMapping = { cppType: 'inox::String', fields: [] }
 
@@ -25,6 +26,8 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   operations: [
     numberToString(),
     memberRead('length', 'codeUnitLength', numberTypeRef, 'static_cast<double>($value)'),
+    stringAt(),
+    stringCall('charAt', stringTypeRef, ['number'], [numberArgument()]),
     stringCall('charCodeAt', numberTypeRef, ['number'], [numberArgument()], null),
     stringConcat(),
     stringCall(
@@ -235,6 +238,13 @@ function stringConcat(): LibraryOperationDescriptor {
   }
 }
 
+function stringAt(): LibraryOperationDescriptor {
+  return {
+    ...stringCall('at', nullableStringTypeRef, ['number'], [numberArgument()]),
+    cResultMapping: { cppType: 'inox::Value', fields: [] }
+  }
+}
+
 function stringSplit(): LibraryOperationDescriptor {
   return {
     ...stringCall(
@@ -276,11 +286,11 @@ function numberArgument(): LibraryArgumentCheckDescriptor {
   return { valueTypes: ['number'] }
 }
 
-function primitiveTypeRef(name: 'boolean' | 'number' | 'string'): PrimitiveTypeRef {
+function primitiveTypeRef(name: 'boolean' | 'number' | 'string', nullable = false): PrimitiveTypeRef {
   return {
     kind: 'primitive',
     name,
-    nullable: false,
+    nullable,
     ownership: 'value',
     traits: []
   }

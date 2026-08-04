@@ -51,6 +51,8 @@ public:
   size_t codeUnitLength() const;
   const char* bytes() const;
   operator StringView() const;
+  Value at(double index) const;
+  String charAt(double index) const;
   String trim() const;
   String trimStart() const;
   String trimLeft() const;

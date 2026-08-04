@@ -803,6 +803,66 @@ String::operator StringView() const {
   return StringView(bytes(), length());
 }
 
+static bool string_character_span(
+  StringView value,
+  double raw_index,
+  bool relative,
+  size_t* start,
+  size_t* end
+) {
+  if (start == nullptr || end == nullptr || isinf(raw_index)) {
+    return false;
+  }
+
+  double index = raw_index != raw_index ? 0 : trunc(raw_index);
+  const size_t length = string_code_unit_length(value.bytes, value.len);
+
+  if (relative && index < 0) {
+    index += static_cast<double>(length);
+  }
+
+  if (index < 0 || index >= static_cast<double>(length)) {
+    return false;
+  }
+
+  const size_t position = static_cast<size_t>(index);
+  *start = string_code_unit_to_byte_offset_ceiling(value.bytes, value.len, position);
+  *end = string_code_unit_to_byte_offset_ceiling(value.bytes, value.len, position + 1);
+  return true;
+}
+
+Value String::at(double index) const {
+  if (!valid()) {
+    throw_out_of_memory();
+    return Value();
+  }
+
+  size_t start = 0;
+  size_t end = 0;
+
+  if (!string_character_span(*this, index, true, &start, &end)) {
+    return Value(inox_undefined_value());
+  }
+
+  return string_result_or_oom(String(bytes() + start, end - start));
+}
+
+String String::charAt(double index) const {
+  if (!valid()) {
+    throw_out_of_memory();
+    return String();
+  }
+
+  size_t start = 0;
+  size_t end = 0;
+
+  if (!string_character_span(*this, index, false, &start, &end)) {
+    return string_result_or_oom(String(""));
+  }
+
+  return string_result_or_oom(String(bytes() + start, end - start));
+}
+
 String String::trim() const {
   if (!valid()) {
     throw_out_of_memory();
@@ -1313,6 +1373,10 @@ String String::concat(const StringView* values, size_t count) const {
 
 double String::charCodeAt(double offset) const {
   if (!valid()) {
+    return 0;
+  }
+
+  if (isinf(offset) || offset < 0) {
     return 0;
   }
 

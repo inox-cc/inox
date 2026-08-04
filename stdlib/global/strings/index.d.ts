@@ -9,6 +9,8 @@ declare global {
     readonly length: number
     readonly [index: number]: string
 
+    at(index: number): string | undefined
+    charAt(index: number): string
     charCodeAt(index: number): number
     concat(...values: string[]): string
     endsWith(value: string, endPosition?: number): boolean
