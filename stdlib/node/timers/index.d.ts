@@ -3,18 +3,18 @@ export interface IntervalHandle {}
 export interface ImmediateHandle {}
 
 export interface TimersModule {
-  setTimeout(callback: () => void, delay: number): TimeoutHandle
+  setTimeout(callback: () => void, delay?: number): TimeoutHandle
   clearTimeout(handle: TimeoutHandle): void
-  setInterval(callback: () => void, delay: number): IntervalHandle
+  setInterval(callback: () => void, delay?: number): IntervalHandle
   clearInterval(handle: IntervalHandle): void
   setImmediate(callback: () => void): ImmediateHandle
   clearImmediate(handle: ImmediateHandle): void
 }
 
-export function setTimeout(callback: () => void, delay: number): TimeoutHandle
+export function setTimeout(callback: () => void, delay?: number): TimeoutHandle
 export function clearTimeout(handle: TimeoutHandle): void
 
-export function setInterval(callback: () => void, delay: number): IntervalHandle
+export function setInterval(callback: () => void, delay?: number): IntervalHandle
 export function clearInterval(handle: IntervalHandle): void
 
 export function setImmediate(callback: () => void): ImmediateHandle
@@ -28,10 +28,10 @@ declare global {
   interface IntervalHandle {}
   interface ImmediateHandle {}
 
-  function setTimeout(callback: () => void, delay: number): TimeoutHandle
+  function setTimeout(callback: () => void, delay?: number): TimeoutHandle
   function clearTimeout(handle: TimeoutHandle): void
 
-  function setInterval(callback: () => void, delay: number): IntervalHandle
+  function setInterval(callback: () => void, delay?: number): IntervalHandle
   function clearInterval(handle: IntervalHandle): void
 
   function setImmediate(callback: () => void): ImmediateHandle

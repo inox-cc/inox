@@ -41,9 +41,9 @@ public:
 
 class TimersModule {
 public:
-  TimeoutHandle setTimeout(inox::Callback callback, double delay) const;
+  TimeoutHandle setTimeout(inox::Callback callback, double delay = 1) const;
   void clearTimeout(const TimeoutHandle& handle) const;
-  IntervalHandle setInterval(inox::Callback callback, double delay) const;
+  IntervalHandle setInterval(inox::Callback callback, double delay = 1) const;
   void clearInterval(const IntervalHandle& handle) const;
   ImmediateHandle setImmediate(inox::Callback callback) const;
   void clearImmediate(const ImmediateHandle& handle) const;

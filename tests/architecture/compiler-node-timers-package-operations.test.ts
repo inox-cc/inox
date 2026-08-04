@@ -24,14 +24,14 @@ const startOperations: StartOperation[] = [
     name: 'setInterval',
     typeId: 'node:timers#IntervalHandle',
     argumentKinds: ['runtime-callback', 'number'],
-    minArgs: 2,
+    minArgs: 1,
     maxArgs: 2
   },
   {
     name: 'setTimeout',
     typeId: 'node:timers#TimeoutHandle',
     argumentKinds: ['runtime-callback', 'number'],
-    minArgs: 2,
+    minArgs: 1,
     maxArgs: 2
   }
 ]
@@ -107,6 +107,20 @@ test('node:timers объявляет global, named, default и handle operations
 
     if (item.argumentKinds.includes('number')) {
       assert.deepEqual(argumentCheck(descriptor, 1).valueTypes, ['number'])
+      assert.deepEqual(descriptor.variants, [
+        {
+          minArgs: 1,
+          maxArgs: 1,
+          cExpression: `timers.${item.name}`,
+          cArgumentKinds: ['runtime-callback']
+        },
+        {
+          minArgs: 2,
+          maxArgs: 2,
+          cExpression: `timers.${item.name}`,
+          cArgumentKinds: ['runtime-callback', 'number']
+        }
+      ])
     }
   }
 

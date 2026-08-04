@@ -85,7 +85,7 @@ function startOperation(
     cArgumentKinds.push('number')
   }
 
-  return {
+  const operation: LibraryOperationDescriptor = {
     libraryId,
     bindingId: moduleBinding(name),
     bindingAliases: [moduleBinding(`default.${name}`), `global:${name}`],
@@ -96,11 +96,30 @@ function startOperation(
     cArgumentKinds,
     callbackLifetime: 'event-loop',
     cFailureMode: 'thrown',
-    minArgs: argumentChecks.length,
+    minArgs: 1,
     maxArgs: argumentChecks.length,
     argumentChecks,
     resultTypeRef: handleTypeRef(handleName)
   }
+
+  if (hasDelay) {
+    operation.variants = [
+      {
+        minArgs: 1,
+        maxArgs: 1,
+        cExpression: `timers.${name}`,
+        cArgumentKinds: ['runtime-callback']
+      },
+      {
+        minArgs: 2,
+        maxArgs: 2,
+        cExpression: `timers.${name}`,
+        cArgumentKinds: ['runtime-callback', 'number']
+      }
+    ]
+  }
+
+  return operation
 }
 
 function clearOperation(

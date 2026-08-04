@@ -1,5 +1,6 @@
 #include "inox/timers.h"
 
+#include <cmath>
 #include <memory>
 #include <new>
 #include <utility>
@@ -27,6 +28,14 @@ struct TimerHandleCarrier {
 };
 
 using TimerStateOwner = std::shared_ptr<TimerHandleState>;
+
+double normalizeTimerDelay(double delay) {
+  if (!std::isfinite(delay) || delay < 1 || delay > 2147483647) {
+    return 1;
+  }
+
+  return std::trunc(delay);
+}
 
 inox_status timerCarrierCall(void*, const inox_value*, std::size_t, inox_value*) {
   return INOX_ERR_UNSUPPORTED;
@@ -208,11 +217,13 @@ TimeoutHandle TimersModule::setTimeout(inox::Callback callback, double delay) co
     return {};
   }
 
+  const double normalized_delay = normalizeTimerDelay(delay);
+
   return scheduleTimer<TimeoutHandle>(
     std::move(callback),
-    [loop, delay](inox_loop_callback_fn run, void* context, inox_loop_callback_finalizer_fn finalizer,
-                  inox_timer_handle** out) {
-      return inox_loop_set_timeout(loop, delay, run, context, finalizer, out);
+    [loop, normalized_delay](inox_loop_callback_fn run, void* context,
+                             inox_loop_callback_finalizer_fn finalizer, inox_timer_handle** out) {
+      return inox_loop_set_timeout(loop, normalized_delay, run, context, finalizer, out);
     }
   );
 }
@@ -229,11 +240,13 @@ IntervalHandle TimersModule::setInterval(inox::Callback callback, double delay) 
     return {};
   }
 
+  const double normalized_delay = normalizeTimerDelay(delay);
+
   return scheduleTimer<IntervalHandle>(
     std::move(callback),
-    [loop, delay](inox_loop_callback_fn run, void* context, inox_loop_callback_finalizer_fn finalizer,
-                  inox_timer_handle** out) {
-      return inox_loop_set_interval(loop, delay, run, context, finalizer, out);
+    [loop, normalized_delay](inox_loop_callback_fn run, void* context,
+                             inox_loop_callback_finalizer_fn finalizer, inox_timer_handle** out) {
+      return inox_loop_set_interval(loop, normalized_delay, run, context, finalizer, out);
     }
   );
 }
