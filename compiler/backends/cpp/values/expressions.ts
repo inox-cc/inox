@@ -5386,10 +5386,11 @@ function emitCValueExpressionUnadapted(
       context.libraries,
       expression.typeRef
     )
-    const nativeRuntimeValueExpression = compilerLibraryNativeRuntimeValueExpressionForTypeRef(
-      context.libraries,
-      expression.typeRef
-    )
+    const nativeRuntimeValueExpression =
+      cCallExpressionReturnsTypeErasedValue(expression) ||
+      callExpressionReturnsNullableRuntimeValue(expression, context)
+      ? null
+      : compilerLibraryNativeRuntimeValueExpressionForTypeRef(context.libraries, expression.typeRef)
     const returnRuntimeTypeAlternatives = callExpressionReturnRuntimeTypeAlternatives(expression, context)
     const call = deps.emitPreparedCallExpression(expression, context)
 

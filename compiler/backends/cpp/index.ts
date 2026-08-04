@@ -7347,17 +7347,10 @@ function resolveAwaitResultCppValueInfo(
 
   const shape = expression.shape ?? expression.argument?.shape
   const libraryCppType = shape?.libraryCppType
-  let nativeValidExpression = compilerLibraryNativeRuntimeValueValidExpressionForTypeRef(
+  const nativeValidExpression = compilerLibraryNativeRuntimeValueValidExpressionForTypeRef(
     context.libraries,
     expression.typeRef
   )
-
-  if (nativeValidExpression === null) {
-    nativeValidExpression = compilerLibraryNativeRuntimeValueValidExpressionForTypeRef(
-      context.libraries,
-      expression.argument?.typeRef
-    )
-  }
   const asyncResultCppType = compilerLibraryIntrinsicNativeCppType(context.libraries, 'async-result')
 
   if (libraryCppType !== null && typeof libraryCppType !== 'undefined' && libraryCppType !== asyncResultCppType) {
