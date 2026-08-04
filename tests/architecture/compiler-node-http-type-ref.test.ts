@@ -13,11 +13,20 @@ const operationIds = [
   'node:http#Server.close',
   'node:http#Server.listen',
   'node:http#Server.on',
+  'node:http#IncomingMessage.headers',
+  'node:http#IncomingMessage.httpVersion',
   'node:http#IncomingMessage.method',
+  'node:http#IncomingMessage.socket',
   'node:http#IncomingMessage.url',
+  'node:http#ServerResponse.headersSent',
   'node:http#ServerResponse.statusCode.read',
   'node:http#ServerResponse.statusCode.write',
+  'node:http#ServerResponse.writableEnded',
   'node:http#ServerResponse.end',
+  'node:http#ServerResponse.getHeader',
+  'node:http#ServerResponse.getHeaderNames',
+  'node:http#ServerResponse.hasHeader',
+  'node:http#ServerResponse.removeHeader',
   'node:http#ServerResponse.setHeader',
   'node:http#ServerResponse.write',
   'node:http#ServerResponse.writeHead'
@@ -39,16 +48,33 @@ test('node:http operations describe results only through TypeRef', async () => {
     assertResult(operation, nominalTypeRef('node:http#Server', 'borrowed'))
   }
 
-  for (const operation of operations.slice(4, 6)) {
+  assertResult(operations[4], {
+    kind: 'object',
+    fields: [],
+    dynamic: true,
+    dynamicField: primitiveTypeRef('string', true),
+    nullable: false,
+    ownership: 'value',
+    traits: []
+  }, 'inox::Value')
+
+  for (const operation of [operations[5], operations[6], operations[8]]) {
     assertResult(operation, primitiveTypeRef('string'), 'inox::String')
   }
 
-  assertResult(operations[6], primitiveTypeRef('number'))
-  assertResult(operations[7], primitiveTypeRef('number'), 'void')
-  assertResult(operations[8], primitiveTypeRef('void'))
-  assertResult(operations[9], primitiveTypeRef('void'))
-  assertResult(operations[10], primitiveTypeRef('boolean'))
-  assertResult(operations[11], nominalTypeRef('node:http#ServerResponse', 'borrowed'))
+  assertResult(operations[7], nominalTypeRef('node:net#Socket', 'value'))
+  assertResult(operations[9], primitiveTypeRef('boolean'))
+  assertResult(operations[10], primitiveTypeRef('number'))
+  assertResult(operations[11], primitiveTypeRef('number'), 'void')
+  assertResult(operations[12], primitiveTypeRef('boolean'))
+  assertResult(operations[13], primitiveTypeRef('void'))
+  assertResult(operations[14], primitiveTypeRef('string', true), 'inox::Value')
+  assertResult(operations[15], arrayTypeRef(primitiveTypeRef('string')))
+  assertResult(operations[16], primitiveTypeRef('boolean'))
+  assertResult(operations[17], primitiveTypeRef('void'))
+  assertResult(operations[18], nominalTypeRef('node:http#ServerResponse', 'borrowed'))
+  assertResult(operations[19], primitiveTypeRef('boolean'))
+  assertResult(operations[20], nominalTypeRef('node:http#ServerResponse', 'borrowed'))
 
   const variants = operations.flatMap((operation) => operation.variants ?? [])
 
@@ -75,13 +101,24 @@ function nominalTypeRef(typeId: string, ownership: 'borrowed' | 'value'): TypeRe
   }
 }
 
-function primitiveTypeRef(name: 'boolean' | 'number' | 'string' | 'void'): TypeRef {
+function primitiveTypeRef(name: 'boolean' | 'number' | 'string' | 'void', nullable = false): TypeRef {
   return {
     kind: 'primitive',
     name,
-    nullable: false,
+    nullable,
     ownership: 'value',
     traits: []
+  }
+}
+
+function arrayTypeRef(elementType: TypeRef): TypeRef {
+  return {
+    kind: 'nominal',
+    typeId: 'global:collections#Array',
+    args: [elementType],
+    nullable: false,
+    ownership: 'value',
+    traits: [{ traitId: 'iterable', args: [elementType] }]
   }
 }
 

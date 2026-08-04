@@ -7,6 +7,10 @@ export interface ListenOptions {
   readonly backlog?: number;
 }
 
+export interface IncomingHttpHeaders {
+  readonly [name: string]: string | undefined;
+}
+
 export interface HttpModule {
   readonly IncomingMessage: typeof IncomingMessage;
   readonly Server: typeof Server;
@@ -16,15 +20,24 @@ export interface HttpModule {
 }
 
 export class IncomingMessage {
+  readonly headers: IncomingHttpHeaders;
+  readonly httpVersion: string;
   readonly method: string;
+  readonly socket: import('node:net').Socket;
   readonly url: string;
 }
 
 export class ServerResponse {
+  readonly headersSent: boolean;
   statusCode: number;
+  readonly writableEnded: boolean;
 
   end(body?: string | Uint8Array): void;
-  setHeader(name: string, value: string): void;
+  getHeader(name: string): string | undefined;
+  getHeaderNames(): string[];
+  hasHeader(name: string): boolean;
+  removeHeader(name: string): void;
+  setHeader(name: string, value: string): ServerResponse;
   write(body: string | Uint8Array): boolean;
   writeHead(statusCode: number, headers?: Record<string, string>): ServerResponse;
 }

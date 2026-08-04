@@ -22,15 +22,24 @@ test('node:http объявляет module, Server, IncomingMessage и ServerResp
   const ids = operations.map((operation) => operation.operationId).sort()
 
   assert.deepEqual(ids, [
+    'node:http#IncomingMessage.headers',
+    'node:http#IncomingMessage.httpVersion',
     'node:http#IncomingMessage.method',
+    'node:http#IncomingMessage.socket',
     'node:http#IncomingMessage.url',
     'node:http#Server.close',
     'node:http#Server.listen',
     'node:http#Server.on',
     'node:http#ServerResponse.end',
+    'node:http#ServerResponse.getHeader',
+    'node:http#ServerResponse.getHeaderNames',
+    'node:http#ServerResponse.hasHeader',
+    'node:http#ServerResponse.headersSent',
+    'node:http#ServerResponse.removeHeader',
     'node:http#ServerResponse.setHeader',
     'node:http#ServerResponse.statusCode.read',
     'node:http#ServerResponse.statusCode.write',
+    'node:http#ServerResponse.writableEnded',
     'node:http#ServerResponse.write',
     'node:http#ServerResponse.writeHead',
     'node:http#createServer'
@@ -74,7 +83,13 @@ test('node:http объявляет module, Server, IncomingMessage и ServerResp
   assert.ok(requestVariant)
   assert.deepEqual(callbackParameterTypeIds(requestVariant), [requestTypeId, responseTypeId])
 
-  for (const operationId of ['node:http#IncomingMessage.method', 'node:http#IncomingMessage.url']) {
+  for (const operationId of [
+    'node:http#IncomingMessage.headers',
+    'node:http#IncomingMessage.httpVersion',
+    'node:http#IncomingMessage.method',
+    'node:http#IncomingMessage.socket',
+    'node:http#IncomingMessage.url'
+  ]) {
     const requestRead = operation(operations, operationId)
 
     assert.equal(requestRead.kind, 'member-read')
@@ -94,11 +109,24 @@ test('node:http объявляет module, Server, IncomingMessage и ServerResp
   assert.equal(statusWrite.cReceiverAdapter, 'HttpResponse($value)')
 
   const end = operation(operations, 'node:http#ServerResponse.end')
+  const getHeader = operation(operations, 'node:http#ServerResponse.getHeader')
+  const getHeaderNames = operation(operations, 'node:http#ServerResponse.getHeaderNames')
+  const hasHeader = operation(operations, 'node:http#ServerResponse.hasHeader')
+  const removeHeader = operation(operations, 'node:http#ServerResponse.removeHeader')
   const setHeader = operation(operations, 'node:http#ServerResponse.setHeader')
   const write = operation(operations, 'node:http#ServerResponse.write')
   const writeHead = operation(operations, 'node:http#ServerResponse.writeHead')
 
-  for (const responseOperation of [end, setHeader, write, writeHead]) {
+  for (const responseOperation of [
+    end,
+    getHeader,
+    getHeaderNames,
+    hasHeader,
+    removeHeader,
+    setHeader,
+    write,
+    writeHead
+  ]) {
     assert.equal(responseOperation.receiverTypeId, responseTypeId)
     assert.equal(responseOperation.cReceiverAdapter, 'HttpResponse($value)')
     assert.equal(responseOperation.cCallStyle, 'member')
@@ -106,6 +134,11 @@ test('node:http объявляет module, Server, IncomingMessage и ServerResp
 
   assertBodyVariants(end)
   assert.deepEqual(setHeader.cArgumentKinds, ['receiver', 'string-view', 'string-view'])
+  assert.equal(setHeader.cResultMode, 'borrowed')
+  assert.deepEqual(getHeader.cArgumentKinds, ['receiver', 'string-view'])
+  assert.deepEqual(getHeaderNames.cArgumentKinds, ['receiver'])
+  assert.deepEqual(hasHeader.cArgumentKinds, ['receiver', 'string-view'])
+  assert.deepEqual(removeHeader.cArgumentKinds, ['receiver', 'string-view'])
   assertBodyVariants(write)
   assert.equal(writeHead.cResultMode, 'borrowed')
   assert.ok(

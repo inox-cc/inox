@@ -5,31 +5,59 @@ import type {
   LibraryCallbackParameterDescriptor,
   LibraryOperationDescriptor,
   LibraryOperationVariantDescriptor,
+  NominalTypeRef,
+  ObjectTypeRef,
+  PrimitiveTypeRef,
   TypeRef
 } from '../../../../compiler/extensions/types.ts'
 
 const libraryId = 'node:http'
+const collectionsLibraryId = 'global:collections'
 const runtimeRequirement = libraryId
+const arrayRuntimeRequirement = `${collectionsLibraryId}#array`
+const arrayTypeId = `${collectionsLibraryId}#Array`
 const serverTypeId = `${libraryId}#Server`
 const requestTypeId = `${libraryId}#IncomingMessage`
 const responseTypeId = `${libraryId}#ServerResponse`
+const netSocketTypeId = 'node:net#Socket'
 const uint8ArrayTypeId = 'global:binary#Uint8Array'
 const runtimeRequirements = [runtimeRequirement]
 const stringTypeRef = primitiveTypeRef('string')
+const nullableStringTypeRef: PrimitiveTypeRef = { ...stringTypeRef, nullable: true }
 const numberTypeRef = primitiveTypeRef('number')
 const booleanTypeRef = primitiveTypeRef('boolean')
 const voidTypeRef = primitiveTypeRef('void')
+const headersTypeRef: ObjectTypeRef = {
+  kind: 'object',
+  fields: [],
+  dynamic: true,
+  dynamicField: nullableStringTypeRef,
+  nullable: false,
+  ownership: 'value',
+  traits: []
+}
+const stringCResultMapping = cResultMapping('inox::String')
+const valueCResultMapping = cResultMapping('inox::Value')
 
 const operations: LibraryOperationDescriptor[] = [
   createServerOperation(),
   serverCloseOperation(),
   serverListenOperation(),
   serverOnOperation(),
-  requestMemberReadOperation('method'),
-  requestMemberReadOperation('url'),
+  requestMemberReadOperation('headers', headersTypeRef, valueCResultMapping),
+  requestMemberReadOperation('httpVersion', stringTypeRef, stringCResultMapping),
+  requestMemberReadOperation('method', stringTypeRef, stringCResultMapping),
+  requestMemberReadOperation('socket', nominalTypeRef(netSocketTypeId, 'value')),
+  requestMemberReadOperation('url', stringTypeRef, stringCResultMapping),
+  responseBooleanReadOperation('headersSent'),
   responseStatusReadOperation(),
   responseStatusWriteOperation(),
+  responseBooleanReadOperation('writableEnded'),
   responseEndOperation(),
+  responseGetHeaderOperation(),
+  responseGetHeaderNamesOperation(),
+  responseHasHeaderOperation(),
+  responseRemoveHeaderOperation(),
   responseSetHeaderOperation(),
   responseWriteOperation(),
   responseWriteHeadOperation()
@@ -37,7 +65,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:binary', 'node:net'],
+  dependencies: ['global:binary', collectionsLibraryId, 'node:net'],
   nativeTypes: [
     {
       libraryId,
@@ -78,6 +106,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       id: runtimeRequirement,
       dependencies: [
         'async-runtime',
+        arrayRuntimeRequirement,
         'callback-values',
         'global:binary',
         'managed-values',
@@ -220,7 +249,11 @@ function serverOnOperation(): LibraryOperationDescriptor {
   }
 }
 
-function requestMemberReadOperation(name: string): LibraryOperationDescriptor {
+function requestMemberReadOperation(
+  name: string,
+  resultTypeRef: TypeRef,
+  cResultMapping?: { cppType: string; fields: [] }
+): LibraryOperationDescriptor {
   return {
     libraryId,
     bindingId: `${requestTypeId}.${name}`,
@@ -233,11 +266,17 @@ function requestMemberReadOperation(name: string): LibraryOperationDescriptor {
     cReceiverAdapter: 'HttpRequest($value)',
     cCallStyle: 'member',
     cFailureMode: 'thrown',
-    resultTypeRef: stringTypeRef,
-    cResultMapping: {
-      cppType: 'inox::String',
-      fields: []
-    }
+    resultTypeRef,
+    cResultMapping
+  }
+}
+
+function responseBooleanReadOperation(name: 'headersSent' | 'writableEnded'): LibraryOperationDescriptor {
+  return {
+    ...responseReceiverOperation(name),
+    kind: 'member-read',
+    cArgumentKinds: ['receiver'],
+    resultTypeRef: booleanTypeRef
   }
 }
 
@@ -293,6 +332,51 @@ function responseEndOperation(): LibraryOperationDescriptor {
   }
 }
 
+function responseGetHeaderOperation(): LibraryOperationDescriptor {
+  return {
+    ...responseReceiverOperation('getHeader'),
+    cArgumentKinds: ['receiver', 'string-view'],
+    minArgs: 1,
+    maxArgs: 1,
+    argumentChecks: [stringArgument()],
+    resultTypeRef: nullableStringTypeRef,
+    cResultMapping: valueCResultMapping
+  }
+}
+
+function responseGetHeaderNamesOperation(): LibraryOperationDescriptor {
+  return {
+    ...responseReceiverOperation('getHeaderNames'),
+    cArgumentKinds: ['receiver'],
+    minArgs: 0,
+    maxArgs: 0,
+    argumentChecks: [],
+    resultTypeRef: arrayTypeRef(stringTypeRef)
+  }
+}
+
+function responseHasHeaderOperation(): LibraryOperationDescriptor {
+  return {
+    ...responseReceiverOperation('hasHeader'),
+    cArgumentKinds: ['receiver', 'string-view'],
+    minArgs: 1,
+    maxArgs: 1,
+    argumentChecks: [stringArgument()],
+    resultTypeRef: booleanTypeRef
+  }
+}
+
+function responseRemoveHeaderOperation(): LibraryOperationDescriptor {
+  return {
+    ...responseReceiverOperation('removeHeader'),
+    cArgumentKinds: ['receiver', 'string-view'],
+    minArgs: 1,
+    maxArgs: 1,
+    argumentChecks: [stringArgument()],
+    resultTypeRef: voidTypeRef
+  }
+}
+
 function responseSetHeaderOperation(): LibraryOperationDescriptor {
   return {
     ...responseReceiverOperation('setHeader'),
@@ -300,7 +384,8 @@ function responseSetHeaderOperation(): LibraryOperationDescriptor {
     minArgs: 2,
     maxArgs: 2,
     argumentChecks: [stringArgument(), stringArgument()],
-    resultTypeRef: voidTypeRef
+    cResultMode: 'borrowed',
+    resultTypeRef: nominalTypeRef(responseTypeId, 'borrowed')
   }
 }
 
@@ -431,7 +516,7 @@ function nominalTypeRef(typeId: string, ownership: 'borrowed' | 'value'): TypeRe
   }
 }
 
-function primitiveTypeRef(name: 'boolean' | 'number' | 'string' | 'void'): TypeRef {
+function primitiveTypeRef(name: 'boolean' | 'number' | 'string' | 'void'): PrimitiveTypeRef {
   return {
     kind: 'primitive',
     name,
@@ -439,6 +524,21 @@ function primitiveTypeRef(name: 'boolean' | 'number' | 'string' | 'void'): TypeR
     ownership: 'value',
     traits: []
   }
+}
+
+function arrayTypeRef(elementType: TypeRef): NominalTypeRef {
+  return {
+    kind: 'nominal',
+    typeId: arrayTypeId,
+    args: [elementType],
+    nullable: false,
+    ownership: 'value',
+    traits: [{ traitId: 'iterable', args: [elementType] }]
+  }
+}
+
+function cResultMapping(cppType: string): { cppType: string; fields: [] } {
+  return { cppType, fields: [] }
 }
 
 function moduleBinding(name: string): string {

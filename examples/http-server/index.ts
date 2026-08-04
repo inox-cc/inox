@@ -25,6 +25,24 @@ function main(): void {
       return
     }
 
+    if (request.method === 'GET' && request.url === '/network') {
+      const marker = request.headers['x-inox-test'] ?? ''
+      response.setHeader('X-Inox-Echo', marker).setHeader('X-Remove', 'unused')
+      const configured =
+        response.hasHeader('x-inox-echo') &&
+        response.getHeader('X-Inox-Echo') === marker &&
+        response.getHeaderNames().includes('x-inox-echo')
+      response.removeHeader('X-Remove')
+      response.setHeader('Content-Type', 'application/json')
+      response.end(
+        '{"configured":' + String(configured) +
+        ',"headersSentBeforeEnd":' + String(response.headersSent) +
+        ',"httpVersion":"' + request.httpVersion +
+        '","remote":' + String((request.socket.remoteAddress ?? '').length > 0) + '}'
+      )
+      return
+    }
+
     if (request.method === 'GET' && request.url && !request.url.includes('..')) {
       const requestPath = request.url === '/' ? '/index.html' : request.url
       const filePath = join(staticRoot, normalize(requestPath))

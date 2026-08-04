@@ -63,6 +63,19 @@ async function main(): Promise<void> {
     assert.equal(text.headers.get('content-type'), 'text/plain; charset=utf-8')
     assert.equal(await text.text(), 'Hello from inox HTTP static files.\n')
     assertServerIsAlive(server, stdout, stderr)
+
+    const network = await fetchWithTimeout(`http://127.0.0.1:${port}/network`, 2_000, {
+      'X-Inox-Test': nonce
+    })
+    assert.equal(network.status, 200)
+    assert.equal(network.headers.get('x-inox-echo'), nonce)
+    assert.deepEqual(await network.json(), {
+      configured: true,
+      headersSentBeforeEnd: false,
+      httpVersion: '1.1',
+      remote: true
+    })
+    assertServerIsAlive(server, stdout, stderr)
   } finally {
     await stopServer(server)
     await rm(buildRoot, { recursive: true, force: true })
@@ -117,7 +130,11 @@ async function waitForServer(
   assert.fail(`HTTP server не подтвердил готовность ${readyLine}\nstdout: ${stdout()}\nstderr: ${stderr()}`)
 }
 
-async function fetchWithTimeout(url: string, milliseconds: number): Promise<Response> {
+async function fetchWithTimeout(
+  url: string,
+  milliseconds: number,
+  headers?: Record<string, string>
+): Promise<Response> {
   const controller = new AbortController()
   const timeout = setTimeout(() => {
     controller.abort()
@@ -125,7 +142,8 @@ async function fetchWithTimeout(url: string, milliseconds: number): Promise<Resp
 
   try {
     return await fetch(url, {
-      signal: controller.signal
+      signal: controller.signal,
+      headers
     })
   } finally {
     clearTimeout(timeout)

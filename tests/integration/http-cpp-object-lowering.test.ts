@@ -28,8 +28,27 @@ server.close()
 createServer().listen(8081, '127.0.0.1')
 
 createServer((request, response) => {
-  if (request.method === 'GET') {
+  const host = request.headers['host'] ?? ''
+
+  if (
+    request.method === 'GET' &&
+    request.httpVersion === '1.1' &&
+    request.socket.remotePort > 0 &&
+    host.length > 0
+  ) {
+    response.setHeader('X-Inox', 'yes').setHeader('X-Remove', 'unused')
+    response.removeHeader('X-Remove')
+
+    if (response.hasHeader('x-inox') && response.getHeader('X-Inox') === 'yes') {
+      response.getHeaderNames().includes('x-inox')
+    }
+
+    if (response.headersSent || response.writableEnded) {
+      return
+    }
+
     response.end(request.url)
+    response.writableEnded
     return
   }
 
@@ -64,7 +83,19 @@ createServer((request, response) => {
   assert.match(source, /inox_callback_arg_count < 2/)
   assert.match(source, /HttpRequest request = /)
   assert.match(source, /HttpResponse response = /)
+  assert.match(source, /request\.headers\(\)/)
+  assert.match(source, /(?:request\.httpVersion\(\)|inox::get\(request, "httpVersion"\))/)
+  assert.match(source, /request\.socket\(\)/)
+  assert.match(source, /\.remotePort\(\)/)
   assert.match(source, /request\.url\(\)/)
+  assert.match(source, /response\.setHeader\("X-Inox", "yes"\)/)
+  assert.match(source, /\.setHeader\("X-Remove", "unused"\)/)
+  assert.match(source, /response\.getHeader\("X-Inox"\)/)
+  assert.match(source, /response\.getHeaderNames\(\)/)
+  assert.match(source, /response\.hasHeader\("x-inox"\)/)
+  assert.match(source, /(?:response\.headersSent\(\)|inox::get\(response, "headersSent"\))/)
+  assert.match(source, /response\.removeHeader\("X-Remove"\)/)
+  assert.match(source, /(?:response\.writableEnded\(\)|inox::get\(response, "writableEnded"\))/)
   assert.match(source, /response\.end\(/)
   assert.match(source, /response\.setStatusCode\(404\)/)
   assert.match(source, /http\.createServer\(inox_callback_\d+\)/)

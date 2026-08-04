@@ -192,11 +192,24 @@ struct ResponseHeader {
 
 class HttpRequestState {
 public:
+  inox::Value headers_;
+  inox::String http_version_;
   inox::String method_;
+  NetSocket socket_;
   inox::String url_;
 
-  HttpRequestState(inox::String method, inox::String url)
-    : method_(std::move(method)), url_(std::move(url)) {}
+  HttpRequestState(
+    inox::Value headers,
+    inox::String http_version,
+    inox::String method,
+    NetSocket socket,
+    inox::String url
+  )
+    : headers_(std::move(headers)),
+      http_version_(std::move(http_version)),
+      method_(std::move(method)),
+      socket_(std::move(socket)),
+      url_(std::move(url)) {}
 };
 
 class HttpResponseState : public std::enable_shared_from_this<HttpResponseState> {
@@ -212,9 +225,15 @@ public:
 
   void applyHeaders(const inox::Value& headers);
   void end(std::span<const std::uint8_t> body);
+  inox::Value getHeader(inox::StringView name) const;
+  Array getHeaderNames() const;
+  bool hasHeader(inox::StringView name) const;
+  bool headersSent() const;
+  void removeHeader(inox::StringView name);
   void setHeader(inox::StringView name, inox::StringView value);
   void setStatusCode(double value);
   bool write(std::span<const std::uint8_t> body);
+  bool writableEnded() const;
 };
 
 class HttpServerState : public std::enable_shared_from_this<HttpServerState> {
@@ -299,12 +318,17 @@ inox_status readRequestField(const void* instance, std::uint32_t index, inox_val
 inox_status readResponseField(const void* instance, std::uint32_t index, inox_value* out);
 
 const inox_class_field_descriptor requestFields[] = {
+  {"headers", "object", "IncomingHttpHeaders", "owned", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
+  {"httpVersion", "string", "string", "owned", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
   {"method", "string", "string", "owned", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
+  {"socket", "object", "Socket", "owned", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
   {"url", "string", "string", "owned", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
 };
 
 const inox_class_field_descriptor responseFields[] = {
+  {"headersSent", "boolean", "boolean", "value", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
   {"statusCode", "number", "number", "value", INOX_CLASS_FIELD_ENUMERABLE},
+  {"writableEnded", "boolean", "boolean", "value", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
 };
 
 const inox_class_descriptor serverDescriptor = {
@@ -318,7 +342,7 @@ const inox_class_descriptor serverDescriptor = {
 
 const inox_class_descriptor requestDescriptor = {
   "IncomingMessage",
-  2,
+  5,
   requestFields,
   readRequestField,
   copyHolder<HttpRequestHolder>,
@@ -327,7 +351,7 @@ const inox_class_descriptor requestDescriptor = {
 
 const inox_class_descriptor responseDescriptor = {
   "ServerResponse",
-  1,
+  3,
   responseFields,
   readResponseField,
   copyHolder<HttpResponseHolder>,
@@ -444,10 +468,22 @@ inox_status readRequestField(const void* instance, std::uint32_t index, inox_val
   }
 
   if (index == 0) {
-    return holder->state->method_.copy_to(out);
+    return holder->state->headers_.copy_to(out);
   }
 
   if (index == 1) {
+    return holder->state->http_version_.copy_to(out);
+  }
+
+  if (index == 2) {
+    return holder->state->method_.copy_to(out);
+  }
+
+  if (index == 3) {
+    return holder->state->socket_.copy_to(out);
+  }
+
+  if (index == 4) {
     return holder->state->url_.copy_to(out);
   }
 
@@ -461,12 +497,26 @@ inox_status readResponseField(const void* instance, std::uint32_t index, inox_va
 
   const auto* holder = static_cast<const HttpResponseHolder*>(instance);
 
-  if (!holder->state || index != 0) {
+  if (!holder->state) {
     return INOX_ERR_FIELD;
   }
 
-  *out = inox_number_value(holder->state->status_code_);
-  return INOX_OK;
+  if (index == 0) {
+    *out = inox_bool_value(holder->state->headersSent());
+    return INOX_OK;
+  }
+
+  if (index == 1) {
+    *out = inox_number_value(holder->state->status_code_);
+    return INOX_OK;
+  }
+
+  if (index == 2) {
+    *out = inox_bool_value(holder->state->writableEnded());
+    return INOX_OK;
+  }
+
+  return INOX_ERR_FIELD;
 }
 
 template <typename State>
@@ -548,6 +598,10 @@ struct ParsedRequest {
   std::size_t method_length;
   std::size_t url_start;
   std::size_t url_length;
+  std::size_t version_start;
+  std::size_t version_length;
+  std::size_t headers_start;
+  std::size_t headers_end;
 };
 
 std::size_t findCrlf(std::span<const char> bytes, std::size_t start) {
@@ -585,6 +639,213 @@ bool spanEqualsIgnoreCase(std::span<const char> value, const char* expected) {
     inox::StringView(value.data(), value.size()),
     inox::StringView(expected, std::strlen(expected))
   );
+}
+
+inox::String normalizedHeaderName(std::span<const char> name) {
+  std::string normalized;
+
+  try {
+    normalized.reserve(name.size());
+
+    for (const char character : name) {
+      const unsigned char byte = static_cast<unsigned char>(character);
+      normalized.push_back(
+        byte >= 'A' && byte <= 'Z'
+          ? static_cast<char>(byte - 'A' + 'a')
+          : static_cast<char>(byte)
+      );
+    }
+  } catch (const std::bad_alloc&) {
+    throwHttpError("TypeError: HTTP header allocation failed");
+    return inox::String("");
+  }
+
+  return inox::String(normalized.data(), normalized.size());
+}
+
+inox::Value materializeRequestHeaders(
+  std::span<const char> bytes,
+  std::size_t headers_start,
+  std::size_t headers_end
+) {
+  std::vector<ResponseHeader> headers;
+  std::size_t cursor = headers_start;
+
+  try {
+    headers.reserve(8);
+
+    while (cursor + 2 <= headers_end) {
+      const std::size_t line_end = findCrlf(bytes, cursor);
+
+      if (line_end == std::numeric_limits<std::size_t>::max() || line_end > headers_end || line_end == cursor) {
+        break;
+      }
+
+      const std::size_t separator = findByte(bytes, cursor, line_end, ':');
+
+      if (separator == std::numeric_limits<std::size_t>::max()) {
+        throwHttpError("TypeError: HTTP header parsing failed");
+        return inox::Value();
+      }
+
+      std::size_t value_start = separator + 1;
+      std::size_t value_end = line_end;
+
+      while (value_start < value_end && (bytes[value_start] == ' ' || bytes[value_start] == '\t')) {
+        value_start += 1;
+      }
+
+      while (value_end > value_start && (bytes[value_end - 1] == ' ' || bytes[value_end - 1] == '\t')) {
+        value_end -= 1;
+      }
+
+      const std::span<const char> raw_name = bytes.subspan(cursor, separator - cursor);
+      const inox::StringView raw_value(bytes.data() + value_start, value_end - value_start);
+      inox::String name = normalizedHeaderName(raw_name);
+
+      if (inox::thrown()) {
+        return inox::Value();
+      }
+
+      bool merged = false;
+
+      for (ResponseHeader& header : headers) {
+        if (!equalsIgnoreCase(header.name, name)) {
+          continue;
+        }
+
+        const inox::StringView previous = header.value;
+        std::string combined;
+        combined.reserve(previous.len + 2 + raw_value.len);
+        combined.append(previous.bytes, previous.len);
+        combined.append(", ");
+        combined.append(raw_value.bytes, raw_value.len);
+        header.value = inox::String(combined.data(), combined.size());
+        merged = true;
+        break;
+      }
+
+      if (!merged) {
+        headers.push_back(ResponseHeader{std::move(name), inox::String(raw_value)});
+      }
+
+      if (inox::thrown()) {
+        return inox::Value();
+      }
+
+      cursor = line_end + 2;
+    }
+  } catch (const std::bad_alloc&) {
+    throwHttpError("TypeError: HTTP header allocation failed");
+    return inox::Value();
+  }
+
+  inox_allocator* allocator = &inox_default_allocator;
+  auto* shape = static_cast<inox_shape*>(allocator->alloc(allocator->user, sizeof(inox_shape), alignof(inox_shape)));
+
+  if (shape == nullptr) {
+    throwHttpError("TypeError: HTTP header allocation failed");
+    return inox::Value();
+  }
+
+  auto* fields = headers.empty()
+    ? static_cast<inox_field_info*>(nullptr)
+    : static_cast<inox_field_info*>(allocator->alloc(
+        allocator->user,
+        sizeof(inox_field_info) * headers.size(),
+        alignof(inox_field_info)
+      ));
+
+  if (!headers.empty() && fields == nullptr) {
+    allocator->free(allocator->user, shape, sizeof(inox_shape), alignof(inox_shape));
+    throwHttpError("TypeError: HTTP header allocation failed");
+    return inox::Value();
+  }
+
+  for (std::size_t index = 0; index < headers.size(); index += 1) {
+    fields[index] = {nullptr, INOX_FIELD_READONLY};
+  }
+
+  std::size_t names_initialized = 0;
+
+  for (; names_initialized < headers.size(); names_initialized += 1) {
+    const inox::StringView name = headers[names_initialized].name;
+    auto* copy = static_cast<char*>(allocator->alloc(allocator->user, name.len + 1, alignof(char)));
+
+    if (copy == nullptr) {
+      break;
+    }
+
+    std::memcpy(copy, name.bytes, name.len);
+    copy[name.len] = '\0';
+    fields[names_initialized].name = copy;
+  }
+
+  if (names_initialized != headers.size()) {
+    for (std::size_t index = 0; index < names_initialized; index += 1) {
+      allocator->free(
+        allocator->user,
+        const_cast<char*>(fields[index].name),
+        std::strlen(fields[index].name) + 1,
+        alignof(char)
+      );
+    }
+
+    if (fields != nullptr) {
+      allocator->free(
+        allocator->user,
+        fields,
+        sizeof(inox_field_info) * headers.size(),
+        alignof(inox_field_info)
+      );
+    }
+
+    allocator->free(allocator->user, shape, sizeof(inox_shape), alignof(inox_shape));
+    throwHttpError("TypeError: HTTP header allocation failed");
+    return inox::Value();
+  }
+
+  shape->field_count = static_cast<std::uint32_t>(headers.size());
+  shape->fields = fields;
+  inox_value object = inox_undefined_value();
+  const inox_status status = inox_object_new(allocator, shape, &object);
+
+  if (status != INOX_OK) {
+    for (std::size_t index = 0; index < headers.size(); index += 1) {
+      allocator->free(
+        allocator->user,
+        const_cast<char*>(fields[index].name),
+        std::strlen(fields[index].name) + 1,
+        alignof(char)
+      );
+    }
+
+    if (fields != nullptr) {
+      allocator->free(
+        allocator->user,
+        fields,
+        sizeof(inox_field_info) * headers.size(),
+        alignof(inox_field_info)
+      );
+    }
+
+    allocator->free(allocator->user, shape, sizeof(inox_shape), alignof(inox_shape));
+    throwHttpError("TypeError: HTTP header allocation failed");
+    return inox::Value();
+  }
+
+  auto* instance = reinterpret_cast<inox_object*>(object.as.ref);
+  instance->header.flags |= INOX_OBJECT_OWNED_SHAPE;
+
+  for (std::uint32_t index = 0; index < shape->field_count; index += 1) {
+    if (inox_object_init_known(object, index, headers[index].value.raw()) != INOX_OK) {
+      inox_release(object);
+      throwHttpError("TypeError: HTTP header initialization failed");
+      return inox::Value();
+    }
+  }
+
+  return inox::adopt(object);
 }
 
 ParsedRequest parseRequest(std::span<const char> bytes) {
@@ -667,6 +928,11 @@ ParsedRequest parseRequest(std::span<const char> bytes) {
     const std::span<const char> name = bytes.subspan(cursor, separator - cursor);
     const std::span<const char> value = bytes.subspan(value_start, value_end - value_start);
 
+    if (!validHeaderName(inox::StringView(name.data(), name.size())) ||
+        !validHeaderValue(inox::StringView(value.data(), value.size()))) {
+      return {RequestParseResult::invalid, 0, 0, 0, 0};
+    }
+
     if (spanEqualsIgnoreCase(name, "Transfer-Encoding")) {
       return {RequestParseResult::invalid, 0, 0, 0, 0};
     }
@@ -717,6 +983,10 @@ ParsedRequest parseRequest(std::span<const char> bytes) {
     method_end,
     url_start,
     url_end - url_start,
+    url_end + 6,
+    3,
+    request_line_end + 2,
+    header_end - 2,
   };
 }
 
@@ -960,10 +1230,23 @@ void HttpConnectionState::onData(inox::StringView data) {
   request_dispatched_ = true;
   std::shared_ptr<HttpRequestState> request;
   std::shared_ptr<HttpResponseState> response;
+  inox::Value headers = materializeRequestHeaders(
+    request_bytes_,
+    parsed.headers_start,
+    parsed.headers_end
+  );
+
+  if (inox::thrown()) {
+    socket_.destroy();
+    return;
+  }
 
   try {
     request = std::make_shared<HttpRequestState>(
+      std::move(headers),
+      inox::String(request_bytes_.data() + parsed.version_start, parsed.version_length),
       inox::String(request_bytes_.data() + parsed.method_start, parsed.method_length),
+      socket_,
       inox::String(request_bytes_.data() + parsed.url_start, parsed.url_length)
     );
     response = std::make_shared<HttpResponseState>(shared_from_this());
@@ -1101,10 +1384,82 @@ void HttpResponseState::setHeader(inox::StringView name, inox::StringView value)
   }
 
   try {
-    headers_.push_back(ResponseHeader{inox::String(name), inox::String(value)});
+    const inox::String normalized_name = normalizedHeaderName(std::span<const char>(name.bytes, name.len));
+
+    if (inox::thrown()) {
+      return;
+    }
+
+    headers_.push_back(ResponseHeader{normalized_name, inox::String(value)});
   } catch (const std::bad_alloc&) {
     throwHttpError("TypeError: HttpResponse header allocation failed");
   }
+}
+
+inox::Value HttpResponseState::getHeader(inox::StringView name) const {
+  if (!validHeaderName(name)) {
+    throwHttpError("TypeError: HttpResponse.getHeader failed");
+    return inox::Value();
+  }
+
+  for (const ResponseHeader& header : headers_) {
+    if (equalsIgnoreCase(header.name, name)) {
+      return header.value;
+    }
+  }
+
+  return inox::Value();
+}
+
+Array HttpResponseState::getHeaderNames() const {
+  Array names = Array::create(0);
+
+  for (const ResponseHeader& header : headers_) {
+    names.push(header.name);
+
+    if (inox::thrown()) {
+      return Array();
+    }
+  }
+
+  return names;
+}
+
+bool HttpResponseState::hasHeader(inox::StringView name) const {
+  if (!validHeaderName(name)) {
+    throwHttpError("TypeError: HttpResponse.hasHeader failed");
+    return false;
+  }
+
+  for (const ResponseHeader& header : headers_) {
+    if (equalsIgnoreCase(header.name, name)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool HttpResponseState::headersSent() const {
+  return ending_ || ended_;
+}
+
+void HttpResponseState::removeHeader(inox::StringView name) {
+  if (ending_ || ended_ || !validHeaderName(name)) {
+    throwHttpError("TypeError: HttpResponse.removeHeader failed");
+    return;
+  }
+
+  for (auto iterator = headers_.begin(); iterator != headers_.end(); iterator += 1) {
+    if (equalsIgnoreCase(iterator->name, name)) {
+      headers_.erase(iterator);
+      return;
+    }
+  }
+}
+
+bool HttpResponseState::writableEnded() const {
+  return ending_ || ended_;
 }
 
 void HttpResponseState::setStatusCode(double value) {
@@ -1488,6 +1843,28 @@ HttpRequest::HttpRequest(const inox::Value& value) : inox::Value(value) {}
 
 HttpRequest::HttpRequest(inox::Value&& value) : inox::Value(std::move(value)) {}
 
+inox::Value HttpRequest::headers() const {
+  std::shared_ptr<HttpRequestState> state = requestState(*this);
+
+  if (!state) {
+    throwHttpError("TypeError: HttpRequest.headers failed");
+    return inox::Value();
+  }
+
+  return state->headers_;
+}
+
+inox::String HttpRequest::httpVersion() const {
+  std::shared_ptr<HttpRequestState> state = requestState(*this);
+
+  if (!state) {
+    throwHttpError("TypeError: HttpRequest.httpVersion failed");
+    return inox::String("");
+  }
+
+  return state->http_version_;
+}
+
 inox::String HttpRequest::method() const {
   std::shared_ptr<HttpRequestState> state = requestState(*this);
 
@@ -1497,6 +1874,17 @@ inox::String HttpRequest::method() const {
   }
 
   return state->method_;
+}
+
+NetSocket HttpRequest::socket() const {
+  std::shared_ptr<HttpRequestState> state = requestState(*this);
+
+  if (!state) {
+    throwHttpError("TypeError: HttpRequest.socket failed");
+    return NetSocket();
+  }
+
+  return state->socket_;
 }
 
 inox::String HttpRequest::url() const {
@@ -1549,15 +1937,71 @@ void HttpResponse::end(const Uint8Array& body) {
   }
 }
 
-void HttpResponse::setHeader(inox::StringView name, inox::StringView value) {
+inox::Value HttpResponse::getHeader(inox::StringView name) const {
+  std::shared_ptr<HttpResponseState> state = responseState(*this);
+
+  if (!state) {
+    throwHttpError("TypeError: HttpResponse.getHeader failed");
+    return inox::Value();
+  }
+
+  return state->getHeader(name);
+}
+
+Array HttpResponse::getHeaderNames() const {
+  std::shared_ptr<HttpResponseState> state = responseState(*this);
+
+  if (!state) {
+    throwHttpError("TypeError: HttpResponse.getHeaderNames failed");
+    return Array();
+  }
+
+  return state->getHeaderNames();
+}
+
+bool HttpResponse::hasHeader(inox::StringView name) const {
+  std::shared_ptr<HttpResponseState> state = responseState(*this);
+
+  if (!state) {
+    throwHttpError("TypeError: HttpResponse.hasHeader failed");
+    return false;
+  }
+
+  return state->hasHeader(name);
+}
+
+bool HttpResponse::headersSent() const {
+  std::shared_ptr<HttpResponseState> state = responseState(*this);
+
+  if (!state) {
+    throwHttpError("TypeError: HttpResponse.headersSent failed");
+    return false;
+  }
+
+  return state->headersSent();
+}
+
+void HttpResponse::removeHeader(inox::StringView name) {
+  std::shared_ptr<HttpResponseState> state = responseState(*this);
+
+  if (!state) {
+    throwHttpError("TypeError: HttpResponse.removeHeader failed");
+    return;
+  }
+
+  state->removeHeader(name);
+}
+
+HttpResponse& HttpResponse::setHeader(inox::StringView name, inox::StringView value) {
   std::shared_ptr<HttpResponseState> state = responseState(*this);
 
   if (!state) {
     throwHttpError("TypeError: HttpResponse.setHeader failed");
-    return;
+    return *this;
   }
 
   state->setHeader(name, value);
+  return *this;
 }
 
 double HttpResponse::statusCode() const {
@@ -1580,6 +2024,17 @@ void HttpResponse::setStatusCode(double value) {
   }
 
   state->setStatusCode(value);
+}
+
+bool HttpResponse::writableEnded() const {
+  std::shared_ptr<HttpResponseState> state = responseState(*this);
+
+  if (!state) {
+    throwHttpError("TypeError: HttpResponse.writableEnded failed");
+    return false;
+  }
+
+  return state->writableEnded();
 }
 
 bool HttpResponse::write(inox::StringView body) {

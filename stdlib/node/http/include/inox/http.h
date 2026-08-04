@@ -3,8 +3,10 @@
 
 #include <optional>
 
+#include "inox/array.h"
 #include "inox/binary.h"
 #include "inox/callback.h"
+#include "inox/net.h"
 #include "inox/string.h"
 #include "inox/string_view.h"
 #include "inox/value.h"
@@ -64,7 +66,10 @@ public:
 
   using inox::Value::operator=;
 
+  inox::Value headers() const;
+  inox::String httpVersion() const;
   inox::String method() const;
+  NetSocket socket() const;
   inox::String url() const;
 };
 
@@ -79,9 +84,15 @@ public:
   void end();
   void end(inox::StringView body);
   void end(const Uint8Array& body);
-  void setHeader(inox::StringView name, inox::StringView value);
+  inox::Value getHeader(inox::StringView name) const;
+  Array getHeaderNames() const;
+  bool hasHeader(inox::StringView name) const;
+  bool headersSent() const;
+  void removeHeader(inox::StringView name);
+  HttpResponse& setHeader(inox::StringView name, inox::StringView value);
   void setStatusCode(double value);
   double statusCode() const;
+  bool writableEnded() const;
   bool write(inox::StringView body);
   bool write(const Uint8Array& body);
   HttpResponse& writeHead(double status_code);
