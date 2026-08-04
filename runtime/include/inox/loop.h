@@ -22,12 +22,15 @@ typedef void (*inox_loop_callback_finalizer_fn)(void* context);
 struct inox_loop {
   inox_allocator* allocator;
   void* backend;
+  void* priority_microtask_head;
+  void* priority_microtask_tail;
   void* microtask_head;
   void* microtask_tail;
   void* immediate_head;
   void* immediate_tail;
   void* timer_head;
   void* timer_tail;
+  size_t priority_microtask_count;
   size_t microtask_count;
   size_t immediate_count;
   size_t timer_count;
@@ -39,6 +42,12 @@ inox_status inox_loop_init(inox_loop* loop, inox_allocator* allocator);
 void inox_loop_dispose(inox_loop* loop);
 inox_status
 inox_loop_queue_microtask(inox_loop* loop, inox_microtask_fn run, void* context, inox_microtask_finalizer_fn finalizer);
+inox_status inox_loop_queue_priority_microtask(
+  inox_loop* loop,
+  inox_microtask_fn run,
+  void* context,
+  inox_microtask_finalizer_fn finalizer
+);
 inox_status inox_loop_drain_microtasks(inox_loop* loop);
 inox_status inox_loop_queue_immediate(
   inox_loop* loop,

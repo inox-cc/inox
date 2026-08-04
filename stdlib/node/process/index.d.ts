@@ -37,9 +37,12 @@ export interface ProcessModule {
   readonly versions: ProcessVersions
 
   cwd(): string
+  chdir(directory: string): void
   exit(code?: number): void
   hrtime(time?: ProcessHrtime): ProcessHrtime
   memoryUsage(): ProcessMemoryUsage
+  nextTick(callback: () => void): void
+  uptime(): number
 }
 
 export const arch: string
@@ -54,9 +57,12 @@ export const version: string
 export const versions: ProcessVersions
 
 export function cwd(): string
+export function chdir(directory: string): void
 export function exit(code?: number): void
 export function hrtime(time?: ProcessHrtime): ProcessHrtime
 export function memoryUsage(): ProcessMemoryUsage
+export function nextTick(callback: () => void): void
+export function uptime(): number
 
 declare const process: ProcessModule
 export default process
@@ -101,9 +107,12 @@ declare global {
     readonly versions: ProcessVersions
 
     cwd(): string
+    chdir(directory: string): void
     exit(code?: number): void
     hrtime(time?: ProcessHrtime): ProcessHrtime
     memoryUsage(): ProcessMemoryUsage
+    nextTick(callback: () => void): void
+    uptime(): number
   }
 
   const process: Process

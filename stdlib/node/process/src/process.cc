@@ -3,7 +3,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <new>
+#include <utility>
 #if defined(_WIN32)
+#include <direct.h>
 #include <windows.h>
 #else
 #include <sys/resource.h>
@@ -24,12 +27,49 @@
 
 static const char* process_arch_name(void);
 static const char* process_platform_name(void);
+static inox_status process_now(int64_t* seconds, int64_t* nanoseconds);
+static void process_record_start(void);
 
 static int process_argc = 0;
 static char** process_argv_values = 0;
 static bool process_has_entry_path = false;
 static inox::StringView process_entry_path;
 static int process_exit_code = 0;
+static bool process_has_start = false;
+static int64_t process_start_seconds = 0;
+static int64_t process_start_nanoseconds = 0;
+
+struct ProcessNextTickContext {
+  explicit ProcessNextTickContext(inox::Callback callback) : callback(std::move(callback)) {}
+
+  inox::Callback callback;
+};
+
+static void process_throw_error(const char* message) {
+  inox::String error(message);
+
+  if (!error.valid()) {
+    inox::throw_out_of_memory();
+    return;
+  }
+
+  inox::throw_value(error);
+}
+
+static inox_status process_run_next_tick(void* context) {
+  auto* tick = static_cast<ProcessNextTickContext*>(context);
+
+  if (tick == nullptr) {
+    return INOX_ERR_TYPE;
+  }
+
+  tick->callback.call();
+  return inox::thrown() ? INOX_ERR_THROW : INOX_OK;
+}
+
+static void process_finalize_next_tick(void* context) {
+  delete static_cast<ProcessNextTickContext*>(context);
+}
 
 static const inox_field_info process_memory_usage_fields[] = {
   { "rss", INOX_FIELD_READONLY },
@@ -59,6 +99,7 @@ static void process_init(int argc, char** argv) {
   process_argv_values = argv;
   process_has_entry_path = false;
   process_entry_path = inox::StringView();
+  process_record_start();
 }
 
 static void process_init_with_entry(int argc, char** argv, inox::StringView entry_path) {
@@ -66,6 +107,7 @@ static void process_init_with_entry(int argc, char** argv, inox::StringView entr
   process_argv_values = argv;
   process_has_entry_path = true;
   process_entry_path = entry_path;
+  process_record_start();
 }
 
 static int process_argv_native_index(int index) {
@@ -163,6 +205,10 @@ static inox_status process_now(int64_t* seconds, int64_t* nanoseconds) {
   *nanoseconds = (int64_t)current.tv_nsec;
   return INOX_OK;
 #endif
+}
+
+static void process_record_start(void) {
+  process_has_start = process_now(&process_start_seconds, &process_start_nanoseconds) == INOX_OK;
 }
 
 static inox_status process_hrtime_component(inox_value previous, size_t index, int64_t* out) {
@@ -366,6 +412,34 @@ inox::String Process::cwd() const {
   return inox::String(cwd);
 }
 
+void Process::chdir(inox::StringView directory) const {
+  char* path = static_cast<char*>(
+    inox_default_allocator.alloc(inox_default_allocator.user, directory.len + 1, alignof(char))
+  );
+
+  if (path == nullptr) {
+    inox::throw_out_of_memory();
+    return;
+  }
+
+  if (directory.len != 0) {
+    memcpy(path, directory.bytes, directory.len);
+  }
+  path[directory.len] = 0;
+
+#if defined(_WIN32)
+  const int status = _chdir(path);
+#else
+  const int status = ::chdir(path);
+#endif
+
+  inox_default_allocator.free(inox_default_allocator.user, path, directory.len + 1, alignof(char));
+
+  if (status != 0) {
+    process_throw_error("Error: process.chdir failed");
+  }
+}
+
 void Process::exit(int code) const {
   ::exit(code);
 }
@@ -483,6 +557,56 @@ ProcessMemoryUsage Process::memoryUsage() const {
 
   static_cast<inox::Value&>(result) = inox::adopt(value);
   return result;
+}
+
+void Process::nextTick(inox::Callback callback) const {
+  inox_loop* active_loop = inox::loop();
+
+  if (active_loop == nullptr) {
+    process_throw_error("Error: process.nextTick requires an active event loop");
+    return;
+  }
+
+  auto* context = new (std::nothrow) ProcessNextTickContext(std::move(callback));
+
+  if (context == nullptr) {
+    inox::throw_out_of_memory();
+    return;
+  }
+
+  const inox_status status = inox_loop_queue_priority_microtask(
+    active_loop,
+    process_run_next_tick,
+    context,
+    process_finalize_next_tick
+  );
+
+  if (status != INOX_OK) {
+    delete context;
+
+    if (status == INOX_ERR_OOM) {
+      inox::throw_out_of_memory();
+    } else {
+      process_throw_error("Error: process.nextTick failed");
+    }
+  }
+}
+
+double Process::uptime() const {
+  if (!process_has_start) {
+    return 0;
+  }
+
+  int64_t seconds = 0;
+  int64_t nanoseconds = 0;
+
+  if (process_now(&seconds, &nanoseconds) != INOX_OK) {
+    return 0;
+  }
+
+  const double elapsed = static_cast<double>(seconds - process_start_seconds) +
+                         static_cast<double>(nanoseconds - process_start_nanoseconds) / 1000000000.0;
+  return elapsed < 0 ? 0 : elapsed;
 }
 
 Process process;

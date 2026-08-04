@@ -73,6 +73,9 @@ const operations: LibraryOperationDescriptor[] = [
   callOperation('cwd', [], 'process.cwd', stringTypeRef, 0, 0, [], {
     cResultMapping: stringResultMapping
   }),
+  callOperation('chdir', ['string-view'], 'process.chdir', voidTypeRef, 1, 1, [stringArgument()], {
+    cFailureMode: 'thrown'
+  }),
   callOperation('exit', ['optional-number'], 'process.exit', voidTypeRef, 0, 1, [numberArgument()]),
   callOperation('hrtime', ['optional-argument'], 'process.hrtime', arrayTypeRef(numberTypeRef), 0, 1, [
     arrayArgument()
@@ -80,6 +83,11 @@ const operations: LibraryOperationDescriptor[] = [
   callOperation('memoryUsage', [], 'process.memoryUsage', nominalTypeRef(memoryUsageTypeId), 0, 0, [], {
     cFailureMode: 'thrown'
   }),
+  callOperation('nextTick', ['runtime-callback'], 'process.nextTick', voidTypeRef, 1, 1, [callbackArgument()], {
+    cFailureMode: 'thrown',
+    callbackLifetime: 'event-loop'
+  }),
+  callOperation('uptime', [], 'process.uptime', numberTypeRef, 0, 0, []),
   {
     libraryId,
     bindingId: moduleBinding('exitCode'),
@@ -162,7 +170,14 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: [arrayRuntimeRequirement, 'managed-values', 'objects', 'string-bytes'],
+      dependencies: [
+        arrayRuntimeRequirement,
+        'async-runtime',
+        'callback-values',
+        'managed-values',
+        'objects',
+        'string-bytes'
+      ],
       cPreludeIncludes: ['inox/process.h'],
       capabilities: [],
       cEntrypointAdapter: {
@@ -176,6 +191,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
 type CallResultOptions = {
   cResultMapping?: LibraryCResultMappingDescriptor
   cFailureMode?: LibraryOperationDescriptor['cFailureMode']
+  callbackLifetime?: LibraryOperationDescriptor['callbackLifetime']
 }
 
 function callOperation(
@@ -201,6 +217,7 @@ function callOperation(
     cResultMapping: options.cResultMapping,
     cCallStyle: 'function',
     cFailureMode: options.cFailureMode ?? null,
+    callbackLifetime: options.callbackLifetime ?? null,
     minArgs,
     maxArgs,
     argumentChecks
@@ -347,6 +364,19 @@ function arrayArgument(): LibraryArgumentCheckDescriptor {
   return { valueTypes: ['object'] }
 }
 
+function stringArgument(): LibraryArgumentCheckDescriptor {
+  return { valueTypes: ['string'] }
+}
+
+function callbackArgument(): LibraryArgumentCheckDescriptor {
+  return {
+    valueTypes: ['function'],
+    functionParameters: [],
+    functionReturnType: 'void',
+    functionAsync: true
+  }
+}
+
 function moduleBinding(name: string): string {
   return `${libraryId}#module:${libraryId}:${name}`
 }
@@ -375,17 +405,14 @@ function unsupportedMethods(): string[] {
   return [
     'abort',
     'addListener',
-    'chdir',
     'cpuUsage',
     'emit',
     'kill',
     'listenerCount',
-    'nextTick',
     'off',
     'on',
     'once',
-    'removeListener',
-    'uptime'
+    'removeListener'
   ]
 }
 

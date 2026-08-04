@@ -6,6 +6,7 @@
 #ifdef __cplusplus
 
 #include "inox/array.h"
+#include "inox/callback.h"
 #include "inox/string.h"
 
 namespace inox {
@@ -92,10 +93,13 @@ public:
   ProcessVersions versions;
 
   inox::String cwd() const;
+  void chdir(inox::StringView directory) const;
   void exit(int code = 0) const;
   Array hrtime() const;
   Array hrtime(const inox::Value& previous) const;
   ProcessMemoryUsage memoryUsage() const;
+  void nextTick(inox::Callback callback) const;
+  double uptime() const;
 };
 
 extern Process process;

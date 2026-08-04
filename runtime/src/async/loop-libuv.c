@@ -63,6 +63,15 @@ static inox_status inox_loop_run_handle(inox_timer_handle* handle);
 static inox_status inox_loop_keep_first_error(inox_status current, inox_status next);
 static void inox_libuv_keep_callback_status(inox_loop* loop, inox_status status);
 static void inox_libuv_dispose_microtasks(inox_loop* loop);
+static inox_status inox_loop_queue_microtask_list(
+  inox_loop* loop,
+  inox_microtask_fn run,
+  void* context,
+  inox_microtask_finalizer_fn finalizer,
+  void** head,
+  void** tail,
+  size_t* count
+);
 static void inox_libuv_dispose_handle_list(inox_timer_handle* handle);
 static void inox_libuv_free_handle_list(inox_loop* loop, inox_timer_handle* handle);
 
@@ -93,12 +102,15 @@ inox_status inox_loop_init(inox_loop* loop, inox_allocator* allocator) {
 
   loop->allocator = allocator;
   loop->backend = backend;
+  loop->priority_microtask_head = 0;
+  loop->priority_microtask_tail = 0;
   loop->microtask_head = 0;
   loop->microtask_tail = 0;
   loop->immediate_head = 0;
   loop->immediate_tail = 0;
   loop->timer_head = 0;
   loop->timer_tail = 0;
+  loop->priority_microtask_count = 0;
   loop->microtask_count = 0;
   loop->immediate_count = 0;
   loop->timer_count = 0;
@@ -146,12 +158,15 @@ void inox_loop_dispose(inox_loop* loop) {
 
   loop->allocator = 0;
   loop->backend = 0;
+  loop->priority_microtask_head = 0;
+  loop->priority_microtask_tail = 0;
   loop->microtask_head = 0;
   loop->microtask_tail = 0;
   loop->immediate_head = 0;
   loop->immediate_tail = 0;
   loop->timer_head = 0;
   loop->timer_tail = 0;
+  loop->priority_microtask_count = 0;
   loop->microtask_count = 0;
   loop->immediate_count = 0;
   loop->timer_count = 0;
@@ -159,6 +174,51 @@ void inox_loop_dispose(inox_loop* loop) {
 
 inox_status
 inox_loop_queue_microtask(inox_loop* loop, inox_microtask_fn run, void* context, inox_microtask_finalizer_fn finalizer) {
+  if (loop == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  return inox_loop_queue_microtask_list(
+    loop,
+    run,
+    context,
+    finalizer,
+    &loop->microtask_head,
+    &loop->microtask_tail,
+    &loop->microtask_count
+  );
+}
+
+inox_status inox_loop_queue_priority_microtask(
+  inox_loop* loop,
+  inox_microtask_fn run,
+  void* context,
+  inox_microtask_finalizer_fn finalizer
+) {
+  if (loop == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  return inox_loop_queue_microtask_list(
+    loop,
+    run,
+    context,
+    finalizer,
+    &loop->priority_microtask_head,
+    &loop->priority_microtask_tail,
+    &loop->priority_microtask_count
+  );
+}
+
+static inox_status inox_loop_queue_microtask_list(
+  inox_loop* loop,
+  inox_microtask_fn run,
+  void* context,
+  inox_microtask_finalizer_fn finalizer,
+  void** head,
+  void** tail,
+  size_t* count
+) {
   if (loop == 0 || loop->allocator == 0 || loop->allocator->alloc == 0 || run == 0) {
     return INOX_ERR_TYPE;
   }
@@ -174,15 +234,15 @@ inox_loop_queue_microtask(inox_loop* loop, inox_microtask_fn run, void* context,
   task->finalizer = finalizer;
   task->next = 0;
 
-  if (loop->microtask_tail == 0) {
-    loop->microtask_head = task;
-    loop->microtask_tail = task;
+  if (*tail == 0) {
+    *head = task;
+    *tail = task;
   } else {
-    ((inox_microtask*)loop->microtask_tail)->next = task;
-    loop->microtask_tail = task;
+    ((inox_microtask*)*tail)->next = task;
+    *tail = task;
   }
 
-  loop->microtask_count += 1;
+  *count += 1;
 
   return INOX_OK;
 }
@@ -194,16 +254,20 @@ inox_status inox_loop_drain_microtasks(inox_loop* loop) {
 
   inox_status first_error = INOX_OK;
 
-  while (loop->microtask_head != 0) {
-    inox_microtask* task = (inox_microtask*)loop->microtask_head;
-    loop->microtask_head = task->next;
+  while (loop->priority_microtask_head != 0 || loop->microtask_head != 0) {
+    const int priority = loop->priority_microtask_head != 0;
+    void** head = priority ? &loop->priority_microtask_head : &loop->microtask_head;
+    void** tail = priority ? &loop->priority_microtask_tail : &loop->microtask_tail;
+    size_t* count = priority ? &loop->priority_microtask_count : &loop->microtask_count;
+    inox_microtask* task = (inox_microtask*)*head;
+    *head = task->next;
 
-    if (loop->microtask_head == 0) {
-      loop->microtask_tail = 0;
+    if (*head == 0) {
+      *tail = 0;
     }
 
-    if (loop->microtask_count > 0) {
-      loop->microtask_count -= 1;
+    if (*count > 0) {
+      *count -= 1;
     }
 
     first_error = inox_loop_keep_first_error(first_error, task->run(task->context));
@@ -277,7 +341,7 @@ inox_status inox_loop_poll(inox_loop* loop, inox_number now_ms) {
   loop->turn += 1;
   backend->callback_status = INOX_OK;
 
-  const int had_microtasks = loop->microtask_count > 0;
+  const int had_microtasks = inox_loop_pending_microtasks(loop) > 0;
   inox_status first_error = inox_loop_drain_microtasks(loop);
   uv_run_mode run_mode = had_microtasks || !uv_loop_alive(&backend->uv_loop) ? UV_RUN_NOWAIT : UV_RUN_ONCE;
   uv_run(&backend->uv_loop, run_mode);
@@ -314,12 +378,13 @@ int inox_loop_has_work(const inox_loop* loop) {
   inox_libuv_loop_backend* backend = inox_libuv_backend(loop);
 
   return loop != 0 &&
-         (loop->microtask_count > 0 || loop->immediate_count > 0 || loop->timer_count > 0 ||
+         (loop->priority_microtask_count > 0 || loop->microtask_count > 0 || loop->immediate_count > 0 ||
+          loop->timer_count > 0 ||
           (backend != 0 && (backend->request_count > 0 || uv_loop_alive(&backend->uv_loop))));
 }
 
 size_t inox_loop_pending_microtasks(const inox_loop* loop) {
-  return loop == 0 ? 0 : loop->microtask_count;
+  return loop == 0 ? 0 : loop->priority_microtask_count + loop->microtask_count;
 }
 
 size_t inox_loop_pending_immediates(const inox_loop* loop) {
@@ -694,7 +759,7 @@ static void inox_libuv_dispose_microtasks(inox_loop* loop) {
     return;
   }
 
-  inox_microtask* task = (inox_microtask*)loop->microtask_head;
+  inox_microtask* task = (inox_microtask*)loop->priority_microtask_head;
 
   while (task != 0) {
     inox_microtask* next = task->next;
@@ -707,6 +772,22 @@ static void inox_libuv_dispose_microtasks(inox_loop* loop) {
     task = next;
   }
 
+  task = (inox_microtask*)loop->microtask_head;
+
+  while (task != 0) {
+    inox_microtask* next = task->next;
+
+    if (task->finalizer != 0) {
+      task->finalizer(task->context);
+    }
+
+    loop->allocator->free(loop->allocator->user, task, sizeof(inox_microtask), _Alignof(inox_microtask));
+    task = next;
+  }
+
+  loop->priority_microtask_head = 0;
+  loop->priority_microtask_tail = 0;
+  loop->priority_microtask_count = 0;
   loop->microtask_head = 0;
   loop->microtask_tail = 0;
   loop->microtask_count = 0;
