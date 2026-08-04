@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <cmath>
+#include <memory>
 #include "inox/array.h"
 #include "inox/class_descriptor.h"
 #include "inox/json.h"
@@ -34,6 +36,10 @@ struct JsonParser {
 struct JsonStringifyStack {
   const inox_ref* refs[INOX_JSON_MAX_DEPTH + 1];
   size_t length;
+};
+
+struct JsonStringifyOptions {
+  size_t indent_width;
 };
 
 static void inox_json_buffer_dispose(JsonBuffer* buffer) {
@@ -642,9 +648,25 @@ static inox_status inox_json_parse_object(JsonParser* parser, size_t depth, inox
         break;
       }
 
-      names[len] = key;
-      values[len] = value;
-      len += 1;
+      size_t existing_index = len;
+
+      for (size_t index = 0; index < len; index += 1) {
+        if (strcmp(names[index], key) == 0) {
+          existing_index = index;
+          break;
+        }
+      }
+
+      if (existing_index < len) {
+        allocator->free(allocator->user, key, key_len + 1, alignof(char));
+        inox_release(values[existing_index]);
+        values[existing_index] = value;
+      } else {
+        names[len] = key;
+        values[len] = value;
+        len += 1;
+      }
+
       inox_json_skip_ws(parser);
 
       if (inox_json_match_byte(parser, '}')) {
@@ -915,15 +937,49 @@ static inox_status json_parse_with_error(
   return INOX_OK;
 }
 
-static inox_status
-inox_json_stringify_value(JsonBuffer* buffer, JsonStringifyStack* stack, inox_value value, size_t depth);
+static inox_status inox_json_stringify_value(
+  JsonBuffer* buffer,
+  JsonStringifyStack* stack,
+  const JsonStringifyOptions* options,
+  inox_value value,
+  size_t depth
+);
 static inox_status inox_json_stringify_class_instance_value(
   JsonBuffer* buffer,
   JsonStringifyStack* stack,
+  const JsonStringifyOptions* options,
   const inox_class_descriptor* descriptor,
   const void* instance,
   size_t depth
 );
+
+static inox_status inox_json_stringify_line_break(
+  JsonBuffer* buffer,
+  const JsonStringifyOptions* options,
+  size_t depth
+) {
+  if (options == 0 || options->indent_width == 0) {
+    return INOX_OK;
+  }
+
+  inox_status status = inox_json_buffer_push_char(buffer, '\n');
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  const size_t spaces = options->indent_width * depth;
+
+  for (size_t index = 0; index < spaces; index += 1) {
+    status = inox_json_buffer_push_char(buffer, ' ');
+
+    if (status != INOX_OK) {
+      return status;
+    }
+  }
+
+  return INOX_OK;
+}
 
 static bool inox_json_stringify_stack_contains(const JsonStringifyStack* stack, const inox_ref* ref) {
   if (stack == 0 || ref == 0) {
@@ -1012,6 +1068,14 @@ static inox_status inox_json_stringify_string_bytes(JsonBuffer* buffer, const ch
 }
 
 static inox_status inox_json_stringify_number(JsonBuffer* buffer, double number) {
+  if (!std::isfinite(number)) {
+    return inox_json_buffer_push_bytes(buffer, "null", 4);
+  }
+
+  if (number == 0) {
+    return inox_json_buffer_push_char(buffer, '0');
+  }
+
   char temp[64];
   int written = snprintf(temp, sizeof(temp), "%.17g", number);
 
@@ -1022,8 +1086,13 @@ static inox_status inox_json_stringify_number(JsonBuffer* buffer, double number)
   return inox_json_buffer_push_bytes(buffer, temp, (size_t)written);
 }
 
-static inox_status
-inox_json_stringify_array(JsonBuffer* buffer, JsonStringifyStack* stack, inox_value value, size_t depth) {
+static inox_status inox_json_stringify_array(
+  JsonBuffer* buffer,
+  JsonStringifyStack* stack,
+  const JsonStringifyOptions* options,
+  inox_value value,
+  size_t depth
+) {
   Array array{inox::Value(value)};
   size_t length = array.length();
   inox_status status = inox_json_stringify_stack_push(stack, value.as.ref);
@@ -1047,7 +1116,28 @@ inox_json_stringify_array(JsonBuffer* buffer, JsonStringifyStack* stack, inox_va
       }
     }
 
-    status = inox_json_stringify_value(buffer, stack, array.get(index).raw(), depth + 1);
+    status = inox_json_stringify_line_break(buffer, options, depth + 1);
+
+    if (status != INOX_OK) {
+      goto done;
+    }
+
+    inox::Value item_value = array.get(index);
+    inox_value item = item_value.raw();
+
+    if (item.tag == INOX_TAG_UNDEFINED || item.tag == INOX_TAG_FUNCTION) {
+      status = inox_json_buffer_push_bytes(buffer, "null", 4);
+    } else {
+      status = inox_json_stringify_value(buffer, stack, options, item, depth + 1);
+    }
+
+    if (status != INOX_OK) {
+      goto done;
+    }
+  }
+
+  if (length > 0) {
+    status = inox_json_stringify_line_break(buffer, options, depth);
 
     if (status != INOX_OK) {
       goto done;
@@ -1061,8 +1151,13 @@ done:
   return status;
 }
 
-static inox_status
-inox_json_stringify_object(JsonBuffer* buffer, JsonStringifyStack* stack, inox_value value, size_t depth) {
+static inox_status inox_json_stringify_object(
+  JsonBuffer* buffer,
+  JsonStringifyStack* stack,
+  const JsonStringifyOptions* options,
+  inox_value value,
+  size_t depth
+) {
   inox_object* object = (inox_object*)value.as.ref;
   inox_status status = inox_json_stringify_stack_push(stack, value.as.ref);
   uint32_t printed = 0;
@@ -1100,6 +1195,13 @@ inox_json_stringify_object(JsonBuffer* buffer, JsonStringifyStack* stack, inox_v
       }
     }
 
+    status = inox_json_stringify_line_break(buffer, options, depth + 1);
+
+    if (status != INOX_OK) {
+      inox_release(field);
+      goto done;
+    }
+
     const char* name = object->shape->fields[index].name;
     status = inox_json_stringify_string_bytes(buffer, name, strlen(name));
 
@@ -1107,8 +1209,12 @@ inox_json_stringify_object(JsonBuffer* buffer, JsonStringifyStack* stack, inox_v
       status = inox_json_buffer_push_char(buffer, ':');
     }
 
+    if (status == INOX_OK && options != 0 && options->indent_width > 0) {
+      status = inox_json_buffer_push_char(buffer, ' ');
+    }
+
     if (status == INOX_OK) {
-      status = inox_json_stringify_value(buffer, stack, field, depth + 1);
+      status = inox_json_stringify_value(buffer, stack, options, field, depth + 1);
     }
 
     inox_release(field);
@@ -1120,6 +1226,14 @@ inox_json_stringify_object(JsonBuffer* buffer, JsonStringifyStack* stack, inox_v
     printed += 1;
   }
 
+  if (printed > 0) {
+    status = inox_json_stringify_line_break(buffer, options, depth);
+
+    if (status != INOX_OK) {
+      goto done;
+    }
+  }
+
   status = inox_json_buffer_push_char(buffer, '}');
 
 done:
@@ -1127,8 +1241,13 @@ done:
   return status;
 }
 
-static inox_status
-inox_json_stringify_value(JsonBuffer* buffer, JsonStringifyStack* stack, inox_value value, size_t depth) {
+static inox_status inox_json_stringify_value(
+  JsonBuffer* buffer,
+  JsonStringifyStack* stack,
+  const JsonStringifyOptions* options,
+  inox_value value,
+  size_t depth
+) {
   if (depth > INOX_JSON_MAX_DEPTH) {
     return INOX_ERR_UNSUPPORTED;
   }
@@ -1152,17 +1271,24 @@ inox_json_stringify_value(JsonBuffer* buffer, JsonStringifyStack* stack, inox_va
   }
 
   if (value.tag == INOX_TAG_ARRAY && value.as.ref != 0) {
-    return inox_json_stringify_array(buffer, stack, value, depth);
+    return inox_json_stringify_array(buffer, stack, options, value, depth);
   }
 
   if (value.tag == INOX_TAG_OBJECT && value.as.ref != 0) {
-    return inox_json_stringify_object(buffer, stack, value, depth);
+    return inox_json_stringify_object(buffer, stack, options, value, depth);
   }
 
   if (value.tag == INOX_TAG_CLASS_INSTANCE && value.as.ref != 0) {
     inox_class_instance_ref* instance = (inox_class_instance_ref*)value.as.ref;
 
-    return inox_json_stringify_class_instance_value(buffer, stack, instance->descriptor, instance->instance, depth);
+    return inox_json_stringify_class_instance_value(
+      buffer,
+      stack,
+      options,
+      instance->descriptor,
+      instance->instance,
+      depth
+    );
   }
 
   return INOX_ERR_UNSUPPORTED;
@@ -1171,6 +1297,7 @@ inox_json_stringify_value(JsonBuffer* buffer, JsonStringifyStack* stack, inox_va
 static inox_status inox_json_stringify_class_instance_value(
   JsonBuffer* buffer,
   JsonStringifyStack* stack,
+  const JsonStringifyOptions* options,
   const inox_class_descriptor* descriptor,
   const void* instance,
   size_t depth
@@ -1220,6 +1347,13 @@ static inox_status inox_json_stringify_class_instance_value(
       }
     }
 
+    status = inox_json_stringify_line_break(buffer, options, depth + 1);
+
+    if (status != INOX_OK) {
+      inox_release(value);
+      return status;
+    }
+
     const char* name = field->name == 0 ? "" : field->name;
     status = inox_json_stringify_string_bytes(buffer, name, strlen(name));
 
@@ -1227,8 +1361,12 @@ static inox_status inox_json_stringify_class_instance_value(
       status = inox_json_buffer_push_char(buffer, ':');
     }
 
+    if (status == INOX_OK && options != 0 && options->indent_width > 0) {
+      status = inox_json_buffer_push_char(buffer, ' ');
+    }
+
     if (status == INOX_OK) {
-      status = inox_json_stringify_value(buffer, stack, value, depth + 1);
+      status = inox_json_stringify_value(buffer, stack, options, value, depth + 1);
     }
 
     inox_release(value);
@@ -1238,6 +1376,14 @@ static inox_status inox_json_stringify_class_instance_value(
     }
 
     printed += 1;
+  }
+
+  if (printed > 0) {
+    status = inox_json_stringify_line_break(buffer, options, depth);
+
+    if (status != INOX_OK) {
+      return status;
+    }
   }
 
   return inox_json_buffer_push_char(buffer, '}');
@@ -1268,8 +1414,6 @@ inox::Value Json::parse(inox::StringView text) const {
 }
 
 static inox::String inox_json_stringify_value(const inox::Value& value, const inox::Value* replacer, double space) {
-  (void)space;
-
   if (replacer != 0 && replacer->tag != INOX_TAG_UNDEFINED && replacer->tag != INOX_TAG_NULL) {
     inox::throw_value(inox::String("JSON.stringify replacer is not supported"));
     return inox::String();
@@ -1284,7 +1428,14 @@ static inox::String inox_json_stringify_value(const inox::Value& value, const in
 
   JsonBuffer buffer = { allocator, 0, 0, 0 };
   JsonStringifyStack stack = { 0 };
-  inox_status status = inox_json_stringify_value(&buffer, &stack, value.raw(), 0);
+  size_t indent_width = 0;
+
+  if (!std::isnan(space) && space > 0) {
+    indent_width = space >= 10 ? 10 : static_cast<size_t>(std::trunc(space));
+  }
+
+  JsonStringifyOptions options = { indent_width };
+  inox_status status = inox_json_stringify_value(&buffer, &stack, &options, value.raw(), 0);
 
   inox::String out;
 

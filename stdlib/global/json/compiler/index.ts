@@ -182,11 +182,7 @@ function jsonLiteralInfoTypeRef(info: JsonParseLiteralTypeInfo): TypeRef {
     return objectTypeRef(typeFields)
   }
 
-  if (
-    info.valueType === 'boolean' ||
-    info.valueType === 'number' ||
-    info.valueType === 'string'
-  ) {
+  if (info.valueType === 'boolean' || info.valueType === 'number' || info.valueType === 'string') {
     return primitiveTypeRef(info.valueType)
   }
 
@@ -372,7 +368,21 @@ function parseJsonObjectLiteralType(source: string, index: number): JsonParseLit
       return null
     }
 
-    fields.push(jsonObjectLiteralField(key.value, value.info))
+    const field = jsonObjectLiteralField(key.value, value.info)
+    let existingIndex = -1
+
+    for (let index = 0; index < fields.length; index = index + 1) {
+      if (fields[index].name === key.value) {
+        existingIndex = index
+        break
+      }
+    }
+
+    if (existingIndex >= 0) {
+      fields[existingIndex] = field
+    } else {
+      fields.push(field)
+    }
     nextIndex = skipJsonWhitespace(source, value.index)
 
     if (source[nextIndex] === '}') {
