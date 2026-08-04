@@ -173,9 +173,10 @@ export function createTypeAliasDeclaration(
   }
 }
 
-export function createFunctionType(params: AnyNode[], returnType: string): AnyNode {
+export function createFunctionType(params: AnyNode[], returnType: string, typeParameters: AnyNode[] = []): AnyNode {
   return {
     kind: 'function',
+    typeParameters,
     params,
     returnType
   }

@@ -690,10 +690,11 @@ class Parser {
 
       const name = this.expectTypeFieldName()
       const optional = this.matchValue('?')
+      const typeParameters = this.parseFunctionTypeParameters()
 
       if (this.isValue('(')) {
         const field = createObjectTypeField(name, modifiers.readOnly, optional, 'function', 'strong')
-        field.functionType = this.parseObjectTypeMethodSignature()
+        field.functionType = this.parseObjectTypeMethodSignature(typeParameters)
         appendObjectTypeMethodField(fields, field)
         this.matchValue(',')
         this.matchValue(';')
@@ -741,7 +742,7 @@ class Parser {
     return createObjectType(fields, actualBaseTypes, dynamic, dynamicField)
   }
 
-  parseObjectTypeMethodSignature() {
+  parseObjectTypeMethodSignature(typeParameters: AnyNode[]) {
     const params: AnyNode[] = []
 
     this.expectValue('(', 'INOX_EXPECTED_TYPE', 'expected ( in object type method')
@@ -766,7 +767,7 @@ class Parser {
       stopAtLineBreak: true
     })
 
-    return createFunctionType(params, returnType)
+    return createFunctionType(params, returnType, typeParameters)
   }
 
   parseTypeIndexSignature(readOnly: boolean): AnyNode | null {

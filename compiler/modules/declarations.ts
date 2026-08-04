@@ -1902,8 +1902,9 @@ function formatTypeAliasInfo(info: AnyNode | null | undefined): string {
 
 function formatFunctionType(info: AnyNode): string {
   const returnType = typeNameOrUnknown(info.returnType)
+  const typeParameters = formatTypeParameterList(info.typeParameters)
 
-  return `(${formatParamList(info.params)}) => ${returnType}`
+  return `${typeParameters}(${formatParamList(info.params)}) => ${returnType}`
 }
 
 function formatTypeParameterList(typeParameters: AnyNode[] | null | undefined): string {
