@@ -97,12 +97,15 @@ static inox_status inox_url_search_params_append_pair(
   const char* value,
   size_t value_len
 );
-static inox_status inox_url_search_params_remove_name(
+static inox_status inox_url_search_params_remove_matching(
   inox_allocator* allocator,
   const char* query,
   size_t query_len,
   const char* encoded_name,
   size_t encoded_name_len,
+  const char* encoded_value,
+  size_t encoded_value_len,
+  int match_value,
   char** out,
   size_t* out_len,
   int* removed
@@ -118,11 +121,14 @@ static inox_status inox_url_search_params_set_pair(
   char** out,
   size_t* out_len
 );
-static int inox_url_search_params_has_encoded_name(
+static int inox_url_search_params_has_encoded_pair(
   const char* query,
   size_t query_len,
   const char* encoded_name,
   size_t encoded_name_len,
+  const char* encoded_value,
+  size_t encoded_value_len,
+  int match_value,
   const char** value,
   size_t* value_len
 );
@@ -145,6 +151,41 @@ static char* inox_url_alloc(inox_allocator* allocator, size_t len);
 static int inox_url_hex_value(char value);
 static int inox_url_should_escape_path_char(unsigned char value);
 static void inox_url_write_hex(char* out, unsigned char value);
+
+namespace {
+
+class EncodedQueryComponent {
+public:
+  EncodedQueryComponent() : bytes(0), length(0) {}
+  EncodedQueryComponent(const EncodedQueryComponent&) = delete;
+  EncodedQueryComponent& operator=(const EncodedQueryComponent&) = delete;
+
+  ~EncodedQueryComponent() {
+    if (bytes != 0) {
+      inox_default_allocator.free(
+        inox_default_allocator.user,
+        bytes,
+        length + 1,
+        alignof(char)
+      );
+    }
+  }
+
+  inox_status encode(inox::StringView value) {
+    return inox_url_encode_query_component(
+      &inox_default_allocator,
+      value.bytes,
+      value.len,
+      &bytes,
+      &length
+    );
+  }
+
+  char* bytes;
+  size_t length;
+};
+
+} // namespace
 
 static void inox_url_throw_failed(const char* message) {
   if (inox::thrown()) {
@@ -680,7 +721,20 @@ inox::Value URLSearchParams::get(inox::StringView name) const {
 
   status = inox_url_value_string(raw(), INOX_URL_SEARCH_PARAMS_QUERY_INDEX, &retained, &query, &query_len);
 
-  if (status == INOX_OK && inox_url_search_params_has_encoded_name(query, query_len, encoded_name, encoded_name_len, &value, &value_len)) {
+  if (
+    status == INOX_OK &&
+    inox_url_search_params_has_encoded_pair(
+      query,
+      query_len,
+      encoded_name,
+      encoded_name_len,
+      0,
+      0,
+      0,
+      &value,
+      &value_len
+    )
+  ) {
     char* decoded = 0;
     size_t decoded_len = 0;
 
@@ -819,10 +873,14 @@ Array URLSearchParams::getAll(inox::StringView name) const {
   return out;
 }
 
-bool URLSearchParams::has(inox::StringView name) const {
-  char* encoded_name = 0;
-  size_t encoded_name_len = 0;
-  inox_status status = inox_url_encode_query_component(&inox_default_allocator, name.bytes, name.len, &encoded_name, &encoded_name_len);
+bool URLSearchParams::has(inox::StringView name, inox::StringView value, bool has_value) const {
+  EncodedQueryComponent encoded_name;
+  EncodedQueryComponent encoded_value;
+  inox_status status = encoded_name.encode(name);
+
+  if (status == INOX_OK && has_value) {
+    status = encoded_value.encode(value);
+  }
 
   if (status != INOX_OK) {
     inox_url_throw_failed("URLSearchParams.has failed");
@@ -837,11 +895,20 @@ bool URLSearchParams::has(inox::StringView name) const {
   status = inox_url_value_string(raw(), INOX_URL_SEARCH_PARAMS_QUERY_INDEX, &retained, &query, &query_len);
 
   if (status == INOX_OK) {
-    found = inox_url_search_params_has_encoded_name(query, query_len, encoded_name, encoded_name_len, 0, 0) != 0;
+    found = inox_url_search_params_has_encoded_pair(
+      query,
+      query_len,
+      encoded_name.bytes,
+      encoded_name.length,
+      encoded_value.bytes,
+      encoded_value.length,
+      has_value,
+      0,
+      0
+    ) != 0;
   }
 
   inox_release(retained);
-  inox_default_allocator.free(inox_default_allocator.user, encoded_name, encoded_name_len + 1, alignof(char));
 
   if (status != INOX_OK) {
     inox_url_throw_failed("URLSearchParams.has failed");
@@ -892,10 +959,14 @@ double URLSearchParams::size() const {
   return static_cast<double>(count);
 }
 
-void URLSearchParams::remove(inox::StringView name) {
-  char* encoded_name = 0;
-  size_t encoded_name_len = 0;
-  inox_status status = inox_url_encode_query_component(&inox_default_allocator, name.bytes, name.len, &encoded_name, &encoded_name_len);
+void URLSearchParams::remove(inox::StringView name, inox::StringView value, bool has_value) {
+  EncodedQueryComponent encoded_name;
+  EncodedQueryComponent encoded_value;
+  inox_status status = encoded_name.encode(name);
+
+  if (status == INOX_OK && has_value) {
+    status = encoded_value.encode(value);
+  }
 
   if (status != INOX_OK) {
     inox_url_throw_failed("URLSearchParams.delete failed");
@@ -913,7 +984,19 @@ void URLSearchParams::remove(inox::StringView name) {
   int removed = 0;
 
   if (status == INOX_OK) {
-    status = inox_url_search_params_remove_name(&inox_default_allocator, query, query_len, encoded_name, encoded_name_len, &next, &next_len, &removed);
+    status = inox_url_search_params_remove_matching(
+      &inox_default_allocator,
+      query,
+      query_len,
+      encoded_name.bytes,
+      encoded_name.length,
+      encoded_value.bytes,
+      encoded_value.length,
+      has_value,
+      &next,
+      &next_len,
+      &removed
+    );
   }
 
   if (status == INOX_OK && removed) {
@@ -925,7 +1008,6 @@ void URLSearchParams::remove(inox::StringView name) {
   }
 
   inox_release(retained);
-  inox_default_allocator.free(inox_default_allocator.user, encoded_name, encoded_name_len + 1, alignof(char));
 
   if (status != INOX_OK) {
     inox_url_throw_failed("URLSearchParams.delete failed");
@@ -1637,15 +1719,91 @@ static inox_status inox_url_search_params_from_string(
     len -= 1;
   }
 
-  char* query = inox_url_alloc(allocator, len);
+  char* query = inox_url_alloc(allocator, 0);
 
   if (query == 0) {
     return INOX_ERR_OOM;
   }
 
-  memcpy(query, bytes, len);
+  size_t query_len = 0;
+  size_t cursor = 0;
+  inox_status status = INOX_OK;
+
+  while (cursor < len) {
+    const size_t pair_start = cursor;
+
+    while (cursor < len && bytes[cursor] != '&') {
+      cursor += 1;
+    }
+
+    const size_t pair_end = cursor;
+
+    if (pair_end != pair_start) {
+      size_t key_end = pair_start;
+
+      while (key_end < pair_end && bytes[key_end] != '=') {
+        key_end += 1;
+      }
+
+      const size_t encoded_name_len = key_end - pair_start;
+      const size_t value_start = key_end < pair_end ? key_end + 1 : pair_end;
+      const size_t encoded_value_len = pair_end - value_start;
+      char* name = 0;
+      size_t name_len = 0;
+      char* value = 0;
+      size_t value_len = 0;
+
+      status = inox_url_decode_query_component(
+        allocator,
+        bytes + pair_start,
+        encoded_name_len,
+        &name,
+        &name_len
+      );
+
+      if (status == INOX_OK) {
+        status = inox_url_decode_query_component(
+          allocator,
+          bytes + value_start,
+          encoded_value_len,
+          &value,
+          &value_len
+        );
+      }
+
+      if (status == INOX_OK) {
+        status = inox_url_search_params_append_pair(
+          allocator,
+          &query,
+          &query_len,
+          name,
+          name_len,
+          value,
+          value_len
+        );
+      }
+
+      if (name != 0) {
+        allocator->free(allocator->user, name, encoded_name_len + 1, alignof(char));
+      }
+
+      if (value != 0) {
+        allocator->free(allocator->user, value, encoded_value_len + 1, alignof(char));
+      }
+
+      if (status != INOX_OK) {
+        allocator->free(allocator->user, query, query_len + 1, alignof(char));
+        return status;
+      }
+    }
+
+    if (cursor < len) {
+      cursor += 1;
+    }
+  }
+
   *out = query;
-  *out_len = len;
+  *out_len = query_len;
 
   return INOX_OK;
 }
@@ -1764,12 +1922,15 @@ static inox_status inox_url_search_params_append_pair(
   return INOX_OK;
 }
 
-static inox_status inox_url_search_params_remove_name(
+static inox_status inox_url_search_params_remove_matching(
   inox_allocator* allocator,
   const char* query,
   size_t query_len,
   const char* encoded_name,
   size_t encoded_name_len,
+  const char* encoded_value,
+  size_t encoded_value_len,
+  int match_value,
   char** out,
   size_t* out_len,
   int* removed
@@ -1799,7 +1960,14 @@ static inox_status inox_url_search_params_remove_name(
     }
 
     size_t key_len = key_end - pair_start;
-    int matches = key_len == encoded_name_len && strncmp(query + pair_start, encoded_name, encoded_name_len) == 0;
+    size_t value_start = key_end < pair_end ? key_end + 1 : pair_end;
+    size_t value_len = pair_end - value_start;
+    int name_matches =
+      key_len == encoded_name_len && strncmp(query + pair_start, encoded_name, encoded_name_len) == 0;
+    int value_matches =
+      !match_value ||
+      (value_len == encoded_value_len && strncmp(query + value_start, encoded_value, encoded_value_len) == 0);
+    int matches = name_matches && value_matches;
 
     if (matches) {
       did_remove = 1;
@@ -1987,11 +2155,14 @@ static inox_status inox_url_search_params_set_pair(
   return INOX_OK;
 }
 
-static int inox_url_search_params_has_encoded_name(
+static int inox_url_search_params_has_encoded_pair(
   const char* query,
   size_t query_len,
   const char* encoded_name,
   size_t encoded_name_len,
+  const char* encoded_value,
+  size_t encoded_value_len,
+  int match_value,
   const char** value,
   size_t* value_len
 ) {
@@ -2012,14 +2183,22 @@ static int inox_url_search_params_has_encoded_name(
     }
 
     size_t key_len = key_end - pair_start;
+    size_t current_value_start = key_end < pair_end ? key_end + 1 : pair_end;
+    size_t current_value_len = pair_end - current_value_start;
+    int name_matches =
+      key_len == encoded_name_len && strncmp(query + pair_start, encoded_name, encoded_name_len) == 0;
+    int value_matches =
+      !match_value ||
+      (current_value_len == encoded_value_len &&
+       strncmp(query + current_value_start, encoded_value, encoded_value_len) == 0);
 
-    if (key_len == encoded_name_len && strncmp(query + pair_start, encoded_name, encoded_name_len) == 0) {
+    if (name_matches && value_matches) {
       if (value != 0) {
-        *value = key_end < pair_end ? query + key_end + 1 : "";
+        *value = current_value_start < pair_end ? query + current_value_start : "";
       }
 
       if (value_len != 0) {
-        *value_len = key_end < pair_end ? pair_end - key_end - 1 : 0;
+        *value_len = current_value_len;
       }
 
       return 1;

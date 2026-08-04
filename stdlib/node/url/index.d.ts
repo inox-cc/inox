@@ -36,10 +36,10 @@ export class URLSearchParams {
   constructor(init?: URLSearchParamsInit);
 
   append(name: string, value: string): void;
-  delete(name: string): void;
+  delete(name: string, value?: string): void;
   get(name: string): string | null;
   getAll(name: string): string[];
-  has(name: string): boolean;
+  has(name: string, value?: string): boolean;
   set(name: string, value: string): void;
   sort(): void;
   toString(): string;

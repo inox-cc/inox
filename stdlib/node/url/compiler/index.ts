@@ -81,9 +81,7 @@ const operations: LibraryOperationDescriptor[] = [
     undefined,
     [stringArgument(), stringArgument()]
   ),
-  receiverCall(searchParamsTypeId, 'delete', ['receiver', 'string-view'], 'remove', voidTypeRef, undefined, [
-    stringArgument()
-  ]),
+  searchParamsValueFilterOperation('delete', 'remove', voidTypeRef),
   receiverCall(
     searchParamsTypeId,
     'get',
@@ -102,9 +100,7 @@ const operations: LibraryOperationDescriptor[] = [
     undefined,
     [stringArgument()]
   ),
-  receiverCall(searchParamsTypeId, 'has', ['receiver', 'string-view'], 'has', booleanTypeRef, undefined, [
-    stringArgument()
-  ]),
+  searchParamsValueFilterOperation('has', 'has', booleanTypeRef),
   receiverMemberRead(searchParamsTypeId, 'size', 'size', numberTypeRef),
   receiverCall(searchParamsTypeId, 'set', ['receiver', 'string-view', 'string-view'], 'set', voidTypeRef, undefined, [
     stringArgument(),
@@ -265,6 +261,26 @@ function receiverMemberRead(
     cCallStyle: 'member',
     cFailureMode: 'thrown',
     resultTypeRef
+  }
+}
+
+function searchParamsValueFilterOperation(
+  name: 'delete' | 'has',
+  cExpression: 'has' | 'remove',
+  resultTypeRef: TypeRef
+): LibraryOperationDescriptor {
+  return {
+    ...receiverCall(
+      searchParamsTypeId,
+      name,
+      ['receiver', 'string-view', 'optional-string-view', 'argument-presence'],
+      cExpression,
+      resultTypeRef,
+      undefined,
+      [stringArgument(), stringArgument()]
+    ),
+    minArgs: 1,
+    maxArgs: 2
   }
 }
 

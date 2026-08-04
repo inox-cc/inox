@@ -60,9 +60,9 @@ public:
   void append(inox::StringView name, inox::StringView value);
   inox::Value get(inox::StringView name) const;
   Array getAll(inox::StringView name) const;
-  bool has(inox::StringView name) const;
+  bool has(inox::StringView name, inox::StringView value, bool has_value) const;
   double size() const;
-  void remove(inox::StringView name);
+  void remove(inox::StringView name, inox::StringView value, bool has_value);
   void set(inox::StringView name, inox::StringView value);
   void sort();
   inox::String toString() const;
