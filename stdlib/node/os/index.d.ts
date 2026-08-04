@@ -1,9 +1,11 @@
 export interface OsModule {
   readonly EOL: string;
+  readonly devNull: string;
 
   arch(): string;
   availableParallelism(): number;
   cpus(): unknown[];
+  endianness(): 'BE' | 'LE';
   freemem(): number;
   getPriority(pid?: number): number;
   homedir(): string;
@@ -24,10 +26,12 @@ export interface OsModule {
 }
 
 export const EOL: string;
+export const devNull: string;
 
 export function arch(): string;
 export function availableParallelism(): number;
 export function cpus(): unknown[];
+export function endianness(): 'BE' | 'LE';
 export function freemem(): number;
 export function getPriority(pid?: number): number;
 export function homedir(): string;

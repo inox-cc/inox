@@ -1,12 +1,24 @@
 #include "inox/os.h"
 
+#include <bit>
 #include <stdlib.h>
+#include <thread>
 #ifndef _WIN32
 #include <sys/utsname.h>
 #include <unistd.h>
 #endif
 
-os::os() : EOL("\n") {}
+os::os()
+#ifdef _WIN32
+  : EOL("\r\n"), devNull("\\\\.\\nul") {}
+#else
+  : EOL("\n"), devNull("/dev/null") {}
+#endif
+
+double os::availableParallelism() const {
+  const unsigned int count = std::thread::hardware_concurrency();
+  return static_cast<double>(count == 0 ? 1 : count);
+}
 
 inox::String os::arch() const {
 #if defined(__aarch64__) || defined(_M_ARM64)
@@ -26,6 +38,14 @@ inox::String os::arch() const {
 #else
   return inox::String("unknown");
 #endif
+}
+
+inox::String os::endianness() const {
+  if constexpr (std::endian::native == std::endian::big) {
+    return inox::String("BE");
+  }
+
+  return inox::String("LE");
 }
 
 inox::String os::homedir() const {
@@ -52,6 +72,30 @@ inox::String os::hostname() const {
 
   name[sizeof(name) - 1] = 0;
   return inox::String(name);
+#endif
+}
+
+inox::String os::machine() const {
+#ifdef _WIN32
+#if defined(_M_ARM64)
+  return inox::String("aarch64");
+#elif defined(_M_X64)
+  return inox::String("x86_64");
+#elif defined(_M_IX86)
+  return inox::String("i386");
+#elif defined(_M_ARM)
+  return inox::String("arm");
+#else
+  return inox::String("unknown");
+#endif
+#else
+  struct utsname info;
+
+  if (uname(&info) != 0) {
+    return inox::String("");
+  }
+
+  return inox::String(info.machine);
 #endif
 }
 
@@ -122,6 +166,20 @@ inox::String os::type() const {
   }
 
   return inox::String(info.sysname);
+#endif
+}
+
+inox::String os::version() const {
+#ifdef _WIN32
+  return inox::String("");
+#else
+  struct utsname info;
+
+  if (uname(&info) != 0) {
+    return inox::String("");
+  }
+
+  return inox::String(info.version);
 #endif
 }
 

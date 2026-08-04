@@ -13,34 +13,43 @@ const stringTypeRef: PrimitiveTypeRef = {
   ownership: 'value',
   traits: []
 }
+const numberTypeRef: PrimitiveTypeRef = {
+  kind: 'primitive',
+  name: 'number',
+  nullable: false,
+  ownership: 'value',
+  traits: []
+}
 const stringCResultMapping: LibraryCResultMappingDescriptor = {
   cppType: 'inox::String',
   fields: []
 }
 const unsupportedOsRuntimeMethods = [
-  'availableParallelism',
   'cpus',
   'freemem',
   'getPriority',
   'loadavg',
-  'machine',
   'networkInterfaces',
   'setPriority',
   'totalmem',
   'uptime',
-  'userInfo',
-  'version'
+  'userInfo'
 ]
 
 const operations: LibraryOperationDescriptor[] = [
   operation('EOL', 'member-read'),
+  operation('devNull', 'member-read'),
+  operation('availableParallelism', 'call', numberTypeRef),
   operation('arch', 'call'),
+  operation('endianness', 'call'),
   operation('homedir', 'call'),
   operation('hostname', 'call'),
+  operation('machine', 'call'),
   operation('platform', 'call'),
   operation('release', 'call'),
   operation('tmpdir', 'call'),
-  operation('type', 'call')
+  operation('type', 'call'),
+  operation('version', 'call')
 ]
 
 for (const name of unsupportedOsRuntimeMethods) {
@@ -62,13 +71,13 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   ]
 }
 
-function operation(name: string, kind: 'call' | 'member-read'): LibraryOperationDescriptor {
+function operation(
+  name: string,
+  kind: 'call' | 'member-read',
+  resultTypeRef: PrimitiveTypeRef = stringTypeRef
+): LibraryOperationDescriptor {
   const cExpression = `os.${name}`
-  let constantValue: string | null = null
-
-  if (kind === 'member-read') {
-    constantValue = '\n'
-  }
+  const returnsString = resultTypeRef.name === 'string'
 
   const descriptor: LibraryOperationDescriptor = {
     libraryId: nodeOsLibraryId,
@@ -78,14 +87,14 @@ function operation(name: string, kind: 'call' | 'member-read'): LibraryOperation
     kind,
     runtimeRequirements: [nodeOsRuntimeRequirement],
     cExpression,
-    resultTypeRef: stringTypeRef,
-    cResultMapping: stringCResultMapping,
-    constantValue
+    resultTypeRef,
+    cResultMapping: returnsString ? stringCResultMapping : undefined,
+    constantValue: null
   }
 
   if (kind === 'call') {
     descriptor.cArgumentKinds = []
-    descriptor.cFailureMode = 'thrown'
+    descriptor.cFailureMode = returnsString ? 'thrown' : null
     descriptor.cPreservesPendingException = true
   }
 
