@@ -7,6 +7,7 @@ import type {
   LibraryNativeTypeDescriptor,
   LibraryOperationDescriptor,
   LibraryOperationKind,
+  LibraryResultShapeFieldDescriptor,
   LibraryTypeOperatorDescriptor
 } from './types.ts'
 
@@ -69,6 +70,37 @@ export function compilerLibraryNativeTypeForName(
   }
 
   return result
+}
+
+export function compilerLibraryNativeTypeFields(
+  libraries: CompilerLibrarySet,
+  typeId: string
+): LibraryResultShapeFieldDescriptor[] {
+  const fields = new Map<string, LibraryResultShapeFieldDescriptor>()
+  collectCompilerLibraryNativeTypeFields(libraries, typeId, fields, new Set())
+  return Array.from(fields.values())
+}
+
+function collectCompilerLibraryNativeTypeFields(
+  libraries: CompilerLibrarySet,
+  typeId: string,
+  fields: Map<string, LibraryResultShapeFieldDescriptor>,
+  visited: Set<string>
+): void {
+  if (visited.has(typeId)) return
+  visited.add(typeId)
+
+  const nativeType = compilerLibraryNativeTypeForId(libraries, typeId)
+  if (nativeType === null) return
+
+  for (let index = 0; index < nativeType.baseTypeIds.length; index = index + 1) {
+    collectCompilerLibraryNativeTypeFields(libraries, nativeType.baseTypeIds[index], fields, visited)
+  }
+
+  const ownFields = nativeType.fields ?? []
+  for (let index = 0; index < ownFields.length; index = index + 1) {
+    fields.set(ownFields[index].name, ownFields[index])
+  }
 }
 
 export function compilerLibraryNativeTypeIsAssignable(

@@ -1,5 +1,6 @@
 import {
   compilerLibraryIntrinsicRoleForTypeId,
+  compilerLibraryNativeTypeFields,
   compilerLibraryNativeTypeForId,
   compilerLibraryNativeTypeIsAssignable
 } from './library-set.ts'
@@ -819,7 +820,7 @@ function baseTypeRefCompatibilityMetadata(
       typeRef.ownership === 'owned'
     )
     const fields: AnyNode[] = []
-    const nativeFields = nativeType.fields ?? []
+    const nativeFields = compilerLibraryNativeTypeFields(libraries, nativeType.typeId)
 
     for (let index = 0; index < nativeFields.length; index = index + 1) {
       fields.push(descriptorResultShapeField(nativeFields[index], loc))

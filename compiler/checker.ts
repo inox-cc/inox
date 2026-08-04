@@ -14,6 +14,7 @@ import { parseTemplateLiteralParts, parseTemplatePlaceholderExpression } from '.
 import {
   compilerLibraryHasModuleDeclaration,
   compilerLibraryIntrinsicRoleForBinding,
+  compilerLibraryNativeTypeFields,
   compilerLibraryNativeTypeForIntrinsic,
   compilerLibraryNativeTypeForId,
   compilerLibraryNativeTypeIsAssignable,
@@ -5399,7 +5400,11 @@ class Checker {
         parameter.resultTypeId === null || typeof parameter.resultTypeId === 'undefined'
           ? null
           : compilerLibraryNativeTypeForId(libraries, parameter.resultTypeId)
-      const fields = parameter.shapeFields ?? nativeType?.fields ?? []
+      const fields =
+        parameter.shapeFields ??
+        (nativeType === null || typeof nativeType === 'undefined'
+          ? []
+          : compilerLibraryNativeTypeFields(libraries, nativeType.typeId))
       const shapeFields: AnyNode[] = []
 
       for (let fieldIndex = 0; fieldIndex < fields.length; fieldIndex = fieldIndex + 1) {
