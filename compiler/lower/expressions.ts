@@ -1215,6 +1215,7 @@ function cloneAssignmentExpression(
       type: 'AssignmentExpression',
       target,
       value,
+      operator: fallbackString(expression.operator, '='),
       valueType: fallbackString(value.valueType, 'unknown'),
       nullable: expression.nullable === true,
       asyncResultValueType: nullableString(expression.asyncResultValueType),

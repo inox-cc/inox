@@ -831,6 +831,10 @@ class Parser {
     this.expectValue('{', 'INOX_EXPECTED_BLOCK', 'expected { after class name')
 
     while (!this.isValue('}') && !this.is('eof')) {
+      if (this.matchValue(';')) {
+        continue
+      }
+
       const inlineAnnotation = this.matchInlineAnnotation()
       const member = this.applyInlineAnnotation(this.parseClassMember(), inlineAnnotation)
 
@@ -1548,9 +1552,20 @@ class Parser {
     }
 
     const expression = this.parseConditional()
+    const operator = this.current()
 
-    if (this.matchValue('=')) {
-      return createAssignmentExpression(expression, this.parseAssignment())
+    if (isAssignmentOperator(operator.value)) {
+      this.advance()
+
+      if (operator.value !== '=' && expression.type !== 'Reference') {
+        this.report(
+          'INOX_COMPOUND_ASSIGNMENT_TARGET',
+          'compound assignment currently requires a direct binding target',
+          operator
+        )
+      }
+
+      return createAssignmentExpression(expression, this.parseAssignment(), operator.value)
     }
 
     return expression
@@ -2746,6 +2761,10 @@ class Parser {
 
     return token
   }
+}
+
+function isAssignmentOperator(value: string): boolean {
+  return value === '=' || value === '+=' || value === '-=' || value === '*=' || value === '/=' || value === '%='
 }
 
 function appendObjectTypeMethodField(fields: AnyNode[], field: AnyNode): void {

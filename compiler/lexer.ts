@@ -672,9 +672,14 @@ function isRegexpPrefixPunctuator(value: string): boolean {
     value === '??' ||
     value === '?' ||
     value === '+' ||
+    value === '+=' ||
     value === '-' ||
+    value === '-=' ||
     value === '*' ||
+    value === '*=' ||
+    value === '/=' ||
     value === '%' ||
+    value === '%=' ||
     value === '<' ||
     value === '>' ||
     value === '<=' ||
@@ -752,6 +757,11 @@ function isTwoCharPunctuator(value: string): boolean {
     value === '??' ||
     value === '?.' ||
     value === '=>' ||
+    value === '+=' ||
+    value === '-=' ||
+    value === '*=' ||
+    value === '/=' ||
+    value === '%=' ||
     value === '++' ||
     value === '--'
   )

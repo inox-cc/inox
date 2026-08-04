@@ -2106,6 +2106,68 @@ inox::Value Array::find(inox::Callback predicate) const {
   return inox::Value(inox_undefined_value());
 }
 
+double Array::findIndex(inox::Callback predicate) const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox_collection_throw("TypeError: Array.findIndex receiver is not an Array");
+    return -1;
+  }
+
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
+  const size_t length = instance->length;
+
+  for (size_t index = 0; index < length; index += 1) {
+    bool match = false;
+
+    if (!inox_array_call_predicate(
+          predicate,
+          instance->items[index],
+          index,
+          array,
+          "TypeError: Array.findIndex callback must return boolean",
+          &match
+        )) {
+      return -1;
+    }
+
+    if (match) {
+      return static_cast<double>(index);
+    }
+  }
+
+  return -1;
+}
+
+void Array::forEach(inox::Callback callback) const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox_collection_throw("TypeError: Array.forEach receiver is not an Array");
+    return;
+  }
+
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
+  const size_t length = instance->length;
+
+  for (size_t index = 0; index < length; index += 1) {
+    if (index >= instance->length) {
+      continue;
+    }
+
+    inox::Value arguments[] = {
+      inox::Value(instance->items[index]),
+      inox::Value(inox_number_value(static_cast<double>(index))),
+      inox::Value(array)
+    };
+    callback.call(std::span<const inox::Value>(arguments, 3));
+
+    if (inox::thrown()) {
+      return;
+    }
+  }
+}
+
 Array Array::map(inox::Callback callback) const {
   inox_value array = inox::Value::raw();
 

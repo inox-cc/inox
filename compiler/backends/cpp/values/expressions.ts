@@ -3179,10 +3179,19 @@ export function emitPreparedNumberExpression(
 
   if (expression.type === 'AssignmentExpression') {
     const value = emitPreparedNumberExpression(expression.value, context, deps)
+    const operator = expression.operator ?? '='
+    const target = deps.emitReference(expression.target, context)
+
+    if (operator === '%=') {
+      return {
+        lines: value.lines,
+        expression: `(${target} = fmod(${target}, ${value.expression}))`
+      }
+    }
 
     return {
       lines: value.lines,
-      expression: `(${deps.emitReference(expression.target, context)} = ${value.expression})`
+      expression: `(${target} ${operator} ${value.expression})`
     }
   }
 

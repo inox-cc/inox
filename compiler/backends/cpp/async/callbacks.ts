@@ -4385,7 +4385,7 @@ function runtimeArrowCoroutineArgs(wrapper: CRuntimeArrowCallbackWrapper): strin
     )
 
     if (nativeCppType !== null || !isManagedRuntimeCallbackParamValueType(param.valueType)) {
-      args.push(runtimeArrowCallbackParamName(wrapper, index))
+      args.push(emitCIdentifier(runtimeArrowCallbackParamName(wrapper, index)))
     } else {
       args.push(`inox::Value(${runtimeCallbackArg(index)})`)
     }
@@ -4559,6 +4559,7 @@ function emitRuntimeArrowCallbackParamPrelude(
 
   for (const param of wrapper.functionType.params) {
     const name = runtimeArrowCallbackParamName(wrapper, index)
+    const cName = emitCIdentifier(name)
     const value = runtimeCallbackArg(index)
 
     pushLines(lines, emitRuntimeCallbackWrapperArgChecks(param, index, context.libraries))
@@ -4574,7 +4575,7 @@ function emitRuntimeArrowCallbackParamPrelude(
     if (nativeCppType !== null) {
       context.cppValueTypes.set(name, nativeCppType)
       lines.push(
-        `${nativeCppType} ${name} = ${applyLibraryNativeValueAdapter(
+        `${nativeCppType} ${cName} = ${applyLibraryNativeValueAdapter(
           value,
           libraryNativeValueAdapter(param.shape)
         )};`
@@ -4584,27 +4585,27 @@ function emitRuntimeArrowCallbackParamPrelude(
     }
 
     if (param.nullable === true && isNullableScalarType(param.valueType)) {
-      lines.push(`inox_value ${name} = ${value};`)
+      lines.push(`inox_value ${cName} = ${value};`)
       index = index + 1
       continue
     }
 
     if (param.valueType === 'string') {
       context.runtimeStrings.add(name)
-      lines.push(`inox_string* ${name} = (inox_string*)${value}.as.ref;`)
+      lines.push(`inox_string* ${cName} = (inox_string*)${value}.as.ref;`)
       index = index + 1
       continue
     }
 
     if (param.valueType === 'object') {
       deps.registerObjectShape(context, name, param.shape)
-      lines.push(`inox_value ${name} = ${value};`)
+      lines.push(`inox_value ${cName} = ${value};`)
       index = index + 1
       continue
     }
 
     if (param.valueType === 'bytes') {
-      lines.push(`inox_value ${name} = ${value};`)
+      lines.push(`inox_value ${cName} = ${value};`)
       index = index + 1
       continue
     }
@@ -4612,19 +4613,19 @@ function emitRuntimeArrowCallbackParamPrelude(
     if (param.valueType === 'function') {
       context.runtimeCallbacks.add(name)
       context.functionTypes.set(name, normalizeFunctionType(param.functionType))
-      lines.push(`inox_value ${name} = ${value};`)
+      lines.push(`inox_value ${cName} = ${value};`)
       index = index + 1
       continue
     }
 
     if (param.valueType === 'number') {
-      lines.push(`double ${name} = ${value}.as.number;`)
+      lines.push(`double ${cName} = ${value}.as.number;`)
       index = index + 1
       continue
     }
 
     if (param.valueType === 'boolean') {
-      lines.push(`double ${name} = ${value}.as.boolean ? 1 : 0;`)
+      lines.push(`double ${cName} = ${value}.as.boolean ? 1 : 0;`)
     }
 
     index = index + 1

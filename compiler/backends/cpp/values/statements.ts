@@ -4046,10 +4046,18 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
 
     if (valueType === 'number' || valueType === 'boolean') {
       const value = deps.emitPreparedNumberExpression(expression.value, context)
+      const operator = expression.operator ?? '='
+      const target = deps.emitReference(expression.target, context)
 
       const lines: string[] = []
       pushAllLines(lines, value.lines)
-      lines.push(`${deps.emitReference(expression.target, context)} = ${value.expression};`)
+
+      if (operator === '%=') {
+        lines.push(`${target} = fmod(${target}, ${value.expression});`)
+      } else {
+        lines.push(`${target} ${operator} ${value.expression};`)
+      }
+
       return lines
     }
 
@@ -4109,6 +4117,10 @@ function emitModuleValueAssignmentExpression(
   deps: StatementLoweringDependencies
 ): string[] | null {
   if (expression.type !== 'AssignmentExpression' || expression.target.type !== 'Reference') {
+    return null
+  }
+
+  if (expression.operator !== null && typeof expression.operator !== 'undefined' && expression.operator !== '=') {
     return null
   }
 

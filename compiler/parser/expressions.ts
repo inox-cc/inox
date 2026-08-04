@@ -10,11 +10,12 @@ type RegExpLiteralParts = {
   pattern: string
 }
 
-export function createAssignmentExpression(target: AnyNode, value: AnyNode): AnyNode {
+export function createAssignmentExpression(target: AnyNode, value: AnyNode, operator = '='): AnyNode {
   return {
     type: 'AssignmentExpression',
     target,
     value,
+    operator,
     loc: target.loc
   }
 }

@@ -13,6 +13,8 @@ declare global {
     every(predicate: (value: T, index: number, array: Array<T>) => boolean): boolean
     filter(predicate: (value: T, index: number, array: Array<T>) => boolean): Array<T>
     find(predicate: (value: T, index: number, array: Array<T>) => boolean): T | undefined
+    findIndex(predicate: (value: T, index: number, array: Array<T>) => boolean): number
+    forEach(callback: (value: T, index: number, array: Array<T>) => void): void
     includes(value: T): boolean
     indexOf(value: T, fromIndex?: number): number
     join(separator?: string): string

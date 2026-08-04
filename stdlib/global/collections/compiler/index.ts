@@ -210,6 +210,8 @@ const arrayOperations: LibraryOperationDescriptor[] = [
     cppType: 'inox::Value',
     fields: []
   }),
+  arrayCallbackReceiverCall('findIndex', numberTypeRef, arrayPredicateParameters(), 'boolean'),
+  arrayCallbackReceiverCall('forEach', voidTypeRef, arrayPredicateParameters(), 'void'),
   arrayCallbackReceiverCall('map', arrayTypeRef(mappedParameterTypeRef), arrayPredicateParameters(), null, null, [
     ...arrayTypeParameters(),
     { name: 'U', sources: [{ source: 'argument-function-return', argumentIndex: 0 }] }

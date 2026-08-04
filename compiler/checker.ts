@@ -2766,6 +2766,10 @@ class Checker {
       }
     }
 
+    if (expression.operator !== null && typeof expression.operator !== 'undefined' && expression.operator !== '=') {
+      return this.checkCompoundAssignment(expression)
+    }
+
     if (expression.target.type === 'MemberExpression') {
       return this.checkMemberAssignment(expression)
     }
@@ -2828,6 +2832,32 @@ class Checker {
     }
 
     return valueType
+  }
+
+  checkCompoundAssignment(expression: AnyNode): ValueType {
+    const targetType = this.checkExpression(expression.target)
+    const valueType = this.checkExpression(expression.value)
+
+    if (expression.target.type !== 'Reference') {
+      expression.valueType = 'number'
+      return 'number'
+    }
+
+    const symbol = this.resolveReference(expression.target)
+
+    if (symbol !== null && expression.target.path.length === 1 && symbol.mutable !== true) {
+      const path: string[] = expression.target.path
+      this.report('INOX_ASSIGN_CONST', `cannot assign to ${symbol.kind} binding ${path[0]}`, expression.target.loc)
+    }
+
+    this.checkAssignableType(targetType, 'number', expression.target.loc, false, this.expressionCanBeNull(expression.target))
+    this.checkAssignableType(valueType, 'number', expression.value.loc, false, this.expressionCanBeNull(expression.value))
+    expression.valueType = 'number'
+    expression.nullable = false
+
+    const targetName = firstPathSegment(expression.target.path)
+    this.deleteFlowFactsAtPath(targetName)
+    return 'number'
   }
 
   checkUpdateExpression(expression: AnyNode): ValueType {
@@ -7412,6 +7442,9 @@ class Checker {
       expression.functionType = functionType
     }
 
+    const ignoresContextualVoidResult =
+      functionType?.returnType === 'void' &&
+      (expression.declaredReturnType === null || typeof expression.declaredReturnType === 'undefined')
     let actualReturnType: ValueType = 'unknown'
     let asyncResultValueType: ValueType = 'void'
 
@@ -7592,6 +7625,7 @@ class Checker {
 
           if (
             expression.async !== true &&
+            !ignoresContextualVoidResult &&
             functionType !== null &&
             typeof functionType !== 'undefined' &&
             functionType.returnType !== null &&
@@ -7652,6 +7686,10 @@ class Checker {
 
             if (functionType.returnType !== null && typeof functionType.returnType !== 'undefined') {
               expectedReturnType = functionType.returnType
+            }
+
+            if (ignoresContextualVoidResult) {
+              expectedReturnType = 'unknown'
             }
 
             this.currentReturnType = expression.async === true ? 'async-result' : expectedReturnType
