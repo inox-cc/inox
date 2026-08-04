@@ -24,10 +24,13 @@ struct ArrayStorage {
 
 enum MapSlotState { MapSlotEmpty, MapSlotOccupied, MapSlotTombstone };
 
+static constexpr size_t inox_collection_no_index = std::numeric_limits<size_t>::max();
+
 struct MapEntry {
   inox_value key;
   inox_value value;
   uint64_t hash;
+  size_t order_index;
   MapSlotState state;
 };
 
@@ -37,6 +40,9 @@ struct MapStorage {
   size_t capacity;
   size_t tombstones;
   MapEntry* entries;
+  size_t order_length;
+  size_t order_capacity;
+  size_t* order;
 };
 
 static void inox_map_dispose_ref(inox_ref* ref);
@@ -139,12 +145,19 @@ static void inox_map_init_entries(MapEntry* entries, size_t cap) {
     entries[index].key = inox_undefined_value();
     entries[index].value = inox_undefined_value();
     entries[index].hash = 0;
+    entries[index].order_index = inox_collection_no_index;
     entries[index].state = MapSlotEmpty;
   }
 }
 
-static inox_status
-inox_map_insert_existing(MapEntry* entries, size_t cap, inox_value key, inox_value value, uint64_t hash) {
+static inox_status inox_map_insert_existing(
+  MapEntry* entries,
+  size_t cap,
+  inox_value key,
+  inox_value value,
+  uint64_t hash,
+  size_t order_index
+) {
   if (entries == 0 || cap == 0) {
     return INOX_ERR_TYPE;
   }
@@ -159,6 +172,7 @@ inox_map_insert_existing(MapEntry* entries, size_t cap, inox_value key, inox_val
       entry->key = key;
       entry->value = value;
       entry->hash = hash;
+      entry->order_index = order_index;
       entry->state = MapSlotOccupied;
       return INOX_OK;
     }
@@ -185,14 +199,22 @@ static inox_status inox_map_rehash(MapStorage* map, size_t next_cap) {
 
   inox_map_init_entries(entries, next_cap);
 
-  for (size_t index = 0; index < map->capacity; index += 1) {
-    MapEntry* entry = &map->entries[index];
+  for (size_t order_index = 0; order_index < map->order_length; order_index += 1) {
+    size_t slot_index = map->order[order_index];
 
-    if (entry->state != MapSlotOccupied) {
+    if (slot_index == inox_collection_no_index) {
       continue;
     }
 
-    inox_status status = inox_map_insert_existing(entries, next_cap, entry->key, entry->value, entry->hash);
+    MapEntry* entry = &map->entries[slot_index];
+    inox_status status = inox_map_insert_existing(
+      entries,
+      next_cap,
+      entry->key,
+      entry->value,
+      entry->hash,
+      order_index
+    );
 
     if (status != INOX_OK) {
       if (allocator->free != 0) {
@@ -211,6 +233,62 @@ static inox_status inox_map_rehash(MapStorage* map, size_t next_cap) {
   map->capacity = next_cap;
   map->tombstones = 0;
 
+  for (size_t index = 0; index < map->capacity; index += 1) {
+    MapEntry* entry = &map->entries[index];
+
+    if (entry->state == MapSlotOccupied) {
+      map->order[entry->order_index] = index;
+    }
+  }
+
+  return INOX_OK;
+}
+
+static inox_status inox_map_reserve_order(MapStorage* map, size_t min_len) {
+  if (map == 0 || map->header.allocator == 0 || map->header.allocator->alloc == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  if (min_len <= map->order_capacity) {
+    return INOX_OK;
+  }
+
+  size_t next_cap = map->order_capacity == 0 ? 8 : map->order_capacity;
+
+  while (next_cap < min_len) {
+    next_cap *= 2;
+  }
+
+  inox_allocator* allocator = map->header.allocator;
+  size_t* order = (size_t*)allocator->alloc(
+    allocator->user,
+    sizeof(size_t) * next_cap,
+    alignof(size_t)
+  );
+
+  if (order == 0) {
+    return INOX_ERR_OOM;
+  }
+
+  for (size_t index = 0; index < map->order_length; index += 1) {
+    order[index] = map->order[index];
+  }
+
+  for (size_t index = map->order_length; index < next_cap; index += 1) {
+    order[index] = inox_collection_no_index;
+  }
+
+  if (allocator->free != 0 && map->order != 0) {
+    allocator->free(
+      allocator->user,
+      map->order,
+      sizeof(size_t) * map->order_capacity,
+      alignof(size_t)
+    );
+  }
+
+  map->order = order;
+  map->order_capacity = next_cap;
   return INOX_OK;
 }
 
@@ -357,6 +435,9 @@ static inox::Value inox_map_create_value() {
   map->capacity = 0;
   map->tombstones = 0;
   map->entries = 0;
+  map->order_length = 0;
+  map->order_capacity = 0;
+  map->order = 0;
 
   inox_value out = inox_undefined_value();
   out.tag = INOX_TAG_MAP;
@@ -441,7 +522,12 @@ void Map::clear() const {
     entry->key = inox_undefined_value();
     entry->value = inox_undefined_value();
     entry->hash = 0;
+    entry->order_index = inox_collection_no_index;
     entry->state = MapSlotEmpty;
+  }
+
+  for (size_t index = 0; index < instance->order_length; index += 1) {
+    instance->order[index] = inox_collection_no_index;
   }
 
   instance->length = 0;
@@ -479,11 +565,13 @@ bool Map::erase(const inox::Value& key) const {
   }
 
   MapEntry* entry = &instance->entries[index];
+  instance->order[entry->order_index] = inox_collection_no_index;
   inox_release(entry->key);
   inox_release(entry->value);
   entry->key = inox_undefined_value();
   entry->value = inox_undefined_value();
   entry->hash = 0;
+  entry->order_index = inox_collection_no_index;
   entry->state = MapSlotTombstone;
   instance->length -= 1;
   instance->tombstones += 1;
@@ -508,6 +596,15 @@ static void inox_map_dispose(MapStorage* map) {
   if (map->header.allocator != 0 && map->header.allocator->free != 0 && map->entries != 0) {
     map->header.allocator->free(
       map->header.allocator->user, map->entries, sizeof(MapEntry) * map->capacity, alignof(MapEntry)
+    );
+  }
+
+  if (map->header.allocator != 0 && map->header.allocator->free != 0 && map->order != 0) {
+    map->header.allocator->free(
+      map->header.allocator->user,
+      map->order,
+      sizeof(size_t) * map->order_capacity,
+      alignof(size_t)
     );
   }
 }
@@ -625,6 +722,13 @@ Map Map::set(const inox::Value& key, const inox::Value& value) const {
     return Map(*this);
   }
 
+  status = inox_map_reserve_order(instance, instance->order_length + 1);
+
+  if (status != INOX_OK) {
+    inox_collection_throw("TypeError: Map allocation failed");
+    return Map();
+  }
+
   if (entry->state == MapSlotTombstone) {
     instance->tombstones -= 1;
   }
@@ -634,7 +738,10 @@ Map Map::set(const inox::Value& key, const inox::Value& value) const {
   entry->key = raw_key;
   entry->value = raw_value;
   entry->hash = hash;
+  entry->order_index = instance->order_length;
   entry->state = MapSlotOccupied;
+  instance->order[instance->order_length] = index;
+  instance->order_length += 1;
   instance->length += 1;
 
   return Map(*this);
@@ -678,11 +785,16 @@ MapIterator Map::values() const {
   return MapIterator(*this, 2);
 }
 
-MapIterator::MapIterator() : owner_(), index_(0), mode_(0) {}
+MapIterator::MapIterator() : owner_(), index_(0), mode_(0), done_(false) {}
 
-MapIterator::MapIterator(const Map& value, uint8_t mode) : owner_(value), index_(0), mode_(mode) {}
+MapIterator::MapIterator(const Map& value, uint8_t mode)
+  : owner_(value), index_(0), mode_(mode), done_(false) {}
 
 MapIterationResult MapIterator::next() {
+  if (done_) {
+    return { true, inox::Value() };
+  }
+
   Map value(owner_);
   MapStorage* instance = map_data(value);
 
@@ -690,13 +802,17 @@ MapIterationResult MapIterator::next() {
     inox::fatal("Map iterator native facade invariant failed");
   }
 
-  while (index_ < instance->capacity) {
-    MapEntry* entry = &instance->entries[index_];
+  while (index_ < instance->order_length) {
+    size_t order_index = index_;
     index_ += 1;
 
-    if (entry->state != MapSlotOccupied) {
+    size_t slot_index = instance->order[order_index];
+
+    if (slot_index == inox_collection_no_index) {
       continue;
     }
+
+    MapEntry* entry = &instance->entries[slot_index];
 
     if (mode_ == 1) {
       return { false, inox::Value(entry->key) };
@@ -717,6 +833,7 @@ MapIterationResult MapIterator::next() {
     return { false, pair };
   }
 
+  done_ = true;
   return { true, inox::Value() };
 }
 
@@ -725,6 +842,7 @@ enum SetSlotState { SetSlotEmpty, SetSlotOccupied, SetSlotTombstone };
 struct SetEntry {
   inox_value value;
   uint64_t hash;
+  size_t order_index;
   SetSlotState state;
 };
 
@@ -734,6 +852,9 @@ struct SetStorage {
   size_t capacity;
   size_t tombstones;
   SetEntry* entries;
+  size_t order_length;
+  size_t order_capacity;
+  size_t* order;
 };
 
 static SetStorage* set_data(const Set& value) {
@@ -753,11 +874,18 @@ static void inox_set_init_entries(SetEntry* entries, size_t cap) {
   for (size_t index = 0; index < cap; index += 1) {
     entries[index].value = inox_undefined_value();
     entries[index].hash = 0;
+    entries[index].order_index = inox_collection_no_index;
     entries[index].state = SetSlotEmpty;
   }
 }
 
-static inox_status inox_set_insert_existing(SetEntry* entries, size_t cap, inox_value value, uint64_t hash) {
+static inox_status inox_set_insert_existing(
+  SetEntry* entries,
+  size_t cap,
+  inox_value value,
+  uint64_t hash,
+  size_t order_index
+) {
   if (entries == 0 || cap == 0) {
     return INOX_ERR_TYPE;
   }
@@ -771,6 +899,7 @@ static inox_status inox_set_insert_existing(SetEntry* entries, size_t cap, inox_
     if (entry->state != SetSlotOccupied) {
       entry->value = value;
       entry->hash = hash;
+      entry->order_index = order_index;
       entry->state = SetSlotOccupied;
       return INOX_OK;
     }
@@ -797,14 +926,21 @@ static inox_status inox_set_rehash(SetStorage* set, size_t next_cap) {
 
   inox_set_init_entries(entries, next_cap);
 
-  for (size_t index = 0; index < set->capacity; index += 1) {
-    SetEntry* entry = &set->entries[index];
+  for (size_t order_index = 0; order_index < set->order_length; order_index += 1) {
+    size_t slot_index = set->order[order_index];
 
-    if (entry->state != SetSlotOccupied) {
+    if (slot_index == inox_collection_no_index) {
       continue;
     }
 
-    inox_status status = inox_set_insert_existing(entries, next_cap, entry->value, entry->hash);
+    SetEntry* entry = &set->entries[slot_index];
+    inox_status status = inox_set_insert_existing(
+      entries,
+      next_cap,
+      entry->value,
+      entry->hash,
+      order_index
+    );
 
     if (status != INOX_OK) {
       if (allocator->free != 0) {
@@ -823,6 +959,62 @@ static inox_status inox_set_rehash(SetStorage* set, size_t next_cap) {
   set->capacity = next_cap;
   set->tombstones = 0;
 
+  for (size_t index = 0; index < set->capacity; index += 1) {
+    SetEntry* entry = &set->entries[index];
+
+    if (entry->state == SetSlotOccupied) {
+      set->order[entry->order_index] = index;
+    }
+  }
+
+  return INOX_OK;
+}
+
+static inox_status inox_set_reserve_order(SetStorage* set, size_t min_len) {
+  if (set == 0 || set->header.allocator == 0 || set->header.allocator->alloc == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  if (min_len <= set->order_capacity) {
+    return INOX_OK;
+  }
+
+  size_t next_cap = set->order_capacity == 0 ? 8 : set->order_capacity;
+
+  while (next_cap < min_len) {
+    next_cap *= 2;
+  }
+
+  inox_allocator* allocator = set->header.allocator;
+  size_t* order = (size_t*)allocator->alloc(
+    allocator->user,
+    sizeof(size_t) * next_cap,
+    alignof(size_t)
+  );
+
+  if (order == 0) {
+    return INOX_ERR_OOM;
+  }
+
+  for (size_t index = 0; index < set->order_length; index += 1) {
+    order[index] = set->order[index];
+  }
+
+  for (size_t index = set->order_length; index < next_cap; index += 1) {
+    order[index] = inox_collection_no_index;
+  }
+
+  if (allocator->free != 0 && set->order != 0) {
+    allocator->free(
+      allocator->user,
+      set->order,
+      sizeof(size_t) * set->order_capacity,
+      alignof(size_t)
+    );
+  }
+
+  set->order = order;
+  set->order_capacity = next_cap;
   return INOX_OK;
 }
 
@@ -1005,6 +1197,13 @@ Set Set::add(const inox::Value& value) const {
     return Set(*this);
   }
 
+  status = inox_set_reserve_order(instance, instance->order_length + 1);
+
+  if (status != INOX_OK) {
+    inox_collection_throw("TypeError: Set allocation failed");
+    return Set(*this);
+  }
+
   SetEntry* entry = &instance->entries[index];
 
   if (entry->state == SetSlotTombstone) {
@@ -1014,7 +1213,10 @@ Set Set::add(const inox::Value& value) const {
   inox_retain(raw_value);
   entry->value = raw_value;
   entry->hash = hash;
+  entry->order_index = instance->order_length;
   entry->state = SetSlotOccupied;
+  instance->order[instance->order_length] = index;
+  instance->order_length += 1;
   instance->length += 1;
 
   return Set(*this);
@@ -1037,7 +1239,12 @@ void Set::clear() const {
 
     entry->value = inox_undefined_value();
     entry->hash = 0;
+    entry->order_index = inox_collection_no_index;
     entry->state = SetSlotEmpty;
+  }
+
+  for (size_t index = 0; index < instance->order_length; index += 1) {
+    instance->order[index] = inox_collection_no_index;
   }
 
   instance->length = 0;
@@ -1075,9 +1282,11 @@ bool Set::erase(const inox::Value& value) const {
   }
 
   SetEntry* entry = &instance->entries[index];
+  instance->order[entry->order_index] = inox_collection_no_index;
   inox_release(entry->value);
   entry->value = inox_undefined_value();
   entry->hash = 0;
+  entry->order_index = inox_collection_no_index;
   entry->state = SetSlotTombstone;
   instance->length -= 1;
   instance->tombstones += 1;
@@ -1101,6 +1310,15 @@ static void inox_set_dispose(SetStorage* set) {
   if (set->header.allocator != 0 && set->header.allocator->free != 0 && set->entries != 0) {
     set->header.allocator->free(
       set->header.allocator->user, set->entries, sizeof(SetEntry) * set->capacity, alignof(SetEntry)
+    );
+  }
+
+  if (set->header.allocator != 0 && set->header.allocator->free != 0 && set->order != 0) {
+    set->header.allocator->free(
+      set->header.allocator->user,
+      set->order,
+      sizeof(size_t) * set->order_capacity,
+      alignof(size_t)
     );
   }
 }
@@ -1166,6 +1384,9 @@ static inox::Value inox_set_create_value() {
   set->capacity = 0;
   set->tombstones = 0;
   set->entries = 0;
+  set->order_length = 0;
+  set->order_capacity = 0;
+  set->order = 0;
 
   inox_value out = inox_undefined_value();
   out.tag = INOX_TAG_SET;
@@ -1199,11 +1420,15 @@ SetIterator Set::values() const {
   return SetIterator(*this);
 }
 
-SetIterator::SetIterator() : owner_(), index_(0) {}
+SetIterator::SetIterator() : owner_(), index_(0), done_(false) {}
 
-SetIterator::SetIterator(const Set& value) : owner_(value), index_(0) {}
+SetIterator::SetIterator(const Set& value) : owner_(value), index_(0), done_(false) {}
 
 SetIterationResult SetIterator::next() {
+  if (done_) {
+    return { true, inox::Value() };
+  }
+
   Set value(owner_);
   SetStorage* instance = set_data(value);
 
@@ -1211,15 +1436,21 @@ SetIterationResult SetIterator::next() {
     inox::fatal("Set iterator native facade invariant failed");
   }
 
-  while (index_ < instance->capacity) {
-    SetEntry* entry = &instance->entries[index_];
+  while (index_ < instance->order_length) {
+    size_t order_index = index_;
     index_ += 1;
 
-    if (entry->state == SetSlotOccupied) {
-      return { false, inox::Value(entry->value) };
+    size_t slot_index = instance->order[order_index];
+
+    if (slot_index == inox_collection_no_index) {
+      continue;
     }
+
+    SetEntry* entry = &instance->entries[slot_index];
+    return { false, inox::Value(entry->value) };
   }
 
+  done_ = true;
   return { true, inox::Value() };
 }
 

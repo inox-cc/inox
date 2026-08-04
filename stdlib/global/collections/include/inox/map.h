@@ -28,6 +28,7 @@ private:
   inox::Value owner_;
   size_t index_;
   uint8_t mode_;
+  bool done_;
 };
 
 class Map : public inox::Value {

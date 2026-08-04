@@ -23,6 +23,7 @@ public:
 private:
   inox::Value owner_;
   size_t index_;
+  bool done_;
 };
 
 class Set : public inox::Value {
