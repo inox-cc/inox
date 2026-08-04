@@ -212,28 +212,30 @@ void destroySocketHolder(inox_allocator* allocator, void* instance) {
   allocator->free(allocator->user, instance, sizeof(NetSocketHolder), alignof(NetSocketHolder));
 }
 
-inox_status readServerField(const void* instance, std::uint32_t index, inox_value* out) {
-  (void)instance;
-  (void)index;
-  (void)out;
-  return INOX_ERR_FIELD;
-}
-
+inox_status readServerField(const void* instance, std::uint32_t index, inox_value* out);
 inox_status readSocketField(const void* instance, std::uint32_t index, inox_value* out);
+
+const inox_class_field_descriptor serverFields[] = {
+  {"listening", "boolean", "boolean", "value", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
+};
 
 const inox_class_field_descriptor socketFields[] = {
   {"bytesRead", "number", "number", "value", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
   {"bytesWritten", "number", "number", "value", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
+  {"connecting", "boolean", "boolean", "value", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
+  {"destroyed", "boolean", "boolean", "value", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
   {"localAddress", "string", "string", "owned", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
   {"localPort", "number", "number", "value", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
+  {"pending", "boolean", "boolean", "value", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
+  {"readyState", "string", "string", "owned", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
   {"remoteAddress", "string", "string", "owned", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
   {"remotePort", "number", "number", "value", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
 };
 
 const inox_class_descriptor serverDescriptor = {
   "Server",
-  0,
-  nullptr,
+  1,
+  serverFields,
   readServerField,
   copyServerHolder,
   destroyServerHolder,
@@ -241,7 +243,7 @@ const inox_class_descriptor serverDescriptor = {
 
 const inox_class_descriptor socketDescriptor = {
   "Socket",
-  6,
+  10,
   socketFields,
   readSocketField,
   copySocketHolder,
@@ -477,9 +479,12 @@ public:
   std::size_t bytes_read_;
   std::size_t bytes_written_;
   bool initialized_;
+  bool connecting_;
+  bool connected_;
   bool closing_;
   bool closed_;
   bool reading_;
+  bool paused_;
   bool referenced_;
   bool utf8_encoding_;
   bool needs_drain_;
@@ -501,7 +506,10 @@ public:
   void close(inox::Callback callback, bool had_error = false);
   void end(inox::StringView text, inox::Callback callback);
   void on(inox::StringView event_name, inox::Callback listener);
+  void pause();
   void ref();
+  inox::String readyState() const;
+  void resume();
   void setEncoding(inox::StringView encoding);
   void setKeepAlive(bool enabled, double initial_delay);
   void setNoDelay(bool enabled);
@@ -538,7 +546,9 @@ public:
   void close(inox::Callback callback);
   void listen(double port, inox::StringView host, double backlog, inox::Callback callback);
   void on(inox::StringView event_name, inox::Callback listener);
+  void ref();
   void reportError(const char* message, int status);
+  void unref();
   void queueListening();
 
   static void closeExternalHandle(void* context);
@@ -591,9 +601,12 @@ NetSocketState::NetSocketState()
     bytes_read_(0),
     bytes_written_(0),
     initialized_(false),
+    connecting_(false),
+    connected_(false),
     closing_(false),
     closed_(false),
     reading_(false),
+    paused_(false),
     referenced_(true),
     utf8_encoding_(false),
     needs_drain_(false),
@@ -695,6 +708,8 @@ std::shared_ptr<NetSocketState> NetSocketState::connect(
     return {};
   }
 
+  socket->connecting_ = true;
+
   return socket;
 }
 
@@ -729,7 +744,7 @@ void NetSocketState::reportError(const char* message, int status) {
 }
 
 void NetSocketState::startReading() {
-  if (reading_ || closing_ || closed_) {
+  if (reading_ || paused_ || !connected_ || closing_ || closed_) {
     return;
   }
 
@@ -746,6 +761,48 @@ void NetSocketState::startReading() {
   }
 
   reading_ = true;
+}
+
+void NetSocketState::pause() {
+  if (!initialized_ || closing_ || closed_) {
+    throwNetError("TypeError: NetSocket.pause failed");
+    return;
+  }
+
+  paused_ = true;
+
+  if (reading_) {
+    uv_read_stop(reinterpret_cast<uv_stream_t*>(&handle_));
+    reading_ = false;
+  }
+}
+
+void NetSocketState::resume() {
+  if (!initialized_ || closing_ || closed_) {
+    throwNetError("TypeError: NetSocket.resume failed");
+    return;
+  }
+
+  paused_ = false;
+  startReading();
+}
+
+inox::String NetSocketState::readyState() const {
+  if (connecting_) {
+    return inox::String("opening");
+  }
+
+  if (!initialized_ || closing_ || closed_ || !connected_) {
+    return inox::String("closed");
+  }
+
+  const bool readable = !closing_ && !closed_;
+  const bool writable = !ending_ && !shutdown_started_ && !closing_ && !closed_;
+
+  if (readable && writable) return inox::String("open");
+  if (readable) return inox::String("readOnly");
+  if (writable) return inox::String("writeOnly");
+  return inox::String("closed");
 }
 
 void NetSocketState::on(inox::StringView event_name, inox::Callback listener) {
@@ -1230,6 +1287,24 @@ void NetServerState::on(inox::StringView event_name, inox::Callback listener) {
   }
 }
 
+void NetServerState::ref() {
+  if (!initialized_ || closing_ || closed_) {
+    throwNetError("TypeError: NetServer.ref failed");
+    return;
+  }
+
+  uv_ref(reinterpret_cast<uv_handle_t*>(&handle_));
+}
+
+void NetServerState::unref() {
+  if (!initialized_ || closing_ || closed_) {
+    throwNetError("TypeError: NetServer.unref failed");
+    return;
+  }
+
+  uv_unref(reinterpret_cast<uv_handle_t*>(&handle_));
+}
+
 void NetServerState::close(inox::Callback callback) {
   if (closed_) {
     throwNetError("TypeError: NetServer.close failed: server is not running");
@@ -1292,6 +1367,7 @@ void net_server_connection_cb(uv_stream_t* stream, int status) {
     return;
   }
 
+  socket->connected_ = true;
   socket->startReading();
   NetSocket facade = materializeSocket(socket);
 
@@ -1312,6 +1388,7 @@ void net_connect_cb(uv_connect_t* raw_request, int status) {
   std::shared_ptr<NetSocketState> socket = request->socket;
   inox::Callback callback = std::move(request->callback);
   delete request;
+  socket->connecting_ = false;
 
   if (status != 0) {
     socket->reportError("NetSocket.connect failed", status);
@@ -1319,6 +1396,7 @@ void net_connect_cb(uv_connect_t* raw_request, int status) {
     return;
   }
 
+  socket->connected_ = true;
   socket->startReading();
 
   if (callback.valid()) {
@@ -1480,6 +1558,8 @@ void net_socket_close_cb(uv_handle_t* handle) {
   std::shared_ptr<NetSocketState> owner = socket->native_owner_;
   socket->closed_ = true;
   socket->initialized_ = false;
+  socket->connecting_ = false;
+  socket->connected_ = false;
   inox_libuv_loop_unregister_external_handle(socket->loop_, socket);
   std::vector<inox::Callback> close_listeners_ = std::move(socket->close_listeners_);
   socket->connect_listeners_.clear();
@@ -1499,6 +1579,22 @@ class NetServerState {};
 class NetSocketState {};
 
 #endif
+
+inox_status readServerField(const void* instance, std::uint32_t index, inox_value* out) {
+  if (instance == nullptr || out == nullptr || index != 0) {
+    return INOX_ERR_FIELD;
+  }
+
+  const auto* holder = static_cast<const NetServerHolder*>(instance);
+  NetServer server = materializeServer(holder->state);
+
+  if (!holder->state || inox::thrown()) {
+    return INOX_ERR_TYPE;
+  }
+
+  *out = inox_bool_value(server.listening());
+  return inox::thrown() ? INOX_ERR_TYPE : INOX_OK;
+}
 
 inox_status readSocketField(const void* instance, std::uint32_t index, inox_value* out) {
   if (instance == nullptr || out == nullptr) {
@@ -1520,13 +1616,24 @@ inox_status readSocketField(const void* instance, std::uint32_t index, inox_valu
       *out = inox_number_value(socket.bytesWritten());
       return INOX_OK;
     case 2:
-      return socket.localAddress().copy_to(out);
+      *out = inox_bool_value(socket.connecting());
+      return INOX_OK;
     case 3:
-      *out = inox_number_value(socket.localPort());
+      *out = inox_bool_value(socket.destroyed());
       return INOX_OK;
     case 4:
-      return socket.remoteAddress().copy_to(out);
+      return socket.localAddress().copy_to(out);
     case 5:
+      *out = inox_number_value(socket.localPort());
+      return INOX_OK;
+    case 6:
+      *out = inox_bool_value(socket.pending());
+      return INOX_OK;
+    case 7:
+      return socket.readyState().copy_to(out);
+    case 8:
+      return socket.remoteAddress().copy_to(out);
+    case 9:
       *out = inox_number_value(socket.remotePort());
       return INOX_OK;
     default:
@@ -1614,6 +1721,20 @@ NetServer& NetServer::close(inox::Callback callback) {
 #endif
 
   return *this;
+}
+
+bool NetServer::listening() const {
+  std::shared_ptr<NetServerState> state = serverState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) return state->listening_ && !state->closing_ && !state->closed_;
+  throwNetError("TypeError: NetServer.listening failed");
+#else
+  (void)state;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return false;
 }
 
 NetServer& NetServer::listen() {
@@ -1707,6 +1828,34 @@ NetServer& NetServer::on(inox::StringView event_name, inox::Callback listener) {
   return *this;
 }
 
+NetServer& NetServer::ref() {
+  std::shared_ptr<NetServerState> state = serverState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) state->ref();
+  else throwNetError("TypeError: NetServer.ref failed");
+#else
+  (void)state;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return *this;
+}
+
+NetServer& NetServer::unref() {
+  std::shared_ptr<NetServerState> state = serverState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) state->unref();
+  else throwNetError("TypeError: NetServer.unref failed");
+#else
+  (void)state;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return *this;
+}
+
 NetSocket::NetSocket() : inox::Value() {}
 NetSocket::NetSocket(const inox::Value& value) : inox::Value(value) {}
 NetSocket::NetSocket(inox::Value&& value) : inox::Value(std::move(value)) {}
@@ -1744,6 +1893,20 @@ double NetSocket::bytesWritten() const {
   return 0;
 }
 
+bool NetSocket::connecting() const {
+  std::shared_ptr<NetSocketState> state = socketState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) return state->connecting_;
+  throwNetError("TypeError: NetSocket.connecting failed");
+#else
+  (void)state;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return false;
+}
+
 NetSocket& NetSocket::destroy() {
   std::shared_ptr<NetSocketState> state = socketState(*this);
 
@@ -1756,6 +1919,20 @@ NetSocket& NetSocket::destroy() {
 #endif
 
   return *this;
+}
+
+bool NetSocket::destroyed() const {
+  std::shared_ptr<NetSocketState> state = socketState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) return state->closing_ || state->closed_;
+  throwNetError("TypeError: NetSocket.destroyed failed");
+#else
+  (void)state;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return false;
 }
 
 NetSocket& NetSocket::end() {
@@ -1786,6 +1963,20 @@ NetSocket& NetSocket::end(inox::StringView text, inox::Callback callback) {
   return *this;
 }
 
+bool NetSocket::isPaused() const {
+  std::shared_ptr<NetSocketState> state = socketState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) return state->paused_;
+  throwNetError("TypeError: NetSocket.isPaused failed");
+#else
+  (void)state;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return false;
+}
+
 inox::String NetSocket::localAddress() const {
   return address().address;
 }
@@ -1810,12 +2001,58 @@ NetSocket& NetSocket::on(inox::StringView event_name, inox::Callback listener) {
   return *this;
 }
 
+NetSocket& NetSocket::pause() {
+  std::shared_ptr<NetSocketState> state = socketState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) state->pause();
+  else throwNetError("TypeError: NetSocket.pause failed");
+#else
+  (void)state;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return *this;
+}
+
+bool NetSocket::pending() const {
+  return connecting();
+}
+
+inox::String NetSocket::readyState() const {
+  std::shared_ptr<NetSocketState> state = socketState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) return state->readyState();
+  throwNetError("TypeError: NetSocket.readyState failed");
+#else
+  (void)state;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return inox::String("closed");
+}
+
 NetSocket& NetSocket::ref() {
   std::shared_ptr<NetSocketState> state = socketState(*this);
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (state) state->ref();
   else throwNetError("TypeError: NetSocket.ref failed");
+#else
+  (void)state;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return *this;
+}
+
+NetSocket& NetSocket::resume() {
+  std::shared_ptr<NetSocketState> state = socketState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) state->resume();
+  else throwNetError("TypeError: NetSocket.resume failed");
 #else
   (void)state;
   throwNetError("TypeError: node:net is unsupported without libuv");

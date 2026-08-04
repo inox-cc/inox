@@ -13,17 +13,27 @@ const expectedResults = [
   ['node:net#connect', nominalTypeRef('node:net#Socket', 'value')],
   ['node:net#Server.address', nominalTypeRef('node:net#AddressInfo', 'value')],
   ['node:net#Server.close', serverTypeRef()],
+  ['node:net#Server.listening', primitiveTypeRef('boolean')],
   ['node:net#Server.listen', serverTypeRef()],
   ['node:net#Server.on', serverTypeRef()],
+  ['node:net#Server.ref', serverTypeRef()],
+  ['node:net#Server.unref', serverTypeRef()],
   ['node:net#Socket.address', nominalTypeRef('node:net#AddressInfo', 'value')],
   ['node:net#Socket.bytesRead', primitiveTypeRef('number')],
   ['node:net#Socket.bytesWritten', primitiveTypeRef('number')],
+  ['node:net#Socket.connecting', primitiveTypeRef('boolean')],
   ['node:net#Socket.destroy', socketTypeRef()],
+  ['node:net#Socket.destroyed', primitiveTypeRef('boolean')],
   ['node:net#Socket.end', socketTypeRef()],
+  ['node:net#Socket.isPaused', primitiveTypeRef('boolean')],
   ['node:net#Socket.localAddress', primitiveTypeRef('string')],
   ['node:net#Socket.localPort', primitiveTypeRef('number')],
   ['node:net#Socket.on', socketTypeRef()],
+  ['node:net#Socket.pause', socketTypeRef()],
+  ['node:net#Socket.pending', primitiveTypeRef('boolean')],
+  ['node:net#Socket.readyState', primitiveTypeRef('string')],
   ['node:net#Socket.ref', socketTypeRef()],
+  ['node:net#Socket.resume', socketTypeRef()],
   ['node:net#Socket.remoteAddress', primitiveTypeRef('string')],
   ['node:net#Socket.remotePort', primitiveTypeRef('number')],
   ['node:net#Socket.setEncoding', socketTypeRef()],
@@ -49,7 +59,8 @@ test('node:net operations describe results only through TypeRef', async () => {
     assert.deepEqual(operation.resultTypeRef, expectedResults[index][1])
     if (
       operation.operationId === 'node:net#Socket.localAddress' ||
-      operation.operationId === 'node:net#Socket.remoteAddress'
+      operation.operationId === 'node:net#Socket.remoteAddress' ||
+      operation.operationId === 'node:net#Socket.readyState'
     ) {
       assert.deepEqual(operation.cResultMapping, { cppType: 'inox::String', fields: [] })
     } else {

@@ -36,6 +36,8 @@ export interface NetModule {
 }
 
 export class Server {
+  readonly listening: boolean;
+
   address(): AddressInfo;
   close(callback?: ListenCallback): Server;
   listen(callback?: ListenCallback): Server;
@@ -47,13 +49,19 @@ export class Server {
   on(eventName: 'connection', listener: ConnectionListener): Server;
   on(eventName: 'listening' | 'close', listener: ListenCallback): Server;
   on(eventName: 'error', listener: ErrorListener): Server;
+  ref(): Server;
+  unref(): Server;
 }
 
 export class Socket {
   readonly bytesRead: number;
   readonly bytesWritten: number;
+  readonly connecting: boolean;
+  readonly destroyed: boolean;
   readonly localAddress: string;
   readonly localPort: number;
+  readonly pending: boolean;
+  readonly readyState: string;
   readonly remoteAddress: string;
   readonly remotePort: number;
 
@@ -61,11 +69,14 @@ export class Socket {
   destroy(): Socket;
   end(callback?: SocketCallback): Socket;
   end(text: string, callback?: SocketCallback): Socket;
+  isPaused(): boolean;
   on(eventName: 'data', listener: SocketDataListener): Socket;
   on(eventName: 'close', listener: SocketCloseListener): Socket;
   on(eventName: 'error', listener: ErrorListener): Socket;
   on(eventName: 'connect' | 'ready' | 'end' | 'drain', listener: SocketCallback): Socket;
+  pause(): Socket;
   ref(): Socket;
+  resume(): Socket;
   setEncoding(encoding: string): Socket;
   setKeepAlive(enabled?: boolean, initialDelay?: number): Socket;
   setNoDelay(enabled?: boolean): Socket;

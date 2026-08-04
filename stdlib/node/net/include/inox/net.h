@@ -52,6 +52,7 @@ public:
   NetAddress address() const;
   NetServer& close();
   NetServer& close(inox::Callback callback);
+  bool listening() const;
   NetServer& listen();
   NetServer& listen(inox::Callback callback);
   NetServer& listen(double port);
@@ -65,6 +66,8 @@ public:
   NetServer& listen(const NetListenOptions& options);
   NetServer& listen(const NetListenOptions& options, inox::Callback callback);
   NetServer& on(inox::StringView event_name, inox::Callback listener);
+  NetServer& ref();
+  NetServer& unref();
 };
 
 class NetSocket : public inox::Value {
@@ -78,15 +81,22 @@ public:
   NetAddress address() const;
   double bytesRead() const;
   double bytesWritten() const;
+  bool connecting() const;
   NetSocket& destroy();
+  bool destroyed() const;
   NetSocket& end();
   NetSocket& end(inox::Callback callback);
   NetSocket& end(inox::StringView text);
   NetSocket& end(inox::StringView text, inox::Callback callback);
+  bool isPaused() const;
   inox::String localAddress() const;
   double localPort() const;
   NetSocket& on(inox::StringView event_name, inox::Callback listener);
+  NetSocket& pause();
+  bool pending() const;
+  inox::String readyState() const;
   NetSocket& ref();
+  NetSocket& resume();
   inox::String remoteAddress() const;
   double remotePort() const;
   NetSocket& setEncoding(inox::StringView encoding);

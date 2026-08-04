@@ -33,17 +33,27 @@ const operations: LibraryOperationDescriptor[] = [
   connectOperation(),
   serverAddressOperation(),
   serverCloseOperation(),
+  serverScalarMemberReadOperation('listening', booleanTypeRef),
   serverListenOperation(),
   serverOnOperation(),
+  serverResultOperation('ref'),
+  serverResultOperation('unref'),
   socketAddressOperation(),
   socketScalarMemberReadOperation('bytesRead', numberTypeRef),
   socketScalarMemberReadOperation('bytesWritten', numberTypeRef),
+  socketScalarMemberReadOperation('connecting', booleanTypeRef),
   socketResultOperation('destroy'),
+  socketScalarMemberReadOperation('destroyed', booleanTypeRef),
   socketEndOperation(),
+  socketBooleanResultOperation('isPaused'),
   socketScalarMemberReadOperation('localAddress', stringTypeRef, stringCResultMapping),
   socketScalarMemberReadOperation('localPort', numberTypeRef),
   socketOnOperation(),
+  socketResultOperation('pause'),
+  socketScalarMemberReadOperation('pending', booleanTypeRef),
+  socketScalarMemberReadOperation('readyState', stringTypeRef, stringCResultMapping),
   socketResultOperation('ref'),
+  socketResultOperation('resume'),
   socketScalarMemberReadOperation('remoteAddress', stringTypeRef, stringCResultMapping),
   socketScalarMemberReadOperation('remotePort', numberTypeRef),
   socketSetEncodingOperation(),
@@ -336,6 +346,22 @@ function serverOnOperation(): LibraryOperationDescriptor {
   }
 }
 
+function serverResultOperation(name: 'ref' | 'unref'): LibraryOperationDescriptor {
+  return {
+    ...serverReceiverOperation(name),
+    cArgumentKinds: ['receiver'],
+    cResultMode: 'borrowed',
+    minArgs: 0,
+    maxArgs: 0,
+    argumentChecks: [],
+    resultTypeRef: serverBorrowedTypeRef
+  }
+}
+
+function serverScalarMemberReadOperation(name: string, resultTypeRef: TypeRef): LibraryOperationDescriptor {
+  return scalarMemberReadOperation(serverTypeId, 'Server', 'NetServer($value)', name, resultTypeRef)
+}
+
 function socketAddressOperation(): LibraryOperationDescriptor {
   return {
     ...socketReceiverOperation('address'),
@@ -465,6 +491,17 @@ function socketWriteOperation(): LibraryOperationDescriptor {
   }
 }
 
+function socketBooleanResultOperation(name: string): LibraryOperationDescriptor {
+  return {
+    ...socketReceiverOperation(name),
+    cArgumentKinds: ['receiver'],
+    minArgs: 0,
+    maxArgs: 0,
+    argumentChecks: [],
+    resultTypeRef: booleanTypeRef
+  }
+}
+
 function socketResultOperation(name: string): LibraryOperationDescriptor {
   return {
     ...socketReceiverOperation(name),
@@ -482,16 +519,34 @@ function socketScalarMemberReadOperation(
   resultTypeRef: TypeRef,
   cResultMapping?: LibraryCResultMappingDescriptor
 ): LibraryOperationDescriptor {
+  return scalarMemberReadOperation(
+    socketTypeId,
+    'Socket',
+    'NetSocket($value)',
+    name,
+    resultTypeRef,
+    cResultMapping
+  )
+}
+
+function scalarMemberReadOperation(
+  receiverTypeId: string,
+  receiverName: string,
+  receiverAdapter: string,
+  name: string,
+  resultTypeRef: TypeRef,
+  cResultMapping?: LibraryCResultMappingDescriptor
+): LibraryOperationDescriptor {
   return {
     libraryId,
-    bindingId: `${socketTypeId}.${name}`,
-    operationId: `${libraryId}#Socket.${name}`,
+    bindingId: `${receiverTypeId}.${name}`,
+    operationId: `${libraryId}#${receiverName}.${name}`,
     kind: 'member-read',
     runtimeRequirements,
-    receiverTypeId: socketTypeId,
+    receiverTypeId,
     cExpression: name,
     cArgumentKinds: ['receiver'],
-    cReceiverAdapter: 'NetSocket($value)',
+    cReceiverAdapter: receiverAdapter,
     cCallStyle: 'member',
     cFailureMode: 'thrown',
     resultTypeRef,
