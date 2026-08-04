@@ -874,6 +874,34 @@ String String::trimRight() const {
   return string_result_or_oom(String(bytes(), end));
 }
 
+String String::toLowerCase() const {
+  if (!valid()) {
+    throw_out_of_memory();
+    return String();
+  }
+
+  String out(bytes(), length());
+
+  if (!out.valid()) {
+    throw_out_of_memory();
+    return String();
+  }
+
+  inox_string* string = (inox_string*)out.raw().as.ref;
+
+  for (size_t index = 0; index < string->len; index += 1) {
+    unsigned char value = (unsigned char)string->bytes[index];
+
+    if (value >= (unsigned char)'A' && value <= (unsigned char)'Z') {
+      value = (unsigned char)(value + ((unsigned char)'a' - (unsigned char)'A'));
+    }
+
+    string->bytes[index] = (char)value;
+  }
+
+  return out;
+}
+
 String String::toUpperCase() const {
   if (!valid()) {
     throw_out_of_memory();
@@ -902,19 +930,17 @@ String String::toUpperCase() const {
   return out;
 }
 
-String String::padStart(double target_len) const {
-  if (!valid()) {
+static String string_pad(const String& source, size_t target, StringView pad, bool at_start) {
+  if (!source.valid()) {
     throw_out_of_memory();
     return String();
   }
 
-  StringView pad(" ");
-  size_t target = non_negative_index(target_len);
-  const size_t value_units = string_code_unit_length(bytes(), length());
+  const size_t value_units = string_code_unit_length(source.bytes(), source.length());
   const size_t pad_units = string_code_unit_length(pad.bytes, pad.len);
 
   if (target <= value_units || pad.len == 0 || pad_units == 0) {
-    return String(*this);
+    return source;
   }
 
   size_t remaining_units = target - value_units;
@@ -938,12 +964,12 @@ String String::padStart(double target_len) const {
     remaining_units -= take_units;
   }
 
-  if (length() > ((size_t)-1) - pad_total_len) {
+  if (source.length() > ((size_t)-1) - pad_total_len) {
     throw_out_of_memory();
     return String();
   }
 
-  const size_t len = pad_total_len + length();
+  const size_t len = pad_total_len + source.length();
   inox_string* string = string_alloc_storage(&inox_default_allocator, len);
 
   if (string == 0) {
@@ -951,8 +977,14 @@ String String::padStart(double target_len) const {
     return String();
   }
 
+  const size_t source_offset = at_start ? pad_total_len : 0;
+  size_t offset = at_start ? 0 : source.length();
+
+  if (source.length() != 0) {
+    memcpy(string->bytes + source_offset, source.bytes(), source.length());
+  }
+
   remaining_units = target - value_units;
-  size_t offset = 0;
 
   while (remaining_units > 0) {
     size_t take_units = pad_units;
@@ -969,10 +1001,6 @@ String String::padStart(double target_len) const {
     }
 
     remaining_units -= take_units;
-  }
-
-  if (length() != 0) {
-    memcpy(string->bytes + offset, bytes(), length());
   }
 
   inox_value value = { INOX_TAG_STRING };
@@ -981,47 +1009,47 @@ String String::padStart(double target_len) const {
   return String(adopt(value));
 }
 
+String String::padEnd(double target_len) const {
+  return string_pad(*this, non_negative_index(target_len), StringView(" "), false);
+}
+
+String String::padEnd(double target_len, StringView pad) const {
+  return string_pad(*this, non_negative_index(target_len), pad, false);
+}
+
+String String::padStart(double target_len) const {
+  return string_pad(*this, non_negative_index(target_len), StringView(" "), true);
+}
+
 String String::padStart(double target_len, StringView pad) const {
+  return string_pad(*this, non_negative_index(target_len), pad, true);
+}
+
+String String::repeat(double raw_count) const {
   if (!valid()) {
     throw_out_of_memory();
     return String();
   }
 
-  size_t target = non_negative_index(target_len);
-  const size_t value_units = string_code_unit_length(bytes(), length());
-  const size_t pad_units = string_code_unit_length(pad.bytes, pad.len);
+  double integer_count = raw_count != raw_count ? 0 : trunc(raw_count);
 
-  if (target <= value_units || pad.len == 0 || pad_units == 0) {
-    return String(*this);
-  }
-
-  size_t remaining_units = target - value_units;
-  size_t pad_total_len = 0;
-
-  while (remaining_units > 0) {
-    size_t take_units = pad_units;
-
-    if (take_units > remaining_units) {
-      take_units = remaining_units;
-    }
-
-    const size_t take_len = string_code_unit_to_byte_offset_ceiling(pad.bytes, pad.len, take_units);
-
-    if (take_len > ((size_t)-1) - pad_total_len) {
-      throw_out_of_memory();
-      return String();
-    }
-
-    pad_total_len += take_len;
-    remaining_units -= take_units;
-  }
-
-  if (length() > ((size_t)-1) - pad_total_len) {
-    throw_out_of_memory();
+  if (!isfinite(integer_count) || integer_count < 0 || integer_count >= (double)((size_t)-1)) {
+    string_throw_range_error("RangeError: invalid string repeat count");
     return String();
   }
 
-  const size_t len = pad_total_len + length();
+  const size_t count = (size_t)integer_count;
+
+  if (count == 0 || length() == 0) {
+    return string_result_or_oom(String(""));
+  }
+
+  if (count > ((size_t)-1) / length()) {
+    string_throw_range_error("RangeError: invalid string repeat count");
+    return String();
+  }
+
+  const size_t len = length() * count;
   inox_string* string = string_alloc_storage(&inox_default_allocator, len);
 
   if (string == 0) {
@@ -1029,28 +1057,8 @@ String String::padStart(double target_len, StringView pad) const {
     return String();
   }
 
-  remaining_units = target - value_units;
-  size_t offset = 0;
-
-  while (remaining_units > 0) {
-    size_t take_units = pad_units;
-
-    if (take_units > remaining_units) {
-      take_units = remaining_units;
-    }
-
-    const size_t take_len = string_code_unit_to_byte_offset_ceiling(pad.bytes, pad.len, take_units);
-
-    if (take_len != 0) {
-      memcpy(string->bytes + offset, pad.bytes, take_len);
-      offset += take_len;
-    }
-
-    remaining_units -= take_units;
-  }
-
-  if (length() != 0) {
-    memcpy(string->bytes + offset, bytes(), length());
+  for (size_t index = 0; index < count; index += 1) {
+    memcpy(string->bytes + index * length(), bytes(), length());
   }
 
   inox_value value = { INOX_TAG_STRING };

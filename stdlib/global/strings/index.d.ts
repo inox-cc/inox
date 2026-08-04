@@ -15,11 +15,14 @@ declare global {
     includes(value: string, position?: number): boolean
     indexOf(value: string, position?: number): number
     lastIndexOf(value: string, position?: number): number
+    padEnd(targetLength: number, pad?: string): string
     padStart(targetLength: number, pad?: string): string
+    repeat(count: number): string
     slice(start?: number, end?: number): string
     split(separator?: string, limit?: number): Array<string>
     startsWith(value: string, position?: number): boolean
     substring(start: number, end?: number): string
+    toLowerCase(): string
     toUpperCase(): string
     trim(): string
     trimEnd(): string

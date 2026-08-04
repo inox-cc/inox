@@ -60,6 +60,14 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       1
     ),
     stringCall(
+      'padEnd',
+      stringTypeRef,
+      ['number', 'optional-string-view'],
+      [numberArgument(), stringArgument()],
+      'thrown',
+      1
+    ),
+    stringCall(
       'padStart',
       stringTypeRef,
       ['number', 'optional-string-view'],
@@ -67,6 +75,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       'thrown',
       1
     ),
+    stringCall('repeat', stringTypeRef, ['number'], [numberArgument()]),
     stringCall(
       'slice',
       stringTypeRef,
@@ -84,6 +93,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       null,
       1
     ),
+    stringCall('toLowerCase', stringTypeRef, [], []),
     stringCall('toUpperCase', stringTypeRef, [], []),
     stringCall('trim', stringTypeRef, [], []),
     stringCall('trimEnd', stringTypeRef, [], []),

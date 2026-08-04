@@ -56,9 +56,13 @@ public:
   String trimLeft() const;
   String trimEnd() const;
   String trimRight() const;
+  String toLowerCase() const;
   String toUpperCase() const;
+  String padEnd(double target_len) const;
+  String padEnd(double target_len, StringView pad) const;
   String padStart(double target_len) const;
   String padStart(double target_len, StringView pad) const;
+  String repeat(double count) const;
   String slice() const;
   String slice(double start) const;
   String slice(double start, double end) const;
