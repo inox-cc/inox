@@ -1176,7 +1176,7 @@ class Parser {
       const token = this.previous()
       let argument: AnyNode | null = null
 
-      if (!this.isValue('}') && !this.isValue(';')) {
+      if (!this.is('eof') && this.current().line === token.line && !this.isValue('}') && !this.isValue(';')) {
         argument = this.parseExpression()
       }
       this.matchValue(';')
