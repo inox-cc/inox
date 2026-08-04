@@ -57,6 +57,7 @@ public:
   size_t length() const;
   inox::Value get(size_t index) const;
   inox::Value at(double index) const;
+  Array concat(const inox::Value* values, size_t count) const;
   bool every(inox::Callback predicate) const;
   Array fill(
     const inox::Value& value,

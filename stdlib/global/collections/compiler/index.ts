@@ -138,6 +138,7 @@ const arrayOperations: LibraryOperationDescriptor[] = [
     cFailureMode: null,
     cPreservesPendingException: true
   },
+  arrayConcatOperation(),
   {
     ...arrayReceiverCall(
       'fill',
@@ -635,6 +636,27 @@ function arrayPushOperation(): LibraryOperationDescriptor {
     minArgs: 0,
     maxArgs: null,
     argumentChecks: [{ valueTypes: [], typeRef: parameterTypeRef }]
+  }
+}
+
+function arrayConcatOperation(): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: `${arrayNativeTypeId}.concat`,
+    operationId: `${arrayNativeTypeId}.concat`,
+    kind: 'call',
+    runtimeRequirements: [arrayRuntimeRequirement],
+    receiverTypeId: arrayNativeTypeId,
+    typeParameters: arrayTypeParameters(),
+    cExpression: 'concat',
+    cArgumentKinds: ['receiver', 'variadic-runtime-value-array', 'variadic-count'],
+    cCallStyle: 'member',
+    cFailureMode: 'thrown',
+    cResultMode: 'value',
+    resultTypeRef: arrayTypeRef(parameterTypeRef),
+    minArgs: 0,
+    maxArgs: null,
+    argumentChecks: [{ valueTypes: [], typeRefs: [parameterTypeRef, arrayTypeRef(parameterTypeRef)] }]
   }
 }
 

@@ -1952,6 +1952,40 @@ inox::Value Array::at(double index) const {
   return inox::Value(instance->items[static_cast<size_t>(integer)]);
 }
 
+Array Array::concat(const inox::Value* values, size_t count) const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox::fatal("Array.concat native facade invariant failed");
+  }
+
+  Array result = Array::create(0);
+
+  if (inox::thrown()) {
+    return Array();
+  }
+
+  result.appendAll(*this);
+
+  if (inox::thrown()) {
+    return Array();
+  }
+
+  for (size_t index = 0; index < count; index += 1) {
+    if (Array::isArray(values[index])) {
+      result.appendAll(Array(values[index]));
+    } else {
+      result.push(values[index]);
+    }
+
+    if (inox::thrown()) {
+      return Array();
+    }
+  }
+
+  return result;
+}
+
 bool Array::includes(const inox::Value& value) const {
   if (inox::thrown()) {
     return false;

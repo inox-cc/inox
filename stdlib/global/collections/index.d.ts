@@ -11,6 +11,7 @@ declare global {
     static isArray(value: unknown): boolean
 
     at(index: number): T | undefined
+    concat(...items: Array<T | Array<T>>): Array<T>
     every(predicate: (value: T, index: number, array: Array<T>) => boolean): boolean
     fill(value: T, start?: number, end?: number): Array<T>
     filter(predicate: (value: T, index: number, array: Array<T>) => boolean): Array<T>
