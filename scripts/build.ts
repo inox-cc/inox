@@ -918,6 +918,7 @@ async function linkNativeCompiler(options: BuildOptions, nativePlanCMakeSource: 
       cmakeSourceDir,
       '-B',
       cmakeBuildDir,
+      '-DCMAKE_BUILD_TYPE=Release',
       ...compilerTargetCMakeConfigureArgs(nativeCompilerTargetProfile)
     ]),
     {
@@ -930,10 +931,14 @@ async function linkNativeCompiler(options: BuildOptions, nativePlanCMakeSource: 
     return configure
   }
 
-  const build = await runCommand('cmake', ['--build', cmakeBuildDir, '--target', 'inox', '--parallel'], {
-    stderr: process.stderr,
-    stdout: process.stdout
-  })
+  const build = await runCommand(
+    'cmake',
+    ['--build', cmakeBuildDir, '--target', 'inox', '--parallel', '--config', 'Release'],
+    {
+      stderr: process.stderr,
+      stdout: process.stdout
+    }
+  )
 
   if (build.code !== 0) {
     return build

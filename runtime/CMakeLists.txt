@@ -221,6 +221,18 @@ target_compile_definitions(
   INOX_PACKAGE_VERSION=\"${INOX_PACKAGE_VERSION}\"
 )
 
+if(MSVC)
+  target_link_options(inox_runtime_configuration INTERFACE /OPT:REF /OPT:ICF)
+elseif(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(inox_runtime_configuration INTERFACE -ffunction-sections -fdata-sections)
+
+  if(APPLE)
+    target_link_options(inox_runtime_configuration INTERFACE "LINKER:-dead_strip")
+  else()
+    target_link_options(inox_runtime_configuration INTERFACE "LINKER:--gc-sections")
+  endif()
+endif()
+
 if(INOX_TLS_LIBRARIES)
   target_link_libraries(inox_runtime_configuration INTERFACE ${INOX_TLS_LIBRARIES})
 endif()
