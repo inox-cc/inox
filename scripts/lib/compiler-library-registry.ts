@@ -1,4 +1,4 @@
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
@@ -502,6 +502,14 @@ function jsonSource(value: unknown): string {
 }
 
 async function writeAtomic(path: string, source: string): Promise<void> {
+  try {
+    if ((await readFile(path, 'utf8')) === source) {
+      return
+    }
+  } catch {
+    // The first generation has no previous file to compare.
+  }
+
   const temporary = path + '.tmp'
 
   await writeFile(temporary, source)
