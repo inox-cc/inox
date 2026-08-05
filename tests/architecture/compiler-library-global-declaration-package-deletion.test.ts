@@ -41,7 +41,7 @@ async function createFixture(): Promise<void> {
   await writeFile(resolve(fixtureRoot, 'stdlib/global/bridge/src/bridge.cc'), 'int bridge_fixture = 0;\n')
   await writeFile(
     resolve(fixtureRoot, 'stdlib/global/bridge/compiler/index.ts'),
-    "export const compilerLibraryPackage = { id: 'global:bridge', dependencies: [], operations: [{ libraryId: 'global:bridge', bindingId: 'global:bridge', operationId: 'global:bridge#call', kind: 'call', runtimeRequirements: [], cExpression: 'bridge' }], intrinsicBindings: [], runtimeRequirements: [] }\n"
+    "export const compilerLibraryPackage = { id: 'global:bridge', dependencies: [], operations: [{ libraryId: 'global:bridge', bindingId: 'global:bridge', operationId: 'global:bridge#call', kind: 'call', runtimeRequirements: ['global:bridge'], cExpression: 'bridge' }], intrinsicBindings: [], runtimeRequirements: [{ id: 'global:bridge', dependencies: [], cPreludeIncludes: [], capabilities: [] }] }\n"
   )
 }
 

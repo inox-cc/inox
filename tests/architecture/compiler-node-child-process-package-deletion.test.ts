@@ -56,7 +56,7 @@ async function createFixture(): Promise<void> {
   await writeFile(resolve(fixtureRoot, 'stdlib/node/child_process/src/child_process.cc'), 'int child_process_fixture = 0;\n')
   await writeFile(
     resolve(fixtureRoot, 'stdlib/node/child_process/compiler/index.ts'),
-    "export const compilerLibraryPackage = { id: 'node:child_process', dependencies: [], operations: [{ libraryId: 'node:child_process', bindingId: 'node:child_process#module:node:child_process:execSync', operationId: 'node:child_process#execSync', kind: 'call', runtimeRequirements: [] }], intrinsicBindings: [], runtimeRequirements: [] }\n"
+    "export const compilerLibraryPackage = { id: 'node:child_process', dependencies: [], operations: [{ libraryId: 'node:child_process', bindingId: 'node:child_process#module:node:child_process:execSync', operationId: 'node:child_process#execSync', kind: 'call', runtimeRequirements: ['node:child_process'] }], intrinsicBindings: [], runtimeRequirements: [{ id: 'node:child_process', dependencies: [], cPreludeIncludes: [], capabilities: [] }] }\n"
   )
   await writeFile(resolve(fixtureRoot, 'stdlib/node/os/index.d.ts'), 'export function platform(): string;\n')
 }

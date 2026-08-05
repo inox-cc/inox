@@ -76,6 +76,7 @@ export type CppModuleCompileResult = {
   target: 'cc'
   graph: ModuleGraph
   files: CppModuleOutputFile[]
+  irRuntimeRequirements: string[]
 }
 
 export type CppModuleTextFile = {
@@ -260,7 +261,8 @@ export function compileFileToCppModulesWithHostSync(
   return {
     target: 'cc',
     graph: compiled.graph,
-    files: emitCppModuleFilesFromGraph(compiled.graph, emitOptions)
+    files: emitCppModuleFilesFromGraph(compiled.graph, emitOptions),
+    irRuntimeRequirements: collectIrRuntimeRequirements(irModules)
   }
 }
 

@@ -14,7 +14,24 @@ test('self-hosted сборка выбирает native-файлы stdlib чер�
   assert.match(runtimeCMakeSource, /include\("\$\{INOX_STDLIB_NATIVE_PLAN\}"\)/)
   assert.match(runtimeCMakeSource, /\$<TARGET_OBJECTS:inox_stdlib_objects>/)
   assert.match(runtimeCMakeSource, /\$\{INOX_STDLIB_INCLUDE_DIRS\}/)
-  assert.match(stdlibCMakeSource, /foreach\(INOX_STDLIB_SOURCE IN LISTS INOX_STDLIB_SOURCES\)/)
+  assert.match(stdlibCMakeSource, /function\(inox_add_stdlib_runtime_requirements\)/)
+  assert.match(stdlibCMakeSource, /target_sources\(inox_stdlib_objects PRIVATE/)
+  assert.match(
+    stdlibCMakeSource,
+    /inox_stdlib_relative_sources\(INOX_STDLIB_RELATIVE_SOURCES \$\{INOX_STDLIB_SOURCES\}\)/
+  )
+})
+
+test('CMake package передаёт runtime requirements программы в stdlib target', async () => {
+  const source = await readFile('cmake/Inox.cmake', 'utf8')
+
+  assert.match(source, /inox_json_array\(INOX_TARGET_RUNTIME_REQUIREMENTS .* runtimeRequirements\)/)
+  assert.match(source, /set\(INOX_STDLIB_FILTER_NATIVE_SOURCES ON\)/)
+  assert.match(
+    source,
+    /set\(INOX_STDLIB_INITIAL_RUNTIME_REQUIREMENTS \$\{INOX_TARGET_RUNTIME_REQUIREMENTS\}\)/
+  )
+  assert.match(source, /inox_add_stdlib_runtime_requirements\(\$\{INOX_TARGET_RUNTIME_REQUIREMENTS\}\)/)
 })
 
 test('обычная CMake сборка требует selected native plan без stdlib-wide fallback', async () => {

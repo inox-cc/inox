@@ -45,6 +45,13 @@ runCompilerCli(
     fileExists: (path: string) => fs.existsSync(path),
     log: (message: string) => console.log(message),
     mkdirSync: (path: string) => fs.mkdirSync(path, { recursive: true }),
+    readFileSync: (path: string) => {
+      try {
+        return fs.readFileSync(path, 'utf8')
+      } catch {
+        return null
+      }
+    },
     resolvePath: (path: string) => resolve(process.cwd(), path),
     runCommand: runHostCommand,
     runProgram: runHostProgram,

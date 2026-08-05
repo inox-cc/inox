@@ -95,21 +95,35 @@ export function executeCliBuild(
   }
 
   environment.mkdirSync(paths.project)
-  environment.writeFileSync(
+  writeFileIfChanged(
+    environment,
     joinPath(paths.project, 'CMakeLists.txt'),
-    renderCliCMakeProject(name, target, input, paths, configuration, optionPlan, plan.release, environment.cwd)
+    renderCliCMakeProject(
+      name,
+      target,
+      input,
+      paths,
+      configuration,
+      optionPlan,
+      plan.release,
+      environment.cwd
+    )
   )
 
-  const configureArgs = ['-S', paths.project, '-B', paths.build]
+  const cmakeCache = environment.readFileSync?.(joinPath(paths.build, 'CMakeCache.txt')) ?? null
 
-  if (plan.release) {
-    configureArgs.push('-DCMAKE_BUILD_TYPE=Release')
-  }
+  if (cmakeCache === null) {
+    const configureArgs = ['-S', paths.project, '-B', paths.build]
 
-  const configured = runCommand(configuration.cmakeCommand, configureArgs, environment.cwd)
+    if (plan.release) {
+      configureArgs.push('-DCMAKE_BUILD_TYPE=Release')
+    }
 
-  if (!reportCommandResult(configured, environment)) {
-    return false
+    const configured = runCommand(configuration.cmakeCommand, configureArgs, environment.cwd)
+
+    if (!reportCommandResult(configured, environment)) {
+      return false
+    }
   }
 
   const buildArgs = ['--build', paths.build, '--target', target, '--parallel']
@@ -139,6 +153,14 @@ export function executeCliBuild(
   }
 
   return true
+}
+
+function writeFileIfChanged(environment: CliEnvironment, path: string, source: string): void {
+  if (environment.readFileSync?.(path) === source) {
+    return
+  }
+
+  environment.writeFileSync(path, source)
 }
 
 function reportCommandResult(

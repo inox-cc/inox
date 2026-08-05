@@ -56,7 +56,7 @@ async function createFixture(): Promise<void> {
   await writeFile(resolve(fixtureRoot, 'stdlib/node/url/src/url.cc'), 'int url_fixture = 0;\n')
   await writeFile(
     resolve(fixtureRoot, 'stdlib/node/url/compiler/index.ts'),
-    "export const compilerLibraryPackage = { id: 'node:url', dependencies: [], operations: [{ libraryId: 'node:url', bindingId: 'node:url#module:node:url:pathToFileURL', operationId: 'node:url#pathToFileURL', kind: 'call', runtimeRequirements: [] }], intrinsicBindings: [], runtimeRequirements: [] }\n"
+    "export const compilerLibraryPackage = { id: 'node:url', dependencies: [], operations: [{ libraryId: 'node:url', bindingId: 'node:url#module:node:url:pathToFileURL', operationId: 'node:url#pathToFileURL', kind: 'call', runtimeRequirements: ['node:url'] }], intrinsicBindings: [], runtimeRequirements: [{ id: 'node:url', dependencies: [], cPreludeIncludes: [], capabilities: [] }] }\n"
   )
   await writeFile(resolve(fixtureRoot, 'stdlib/node/os/index.d.ts'), 'export function platform(): string;\n')
 }

@@ -13,6 +13,7 @@ import {
   compilerLibraryAutomaticOptionValues,
   compilerLibraryOptionForCliAlias,
   compilerLibraryOptionScalarText,
+  expandedRuntimeRequirementIds,
   mergeCompilerLibraryOptionValues,
   parseCompilerLibraryOptionCliValue,
   resolveCompilerLibraryOptions
@@ -42,6 +43,7 @@ export type CliEnvironment = {
   fileExists?(path: string): boolean
   log(message: string): void
   mkdirSync(path: string): void
+  readFileSync?(path: string): string | null
   resolvePath?(path: string): string
   runCommand?(command: string, args: string[], cwd: string): CliCommandResult
   runProgram?(command: string, args: string[], cwd: string): CliCommandResult
@@ -456,7 +458,14 @@ function writeCppModules(
   }
 
   if (plan.hasBuildManifest) {
-    writeCppBuildManifest(plan, compiled.graph.modules, files, libraries, environment)
+    writeCppBuildManifest(
+      plan,
+      compiled.graph.modules,
+      files,
+      compiled.irRuntimeRequirements,
+      libraries,
+      environment
+    )
   }
 
   environment.log(outDir)
@@ -474,6 +483,7 @@ type CppBuildManifest = {
   sourceFiles: string[]
   headerFiles: string[]
   declarationFiles: string[]
+  runtimeRequirements: string[]
   cmakeCacheEntries: Array<{ name: string; value: string }>
 }
 
@@ -481,6 +491,7 @@ function writeCppBuildManifest(
   plan: CliCompilePlan,
   modules: CppBuildManifestModule[],
   files: CppModuleOutputFile[],
+  runtimeRequirements: string[],
   libraries: CompilerLibrarySet,
   environment: CliEnvironment
 ): void {
@@ -517,6 +528,7 @@ function writeCppBuildManifest(
     sourceFiles,
     headerFiles,
     declarationFiles,
+    runtimeRequirements: expandedRuntimeRequirementIds(libraries.runtimeRequirements, runtimeRequirements),
     cmakeCacheEntries: cppBuildManifestCMakeCacheEntries(plan, libraries, environment)
   }
 

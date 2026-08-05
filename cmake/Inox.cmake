@@ -183,12 +183,17 @@ function(inox_add_executable target)
   inox_json_array(INOX_TARGET_SOURCE_FILES "${INOX_TARGET_BUILD_MANIFEST}" sourceFiles)
   inox_json_array(INOX_TARGET_HEADER_FILES "${INOX_TARGET_BUILD_MANIFEST}" headerFiles)
   inox_json_array(INOX_TARGET_DECLARATION_FILES "${INOX_TARGET_BUILD_MANIFEST}" declarationFiles)
+  inox_json_array(INOX_TARGET_RUNTIME_REQUIREMENTS "${INOX_TARGET_BUILD_MANIFEST}" runtimeRequirements)
 
   if(NOT INOX_TARGET_SOURCE_FILES)
     message(FATAL_ERROR "Inox compiler produced no C++ sources for ${target}.")
   endif()
 
-  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${INOX_TARGET_INPUT_FILES})
+  set_property(
+    DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    ${INOX_TARGET_INPUT_FILES}
+    ${INOX_TARGET_COMPILER_DEPENDS}
+  )
 
   add_custom_command(
     OUTPUT ${INOX_TARGET_SOURCE_FILES}
@@ -212,11 +217,19 @@ function(inox_add_executable target)
       message(FATAL_ERROR "Inox native library plan was not found: ${INOX_STDLIB_NATIVE_PLAN}")
     endif()
 
+    set(INOX_STDLIB_FILTER_NATIVE_SOURCES ON)
+    set(INOX_STDLIB_INITIAL_RUNTIME_REQUIREMENTS ${INOX_TARGET_RUNTIME_REQUIREMENTS})
     add_subdirectory(
       "${INOX_TARGET_TOOLCHAIN_ROOT}/runtime"
       "${CMAKE_CURRENT_BINARY_DIR}/inox/runtime"
     )
   endif()
+
+  if(NOT COMMAND inox_add_stdlib_runtime_requirements)
+    message(FATAL_ERROR "inox_runtime does not support per-target stdlib source selection.")
+  endif()
+
+  inox_add_stdlib_runtime_requirements(${INOX_TARGET_RUNTIME_REQUIREMENTS})
 
   add_executable(${target} ${INOX_TARGET_SOURCE_FILES})
   target_include_directories(${target} PRIVATE "${INOX_TARGET_GENERATED_DIR}")

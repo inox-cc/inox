@@ -493,6 +493,36 @@ function expandedRuntimeRequirements(
   return result
 }
 
+export function expandedRuntimeRequirementIds(
+  descriptors: RuntimeRequirementDescriptor[],
+  selected: string[]
+): string[] {
+  const result: string[] = []
+  const pending = selected.slice()
+
+  for (let index = 0; index < pending.length; index = index + 1) {
+    const id = pending[index]
+
+    if (result.includes(id)) {
+      continue
+    }
+
+    result.push(id)
+    const descriptor = runtimeRequirementDescriptor(descriptors, id)
+
+    if (descriptor === null) {
+      continue
+    }
+
+    for (let dependencyIndex = 0; dependencyIndex < descriptor.dependencies.length; dependencyIndex = dependencyIndex + 1) {
+      pending.push(descriptor.dependencies[dependencyIndex])
+    }
+  }
+
+  result.sort()
+  return result
+}
+
 function runtimeRequirementDescriptor(
   descriptors: RuntimeRequirementDescriptor[],
   id: string

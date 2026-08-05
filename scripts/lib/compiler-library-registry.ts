@@ -34,6 +34,13 @@ export type CompilerLibraryNativePlan = {
   librarySetFingerprint: string
   sources: string[]
   includeDirs: string[]
+  units: CompilerLibraryNativeUnit[]
+}
+
+export type CompilerLibraryNativeUnit = {
+  libraryId: string
+  runtimeRequirements: string[]
+  sources: string[]
 }
 
 export async function generateCompilerLibraryRegistry(
@@ -63,6 +70,7 @@ export function renderCompilerLibraryRegistry(
   const manifestPackages = []
   const nativeSources = new Set<string>()
   const nativeIncludeDirs = new Set<string>()
+  const nativeUnits: CompilerLibraryNativeUnit[] = []
 
   for (const library of discovered) {
     manifestPackages.push({
@@ -78,6 +86,20 @@ export function renderCompilerLibraryRegistry(
       nativeSources.add(source)
     }
 
+    if (library.nativeSources.length > 0) {
+      const runtimeRequirements = library.compilerPackage?.runtimeRequirements ?? []
+
+      if (runtimeRequirements.length === 0) {
+        throw new Error(`Native compiler library ${library.id} has no runtime requirements`)
+      }
+
+      nativeUnits.push({
+        libraryId: library.id,
+        runtimeRequirements: runtimeRequirements.map((requirement) => requirement.id).sort(),
+        sources: library.nativeSources.slice().sort()
+      })
+    }
+
     for (const includeDir of library.nativeIncludeDirs) {
       nativeIncludeDirs.add(includeDir)
     }
@@ -88,7 +110,8 @@ export function renderCompilerLibraryRegistry(
     version: 1,
     librarySetFingerprint: librarySet.fingerprint,
     sources: Array.from(nativeSources).sort(),
-    includeDirs: Array.from(nativeIncludeDirs).sort()
+    includeDirs: Array.from(nativeIncludeDirs).sort(),
+    units: nativeUnits
   }
   const registrySource = renderRegistrySource(librarySet, discovered)
   const manifestSource = jsonSource({
@@ -138,6 +161,7 @@ export function renderCompilerLibraryRegistry(
     '  },\n' +
     '  log: (message: string) => console.log(message),\n' +
     '  mkdirSync: (path: string) => fs.mkdirSync(path, { recursive: true }),\n' +
+    "  readFileSync: (path: string) => { try { return fs.readFileSync(path, 'utf8') } catch { return null } },\n" +
     '  resolvePath: (value: string) => path.resolve(process.cwd(), value),\n' +
     '  runCommand: (command: string, args: string[], cwd: string) => {\n' +
     "    const result = childProcess.spawnSync(command, args, { cwd, encoding: 'utf8', stdio: 'inherit' })\n\n" +
@@ -190,11 +214,24 @@ export function renderCompilerLibraryRegistry(
 }
 
 function renderNativePlanCMake(plan: CompilerLibraryNativePlan): string {
-  return (
+  let source =
     `set(INOX_STDLIB_LIBRARY_SET_FINGERPRINT "${plan.librarySetFingerprint}")\n` +
     renderNativePlanCMakeList('INOX_STDLIB_SOURCES', plan.sources) +
-    renderNativePlanCMakeList('INOX_STDLIB_INCLUDE_DIRS', plan.includeDirs)
-  )
+    renderNativePlanCMakeList('INOX_STDLIB_INCLUDE_DIRS', plan.includeDirs) +
+    `set(INOX_STDLIB_NATIVE_UNIT_COUNT ${plan.units.length})\n`
+
+  for (let index = 0; index < plan.units.length; index = index + 1) {
+    const unit = plan.units[index]
+    const prefix = `INOX_STDLIB_NATIVE_UNIT_${index}`
+
+    source =
+      source +
+      `set(${prefix}_LIBRARY_ID "${unit.libraryId}")\n` +
+      renderNativePlanValueList(`${prefix}_RUNTIME_REQUIREMENTS`, unit.runtimeRequirements) +
+      renderNativePlanCMakeList(`${prefix}_SOURCES`, unit.sources)
+  }
+
+  return source
 }
 
 function renderNativePlanCMakeList(name: string, paths: string[]): string {
@@ -202,6 +239,16 @@ function renderNativePlanCMakeList(name: string, paths: string[]): string {
 
   for (const path of paths) {
     source = `${source}  "\${INOX_REPO_ROOT}/${path}"\n`
+  }
+
+  return `${source})\n`
+}
+
+function renderNativePlanValueList(name: string, values: string[]): string {
+  let source = `set(${name}\n`
+
+  for (const value of values) {
+    source = `${source}  "${value}"\n`
   }
 
   return `${source})\n`

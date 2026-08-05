@@ -56,7 +56,7 @@ async function createFixture(): Promise<void> {
   await writeFile(resolve(fixtureRoot, 'stdlib/node/path/src/path.cc'), 'int path_fixture = 0;\n')
   await writeFile(
     resolve(fixtureRoot, 'stdlib/node/path/compiler/index.ts'),
-    "export const compilerLibraryPackage = { id: 'node:path', dependencies: [], operations: [{ libraryId: 'node:path', bindingId: 'node:path#module:node:path:join', operationId: 'node:path#join', kind: 'call', runtimeRequirements: [] }], intrinsicBindings: [], runtimeRequirements: [] }\n"
+    "export const compilerLibraryPackage = { id: 'node:path', dependencies: [], operations: [{ libraryId: 'node:path', bindingId: 'node:path#module:node:path:join', operationId: 'node:path#join', kind: 'call', runtimeRequirements: ['node:path'] }], intrinsicBindings: [], runtimeRequirements: [{ id: 'node:path', dependencies: [], cPreludeIncludes: [], capabilities: [] }] }\n"
   )
   await writeFile(resolve(fixtureRoot, 'stdlib/node/os/index.d.ts'), 'export function platform(): string;\n')
 }

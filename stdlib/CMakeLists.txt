@@ -1,29 +1,125 @@
 cmake_minimum_required(VERSION 3.20)
 
-set(INOX_STDLIB_RELATIVE_SOURCES)
+function(inox_stdlib_relative_sources output)
+  set(INOX_STDLIB_RESULT)
 
-foreach(INOX_STDLIB_SOURCE IN LISTS INOX_STDLIB_SOURCES)
-  get_filename_component(
-    INOX_STDLIB_SOURCE_ABSOLUTE
-    "${INOX_STDLIB_SOURCE}"
-    ABSOLUTE
-    BASE_DIR "${INOX_REPO_ROOT}"
-  )
-  file(
-    RELATIVE_PATH
-    INOX_STDLIB_RELATIVE_SOURCE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
-    "${INOX_STDLIB_SOURCE_ABSOLUTE}"
-  )
+  foreach(INOX_STDLIB_SOURCE IN LISTS ARGN)
+    get_filename_component(
+      INOX_STDLIB_SOURCE_ABSOLUTE
+      "${INOX_STDLIB_SOURCE}"
+      ABSOLUTE
+      BASE_DIR "${INOX_REPO_ROOT}"
+    )
+    file(
+      RELATIVE_PATH
+      INOX_STDLIB_RELATIVE_SOURCE
+      "${CMAKE_CURRENT_SOURCE_DIR}"
+      "${INOX_STDLIB_SOURCE_ABSOLUTE}"
+    )
 
-  if(
-    INOX_STDLIB_RELATIVE_SOURCE STREQUAL ".." OR
-    INOX_STDLIB_RELATIVE_SOURCE MATCHES "^\\.\\./"
-  )
-    message(FATAL_ERROR "stdlib native source is outside the stdlib root: ${INOX_STDLIB_SOURCE}")
+    if(
+      INOX_STDLIB_RELATIVE_SOURCE STREQUAL ".." OR
+      INOX_STDLIB_RELATIVE_SOURCE MATCHES "^\\.\\./"
+    )
+      message(FATAL_ERROR "stdlib native source is outside the stdlib root: ${INOX_STDLIB_SOURCE}")
+    endif()
+
+    list(APPEND INOX_STDLIB_RESULT "${INOX_STDLIB_RELATIVE_SOURCE}")
+  endforeach()
+
+  set(${output} "${INOX_STDLIB_RESULT}" PARENT_SCOPE)
+endfunction()
+
+function(inox_stdlib_sources_for_runtime_requirements output)
+  set(INOX_STDLIB_SELECTED_SOURCES)
+
+  if(INOX_STDLIB_NATIVE_UNIT_COUNT GREATER 0)
+    math(EXPR INOX_STDLIB_NATIVE_UNIT_LAST "${INOX_STDLIB_NATIVE_UNIT_COUNT} - 1")
+
+    foreach(INOX_STDLIB_NATIVE_UNIT_INDEX RANGE 0 ${INOX_STDLIB_NATIVE_UNIT_LAST})
+      set(
+        INOX_STDLIB_UNIT_REQUIREMENTS_VARIABLE
+        "INOX_STDLIB_NATIVE_UNIT_${INOX_STDLIB_NATIVE_UNIT_INDEX}_RUNTIME_REQUIREMENTS"
+      )
+      set(
+        INOX_STDLIB_UNIT_SOURCES_VARIABLE
+        "INOX_STDLIB_NATIVE_UNIT_${INOX_STDLIB_NATIVE_UNIT_INDEX}_SOURCES"
+      )
+      set(INOX_STDLIB_UNIT_SELECTED OFF)
+
+      foreach(INOX_STDLIB_UNIT_REQUIREMENT IN LISTS ${INOX_STDLIB_UNIT_REQUIREMENTS_VARIABLE})
+        list(FIND ARGN "${INOX_STDLIB_UNIT_REQUIREMENT}" INOX_STDLIB_REQUIREMENT_INDEX)
+
+        if(NOT INOX_STDLIB_REQUIREMENT_INDEX EQUAL -1)
+          set(INOX_STDLIB_UNIT_SELECTED ON)
+          break()
+        endif()
+      endforeach()
+
+      if(INOX_STDLIB_UNIT_SELECTED)
+        list(APPEND INOX_STDLIB_SELECTED_SOURCES ${${INOX_STDLIB_UNIT_SOURCES_VARIABLE}})
+      endif()
+    endforeach()
   endif()
 
-  list(APPEND INOX_STDLIB_RELATIVE_SOURCES "${INOX_STDLIB_RELATIVE_SOURCE}")
-endforeach()
+  set(${output} "${INOX_STDLIB_SELECTED_SOURCES}" PARENT_SCOPE)
+endfunction()
 
-add_library(inox_stdlib_objects OBJECT ${INOX_STDLIB_RELATIVE_SOURCES})
+if(INOX_STDLIB_FILTER_NATIVE_SOURCES)
+  inox_stdlib_sources_for_runtime_requirements(
+    INOX_STDLIB_INITIAL_SOURCES
+    ${INOX_STDLIB_INITIAL_RUNTIME_REQUIREMENTS}
+  )
+  inox_stdlib_relative_sources(
+    INOX_STDLIB_INITIAL_RELATIVE_SOURCES
+    ${INOX_STDLIB_INITIAL_SOURCES}
+  )
+
+  if(INOX_STDLIB_INITIAL_RELATIVE_SOURCES)
+    add_library(inox_stdlib_objects OBJECT ${INOX_STDLIB_INITIAL_RELATIVE_SOURCES})
+  else()
+    set(INOX_STDLIB_EMPTY_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/inox_stdlib_empty.cc")
+    file(GENERATE OUTPUT "${INOX_STDLIB_EMPTY_SOURCE}" CONTENT "")
+    add_library(inox_stdlib_objects OBJECT "${INOX_STDLIB_EMPTY_SOURCE}")
+  endif()
+
+  set_property(
+    TARGET inox_stdlib_objects
+    PROPERTY INOX_STDLIB_ADDED_SOURCES "${INOX_STDLIB_INITIAL_RELATIVE_SOURCES}"
+  )
+else()
+  inox_stdlib_relative_sources(INOX_STDLIB_RELATIVE_SOURCES ${INOX_STDLIB_SOURCES})
+  add_library(inox_stdlib_objects OBJECT ${INOX_STDLIB_RELATIVE_SOURCES})
+  set_property(
+    TARGET inox_stdlib_objects
+    PROPERTY INOX_STDLIB_ADDED_SOURCES "${INOX_STDLIB_RELATIVE_SOURCES}"
+  )
+endif()
+
+function(inox_add_stdlib_runtime_requirements)
+  if(NOT INOX_STDLIB_FILTER_NATIVE_SOURCES)
+    return()
+  endif()
+
+  inox_stdlib_sources_for_runtime_requirements(INOX_STDLIB_SELECTED_SOURCES ${ARGN})
+  inox_stdlib_relative_sources(INOX_STDLIB_SELECTED_RELATIVE_SOURCES ${INOX_STDLIB_SELECTED_SOURCES})
+  get_property(
+    INOX_STDLIB_ADDED_SOURCES
+    TARGET inox_stdlib_objects
+    PROPERTY INOX_STDLIB_ADDED_SOURCES
+  )
+
+  foreach(INOX_STDLIB_SELECTED_SOURCE IN LISTS INOX_STDLIB_SELECTED_RELATIVE_SOURCES)
+    list(FIND INOX_STDLIB_ADDED_SOURCES "${INOX_STDLIB_SELECTED_SOURCE}" INOX_STDLIB_SOURCE_INDEX)
+
+    if(INOX_STDLIB_SOURCE_INDEX EQUAL -1)
+      target_sources(inox_stdlib_objects PRIVATE "${INOX_STDLIB_SELECTED_SOURCE}")
+      list(APPEND INOX_STDLIB_ADDED_SOURCES "${INOX_STDLIB_SELECTED_SOURCE}")
+    endif()
+  endforeach()
+
+  set_property(
+    TARGET inox_stdlib_objects
+    PROPERTY INOX_STDLIB_ADDED_SOURCES "${INOX_STDLIB_ADDED_SOURCES}"
+  )
+endfunction()
