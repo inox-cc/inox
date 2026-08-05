@@ -3711,13 +3711,13 @@ function emitRuntimeStringAssignment(expression: StatementNode, context: CFuncti
   const lines: string[] = []
 
   pushAllLines(lines, value.lines)
-
-  if (!isNarrowedNullableScalarExpression(expression.value, context)) {
-    lines.push(emitRuntimeValueCheck(value.expression, 'INOX_TAG_STRING', context))
-  }
-
   lines.push(`${storage} = ${value.expression};`)
   pushPreparedRuntimeValueOwnershipLines(lines, storage, value)
+
+  if (!isNarrowedNullableScalarExpression(expression.value, context)) {
+    lines.push(emitRuntimeValueCheck(storage, 'INOX_TAG_STRING', context))
+  }
+
   lines.push(`${emitCIdentifier(target)} = (inox_string*)${storage}.as.ref;`)
 
   return lines

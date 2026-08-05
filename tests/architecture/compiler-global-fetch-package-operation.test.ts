@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
+import { expandedRuntimeRequirementIds } from '../../compiler/extensions/library-options.ts'
 import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
 import { createCompilerLibrarySetFromDiscovered } from '../../scripts/lib/compiler-library-registry.ts'
 
@@ -52,5 +53,6 @@ test('global:fetch владеет declarations, native types, operations и runt
   assert.equal(construct.libraryOperationId, 'global:fetch#AbortController.construct')
   assert.equal(abortCall.libraryOperationId, 'global:fetch#AbortController.abort')
   assert.deepEqual(fetchCall.libraryRuntimeRequirements, ['global:fetch'])
+  assert.ok(expandedRuntimeRequirementIds(libraries.runtimeRequirements, result.ir.runtimeRequirements).includes('node:net'))
   assert.match(result.code, /#include "inox\/fetch\.h"/)
 })

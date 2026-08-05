@@ -93,7 +93,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: [binaryLibraryId, 'global:error', jsonLibraryId, 'global:promise'],
+  dependencies: [binaryLibraryId, 'global:error', jsonLibraryId, 'global:promise', 'node:net'],
   nativeTypes: [
     {
       libraryId,
@@ -152,7 +152,15 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: ['async-runtime', binaryLibraryId, jsonLibraryId, 'managed-values', 'objects', 'string-bytes'],
+      dependencies: [
+        'async-runtime',
+        binaryLibraryId,
+        jsonLibraryId,
+        'managed-values',
+        'node:net',
+        'objects',
+        'string-bytes'
+      ],
       cPreludeIncludes: ['inox/fetch.h'],
       capabilities: ['tcp'],
       optionConstraints: [

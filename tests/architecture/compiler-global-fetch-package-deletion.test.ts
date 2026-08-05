@@ -58,4 +58,6 @@ async function createFixture(): Promise<void> {
   for (const name of ['binary', 'collections', 'error', 'fetch', 'json', 'math', 'promise', 'strings']) {
     await cp(resolve(`stdlib/global/${name}`), resolve(fixture, `stdlib/global/${name}`), { recursive: true })
   }
+
+  await cp(resolve('stdlib/node/net'), resolve(fixture, 'stdlib/node/net'), { recursive: true })
 }

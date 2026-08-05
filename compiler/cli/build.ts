@@ -48,6 +48,7 @@ export type CliBuildPlan = {
 type CliBuildPaths = {
   binary: string
   build: string
+  configureState: string
   generated: string
   manifest: string
   output: string
@@ -121,24 +122,28 @@ export function executeCliBuild(
   }
 
   environment.mkdirSync(paths.project)
+  const projectSource = renderCliCMakeProject(
+    name,
+    target,
+    input,
+    paths,
+    configuration,
+    optionPlan,
+    plan.release,
+    environment.cwd
+  )
   writeFileIfChanged(
     environment,
     joinPath(paths.project, 'CMakeLists.txt'),
-    renderCliCMakeProject(
-      name,
-      target,
-      input,
-      paths,
-      configuration,
-      optionPlan,
-      plan.release,
-      environment.cwd
-    )
+    projectSource
   )
 
   const cmakeCache = environment.readFileSync?.(joinPath(paths.build, 'CMakeCache.txt')) ?? null
+  const manifestSource = environment.readFileSync?.(paths.manifest) ?? ''
+  const configureState = renderCliConfigureState(projectSource, manifestSource)
+  const previousConfigureState = environment.readFileSync?.(paths.configureState) ?? null
 
-  if (cmakeCache === null) {
+  if (cmakeCache === null || previousConfigureState !== configureState) {
     const configureArgs = ['-S', paths.project, '-B', paths.build]
 
     if (plan.release) {
@@ -150,6 +155,8 @@ export function executeCliBuild(
     if (!reportCommandResult(configured, environment)) {
       return false
     }
+
+    writeFileIfChanged(environment, paths.configureState, configureState)
   }
 
   const buildArgs = ['--build', paths.build, '--target', target, '--parallel']
@@ -218,11 +225,16 @@ function cliBuildPaths(output: string, name: string, executableSuffix: string): 
   return {
     binary: joinPath(joinPath(output, 'bin'), name + executableSuffix),
     build: joinPath(output, 'build'),
+    configureState: joinPath(joinPath(output, 'build'), 'inox-cli-configure-state'),
     generated: joinPath(output, 'generated'),
     manifest: joinPath(output, 'build-manifest.json'),
     output,
     project: output
   }
+}
+
+function renderCliConfigureState(projectSource: string, manifestSource: string): string {
+  return `${projectSource.length}\n${projectSource}${manifestSource}`
 }
 
 function cliBuildOptionPlan(

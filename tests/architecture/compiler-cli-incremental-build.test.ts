@@ -41,9 +41,13 @@ test('повторная CLI-сборка не перезаписывает не
 
   assert.equal(commands.length, 3)
   assert.deepEqual(commands[2], ['--build', '/work/out/build', '--target', 'inox_empty', '--parallel'])
-  assert.equal(writes.length, 5)
+  assert.equal(writes.length, 6)
   assert.match(writes[0], /\.cc$/)
   assert.match(writes[1], /\.h$/)
   assert.match(writes[2], /\.d\.ts$/)
-  assert.deepEqual(writes.slice(3), ['/work/out/build-manifest.json', '/work/out/CMakeLists.txt'])
+  assert.deepEqual(writes.slice(3), [
+    '/work/out/build-manifest.json',
+    '/work/out/CMakeLists.txt',
+    '/work/out/build/inox-cli-configure-state'
+  ])
 })
