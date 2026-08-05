@@ -8,78 +8,80 @@ import type {
 import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
 
 const libraryId = 'node:events'
-const eventRuntimeReason = 'node:events runtime support is not implemented by the current C++ backend'
-const listenerReason = 'event dispatch and listener lifetime support are not implemented by the current C++ backend'
-const asyncListenerReason = 'async event iterator/listener helpers need EventEmitter runtime support'
+const eventEmitterTypeId = `${libraryId}#EventEmitter`
 
-test('node:events exhaustive diagnostics принадлежат package operations', async () => {
+test('node:events отделяет native EventEmitter от честных diagnostics', async () => {
   const discovered = await discoverCompilerLibraries()
   const eventsPackage = discovered.find((library) => library.id === libraryId)
 
   assert.ok(eventsPackage?.compilerPackage)
   const operations = eventsPackage.compilerPackage.operations
 
-  assert.equal(operations.length, 22)
-
-  assertDiagnosticOperation(operations, 'EventEmitter', 'member-read', listenerReason)
-  assertDiagnosticOperation(operations, 'EventEmitter', 'construct', listenerReason)
-  assertDiagnosticOperation(operations, 'EventEmitterAsyncResource', 'member-read', listenerReason)
-  assertDiagnosticOperation(operations, 'EventEmitterAsyncResource', 'construct', listenerReason)
-
-  for (const name of ['addAbortListener', 'on', 'once']) {
-    assertDiagnosticOperation(operations, name, 'member-read', asyncListenerReason)
-    assertDiagnosticOperation(operations, name, 'call', asyncListenerReason)
-  }
+  const constructor = operation(operations, `${eventEmitterTypeId}.construct`)
+  assert.equal(constructor?.kind, 'construct')
+  assert.equal(constructor?.cExpression, 'EventEmitter::create')
+  assert.deepEqual(constructor?.runtimeRequirements, [libraryId])
 
   for (const name of [
-    'getEventListeners',
-    'getMaxListeners',
+    'addListener',
+    'emit',
     'listenerCount',
-    'setMaxListeners'
+    'off',
+    'on',
+    'once',
+    'removeListener'
   ]) {
-    assertDiagnosticOperation(operations, name, 'member-read', eventRuntimeReason)
-    assertDiagnosticOperation(operations, name, 'call', eventRuntimeReason)
+    const item = operations.find((candidate) => candidate.bindingId === `${eventEmitterTypeId}.${name}`)
+    assert.equal(item?.cExpression, name)
+    assert.deepEqual(item?.runtimeRequirements, [libraryId])
+    assert.equal(item?.diagnosticCode ?? null, null)
   }
 
-  assertDiagnosticOperation(operations, 'captureRejectionSymbol', 'member-read', eventRuntimeReason)
-  assertDiagnosticOperation(operations, 'defaultMaxListeners', 'member-read', eventRuntimeReason)
-  assertDiagnosticOperation(operations, 'defaultMaxListeners', 'member-write', eventRuntimeReason)
-  assertDiagnosticOperation(operations, 'errorMonitor', 'member-read', eventRuntimeReason)
+  for (const name of ['listenerCount', 'off', 'removeAllListeners', 'removeListener']) {
+    const item = operations.find((candidate) => candidate.bindingId === `${eventEmitterTypeId}.${name}`)
+    assert.equal(item?.cFailureMode ?? null, null)
+  }
 
-  assert.equal(operations.every((operation) => operation.libraryId === libraryId), true)
-  assert.equal(operations.every((operation) => operation.runtimeRequirements.length === 0), true)
-  assert.equal(operations.every((operation) => operation.cExpression === null), true)
+  for (const name of ['addListener', 'emit', 'on', 'once']) {
+    const item = operations.find((candidate) => candidate.bindingId === `${eventEmitterTypeId}.${name}`)
+    assert.equal(item?.cFailureMode, 'thrown')
+  }
+
+  assert.equal(
+    operations.filter((candidate) => candidate.bindingId === `${eventEmitterTypeId}.removeAllListeners`).length,
+    1
+  )
+
+  for (const name of ['eventNames', 'listeners']) {
+    const item = operations.find((candidate) => candidate.bindingId === `${eventEmitterTypeId}.${name}`)
+    assert.equal(item?.diagnosticCode, 'INOX_NOT_IMPLEMENTED')
+    assert.equal(item?.cExpression, null)
+  }
+
+  assertDiagnosticOperation(operations, 'EventEmitter', 'member-read')
+  assertDiagnosticOperation(operations, 'EventEmitterAsyncResource', 'construct')
+  assertDiagnosticOperation(operations, 'once', 'call')
+  assertDiagnosticOperation(operations, 'defaultMaxListeners', 'member-write')
+  assert.equal(operations.every((item) => item.libraryId === libraryId), true)
 })
+
+function operation(
+  operations: LibraryOperationDescriptor[],
+  operationId: string
+): LibraryOperationDescriptor | undefined {
+  return operations.find((candidate) => candidate.operationId === operationId)
+}
 
 function assertDiagnosticOperation(
   operations: LibraryOperationDescriptor[],
   name: string,
-  kind: LibraryOperationKind,
-  reason: string
+  kind: LibraryOperationKind
 ): void {
   const bindingId = `${libraryId}#module:${libraryId}:${name}`
-  const operation = operations.find(
-    (candidate) => candidate.bindingId === bindingId && candidate.kind === kind
-  )
+  const item = operations.find((candidate) => candidate.bindingId === bindingId && candidate.kind === kind)
 
-  assert.ok(operation, `missing ${kind} diagnostic operation for ${name}`)
-  assert.equal(operation.operationId, `${libraryId}#${name}.${operationKindSuffix(kind)}`)
-  assert.deepEqual(operation.bindingAliases, [`${libraryId}#module:${libraryId}:default.${name}`])
-  assert.equal(operation.diagnosticCode, 'INOX_NOT_IMPLEMENTED')
-  assert.equal(
-    operation.diagnosticMessage,
-    `${libraryId} ${name} is not implemented by the current C++ backend: ${reason}`
-  )
-}
-
-function operationKindSuffix(kind: LibraryOperationKind): string {
-  if (kind === 'member-read') {
-    return 'read'
-  }
-
-  if (kind === 'member-write') {
-    return 'write'
-  }
-
-  return kind
+  assert.ok(item, `missing ${kind} diagnostic operation for ${name}`)
+  assert.equal(item.diagnosticCode, 'INOX_NOT_IMPLEMENTED')
+  assert.equal(item.cExpression, null)
+  assert.deepEqual(item.runtimeRequirements, [])
 }

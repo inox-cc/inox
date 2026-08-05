@@ -11,6 +11,7 @@ extern "C" {
 typedef inox_status (*inox_class_field_read_fn)(const void* instance, uint32_t index, inox_value* out);
 typedef inox_status (*inox_class_instance_copy_fn)(inox_allocator* allocator, const void* instance, void** out);
 typedef void (*inox_class_instance_destroy_fn)(inox_allocator* allocator, void* instance);
+typedef void* (*inox_class_instance_query_interface_fn)(const void* instance, const void* interface_id);
 
 enum {
   INOX_CLASS_FIELD_READONLY = 1u << 0,
@@ -35,6 +36,7 @@ typedef struct inox_class_descriptor {
   inox_class_field_read_fn read_field;
   inox_class_instance_copy_fn copy_instance;
   inox_class_instance_destroy_fn destroy_instance;
+  inox_class_instance_query_interface_fn query_interface;
 } inox_class_descriptor;
 
 typedef struct inox_class_instance_ref {

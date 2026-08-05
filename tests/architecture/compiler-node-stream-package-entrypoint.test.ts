@@ -12,7 +12,7 @@ test('entrypoint package node:stream владеет native API и runtime plan',
   assert.equal(streamPackage.compilerEntrypoint, 'stdlib/node/stream/compiler/index.ts')
   assert.ok(streamPackage.compilerPackage)
   assert.equal(streamPackage.compilerPackage.id, 'node:stream')
-  assert.deepEqual(streamPackage.compilerPackage.dependencies, ['node:buffer'])
+  assert.deepEqual(streamPackage.compilerPackage.dependencies, ['node:buffer', 'node:events'])
   assert.deepEqual(streamPackage.nativeSources, ['stdlib/node/stream/src/stream.cc'])
   assert.deepEqual(streamPackage.nativeIncludeDirs, ['stdlib/node/stream/include'])
 
@@ -28,6 +28,7 @@ test('entrypoint package node:stream владеет native API и runtime plan',
       'node:stream#PassThrough'
     ]
   )
+  assert.deepEqual(nativeTypes[0]?.baseTypeIds, ['node:events#EventEmitter'])
   assert.deepEqual(nativeTypes[3]?.baseTypeIds, ['node:stream#Readable', 'node:stream#Writable'])
   assert.deepEqual(nativeTypes[5]?.baseTypeIds, ['node:stream#Transform'])
 
@@ -38,6 +39,7 @@ test('entrypoint package node:stream владеет native API и runtime plan',
     'callback-values',
     'managed-values',
     'node:buffer',
+    'node:events',
     'objects',
     'string-bytes'
   ])

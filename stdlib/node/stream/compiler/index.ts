@@ -18,6 +18,8 @@ const writableTypeId = `${libraryId}#Writable`
 const duplexTypeId = `${libraryId}#Duplex`
 const transformTypeId = `${libraryId}#Transform`
 const passThroughTypeId = `${libraryId}#PassThrough`
+const eventEmitterLibraryId = 'node:events'
+const eventEmitterTypeId = `${eventEmitterLibraryId}#EventEmitter`
 const bufferTypeId = 'node:buffer#Buffer'
 const uint8ArrayTypeId = 'global:binary#Uint8Array'
 const streamBorrowedTypeRef = nominalTypeRef(streamTypeId, 'borrowed')
@@ -59,9 +61,9 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['node:buffer'],
+  dependencies: ['node:buffer', eventEmitterLibraryId],
   nativeTypes: [
-    nativeType(streamTypeId, ['Stream'], 'Stream', [], streamFields),
+    nativeType(streamTypeId, ['Stream'], 'Stream', [eventEmitterTypeId], streamFields),
     nativeType(readableTypeId, ['Readable'], 'Readable', [streamTypeId], readableFields.slice(1)),
     nativeType(writableTypeId, ['Writable'], 'Writable', [streamTypeId], writableFields.slice(1)),
     nativeType(duplexTypeId, ['Duplex'], 'Duplex', [readableTypeId, writableTypeId]),
@@ -73,7 +75,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: ['callback-values', 'managed-values', 'node:buffer', 'objects', 'string-bytes'],
+      dependencies: ['callback-values', 'managed-values', 'node:buffer', eventEmitterLibraryId, 'objects', 'string-bytes'],
       cPreludeIncludes: ['inox/stream.h'],
       capabilities: []
     }

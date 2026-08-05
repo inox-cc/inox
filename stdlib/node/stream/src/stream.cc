@@ -1,6 +1,5 @@
 #include "inox/stream.h"
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstring>
@@ -19,47 +18,18 @@ namespace {
 
 constexpr std::size_t streamHighWaterMark = 16 * 1024;
 
-enum class StreamEvent : std::size_t {
-  close,
-  data,
-  drain,
-  end,
-  error,
-  finish,
-  count
-};
-
-struct StreamListener {
-  inox::Callback callback;
-  bool once;
-};
-
 void throwStreamError(const char* message) {
   inox::throw_value(inox::String(message == nullptr ? "stream operation failed" : message));
 }
 
-bool textEquals(inox::StringView value, const char* expected) {
-  const std::size_t length = std::strlen(expected);
-  return value.len == length && std::memcmp(value.bytes, expected, length) == 0;
-}
-
-bool streamEventFromName(inox::StringView name, StreamEvent& event) {
-  if (textEquals(name, "close")) event = StreamEvent::close;
-  else if (textEquals(name, "data")) event = StreamEvent::data;
-  else if (textEquals(name, "drain")) event = StreamEvent::drain;
-  else if (textEquals(name, "end")) event = StreamEvent::end;
-  else if (textEquals(name, "error")) event = StreamEvent::error;
-  else if (textEquals(name, "finish")) event = StreamEvent::finish;
-  else return false;
-  return true;
-}
+void streamListenerAdded(void* context, inox::StringView event_name);
 
 } // namespace
 
 class Stream::Impl : public std::enable_shared_from_this<Stream::Impl> {
 public:
   Impl()
-    : listeners_(),
+    : events_(inox::EventEmitterState::create(this, streamListenerAdded)),
       chunks_(),
       pipes_(),
       queued_bytes_(0),
@@ -72,25 +42,16 @@ public:
       destroyed_(false) {}
 
   void addListener(inox::StringView event_name, inox::Callback listener, bool once) {
-    StreamEvent event = StreamEvent::close;
+    if (events_) events_->addListener(event_name, std::move(listener), once);
+  }
 
-    if (!streamEventFromName(event_name, event) || !listener.valid()) {
-      throwStreamError("TypeError: invalid node:stream listener");
-      return;
-    }
+  std::shared_ptr<inox::EventEmitterState> events() const { return events_; }
 
-    try {
-      listeners_[static_cast<std::size_t>(event)].push_back({std::move(listener), once});
-    } catch (const std::bad_alloc&) {
-      inox::throw_out_of_memory();
-      return;
-    }
-
-    if (event == StreamEvent::data) {
-      flowing_ = true;
-      paused_ = false;
-      flush();
-    }
+  void listenerAdded(inox::StringView event_name) {
+    if (event_name.len != 4 || std::memcmp(event_name.bytes, "data", 4) != 0) return;
+    flowing_ = true;
+    paused_ = false;
+    flush();
   }
 
   void addPipe(const std::shared_ptr<Impl>& destination) {
@@ -116,7 +77,7 @@ public:
     destroyed_ = true;
     chunks_.clear();
     queued_bytes_ = 0;
-    emit(StreamEvent::close);
+    emit("close");
     clearListeners();
     pipes_.clear();
   }
@@ -139,7 +100,8 @@ public:
     if (inox::thrown()) return;
 
     writable_ended_ = true;
-    emit(StreamEvent::finish);
+    emit("finish");
+    if (inox::thrown()) return;
     emitEndIfReady();
   }
 
@@ -204,7 +166,7 @@ public:
   }
 
 private:
-  std::array<std::vector<StreamListener>, static_cast<std::size_t>(StreamEvent::count)> listeners_;
+  std::shared_ptr<inox::EventEmitterState> events_;
   std::deque<Buffer> chunks_;
   std::vector<std::weak_ptr<Impl>> pipes_;
   std::size_t queued_bytes_;
@@ -217,64 +179,22 @@ private:
   bool destroyed_;
 
   void addFinishCallback(inox::Callback callback) {
-    try {
-      listeners_[static_cast<std::size_t>(StreamEvent::finish)].push_back({std::move(callback), true});
-    } catch (const std::bad_alloc&) {
-      inox::throw_out_of_memory();
-    }
+    if (events_) events_->addListener("finish", std::move(callback), true);
   }
 
   void clearListeners() {
-    for (std::vector<StreamListener>& listeners : listeners_) listeners.clear();
+    if (events_) events_->removeAllListeners();
   }
 
-  void emit(StreamEvent event) {
-    std::vector<StreamListener>& stored = listeners_[static_cast<std::size_t>(event)];
-    std::vector<StreamListener> listeners;
-
-    try {
-      listeners = stored;
-    } catch (const std::bad_alloc&) {
-      inox::throw_out_of_memory();
-      return;
-    }
-
-    stored.erase(
-      std::remove_if(stored.begin(), stored.end(), [](const StreamListener& listener) { return listener.once; }),
-      stored.end()
-    );
-
-    for (const StreamListener& listener : listeners) {
-      inox::Value result = listener.callback.call();
-      (void)result;
-      if (inox::thrown()) return;
-    }
+  void emit(inox::StringView event_name) {
+    if (events_) events_->emit(event_name, {});
   }
 
   void emitData(const Buffer& chunk) {
-    std::vector<StreamListener>& stored = listeners_[static_cast<std::size_t>(StreamEvent::data)];
-    std::vector<StreamListener> listeners;
-
-    try {
-      listeners = stored;
-    } catch (const std::bad_alloc&) {
-      inox::throw_out_of_memory();
-      return;
-    }
-
-    stored.erase(
-      std::remove_if(stored.begin(), stored.end(), [](const StreamListener& listener) { return listener.once; }),
-      stored.end()
-    );
-
     const inox::Value argument(chunk.raw());
-
-    for (const StreamListener& listener : listeners) {
-      const std::array<inox::Value, 1> arguments = {argument};
-      inox::Value result = listener.callback.call(std::span<const inox::Value>(arguments));
-      (void)result;
-      if (inox::thrown()) return;
-    }
+    const std::array<inox::Value, 1> arguments = {argument};
+    if (events_) events_->emit("data", arguments);
+    if (inox::thrown()) return;
 
     for (std::size_t index = 0; index < pipes_.size();) {
       std::shared_ptr<Impl> destination = pipes_[index].lock();
@@ -295,7 +215,7 @@ private:
 
     readable_ended_ = true;
     end_emitted_ = true;
-    emit(StreamEvent::end);
+    emit("end");
     if (inox::thrown()) return;
 
     for (std::size_t index = 0; index < pipes_.size(); index += 1) {
@@ -316,7 +236,7 @@ private:
 
     if (backpressured_ && queued_bytes_ < streamHighWaterMark) {
       backpressured_ = false;
-      emit(StreamEvent::drain);
+      emit("drain");
       if (inox::thrown()) return;
     }
 
@@ -335,6 +255,15 @@ private:
     return false;
   }
 };
+
+namespace {
+
+void streamListenerAdded(void* context, inox::StringView event_name) {
+  if (context == nullptr) return;
+  static_cast<Stream::Impl*>(context)->listenerAdded(event_name);
+}
+
+} // namespace
 
 namespace {
 
@@ -378,6 +307,12 @@ inox_status readStreamField(const void* instance, std::uint32_t index, inox_valu
   return INOX_ERR_FIELD;
 }
 
+void* queryStreamInterface(const void* instance, const void* interface_id) {
+  if (instance == nullptr || interface_id != &inox::eventEmitterInterface) return nullptr;
+  const std::shared_ptr<Stream::Impl>& impl = static_cast<const StreamHolder*>(instance)->impl;
+  return impl ? impl->events().get() : nullptr;
+}
+
 const inox_class_descriptor streamDescriptor = {
   "PassThrough",
   0,
@@ -385,6 +320,7 @@ const inox_class_descriptor streamDescriptor = {
   readStreamField,
   copyStreamHolder,
   destroyStreamHolder,
+  queryStreamInterface,
 };
 
 PassThrough materializeStream(const std::shared_ptr<Stream::Impl>& impl) {
@@ -432,9 +368,9 @@ Buffer byteChunk(const Uint8Array& chunk) {
 
 } // namespace
 
-Stream::Stream() : inox::Value() {}
-Stream::Stream(const inox::Value& value) : inox::Value(value) {}
-Stream::Stream(inox::Value&& value) : inox::Value(std::move(value)) {}
+Stream::Stream() : EventEmitter() {}
+Stream::Stream(const inox::Value& value) : EventEmitter(value) {}
+Stream::Stream(inox::Value&& value) : EventEmitter(std::move(value)) {}
 
 Stream& Stream::destroy() {
   std::shared_ptr<Impl> impl = requireStream(*this, "TypeError: Stream.destroy failed");

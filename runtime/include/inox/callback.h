@@ -92,6 +92,7 @@ public:
   ~Callback();
 
   bool valid() const;
+  bool same(const Callback& other) const;
   Value call() const;
   Value call(std::span<const Value> args) const;
 };

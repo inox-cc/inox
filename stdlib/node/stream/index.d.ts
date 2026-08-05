@@ -1,4 +1,5 @@
 import type { Buffer } from 'node:buffer'
+import type { EventEmitter } from 'node:events'
 
 export type StreamCallback = (error?: Error) => void
 export type StreamChunk = string | Buffer | Uint8Array
@@ -22,6 +23,8 @@ export interface StreamModule {
   finished(stream: Stream, callback?: StreamCallback): Stream
   pipeline(...streams: Stream[]): Stream
 }
+
+export interface Stream extends EventEmitter {}
 
 export class Stream {
   readonly destroyed: boolean

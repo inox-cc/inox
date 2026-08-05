@@ -3,10 +3,11 @@
 
 #include "inox/binary.h"
 #include "inox/callback.h"
+#include "inox/events.h"
 #include "inox/string_view.h"
 #include "inox/value.h"
 
-class Stream : public inox::Value {
+class Stream : public EventEmitter {
 public:
   class Impl;
 
@@ -14,7 +15,7 @@ public:
   explicit Stream(const inox::Value& value);
   explicit Stream(inox::Value&& value);
 
-  using inox::Value::operator=;
+  using EventEmitter::operator=;
 
   Stream& destroy();
   bool destroyed() const;
@@ -25,8 +26,8 @@ public:
   Stream& end(const Uint8Array& chunk);
   Stream& end(const Uint8Array& chunk, inox::Callback callback);
   bool isPaused() const;
-  Stream& on(inox::StringView event_name, inox::Callback listener);
-  Stream& once(inox::StringView event_name, inox::Callback listener);
+  Stream& on(inox::StringView event_name, inox::Callback listener) override;
+  Stream& once(inox::StringView event_name, inox::Callback listener) override;
   Stream& pause();
   Stream pipe(Stream destination);
   bool readable() const;

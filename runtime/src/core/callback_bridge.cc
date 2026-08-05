@@ -39,6 +39,11 @@ bool Callback::valid() const {
          value_.as.ref->kind == INOX_REF_FUNCTION;
 }
 
+bool Callback::same(const Callback& other) const {
+  return value_.tag == INOX_TAG_FUNCTION && other.value_.tag == INOX_TAG_FUNCTION &&
+         value_.as.ref != nullptr && value_.as.ref == other.value_.as.ref;
+}
+
 Value Callback::call() const {
   return call(std::span<const Value>());
 }

@@ -103,6 +103,7 @@ const coreProtocolValues = new Set([
   'weak-references'
 ])
 const universalNativeValues = new Set([
+  '$value',
   'bool',
   'double',
   'inox::String',

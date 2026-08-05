@@ -577,7 +577,13 @@ function isPlainFunctionPointerReturn(functionType: CFunctionType, allowNullable
 }
 
 function isManagedRuntimeCallbackParamValueType(valueType: string): boolean {
-  return valueType === 'string' || valueType === 'object' || valueType === 'bytes' || valueType === 'function'
+  return (
+    valueType === 'string' ||
+    valueType === 'object' ||
+    valueType === 'bytes' ||
+    valueType === 'function' ||
+    valueType === 'unknown'
+  )
 }
 
 function isSupportedRuntimeCallbackParamValueType(valueType: string): boolean {
@@ -587,7 +593,8 @@ function isSupportedRuntimeCallbackParamValueType(valueType: string): boolean {
     valueType === 'string' ||
     valueType === 'object' ||
     valueType === 'bytes' ||
-    valueType === 'function'
+    valueType === 'function' ||
+    valueType === 'unknown'
   )
 }
 
@@ -4613,6 +4620,12 @@ function emitRuntimeArrowCallbackParamPrelude(
     if (param.valueType === 'function') {
       context.runtimeCallbacks.add(name)
       context.functionTypes.set(name, normalizeFunctionType(param.functionType))
+      lines.push(`inox_value ${cName} = ${value};`)
+      index = index + 1
+      continue
+    }
+
+    if (param.valueType === 'unknown') {
       lines.push(`inox_value ${cName} = ${value};`)
       index = index + 1
       continue

@@ -14,10 +14,6 @@ test('node:events и node:stream diagnostics работают через named, 
       message: 'node:events once is not implemented'
     },
     {
-      source: "import events from 'node:events'\nnew events.EventEmitter()\n",
-      message: 'node:events EventEmitter is not implemented'
-    },
-    {
       source: "import { EventEmitter } from 'node:events'\nconst EventClass = EventEmitter\n",
       message: 'node:events EventEmitter is not implemented'
     },
