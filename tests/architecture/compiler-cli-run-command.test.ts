@@ -9,12 +9,22 @@ test('inox run builds and executes the inferred application binary', () => {
   const programs: Array<{ command: string; args: string[] }> = []
   const success: CliCommandResult = { code: 0, stderr: '', stdout: '' }
   const environment: CliEnvironment = {
-    args: ['node', 'inox', 'run', 'project/src/index.ts', '--out-dir', 'out', '--', '--flag', 'value'],
+    args: [
+      'node',
+      'inox',
+      'run',
+      'tests/architecture/fixtures/empty.ts',
+      '--out-dir',
+      'out',
+      '--name',
+      'project',
+      '--',
+      '--flag',
+      'value'
+    ],
     build: {
       cmakeCommand: 'cmake',
       cmakeOptionMappings: [],
-      compilerCommand: ['/toolchain/bin/inox'],
-      compilerDependencies: ['/toolchain/bin/inox'],
       defaultLibraryOptions: [],
       executableSuffix: '',
       toolchainRoot: '/toolchain'

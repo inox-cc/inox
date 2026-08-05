@@ -21,8 +21,6 @@ export type CliCMakeOptionMapping = {
 export type CliBuildConfiguration = {
   cmakeCommand: string
   cmakeOptionMappings: CliCMakeOptionMapping[]
-  compilerCommand: string[]
-  compilerDependencies: string[]
   defaultLibraryOptions: CompilerLibraryOptionValue[]
   executableSuffix: string
   preparations?: CliBuildPreparation[]
@@ -60,6 +58,34 @@ type CliBuildOptionPlan = {
   cacheEntries: Array<{ name: string; value: string }>
   compilerArgs: string[]
   options: CompilerLibraryOptionValue[]
+}
+
+export type CliBuildGenerationPaths = {
+  generated: string
+  manifest: string
+}
+
+export function cliBuildGenerationPaths(
+  plan: CliBuildPlan,
+  environment: CliEnvironment
+): CliBuildGenerationPaths | null {
+  const configuration = environment.build
+  const resolvePath = environment.resolvePath
+
+  if (
+    configuration === null ||
+    typeof configuration === 'undefined' ||
+    resolvePath === null ||
+    typeof resolvePath === 'undefined'
+  ) {
+    return null
+  }
+
+  const name = validBuildName(plan.name.length > 0 ? plan.name : defaultBuildName(plan.input))
+  const output = resolvePath(plan.outDir.length > 0 ? plan.outDir : joinPath('dist', name))
+  const paths = cliBuildPaths(output, name, configuration.executableSuffix)
+
+  return { generated: paths.generated, manifest: paths.manifest }
 }
 
 export function executeCliBuild(
@@ -367,9 +393,6 @@ function renderCliCMakeProject(
   }
 
   lines.push('')
-  appendCMakeList(lines, 'INOX_COMPILER_COMMAND', configuration.compilerCommand)
-  appendCMakeList(lines, 'INOX_COMPILER_DEPENDS', configuration.compilerDependencies)
-
   for (let index = 0; index < optionPlan.cacheEntries.length; index = index + 1) {
     const entry = optionPlan.cacheEntries[index]
     lines.push(`set(${entry.name} "${cmakeString(entry.value)}" CACHE STRING "" FORCE)`)
@@ -379,6 +402,7 @@ function renderCliCMakeProject(
   lines.push(`include("${cmakeString(joinPath(configuration.toolchainRoot, 'cmake/Inox.cmake'))}")`)
   lines.push('')
   lines.push(`inox_add_executable(${target}`)
+  lines.push('  PREGENERATED')
   lines.push(`  ENTRY "${cmakeString(input)}"`)
   lines.push(`  ROOT "${cmakeString(configuration.toolchainRoot)}"`)
   lines.push(`  GENERATED_DIR "${cmakeString(paths.generated)}"`)
@@ -398,16 +422,6 @@ function renderCliCMakeProject(
   lines.push('')
 
   return lines.join('\n')
-}
-
-function appendCMakeList(lines: string[], name: string, values: string[]): void {
-  lines.push(`set(${name}`)
-
-  for (let index = 0; index < values.length; index = index + 1) {
-    lines.push(`  "${cmakeString(values[index])}"`)
-  }
-
-  lines.push(')')
 }
 
 function cmakeString(value: string): string {

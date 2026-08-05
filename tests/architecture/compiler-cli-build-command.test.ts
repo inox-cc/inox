@@ -10,12 +10,20 @@ test('inox build creates and builds an internal CMake project', () => {
   let exitCode = 0
   const success: CliCommandResult = { code: 0, stderr: '', stdout: '' }
   const environment: CliEnvironment = {
-    args: ['node', 'inox', 'build', 'src/main.ts', '--out-dir', 'out', '--name', 'demo', '--release'],
+    args: [
+      'node',
+      'inox',
+      'build',
+      'tests/architecture/fixtures/empty.ts',
+      '--out-dir',
+      'out',
+      '--name',
+      'demo',
+      '--release'
+    ],
     build: {
       cmakeCommand: 'cmake',
       cmakeOptionMappings: [],
-      compilerCommand: ['/toolchain/bin/inox'],
-      compilerDependencies: ['/toolchain/bin/inox'],
       defaultLibraryOptions: [],
       executableSuffix: '',
       toolchainRoot: '/toolchain'
@@ -49,7 +57,9 @@ test('inox build creates and builds an internal CMake project', () => {
   })
   const cmake = files.get('/work/out/CMakeLists.txt') ?? ''
   assert.match(cmake, /inox_add_executable\(inox_demo/)
-  assert.match(cmake, /ENTRY "\/work\/src\/main\.ts"/)
+  assert.match(cmake, /PREGENERATED/)
+  assert.match(cmake, /ENTRY "\/work\/tests\/architecture\/fixtures\/empty\.ts"/)
+  assert.doesNotMatch(cmake, /INOX_COMPILER_COMMAND/)
   assert.match(cmake, /OUTPUT_NAME "demo"/)
   assert.doesNotMatch(cmake, /stdlib\/(?:global|node)\//)
 })

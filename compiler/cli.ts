@@ -4,6 +4,7 @@ import { compileFileSync, compileFileToCppModulesSync, compileGraphToIrModulesSy
 import type { CppModuleCompileOptions } from './core.ts'
 import type { CppModuleOutputFile } from './backends/cpp/types.ts'
 import {
+  cliBuildGenerationPaths,
   executeCliBuild,
   type CliBuildConfiguration,
   type CliBuildPlan
@@ -454,7 +455,7 @@ function writeCppModules(
     const output = joinPath(outDir, file.path)
 
     ensureParentDirectory(output, environment)
-    environment.writeFileSync(output, file.code)
+    writeFileIfChanged(output, file.code, environment)
   }
 
   if (plan.hasBuildManifest) {
@@ -533,7 +534,15 @@ function writeCppBuildManifest(
   }
 
   ensureParentDirectory(plan.buildManifest, environment)
-  environment.writeFileSync(plan.buildManifest, `${JSON.stringify(manifest, null, 2)}\n`)
+  writeFileIfChanged(plan.buildManifest, `${JSON.stringify(manifest, null, 2)}\n`, environment)
+}
+
+function writeFileIfChanged(path: string, source: string, environment: CliEnvironment): void {
+  if (environment.readFileSync?.(path) === source) {
+    return
+  }
+
+  environment.writeFileSync(path, source)
 }
 
 function cppBuildManifestCMakeCacheEntries(
@@ -667,6 +676,30 @@ function executeCompilerCli(
       )
 
       if (parsed.plan.command !== 'compile') {
+        const paths = cliBuildGenerationPaths(parsed.plan, environment)
+
+        if (paths === null) {
+          return executeCliBuild(parsed.plan, libraries, environment)
+        }
+
+        writeCppModules(
+          {
+            command: 'compile',
+            buildManifest: paths.manifest,
+            emitCc: true,
+            entryMode: true,
+            hasBuildManifest: true,
+            hasOutDir: true,
+            hasOutput: false,
+            input: parsed.plan.input,
+            libraryOptions: parsed.plan.libraryOptions,
+            outDir: paths.generated,
+            output: ''
+          },
+          libraries,
+          environment,
+          libraryLiteralTypeInference
+        )
         return executeCliBuild(parsed.plan, libraries, environment)
       } else if (parsed.plan.hasOutDir) {
         writeCppModules(parsed.plan, libraries, environment, libraryLiteralTypeInference)

@@ -17,6 +17,9 @@ export type ParseCompilerLibraryGlobalDeclarationsResult = {
   diagnostics: Diagnostic[]
 }
 
+let cachedGlobalDeclarationDescriptors: LibraryDeclarationDescriptor[] | null = null
+let cachedGlobalDeclarations: ParseCompilerLibraryGlobalDeclarationsResult | null = null
+
 type AmbientDeclarationOwner = {
   libraryId: string
   source: string
@@ -26,6 +29,10 @@ type AmbientDeclarationOwner = {
 export function parseCompilerLibraryGlobalDeclarations(
   descriptors: LibraryDeclarationDescriptor[]
 ): ParseCompilerLibraryGlobalDeclarationsResult {
+  if (descriptors === cachedGlobalDeclarationDescriptors && cachedGlobalDeclarations !== null) {
+    return cachedGlobalDeclarations
+  }
+
   const declarations: ParsedCompilerLibraryGlobalDeclaration[] = []
   const diagnostics: Diagnostic[] = []
   const typeOwners: Map<string, AmbientDeclarationOwner> = new Map()
@@ -81,10 +88,22 @@ export function parseCompilerLibraryGlobalDeclarations(
     }
   }
 
-  return {
+  const result: ParseCompilerLibraryGlobalDeclarationsResult = {
     declarations,
     diagnostics
   }
+
+  cachedGlobalDeclarationDescriptors = descriptors
+  cachedGlobalDeclarations = result
+  return result
+}
+
+export function seedCompilerLibraryGlobalDeclarations(
+  descriptors: LibraryDeclarationDescriptor[],
+  result: ParseCompilerLibraryGlobalDeclarationsResult
+): void {
+  cachedGlobalDeclarationDescriptors = descriptors
+  cachedGlobalDeclarations = result
 }
 
 export function compilerLibraryGlobalTypeNames(descriptors: LibraryDeclarationDescriptor[]): Set<string> {

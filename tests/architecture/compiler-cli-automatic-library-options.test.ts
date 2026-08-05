@@ -50,8 +50,6 @@ function runBuild(args: string[]): { cmake: string; commands: string[]; errors: 
         { optionId: 'bridge#loop', cacheName: 'TEST_LOOP' },
         { optionId: 'bridge#tls', cacheName: 'TEST_TLS' }
       ],
-      compilerCommand: ['inox'],
-      compilerDependencies: [],
       defaultLibraryOptions: [],
       executableSuffix: '',
       preparations: [

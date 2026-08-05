@@ -781,7 +781,6 @@ class Checker {
         loc: item.loc
       }
 
-      item.shape = metadata.shape
       this.scope.bindings.set(item.name, symbol)
       this.typeSymbols.set(item.name, symbol)
     } finally {

@@ -33,8 +33,6 @@ runCompilerCli(
     build: {
       cmakeCommand: 'cmake',
       cmakeOptionMappings: compilerTargetCMakeOptionMappings,
-      compilerCommand: [process.execPath, join(rootDir, 'compiler/index.ts')],
-      compilerDependencies: [join(rootDir, 'compiler/index.ts')],
       defaultLibraryOptions: [],
       executableSuffix: process.platform === 'win32' ? '.exe' : '',
       preparations: compilerTargetBuildPreparations,

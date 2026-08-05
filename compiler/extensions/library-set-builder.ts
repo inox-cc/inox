@@ -31,7 +31,11 @@ import type {
   TypeTraitRef
 } from './types.ts'
 import { formatDiagnostics } from '../diagnostics.ts'
-import { parseCompilerLibraryGlobalDeclarations } from './global-declarations.ts'
+import {
+  parseCompilerLibraryGlobalDeclarations,
+  seedCompilerLibraryGlobalDeclarations,
+  type ParseCompilerLibraryGlobalDeclarationsResult
+} from './global-declarations.ts'
 import {
   compilerLibraryOptionScalarText,
   compilerLibraryOptionScalarType,
@@ -59,6 +63,24 @@ export function createCompilerLibrarySet(
   libraries: CompilerLibraryDescriptor[],
   targetOptions: LibraryOptionDescriptor[] = [],
   precomputedFingerprint?: string
+): CompilerLibrarySet {
+  return createCompilerLibrarySetInternal(libraries, targetOptions, precomputedFingerprint, null)
+}
+
+export function createGeneratedCompilerLibrarySet(
+  libraries: CompilerLibraryDescriptor[],
+  targetOptions: LibraryOptionDescriptor[],
+  precomputedFingerprint: string,
+  globalDeclarations: ParseCompilerLibraryGlobalDeclarationsResult
+): CompilerLibrarySet {
+  return createCompilerLibrarySetInternal(libraries, targetOptions, precomputedFingerprint, globalDeclarations)
+}
+
+function createCompilerLibrarySetInternal(
+  libraries: CompilerLibraryDescriptor[],
+  targetOptions: LibraryOptionDescriptor[],
+  precomputedFingerprint: string | undefined,
+  globalDeclarations: ParseCompilerLibraryGlobalDeclarationsResult | null
 ): CompilerLibrarySet {
   const ordered = orderCompilerLibraries(libraries)
   const declarations: LibraryDeclarationDescriptor[] = []
@@ -94,11 +116,11 @@ export function createCompilerLibrarySet(
     nativeTypes,
     operations,
     intrinsicBindings,
-    runtimeRequirements
+    runtimeRequirements,
+    globalDeclarations
   )
   const effectiveReceiverOperations = buildEffectiveReceiverOperations(nativeTypes, operations)
-
-  return {
+  const result: CompilerLibrarySet = {
     fingerprint:
       typeof precomputedFingerprint === 'string'
         ? precomputedFingerprint
@@ -113,6 +135,12 @@ export function createCompilerLibrarySet(
     intrinsicBindings,
     runtimeRequirements
   }
+
+  if (globalDeclarations !== null) {
+    seedCompilerLibraryGlobalDeclarations(result.declarations, globalDeclarations)
+  }
+
+  return result
 }
 
 function buildEffectiveReceiverOperations(
@@ -415,11 +443,16 @@ function validateCompilerLibrarySet(
   nativeTypes: LibraryNativeTypeDescriptor[],
   operations: LibraryOperationDescriptor[],
   intrinsicBindings: IntrinsicRoleBinding[],
-  runtimeRequirements: RuntimeRequirementDescriptor[]
+  runtimeRequirements: RuntimeRequirementDescriptor[],
+  globalDeclarations: ParseCompilerLibraryGlobalDeclarationsResult | null
 ): void {
   validateUniqueDeclarationSources(declarations)
   validateUniqueTypeOperators(typeOperators)
-  validateGlobalDeclarations(declarations)
+  if (globalDeclarations === null) {
+    validateGlobalDeclarations(declarations)
+  } else if (globalDeclarations.diagnostics.length > 0) {
+    throw new Error(formatDiagnostics(globalDeclarations.diagnostics))
+  }
   validateCompilerLibraryOptionDescriptors(options)
   validateUniqueRuntimeRequirementIds(runtimeRequirements)
   validateRuntimeInitializers(runtimeInitializers, options, runtimeRequirements)

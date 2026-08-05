@@ -295,32 +295,20 @@ function readQuotedRaw(state: LexerState, quote: string): string {
 }
 
 function readLineCommentRaw(state: LexerState): string {
-  let raw = ''
-
-  while (state.index < state.source.length && lexerCurrentChar(state) !== '\n') {
-    const unit = lexerCurrentChar(state)
-    raw = raw + unit
-    advanceLexer(state, unit)
-  }
-
+  const start = state.index
+  const newline = state.source.indexOf('\n', start)
+  const end = newline === -1 ? state.source.length : newline
+  const raw = state.source.slice(start, end)
+  advanceLexerTo(state, end)
   return raw
 }
 
 function readBlockCommentRaw(state: LexerState): string {
-  let raw = ''
-
-  while (state.index < state.source.length) {
-    const unit = lexerCurrentChar(state)
-    raw = raw + unit
-    advanceLexer(state, unit)
-
-    if (unit === '*' && state.index < state.source.length && lexerCurrentChar(state) === '/') {
-      raw = raw + '/'
-      advanceLexer(state, '/')
-      return raw
-    }
-  }
-
+  const start = state.index
+  const close = state.source.indexOf('*/', start + 2)
+  const end = close === -1 ? state.source.length : close + 2
+  const raw = state.source.slice(start, end)
+  advanceLexerTo(state, end)
   return raw
 }
 
@@ -522,9 +510,8 @@ function readEscapeValue(state: LexerState): string {
 }
 
 function skipLineComment(state: LexerState): void {
-  while (state.index < state.source.length && lexerCurrentChar(state) !== '\n') {
-    advanceLexer(state, lexerCurrentChar(state))
-  }
+  const newline = state.source.indexOf('\n', state.index)
+  advanceLexerTo(state, newline === -1 ? state.source.length : newline)
 }
 
 function readBlockComment(state: LexerState): void {
@@ -532,26 +519,14 @@ function readBlockComment(state: LexerState): void {
   const startColumn = state.column
   const startIndex = state.index
   const docComment = lexerCharAt(state.source, state.index + 2) === '*'
-  let value = ''
+  const contentStart = state.index + 2
+  const close = state.source.indexOf('*/', contentStart)
+  const contentEnd = close === -1 ? state.source.length : close
+  const value = docComment ? state.source.slice(contentStart, contentEnd) : ''
+  advanceLexerTo(state, close === -1 ? state.source.length : close + 2)
 
-  advanceLexer(state, '/')
-  advanceLexer(state, '*')
-
-  while (state.index < state.source.length) {
-    if (lexerCurrentChar(state) === '*' && lexerNextChar(state) === '/') {
-      advanceLexer(state, '*')
-      advanceLexer(state, '/')
-
-      if (docComment && blockCommentHasInlineTag(value)) {
-        state.tokens.push(makeToken('annotation', 'inline', startLine, startColumn, startIndex, state.file))
-      }
-
-      return
-    }
-
-    const unit = lexerCurrentChar(state)
-    value = value + unit
-    advanceLexer(state, unit)
+  if (docComment && blockCommentHasInlineTag(value)) {
+    state.tokens.push(makeToken('annotation', 'inline', startLine, startColumn, startIndex, state.file))
   }
 }
 
@@ -597,6 +572,25 @@ function advanceLexer(state: LexerState, unit: string): void {
   } else {
     state.column = state.column + 1
   }
+}
+
+function advanceLexerTo(state: LexerState, end: number): void {
+  let cursor = state.index
+
+  while (cursor < end) {
+    const newline = state.source.indexOf('\n', cursor)
+
+    if (newline === -1 || newline >= end) {
+      state.column = state.column + (end - cursor)
+      break
+    }
+
+    state.line = state.line + 1
+    state.column = 1
+    cursor = newline + 1
+  }
+
+  state.index = end
 }
 
 function lexerLocation(state: LexerState, line: number, column: number): SourceLocation {

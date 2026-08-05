@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
+import { parseCompilerLibraryGlobalDeclarations } from '../../compiler/extensions/global-declarations.ts'
 import type {
   CompilerLibraryDescriptor,
   CompilerLibraryLiteralTypeInference,
@@ -142,8 +143,6 @@ export function renderCompilerLibraryRegistry(
     '  build: {\n' +
     "    cmakeCommand: 'cmake',\n" +
     `    cmakeOptionMappings: ${JSON.stringify(compilerTargetCMakeOptionMappings)},\n` +
-    '    compilerCommand: [compilerExecutable],\n' +
-    '    compilerDependencies: [compilerExecutable],\n' +
     '    defaultLibraryOptions: [],\n' +
     "    executableSuffix: process.platform === 'win32' ? '.exe' : '',\n" +
     `    preparations: ${JSON.stringify(compilerTargetBuildPreparations)},\n` +
@@ -337,8 +336,10 @@ function compilerLibraryDescriptor(library: DiscoveredCompilerLibrary): Compiler
 }
 
 function renderRegistrySource(librarySet: CompilerLibrarySet, discovered: DiscoveredCompilerLibrary[]): string {
+  const globalDeclarations = parseCompilerLibraryGlobalDeclarations(librarySet.declarations)
   let source =
-    "import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'\n" +
+    "import { createGeneratedCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'\n" +
+    "import type { ParseCompilerLibraryGlobalDeclarationsResult } from '../../compiler/extensions/global-declarations.ts'\n" +
     "import type { CompilerLibraryDescriptor, CompilerLibrarySet, TypeRef } from '../../compiler/extensions/types.ts'\n"
   const packageNames: Map<string, string> = new Map()
   const literalInferenceNames: Map<string, string> = new Map()
@@ -384,10 +385,14 @@ function renderRegistrySource(librarySet: CompilerLibrarySet, discovered: Discov
   }
 
   source = source + ']\n\n'
-  source = source + 'export const defaultCompilerLibrarySet: CompilerLibrarySet = createCompilerLibrarySet(\n'
+  source =
+    source +
+    `const compilerLibraryGlobalDeclarations: ParseCompilerLibraryGlobalDeclarationsResult = ${JSON.stringify(globalDeclarations)}\n\n`
+  source = source + 'export const defaultCompilerLibrarySet: CompilerLibrarySet = createGeneratedCompilerLibrarySet(\n'
   source = source + '  compilerLibraryDescriptors,\n'
   source = source + `  ${JSON.stringify(defaultCompilerTargetOptions)},\n`
-  source = source + `  ${JSON.stringify(librarySet.fingerprint)}\n`
+  source = source + `  ${JSON.stringify(librarySet.fingerprint)},\n`
+  source = source + '  compilerLibraryGlobalDeclarations\n'
   source = source + ')\n'
   source = source + renderLiteralTypeInferenceDispatch(discovered, literalInferenceNames)
 
