@@ -585,6 +585,7 @@ async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<
   const { assertNativeInoxDefaultOutput, assertNativeInoxHelp, assertNativeInoxRuntimeSmoke } =
     await import('./integration/native-inox-help.test.ts')
   const { assertNativeInoxModuleGraph } = await import('./integration/native-inox-module-graph.test.ts')
+  const { assertNativeInoxModularOutput } = await import('./integration/native-inox-modular-output.test.ts')
   const { assertNativeInoxProcessRuntimeString } =
     await import('./integration/native-inox-process-runtime-string.test.ts')
   const { assertNativeInoxUnicodeStringLiteral } =
@@ -641,6 +642,10 @@ async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<
 
     await t.test('native-inox-module-graph', async () => {
       await assertNativeInoxModuleGraph(compilerPath)
+    })
+
+    await t.test('native-inox-modular-output', async () => {
+      await assertNativeInoxModularOutput(compilerPath)
     })
 
     await t.test('native-inox-process-runtime-string', async () => {
