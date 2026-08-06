@@ -18,6 +18,8 @@ test('удаление node:net убирает API и native plan без central
   await rm(fixture, { recursive: true, force: true })
   await mkdir(resolve(fixture, 'stdlib/global'), { recursive: true })
   await mkdir(resolve(fixture, 'stdlib/node'), { recursive: true })
+  await cp(resolve('stdlib/global/collections'), resolve(fixture, 'stdlib/global/collections'), { recursive: true })
+  await cp(resolve('stdlib/global/strings'), resolve(fixture, 'stdlib/global/strings'), { recursive: true })
   await cp(resolve('stdlib/node/net'), resolve(fixture, 'stdlib/node/net'), { recursive: true })
   await generateCompilerLibraryRegistry(fixture, output)
 
@@ -41,12 +43,11 @@ test('удаление node:net убирает API и native plan без central
 
   assert.doesNotMatch(afterPlan, /node\/net/)
   assert.throws(
-    () => compileSource(source, {
-      libraries: after,
-      libraryOptions: [{ optionId: 'target:runtime#loop-backend', value: 'libuv' }]
-    }),
-    (error: unknown) =>
-      error instanceof CompileError &&
-      error.diagnostics[0].code === 'INOX_UNSUPPORTED_IMPORT_SOURCE'
+    () =>
+      compileSource(source, {
+        libraries: after,
+        libraryOptions: [{ optionId: 'target:runtime#loop-backend', value: 'libuv' }]
+      }),
+    (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_UNSUPPORTED_IMPORT_SOURCE'
   )
 })

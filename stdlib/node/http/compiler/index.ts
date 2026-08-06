@@ -19,12 +19,16 @@ const arrayTypeId = `${collectionsLibraryId}#Array`
 const serverTypeId = `${libraryId}#Server`
 const requestTypeId = `${libraryId}#IncomingMessage`
 const responseTypeId = `${libraryId}#ServerResponse`
+const clientRequestTypeId = `${libraryId}#ClientRequest`
 const netSocketTypeId = 'node:net#Socket'
+const netAddressTypeId = 'node:net#AddressInfo'
 const uint8ArrayTypeId = 'global:binary#Uint8Array'
+const stringRuntimeRequirement = 'global:strings#strings'
 const runtimeRequirements = [runtimeRequirement]
 const stringTypeRef = primitiveTypeRef('string')
 const nullableStringTypeRef: PrimitiveTypeRef = { ...stringTypeRef, nullable: true }
 const numberTypeRef = primitiveTypeRef('number')
+const nullableNumberTypeRef: PrimitiveTypeRef = { ...numberTypeRef, nullable: true }
 const booleanTypeRef = primitiveTypeRef('boolean')
 const voidTypeRef = primitiveTypeRef('void')
 const headersTypeRef: ObjectTypeRef = {
@@ -41,6 +45,9 @@ const valueCResultMapping = cResultMapping('inox::Value')
 
 const operations: LibraryOperationDescriptor[] = [
   createServerOperation(),
+  clientCreateOperation('get'),
+  clientCreateOperation('request'),
+  serverAddressOperation(),
   serverCloseOperation(),
   serverListenOperation(),
   serverOnOperation(),
@@ -48,7 +55,22 @@ const operations: LibraryOperationDescriptor[] = [
   requestMemberReadOperation('httpVersion', stringTypeRef, stringCResultMapping),
   requestMemberReadOperation('method', stringTypeRef, stringCResultMapping),
   requestMemberReadOperation('socket', nominalTypeRef(netSocketTypeId, 'value')),
+  requestOptionalMemberReadOperation('statusCode', nullableNumberTypeRef),
+  requestOptionalMemberReadOperation('statusMessage', nullableStringTypeRef),
   requestMemberReadOperation('url', stringTypeRef, stringCResultMapping),
+  requestOnOperation(),
+  requestSetEncodingOperation(),
+  clientBooleanReadOperation('headersSent'),
+  clientBooleanReadOperation('writableEnded'),
+  clientDestroyOperation(),
+  clientEndOperation(),
+  clientGetHeaderOperation(),
+  clientGetHeaderNamesOperation(),
+  clientHasHeaderOperation(),
+  clientOnOperation(),
+  clientRemoveHeaderOperation(),
+  clientSetHeaderOperation(),
+  clientWriteOperation(),
   responseBooleanReadOperation('headersSent'),
   responseStatusReadOperation(),
   responseStatusWriteOperation(),
@@ -65,7 +87,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:binary', collectionsLibraryId, 'node:net'],
+  dependencies: ['global:binary', collectionsLibraryId, 'global:strings', 'node:net'],
   nativeTypes: [
     {
       libraryId,
@@ -85,7 +107,44 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       baseTypeIds: [],
       runtimeRequirements,
       cValueAdapter: 'HttpRequest(inox::Value($value))',
-      cValueAdapterPreservesPendingException: true
+      cValueAdapterPreservesPendingException: true,
+      fields: [
+        {
+          name: 'headers',
+          valueType: 'object',
+          typeRef: headersTypeRef,
+          readonly: true,
+          cGetter: 'headers',
+          cppType: 'inox::Value'
+        },
+        { name: 'httpVersion', valueType: 'string', readonly: true, cGetter: 'httpVersion', cppType: 'inox::String' },
+        { name: 'method', valueType: 'string', readonly: true, cGetter: 'method', cppType: 'inox::String' },
+        {
+          name: 'socket',
+          valueType: 'object',
+          typeRef: nominalTypeRef(netSocketTypeId, 'value'),
+          readonly: true,
+          cGetter: 'socket',
+          cppType: 'NetSocket'
+        },
+        {
+          name: 'statusCode',
+          valueType: 'number',
+          nullable: true,
+          readonly: true,
+          cGetter: 'statusCode',
+          cppType: 'inox::Value'
+        },
+        {
+          name: 'statusMessage',
+          valueType: 'string',
+          nullable: true,
+          readonly: true,
+          cGetter: 'statusMessage',
+          cppType: 'inox::Value'
+        },
+        { name: 'url', valueType: 'string', readonly: true, cGetter: 'url', cppType: 'inox::String' }
+      ]
     },
     {
       libraryId,
@@ -96,7 +155,27 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       baseTypeIds: [],
       runtimeRequirements,
       cValueAdapter: 'HttpResponse(inox::Value($value))',
-      cValueAdapterPreservesPendingException: true
+      cValueAdapterPreservesPendingException: true,
+      fields: [
+        { name: 'headersSent', valueType: 'boolean', readonly: true, cGetter: 'headersSent' },
+        { name: 'statusCode', valueType: 'number', readonly: false, cGetter: 'statusCode' },
+        { name: 'writableEnded', valueType: 'boolean', readonly: true, cGetter: 'writableEnded' }
+      ]
+    },
+    {
+      libraryId,
+      typeId: clientRequestTypeId,
+      declarationNames: ['ClientRequest'],
+      valueType: 'object',
+      cppType: 'HttpClientRequest',
+      baseTypeIds: [],
+      runtimeRequirements,
+      cValueAdapter: 'HttpClientRequest(inox::Value($value))',
+      cValueAdapterPreservesPendingException: true,
+      fields: [
+        { name: 'headersSent', valueType: 'boolean', readonly: true, cGetter: 'headersSent' },
+        { name: 'writableEnded', valueType: 'boolean', readonly: true, cGetter: 'writableEnded' }
+      ]
     }
   ],
   operations,
@@ -109,6 +188,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
         arrayRuntimeRequirement,
         'callback-values',
         'global:binary',
+        stringRuntimeRequirement,
         'managed-values',
         'node:net',
         'objects',
@@ -151,6 +231,82 @@ function createServerOperation(): LibraryOperationDescriptor {
       })
     ],
     resultTypeRef: nominalTypeRef(serverTypeId, 'value')
+  }
+}
+
+function clientCreateOperation(name: 'get' | 'request'): LibraryOperationDescriptor {
+  const callback = responseCallbackArgument()
+  const options = requestOptionsArgument()
+
+  return {
+    libraryId,
+    bindingId: moduleBinding(name),
+    bindingAliases: [moduleBinding(`default.${name}`)],
+    operationId: `${libraryId}#${name}`,
+    kind: 'call',
+    runtimeRequirements,
+    cExpression: `http.${name}`,
+    cFailureMode: 'thrown',
+    minArgs: 1,
+    maxArgs: 3,
+    argumentChecks: [
+      { valueTypes: ['string', 'object'], objectLiteralFields: options.objectLiteralFields },
+      { ...callback, valueTypes: ['object', 'function'], objectLiteralFields: options.objectLiteralFields },
+      callback
+    ],
+    variants: [
+      operationVariant(1, 1, ['string-view'], {
+        argumentIndex: 0,
+        argumentValueTypes: ['string'],
+        argumentChecks: [stringArgument()]
+      }),
+      operationVariant(1, 1, ['value'], {
+        argumentIndex: 0,
+        argumentValueTypes: ['object'],
+        argumentChecks: [options],
+        cArgumentAdapters: ['HttpRequestOptions($value)']
+      }),
+      operationVariant(2, 2, ['value', 'runtime-callback'], {
+        argumentIndex: 0,
+        argumentValueTypes: ['object'],
+        argumentChecks: [options, callback],
+        cArgumentAdapters: ['HttpRequestOptions($value)', ''],
+        cArgumentSources: [null, { argumentIndex: 1 }],
+        callbackLifetime: 'event-loop'
+      }),
+      operationVariant(2, 2, ['string-view', 'runtime-callback'], {
+        argumentIndex: 1,
+        argumentValueTypes: ['function'],
+        argumentChecks: [stringArgument(), callback],
+        cArgumentSources: [null, { argumentIndex: 1 }],
+        callbackLifetime: 'event-loop'
+      }),
+      operationVariant(2, 2, ['string-view', 'value'], {
+        argumentIndex: 1,
+        argumentValueTypes: ['object'],
+        argumentChecks: [stringArgument(), options],
+        cArgumentAdapters: ['', 'HttpRequestOptions($value)']
+      }),
+      operationVariant(3, 3, ['string-view', 'value', 'runtime-callback'], {
+        argumentChecks: [stringArgument(), options, callback],
+        cArgumentAdapters: ['', 'HttpRequestOptions($value)', ''],
+        cArgumentSources: [null, null, { argumentIndex: 2 }],
+        callbackLifetime: 'event-loop'
+      })
+    ],
+    resultTypeRef: nominalTypeRef(clientRequestTypeId, 'value'),
+    callbackLifetime: 'event-loop'
+  }
+}
+
+function serverAddressOperation(): LibraryOperationDescriptor {
+  return {
+    ...serverReceiverOperation('address'),
+    cArgumentKinds: ['receiver'],
+    minArgs: 0,
+    maxArgs: 0,
+    argumentChecks: [],
+    resultTypeRef: nominalTypeRef(netAddressTypeId, 'value')
   }
 }
 
@@ -268,6 +424,160 @@ function requestMemberReadOperation(
     cFailureMode: 'thrown',
     resultTypeRef,
     cResultMapping
+  }
+}
+
+function requestOptionalMemberReadOperation(
+  name: 'statusCode' | 'statusMessage',
+  resultTypeRef: TypeRef
+): LibraryOperationDescriptor {
+  return requestMemberReadOperation(name, resultTypeRef, valueCResultMapping)
+}
+
+function requestOnOperation(): LibraryOperationDescriptor {
+  return {
+    ...requestReceiverOperation('on'),
+    minArgs: 2,
+    maxArgs: 2,
+    argumentChecks: [requestStreamEventArgument(), zeroArgumentCallback()],
+    variants: [
+      requestEventVariant(['data'], dataCallbackArgument()),
+      requestEventVariant(['end', 'close'], zeroArgumentCallback()),
+      requestEventVariant(['error'], errorCallbackArgument())
+    ],
+    cResultMode: 'borrowed',
+    resultTypeRef: nominalTypeRef(requestTypeId, 'borrowed'),
+    callbackLifetime: 'event-loop'
+  }
+}
+
+function requestSetEncodingOperation(): LibraryOperationDescriptor {
+  return {
+    ...requestReceiverOperation('setEncoding'),
+    cArgumentKinds: ['receiver', 'string-view'],
+    cResultMode: 'borrowed',
+    minArgs: 1,
+    maxArgs: 1,
+    argumentChecks: [encodingArgument()],
+    resultTypeRef: nominalTypeRef(requestTypeId, 'borrowed')
+  }
+}
+
+function clientBooleanReadOperation(name: 'headersSent' | 'writableEnded'): LibraryOperationDescriptor {
+  return {
+    ...clientReceiverOperation(name),
+    kind: 'member-read',
+    cArgumentKinds: ['receiver'],
+    resultTypeRef: booleanTypeRef
+  }
+}
+
+function clientDestroyOperation(): LibraryOperationDescriptor {
+  return {
+    ...clientReceiverOperation('destroy'),
+    cArgumentKinds: ['receiver'],
+    cResultMode: 'borrowed',
+    minArgs: 0,
+    maxArgs: 0,
+    argumentChecks: [],
+    resultTypeRef: nominalTypeRef(clientRequestTypeId, 'borrowed')
+  }
+}
+
+function clientEndOperation(): LibraryOperationDescriptor {
+  return {
+    ...clientReceiverOperation('end'),
+    minArgs: 0,
+    maxArgs: 1,
+    argumentChecks: [bodyArgument()],
+    variants: [clientVariant(0, 0, ['receiver']), clientBodyVariant('string', true), clientBodyVariant('bytes', true)],
+    cResultMode: 'borrowed',
+    resultTypeRef: nominalTypeRef(clientRequestTypeId, 'borrowed')
+  }
+}
+
+function clientGetHeaderOperation(): LibraryOperationDescriptor {
+  return {
+    ...clientReceiverOperation('getHeader'),
+    cArgumentKinds: ['receiver', 'string-view'],
+    minArgs: 1,
+    maxArgs: 1,
+    argumentChecks: [stringArgument()],
+    resultTypeRef: nullableStringTypeRef,
+    cResultMapping: valueCResultMapping
+  }
+}
+
+function clientGetHeaderNamesOperation(): LibraryOperationDescriptor {
+  return {
+    ...clientReceiverOperation('getHeaderNames'),
+    cArgumentKinds: ['receiver'],
+    minArgs: 0,
+    maxArgs: 0,
+    argumentChecks: [],
+    resultTypeRef: arrayTypeRef(stringTypeRef)
+  }
+}
+
+function clientHasHeaderOperation(): LibraryOperationDescriptor {
+  return {
+    ...clientReceiverOperation('hasHeader'),
+    cArgumentKinds: ['receiver', 'string-view'],
+    minArgs: 1,
+    maxArgs: 1,
+    argumentChecks: [stringArgument()],
+    resultTypeRef: booleanTypeRef
+  }
+}
+
+function clientOnOperation(): LibraryOperationDescriptor {
+  return {
+    ...clientReceiverOperation('on'),
+    minArgs: 2,
+    maxArgs: 2,
+    argumentChecks: [clientEventArgument(), zeroArgumentCallback()],
+    variants: [
+      clientEventVariant(['response'], responseCallbackArgument()),
+      clientEventVariant(['finish', 'close'], zeroArgumentCallback()),
+      clientEventVariant(['error'], errorCallbackArgument())
+    ],
+    cResultMode: 'borrowed',
+    resultTypeRef: nominalTypeRef(clientRequestTypeId, 'borrowed'),
+    callbackLifetime: 'event-loop'
+  }
+}
+
+function clientRemoveHeaderOperation(): LibraryOperationDescriptor {
+  return {
+    ...clientReceiverOperation('removeHeader'),
+    cArgumentKinds: ['receiver', 'string-view'],
+    minArgs: 1,
+    maxArgs: 1,
+    argumentChecks: [stringArgument()],
+    resultTypeRef: voidTypeRef
+  }
+}
+
+function clientSetHeaderOperation(): LibraryOperationDescriptor {
+  return {
+    ...clientReceiverOperation('setHeader'),
+    cArgumentKinds: ['receiver', 'string-view', 'string-view'],
+    minArgs: 2,
+    maxArgs: 2,
+    argumentChecks: [stringArgument(), stringArgument()],
+    cResultMode: 'borrowed',
+    resultTypeRef: nominalTypeRef(clientRequestTypeId, 'borrowed')
+  }
+}
+
+function clientWriteOperation(): LibraryOperationDescriptor {
+  return {
+    ...clientReceiverOperation('write'),
+    minArgs: 1,
+    maxArgs: 1,
+    argumentChecks: [bodyArgument()],
+    variants: [clientBodyVariant('string', false), clientBodyVariant('bytes', false)],
+    resultTypeRef: booleanTypeRef
   }
 }
 
@@ -425,6 +735,14 @@ function serverReceiverOperation(name: string): LibraryOperationDescriptor {
   return receiverOperation(serverTypeId, 'Server', 'HttpServer($value)', name)
 }
 
+function requestReceiverOperation(name: string): LibraryOperationDescriptor {
+  return receiverOperation(requestTypeId, 'IncomingMessage', 'HttpRequest($value)', name)
+}
+
+function clientReceiverOperation(name: string): LibraryOperationDescriptor {
+  return receiverOperation(clientRequestTypeId, 'ClientRequest', 'HttpClientRequest($value)', name)
+}
+
 function responseReceiverOperation(name: string): LibraryOperationDescriptor {
   return receiverOperation(responseTypeId, 'ServerResponse', 'HttpResponse($value)', name)
 }
@@ -473,6 +791,18 @@ function serverVariant(
   }
 }
 
+function clientVariant(
+  minArgs: number,
+  maxArgs: number,
+  cArgumentKinds: LibraryCArgumentKind[],
+  options: VariantOptions = {}
+): LibraryOperationVariantDescriptor {
+  return {
+    ...operationVariant(minArgs, maxArgs, cArgumentKinds, options),
+    cResultMode: 'borrowed'
+  }
+}
+
 function bodyVariant(valueType: 'string' | 'bytes'): LibraryOperationVariantDescriptor {
   return operationVariant(1, 1, valueType === 'string' ? ['receiver', 'string-view'] : ['receiver', 'value'], {
     argumentIndex: 0,
@@ -480,6 +810,38 @@ function bodyVariant(valueType: 'string' | 'bytes'): LibraryOperationVariantDesc
     argumentChecks: [{ valueTypes: [valueType] }],
     cArgumentAdapters: valueType === 'bytes' ? ['Uint8Array($value)'] : [],
     cArgumentAdapterTypeIds: valueType === 'bytes' ? [uint8ArrayTypeId] : []
+  })
+}
+
+function clientBodyVariant(valueType: 'string' | 'bytes', borrowed: boolean): LibraryOperationVariantDescriptor {
+  const variant = bodyVariant(valueType)
+  return borrowed ? { ...variant, cResultMode: 'borrowed' } : variant
+}
+
+function requestEventVariant(
+  eventNames: string[],
+  callback: LibraryArgumentCheckDescriptor
+): LibraryOperationVariantDescriptor {
+  return operationVariant(2, 2, ['receiver', 'string-view', 'runtime-callback'], {
+    argumentIndex: 0,
+    stringLiterals: eventNames,
+    argumentChecks: [stringLiteralArgument(eventNames, 'INOX_HTTP_MESSAGE'), callback],
+    cArgumentSources: [null, null, { argumentIndex: 1 }],
+    cResultMode: 'borrowed',
+    callbackLifetime: 'event-loop'
+  })
+}
+
+function clientEventVariant(
+  eventNames: string[],
+  callback: LibraryArgumentCheckDescriptor
+): LibraryOperationVariantDescriptor {
+  return clientVariant(2, 2, ['receiver', 'string-view', 'runtime-callback'], {
+    argumentIndex: 0,
+    stringLiterals: eventNames,
+    argumentChecks: [stringLiteralArgument(eventNames, 'INOX_HTTP_CLIENT_REQUEST'), callback],
+    cArgumentSources: [null, null, { argumentIndex: 1 }],
+    callbackLifetime: 'event-loop'
   })
 }
 
@@ -565,6 +927,24 @@ function requestCallbackArgument(): LibraryArgumentCheckDescriptor {
   return callbackArgument([callbackParameter('request', requestTypeId), callbackParameter('response', responseTypeId)])
 }
 
+function responseCallbackArgument(): LibraryArgumentCheckDescriptor {
+  return callbackArgument([callbackParameter('response', requestTypeId)])
+}
+
+function dataCallbackArgument(): LibraryArgumentCheckDescriptor {
+  return callbackArgument([{ name: 'chunk', valueType: 'string' }])
+}
+
+function errorCallbackArgument(): LibraryArgumentCheckDescriptor {
+  return callbackArgument([
+    {
+      name: 'error',
+      valueType: 'object',
+      shapeFields: [{ name: 'message', valueType: 'string', readonly: true }]
+    }
+  ])
+}
+
 function callbackParameter(name: string, resultTypeId: string): LibraryCallbackParameterDescriptor {
   return {
     name,
@@ -599,6 +979,20 @@ function listenOptionsArgument(): LibraryArgumentCheckDescriptor {
   }
 }
 
+function requestOptionsArgument(): LibraryArgumentCheckDescriptor {
+  return {
+    valueTypes: ['object'],
+    objectLiteralFields: [
+      { name: 'headers', valueTypes: ['object'], optional: true },
+      { name: 'host', valueTypes: ['string'], optional: true },
+      { name: 'hostname', valueTypes: ['string'], optional: true },
+      { name: 'method', valueTypes: ['string'], optional: true },
+      { name: 'path', valueTypes: ['string'], optional: true },
+      { name: 'port', valueTypes: ['number'], optional: true }
+    ]
+  }
+}
+
 function headersArgument(): LibraryArgumentCheckDescriptor {
   return {
     valueTypes: ['object'],
@@ -612,5 +1006,26 @@ function requestEventArgument(): LibraryArgumentCheckDescriptor {
     stringLiterals: ['request'],
     literalDiagnosticCode: 'INOX_HTTP_SERVER',
     literalDiagnosticMessage: "node:http Server.on supports only the 'request' event"
+  }
+}
+
+function requestStreamEventArgument(): LibraryArgumentCheckDescriptor {
+  return stringLiteralArgument(['data', 'end', 'close', 'error'], 'INOX_HTTP_MESSAGE')
+}
+
+function clientEventArgument(): LibraryArgumentCheckDescriptor {
+  return stringLiteralArgument(['response', 'finish', 'close', 'error'], 'INOX_HTTP_CLIENT_REQUEST')
+}
+
+function encodingArgument(): LibraryArgumentCheckDescriptor {
+  return stringLiteralArgument(['utf8', 'utf-8'], 'INOX_HTTP_MESSAGE')
+}
+
+function stringLiteralArgument(values: string[], code: string): LibraryArgumentCheckDescriptor {
+  return {
+    valueTypes: ['string'],
+    stringLiterals: values,
+    literalDiagnosticCode: code,
+    literalDiagnosticMessage: `node:http supports only ${values.join(', ')} here`
   }
 }

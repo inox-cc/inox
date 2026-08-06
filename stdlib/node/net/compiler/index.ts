@@ -14,6 +14,7 @@ const runtimeRequirement = libraryId
 const serverTypeId = `${libraryId}#Server`
 const socketTypeId = `${libraryId}#Socket`
 const addressTypeId = `${libraryId}#AddressInfo`
+const stringRuntimeRequirement = 'global:strings#strings'
 const runtimeRequirements = [runtimeRequirement]
 const serverValueTypeRef = nominalTypeRef(serverTypeId, 'value')
 const serverBorrowedTypeRef = nominalTypeRef(serverTypeId, 'borrowed')
@@ -65,7 +66,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: [],
+  dependencies: ['global:strings'],
   nativeTypes: [
     {
       libraryId,
@@ -109,7 +110,14 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: ['async-runtime', 'callback-values', 'managed-values', 'objects', 'string-bytes'],
+      dependencies: [
+        'async-runtime',
+        'callback-values',
+        stringRuntimeRequirement,
+        'managed-values',
+        'objects',
+        'string-bytes'
+      ],
       cPreludeIncludes: ['inox/net.h'],
       capabilities: ['tcp'],
       optionConstraints: [
@@ -117,8 +125,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
           optionId: 'target:runtime#loop-backend',
           allowedValues: ['libuv'],
           diagnosticCode: 'INOX_NOT_IMPLEMENTED',
-          diagnosticMessage:
-            'node:net is not implemented for C without libuv; select --loop-backend libuv'
+          diagnosticMessage: 'node:net is not implemented for C without libuv; select --loop-backend libuv'
         }
       ]
     }
@@ -523,14 +530,7 @@ function socketScalarMemberReadOperation(
   resultTypeRef: TypeRef,
   cResultMapping?: LibraryCResultMappingDescriptor
 ): LibraryOperationDescriptor {
-  return scalarMemberReadOperation(
-    socketTypeId,
-    'Socket',
-    'NetSocket($value)',
-    name,
-    resultTypeRef,
-    cResultMapping
-  )
+  return scalarMemberReadOperation(socketTypeId, 'Socket', 'NetSocket($value)', name, resultTypeRef, cResultMapping)
 }
 
 function scalarMemberReadOperation(

@@ -20,6 +20,7 @@ test('удаление node:http убирает API и native plan без centra
   await mkdir(resolve(fixture, 'stdlib/node'), { recursive: true })
   await copyPackage('stdlib/global/collections')
   await copyPackage('stdlib/global/binary')
+  await copyPackage('stdlib/global/strings')
   await copyPackage('stdlib/node/net')
   await copyPackage('stdlib/node/http')
   await generateCompilerLibraryRegistry(fixture, output)
@@ -48,13 +49,12 @@ test('удаление node:http убирает API и native plan без centra
   assert.match(afterPlan, /stdlib\/global\/binary\/src\/binary\.cc/)
   assert.match(afterPlan, /stdlib\/node\/net\/src\/net\.cc/)
   assert.throws(
-    () => compileSource(source, {
-      libraries: after,
-      libraryOptions: [{ optionId: 'target:runtime#loop-backend', value: 'libuv' }]
-    }),
-    (error: unknown) =>
-      error instanceof CompileError &&
-      error.diagnostics[0].code === 'INOX_UNSUPPORTED_IMPORT_SOURCE'
+    () =>
+      compileSource(source, {
+        libraries: after,
+        libraryOptions: [{ optionId: 'target:runtime#loop-backend', value: 'libuv' }]
+      }),
+    (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_UNSUPPORTED_IMPORT_SOURCE'
   )
 })
 

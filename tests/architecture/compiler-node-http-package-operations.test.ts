@@ -11,8 +11,9 @@ import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-di
 const serverTypeId = 'node:http#Server'
 const requestTypeId = 'node:http#IncomingMessage'
 const responseTypeId = 'node:http#ServerResponse'
+const clientRequestTypeId = 'node:http#ClientRequest'
 
-test('node:http объявляет module, Server, IncomingMessage и ServerResponse operations через package descriptor', async () => {
+test('node:http объявляет server и client operations через package descriptor', async () => {
   const discovered = await discoverCompilerLibraries()
   const httpPackage = discovered.find((library) => library.id === 'node:http')
 
@@ -22,11 +23,27 @@ test('node:http объявляет module, Server, IncomingMessage и ServerResp
   const ids = operations.map((operation) => operation.operationId).sort()
 
   assert.deepEqual(ids, [
+    'node:http#ClientRequest.destroy',
+    'node:http#ClientRequest.end',
+    'node:http#ClientRequest.getHeader',
+    'node:http#ClientRequest.getHeaderNames',
+    'node:http#ClientRequest.hasHeader',
+    'node:http#ClientRequest.headersSent',
+    'node:http#ClientRequest.on',
+    'node:http#ClientRequest.removeHeader',
+    'node:http#ClientRequest.setHeader',
+    'node:http#ClientRequest.writableEnded',
+    'node:http#ClientRequest.write',
     'node:http#IncomingMessage.headers',
     'node:http#IncomingMessage.httpVersion',
     'node:http#IncomingMessage.method',
+    'node:http#IncomingMessage.on',
+    'node:http#IncomingMessage.setEncoding',
     'node:http#IncomingMessage.socket',
+    'node:http#IncomingMessage.statusCode',
+    'node:http#IncomingMessage.statusMessage',
     'node:http#IncomingMessage.url',
+    'node:http#Server.address',
     'node:http#Server.close',
     'node:http#Server.listen',
     'node:http#Server.on',
@@ -42,7 +59,9 @@ test('node:http объявляет module, Server, IncomingMessage и ServerResp
     'node:http#ServerResponse.writableEnded',
     'node:http#ServerResponse.write',
     'node:http#ServerResponse.writeHead',
-    'node:http#createServer'
+    'node:http#createServer',
+    'node:http#get',
+    'node:http#request'
   ])
 
   const createServer = operation(operations, 'node:http#createServer')
@@ -52,9 +71,29 @@ test('node:http объявляет module, Server, IncomingMessage и ServerResp
   assert.equal(createServer.cExpression, 'http.createServer')
   assert.deepEqual(callbackParameterTypeIds(callbackVariant(createServer)), [requestTypeId, responseTypeId])
 
+  for (const operationId of ['node:http#get', 'node:http#request']) {
+    const createClientRequest = operation(operations, operationId)
+
+    assert.equal(createClientRequest.cExpression, `http.${operationId.slice('node:http#'.length)}`)
+    assert.equal(createClientRequest.callbackLifetime, 'event-loop')
+    assert.deepEqual(callbackParameterTypeIds(callbackVariant(createClientRequest)), [requestTypeId])
+    assert.deepEqual(createClientRequest.resultTypeRef, {
+      kind: 'nominal',
+      typeId: clientRequestTypeId,
+      args: [],
+      nullable: false,
+      ownership: 'value',
+      traits: []
+    })
+  }
+
   const close = operation(operations, 'node:http#Server.close')
   const listen = operation(operations, 'node:http#Server.listen')
   const on = operation(operations, 'node:http#Server.on')
+  const address = operation(operations, 'node:http#Server.address')
+
+  assert.equal(address.receiverTypeId, serverTypeId)
+  assert.equal(address.cExpression, 'address')
 
   assert.equal(close.receiverTypeId, serverTypeId)
   assert.equal(close.cReceiverAdapter, 'HttpServer($value)')
@@ -88,6 +127,8 @@ test('node:http объявляет module, Server, IncomingMessage и ServerResp
     'node:http#IncomingMessage.httpVersion',
     'node:http#IncomingMessage.method',
     'node:http#IncomingMessage.socket',
+    'node:http#IncomingMessage.statusCode',
+    'node:http#IncomingMessage.statusMessage',
     'node:http#IncomingMessage.url'
   ]) {
     const requestRead = operation(operations, operationId)
@@ -96,6 +137,35 @@ test('node:http объявляет module, Server, IncomingMessage и ServerResp
     assert.equal(requestRead.receiverTypeId, requestTypeId)
     assert.equal(requestRead.cReceiverAdapter, 'HttpRequest($value)')
     assert.equal(requestRead.cCallStyle, 'member')
+  }
+
+  const requestOn = operation(operations, 'node:http#IncomingMessage.on')
+  const requestSetEncoding = operation(operations, 'node:http#IncomingMessage.setEncoding')
+
+  assert.equal(requestOn.receiverTypeId, requestTypeId)
+  assert.equal(requestOn.callbackLifetime, 'event-loop')
+  assert.ok(hasEventLoopCallbackVariant(requestOn))
+  assert.equal(requestSetEncoding.receiverTypeId, requestTypeId)
+  assert.deepEqual(requestSetEncoding.cArgumentKinds, ['receiver', 'string-view'])
+
+  for (const operationId of [
+    'node:http#ClientRequest.destroy',
+    'node:http#ClientRequest.end',
+    'node:http#ClientRequest.getHeader',
+    'node:http#ClientRequest.getHeaderNames',
+    'node:http#ClientRequest.hasHeader',
+    'node:http#ClientRequest.headersSent',
+    'node:http#ClientRequest.on',
+    'node:http#ClientRequest.removeHeader',
+    'node:http#ClientRequest.setHeader',
+    'node:http#ClientRequest.writableEnded',
+    'node:http#ClientRequest.write'
+  ]) {
+    const clientOperation = operation(operations, operationId)
+
+    assert.equal(clientOperation.receiverTypeId, clientRequestTypeId)
+    assert.equal(clientOperation.cReceiverAdapter, 'HttpClientRequest($value)')
+    assert.equal(clientOperation.cCallStyle, 'member')
   }
 
   const statusRead = operation(operations, 'node:http#ServerResponse.statusCode.read')

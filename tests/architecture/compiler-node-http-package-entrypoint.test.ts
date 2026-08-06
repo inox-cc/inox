@@ -14,29 +14,30 @@ test('entrypoint package node:http владеет native API и runtime plan', a
   assert.deepEqual(httpPackage.compilerPackage.dependencies, [
     'global:binary',
     'global:collections',
+    'global:strings',
     'node:net'
   ])
   assert.deepEqual(httpPackage.nativeSources, ['stdlib/node/http/src/http.cc'])
   assert.deepEqual(httpPackage.nativeIncludeDirs, ['stdlib/node/http/include'])
 
-  const server = httpPackage.compilerPackage.nativeTypes?.find(
-    (nativeType) => nativeType.typeId === 'node:http#Server'
-  )
+  const server = httpPackage.compilerPackage.nativeTypes?.find((nativeType) => nativeType.typeId === 'node:http#Server')
   const request = httpPackage.compilerPackage.nativeTypes?.find(
     (nativeType) => nativeType.typeId === 'node:http#IncomingMessage'
   )
   const response = httpPackage.compilerPackage.nativeTypes?.find(
     (nativeType) => nativeType.typeId === 'node:http#ServerResponse'
   )
+  const clientRequest = httpPackage.compilerPackage.nativeTypes?.find(
+    (nativeType) => nativeType.typeId === 'node:http#ClientRequest'
+  )
 
   assert.equal(server?.libraryId, 'node:http')
   assert.equal(server?.cppType, 'HttpServer')
   assert.equal(request?.cppType, 'HttpRequest')
   assert.equal(response?.cppType, 'HttpResponse')
+  assert.equal(clientRequest?.cppType, 'HttpClientRequest')
 
-  const runtime = httpPackage.compilerPackage.runtimeRequirements.find(
-    (requirement) => requirement.id === 'node:http'
-  )
+  const runtime = httpPackage.compilerPackage.runtimeRequirements.find((requirement) => requirement.id === 'node:http')
 
   assert.ok(runtime)
   assert.deepEqual(runtime.cPreludeIncludes, ['inox/http.h'])
@@ -46,6 +47,7 @@ test('entrypoint package node:http владеет native API и runtime plan', a
     'global:collections#array',
     'callback-values',
     'global:binary',
+    'global:strings#strings',
     'managed-values',
     'node:net',
     'objects',
@@ -55,7 +57,6 @@ test('entrypoint package node:http владеет native API и runtime plan', a
     optionId: 'target:runtime#loop-backend',
     allowedValues: ['libuv'],
     diagnosticCode: 'INOX_NOT_IMPLEMENTED',
-    diagnosticMessage:
-      'node:http is not implemented for C without libuv; select --loop-backend libuv'
+    diagnosticMessage: 'node:http is not implemented for C without libuv; select --loop-backend libuv'
   })
 })

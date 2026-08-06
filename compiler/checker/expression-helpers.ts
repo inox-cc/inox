@@ -141,10 +141,16 @@ export function knownCheckedExpressionType(expression: AnyNode): ValueType | nul
     return 'null'
   }
 
+  if (expression.type === 'ArrowFunctionExpression') {
+    return 'function'
+  }
+
   return null
 }
 
-export function resolveExpressionAsyncResultRejectionValueType(expression: AnyNode | null | undefined): ValueType | null {
+export function resolveExpressionAsyncResultRejectionValueType(
+  expression: AnyNode | null | undefined
+): ValueType | null {
   if (expression === null || typeof expression === 'undefined') {
     return null
   }

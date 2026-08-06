@@ -1,6 +1,7 @@
 import process from 'node:process'
 
 import { startHttpAcceptance } from './http.ts'
+import { startHttpClientAcceptance } from './http-client.ts'
 import { startTcpAcceptance } from './tcp.ts'
 import { startUdpAcceptance } from './udp.ts'
 
@@ -10,3 +11,4 @@ const nonce = process.argv[3]
 startTcpAcceptance()
 startUdpAcceptance()
 startHttpAcceptance(port, nonce)
+startHttpClientAcceptance()

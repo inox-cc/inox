@@ -10,6 +10,9 @@ import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-di
 
 const operationIds = [
   'node:http#createServer',
+  'node:http#get',
+  'node:http#request',
+  'node:http#Server.address',
   'node:http#Server.close',
   'node:http#Server.listen',
   'node:http#Server.on',
@@ -17,7 +20,22 @@ const operationIds = [
   'node:http#IncomingMessage.httpVersion',
   'node:http#IncomingMessage.method',
   'node:http#IncomingMessage.socket',
+  'node:http#IncomingMessage.statusCode',
+  'node:http#IncomingMessage.statusMessage',
   'node:http#IncomingMessage.url',
+  'node:http#IncomingMessage.on',
+  'node:http#IncomingMessage.setEncoding',
+  'node:http#ClientRequest.headersSent',
+  'node:http#ClientRequest.writableEnded',
+  'node:http#ClientRequest.destroy',
+  'node:http#ClientRequest.end',
+  'node:http#ClientRequest.getHeader',
+  'node:http#ClientRequest.getHeaderNames',
+  'node:http#ClientRequest.hasHeader',
+  'node:http#ClientRequest.on',
+  'node:http#ClientRequest.removeHeader',
+  'node:http#ClientRequest.setHeader',
+  'node:http#ClientRequest.write',
   'node:http#ServerResponse.headersSent',
   'node:http#ServerResponse.statusCode.read',
   'node:http#ServerResponse.statusCode.write',
@@ -42,39 +60,108 @@ test('node:http operations describe results only through TypeRef', async () => {
     operationIds
   )
 
-  assertResult(operations[0], nominalTypeRef('node:http#Server', 'value'))
+  assertResult(operation(operations, 'node:http#createServer'), nominalTypeRef('node:http#Server', 'value'))
+  assertResult(operation(operations, 'node:http#get'), nominalTypeRef('node:http#ClientRequest', 'value'))
+  assertResult(operation(operations, 'node:http#request'), nominalTypeRef('node:http#ClientRequest', 'value'))
+  assertResult(operation(operations, 'node:http#Server.address'), nominalTypeRef('node:net#AddressInfo', 'value'))
 
-  for (const operation of operations.slice(1, 4)) {
-    assertResult(operation, nominalTypeRef('node:http#Server', 'borrowed'))
+  for (const operationId of ['node:http#Server.close', 'node:http#Server.listen', 'node:http#Server.on']) {
+    assertResult(operation(operations, operationId), nominalTypeRef('node:http#Server', 'borrowed'))
   }
 
-  assertResult(operations[4], {
-    kind: 'object',
-    fields: [],
-    dynamic: true,
-    dynamicField: primitiveTypeRef('string', true),
-    nullable: false,
-    ownership: 'value',
-    traits: []
-  }, 'inox::Value')
+  assertResult(
+    operation(operations, 'node:http#IncomingMessage.headers'),
+    {
+      kind: 'object',
+      fields: [],
+      dynamic: true,
+      dynamicField: primitiveTypeRef('string', true),
+      nullable: false,
+      ownership: 'value',
+      traits: []
+    },
+    'inox::Value'
+  )
 
-  for (const operation of [operations[5], operations[6], operations[8]]) {
-    assertResult(operation, primitiveTypeRef('string'), 'inox::String')
+  for (const operationId of [
+    'node:http#IncomingMessage.httpVersion',
+    'node:http#IncomingMessage.method',
+    'node:http#IncomingMessage.url'
+  ]) {
+    assertResult(operation(operations, operationId), primitiveTypeRef('string'), 'inox::String')
   }
 
-  assertResult(operations[7], nominalTypeRef('node:net#Socket', 'value'))
-  assertResult(operations[9], primitiveTypeRef('boolean'))
-  assertResult(operations[10], primitiveTypeRef('number'))
-  assertResult(operations[11], primitiveTypeRef('number'), 'void')
-  assertResult(operations[12], primitiveTypeRef('boolean'))
-  assertResult(operations[13], primitiveTypeRef('void'))
-  assertResult(operations[14], primitiveTypeRef('string', true), 'inox::Value')
-  assertResult(operations[15], arrayTypeRef(primitiveTypeRef('string')))
-  assertResult(operations[16], primitiveTypeRef('boolean'))
-  assertResult(operations[17], primitiveTypeRef('void'))
-  assertResult(operations[18], nominalTypeRef('node:http#ServerResponse', 'borrowed'))
-  assertResult(operations[19], primitiveTypeRef('boolean'))
-  assertResult(operations[20], nominalTypeRef('node:http#ServerResponse', 'borrowed'))
+  assertResult(operation(operations, 'node:http#IncomingMessage.socket'), nominalTypeRef('node:net#Socket', 'value'))
+  assertResult(
+    operation(operations, 'node:http#IncomingMessage.statusCode'),
+    primitiveTypeRef('number', true),
+    'inox::Value'
+  )
+  assertResult(
+    operation(operations, 'node:http#IncomingMessage.statusMessage'),
+    primitiveTypeRef('string', true),
+    'inox::Value'
+  )
+  assertResult(
+    operation(operations, 'node:http#IncomingMessage.on'),
+    nominalTypeRef('node:http#IncomingMessage', 'borrowed')
+  )
+  assertResult(
+    operation(operations, 'node:http#IncomingMessage.setEncoding'),
+    nominalTypeRef('node:http#IncomingMessage', 'borrowed')
+  )
+
+  for (const operationId of ['node:http#ClientRequest.headersSent', 'node:http#ClientRequest.writableEnded']) {
+    assertResult(operation(operations, operationId), primitiveTypeRef('boolean'))
+  }
+
+  for (const operationId of [
+    'node:http#ClientRequest.destroy',
+    'node:http#ClientRequest.end',
+    'node:http#ClientRequest.on',
+    'node:http#ClientRequest.setHeader'
+  ]) {
+    assertResult(operation(operations, operationId), nominalTypeRef('node:http#ClientRequest', 'borrowed'))
+  }
+
+  assertResult(
+    operation(operations, 'node:http#ClientRequest.getHeader'),
+    primitiveTypeRef('string', true),
+    'inox::Value'
+  )
+  assertResult(
+    operation(operations, 'node:http#ClientRequest.getHeaderNames'),
+    arrayTypeRef(primitiveTypeRef('string'))
+  )
+  assertResult(operation(operations, 'node:http#ClientRequest.hasHeader'), primitiveTypeRef('boolean'))
+  assertResult(operation(operations, 'node:http#ClientRequest.removeHeader'), primitiveTypeRef('void'))
+  assertResult(operation(operations, 'node:http#ClientRequest.write'), primitiveTypeRef('boolean'))
+
+  assertResult(operation(operations, 'node:http#ServerResponse.headersSent'), primitiveTypeRef('boolean'))
+  assertResult(operation(operations, 'node:http#ServerResponse.statusCode.read'), primitiveTypeRef('number'))
+  assertResult(operation(operations, 'node:http#ServerResponse.statusCode.write'), primitiveTypeRef('number'), 'void')
+  assertResult(operation(operations, 'node:http#ServerResponse.writableEnded'), primitiveTypeRef('boolean'))
+  assertResult(operation(operations, 'node:http#ServerResponse.end'), primitiveTypeRef('void'))
+  assertResult(
+    operation(operations, 'node:http#ServerResponse.getHeader'),
+    primitiveTypeRef('string', true),
+    'inox::Value'
+  )
+  assertResult(
+    operation(operations, 'node:http#ServerResponse.getHeaderNames'),
+    arrayTypeRef(primitiveTypeRef('string'))
+  )
+  assertResult(operation(operations, 'node:http#ServerResponse.hasHeader'), primitiveTypeRef('boolean'))
+  assertResult(operation(operations, 'node:http#ServerResponse.removeHeader'), primitiveTypeRef('void'))
+  assertResult(
+    operation(operations, 'node:http#ServerResponse.setHeader'),
+    nominalTypeRef('node:http#ServerResponse', 'borrowed')
+  )
+  assertResult(operation(operations, 'node:http#ServerResponse.write'), primitiveTypeRef('boolean'))
+  assertResult(
+    operation(operations, 'node:http#ServerResponse.writeHead'),
+    nominalTypeRef('node:http#ServerResponse', 'borrowed')
+  )
 
   const variants = operations.flatMap((operation) => operation.variants ?? [])
 
@@ -83,6 +170,13 @@ test('node:http operations describe results only through TypeRef', async () => {
     assertLegacyResultMetadataIsAbsent(variant)
   }
 })
+
+function operation(operations: LibraryOperationDescriptor[], operationId: string): LibraryOperationDescriptor {
+  const result = operations.find((item) => item.operationId === operationId)
+
+  assert.ok(result, `missing operation ${operationId}`)
+  return result
+}
 
 function assertResult(operation: LibraryOperationDescriptor, resultTypeRef: TypeRef, cppType?: string): void {
   assert.deepEqual(operation.resultTypeRef, resultTypeRef)

@@ -18,7 +18,11 @@ test('node:http держит managed state и вызывает lifecycle callbac
   assert.match(source, /std::shared_ptr<HttpResponseState>/)
   assert.match(source, /std::vector<inox::Callback>\s+request_listeners_;/)
   assert.match(source, /request_listeners_\.push_back\(std::move\(listener\)\)/)
-  assert.match(source, /std::vector<inox::Callback>\s+listeners\s*=\s*[^;]*request_listeners_;/)
+  assert.match(
+    source,
+    /void\s+callHttpListeners\([^)]*const std::vector<inox::Callback>&\s+source[^)]*\)[^{]*\{[^}]*const std::vector<inox::Callback>\s+listeners\s*=\s*source;/s
+  )
+  assert.match(source, /callHttpListeners\(server_->request_listeners_,\s*arguments\)/)
   assert.match(source, /for\s*\(const inox::Callback& listener : listeners\)/)
   assert.match(source, /inox_class_instance_ref_(?:new|copy)\(/)
   assert.match(source, /bool\s+request_dispatched_;/)
@@ -28,8 +32,5 @@ test('node:http держит managed state и вызывает lifecycle callbac
   assert.match(source, /net_server_?\.close\(std::move\(callback\)\)/)
 
   assert.match(compiler, /callbackLifetime:\s*'event-loop'/)
-  assert.doesNotMatch(
-    compiler,
-    /emitHttpZeroArgCallbackLines|emitHttpServerListenLines|emitHttpServerCloseLines/
-  )
+  assert.doesNotMatch(compiler, /emitHttpZeroArgCallbackLines|emitHttpServerListenLines|emitHttpServerCloseLines/)
 })

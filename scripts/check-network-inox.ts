@@ -33,7 +33,12 @@ async function main(): Promise<void> {
   })
 
   try {
-    await waitForLine(application, `INOX_HTTP_READY ${nonce} ${port}`, () => stdout, () => stderr)
+    await waitForLine(
+      application,
+      `INOX_HTTP_READY ${nonce} ${port}`,
+      () => stdout,
+      () => stderr
+    )
 
     const response = await fetchWithTimeout(`http://127.0.0.1:${port}/network`, 2_000, {
       'X-Inox-Test': nonce
@@ -51,6 +56,20 @@ async function main(): Promise<void> {
     assert.ok(lines.includes('INOX_TCP_OK'), processFailure('TCP acceptance не завершён', stdout, stderr))
     assert.ok(lines.includes('INOX_UDP_OK'), processFailure('UDP acceptance не завершён', stdout, stderr))
     assert.ok(lines.includes('INOX_HTTP_CLOSED'), processFailure('HTTP server не закрылся', stdout, stderr))
+    assert.ok(lines.includes('INOX_HTTP_CLIENT_OK'), processFailure('HTTP client не получил ответ', stdout, stderr))
+    assert.ok(
+      lines.includes('INOX_HTTP_CLIENT_HEADERS_OK'),
+      processFailure('HTTP client headers не прошли проверку', stdout, stderr)
+    )
+    assert.ok(
+      lines.includes('INOX_HTTP_CLIENT_FINISHED'),
+      processFailure('HTTP client finish не был вызван', stdout, stderr)
+    )
+    assert.ok(lines.includes('INOX_HTTP_GET_OK'), processFailure('HTTP get не получил ответ', stdout, stderr))
+    assert.ok(
+      lines.includes('INOX_HTTP_CLIENT_CLOSED'),
+      processFailure('HTTP client server не закрылся', stdout, stderr)
+    )
   } finally {
     await stopProcess(application)
     await rm(buildRoot, { recursive: true, force: true })
@@ -62,14 +81,7 @@ async function buildExecutable(): Promise<void> {
 
   const result = await runCommand(
     join(repoRoot, 'dist/inox'),
-    [
-      'build',
-      'tests/network/fixtures/index.ts',
-      '--out-dir',
-      buildRoot,
-      '--name',
-      'network-acceptance'
-    ],
+    ['build', 'tests/network/fixtures/index.ts', '--out-dir', buildRoot, '--name', 'network-acceptance'],
     {
       cwd: repoRoot,
       stdout: process.stdout,
@@ -99,11 +111,7 @@ async function waitForLine(
   assert.fail(processFailure(`не получена строка готовности ${expected}`, stdout(), stderr()))
 }
 
-async function fetchWithTimeout(
-  url: string,
-  milliseconds: number,
-  headers: Record<string, string>
-): Promise<Response> {
+async function fetchWithTimeout(url: string, milliseconds: number, headers: Record<string, string>): Promise<Response> {
   const controller = new AbortController()
   const timeout = setTimeout(() => {
     controller.abort()

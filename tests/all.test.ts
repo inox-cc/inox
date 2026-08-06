@@ -186,6 +186,7 @@ async function runHostedIntegrationTests(): Promise<void> {
     await import('./integration/promise-observe-ownership.test.ts')
   const { assertPathLowersToCppObject } = await import('./integration/path-cpp-object-lowering.test.ts')
   const { assertNetUsesCppObjectFacade } = await import('./integration/net-cpp-object-lowering.test.ts')
+  const { assertHttpClientUsesCppObjectFacade } = await import('./integration/http-client-cpp-object-lowering.test.ts')
   const { assertHttpServerUsesCppObjectFacade } = await import('./integration/http-cpp-object-lowering.test.ts')
   const { assertReadableCStringLiterals } = await import('./integration/readable-c-string-literals.test.ts')
   const { assertRegExpLowersToCppObject } = await import('./integration/regexp-cpp-object-lowering.test.ts')
@@ -458,6 +459,10 @@ async function runHostedIntegrationTests(): Promise<void> {
 
     await t.test('http-cpp-object-lowering', async () => {
       await assertHttpServerUsesCppObjectFacade()
+    })
+
+    await t.test('http-client-cpp-object-lowering', async () => {
+      await assertHttpClientUsesCppObjectFacade()
     })
 
     await t.test('regexp-cpp-object-lowering', () => {

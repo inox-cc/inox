@@ -11,16 +11,12 @@ test('entrypoint package node:net владеет native API и runtime plan', as
   assert.equal(netPackage.compilerEntrypoint, 'stdlib/node/net/compiler/index.ts')
   assert.ok(netPackage.compilerPackage)
   assert.equal(netPackage.compilerPackage.id, 'node:net')
-  assert.deepEqual(netPackage.compilerPackage.dependencies, [])
+  assert.deepEqual(netPackage.compilerPackage.dependencies, ['global:strings'])
   assert.deepEqual(netPackage.nativeSources, ['stdlib/node/net/src/net.cc'])
   assert.deepEqual(netPackage.nativeIncludeDirs, ['stdlib/node/net/include'])
 
-  const server = netPackage.compilerPackage.nativeTypes?.find(
-    (nativeType) => nativeType.typeId === 'node:net#Server'
-  )
-  const socket = netPackage.compilerPackage.nativeTypes?.find(
-    (nativeType) => nativeType.typeId === 'node:net#Socket'
-  )
+  const server = netPackage.compilerPackage.nativeTypes?.find((nativeType) => nativeType.typeId === 'node:net#Server')
+  const socket = netPackage.compilerPackage.nativeTypes?.find((nativeType) => nativeType.typeId === 'node:net#Socket')
   const address = netPackage.compilerPackage.nativeTypes?.find(
     (nativeType) => nativeType.typeId === 'node:net#AddressInfo'
   )
@@ -29,9 +25,7 @@ test('entrypoint package node:net владеет native API и runtime plan', as
   assert.equal(socket?.cppType, 'NetSocket')
   assert.equal(address?.cppType, 'NetAddress')
 
-  const runtime = netPackage.compilerPackage.runtimeRequirements.find(
-    (requirement) => requirement.id === 'node:net'
-  )
+  const runtime = netPackage.compilerPackage.runtimeRequirements.find((requirement) => requirement.id === 'node:net')
 
   assert.ok(runtime)
   assert.deepEqual(runtime.cPreludeIncludes, ['inox/net.h'])
@@ -39,6 +33,7 @@ test('entrypoint package node:net владеет native API и runtime plan', as
   assert.deepEqual(runtime.dependencies, [
     'async-runtime',
     'callback-values',
+    'global:strings#strings',
     'managed-values',
     'objects',
     'string-bytes'
@@ -47,7 +42,6 @@ test('entrypoint package node:net владеет native API и runtime plan', as
     optionId: 'target:runtime#loop-backend',
     allowedValues: ['libuv'],
     diagnosticCode: 'INOX_NOT_IMPLEMENTED',
-    diagnosticMessage:
-      'node:net is not implemented for C without libuv; select --loop-backend libuv'
+    diagnosticMessage: 'node:net is not implemented for C without libuv; select --loop-backend libuv'
   })
 })

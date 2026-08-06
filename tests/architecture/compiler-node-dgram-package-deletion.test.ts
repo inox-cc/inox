@@ -20,6 +20,7 @@ test('удаление node:dgram убирает API и native plan без centr
   await mkdir(resolve(fixture, 'stdlib/node'), { recursive: true })
   await copyPackage('stdlib/global/binary')
   await copyPackage('stdlib/global/collections')
+  await copyPackage('stdlib/global/strings')
   await copyPackage('stdlib/node/buffer')
   await copyPackage('stdlib/node/dgram')
   await generateCompilerLibraryRegistry(fixture, output)
@@ -49,9 +50,7 @@ test('удаление node:dgram убирает API и native plan без centr
         libraries: after,
         libraryOptions: [{ optionId: 'target:runtime#loop-backend', value: 'libuv' }]
       }),
-    (error: unknown) =>
-      error instanceof CompileError &&
-      error.diagnostics[0].code === 'INOX_UNSUPPORTED_IMPORT_SOURCE'
+    (error: unknown) => error instanceof CompileError && error.diagnostics[0].code === 'INOX_UNSUPPORTED_IMPORT_SOURCE'
   )
 })
 

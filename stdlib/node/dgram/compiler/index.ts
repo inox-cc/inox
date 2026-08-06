@@ -12,6 +12,7 @@ const runtimeRequirement = libraryId
 const socketTypeId = `${libraryId}#Socket`
 const addressTypeId = `${libraryId}#AddressInfo`
 const remoteInfoTypeId = `${libraryId}#RemoteInfo`
+const stringRuntimeRequirement = 'global:strings#strings'
 const runtimeRequirements = [runtimeRequirement]
 const socketValueTypeRef = nominalTypeRef(socketTypeId, 'value')
 const socketBorrowedTypeRef = nominalTypeRef(socketTypeId, 'borrowed')
@@ -48,7 +49,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['node:buffer'],
+  dependencies: ['global:strings', 'node:buffer'],
   nativeTypes: [
     {
       libraryId,
@@ -89,7 +90,15 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: ['async-runtime', 'callback-values', 'managed-values', 'node:buffer', 'objects', 'string-bytes'],
+      dependencies: [
+        'async-runtime',
+        'callback-values',
+        stringRuntimeRequirement,
+        'managed-values',
+        'node:buffer',
+        'objects',
+        'string-bytes'
+      ],
       cPreludeIncludes: ['inox/dgram.h'],
       capabilities: ['udp'],
       optionConstraints: [
