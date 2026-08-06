@@ -8061,7 +8061,11 @@ function emitOptionalCallbackCallValueExpression(expression: AnyNode, context: C
     lines.push(`  ${emitStatusCheck(call, context)}`)
   }
 
-  lines.push(`  ${emitRuntimeValueCheck(out, expectedTag, context)}`)
+  if (preparedCallee.functionType.returnNullable === true) {
+    pushIndented(lines, emitRuntimeNullableValueCheck(out, expectedTag, context), '  ')
+  } else {
+    lines.push(`  ${emitRuntimeValueCheck(out, expectedTag, context)}`)
+  }
   lines.push('}')
 
   return {
