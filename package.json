@@ -25,6 +25,7 @@
     "test:architecture": "node scripts/test-log.ts dist/test-architecture.log -- node --test tests/architecture/*.test.ts",
     "test:node": "pnpm run test:features --compiler node",
     "test:inox": "node scripts/test-log.ts dist/test-inox.log -- node scripts/test-inox.ts --compiler dist/inox --semantic-probe dist/inox-stage6-semantic-probe",
+    "test:network": "node scripts/test-log.ts dist/test-network.log -- node scripts/check-network-inox.ts hosted",
     "test:network:inox": "node scripts/test-log.ts dist/test-network-inox.log -- node scripts/check-network-inox.ts",
     "test:features": "node scripts/test-log.ts dist/test.log -- node tests/all.test.ts",
     "test:smoke": "node scripts/test-log.ts dist/test.log -- node tests/all.test.ts tests/smoke",

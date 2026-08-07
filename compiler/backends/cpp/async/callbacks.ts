@@ -2016,7 +2016,7 @@ function declareCallbackParams(scope: CallbackScope, params: (CFunctionParam | C
   }
 }
 
-function lookupCallbackBinding(name: string, scopes: CallbackScope[]): CallbackScopeBinding | null {
+function findCallbackBinding(name: string, scopes: CallbackScope[]): CallbackScopeBinding | null {
   for (let index = scopes.length - 1; index >= 0; index = index - 1) {
     const scope = scopes[index]
 
@@ -2106,7 +2106,7 @@ function isRuntimeManagedCaptureBinding(statement: AnyNode, scopes: CallbackScop
   const initName = callbackReferenceNameOrNull(statement.init)
 
   if (initName !== null && typeof initName !== 'undefined') {
-    const binding = lookupCallbackBinding(initName, scopes)
+    const binding = findCallbackBinding(initName, scopes)
 
     if (binding !== null && typeof binding !== 'undefined' && binding.runtimeManaged === true) {
       return true
@@ -2135,7 +2135,7 @@ function inferCapturedExpressionValueType(expression: AnyNode | null | undefined
     expression.type === 'Reference' &&
     expression.path.length === 1
   ) {
-    const binding = lookupCallbackBinding(expression.path[0], scopes)
+    const binding = findCallbackBinding(expression.path[0], scopes)
 
     if (binding !== null && typeof binding !== 'undefined') {
       return binding.valueType
@@ -2172,7 +2172,7 @@ function inferCapturedExpressionInfo(
     expression.type === 'Reference' &&
     expression.path.length === 1
   ) {
-    const entry = lookupCallbackBinding(expression.path[0], scopes)
+    const entry = findCallbackBinding(expression.path[0], scopes)
 
     if (entry !== null && typeof entry !== 'undefined') {
       return entry
@@ -2826,7 +2826,7 @@ function visitCallbackFunctionArg(
 
 function callbackArgumentInfo(arg: AnyNode, scopes: CallbackScope[]): CallbackScopeBinding | null {
   if (arg.type === 'Reference' && arg.path.length === 1) {
-    return lookupCallbackBinding(arg.path[0], scopes)
+    return findCallbackBinding(arg.path[0], scopes)
   }
 
   return null
@@ -2837,7 +2837,7 @@ function callbackAssignmentTargetInfo(
   scopes: CallbackScope[]
 ): CallbackScopeBinding | null {
   if (target !== null && typeof target !== 'undefined' && target.type === 'Reference' && target.path.length === 1) {
-    return lookupCallbackBinding(target.path[0], scopes)
+    return findCallbackBinding(target.path[0], scopes)
   }
 
   return null
@@ -3006,7 +3006,7 @@ function addRuntimeArrowCaptureReference(reference: AnyNode, state: RuntimeArrow
   const context = state.context
   const functionNames = context.functionNames
 
-  const local = lookupCallbackBinding(name, state.localScopes)
+  const local = findCallbackBinding(name, state.localScopes)
   if (local) {
     return
   }
@@ -3025,7 +3025,7 @@ function addRuntimeArrowCaptureReference(reference: AnyNode, state: RuntimeArrow
     return
   }
 
-  const outer = lookupCallbackBinding(name, state.outerScopes)
+  const outer = findCallbackBinding(name, state.outerScopes)
 
   if (outer !== null && typeof outer !== 'undefined' && !state.captures.has(name)) {
     state.captures.set(name, runtimeArrowCaptureFromBinding(name, outer))

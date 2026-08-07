@@ -244,6 +244,10 @@ export function normalizeTypeName(name: string): string {
     return normalizeUnionTypeNames(unionArgs)
   }
 
+  if (stringLiteralTypeValueFromTypeName(name) !== null) {
+    return name
+  }
+
   const indexedAccess = indexedAccessTypeNameFromTypeName(name)
 
   if (indexedAccess !== null) {
@@ -492,9 +496,32 @@ export function typeNameDependencyNames(typeName: string | null | undefined): st
 
   let current = ''
   let index = 0
+  let inStringLiteral = false
 
   while (index < typeName.length) {
     const unit = typeName.slice(index, index + 1)
+
+    if (inStringLiteral) {
+      if (unit === '\\') {
+        index = index + 2
+        continue
+      }
+
+      if (unit === "'") {
+        inStringLiteral = false
+      }
+
+      index = index + 1
+      continue
+    }
+
+    if (unit === "'") {
+      pushTypeNameDependencyName(current, names)
+      current = ''
+      inStringLiteral = true
+      index = index + 1
+      continue
+    }
 
     if (isTypeNameDependencyIdentifierChar(unit)) {
       current = current + unit
@@ -560,7 +587,7 @@ export function isBuiltinTypeDependencyName(name: string): boolean {
     return true
   }
 
-  if (name === 'Function' || name === 'Record' || name === 'typeof') {
+  if (name === 'Function' || name === 'Partial' || name === 'Pick' || name === 'Record' || name === 'typeof') {
     return true
   }
 
@@ -577,6 +604,28 @@ export function isBuiltinTypeDependencyName(name: string): boolean {
   }
 
   return false
+}
+
+export function stringLiteralTypeValueFromTypeName(name: string): string | null {
+  if (name.length < 2 || !name.startsWith("'") || !name.endsWith("'")) {
+    return null
+  }
+
+  let value = ''
+
+  for (let index = 1; index < name.length - 1; index = index + 1) {
+    const unit = name.slice(index, index + 1)
+
+    if (unit === '\\' && index + 1 < name.length - 1) {
+      index = index + 1
+      value = value + name.slice(index, index + 1)
+      continue
+    }
+
+    value = value + unit
+  }
+
+  return value
 }
 
 function normalizeUnionTypeNames(unionArgs: string[]): string {
@@ -646,9 +695,7 @@ function normalizedInlineObjectTypeName(inlineObject: InlineObjectTypeNames): st
   const parts: string[] = []
 
   if (inlineObject.indexSignature !== null) {
-    parts.push(
-      `[key:${inlineObject.indexSignature.keyTypeName}]:${inlineObject.indexSignature.valueTypeName}`
-    )
+    parts.push(`[key:${inlineObject.indexSignature.keyTypeName}]:${inlineObject.indexSignature.valueTypeName}`)
   }
 
   for (const field of inlineObject.fields) {
@@ -903,13 +950,7 @@ function splitDelimitedTypeArgs(value: string, delimiter: string): string[] {
       parenDepth = parenDepth + 1
     } else if (unit === ')') {
       parenDepth = parenDepth - 1
-    } else if (
-      unit === delimiter &&
-      angleDepth === 0 &&
-      braceDepth === 0 &&
-      bracketDepth === 0 &&
-      parenDepth === 0
-    ) {
+    } else if (unit === delimiter && angleDepth === 0 && braceDepth === 0 && bracketDepth === 0 && parenDepth === 0) {
       args.push(value.slice(start, index))
       start = index + 1
     }
@@ -996,13 +1037,7 @@ function topLevelTypeDelimiterIndex(value: string, delimiter: string): number {
   for (let index = 0; index < value.length; index = index + 1) {
     const unit = value.slice(index, index + 1)
 
-    if (
-      unit === delimiter &&
-      angleDepth === 0 &&
-      braceDepth === 0 &&
-      bracketDepth === 0 &&
-      parenDepth === 0
-    ) {
+    if (unit === delimiter && angleDepth === 0 && braceDepth === 0 && bracketDepth === 0 && parenDepth === 0) {
       return index
     }
 

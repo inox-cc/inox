@@ -122,7 +122,7 @@ export function readTypeAnnotation(
 }
 
 function typeAnnotationStringToken(parts: string[], value: string): string {
-  if (parts.length === 0 || parts[parts.length - 1] !== '[') {
+  if (!typeAnnotationNeedsStringLiteral(parts)) {
     return 'string'
   }
 
@@ -139,6 +139,53 @@ function typeAnnotationStringToken(parts: string[], value: string): string {
   }
 
   return `'${escaped}'`
+}
+
+function typeAnnotationNeedsStringLiteral(parts: string[]): boolean {
+  if (parts.length > 0 && parts[parts.length - 1] === '[') {
+    return true
+  }
+
+  const genericNames: string[] = []
+  const genericArgumentIndexes: number[] = []
+
+  for (let index = 0; index < parts.length; index = index + 1) {
+    const part = parts[index]
+
+    if (part === '<') {
+      let genericName = ''
+
+      if (index > 0) {
+        const previousPart = parts[index - 1]
+
+        if (previousPart) {
+          genericName = previousPart
+        }
+      }
+
+      genericNames.push(genericName)
+      genericArgumentIndexes.push(0)
+      continue
+    }
+
+    if (part === '>') {
+      genericNames.pop()
+      genericArgumentIndexes.pop()
+      continue
+    }
+
+    if (part === ',' && genericArgumentIndexes.length > 0) {
+      const last = genericArgumentIndexes.length - 1
+      genericArgumentIndexes[last] = genericArgumentIndexes[last] + 1
+    }
+  }
+
+  if (genericNames.length === 0) {
+    return false
+  }
+
+  const last = genericNames.length - 1
+  return genericNames[last] === 'Pick' && genericArgumentIndexes[last] === 1
 }
 
 function joinStrings(values: string[], separator: string): string {

@@ -9,7 +9,8 @@ import { fileURLToPath } from 'node:url'
 import { runCommand } from './lib/run-command.ts'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
-const buildRoot = join(repoRoot, 'dist/network', `acceptance-native-${process.pid}`)
+const compilerMode = process.argv[2] === 'hosted' ? 'hosted' : 'native'
+const buildRoot = join(repoRoot, 'dist/network', `acceptance-${compilerMode}-${process.pid}`)
 const executable = join(buildRoot, 'bin', 'network-acceptance')
 
 async function main(): Promise<void> {
@@ -55,6 +56,8 @@ async function main(): Promise<void> {
     const lines = stdout.split(/\r?\n/)
     assert.ok(lines.includes('INOX_TCP_OK'), processFailure('TCP acceptance не завершён', stdout, stderr))
     assert.ok(lines.includes('INOX_UDP_OK'), processFailure('UDP acceptance не завершён', stdout, stderr))
+    assert.ok(lines.includes('INOX_DNS_CALLBACK_OK'), processFailure('DNS callback lookup не завершён', stdout, stderr))
+    assert.ok(lines.includes('INOX_DNS_PROMISE_OK'), processFailure('DNS promise lookup не завершён', stdout, stderr))
     assert.ok(lines.includes('INOX_HTTP_CLOSED'), processFailure('HTTP server не закрылся', stdout, stderr))
     assert.ok(lines.includes('INOX_HTTP_CLIENT_OK'), processFailure('HTTP client не получил ответ', stdout, stderr))
     assert.ok(
@@ -79,9 +82,11 @@ async function main(): Promise<void> {
 async function buildExecutable(): Promise<void> {
   await rm(buildRoot, { recursive: true, force: true })
 
+  const command = compilerMode === 'hosted' ? process.execPath : join(repoRoot, 'dist/inox')
+  const compilerArguments = compilerMode === 'hosted' ? ['compiler/index.ts', 'build'] : ['build']
   const result = await runCommand(
-    join(repoRoot, 'dist/inox'),
-    ['build', 'tests/network/fixtures/index.ts', '--out-dir', buildRoot, '--name', 'network-acceptance'],
+    command,
+    [...compilerArguments, 'tests/network/fixtures/index.ts', '--out-dir', buildRoot, '--name', 'network-acceptance'],
     {
       cwd: repoRoot,
       stdout: process.stdout,
@@ -89,7 +94,7 @@ async function buildExecutable(): Promise<void> {
     }
   )
 
-  assert.equal(result.code, 0, `dist/inox build завершился с кодом ${result.code}`)
+  assert.equal(result.code, 0, `${compilerMode} compiler build завершился с кодом ${result.code}`)
 }
 
 async function waitForLine(

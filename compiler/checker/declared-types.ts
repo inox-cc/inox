@@ -10,6 +10,7 @@ import {
   isNullableTypeName,
   nullableTypeNameFromKnownTypeName,
   recordTypeNamesFromTypeName,
+  stringLiteralTypeValueFromTypeName,
   typeNameDependencyNames,
   typeQueryTargetNameFromTypeName,
   unionTypeNamesFromTypeName,
@@ -229,6 +230,36 @@ export function resolveDeclaredType(
       return resolved
     }
 
+    if (genericApplication.name === 'Partial') {
+      if (genericApplication.args.length !== 1) {
+        context.diagnostics.push(
+          diagnostic(
+            'INOX_TYPE_ARGUMENT_COUNT',
+            `utility type Partial expects 1 type argument, got ${genericApplication.args.length}`,
+            loc
+          )
+        )
+        return unresolvedTypeInfo()
+      }
+
+      return resolvePartialDeclaredType(context, genericApplication.args[0], loc)
+    }
+
+    if (genericApplication.name === 'Pick') {
+      if (genericApplication.args.length !== 2) {
+        context.diagnostics.push(
+          diagnostic(
+            'INOX_TYPE_ARGUMENT_COUNT',
+            `utility type Pick expects 2 type arguments, got ${genericApplication.args.length}`,
+            loc
+          )
+        )
+        return unresolvedTypeInfo()
+      }
+
+      return resolvePickDeclaredType(context, genericApplication.args[0], genericApplication.args[1], loc)
+    }
+
     const genericNativeType = compilerLibraryNativeTypeForName(context.libraries, genericApplication.name)
     const nativeTypeParameters = genericNativeType?.typeParameters
 
@@ -342,6 +373,12 @@ export function resolveDeclaredType(
     const info = unresolvedTypeInfo()
     info.valueType = name
 
+    return info
+  }
+
+  if (stringLiteralTypeValueFromTypeName(name) !== null) {
+    const info = unresolvedTypeInfo()
+    info.valueType = 'string'
     return info
   }
 
@@ -467,6 +504,95 @@ export function resolveDeclaredType(
   return unresolvedTypeInfo()
 }
 
+function resolvePartialDeclaredType(
+  context: DeclaredTypeResolverContext,
+  operandName: string,
+  loc: SourceLocation
+): ResolvedTypeInfo {
+  const operand = resolveDeclaredType(context, operandName, loc)
+
+  if (operand.valueType !== 'object' || operand.shape === null) {
+    context.diagnostics.push(diagnostic('INOX_TYPE_MISMATCH', `utility type Partial requires an object type`, loc))
+    return unresolvedTypeInfo()
+  }
+
+  const shape = shallowGenericFieldShape(operand.shape)
+
+  if (shape === null) {
+    return unresolvedTypeInfo()
+  }
+
+  const fields: AnyNode[] = []
+
+  for (const field of shape.fields) {
+    fields.push({
+      ...field,
+      optional: true,
+      nullable: true,
+      typeRef: qualifiedFieldTypeRef(field.typeRef ?? null, false, true)
+    })
+  }
+
+  const resolved = cloneResolvedTypeInfo(operand)
+  resolved.shape = { ...shape, fields }
+  resolved.typeRef = typeRefFromResolvedType(resolved, operandName)
+  return resolved
+}
+
+function resolvePickDeclaredType(
+  context: DeclaredTypeResolverContext,
+  operandName: string,
+  keysName: string,
+  loc: SourceLocation
+): ResolvedTypeInfo {
+  const operand = resolveDeclaredType(context, operandName, loc)
+
+  if (operand.valueType !== 'object' || operand.shape === null) {
+    context.diagnostics.push(diagnostic('INOX_TYPE_MISMATCH', `utility type Pick requires an object type`, loc))
+    return unresolvedTypeInfo()
+  }
+
+  const shape = shallowGenericFieldShape(operand.shape)
+
+  if (shape === null) {
+    return unresolvedTypeInfo()
+  }
+
+  const keyTypeNames = unionTypeNamesFromTypeName(keysName) ?? [keysName]
+  const keys = new Set<string>()
+
+  for (const keyTypeName of keyTypeNames) {
+    const key = stringLiteralTypeValueFromTypeName(keyTypeName)
+
+    if (key === null) {
+      context.diagnostics.push(
+        diagnostic('INOX_TYPE_MISMATCH', `utility type Pick keys must be string literal types`, loc)
+      )
+      return unresolvedTypeInfo()
+    }
+
+    keys.add(key)
+  }
+
+  const fields: AnyNode[] = []
+
+  for (const field of shape.fields) {
+    if (keys.has(field.name)) {
+      fields.push({ ...field })
+      keys.delete(field.name)
+    }
+  }
+
+  for (const key of keys) {
+    context.diagnostics.push(diagnostic('INOX_UNKNOWN_TYPE', `utility type Pick references unknown field ${key}`, loc))
+  }
+
+  const resolved = cloneResolvedTypeInfo(operand)
+  resolved.shape = { ...shape, fields }
+  resolved.typeRef = typeRefFromResolvedType(resolved, operandName)
+  return resolved
+}
+
 function resolveTypeQueryDeclaredType(
   context: DeclaredTypeResolverContext,
   targetName: string,
@@ -487,11 +613,7 @@ function resolveTypeQueryDeclaredType(
   info.shape = symbol.shape ?? null
   info.asyncResultValueType = symbol.asyncResultValueType ?? null
 
-  if (
-    info.functionType === null &&
-    symbol.returnType !== null &&
-    typeof symbol.returnType !== 'undefined'
-  ) {
+  if (info.functionType === null && symbol.returnType !== null && typeof symbol.returnType !== 'undefined') {
     const params: FunctionTypeParamMetadata[] = []
     const symbolParams = symbol.params ?? []
 
@@ -577,9 +699,7 @@ function resolveFunctionResultTypeOperator(
   const operandTypeRef = operand.typeRef ?? typeRefFromResolvedType(operand)
 
   if (operandTypeRef.kind !== 'function') {
-    context.diagnostics.push(
-      diagnostic('INOX_TYPE_OPERATOR_OPERAND', `${operatorName} requires a function type`, loc)
-    )
+    context.diagnostics.push(diagnostic('INOX_TYPE_OPERATOR_OPERAND', `${operatorName} requires a function type`, loc))
     return unresolvedTypeInfo()
   }
 
@@ -2274,6 +2394,12 @@ export function resolveWeakTargetShapeTypeName(
     const info = unresolvedTypeInfo()
     info.valueType = name
 
+    return info
+  }
+
+  if (stringLiteralTypeValueFromTypeName(name) !== null) {
+    const info = unresolvedTypeInfo()
+    info.valueType = 'string'
     return info
   }
 

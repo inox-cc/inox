@@ -21,7 +21,7 @@ test('физическое удаление global:promise даёт dependency d
     .map((library) => library.id)
 
   assert.ok(!libraryIds.includes('global:promise'))
-  assert.deepEqual(dependents, ['global:fetch', 'node:fs/promises', 'node:timers/promises'])
+  assert.deepEqual(dependents, ['global:fetch', 'node:dns/promises', 'node:fs/promises', 'node:timers/promises'])
   assert.ok(nativeSources.every((source) => !source.startsWith('stdlib/global/promise/')))
 
   const math = discovered.find((library) => library.id === 'global:math')

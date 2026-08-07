@@ -3,4 +3,4 @@
 
 import dns from 'node:dns'
 
-console.log(dns)
+dns.lookup('localhost', () => {})

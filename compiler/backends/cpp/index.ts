@@ -4234,7 +4234,11 @@ function emitPreparedRuntimeValueArgumentExpression(
   preservePendingException: boolean
 ): PreparedExpression {
   if (inferExpressionType(expression, context) === 'function') {
-    return emitRuntimeCallbackValue(expression, normalizeFunctionType(resolveFunctionValueType(expression, context)), context)
+    return emitRuntimeCallbackValue(
+      expression,
+      normalizeFunctionType(resolveFunctionValueType(expression, context)),
+      context
+    )
   }
 
   if (preservePendingException) {
@@ -4809,10 +4813,7 @@ function renderSequenceMaterializationExpression(
   return rendered
 }
 
-function compilerArrayLiteralCanUseDirectMaterialization(
-  expression: AnyNode,
-  context: CFunctionContext
-): boolean {
+function compilerArrayLiteralCanUseDirectMaterialization(expression: AnyNode, context: CFunctionContext): boolean {
   for (let index = 0; index < expression.elements.length; index = index + 1) {
     const element = expression.elements[index]
 
@@ -4956,11 +4957,33 @@ function emitCObjectLiteralValueExpression(
 
       if (spread !== null && typeof spread !== 'undefined') {
         const spreadValue = nextCName(context, 'inox_spread_value')
+        const optionalSpreadField = objectSpreadPropertyFieldIsOptional(spread.property, field.name)
+
+        if (optionalSpreadField) {
+          const fallback = objectLiteralPropertyValueBeforeSpread(expression, spread.property, field.name)
+
+          if (fallback !== null) {
+            const fallbackValue = emitObjectFieldInitializerValue(field, fallback, context)
+
+            pushAll(lines, fallbackValue.lines)
+            pushPreparedFunctionCompanions(functionCompanions, fallbackValue.functionCompanions, field.name)
+            lines.push(`${temp}.init(${index}, ${fallbackValue.expression});`)
+            lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+          }
+        }
 
         lines.push(`auto ${spreadValue} = inox::get(${spread.name}, ${cStringLiteral(field.name)});`)
         lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
-        lines.push(`${temp}.init(${index}, ${spreadValue});`)
-        lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+
+        if (optionalSpreadField) {
+          lines.push(`if (${spreadValue}.tag != INOX_TAG_UNDEFINED) {`)
+          lines.push(`  ${temp}.init(${index}, ${spreadValue});`)
+          lines.push(`  ${emitRuntimeTypeCheck('inox::thrown()', context)}`)
+          lines.push('}')
+        } else {
+          lines.push(`${temp}.init(${index}, ${spreadValue});`)
+          lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+        }
         continue
       }
 
@@ -5162,23 +5185,71 @@ function preparedObjectSpreadForField(
 }
 
 function objectSpreadPropertyHasField(property: CObjectLiteralPropertyNode, fieldName: string): boolean {
+  return objectSpreadPropertyField(property, fieldName) !== null
+}
+
+function objectSpreadPropertyField(property: CObjectLiteralPropertyNode, fieldName: string): AnyNode | null {
   const shape = property.value.shape
 
   if (shape === null || typeof shape === 'undefined') {
-    return false
+    return null
   }
 
   if (isCompilerAnyNodeObjectShape(shape) && compilerAnyNodeFallbackShapeHasField(fieldName)) {
-    return true
+    return { name: fieldName, optional: true }
   }
 
   for (const field of shape.fields) {
     if (field.name === fieldName) {
-      return true
+      return field
     }
   }
 
-  return false
+  return null
+}
+
+function objectSpreadPropertyFieldIsOptional(property: CObjectLiteralPropertyNode, fieldName: string): boolean {
+  const field = objectSpreadPropertyField(property, fieldName)
+  return field !== null && field.optional === true
+}
+
+function objectLiteralPropertyValueBeforeSpread(
+  expression: AnyNode,
+  spreadProperty: CObjectLiteralPropertyNode,
+  fieldName: string
+): AnyNode | null {
+  const properties: CObjectLiteralPropertyNode[] = expression.properties
+  let foundSpread = false
+
+  for (let index = properties.length - 1; index >= 0; index = index - 1) {
+    const property = properties[index]
+
+    if (property === null || typeof property === 'undefined') {
+      continue
+    }
+
+    if (!foundSpread) {
+      if (property === spreadProperty) {
+        foundSpread = true
+      }
+
+      continue
+    }
+
+    if (property.spread === true) {
+      if (objectSpreadPropertyHasField(property, fieldName)) {
+        return null
+      }
+
+      continue
+    }
+
+    if (property.key === fieldName) {
+      return property.value
+    }
+  }
+
+  return null
 }
 
 function objectLiteralExpressionRuntimeShape(expression: AnyNode): CObjectShape | null {
@@ -6956,11 +7027,7 @@ function emitPreparedAwaitAsyncResultExpression(
   }
 
   if (asyncResultExpression === null) {
-    asyncResultExpression = emitPreparedAsyncResultExpression(
-      expression,
-      context,
-      asyncResultLoweringDependencies
-    )
+    asyncResultExpression = emitPreparedAsyncResultExpression(expression, context, asyncResultLoweringDependencies)
   }
 
   if (asyncResultExpression !== null && typeof asyncResultExpression !== 'undefined') {

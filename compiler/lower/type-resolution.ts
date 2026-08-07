@@ -7,6 +7,7 @@ import {
   isBuiltinValueType,
   isNullableTypeName,
   nullableTypeNameFromKnownTypeName,
+  stringLiteralTypeValueFromTypeName,
   typeQueryTargetNameFromTypeName,
   unionTypeNamesFromTypeName
 } from '../type-names.ts'
@@ -238,6 +239,10 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
     return primitiveResolvedType(name)
   }
 
+  if (stringLiteralTypeValueFromTypeName(name) !== null) {
+    return primitiveResolvedType('string')
+  }
+
   if (name === 'AnyNode') {
     return anyNodeResolvedType()
   }
@@ -415,7 +420,7 @@ function objectShapeFieldsRequireFunctionCompanions(
   }
 
   for (const field of fields) {
-    if (field.valueType === 'function' || field.functionType !== null && typeof field.functionType !== 'undefined') {
+    if (field.valueType === 'function' || (field.functionType !== null && typeof field.functionType !== 'undefined')) {
       return true
     }
 
@@ -904,10 +909,7 @@ function hydrateFunctionParam(param: LowerTypeNode, context: LowerContext): Lowe
   }
 }
 
-function unresolvedFunctionParamValueType(
-  param: LowerTypeNode,
-  declaredType: string | null | undefined
-): string {
+function unresolvedFunctionParamValueType(param: LowerTypeNode, declaredType: string | null | undefined): string {
   const valueType = lowerNodeValueTypeOrUnknown(param)
 
   if (
@@ -1101,6 +1103,10 @@ function resolveWeakTargetShapeTypeName(name: string | null | undefined, context
 
   if (isBuiltinValueType(name)) {
     return namedResolvedType(name)
+  }
+
+  if (stringLiteralTypeValueFromTypeName(name) !== null) {
+    return namedResolvedType('string')
   }
 
   const typeInfo = context.types.get(name)
