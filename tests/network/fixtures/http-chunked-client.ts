@@ -1,14 +1,12 @@
-import https from 'node:https'
+import http from 'node:http'
 
-export function startHttpsClientAcceptance(port: number, nonce: string): void {
-  const request = https.get(
+export function startHttpChunkedClientAcceptance(port: number, nonce: string): void {
+  const request = http.get(
     {
       hostname: '127.0.0.1',
       port,
-      path: '/secure',
-      headers: { 'X-Inox-Https': nonce },
-      rejectUnauthorized: false,
-      servername: 'localhost'
+      path: '/chunked',
+      headers: { 'X-Inox-Chunked': nonce }
     },
     (response) => {
       let body = ''
@@ -23,17 +21,17 @@ export function startHttpsClientAcceptance(port: number, nonce: string): void {
         if (
           response.statusCode === 200 &&
           response.headers['transfer-encoding'] === 'chunked' &&
-          response.headers['x-inox-https'] === nonce &&
-          body === 'https-chunked-ok ' + nonce &&
+          response.headers['x-inox-chunked'] === nonce &&
+          body === 'http-chunked-ok ' + nonce &&
           chunks >= 2
         ) {
-          console.log('INOX_HTTPS_CLIENT_OK')
+          console.log('INOX_HTTP_CHUNKED_CLIENT_OK')
         }
       })
     }
   )
 
   request.on('error', (error) => {
-    console.log('INOX_HTTPS_CLIENT_ERROR ' + error.message)
+    console.log('INOX_HTTP_CHUNKED_CLIENT_ERROR ' + error.message)
   })
 }

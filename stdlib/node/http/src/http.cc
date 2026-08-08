@@ -28,6 +28,22 @@ constexpr std::size_t maxResponseHeaders = 64;
 constexpr std::size_t maxResponseHeaderBytes = 16 * 1024;
 constexpr std::size_t maxClientRequestBodyBytes = 64 * 1024;
 constexpr std::size_t maxClientResponseBytes = 1024 * 1024;
+constexpr std::size_t maxClientChunkFramingBytes = 256 * 1024;
+
+enum class HttpClientResponseBodyMode {
+  close_delimited,
+  content_length,
+  chunked,
+  none
+};
+
+enum class HttpChunkDecodeState {
+  size,
+  data,
+  data_crlf,
+  trailers,
+  complete
+};
 
 void throwHttpError(const char* message) {
   inox::throw_value(inox::String(message == nullptr ? "TypeError: HTTP operation failed" : message));
@@ -363,7 +379,13 @@ public:
   std::shared_ptr<HttpRequestState> response_;
   std::shared_ptr<HttpClientRequestState> native_owner_;
   std::optional<std::size_t> response_content_length_;
+  std::vector<char> response_chunk_bytes_;
   std::size_t response_body_received_;
+  std::size_t response_chunk_framing_received_;
+  std::size_t response_chunk_remaining_;
+  std::size_t response_trailer_count_;
+  HttpClientResponseBodyMode response_body_mode_;
+  HttpChunkDecodeState response_chunk_state_;
   bool connected_;
   bool ending_;
   bool sent_;
@@ -405,6 +427,11 @@ public:
   void setHeader(inox::StringView name, inox::StringView value);
   bool writableEnded() const;
   bool write(std::span<const std::uint8_t> body);
+
+private:
+  bool consumeChunkedBody(inox::StringView data);
+  bool consumeResponseBody(inox::StringView data);
+  bool deliverResponseBody(inox::StringView data);
 };
 
 template <typename Holder>
@@ -1248,6 +1275,7 @@ struct ParsedResponse {
   std::size_t headers_end;
   std::size_t body_start;
   std::optional<std::size_t> content_length;
+  bool chunked;
 };
 
 ParsedResponse parseResponse(std::span<const char> bytes) {
@@ -1293,6 +1321,7 @@ ParsedResponse parseResponse(std::span<const char> bytes) {
   }
 
   std::optional<std::size_t> content_length;
+  bool chunked = false;
   std::size_t header_count = 0;
   std::size_t cursor = status_line_end + 2;
 
@@ -1334,9 +1363,16 @@ ParsedResponse parseResponse(std::span<const char> bytes) {
     const std::span<const char> value = bytes.subspan(value_start, value_end - value_start);
 
     if (!validHeaderName(inox::StringView(name.data(), name.size())) ||
-        !validHeaderValue(inox::StringView(value.data(), value.size())) ||
-        spanEqualsIgnoreCase(name, "Transfer-Encoding")) {
+        !validHeaderValue(inox::StringView(value.data(), value.size()))) {
       return {ResponseParseResult::invalid};
+    }
+
+    if (spanEqualsIgnoreCase(name, "Transfer-Encoding")) {
+      if (chunked || !spanEqualsIgnoreCase(value, "chunked")) {
+        return {ResponseParseResult::invalid};
+      }
+
+      chunked = true;
     }
 
     if (spanEqualsIgnoreCase(name, "Content-Length")) {
@@ -1374,6 +1410,10 @@ ParsedResponse parseResponse(std::span<const char> bytes) {
     return {ResponseParseResult::too_large};
   }
 
+  if (chunked && content_length) {
+    return {ResponseParseResult::invalid};
+  }
+
   return {
     ResponseParseResult::ready,
     status_code,
@@ -1385,6 +1425,7 @@ ParsedResponse parseResponse(std::span<const char> bytes) {
     header_end - 2,
     header_end,
     content_length,
+    chunked,
   };
 }
 
@@ -1955,7 +1996,13 @@ HttpClientRequestState::HttpClientRequestState(
     response_(),
     native_owner_(),
     response_content_length_(),
+    response_chunk_bytes_(),
     response_body_received_(0),
+    response_chunk_framing_received_(0),
+    response_chunk_remaining_(0),
+    response_trailer_count_(0),
+    response_body_mode_(HttpClientResponseBodyMode::close_delimited),
+    response_chunk_state_(HttpChunkDecodeState::size),
     connected_(false),
     ending_(false),
     sent_(false),
@@ -2272,36 +2319,287 @@ void HttpClientRequestState::onConnect() {
   send();
 }
 
+bool HttpClientRequestState::deliverResponseBody(inox::StringView data) {
+  if (!response_ || data.len == 0 || inox::thrown()) {
+    return !inox::thrown();
+  }
+
+  if (response_body_received_ > maxClientResponseBytes ||
+      data.len > maxClientResponseBytes - response_body_received_ ||
+      (response_body_mode_ == HttpClientResponseBodyMode::content_length &&
+       response_content_length_ &&
+       (response_body_received_ > *response_content_length_ ||
+        data.len > *response_content_length_ - response_body_received_))) {
+    inox::Value error = materializeHttpError("HTTP response body exceeds its framing limit");
+    if (!inox::thrown()) onError(error);
+    return false;
+  }
+
+  response_->emitData(data);
+
+  if (inox::thrown()) {
+    return false;
+  }
+
+  response_body_received_ += data.len;
+
+  if (response_body_mode_ == HttpClientResponseBodyMode::content_length &&
+      response_content_length_ &&
+      response_body_received_ == *response_content_length_) {
+    response_->emitEnd();
+  }
+
+  return !inox::thrown();
+}
+
+bool HttpClientRequestState::consumeChunkedBody(inox::StringView data) {
+  auto fail = [this](const char* message) {
+    inox::Value error = materializeHttpError(message);
+    if (!inox::thrown()) onError(error);
+    return false;
+  };
+  auto compact = [this](std::size_t consumed) {
+    if (consumed == 0) {
+      return;
+    }
+
+    if (consumed == response_chunk_bytes_.size()) {
+      response_chunk_bytes_.clear();
+    } else {
+      response_chunk_bytes_.erase(
+        response_chunk_bytes_.begin(),
+        response_chunk_bytes_.begin() + static_cast<std::ptrdiff_t>(consumed)
+      );
+    }
+  };
+
+  if (response_chunk_state_ == HttpChunkDecodeState::complete) {
+    return data.len == 0 || fail("HTTP chunked response has data after its terminator");
+  }
+
+  constexpr std::size_t max_buffered = maxClientResponseBytes + maxClientChunkFramingBytes;
+
+  if (response_chunk_bytes_.size() > max_buffered ||
+      data.len > max_buffered - response_chunk_bytes_.size()) {
+    return fail("HTTP response is too large");
+  }
+
+  if (data.len > 0) {
+    try {
+      response_chunk_bytes_.insert(response_chunk_bytes_.end(), data.bytes, data.bytes + data.len);
+    } catch (const std::bad_alloc&) {
+      inox::throw_out_of_memory();
+      return false;
+    }
+  }
+
+  std::size_t cursor = 0;
+
+  for (;;) {
+    const std::span<const char> bytes(response_chunk_bytes_);
+
+    if (response_chunk_state_ == HttpChunkDecodeState::size) {
+      const std::size_t line_end = findCrlf(bytes, cursor);
+
+      if (line_end == std::numeric_limits<std::size_t>::max()) {
+        if (bytes.size() - cursor > maxResponseHeaderBytes) {
+          return fail("HTTP chunked response metadata is too large");
+        }
+
+        compact(cursor);
+        return true;
+      }
+
+      const std::size_t extension = findByte(bytes, cursor, line_end, ';');
+      const std::size_t size_end = extension == std::numeric_limits<std::size_t>::max()
+        ? line_end
+        : extension;
+
+      if (size_end == cursor ||
+          !validHeaderValue(inox::StringView(bytes.data() + cursor, line_end - cursor))) {
+        return fail("HTTP chunked response size is invalid");
+      }
+
+      const std::size_t framing_length = line_end + 2 - cursor;
+
+      if (response_chunk_framing_received_ > maxClientChunkFramingBytes ||
+          framing_length > maxClientChunkFramingBytes - response_chunk_framing_received_) {
+        return fail("HTTP chunked response metadata is too large");
+      }
+
+      response_chunk_framing_received_ += framing_length;
+
+      std::size_t chunk_size = 0;
+
+      for (std::size_t index = cursor; index < size_end; index += 1) {
+        const unsigned char byte = static_cast<unsigned char>(bytes[index]);
+        std::size_t digit = 0;
+
+        if (byte >= '0' && byte <= '9') digit = byte - '0';
+        else if (byte >= 'a' && byte <= 'f') digit = byte - 'a' + 10;
+        else if (byte >= 'A' && byte <= 'F') digit = byte - 'A' + 10;
+        else return fail("HTTP chunked response size is invalid");
+
+        if (chunk_size > (maxClientResponseBytes - digit) / 16) {
+          return fail("HTTP response is too large");
+        }
+
+        chunk_size = chunk_size * 16 + digit;
+      }
+
+      if (response_body_received_ > maxClientResponseBytes ||
+          chunk_size > maxClientResponseBytes - response_body_received_) {
+        return fail("HTTP response is too large");
+      }
+
+      cursor = line_end + 2;
+      response_chunk_remaining_ = chunk_size;
+      response_chunk_state_ = chunk_size == 0
+        ? HttpChunkDecodeState::trailers
+        : HttpChunkDecodeState::data;
+      continue;
+    }
+
+    if (response_chunk_state_ == HttpChunkDecodeState::data) {
+      const std::size_t available = bytes.size() - cursor;
+      const std::size_t length = available < response_chunk_remaining_
+        ? available
+        : response_chunk_remaining_;
+
+      if (length > 0 &&
+          !deliverResponseBody(inox::StringView(bytes.data() + cursor, length))) {
+        return false;
+      }
+
+      cursor += length;
+      response_chunk_remaining_ -= length;
+
+      if (response_chunk_remaining_ != 0) {
+        compact(cursor);
+        return true;
+      }
+
+      response_chunk_state_ = HttpChunkDecodeState::data_crlf;
+      continue;
+    }
+
+    if (response_chunk_state_ == HttpChunkDecodeState::data_crlf) {
+      if (bytes.size() - cursor < 2) {
+        compact(cursor);
+        return true;
+      }
+
+      if (bytes[cursor] != '\r' || bytes[cursor + 1] != '\n') {
+        return fail("HTTP chunked response data terminator is invalid");
+      }
+
+      if (response_chunk_framing_received_ > maxClientChunkFramingBytes - 2) {
+        return fail("HTTP chunked response metadata is too large");
+      }
+
+      response_chunk_framing_received_ += 2;
+      cursor += 2;
+      response_chunk_state_ = HttpChunkDecodeState::size;
+      continue;
+    }
+
+    if (response_chunk_state_ == HttpChunkDecodeState::trailers) {
+      const std::size_t line_end = findCrlf(bytes, cursor);
+
+      if (line_end == std::numeric_limits<std::size_t>::max()) {
+        if (bytes.size() - cursor > maxResponseHeaderBytes) {
+          return fail("HTTP chunked response trailers are too large");
+        }
+
+        compact(cursor);
+        return true;
+      }
+
+      if (line_end == cursor) {
+        if (response_chunk_framing_received_ > maxClientChunkFramingBytes - 2) {
+          return fail("HTTP chunked response trailers are too large");
+        }
+
+        response_chunk_framing_received_ += 2;
+        cursor += 2;
+
+        if (cursor != bytes.size()) {
+          return fail("HTTP chunked response has data after its terminator");
+        }
+
+        response_chunk_bytes_.clear();
+        response_chunk_state_ = HttpChunkDecodeState::complete;
+        response_->emitEnd();
+        return !inox::thrown();
+      }
+
+      const std::size_t separator = findByte(bytes, cursor, line_end, ':');
+
+      if (separator == std::numeric_limits<std::size_t>::max() || separator == cursor) {
+        return fail("HTTP chunked response trailer is invalid");
+      }
+
+      std::size_t value_start = separator + 1;
+      std::size_t value_end = line_end;
+
+      while (value_start < value_end && (bytes[value_start] == ' ' || bytes[value_start] == '\t')) {
+        value_start += 1;
+      }
+
+      while (value_end > value_start && (bytes[value_end - 1] == ' ' || bytes[value_end - 1] == '\t')) {
+        value_end -= 1;
+      }
+
+      const std::span<const char> name = bytes.subspan(cursor, separator - cursor);
+      const inox::StringView value(bytes.data() + value_start, value_end - value_start);
+      const std::size_t framing_length = line_end + 2 - cursor;
+
+      response_trailer_count_ += 1;
+
+      if (response_trailer_count_ > maxResponseHeaders ||
+          response_chunk_framing_received_ > maxClientChunkFramingBytes ||
+          framing_length > maxClientChunkFramingBytes - response_chunk_framing_received_ ||
+          !validHeaderName(inox::StringView(name.data(), name.size())) ||
+          !validHeaderValue(value) ||
+          spanEqualsIgnoreCase(name, "Content-Length") ||
+          spanEqualsIgnoreCase(name, "Transfer-Encoding")) {
+        return fail("HTTP chunked response trailer is invalid");
+      }
+
+      response_chunk_framing_received_ += framing_length;
+      cursor = line_end + 2;
+      continue;
+    }
+
+    return bytes.size() == cursor || fail("HTTP chunked response has data after its terminator");
+  }
+}
+
+bool HttpClientRequestState::consumeResponseBody(inox::StringView data) {
+  if (response_body_mode_ == HttpClientResponseBodyMode::chunked) {
+    return consumeChunkedBody(data);
+  }
+
+  if (response_body_mode_ == HttpClientResponseBodyMode::none) {
+    if (data.len == 0) {
+      return true;
+    }
+
+    inox::Value error = materializeHttpError("HTTP response must not contain a body");
+    if (!inox::thrown()) onError(error);
+    return false;
+  }
+
+  return deliverResponseBody(data);
+}
+
 void HttpClientRequestState::onData(inox::StringView data) {
   if (closed_ || data.len == 0) {
     return;
   }
 
-  auto deliver = [this](inox::StringView body) {
-    if (!response_ || body.len == 0 || inox::thrown()) {
-      return;
-    }
-
-    if (
-      response_content_length_ &&
-      (response_body_received_ > *response_content_length_ ||
-       body.len > *response_content_length_ - response_body_received_)
-    ) {
-      inox::Value error = materializeHttpError("HTTP response body exceeds Content-Length");
-      if (!inox::thrown()) onError(error);
-      return;
-    }
-
-    response_->emitData(body);
-    response_body_received_ += body.len;
-
-    if (!inox::thrown() && response_content_length_ && response_body_received_ == *response_content_length_) {
-      response_->emitEnd();
-    }
-  };
-
   if (response_started_) {
-    deliver(data);
+    (void)consumeResponseBody(data);
     return;
   }
 
@@ -2372,9 +2670,15 @@ void HttpClientRequestState::onData(inox::StringView data) {
   }
 
   response_content_length_ = parsed.content_length;
+  response_body_mode_ = parsed.chunked
+    ? HttpClientResponseBodyMode::chunked
+    : parsed.content_length
+      ? HttpClientResponseBodyMode::content_length
+      : HttpClientResponseBodyMode::close_delimited;
 
   if (hasText(method_, "HEAD") || parsed.status_code == 204 || parsed.status_code == 304) {
     response_content_length_ = 0;
+    response_body_mode_ = HttpClientResponseBodyMode::none;
   }
 
   response_started_ = true;
@@ -2391,21 +2695,24 @@ void HttpClientRequestState::onData(inox::StringView data) {
     return;
   }
 
-  if (response_content_length_ && *response_content_length_ == 0) {
-    response_->emitEnd();
-  }
-
   const std::size_t body_length = response_bytes_.size() - parsed.body_start;
 
-  if (body_length > 0 && !response_->ended_) {
-    deliver(inox::StringView(response_bytes_.data() + parsed.body_start, body_length));
+  if (!consumeResponseBody(inox::StringView(response_bytes_.data() + parsed.body_start, body_length))) {
+    return;
+  }
+
+  if ((response_body_mode_ == HttpClientResponseBodyMode::none ||
+       (response_body_mode_ == HttpClientResponseBodyMode::content_length &&
+        response_content_length_ && *response_content_length_ == 0)) &&
+      !response_->ended_) {
+    response_->emitEnd();
   }
 
   response_bytes_.clear();
 }
 
 void HttpClientRequestState::onEnd() {
-  if (closed_) {
+  if (closed_ || failed_) {
     return;
   }
 
@@ -2415,7 +2722,15 @@ void HttpClientRequestState::onEnd() {
     return;
   }
 
-  if (response_content_length_ && response_body_received_ != *response_content_length_) {
+  if (response_body_mode_ == HttpClientResponseBodyMode::chunked &&
+      response_chunk_state_ != HttpChunkDecodeState::complete) {
+    inox::Value error = materializeHttpError("HTTP chunked response ended before its terminator");
+    if (!inox::thrown()) onError(error);
+    return;
+  }
+
+  if (response_body_mode_ == HttpClientResponseBodyMode::content_length &&
+      response_content_length_ && response_body_received_ != *response_content_length_) {
     inox::Value error = materializeHttpError("HTTP response ended before Content-Length was received");
     if (!inox::thrown()) onError(error);
     return;
@@ -2549,7 +2864,7 @@ void HttpClientRequestState::send() {
     return;
   }
 
-  socket_.end(inox::StringView(request.data(), request.size()), std::move(finish));
+  (void)socket_.write(inox::StringView(request.data(), request.size()), std::move(finish));
 
   if (inox::thrown()) {
     sent_ = false;

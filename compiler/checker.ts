@@ -7509,15 +7509,15 @@ class Checker {
     }
 
     expression.valueType = 'function'
+    let declaredFunctionType: FunctionTypeMetadata | null = null
 
     if (
       (functionType === null || typeof functionType === 'undefined') &&
-      expression.functionSyntax === true &&
       typeof expression.declaredReturnType === 'string'
     ) {
       const returnInfo = this.resolveDeclaredType(expression.declaredReturnType, expression.loc)
 
-      functionType = {
+      declaredFunctionType = {
         kind: 'function',
         resolved: true,
         params: this.resolveParams(expression.params),
@@ -7528,6 +7528,7 @@ class Checker {
         returnAsyncResultValueType: returnInfo.asyncResultValueType,
         returnShape: returnInfo.shape
       }
+      functionType = declaredFunctionType
     }
 
     if (functionType !== null && typeof functionType !== 'undefined' && functionType.resolved !== true) {

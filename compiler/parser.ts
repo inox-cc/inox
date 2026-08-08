@@ -1619,16 +1619,25 @@ class Parser {
     }
 
     const params = this.parseArrowParameters()
+    let declaredReturnType: string | null = null
+
+    if (this.matchValue(':')) {
+      declaredReturnType = this.parseTypeAnnotation(['=>'], null)
+    }
+
     this.expectValue('=>', 'INOX_EXPECTED_ARROW', 'expected => in arrow function')
 
     if (this.isValue('{')) {
       const body = this.parseBlock()
-      return createArrowFunction(start, isAsync, params, body, false)
+      const expression = createArrowFunction(start, isAsync, params, body, false)
+      expression.declaredReturnType = declaredReturnType
+      return expression
     }
 
     const body = this.parseExpression()
-
-    return createArrowFunction(start, isAsync, params, body, true)
+    const expression = createArrowFunction(start, isAsync, params, body, true)
+    expression.declaredReturnType = declaredReturnType
+    return expression
   }
 
   parseFunctionExpression(start: Token): AnyNode {
@@ -2666,7 +2675,7 @@ class Parser {
         depth = depth - 1
 
         if (depth === 0) {
-          return this.peek(offset + 1).value === '=>'
+          return this.arrowFollowsParameterList(offset)
         }
       }
 
@@ -2729,9 +2738,52 @@ class Parser {
         depth = depth - 1
 
         if (depth === 0) {
-          return this.peek(offset + 1).value === '=>'
+          return this.arrowFollowsParameterList(offset)
         }
       }
+
+      offset = offset + 1
+    }
+
+    return false
+  }
+
+  arrowFollowsParameterList(closeParenOffset: number): boolean {
+    if (this.peek(closeParenOffset + 1).value === '=>') {
+      return true
+    }
+
+    if (this.peek(closeParenOffset + 1).value !== ':') {
+      return false
+    }
+
+    let braceDepth = 0
+    let bracketDepth = 0
+    let genericDepth = 0
+    let parenDepth = 0
+    let offset = closeParenOffset + 2
+
+    while (this.peek(offset).type !== 'eof') {
+      const token = this.peek(offset)
+
+      if (
+        token.value === '=>' &&
+        braceDepth === 0 &&
+        bracketDepth === 0 &&
+        genericDepth === 0 &&
+        parenDepth === 0
+      ) {
+        return true
+      }
+
+      if (token.value === '{') braceDepth = braceDepth + 1
+      else if (token.value === '}' && braceDepth > 0) braceDepth = braceDepth - 1
+      else if (token.value === '[') bracketDepth = bracketDepth + 1
+      else if (token.value === ']' && bracketDepth > 0) bracketDepth = bracketDepth - 1
+      else if (token.value === '<') genericDepth = genericDepth + 1
+      else if (token.value === '>' && genericDepth > 0) genericDepth = genericDepth - 1
+      else if (token.value === '(') parenDepth = parenDepth + 1
+      else if (token.value === ')' && parenDepth > 0) parenDepth = parenDepth - 1
 
       offset = offset + 1
     }

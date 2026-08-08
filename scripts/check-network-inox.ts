@@ -2,8 +2,9 @@ import assert from 'node:assert/strict'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { once } from 'node:events'
 import { readFile, rm } from 'node:fs/promises'
+import { createServer as createHttpServer, type Server as HttpServer } from 'node:http'
 import { createServer as createHttpsServer, type Server as HttpsServer } from 'node:https'
-import { createServer as createPortReservationServer } from 'node:net'
+import { createServer as createNetServer, type Server as NetServer } from 'node:net'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -19,12 +20,24 @@ async function main(): Promise<void> {
   const nonce = `network-${process.pid}-${Date.now()}`
 
   await buildExecutable()
+  const httpChunkedServer = await startHttpChunkedServer(nonce)
+  const invalidChunkedServer = await startInvalidChunkedServer()
   const httpsServer = await startHttpsServer(nonce)
 
-  const application = spawn(executable, [String(port), nonce, String(httpsServer.port)], {
-    cwd: repoRoot,
-    stdio: 'pipe'
-  })
+  const application = spawn(
+    executable,
+    [
+      String(port),
+      nonce,
+      String(httpsServer.port),
+      String(httpChunkedServer.port),
+      String(invalidChunkedServer.port)
+    ],
+    {
+      cwd: repoRoot,
+      stdio: 'pipe'
+    }
+  )
   let stdout = ''
   let stderr = ''
 
@@ -75,12 +88,82 @@ async function main(): Promise<void> {
       lines.includes('INOX_HTTP_CLIENT_CLOSED'),
       processFailure('HTTP client server не закрылся', stdout, stderr)
     )
+    assert.ok(
+      lines.includes('INOX_HTTP_CHUNKED_CLIENT_OK'),
+      processFailure('HTTP client не декодировал chunked response', stdout, stderr)
+    )
+    assert.ok(
+      lines.includes('INOX_HTTP_CHUNKED_ERRORS_OK'),
+      processFailure('HTTP client не отверг некорректный chunked framing', stdout, stderr)
+    )
     assert.ok(lines.includes('INOX_HTTPS_CLIENT_OK'), processFailure('HTTPS client не получил ответ', stdout, stderr))
   } finally {
     await stopProcess(application)
+    await closeHttpServer(httpChunkedServer.server)
+    await closeNetServer(invalidChunkedServer.server)
     await closeHttpsServer(httpsServer.server)
     await rm(buildRoot, { recursive: true, force: true })
   }
+}
+
+async function startInvalidChunkedServer(): Promise<{ server: NetServer; port: number }> {
+  const server = createNetServer((socket) => {
+    socket.once('data', (data) => {
+      const request = String(data)
+
+      if (request.includes(' /conflicting ')) {
+        socket.end(
+          'HTTP/1.1 200 OK\r\n' +
+          'Transfer-Encoding: chunked\r\n' +
+          'Content-Length: 1\r\n' +
+          'Connection: close\r\n' +
+          '\r\n' +
+          '1\r\nx\r\n0\r\n\r\n'
+        )
+        return
+      }
+
+      socket.end(
+        'HTTP/1.1 200 OK\r\n' +
+        'Transfer-Encoding: chunked\r\n' +
+        'Connection: close\r\n' +
+        '\r\n' +
+        '5\r\nabc'
+      )
+    })
+  })
+
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const address = server.address()
+  assert.ok(address !== null && typeof address !== 'string', 'Не удалось запустить invalid chunked test server')
+  return { server, port: address.port }
+}
+
+async function startHttpChunkedServer(nonce: string): Promise<{ server: HttpServer; port: number }> {
+  const server = createHttpServer((request, response) => {
+    const marker = request.headers['x-inox-chunked']
+    const valid = request.method === 'GET' && request.url === '/chunked' && marker === nonce
+    const prefix = valid ? 'http-chunked-' : 'http-failed-'
+    const suffix = valid ? `ok ${nonce}` : 'response'
+
+    response.statusCode = valid ? 200 : 400
+    response.setHeader('X-Inox-Chunked', typeof marker === 'string' ? marker : '')
+    response.setHeader('Transfer-Encoding', 'chunked')
+    response.setHeader('Trailer', 'X-Inox-Trailer')
+    response.flushHeaders()
+    response.write(prefix)
+    setTimeout(() => {
+      response.addTrailers({ 'X-Inox-Trailer': 'complete' })
+      response.end(suffix)
+    }, 5)
+  })
+
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const address = server.address()
+  assert.ok(address !== null && typeof address !== 'string', 'Не удалось запустить chunked HTTP test server')
+  return { server, port: address.port }
 }
 
 async function startHttpsServer(nonce: string): Promise<{ server: HttpsServer; port: number }> {
@@ -89,12 +172,19 @@ async function startHttpsServer(nonce: string): Promise<{ server: HttpsServer; p
   const server = createHttpsServer({ cert: certificate, key }, (request, response) => {
     const marker = request.headers['x-inox-https']
     const valid = request.method === 'GET' && request.url === '/secure' && marker === nonce
-    const body = valid ? `https-ok ${nonce}` : 'https-failed'
+    const prefix = valid ? 'https-chunked-' : 'https-failed-'
+    const suffix = valid ? `ok ${nonce}` : 'response'
 
     response.statusCode = valid ? 200 : 400
     response.setHeader('X-Inox-Https', typeof marker === 'string' ? marker : '')
-    response.setHeader('Content-Length', String(body.length))
-    response.end(body)
+    response.setHeader('Transfer-Encoding', 'chunked')
+    response.setHeader('Trailer', 'X-Inox-Trailer')
+    response.flushHeaders()
+    response.write(prefix)
+    setTimeout(() => {
+      response.addTrailers({ 'X-Inox-Trailer': 'complete' })
+      response.end(suffix)
+    }, 5)
   })
 
   server.listen(0, '127.0.0.1')
@@ -102,6 +192,26 @@ async function startHttpsServer(nonce: string): Promise<{ server: HttpsServer; p
   const address = server.address()
   assert.ok(address !== null && typeof address !== 'string', 'Не удалось запустить HTTPS test server')
   return { server, port: address.port }
+}
+
+async function closeHttpServer(server: HttpServer): Promise<void> {
+  if (!server.listening) {
+    return
+  }
+
+  const closed = once(server, 'close')
+  server.close()
+  await closed
+}
+
+async function closeNetServer(server: NetServer): Promise<void> {
+  if (!server.listening) {
+    return
+  }
+
+  const closed = once(server, 'close')
+  server.close()
+  await closed
 }
 
 async function closeHttpsServer(server: HttpsServer): Promise<void> {
@@ -165,7 +275,7 @@ async function fetchWithTimeout(url: string, milliseconds: number, headers: Reco
 }
 
 async function reservePort(): Promise<number> {
-  const reservation = createPortReservationServer()
+  const reservation = createNetServer()
   reservation.listen(0, '127.0.0.1')
   await once(reservation, 'listening')
 
