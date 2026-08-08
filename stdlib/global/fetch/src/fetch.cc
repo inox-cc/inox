@@ -578,6 +578,7 @@ static inox_status fetch_start_connection(FetchOperation* request) {
       request->host,
       request->port,
       request->host,
+      1,
       fetch_on_tls_connect,
       fetch_on_tls_data,
       fetch_on_tls_close,

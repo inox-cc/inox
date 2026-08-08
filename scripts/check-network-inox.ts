@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { once } from 'node:events'
-import { rm } from 'node:fs/promises'
+import { readFile, rm } from 'node:fs/promises'
+import { createServer as createHttpsServer, type Server as HttpsServer } from 'node:https'
 import { createServer as createPortReservationServer } from 'node:net'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -18,8 +19,9 @@ async function main(): Promise<void> {
   const nonce = `network-${process.pid}-${Date.now()}`
 
   await buildExecutable()
+  const httpsServer = await startHttpsServer(nonce)
 
-  const application = spawn(executable, [String(port), nonce], {
+  const application = spawn(executable, [String(port), nonce, String(httpsServer.port)], {
     cwd: repoRoot,
     stdio: 'pipe'
   })
@@ -73,10 +75,43 @@ async function main(): Promise<void> {
       lines.includes('INOX_HTTP_CLIENT_CLOSED'),
       processFailure('HTTP client server не закрылся', stdout, stderr)
     )
+    assert.ok(lines.includes('INOX_HTTPS_CLIENT_OK'), processFailure('HTTPS client не получил ответ', stdout, stderr))
   } finally {
     await stopProcess(application)
+    await closeHttpsServer(httpsServer.server)
     await rm(buildRoot, { recursive: true, force: true })
   }
+}
+
+async function startHttpsServer(nonce: string): Promise<{ server: HttpsServer; port: number }> {
+  const certificate = await readFile(join(repoRoot, 'tests/network/fixtures/https-cert.pem'))
+  const key = await readFile(join(repoRoot, 'tests/network/fixtures/https-key.pem'))
+  const server = createHttpsServer({ cert: certificate, key }, (request, response) => {
+    const marker = request.headers['x-inox-https']
+    const valid = request.method === 'GET' && request.url === '/secure' && marker === nonce
+    const body = valid ? `https-ok ${nonce}` : 'https-failed'
+
+    response.statusCode = valid ? 200 : 400
+    response.setHeader('X-Inox-Https', typeof marker === 'string' ? marker : '')
+    response.setHeader('Content-Length', String(body.length))
+    response.end(body)
+  })
+
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const address = server.address()
+  assert.ok(address !== null && typeof address !== 'string', 'Не удалось запустить HTTPS test server')
+  return { server, port: address.port }
+}
+
+async function closeHttpsServer(server: HttpsServer): Promise<void> {
+  if (!server.listening) {
+    return
+  }
+
+  const closed = once(server, 'close')
+  server.close()
+  await closed
 }
 
 async function buildExecutable(): Promise<void> {

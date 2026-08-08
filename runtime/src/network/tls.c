@@ -9,6 +9,7 @@ inox_status inox_tls_connect(
   const char* host,
   int port,
   const char* servername,
+  int verify_peer,
   inox_tls_connect_fn connect,
   inox_tls_data_fn data,
   inox_tls_close_fn close,
@@ -19,6 +20,7 @@ inox_status inox_tls_connect(
   (void)host;
   (void)port;
   (void)servername;
+  (void)verify_peer;
   (void)connect;
   (void)data;
   (void)close;
@@ -29,6 +31,17 @@ inox_status inox_tls_connect(
   }
 
   *out = 0;
+  return INOX_ERR_UNSUPPORTED;
+}
+
+inox_status inox_tls_client_socket(inox_tls_client* client, inox_value* out) {
+  (void)client;
+
+  if (out == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  *out = inox_undefined_value();
   return INOX_ERR_UNSUPPORTED;
 }
 

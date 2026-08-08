@@ -22,13 +22,14 @@ struct inox_tls_client {
   inox_tls_data_fn data;
   inox_tls_close_fn close;
   void* user;
+  int verify_peer;
   int handshake_done;
   int connect_reported;
   int closing;
 };
 
-static inox_status inox_tls_configure_verify(SSL_CTX* ctx);
-static inox_status inox_tls_client_setup_ssl(inox_tls_client* client, const char* servername);
+static inox_status inox_tls_configure_verify(SSL_CTX* ctx, int verify_peer);
+static inox_status inox_tls_client_setup_ssl(inox_tls_client* client, const char* servername, int verify_peer);
 static inox_status inox_tls_on_tcp_connect(void* user, const inox_value* args, size_t arg_count, inox_value* out);
 static inox_status inox_tls_on_tcp_data(void* user, const inox_value* args, size_t arg_count, inox_value* out);
 static inox_status inox_tls_on_tcp_close(void* user, const inox_value* args, size_t arg_count, inox_value* out);
@@ -47,6 +48,7 @@ inox_status inox_tls_connect(
   const char* host,
   int port,
   const char* servername,
+  int verify_peer,
   inox_tls_connect_fn connect,
   inox_tls_data_fn data,
   inox_tls_close_fn close,
@@ -73,8 +75,9 @@ inox_status inox_tls_connect(
   client->data = data;
   client->close = close;
   client->user = user;
+  client->verify_peer = verify_peer;
 
-  inox_status status = inox_tls_client_setup_ssl(client, servername == 0 ? host : servername);
+  inox_status status = inox_tls_client_setup_ssl(client, servername == 0 ? host : servername, verify_peer);
 
   if (status != INOX_OK) {
     inox_tls_client_free(client);
@@ -119,6 +122,16 @@ inox_status inox_tls_connect(
   }
 
   *out = client;
+  return INOX_OK;
+}
+
+inox_status inox_tls_client_socket(inox_tls_client* client, inox_value* out) {
+  if (client == 0 || out == 0 || client->socket.tag != INOX_TAG_CLASS_INSTANCE) {
+    return INOX_ERR_TYPE;
+  }
+
+  *out = client->socket.raw();
+  inox_retain(*out);
   return INOX_OK;
 }
 
@@ -234,9 +247,14 @@ void inox_tls_client_close(inox_tls_client* client) {
   }
 }
 
-static inox_status inox_tls_configure_verify(SSL_CTX* ctx) {
+static inox_status inox_tls_configure_verify(SSL_CTX* ctx, int verify_peer) {
   if (ctx == 0) {
     return INOX_ERR_TYPE;
+  }
+
+  if (!verify_peer) {
+    SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, 0);
+    return INOX_OK;
   }
 
   SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, 0);
@@ -259,7 +277,7 @@ static inox_status inox_tls_configure_verify(SSL_CTX* ctx) {
 #endif
 }
 
-static inox_status inox_tls_client_setup_ssl(inox_tls_client* client, const char* servername) {
+static inox_status inox_tls_client_setup_ssl(inox_tls_client* client, const char* servername, int verify_peer) {
   if (client == 0 || servername == 0) {
     return INOX_ERR_TYPE;
   }
@@ -270,7 +288,7 @@ static inox_status inox_tls_client_setup_ssl(inox_tls_client* client, const char
     return INOX_ERR_OOM;
   }
 
-  inox_status status = inox_tls_configure_verify(client->ctx);
+  inox_status status = inox_tls_configure_verify(client->ctx, verify_peer);
 
   if (status != INOX_OK) {
     return status;
@@ -282,7 +300,11 @@ static inox_status inox_tls_client_setup_ssl(inox_tls_client* client, const char
     return INOX_ERR_OOM;
   }
 
-  if (SSL_set_tlsext_host_name(client->ssl, servername) != 1 || SSL_set1_host(client->ssl, servername) != 1) {
+  if (SSL_set_tlsext_host_name(client->ssl, servername) != 1) {
+    return INOX_ERR_FIELD;
+  }
+
+  if (verify_peer && SSL_set1_host(client->ssl, servername) != 1) {
     return INOX_ERR_FIELD;
   }
 
@@ -413,7 +435,7 @@ static inox_status inox_tls_drive_handshake(inox_tls_client* client) {
   }
 
   if (result == 1) {
-    if (SSL_get_verify_result(client->ssl) != X509_V_OK) {
+    if (client->verify_peer && SSL_get_verify_result(client->ssl) != X509_V_OK) {
       return inox_tls_fail_async(client, INOX_ERR_FIELD);
     }
 

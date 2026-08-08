@@ -17,6 +17,7 @@
 #include "inox/loop.h"
 #include "inox/net.h"
 #include "inox/object.h"
+#include "inox/tls.h"
 
 namespace {
 
@@ -354,7 +355,11 @@ public:
   std::vector<inox::Callback> finish_listeners_;
   std::vector<inox::Callback> close_listeners_;
   std::vector<inox::Callback> error_listeners_;
+  HttpClientTransportKind transport_kind_;
+  bool verify_peer_;
+  std::optional<inox::String> server_name_;
   NetSocket socket_;
+  inox_tls_client* tls_;
   std::shared_ptr<HttpRequestState> response_;
   std::shared_ptr<HttpClientRequestState> native_owner_;
   std::optional<std::size_t> response_content_length_;
@@ -364,14 +369,22 @@ public:
   bool sent_;
   bool finished_;
   bool response_started_;
+  bool failed_;
   bool closed_;
 
-  HttpClientRequestState(inox::String host, double port, inox::String method, inox::String path);
+  HttpClientRequestState(
+    inox::String host,
+    double port,
+    inox::String method,
+    inox::String path,
+    const HttpClientTransportOptions& transport
+  );
 
   static std::shared_ptr<HttpClientRequestState> create(
     inox::StringView url,
     const HttpRequestOptions* options,
-    inox::Callback listener
+    inox::Callback listener,
+    const HttpClientTransportOptions& transport
   );
   void applyHeaders(const inox::Value& headers);
   void destroy();
@@ -798,6 +811,15 @@ inox_status onClientEnd(void* context, const inox_value* args, std::size_t arg_c
 inox_status onClientClose(void* context, const inox_value* args, std::size_t arg_count, inox_value* out);
 inox_status onClientError(void* context, const inox_value* args, std::size_t arg_count, inox_value* out);
 inox_status onClientFinish(void* context, const inox_value* args, std::size_t arg_count, inox_value* out);
+inox_status onClientTlsConnect(void* context, inox_tls_client* client, inox_status status);
+inox_status onClientTlsData(
+  void* context,
+  inox_tls_client* client,
+  const char* bytes,
+  std::size_t length
+);
+void onClientTlsClose(void* context, inox_tls_client* client);
+inox_status onClientTlsWrite(void* context, inox_tls_client* client, inox_status status);
 
 enum class RequestParseResult {
   incomplete,
@@ -1779,6 +1801,7 @@ void HttpConnectionState::sendError(double status, inox::StringView message) {
 
 bool parseClientUrl(
   inox::StringView url,
+  HttpClientTransportKind transport_kind,
   inox::String& host,
   double& port,
   inox::String& path
@@ -1787,11 +1810,18 @@ bool parseClientUrl(
     return true;
   }
 
-  constexpr char prefix[] = "http://";
-  constexpr std::size_t prefix_length = sizeof(prefix) - 1;
+  const bool secure = transport_kind == HttpClientTransportKind::tls;
+  constexpr char http_prefix[] = "http://";
+  constexpr char https_prefix[] = "https://";
+  const char* prefix = secure ? https_prefix : http_prefix;
+  const std::size_t prefix_length = secure ? sizeof(https_prefix) - 1 : sizeof(http_prefix) - 1;
 
   if (url.len < prefix_length || std::memcmp(url.bytes, prefix, prefix_length) != 0) {
-    throwHttpError("TypeError: node:http request URL must use http://");
+    throwHttpError(
+      secure
+        ? "TypeError: node:https request URL must use https://"
+        : "TypeError: node:http request URL must use http://"
+    );
     return false;
   }
 
@@ -1804,7 +1834,11 @@ bool parseClientUrl(
   }
 
   if (cursor == host_start) {
-    throwHttpError("TypeError: node:http request URL requires a host");
+    throwHttpError(
+      secure
+        ? "TypeError: node:https request URL requires a host"
+        : "TypeError: node:http request URL requires a host"
+    );
     return false;
   }
 
@@ -1814,7 +1848,7 @@ bool parseClientUrl(
     return false;
   }
 
-  port = 80;
+  port = secure ? 443 : 80;
 
   if (cursor < url.len && url.bytes[cursor] == ':') {
     cursor += 1;
@@ -1827,7 +1861,11 @@ bool parseClientUrl(
     }
 
     if (cursor == port_start || parsed_port == 0 || parsed_port > 65535) {
-      throwHttpError("TypeError: node:http request URL port is invalid");
+      throwHttpError(
+        secure
+          ? "TypeError: node:https request URL port is invalid"
+          : "TypeError: node:http request URL port is invalid"
+      );
       return false;
     }
 
@@ -1844,7 +1882,11 @@ bool parseClientUrl(
       query_path.push_back('/');
       query_path.append(url.bytes + cursor, url.len - cursor);
     } catch (const std::bad_alloc&) {
-      throwHttpError("TypeError: node:http request URL allocation failed");
+      throwHttpError(
+        secure
+          ? "TypeError: node:https request URL allocation failed"
+          : "TypeError: node:http request URL allocation failed"
+      );
       return false;
     }
 
@@ -1870,12 +1912,17 @@ bool validClientConfiguration(
   inox::StringView host,
   double port,
   inox::StringView method,
-  inox::StringView path
+  inox::StringView path,
+  HttpClientTransportKind transport_kind
 ) {
   if (host.len == 0 || !validHeaderValue(host) || !std::isfinite(port) || std::floor(port) != port ||
       port < 1 || port > 65535 || !validHeaderName(method) || path.len == 0 || path.bytes[0] != '/' ||
       !validHeaderValue(path)) {
-    throwHttpError("TypeError: node:http request options are invalid");
+    throwHttpError(
+      transport_kind == HttpClientTransportKind::tls
+        ? "TypeError: node:https request options are invalid"
+        : "TypeError: node:http request options are invalid"
+    );
     return false;
   }
 
@@ -1886,7 +1933,8 @@ HttpClientRequestState::HttpClientRequestState(
   inox::String host,
   double port,
   inox::String method,
-  inox::String path
+  inox::String path,
+  const HttpClientTransportOptions& transport
 )
   : host_(std::move(host)),
     method_(std::move(method)),
@@ -1899,7 +1947,11 @@ HttpClientRequestState::HttpClientRequestState(
     finish_listeners_(),
     close_listeners_(),
     error_listeners_(),
+    transport_kind_(transport.kind()),
+    verify_peer_(transport.verifyPeer()),
+    server_name_(transport.serverName()),
     socket_(),
+    tls_(nullptr),
     response_(),
     native_owner_(),
     response_content_length_(),
@@ -1909,6 +1961,7 @@ HttpClientRequestState::HttpClientRequestState(
     sent_(false),
     finished_(false),
     response_started_(false),
+    failed_(false),
     closed_(false) {
   try {
     headers_.reserve(8);
@@ -1922,20 +1975,25 @@ HttpClientRequestState::HttpClientRequestState(
 std::shared_ptr<HttpClientRequestState> HttpClientRequestState::create(
   inox::StringView url,
   const HttpRequestOptions* options,
-  inox::Callback listener
+  inox::Callback listener,
+  const HttpClientTransportOptions& transport
 ) {
   inox::String host("127.0.0.1");
   inox::String method("GET");
   inox::String path("/");
-  double port = 80;
+  double port = transport.kind() == HttpClientTransportKind::tls ? 443 : 80;
 
-  if (inox::thrown() || !parseClientUrl(url, host, port, path)) {
+  if (inox::thrown() || !parseClientUrl(url, transport.kind(), host, port, path)) {
     return {};
   }
 
   if (options != nullptr) {
     if (!options->valid()) {
-      throwHttpError("TypeError: node:http request options are invalid");
+      throwHttpError(
+        transport.kind() == HttpClientTransportKind::tls
+          ? "TypeError: node:https request options are invalid"
+          : "TypeError: node:http request options are invalid"
+      );
       return {};
     }
 
@@ -1946,7 +2004,7 @@ std::shared_ptr<HttpClientRequestState> HttpClientRequestState::create(
     if (options->port()) port = *options->port();
   }
 
-  if (!validClientConfiguration(host, port, method, path)) {
+  if (!validClientConfiguration(host, port, method, path, transport.kind())) {
     return {};
   }
 
@@ -1957,7 +2015,8 @@ std::shared_ptr<HttpClientRequestState> HttpClientRequestState::create(
       std::move(host),
       port,
       std::move(method),
-      std::move(path)
+      std::move(path),
+      transport
     );
   } catch (const std::bad_alloc&) {
     throwHttpError("TypeError: HttpClientRequest allocation failed");
@@ -1986,6 +2045,49 @@ std::shared_ptr<HttpClientRequestState> HttpClientRequestState::create(
   }
 
   request->native_owner_ = request;
+  if (transport.kind() == HttpClientTransportKind::tls) {
+    std::string host_bytes;
+    std::string server_name_bytes;
+
+    try {
+      const inox::StringView request_host = request->host_;
+      host_bytes.assign(request_host.bytes, request_host.len);
+
+      if (request->server_name_) {
+        const inox::StringView server_name = *request->server_name_;
+        server_name_bytes.assign(server_name.bytes, server_name.len);
+      } else {
+        server_name_bytes = host_bytes;
+      }
+    } catch (const std::bad_alloc&) {
+      inox::throw_out_of_memory();
+      request->native_owner_.reset();
+      return {};
+    }
+
+    const inox_status status = inox_tls_connect(
+      inox::loop(),
+      host_bytes.c_str(),
+      static_cast<int>(request->port_),
+      server_name_bytes.c_str(),
+      request->verify_peer_ ? 1 : 0,
+      onClientTlsConnect,
+      onClientTlsData,
+      onClientTlsClose,
+      request.get(),
+      &request->tls_
+    );
+
+    if (status != INOX_OK) {
+      if (status == INOX_ERR_OOM) inox::throw_out_of_memory();
+      else throwHttpError("TypeError: node:https connection failed");
+      request->native_owner_.reset();
+      return {};
+    }
+
+    return request;
+  }
+
   inox::Callback connect = makeWeakCallback(request, onClientConnect);
   inox::Callback data = makeWeakCallback(request, onClientData);
   inox::Callback end = makeWeakCallback(request, onClientEnd);
@@ -2051,7 +2153,11 @@ void HttpClientRequestState::applyHeaders(const inox::Value& headers) {
 
 void HttpClientRequestState::destroy() {
   if (!closed_) {
-    socket_.destroy();
+    if (transport_kind_ == HttpClientTransportKind::tls) {
+      if (tls_ != nullptr) (void)inox_tls_client_destroy(tls_);
+    } else {
+      socket_.destroy();
+    }
   }
 }
 
@@ -2232,12 +2338,26 @@ void HttpClientRequestState::onData(inox::StringView data) {
     return;
   }
 
+  NetSocket response_socket = socket_;
+
+  if (transport_kind_ == HttpClientTransportKind::tls) {
+    inox_value raw_socket = inox_undefined_value();
+
+    if (tls_ == nullptr || inox_tls_client_socket(tls_, &raw_socket) != INOX_OK) {
+      inox::Value error = materializeHttpError("HTTPS response socket is unavailable");
+      if (!inox::thrown()) onError(error);
+      return;
+    }
+
+    response_socket = NetSocket(inox::adopt(raw_socket));
+  }
+
   try {
     response_ = std::make_shared<HttpRequestState>(
       std::move(headers),
       inox::String(response_bytes_.data() + parsed.version_start, parsed.version_length),
       inox::String(""),
-      socket_,
+      std::move(response_socket),
       inox::String(""),
       parsed.status_code,
       inox::String(response_bytes_.data() + parsed.status_message_start, parsed.status_message_length)
@@ -2305,10 +2425,11 @@ void HttpClientRequestState::onEnd() {
 }
 
 void HttpClientRequestState::onError(const inox::Value& error) {
-  if (closed_) {
+  if (closed_ || failed_) {
     return;
   }
 
+  failed_ = true;
   const std::array<inox::Value, 1> arguments = {error};
   callHttpListeners(error_listeners_, arguments);
 
@@ -2317,7 +2438,7 @@ void HttpClientRequestState::onError(const inox::Value& error) {
   }
 
   if (!closed_) {
-    socket_.destroy();
+    destroy();
   }
 }
 
@@ -2365,7 +2486,9 @@ void HttpClientRequestState::send() {
       request.append("Host: ");
       request.append(host.bytes, host.len);
 
-      if (port_ != 80) {
+      const double default_port = transport_kind_ == HttpClientTransportKind::tls ? 443 : 80;
+
+      if (port_ != default_port) {
         request.push_back(':');
         request.append(std::to_string(static_cast<int>(port_)));
       }
@@ -2399,13 +2522,33 @@ void HttpClientRequestState::send() {
     return;
   }
 
-  inox::Callback finish = makeWeakCallback(shared_from_this(), onClientFinish);
+  sent_ = true;
 
-  if (inox::thrown()) {
+  if (transport_kind_ == HttpClientTransportKind::tls) {
+    const inox_status status = inox_tls_client_write_with_callback(
+      tls_,
+      request.data(),
+      request.size(),
+      onClientTlsWrite,
+      this
+    );
+
+    if (status != INOX_OK) {
+      sent_ = false;
+      inox::Value error = materializeHttpError("HTTPS request write failed");
+      if (!inox::thrown()) onError(error);
+    }
+
     return;
   }
 
-  sent_ = true;
+  inox::Callback finish = makeWeakCallback(shared_from_this(), onClientFinish);
+
+  if (inox::thrown()) {
+    sent_ = false;
+    return;
+  }
+
   socket_.end(inox::StringView(request.data(), request.size()), std::move(finish));
 
   if (inox::thrown()) {
@@ -3002,7 +3145,122 @@ inox_status onClientFinish(
   return callbackStatus();
 }
 
+inox_status onClientTlsConnect(void* context, inox_tls_client* client, inox_status status) {
+  auto* raw_request = static_cast<HttpClientRequestState*>(context);
+
+  if (raw_request == nullptr || client == nullptr) {
+    return INOX_ERR_TYPE;
+  }
+
+  std::shared_ptr<HttpClientRequestState> request = raw_request->native_owner_;
+
+  if (!request || request->tls_ != client) {
+    return INOX_OK;
+  }
+
+  if (status == INOX_OK) {
+    request->onConnect();
+  } else {
+    inox::Value error = materializeHttpError("HTTPS connection failed");
+    if (!inox::thrown()) request->onError(error);
+  }
+
+  return callbackStatus();
+}
+
+inox_status onClientTlsData(
+  void* context,
+  inox_tls_client* client,
+  const char* bytes,
+  std::size_t length
+) {
+  auto* raw_request = static_cast<HttpClientRequestState*>(context);
+
+  if (raw_request == nullptr || client == nullptr || (bytes == nullptr && length != 0)) {
+    return INOX_ERR_TYPE;
+  }
+
+  std::shared_ptr<HttpClientRequestState> request = raw_request->native_owner_;
+
+  if (request && request->tls_ == client) {
+    request->onData(inox::StringView(bytes, length));
+  }
+
+  return callbackStatus();
+}
+
+void onClientTlsClose(void* context, inox_tls_client* client) {
+  auto* raw_request = static_cast<HttpClientRequestState*>(context);
+
+  if (raw_request == nullptr || client == nullptr) {
+    return;
+  }
+
+  std::shared_ptr<HttpClientRequestState> request = raw_request->native_owner_;
+
+  if (!request || request->tls_ != client) {
+    return;
+  }
+
+  request->tls_ = nullptr;
+  if (!request->failed_) request->onEnd();
+  request->onClose();
+}
+
+inox_status onClientTlsWrite(void* context, inox_tls_client* client, inox_status status) {
+  auto* raw_request = static_cast<HttpClientRequestState*>(context);
+
+  if (raw_request == nullptr || client == nullptr) {
+    return INOX_ERR_TYPE;
+  }
+
+  std::shared_ptr<HttpClientRequestState> request = raw_request->native_owner_;
+
+  if (!request || request->tls_ != client) {
+    return INOX_OK;
+  }
+
+  if (status == INOX_OK) {
+    request->onFinish();
+  } else {
+    inox::Value error = materializeHttpError("HTTPS request write failed");
+    if (!inox::thrown()) request->onError(error);
+  }
+
+  return callbackStatus();
+}
+
 } // namespace
+
+HttpClientTransportOptions HttpClientTransportOptions::plain() {
+  return HttpClientTransportOptions(HttpClientTransportKind::plain, true, std::nullopt);
+}
+
+HttpClientTransportOptions HttpClientTransportOptions::tls(
+  bool verify_peer,
+  std::optional<inox::String> server_name
+) {
+  return HttpClientTransportOptions(HttpClientTransportKind::tls, verify_peer, std::move(server_name));
+}
+
+HttpClientTransportOptions::HttpClientTransportOptions(
+  HttpClientTransportKind kind,
+  bool verify_peer,
+  std::optional<inox::String> server_name
+)
+  : kind_(kind), verify_peer_(verify_peer), server_name_(std::move(server_name)) {}
+
+HttpClientTransportKind HttpClientTransportOptions::kind() const {
+  return kind_;
+}
+
+bool HttpClientTransportOptions::verifyPeer() const {
+  return verify_peer_;
+}
+
+const std::optional<inox::String>& HttpClientTransportOptions::serverName() const {
+  return server_name_;
+}
 
 HttpListenOptions::HttpListenOptions() : valid_(true), port_(), host_(), backlog_() {}
 
@@ -3641,16 +3899,18 @@ HttpServer HttpModule::createServer(inox::Callback listener) const {
 
 namespace {
 
-HttpClientRequest createHttpClientRequest(
+HttpClientRequest createHttpClientRequestImpl(
   inox::StringView url,
   const HttpRequestOptions* options,
   inox::Callback listener,
-  bool end_immediately
+  bool end_immediately,
+  const HttpClientTransportOptions& transport
 ) {
   std::shared_ptr<HttpClientRequestState> state = HttpClientRequestState::create(
     url,
     options,
-    std::move(listener)
+    std::move(listener),
+    transport
   );
   HttpClientRequest request = materializeClientRequest(state);
 
@@ -3663,16 +3923,35 @@ HttpClientRequest createHttpClientRequest(
 
 } // namespace
 
+HttpClientRequest createHttpClientRequest(
+  inox::StringView url,
+  inox::Callback listener,
+  bool end_immediately,
+  const HttpClientTransportOptions& transport
+) {
+  return createHttpClientRequestImpl(url, nullptr, std::move(listener), end_immediately, transport);
+}
+
+HttpClientRequest createHttpClientRequest(
+  inox::StringView url,
+  const HttpRequestOptions& options,
+  inox::Callback listener,
+  bool end_immediately,
+  const HttpClientTransportOptions& transport
+) {
+  return createHttpClientRequestImpl(url, &options, std::move(listener), end_immediately, transport);
+}
+
 HttpClientRequest HttpModule::get(inox::StringView url) const {
-  return createHttpClientRequest(url, nullptr, inox::Callback(), true);
+  return createHttpClientRequest(url, inox::Callback(), true, HttpClientTransportOptions::plain());
 }
 
 HttpClientRequest HttpModule::get(inox::StringView url, inox::Callback listener) const {
-  return createHttpClientRequest(url, nullptr, std::move(listener), true);
+  return createHttpClientRequest(url, std::move(listener), true, HttpClientTransportOptions::plain());
 }
 
 HttpClientRequest HttpModule::get(inox::StringView url, const HttpRequestOptions& options) const {
-  return createHttpClientRequest(url, &options, inox::Callback(), true);
+  return createHttpClientRequest(url, options, inox::Callback(), true, HttpClientTransportOptions::plain());
 }
 
 HttpClientRequest HttpModule::get(
@@ -3680,27 +3959,31 @@ HttpClientRequest HttpModule::get(
   const HttpRequestOptions& options,
   inox::Callback listener
 ) const {
-  return createHttpClientRequest(url, &options, std::move(listener), true);
+  return createHttpClientRequest(url, options, std::move(listener), true, HttpClientTransportOptions::plain());
 }
 
 HttpClientRequest HttpModule::get(const HttpRequestOptions& options) const {
-  return createHttpClientRequest(inox::StringView(), &options, inox::Callback(), true);
+  return createHttpClientRequest(
+    inox::StringView(), options, inox::Callback(), true, HttpClientTransportOptions::plain()
+  );
 }
 
 HttpClientRequest HttpModule::get(const HttpRequestOptions& options, inox::Callback listener) const {
-  return createHttpClientRequest(inox::StringView(), &options, std::move(listener), true);
+  return createHttpClientRequest(
+    inox::StringView(), options, std::move(listener), true, HttpClientTransportOptions::plain()
+  );
 }
 
 HttpClientRequest HttpModule::request(inox::StringView url) const {
-  return createHttpClientRequest(url, nullptr, inox::Callback(), false);
+  return createHttpClientRequest(url, inox::Callback(), false, HttpClientTransportOptions::plain());
 }
 
 HttpClientRequest HttpModule::request(inox::StringView url, inox::Callback listener) const {
-  return createHttpClientRequest(url, nullptr, std::move(listener), false);
+  return createHttpClientRequest(url, std::move(listener), false, HttpClientTransportOptions::plain());
 }
 
 HttpClientRequest HttpModule::request(inox::StringView url, const HttpRequestOptions& options) const {
-  return createHttpClientRequest(url, &options, inox::Callback(), false);
+  return createHttpClientRequest(url, options, inox::Callback(), false, HttpClientTransportOptions::plain());
 }
 
 HttpClientRequest HttpModule::request(
@@ -3708,15 +3991,19 @@ HttpClientRequest HttpModule::request(
   const HttpRequestOptions& options,
   inox::Callback listener
 ) const {
-  return createHttpClientRequest(url, &options, std::move(listener), false);
+  return createHttpClientRequest(url, options, std::move(listener), false, HttpClientTransportOptions::plain());
 }
 
 HttpClientRequest HttpModule::request(const HttpRequestOptions& options) const {
-  return createHttpClientRequest(inox::StringView(), &options, inox::Callback(), false);
+  return createHttpClientRequest(
+    inox::StringView(), options, inox::Callback(), false, HttpClientTransportOptions::plain()
+  );
 }
 
 HttpClientRequest HttpModule::request(const HttpRequestOptions& options, inox::Callback listener) const {
-  return createHttpClientRequest(inox::StringView(), &options, std::move(listener), false);
+  return createHttpClientRequest(
+    inox::StringView(), options, std::move(listener), false, HttpClientTransportOptions::plain()
+  );
 }
 
 const HttpModule http;

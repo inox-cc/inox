@@ -126,6 +126,49 @@ public:
   bool write(const Uint8Array& body);
 };
 
+enum class HttpClientTransportKind {
+  plain,
+  tls
+};
+
+class HttpClientTransportOptions {
+public:
+  static HttpClientTransportOptions plain();
+  static HttpClientTransportOptions tls(
+    bool verify_peer = true,
+    std::optional<inox::String> server_name = std::nullopt
+  );
+
+  HttpClientTransportKind kind() const;
+  bool verifyPeer() const;
+  const std::optional<inox::String>& serverName() const;
+
+private:
+  HttpClientTransportOptions(
+    HttpClientTransportKind kind,
+    bool verify_peer,
+    std::optional<inox::String> server_name
+  );
+
+  HttpClientTransportKind kind_;
+  bool verify_peer_;
+  std::optional<inox::String> server_name_;
+};
+
+HttpClientRequest createHttpClientRequest(
+  inox::StringView url,
+  inox::Callback listener,
+  bool end_immediately,
+  const HttpClientTransportOptions& transport
+);
+HttpClientRequest createHttpClientRequest(
+  inox::StringView url,
+  const HttpRequestOptions& options,
+  inox::Callback listener,
+  bool end_immediately,
+  const HttpClientTransportOptions& transport
+);
+
 class HttpResponse : public inox::Value {
 public:
   HttpResponse();

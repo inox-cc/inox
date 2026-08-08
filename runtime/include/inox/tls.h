@@ -20,12 +20,14 @@ inox_status inox_tls_connect(
   const char* host,
   int port,
   const char* servername,
+  int verify_peer,
   inox_tls_connect_fn connect,
   inox_tls_data_fn data,
   inox_tls_close_fn close,
   void* user,
   inox_tls_client** out
 );
+inox_status inox_tls_client_socket(inox_tls_client* client, inox_value* out);
 inox_status inox_tls_client_write(inox_tls_client* client, const char* bytes, size_t len);
 inox_status inox_tls_client_write_with_callback(
   inox_tls_client* client,
