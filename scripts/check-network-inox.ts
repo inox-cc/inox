@@ -3,7 +3,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { once } from 'node:events'
 import { readFile, rm } from 'node:fs/promises'
 import { createServer as createHttpServer, get as getHttp, type Server as HttpServer } from 'node:http'
-import { createServer as createHttpsServer, type Server as HttpsServer } from 'node:https'
+import { createServer as createHttpsServer, request as requestHttps, type Server as HttpsServer } from 'node:https'
 import { connect as connectNetSocket, createServer as createNetServer, type Server as NetServer } from 'node:net'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -21,6 +21,7 @@ async function main(): Promise<void> {
   const httpKeepAliveServerPort = await reservePort()
   const httpStreamingServerPort = await reservePort()
   const httpIncomingStreamingServerPort = await reservePort()
+  const httpsServerPort = await reservePort()
   const nonce = `network-${process.pid}-${Date.now()}`
 
   await buildExecutable()
@@ -47,7 +48,10 @@ async function main(): Promise<void> {
       String(httpStreamingServerPort),
       String(httpStreamingClientServer.port),
       String(httpsStreamingClientServer.port),
-      String(httpIncomingStreamingServerPort)
+      String(httpIncomingStreamingServerPort),
+      String(httpsServerPort),
+      join(repoRoot, 'tests/network/fixtures/https-cert.pem'),
+      join(repoRoot, 'tests/network/fixtures/https-key.pem')
     ],
     {
       cwd: repoRoot,
@@ -95,11 +99,18 @@ async function main(): Promise<void> {
       () => stdout,
       () => stderr
     )
+    await waitForLine(
+      application,
+      `INOX_HTTPS_SERVER_READY ${nonce} ${httpsServerPort}`,
+      () => stdout,
+      () => stderr
+    )
 
     await checkChunkedHttpServer(httpChunkedServerPort, nonce)
     await checkHttpKeepAliveServer(httpKeepAliveServerPort, nonce)
     await checkHttpStreamingServer(httpStreamingServerPort, nonce)
     await checkHttpIncomingStreamingServer(httpIncomingStreamingServerPort, nonce)
+    await checkHttpsServer(httpsServerPort, nonce)
 
     const response = await fetchWithTimeout(`http://127.0.0.1:${port}/network`, 2_000, {
       'X-Inox-Test': nonce
@@ -194,6 +205,10 @@ async function main(): Promise<void> {
       processFailure('HTTP server не доставил входящее тело по мере получения', stdout, stderr)
     )
     assert.ok(lines.includes('INOX_HTTPS_CLIENT_OK'), processFailure('HTTPS client не получил ответ', stdout, stderr))
+    assert.ok(
+      lines.includes('INOX_HTTPS_SERVER_OK'),
+      processFailure('HTTPS server не завершил acceptance', stdout, stderr)
+    )
   } finally {
     await stopProcess(application)
     await closeHttpServer(httpChunkedServer.server)
@@ -730,6 +745,81 @@ async function checkHttpIncomingStreamingServer(port: number, nonce: string): Pr
     'GET /shutdown HTTP/1.1\r\n' + 'Host: 127.0.0.1\r\n' + 'Connection: close\r\n' + '\r\n'
   ])
   assert.match(shutdown, /^HTTP\/1\.1 200 /)
+}
+
+async function requestHttpsServer(
+  port: number,
+  path: string,
+  method: string,
+  headers: Record<string, string>,
+  bodyChunks: string[]
+): Promise<{
+  readonly statusCode: number
+  readonly headers: Record<string, string | string[] | undefined>
+  readonly body: string
+}> {
+  return await new Promise((resolve, reject) => {
+    const request = requestHttps(
+      {
+        host: '127.0.0.1',
+        port,
+        path,
+        method,
+        headers,
+        rejectUnauthorized: false
+      },
+      (response) => {
+        let body = ''
+        response.setEncoding('utf8')
+        response.on('data', (chunk) => {
+          body = body + chunk
+        })
+        response.on('end', () => {
+          resolve({ statusCode: response.statusCode ?? 0, headers: response.headers, body })
+        })
+      }
+    )
+
+    request.on('error', reject)
+
+    let chunkIndex = 0
+    const sendNext = (): void => {
+      if (chunkIndex >= bodyChunks.length) {
+        request.end()
+        return
+      }
+
+      request.write(bodyChunks[chunkIndex])
+      chunkIndex = chunkIndex + 1
+      setTimeout(sendNext, 150)
+    }
+
+    sendNext()
+  })
+}
+
+async function checkHttpsServer(port: number, nonce: string): Promise<void> {
+  const body = `https-server-body ${nonce}`
+  const split = Math.max(1, Math.floor(body.length / 2))
+  const response = await requestHttpsServer(
+    port,
+    '/network',
+    'POST',
+    {
+      'Content-Length': String(body.length),
+      'X-Inox-Https-Server': nonce
+    },
+    [body.slice(0, split), body.slice(split)]
+  )
+
+  assert.equal(response.statusCode, 200, response.body)
+  assert.equal(response.headers['content-type'], 'text/plain; charset=utf-8')
+  assert.equal(response.headers['x-inox-https-server'], nonce)
+  assert.equal(response.body, `https-server-ok ${nonce}`)
+
+  const shutdown = await requestHttpsServer(port, '/shutdown', 'GET', { Connection: 'close' }, [])
+  assert.equal(shutdown.statusCode, 200)
+  assert.equal(shutdown.body, 'shutdown')
 }
 
 async function checkChunkedHttpServer(port: number, nonce: string): Promise<void> {

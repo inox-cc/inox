@@ -12,8 +12,14 @@ const runtimeRequirement = libraryId
 const runtimeRequirements = [runtimeRequirement]
 const requestTypeId = 'node:http#IncomingMessage'
 const clientRequestTypeId = 'node:http#ClientRequest'
+const serverTypeId = 'node:http#Server'
+const responseTypeId = 'node:http#ServerResponse'
 
-const operations: LibraryOperationDescriptor[] = [clientCreateOperation('get'), clientCreateOperation('request')]
+const operations: LibraryOperationDescriptor[] = [
+  createServerOperation(),
+  clientCreateOperation('get'),
+  clientCreateOperation('request')
+]
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
@@ -44,6 +50,39 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       ]
     }
   ]
+}
+
+function createServerOperation(): LibraryOperationDescriptor {
+  const callback = requestCallbackArgument()
+  const options = serverOptionsArgument()
+
+  return {
+    libraryId,
+    bindingId: moduleBinding('createServer'),
+    bindingAliases: [moduleBinding('default.createServer')],
+    operationId: `${libraryId}#createServer`,
+    kind: 'call',
+    runtimeRequirements,
+    cExpression: 'https.createServer',
+    cFailureMode: 'thrown',
+    minArgs: 1,
+    maxArgs: 2,
+    argumentChecks: [options, callback],
+    variants: [
+      operationVariant(1, 1, ['value'], {
+        argumentChecks: [options],
+        cArgumentAdapters: ['HttpsServerOptions($value)']
+      }),
+      operationVariant(2, 2, ['value', 'runtime-callback'], {
+        argumentChecks: [options, callback],
+        cArgumentAdapters: ['HttpsServerOptions($value)', ''],
+        cArgumentSources: [null, { argumentIndex: 1 }],
+        callbackLifetime: 'event-loop'
+      })
+    ],
+    resultTypeRef: nominalTypeRef(serverTypeId),
+    callbackLifetime: 'event-loop'
+  }
 }
 
 function clientCreateOperation(name: 'get' | 'request'): LibraryOperationDescriptor {
@@ -166,6 +205,17 @@ function responseCallbackArgument(): LibraryArgumentCheckDescriptor {
   }
 }
 
+function requestCallbackArgument(): LibraryArgumentCheckDescriptor {
+  return {
+    valueTypes: ['function'],
+    functionParameters: [
+      { name: 'request', valueType: 'object', resultTypeId: requestTypeId },
+      { name: 'response', valueType: 'object', resultTypeId: responseTypeId }
+    ],
+    functionReturnType: 'void'
+  }
+}
+
 function requestOptionsArgument(): LibraryArgumentCheckDescriptor {
   return {
     valueTypes: ['object'],
@@ -178,6 +228,16 @@ function requestOptionsArgument(): LibraryArgumentCheckDescriptor {
       { name: 'port', valueTypes: ['number'], optional: true },
       { name: 'rejectUnauthorized', valueTypes: ['boolean'], optional: true },
       { name: 'servername', valueTypes: ['string'], optional: true }
+    ]
+  }
+}
+
+function serverOptionsArgument(): LibraryArgumentCheckDescriptor {
+  return {
+    valueTypes: ['object'],
+    objectLiteralFields: [
+      { name: 'cert', valueTypes: ['string', 'object'] },
+      { name: 'key', valueTypes: ['string', 'object'] }
     ]
   }
 }

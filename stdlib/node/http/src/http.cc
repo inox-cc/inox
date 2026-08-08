@@ -15,10 +15,13 @@
 #include <vector>
 
 #include "inox/class_descriptor.h"
+#include "inox/http_server_transport.h"
 #include "inox/loop.h"
 #include "inox/net.h"
 #include "inox/object.h"
 #include "inox/tls.h"
+
+HttpServerConnectionTransport::~HttpServerConnectionTransport() = default;
 
 namespace {
 
@@ -234,6 +237,50 @@ bool validHeaderValue(inox::StringView value) {
   return true;
 }
 
+class NetHttpServerConnectionTransport final : public HttpServerConnectionTransport {
+public:
+  explicit NetHttpServerConnectionTransport(NetSocket socket) : socket_(std::move(socket)) {}
+
+  void destroy() override {
+    socket_.destroy();
+  }
+
+  void end(inox::StringView data, inox::Callback callback) override {
+    socket_.end(data, std::move(callback));
+  }
+
+  NetSocket socket() const override {
+    return socket_;
+  }
+
+  void start(
+    inox::Callback close,
+    inox::Callback error,
+    inox::Callback data
+  ) override {
+    socket_.on("close", std::move(close));
+
+    if (!inox::thrown()) {
+      socket_.on("error", std::move(error));
+    }
+
+    if (!inox::thrown()) {
+      socket_.on("data", std::move(data));
+    }
+  }
+
+  bool write(inox::StringView data) override {
+    return socket_.write(data);
+  }
+
+  bool write(inox::StringView data, inox::Callback callback) override {
+    return socket_.write(data, std::move(callback));
+  }
+
+private:
+  NetSocket socket_;
+};
+
 class HttpServerState;
 class HttpRequestState;
 class HttpResponseState;
@@ -351,7 +398,8 @@ public:
   HttpServerState();
 
   static std::shared_ptr<HttpServerState> create(inox::Callback listener);
-  void accept(NetSocket socket);
+  static std::shared_ptr<HttpServerState> create(NetServer server, inox::Callback listener);
+  void accept(std::shared_ptr<HttpServerConnectionTransport> transport);
   void close(inox::Callback callback);
   void connectionClosed(const HttpConnectionState* connection);
   void listen(double port, inox::StringView host, double backlog, inox::Callback callback);
@@ -362,6 +410,7 @@ public:
 class HttpConnectionState : public std::enable_shared_from_this<HttpConnectionState> {
 public:
   std::shared_ptr<HttpServerState> server_;
+  std::shared_ptr<HttpServerConnectionTransport> transport_;
   NetSocket socket_;
   std::vector<char> request_bytes_;
   std::shared_ptr<HttpRequestState> active_request_;
@@ -384,11 +433,14 @@ public:
   bool request_dispatched_;
   bool closed_;
 
-  HttpConnectionState(std::shared_ptr<HttpServerState> server, NetSocket socket);
+  HttpConnectionState(
+    std::shared_ptr<HttpServerState> server,
+    std::shared_ptr<HttpServerConnectionTransport> transport
+  );
 
   static std::shared_ptr<HttpConnectionState> create(
     const std::shared_ptr<HttpServerState>& server,
-    NetSocket socket
+    std::shared_ptr<HttpServerConnectionTransport> transport
   );
   void completeResponse(bool keep_alive);
   bool consumeRequestBody();
@@ -1966,15 +2018,62 @@ std::shared_ptr<HttpServerState> HttpServerState::create(inox::Callback listener
   return server;
 }
 
-void HttpServerState::accept(NetSocket socket) {
+std::shared_ptr<HttpServerState> HttpServerState::create(
+  NetServer net_server,
+  inox::Callback listener
+) {
+  std::shared_ptr<HttpServerState> server;
+
+  try {
+    server = std::make_shared<HttpServerState>();
+  } catch (const std::bad_alloc&) {
+    throwHttpError("TypeError: HttpServer allocation failed");
+    return {};
+  }
+
+  if (listener.valid()) {
+    try {
+      server->request_listeners_.push_back(std::move(listener));
+    } catch (const std::bad_alloc&) {
+      throwHttpError("TypeError: HttpServer listener allocation failed");
+      return {};
+    }
+  }
+
+  server->native_owner_ = server;
+  inox::Callback close = makeWeakCallback(server, onServerClose);
+
+  if (inox::thrown()) {
+    server->native_owner_.reset();
+    return {};
+  }
+
+  server->net_server_ = std::move(net_server);
+  server->net_server_.on("close", std::move(close));
+
+  if (inox::thrown()) {
+    server->net_server_.close();
+    server->native_owner_.reset();
+    return {};
+  }
+
+  return server;
+}
+
+void HttpServerState::accept(std::shared_ptr<HttpServerConnectionTransport> transport) {
+  if (!transport) {
+    throwHttpError("TypeError: HTTP connection transport is invalid");
+    return;
+  }
+
   if (closed_) {
-    socket.destroy();
+    transport->destroy();
     return;
   }
 
   std::shared_ptr<HttpConnectionState> connection = HttpConnectionState::create(
     shared_from_this(),
-    std::move(socket)
+    std::move(transport)
   );
 
   if (!connection) {
@@ -1984,7 +2083,7 @@ void HttpServerState::accept(NetSocket socket) {
   try {
     connections_.push_back(connection);
   } catch (const std::bad_alloc&) {
-    connection->socket_.destroy();
+    connection->transport_->destroy();
     throwHttpError("TypeError: HTTP connection tracking failed");
   }
 }
@@ -2004,7 +2103,7 @@ void HttpServerState::close(inox::Callback callback) {
       const std::shared_ptr<HttpConnectionState> connection = weak_connection.lock();
 
       if (connection && !connection->request_dispatched_) {
-        connection->socket_.destroy();
+        connection->transport_->destroy();
       }
     }
   }
@@ -2055,9 +2154,13 @@ void HttpServerState::onNetClosed() {
   native_owner_.reset();
 }
 
-HttpConnectionState::HttpConnectionState(std::shared_ptr<HttpServerState> server, NetSocket socket)
+HttpConnectionState::HttpConnectionState(
+  std::shared_ptr<HttpServerState> server,
+  std::shared_ptr<HttpServerConnectionTransport> transport
+)
   : server_(std::move(server)),
-    socket_(std::move(socket)),
+    transport_(std::move(transport)),
+    socket_(transport_ ? transport_->socket() : NetSocket()),
     request_bytes_(),
     active_request_(),
     active_response_(),
@@ -2081,15 +2184,18 @@ HttpConnectionState::HttpConnectionState(std::shared_ptr<HttpServerState> server
 
 std::shared_ptr<HttpConnectionState> HttpConnectionState::create(
   const std::shared_ptr<HttpServerState>& server,
-  NetSocket socket
+  std::shared_ptr<HttpServerConnectionTransport> transport
 ) {
   std::shared_ptr<HttpConnectionState> connection;
 
   try {
-    connection = std::make_shared<HttpConnectionState>(server, socket);
+    connection = std::make_shared<HttpConnectionState>(server, transport);
     connection->request_bytes_.reserve(4096);
   } catch (const std::bad_alloc&) {
-    socket.destroy();
+    if (transport) {
+      transport->destroy();
+    }
+
     throwHttpError("TypeError: HTTP connection allocation failed");
     return {};
   }
@@ -2100,22 +2206,14 @@ std::shared_ptr<HttpConnectionState> HttpConnectionState::create(
   inox::Callback error = makeWeakCallback(connection, onConnectionError);
 
   if (inox::thrown()) {
-    connection->socket_.destroy();
+    connection->transport_->destroy();
     return {};
   }
 
-  connection->socket_.on("close", std::move(close));
-
-  if (!inox::thrown()) {
-    connection->socket_.on("error", std::move(error));
-  }
-
-  if (!inox::thrown()) {
-    connection->socket_.on("data", std::move(data));
-  }
+  connection->transport_->start(std::move(close), std::move(error), std::move(data));
 
   if (inox::thrown()) {
-    connection->socket_.destroy();
+    connection->transport_->destroy();
     return {};
   }
 
@@ -2147,7 +2245,7 @@ void HttpConnectionState::completeResponse(bool keep_alive) {
   }
 
   if (!keep_alive || !server_ || server_->closed_) {
-    socket_.destroy();
+    transport_->destroy();
     return;
   }
 
@@ -2166,7 +2264,7 @@ void HttpConnectionState::resetRequest() {
   }
 
   if (active_request_bytes_ > request_bytes_.size()) {
-    socket_.destroy();
+    transport_->destroy();
     return;
   }
 
@@ -2217,7 +2315,7 @@ bool HttpConnectionState::consumeRequestBody() {
     active_request_->emitData(inox::StringView(request_bytes_.data() + active_body_cursor_, length));
 
     if (inox::thrown()) {
-      socket_.destroy();
+      transport_->destroy();
       return false;
     }
 
@@ -2322,7 +2420,7 @@ bool HttpConnectionState::consumeChunkedRequestBody() {
         active_request_->emitData(inox::StringView(bytes.data() + active_body_cursor_, length));
 
         if (inox::thrown()) {
-          socket_.destroy();
+          transport_->destroy();
           return false;
         }
 
@@ -2447,7 +2545,7 @@ void HttpConnectionState::failRequestBody(double status, const char* message) {
   }
 
   if (inox::thrown()) {
-    socket_.destroy();
+    transport_->destroy();
     return;
   }
 
@@ -2465,11 +2563,11 @@ void HttpConnectionState::failRequestBody(double status, const char* message) {
       ));
     }
   } else {
-    socket_.destroy();
+    transport_->destroy();
   }
 
   if (inox::thrown()) {
-    socket_.destroy();
+    transport_->destroy();
   }
 }
 
@@ -2483,7 +2581,7 @@ void HttpConnectionState::finishRequestBody(std::size_t request_bytes) {
   active_request_->emitEnd();
 
   if (inox::thrown()) {
-    socket_.destroy();
+    transport_->destroy();
     return;
   }
 
@@ -2570,7 +2668,7 @@ void HttpConnectionState::onData(inox::StringView data) {
   );
 
   if (inox::thrown()) {
-    socket_.destroy();
+    transport_->destroy();
     return;
   }
 
@@ -2589,7 +2687,7 @@ void HttpConnectionState::onData(inox::StringView data) {
   }
 
   if (inox::thrown()) {
-    socket_.destroy();
+    transport_->destroy();
     return;
   }
 
@@ -2597,7 +2695,7 @@ void HttpConnectionState::onData(inox::StringView data) {
   HttpResponse response_value = materializeResponse(active_response_);
 
   if (inox::thrown()) {
-    socket_.destroy();
+    transport_->destroy();
     return;
   }
 
@@ -2605,7 +2703,7 @@ void HttpConnectionState::onData(inox::StringView data) {
   callHttpListeners(server_->request_listeners_, arguments);
 
   if (inox::thrown()) {
-    socket_.destroy();
+    transport_->destroy();
     return;
   }
 
@@ -2618,7 +2716,7 @@ void HttpConnectionState::sendError(double status, inox::StringView message) {
   try {
     response = std::make_shared<HttpResponseState>(shared_from_this());
   } catch (const std::bad_alloc&) {
-    socket_.destroy();
+    transport_->destroy();
     throwHttpError("TypeError: HTTP response allocation failed");
     return;
   }
@@ -2637,7 +2735,7 @@ void HttpConnectionState::sendError(double status, inox::StringView message) {
   }
 
   if (inox::thrown()) {
-    socket_.destroy();
+    transport_->destroy();
   }
 }
 
@@ -4411,7 +4509,7 @@ bool HttpResponseState::write(std::span<const std::uint8_t> body) {
   }
 
   if (!appendBody(output, body)) {
-    connection_->socket_.destroy();
+    connection_->transport_->destroy();
     return false;
   }
 
@@ -4431,14 +4529,14 @@ void HttpResponseState::end(std::span<const std::uint8_t> body) {
   }
 
   if (!appendBody(output, body)) {
-    connection_->socket_.destroy();
+    connection_->transport_->destroy();
     return;
   }
 
   if (body_mode_ == HttpOutgoingBodyMode::content_length &&
       (!content_length_ || body_bytes_written_ != *content_length_)) {
     throwHttpError("TypeError: HttpResponse Content-Length does not match its body");
-    connection_->socket_.destroy();
+    connection_->transport_->destroy();
     return;
   }
 
@@ -4447,7 +4545,7 @@ void HttpResponseState::end(std::span<const std::uint8_t> body) {
       output.append("0\r\n\r\n");
     } catch (const std::bad_alloc&) {
       throwHttpError("TypeError: HttpResponse allocation failed");
-      connection_->socket_.destroy();
+      connection_->transport_->destroy();
       return;
     }
   }
@@ -4457,7 +4555,7 @@ void HttpResponseState::end(std::span<const std::uint8_t> body) {
 
   if (inox::thrown()) {
     ending_ = false;
-    connection_->socket_.destroy();
+    connection_->transport_->destroy();
     return;
   }
 
@@ -4581,7 +4679,7 @@ bool HttpResponseState::send(std::string& output, bool final) {
   }
 
   if (!final) {
-    return connection_->socket_.write(inox::StringView(output.data(), output.size()));
+    return connection_->transport_->write(inox::StringView(output.data(), output.size()));
   }
 
   inox::Callback complete = makeWeakCallback(connection_, onResponseComplete);
@@ -4591,13 +4689,13 @@ bool HttpResponseState::send(std::string& output, bool final) {
   }
 
   if (connection_->active_keep_alive_) {
-    return connection_->socket_.write(
+    return connection_->transport_->write(
       inox::StringView(output.data(), output.size()),
       std::move(complete)
     );
   }
 
-  connection_->socket_.end(
+  connection_->transport_->end(
     inox::StringView(output.data(), output.size()),
     std::move(complete)
   );
@@ -4624,7 +4722,17 @@ inox_status onServerConnection(
     return callbackStatus();
   }
 
-  server->accept(std::move(socket));
+  std::shared_ptr<HttpServerConnectionTransport> transport;
+
+  try {
+    transport = std::make_shared<NetHttpServerConnectionTransport>(std::move(socket));
+  } catch (const std::bad_alloc&) {
+    socket.destroy();
+    throwHttpError("TypeError: HTTP connection transport allocation failed");
+    return callbackStatus();
+  }
+
+  server->accept(std::move(transport));
   return callbackStatus();
 }
 
@@ -5604,6 +5712,28 @@ HttpServer HttpModule::createServer() const {
 
 HttpServer HttpModule::createServer(inox::Callback listener) const {
   return materializeServer(HttpServerState::create(std::move(listener)));
+}
+
+HttpServer makeHttpServer(NetServer server, inox::Callback listener) {
+  return materializeServer(HttpServerState::create(std::move(server), std::move(listener)));
+}
+
+void acceptHttpServerConnection(
+  const HttpServer& server,
+  std::shared_ptr<HttpServerConnectionTransport> transport
+) {
+  std::shared_ptr<HttpServerState> state = serverState(server);
+
+  if (!state) {
+    if (transport) {
+      transport->destroy();
+    }
+
+    throwHttpError("TypeError: HttpServer connection acceptance failed");
+    return;
+  }
+
+  state->accept(std::move(transport));
 }
 
 namespace {

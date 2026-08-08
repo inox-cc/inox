@@ -8,13 +8,18 @@ test('node:https — declarations-only facade над общим HTTP/TLS transpo
   const httpSource = await readFile('stdlib/node/http/src/http.cc', 'utf8')
 
   assert.match(header, /class HttpsRequestOptions/)
+  assert.match(header, /class HttpsServerOptions/)
   assert.match(header, /class HttpsModule/)
+  assert.match(header, /HttpServer createServer\(const HttpsServerOptions&/)
   assert.match(header, /extern const HttpsModule https;/)
   assert.doesNotMatch(header, /\)\s*const\s*\{|\)\s*\{/)
   assert.doesNotMatch(header, /\bstruct\b|\bvoid\s*\*|\btypedef\b|\b[a-zA-Z_][\w:<>]*\s*\*/)
 
   assert.match(source, /createHttpClientRequest\(/)
   assert.match(source, /HttpClientTransportOptions::tls\(/)
+  assert.match(source, /makeHttpServer\(/)
+  assert.match(source, /acceptHttpServerConnection\(/)
+  assert.match(source, /inox_tls_server_create\(/)
   assert.doesNotMatch(source, /parseClientUrl|net\.connect|SSL_|HTTP\/1\.1/)
   assert.match(httpSource, /HttpClientTransportKind::tls/)
   assert.match(httpSource, /inox_tls_connect\(/)

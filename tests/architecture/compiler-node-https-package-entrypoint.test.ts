@@ -15,7 +15,7 @@ test('entrypoint package node:https владеет client API и TLS runtime pla
   assert.deepEqual(httpsPackage.compilerPackage.nativeTypes, [])
   assert.deepEqual(
     httpsPackage.compilerPackage.operations.map((operation) => operation.operationId),
-    ['node:https#get', 'node:https#request']
+    ['node:https#createServer', 'node:https#get', 'node:https#request']
   )
 
   for (const operation of httpsPackage.compilerPackage.operations) {
@@ -23,7 +23,7 @@ test('entrypoint package node:https владеет client API и TLS runtime pla
     assert.deepEqual(operation.runtimeRequirements, ['node:https'])
     assert.deepEqual(operation.resultTypeRef, {
       kind: 'nominal',
-      typeId: 'node:http#ClientRequest',
+      typeId: operation.operationId === 'node:https#createServer' ? 'node:http#Server' : 'node:http#ClientRequest',
       args: [],
       nullable: false,
       ownership: 'value',

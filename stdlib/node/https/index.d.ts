@@ -1,4 +1,14 @@
 export type ResponseListener = (response: import('node:http').IncomingMessage) => void
+export type RequestListener = (
+  request: import('node:http').IncomingMessage,
+  response: import('node:http').ServerResponse
+) => void
+export type Server = import('node:http').Server
+
+export interface ServerOptions {
+  readonly cert: string | Uint8Array
+  readonly key: string | Uint8Array
+}
 
 export interface RequestOptions {
   readonly headers?: Record<string, string>
@@ -12,6 +22,7 @@ export interface RequestOptions {
 }
 
 export interface HttpsModule {
+  createServer(options: ServerOptions, listener?: RequestListener): Server
   get(url: string, listener?: ResponseListener): import('node:http').ClientRequest
   get(url: string, options: RequestOptions, listener?: ResponseListener): import('node:http').ClientRequest
   get(options: RequestOptions, listener?: ResponseListener): import('node:http').ClientRequest
@@ -20,6 +31,7 @@ export interface HttpsModule {
   request(options: RequestOptions, listener?: ResponseListener): import('node:http').ClientRequest
 }
 
+export function createServer(options: ServerOptions, listener?: RequestListener): Server
 export function get(url: string, listener?: ResponseListener): import('node:http').ClientRequest
 export function get(
   url: string,

@@ -2,6 +2,7 @@
 #define INOX_HTTPS_H
 
 #include <optional>
+#include <string>
 
 #include "inox/http.h"
 #include "inox/string.h"
@@ -25,8 +26,28 @@ private:
   bool valid_;
 };
 
+class HttpsServerOptions {
+public:
+  HttpsServerOptions();
+  explicit HttpsServerOptions(const inox::Value& value);
+
+  inox::StringView certificate() const;
+  inox::StringView privateKey() const;
+  bool valid() const;
+
+private:
+  std::string certificate_;
+  std::string private_key_;
+  bool valid_;
+};
+
 class HttpsModule {
 public:
+  HttpServer createServer(const HttpsServerOptions& options) const;
+  HttpServer createServer(
+    const HttpsServerOptions& options,
+    inox::Callback listener
+  ) const;
   HttpClientRequest get(inox::StringView url) const;
   HttpClientRequest get(inox::StringView url, inox::Callback listener) const;
   HttpClientRequest get(inox::StringView url, const HttpsRequestOptions& options) const;

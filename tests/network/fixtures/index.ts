@@ -13,6 +13,7 @@ import { startHttpAcceptance } from './http.ts'
 import { startHttpClientAcceptance } from './http-client.ts'
 import { startHttpsClientAcceptance } from './https-client.ts'
 import { startHttpsKeepAliveClientAcceptance } from './https-keep-alive-client.ts'
+import { startHttpsServerAcceptance } from './https-server.ts'
 import { startHttpsStreamingClientAcceptance } from './https-streaming-client.ts'
 import { startTcpAcceptance } from './tcp.ts'
 import { startUdpAcceptance } from './udp.ts'
@@ -30,6 +31,9 @@ const httpStreamingServerPort = Number(process.argv[11]) ?? 0
 const httpStreamingClientPort = Number(process.argv[12]) ?? 0
 const httpsStreamingClientPort = Number(process.argv[13]) ?? 0
 const httpIncomingStreamingServerPort = Number(process.argv[14]) ?? 0
+const httpsServerPort = Number(process.argv[15]) ?? 0
+const httpsServerCertificatePath = process.argv[16]
+const httpsServerPrivateKeyPath = process.argv[17]
 
 startTcpAcceptance()
 startUdpAcceptance()
@@ -47,3 +51,4 @@ startHttpStreamingServerAcceptance(httpStreamingServerPort, nonce)
 startHttpStreamingClientAcceptance(httpStreamingClientPort, nonce)
 startHttpsStreamingClientAcceptance(httpsStreamingClientPort, nonce)
 startHttpIncomingStreamingServerAcceptance(httpIncomingStreamingServerPort, nonce)
+startHttpsServerAcceptance(httpsServerPort, nonce, httpsServerCertificatePath, httpsServerPrivateKeyPath)
