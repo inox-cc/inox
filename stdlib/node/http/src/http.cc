@@ -230,6 +230,7 @@ class HttpServerState;
 class HttpRequestState;
 class HttpResponseState;
 class HttpConnectionState;
+class HttpClientConnectionState;
 class HttpClientRequestState;
 
 struct HttpServerHolder {
@@ -327,6 +328,7 @@ class HttpServerState : public std::enable_shared_from_this<HttpServerState> {
 public:
   NetServer net_server_;
   std::vector<inox::Callback> request_listeners_;
+  std::vector<std::weak_ptr<HttpConnectionState>> connections_;
   std::shared_ptr<HttpServerState> native_owner_;
   bool closed_;
 
@@ -335,6 +337,7 @@ public:
   static std::shared_ptr<HttpServerState> create(inox::Callback listener);
   void accept(NetSocket socket);
   void close(inox::Callback callback);
+  void connectionClosed(const HttpConnectionState* connection);
   void listen(double port, inox::StringView host, double backlog, inox::Callback callback);
   void on(inox::StringView event_name, inox::Callback listener);
   void onNetClosed();
@@ -346,6 +349,8 @@ public:
   NetSocket socket_;
   std::vector<char> request_bytes_;
   std::shared_ptr<HttpConnectionState> native_owner_;
+  std::size_t active_request_bytes_;
+  bool active_keep_alive_;
   bool request_dispatched_;
   bool closed_;
 
@@ -355,9 +360,57 @@ public:
     const std::shared_ptr<HttpServerState>& server,
     NetSocket socket
   );
+  void completeResponse(bool keep_alive);
   void onClose();
   void onData(inox::StringView data);
   void sendError(double status, inox::StringView message);
+};
+
+class HttpClientConnectionState : public std::enable_shared_from_this<HttpClientConnectionState> {
+public:
+  inox::String host_;
+  double port_;
+  HttpClientTransportKind transport_kind_;
+  bool verify_peer_;
+  std::optional<inox::String> server_name_;
+  NetSocket socket_;
+  inox_tls_client* tls_;
+  std::shared_ptr<HttpClientRequestState> request_;
+  std::shared_ptr<HttpClientConnectionState> native_owner_;
+  bool connected_;
+  bool closed_;
+  bool destroying_;
+  std::size_t idle_generation_;
+
+  HttpClientConnectionState(
+    inox::String host,
+    double port,
+    const HttpClientTransportOptions& transport
+  );
+
+  static std::shared_ptr<HttpClientConnectionState> create(
+    inox::StringView host,
+    double port,
+    const HttpClientTransportOptions& transport
+  );
+  bool attach(const std::shared_ptr<HttpClientRequestState>& request);
+  void complete(const std::shared_ptr<HttpClientRequestState>& request);
+  bool release(const std::shared_ptr<HttpClientRequestState>& request);
+  void destroy();
+  bool matches(
+    inox::StringView host,
+    double port,
+    const HttpClientTransportOptions& transport
+  ) const;
+  void onClose();
+  void onConnect();
+  void onData(inox::StringView data);
+  void onEnd();
+  void onError(const inox::Value& error);
+  void onWrite(inox_status status);
+  NetSocket responseSocket() const;
+  void setIdle(bool idle);
+  bool write(inox::StringView data);
 };
 
 class HttpClientRequestState : public std::enable_shared_from_this<HttpClientRequestState> {
@@ -374,10 +427,7 @@ public:
   std::vector<inox::Callback> close_listeners_;
   std::vector<inox::Callback> error_listeners_;
   HttpClientTransportKind transport_kind_;
-  bool verify_peer_;
-  std::optional<inox::String> server_name_;
-  NetSocket socket_;
-  inox_tls_client* tls_;
+  std::shared_ptr<HttpClientConnectionState> connection_;
   std::shared_ptr<HttpRequestState> response_;
   std::shared_ptr<HttpClientRequestState> native_owner_;
   std::optional<std::size_t> response_content_length_;
@@ -388,7 +438,8 @@ public:
   std::size_t response_trailer_count_;
   HttpClientResponseBodyMode response_body_mode_;
   HttpChunkDecodeState response_chunk_state_;
-  bool connected_;
+  bool response_keep_alive_;
+  bool request_keep_alive_;
   bool ending_;
   bool sent_;
   bool finished_;
@@ -434,6 +485,7 @@ private:
   bool consumeChunkedBody(inox::StringView data);
   bool consumeResponseBody(inox::StringView data);
   bool deliverResponseBody(inox::StringView data);
+  void completeResponseBody();
 };
 
 template <typename Holder>
@@ -833,7 +885,7 @@ inox_status onServerClose(void* context, const inox_value* args, std::size_t arg
 inox_status onConnectionData(void* context, const inox_value* args, std::size_t arg_count, inox_value* out);
 inox_status onConnectionClose(void* context, const inox_value* args, std::size_t arg_count, inox_value* out);
 inox_status onConnectionError(void* context, const inox_value* args, std::size_t arg_count, inox_value* out);
-inox_status onResponseShutdown(void* context, const inox_value* args, std::size_t arg_count, inox_value* out);
+inox_status onResponseComplete(void* context, const inox_value* args, std::size_t arg_count, inox_value* out);
 inox_status onClientConnect(void* context, const inox_value* args, std::size_t arg_count, inox_value* out);
 inox_status onClientData(void* context, const inox_value* args, std::size_t arg_count, inox_value* out);
 inox_status onClientEnd(void* context, const inox_value* args, std::size_t arg_count, inox_value* out);
@@ -870,6 +922,7 @@ struct ParsedRequest {
   std::size_t body_start;
   std::size_t body_length;
   bool chunked;
+  bool keep_alive;
 };
 
 enum class ChunkedRequestDecodeResult {
@@ -914,6 +967,46 @@ bool spanEqualsIgnoreCase(std::span<const char> value, const char* expected) {
     inox::StringView(value.data(), value.size()),
     inox::StringView(expected, std::strlen(expected))
   );
+}
+
+bool headerValueHasToken(std::span<const char> value, const char* expected) {
+  const std::size_t expected_length = std::strlen(expected);
+  std::size_t cursor = 0;
+
+  while (cursor <= value.size()) {
+    std::size_t end = cursor;
+
+    while (end < value.size() && value[end] != ',') {
+      end += 1;
+    }
+
+    std::size_t token_start = cursor;
+    std::size_t token_end = end;
+
+    while (token_start < token_end && (value[token_start] == ' ' || value[token_start] == '\t')) {
+      token_start += 1;
+    }
+
+    while (token_end > token_start && (value[token_end - 1] == ' ' || value[token_end - 1] == '\t')) {
+      token_end -= 1;
+    }
+
+    if (token_end - token_start == expected_length &&
+        equalsIgnoreCase(
+          inox::StringView(value.data() + token_start, expected_length),
+          inox::StringView(expected, expected_length)
+        )) {
+      return true;
+    }
+
+    if (end == value.size()) {
+      return false;
+    }
+
+    cursor = end + 1;
+  }
+
+  return false;
 }
 
 inox::String normalizedHeaderName(std::span<const char> name) {
@@ -1126,13 +1219,15 @@ inox::Value materializeRequestHeaders(
 ChunkedRequestDecodeResult decodeChunkedRequestBody(
   std::span<const char> bytes,
   std::size_t body_limit,
-  std::vector<char>& body
+  std::vector<char>& body,
+  std::size_t& consumed
 ) {
   const std::size_t missing = std::numeric_limits<std::size_t>::max();
   std::size_t cursor = 0;
   std::size_t framing_bytes = 0;
   std::size_t trailer_count = 0;
   body.clear();
+  consumed = 0;
 
   for (;;) {
     const std::size_t line_end = findCrlf(bytes, cursor);
@@ -1234,9 +1329,8 @@ ChunkedRequestDecodeResult decodeChunkedRequestBody(
 
     if (line_end == cursor) {
       cursor += 2;
-      return cursor == bytes.size()
-        ? ChunkedRequestDecodeResult::ready
-        : ChunkedRequestDecodeResult::invalid;
+      consumed = cursor;
+      return ChunkedRequestDecodeResult::ready;
     }
 
     const std::size_t separator = findByte(bytes, cursor, line_end, ':');
@@ -1313,6 +1407,8 @@ ParsedRequest parseRequest(std::span<const char> bytes) {
   std::size_t content_length = 0;
   bool has_content_length = false;
   bool chunked = false;
+  bool connection_close = false;
+  bool connection_keep_alive = false;
   std::size_t header_count = 0;
   std::size_t cursor = request_line_end + 2;
 
@@ -1364,6 +1460,11 @@ ParsedRequest parseRequest(std::span<const char> bytes) {
       }
 
       chunked = true;
+    }
+
+    if (spanEqualsIgnoreCase(name, "Connection")) {
+      connection_close = connection_close || headerValueHasToken(value, "close");
+      connection_keep_alive = connection_keep_alive || headerValueHasToken(value, "keep-alive");
     }
 
     if (spanEqualsIgnoreCase(name, "Content-Length")) {
@@ -1423,6 +1524,7 @@ ParsedRequest parseRequest(std::span<const char> bytes) {
     header_end,
     content_length,
     chunked,
+    (!connection_close && version[7] == '1') || (!connection_close && connection_keep_alive),
   };
 }
 
@@ -1445,6 +1547,7 @@ struct ParsedResponse {
   std::size_t body_start;
   std::optional<std::size_t> content_length;
   bool chunked;
+  bool keep_alive;
 };
 
 ParsedResponse parseResponse(std::span<const char> bytes) {
@@ -1491,6 +1594,8 @@ ParsedResponse parseResponse(std::span<const char> bytes) {
 
   std::optional<std::size_t> content_length;
   bool chunked = false;
+  bool connection_close = false;
+  bool connection_keep_alive = false;
   std::size_t header_count = 0;
   std::size_t cursor = status_line_end + 2;
 
@@ -1544,6 +1649,11 @@ ParsedResponse parseResponse(std::span<const char> bytes) {
       chunked = true;
     }
 
+    if (spanEqualsIgnoreCase(name, "Connection")) {
+      connection_close = connection_close || headerValueHasToken(value, "close");
+      connection_keep_alive = connection_keep_alive || headerValueHasToken(value, "keep-alive");
+    }
+
     if (spanEqualsIgnoreCase(name, "Content-Length")) {
       if (value.empty()) {
         return {ResponseParseResult::invalid};
@@ -1595,6 +1705,7 @@ ParsedResponse parseResponse(std::span<const char> bytes) {
     header_end,
     content_length,
     chunked,
+    (!connection_close && bytes[7] == '1') || (!connection_close && connection_keep_alive),
   };
 }
 
@@ -1721,7 +1832,7 @@ const char* statusText(int status) {
 }
 
 HttpServerState::HttpServerState()
-  : net_server_(), request_listeners_(), native_owner_(), closed_(false) {}
+  : net_server_(), request_listeners_(), connections_(), native_owner_(), closed_(false) {}
 
 std::shared_ptr<HttpServerState> HttpServerState::create(inox::Callback listener) {
   std::shared_ptr<HttpServerState> server;
@@ -1775,7 +1886,21 @@ void HttpServerState::accept(NetSocket socket) {
     return;
   }
 
-  (void)HttpConnectionState::create(shared_from_this(), std::move(socket));
+  std::shared_ptr<HttpConnectionState> connection = HttpConnectionState::create(
+    shared_from_this(),
+    std::move(socket)
+  );
+
+  if (!connection) {
+    return;
+  }
+
+  try {
+    connections_.push_back(connection);
+  } catch (const std::bad_alloc&) {
+    connection->socket_.destroy();
+    throwHttpError("TypeError: HTTP connection tracking failed");
+  }
 }
 
 void HttpServerState::close(inox::Callback callback) {
@@ -1785,6 +1910,30 @@ void HttpServerState::close(inox::Callback callback) {
   }
 
   net_server_.close(std::move(callback));
+
+  if (!inox::thrown()) {
+    closed_ = true;
+
+    for (const std::weak_ptr<HttpConnectionState>& weak_connection : connections_) {
+      const std::shared_ptr<HttpConnectionState> connection = weak_connection.lock();
+
+      if (connection && !connection->request_dispatched_) {
+        connection->socket_.destroy();
+      }
+    }
+  }
+}
+
+void HttpServerState::connectionClosed(const HttpConnectionState* connection) {
+  for (auto iterator = connections_.begin(); iterator != connections_.end();) {
+    const std::shared_ptr<HttpConnectionState> existing = iterator->lock();
+
+    if (!existing || existing.get() == connection) {
+      iterator = connections_.erase(iterator);
+    } else {
+      iterator += 1;
+    }
+  }
 }
 
 void HttpServerState::listen(
@@ -1825,6 +1974,8 @@ HttpConnectionState::HttpConnectionState(std::shared_ptr<HttpServerState> server
     socket_(std::move(socket)),
     request_bytes_(),
     native_owner_(),
+    active_request_bytes_(0),
+    active_keep_alive_(false),
     request_dispatched_(false),
     closed_(false) {}
 
@@ -1874,29 +2025,74 @@ std::shared_ptr<HttpConnectionState> HttpConnectionState::create(
 void HttpConnectionState::onClose() {
   std::shared_ptr<HttpConnectionState> owner = native_owner_;
   closed_ = true;
+
+  if (server_) {
+    server_->connectionClosed(this);
+  }
+
   server_.reset();
   request_bytes_.clear();
   native_owner_.reset();
 }
 
+void HttpConnectionState::completeResponse(bool keep_alive) {
+  if (closed_) {
+    return;
+  }
+
+  if (!keep_alive || !server_ || server_->closed_) {
+    socket_.destroy();
+    return;
+  }
+
+  if (active_request_bytes_ > request_bytes_.size()) {
+    socket_.destroy();
+    return;
+  }
+
+  request_bytes_.erase(
+    request_bytes_.begin(),
+    request_bytes_.begin() + static_cast<std::ptrdiff_t>(active_request_bytes_)
+  );
+  active_request_bytes_ = 0;
+  active_keep_alive_ = false;
+  request_dispatched_ = false;
+  onData(inox::StringView());
+}
+
 void HttpConnectionState::onData(inox::StringView data) {
-  if (closed_ || request_dispatched_) {
+  if (closed_) {
     return;
   }
 
   constexpr std::size_t max_wire_bytes = maxRequestBytes + maxRequestChunkFramingBytes;
+  constexpr std::size_t max_buffered_bytes = max_wire_bytes * 2;
 
-  if (request_bytes_.size() > max_wire_bytes || data.len > max_wire_bytes - request_bytes_.size()) {
-    request_dispatched_ = true;
-    sendError(413, "payload too large");
+  if (request_bytes_.size() > max_buffered_bytes || data.len > max_buffered_bytes - request_bytes_.size()) {
+    if (request_dispatched_) {
+      socket_.destroy();
+    } else {
+      request_dispatched_ = true;
+      sendError(413, "payload too large");
+    }
     return;
   }
 
-  try {
-    request_bytes_.insert(request_bytes_.end(), data.bytes, data.bytes + data.len);
-  } catch (const std::bad_alloc&) {
-    request_dispatched_ = true;
-    sendError(500, "internal server error");
+  if (data.len > 0) {
+    try {
+      request_bytes_.insert(request_bytes_.end(), data.bytes, data.bytes + data.len);
+    } catch (const std::bad_alloc&) {
+      if (request_dispatched_) {
+        socket_.destroy();
+      } else {
+        request_dispatched_ = true;
+        sendError(500, "internal server error");
+      }
+      return;
+    }
+  }
+
+  if (request_dispatched_) {
     return;
   }
 
@@ -1919,6 +2115,7 @@ void HttpConnectionState::onData(inox::StringView data) {
   }
 
   std::vector<char> decoded_body;
+  std::size_t request_size = parsed.body_start + parsed.body_length;
   std::span<const char> request_body(
     request_bytes_.data() + parsed.body_start,
     parsed.body_length
@@ -1926,6 +2123,7 @@ void HttpConnectionState::onData(inox::StringView data) {
 
   if (parsed.chunked) {
     ChunkedRequestDecodeResult decoded = ChunkedRequestDecodeResult::invalid;
+    std::size_t consumed = 0;
 
     try {
       decoded = decodeChunkedRequestBody(
@@ -1934,7 +2132,8 @@ void HttpConnectionState::onData(inox::StringView data) {
           request_bytes_.size() - parsed.body_start
         ),
         maxRequestBytes - parsed.body_start,
-        decoded_body
+        decoded_body,
+        consumed
       );
     } catch (const std::bad_alloc&) {
       request_dispatched_ = true;
@@ -1959,8 +2158,11 @@ void HttpConnectionState::onData(inox::StringView data) {
     }
 
     request_body = decoded_body;
+    request_size = parsed.body_start + consumed;
   }
 
+  active_request_bytes_ = request_size;
+  active_keep_alive_ = parsed.keep_alive;
   request_dispatched_ = true;
   std::shared_ptr<HttpRequestState> request;
   std::shared_ptr<HttpResponseState> response;
@@ -2181,6 +2383,439 @@ bool validClientConfiguration(
   return true;
 }
 
+constexpr std::size_t maxIdleClientConnections = 8;
+constexpr double idleClientConnectionTimeoutMs = 5000;
+std::vector<std::shared_ptr<HttpClientConnectionState>> idleClientConnections;
+
+struct IdleClientConnectionContext {
+  std::weak_ptr<HttpClientConnectionState> connection;
+  std::size_t generation;
+};
+
+inox_status expireIdleClientConnection(void* raw_context) {
+  auto* context = static_cast<IdleClientConnectionContext*>(raw_context);
+  std::shared_ptr<HttpClientConnectionState> connection = context == nullptr
+    ? std::shared_ptr<HttpClientConnectionState>()
+    : context->connection.lock();
+
+  if (!connection || connection->request_ || connection->idle_generation_ != context->generation) {
+    return INOX_OK;
+  }
+
+  for (auto iterator = idleClientConnections.begin(); iterator != idleClientConnections.end(); iterator += 1) {
+    if (*iterator == connection) {
+      idleClientConnections.erase(iterator);
+      if (!connection->closed_) connection->destroy();
+      break;
+    }
+  }
+
+  return INOX_OK;
+}
+
+void finalizeIdleClientConnection(void* raw_context) {
+  delete static_cast<IdleClientConnectionContext*>(raw_context);
+}
+
+bool sameString(inox::StringView left, inox::StringView right) {
+  return left.len == right.len &&
+    (left.len == 0 || std::memcmp(left.bytes, right.bytes, left.len) == 0);
+}
+
+std::shared_ptr<HttpClientConnectionState> takeIdleClientConnection(
+  inox::StringView host,
+  double port,
+  const HttpClientTransportOptions& transport
+) {
+  for (auto iterator = idleClientConnections.begin(); iterator != idleClientConnections.end();) {
+    const std::shared_ptr<HttpClientConnectionState>& connection = *iterator;
+
+    if (!connection || connection->closed_) {
+      iterator = idleClientConnections.erase(iterator);
+      continue;
+    }
+
+    if (!connection->matches(host, port, transport)) {
+      iterator += 1;
+      continue;
+    }
+
+    std::shared_ptr<HttpClientConnectionState> result = std::move(*iterator);
+    idleClientConnections.erase(iterator);
+    result->setIdle(false);
+    return result;
+  }
+
+  return {};
+}
+
+void releaseIdleClientConnection(const std::shared_ptr<HttpClientConnectionState>& connection) {
+  for (auto iterator = idleClientConnections.begin(); iterator != idleClientConnections.end();) {
+    if (!*iterator || (*iterator)->closed_) {
+      iterator = idleClientConnections.erase(iterator);
+    } else {
+      iterator += 1;
+    }
+  }
+
+  if (!connection || connection->closed_) {
+    return;
+  }
+
+  if (idleClientConnections.size() >= maxIdleClientConnections) {
+    connection->destroy();
+    return;
+  }
+
+  connection->setIdle(true);
+
+  if (connection->closed_ || connection->destroying_) {
+    return;
+  }
+
+  try {
+    idleClientConnections.push_back(connection);
+  } catch (const std::bad_alloc&) {
+    connection->destroy();
+    return;
+  }
+
+  auto* context = new (std::nothrow) IdleClientConnectionContext{
+    connection,
+    connection->idle_generation_,
+  };
+  inox_timer_handle* timer = nullptr;
+
+  if (context == nullptr ||
+      inox_loop_set_timeout(
+        inox::loop(),
+        idleClientConnectionTimeoutMs,
+        expireIdleClientConnection,
+        context,
+        finalizeIdleClientConnection,
+        &timer
+      ) != INOX_OK) {
+    delete context;
+    idleClientConnections.pop_back();
+    connection->destroy();
+    return;
+  }
+
+  inox_loop_unref_timer(timer);
+}
+
+HttpClientConnectionState::HttpClientConnectionState(
+  inox::String host,
+  double port,
+  const HttpClientTransportOptions& transport
+)
+  : host_(std::move(host)),
+    port_(port),
+    transport_kind_(transport.kind()),
+    verify_peer_(transport.verifyPeer()),
+    server_name_(transport.serverName()),
+    socket_(),
+    tls_(nullptr),
+    request_(),
+    native_owner_(),
+    connected_(false),
+    closed_(false),
+    destroying_(false),
+    idle_generation_(0) {}
+
+std::shared_ptr<HttpClientConnectionState> HttpClientConnectionState::create(
+  inox::StringView host,
+  double port,
+  const HttpClientTransportOptions& transport
+) {
+  std::shared_ptr<HttpClientConnectionState> connection;
+
+  try {
+    connection = std::make_shared<HttpClientConnectionState>(inox::String(host), port, transport);
+  } catch (const std::bad_alloc&) {
+    inox::throw_out_of_memory();
+    return {};
+  }
+
+  if (inox::thrown()) {
+    return {};
+  }
+
+  connection->native_owner_ = connection;
+
+  if (transport.kind() == HttpClientTransportKind::tls) {
+    std::string host_bytes;
+    std::string server_name_bytes;
+
+    try {
+      const inox::StringView connection_host = connection->host_;
+      host_bytes.assign(connection_host.bytes, connection_host.len);
+
+      if (connection->server_name_) {
+        const inox::StringView server_name = *connection->server_name_;
+        server_name_bytes.assign(server_name.bytes, server_name.len);
+      } else {
+        server_name_bytes = host_bytes;
+      }
+    } catch (const std::bad_alloc&) {
+      inox::throw_out_of_memory();
+      connection->native_owner_.reset();
+      return {};
+    }
+
+    const inox_status status = inox_tls_connect(
+      inox::loop(),
+      host_bytes.c_str(),
+      static_cast<int>(connection->port_),
+      server_name_bytes.c_str(),
+      connection->verify_peer_ ? 1 : 0,
+      onClientTlsConnect,
+      onClientTlsData,
+      onClientTlsClose,
+      connection.get(),
+      &connection->tls_
+    );
+
+    if (status != INOX_OK) {
+      if (status == INOX_ERR_OOM) inox::throw_out_of_memory();
+      else throwHttpError("TypeError: node:https connection failed");
+      connection->native_owner_.reset();
+      return {};
+    }
+
+    return connection;
+  }
+
+  inox::Callback connect = makeWeakCallback(connection, onClientConnect);
+  inox::Callback data = makeWeakCallback(connection, onClientData);
+  inox::Callback end = makeWeakCallback(connection, onClientEnd);
+  inox::Callback close = makeWeakCallback(connection, onClientClose);
+  inox::Callback error = makeWeakCallback(connection, onClientError);
+
+  if (inox::thrown()) {
+    connection->native_owner_.reset();
+    return {};
+  }
+
+  connection->socket_ = net.connect(connection->port_, connection->host_, std::move(connect));
+
+  if (!inox::thrown()) connection->socket_.on("data", std::move(data));
+  if (!inox::thrown()) connection->socket_.on("end", std::move(end));
+  if (!inox::thrown()) connection->socket_.on("close", std::move(close));
+  if (!inox::thrown()) connection->socket_.on("error", std::move(error));
+
+  if (inox::thrown()) {
+    connection->socket_.destroy();
+    connection->native_owner_.reset();
+    return {};
+  }
+
+  return connection;
+}
+
+bool HttpClientConnectionState::matches(
+  inox::StringView host,
+  double port,
+  const HttpClientTransportOptions& transport
+) const {
+  if (closed_ || destroying_ || request_ || port_ != port || transport_kind_ != transport.kind() ||
+      verify_peer_ != transport.verifyPeer() || !sameString(host_, host)) {
+    return false;
+  }
+
+  const std::optional<inox::String>& expected_server_name = transport.serverName();
+
+  if (server_name_.has_value() != expected_server_name.has_value()) {
+    return false;
+  }
+
+  return !server_name_ || sameString(*server_name_, *expected_server_name);
+}
+
+bool HttpClientConnectionState::attach(const std::shared_ptr<HttpClientRequestState>& request) {
+  if (!request || request_ || closed_ || destroying_) {
+    return false;
+  }
+
+  request_ = request;
+  request->connection_ = shared_from_this();
+
+  if (connected_) {
+    request->onConnect();
+  }
+
+  return !inox::thrown();
+}
+
+void HttpClientConnectionState::complete(
+  const std::shared_ptr<HttpClientRequestState>& request
+) {
+  if (!request || request_ != request) {
+    return;
+  }
+
+  request_.reset();
+  request->connection_.reset();
+  request->onClose();
+  destroy();
+}
+
+bool HttpClientConnectionState::release(const std::shared_ptr<HttpClientRequestState>& request) {
+  if (!request || request_ != request || closed_ || destroying_) {
+    return false;
+  }
+
+  request_.reset();
+  request->connection_.reset();
+  releaseIdleClientConnection(shared_from_this());
+  return true;
+}
+
+void HttpClientConnectionState::destroy() {
+  if (closed_ || destroying_) {
+    return;
+  }
+
+  destroying_ = true;
+
+  if (transport_kind_ == HttpClientTransportKind::tls) {
+    if (tls_ != nullptr) (void)inox_tls_client_destroy(tls_);
+  } else {
+    socket_.destroy();
+  }
+}
+
+void HttpClientConnectionState::onClose() {
+  if (closed_) {
+    return;
+  }
+
+  std::shared_ptr<HttpClientConnectionState> owner = native_owner_;
+  std::shared_ptr<HttpClientRequestState> request = std::move(request_);
+  closed_ = true;
+  connected_ = false;
+  destroying_ = false;
+  tls_ = nullptr;
+
+  if (request) {
+    request->connection_.reset();
+    request->onClose();
+  }
+
+  native_owner_.reset();
+}
+
+void HttpClientConnectionState::onConnect() {
+  if (closed_) {
+    return;
+  }
+
+  connected_ = true;
+
+  if (request_) {
+    request_->onConnect();
+  }
+}
+
+void HttpClientConnectionState::onData(inox::StringView data) {
+  if (request_) {
+    request_->onData(data);
+  } else if (data.len > 0) {
+    destroy();
+  }
+}
+
+void HttpClientConnectionState::onEnd() {
+  if (request_) {
+    request_->onEnd();
+  }
+}
+
+void HttpClientConnectionState::onError(const inox::Value& error) {
+  if (request_) {
+    request_->onError(error);
+  } else {
+    destroy();
+  }
+}
+
+void HttpClientConnectionState::onWrite(inox_status status) {
+  if (!request_) {
+    return;
+  }
+
+  if (status == INOX_OK) {
+    request_->onFinish();
+  } else {
+    inox::Value error = materializeHttpError(
+      transport_kind_ == HttpClientTransportKind::tls
+        ? "HTTPS request write failed"
+        : "HTTP request write failed"
+    );
+    if (!inox::thrown()) request_->onError(error);
+  }
+}
+
+NetSocket HttpClientConnectionState::responseSocket() const {
+  if (transport_kind_ != HttpClientTransportKind::tls) {
+    return socket_;
+  }
+
+  inox_value raw_socket = inox_undefined_value();
+
+  if (tls_ == nullptr || inox_tls_client_socket(tls_, &raw_socket) != INOX_OK) {
+    throwHttpError("TypeError: HTTPS response socket is unavailable");
+    return NetSocket();
+  }
+
+  return NetSocket(inox::adopt(raw_socket));
+}
+
+void HttpClientConnectionState::setIdle(bool idle) {
+  idle_generation_ += 1;
+  NetSocket socket = responseSocket();
+
+  if (inox::thrown()) {
+    destroy();
+    return;
+  }
+
+  if (idle) socket.unref();
+  else socket.ref();
+}
+
+bool HttpClientConnectionState::write(inox::StringView data) {
+  if (!connected_ || closed_ || destroying_ || !request_) {
+    return false;
+  }
+
+  if (transport_kind_ == HttpClientTransportKind::tls) {
+    const inox_status status = inox_tls_client_write_with_callback(
+      tls_,
+      data.bytes,
+      data.len,
+      onClientTlsWrite,
+      this
+    );
+
+    if (status != INOX_OK) {
+      onWrite(status);
+      return false;
+    }
+
+    return true;
+  }
+
+  inox::Callback finish = makeWeakCallback(request_, onClientFinish);
+
+  if (inox::thrown()) {
+    return false;
+  }
+
+  (void)socket_.write(data, std::move(finish));
+  return !inox::thrown();
+}
+
 HttpClientRequestState::HttpClientRequestState(
   inox::String host,
   double port,
@@ -2200,10 +2835,7 @@ HttpClientRequestState::HttpClientRequestState(
     close_listeners_(),
     error_listeners_(),
     transport_kind_(transport.kind()),
-    verify_peer_(transport.verifyPeer()),
-    server_name_(transport.serverName()),
-    socket_(),
-    tls_(nullptr),
+    connection_(),
     response_(),
     native_owner_(),
     response_content_length_(),
@@ -2214,7 +2846,8 @@ HttpClientRequestState::HttpClientRequestState(
     response_trailer_count_(0),
     response_body_mode_(HttpClientResponseBodyMode::close_delimited),
     response_chunk_state_(HttpChunkDecodeState::size),
-    connected_(false),
+    response_keep_alive_(false),
+    request_keep_alive_(true),
     ending_(false),
     sent_(false),
     finished_(false),
@@ -2303,69 +2936,18 @@ std::shared_ptr<HttpClientRequestState> HttpClientRequestState::create(
   }
 
   request->native_owner_ = request;
-  if (transport.kind() == HttpClientTransportKind::tls) {
-    std::string host_bytes;
-    std::string server_name_bytes;
+  std::shared_ptr<HttpClientConnectionState> connection = takeIdleClientConnection(
+    request->host_,
+    request->port_,
+    transport
+  );
 
-    try {
-      const inox::StringView request_host = request->host_;
-      host_bytes.assign(request_host.bytes, request_host.len);
-
-      if (request->server_name_) {
-        const inox::StringView server_name = *request->server_name_;
-        server_name_bytes.assign(server_name.bytes, server_name.len);
-      } else {
-        server_name_bytes = host_bytes;
-      }
-    } catch (const std::bad_alloc&) {
-      inox::throw_out_of_memory();
-      request->native_owner_.reset();
-      return {};
-    }
-
-    const inox_status status = inox_tls_connect(
-      inox::loop(),
-      host_bytes.c_str(),
-      static_cast<int>(request->port_),
-      server_name_bytes.c_str(),
-      request->verify_peer_ ? 1 : 0,
-      onClientTlsConnect,
-      onClientTlsData,
-      onClientTlsClose,
-      request.get(),
-      &request->tls_
-    );
-
-    if (status != INOX_OK) {
-      if (status == INOX_ERR_OOM) inox::throw_out_of_memory();
-      else throwHttpError("TypeError: node:https connection failed");
-      request->native_owner_.reset();
-      return {};
-    }
-
-    return request;
+  if (!connection) {
+    connection = HttpClientConnectionState::create(request->host_, request->port_, transport);
   }
 
-  inox::Callback connect = makeWeakCallback(request, onClientConnect);
-  inox::Callback data = makeWeakCallback(request, onClientData);
-  inox::Callback end = makeWeakCallback(request, onClientEnd);
-  inox::Callback close = makeWeakCallback(request, onClientClose);
-  inox::Callback error = makeWeakCallback(request, onClientError);
-
-  if (inox::thrown()) {
-    request->native_owner_.reset();
-    return {};
-  }
-
-  request->socket_ = net.connect(request->port_, request->host_, std::move(connect));
-
-  if (!inox::thrown()) request->socket_.on("data", std::move(data));
-  if (!inox::thrown()) request->socket_.on("end", std::move(end));
-  if (!inox::thrown()) request->socket_.on("close", std::move(close));
-  if (!inox::thrown()) request->socket_.on("error", std::move(error));
-
-  if (inox::thrown()) {
-    request->socket_.destroy();
+  if (!connection || !connection->attach(request)) {
+    if (connection) connection->destroy();
     request->native_owner_.reset();
     return {};
   }
@@ -2410,12 +2992,8 @@ void HttpClientRequestState::applyHeaders(const inox::Value& headers) {
 }
 
 void HttpClientRequestState::destroy() {
-  if (!closed_) {
-    if (transport_kind_ == HttpClientTransportKind::tls) {
-      if (tls_ != nullptr) (void)inox_tls_client_destroy(tls_);
-    } else {
-      socket_.destroy();
-    }
+  if (!closed_ && connection_) {
+    connection_->destroy();
   }
 }
 
@@ -2526,7 +3104,6 @@ void HttpClientRequestState::onConnect() {
     return;
   }
 
-  connected_ = true;
   send();
 }
 
@@ -2557,7 +3134,7 @@ bool HttpClientRequestState::deliverResponseBody(inox::StringView data) {
   if (response_body_mode_ == HttpClientResponseBodyMode::content_length &&
       response_content_length_ &&
       response_body_received_ == *response_content_length_) {
-    response_->emitEnd();
+    completeResponseBody();
   }
 
   return !inox::thrown();
@@ -2740,7 +3317,7 @@ bool HttpClientRequestState::consumeChunkedBody(inox::StringView data) {
 
         response_chunk_bytes_.clear();
         response_chunk_state_ = HttpChunkDecodeState::complete;
-        response_->emitEnd();
+        completeResponseBody();
         return !inox::thrown();
       }
 
@@ -2847,19 +3424,15 @@ void HttpClientRequestState::onData(inox::StringView data) {
     return;
   }
 
-  NetSocket response_socket = socket_;
-
-  if (transport_kind_ == HttpClientTransportKind::tls) {
-    inox_value raw_socket = inox_undefined_value();
-
-    if (tls_ == nullptr || inox_tls_client_socket(tls_, &raw_socket) != INOX_OK) {
-      inox::Value error = materializeHttpError("HTTPS response socket is unavailable");
-      if (!inox::thrown()) onError(error);
-      return;
-    }
-
-    response_socket = NetSocket(inox::adopt(raw_socket));
+  if (!connection_) {
+    inox::Value error = materializeHttpError("HTTP response connection is unavailable");
+    if (!inox::thrown()) onError(error);
+    return;
   }
+
+  NetSocket response_socket = connection_->responseSocket();
+
+  if (inox::thrown()) return;
 
   try {
     response_ = std::make_shared<HttpRequestState>(
@@ -2881,6 +3454,7 @@ void HttpClientRequestState::onData(inox::StringView data) {
   }
 
   response_content_length_ = parsed.content_length;
+  response_keep_alive_ = parsed.keep_alive;
   response_body_mode_ = parsed.chunked
     ? HttpClientResponseBodyMode::chunked
     : parsed.content_length
@@ -2916,7 +3490,7 @@ void HttpClientRequestState::onData(inox::StringView data) {
        (response_body_mode_ == HttpClientResponseBodyMode::content_length &&
         response_content_length_ && *response_content_length_ == 0)) &&
       !response_->ended_) {
-    response_->emitEnd();
+    completeResponseBody();
   }
 
   response_bytes_.clear();
@@ -2947,7 +3521,7 @@ void HttpClientRequestState::onEnd() {
     return;
   }
 
-  response_->emitEnd();
+  completeResponseBody();
 }
 
 void HttpClientRequestState::onError(const inox::Value& error) {
@@ -2977,6 +3551,25 @@ void HttpClientRequestState::onFinish() {
   callHttpListeners(finish_listeners_);
 }
 
+void HttpClientRequestState::completeResponseBody() {
+  if (closed_ || !response_ || response_->ended_ || !connection_) {
+    return;
+  }
+
+  const bool reusable = request_keep_alive_ &&
+    response_keep_alive_ &&
+    response_body_mode_ != HttpClientResponseBodyMode::close_delimited;
+  std::shared_ptr<HttpClientConnectionState> connection = connection_;
+  const bool released = reusable && connection->release(shared_from_this());
+  response_->emitEnd();
+
+  if (released) {
+    onClose();
+  } else {
+    connection->complete(shared_from_this());
+  }
+}
+
 void HttpClientRequestState::removeHeader(inox::StringView name) {
   if (ending_ || sent_ || !validHeaderName(name)) {
     throwHttpError("TypeError: HttpClientRequest.removeHeader failed");
@@ -2992,11 +3585,22 @@ void HttpClientRequestState::removeHeader(inox::StringView name) {
 }
 
 void HttpClientRequestState::send() {
-  if (!connected_ || !ending_ || sent_ || closed_) {
+  if (!connection_ || !connection_->connected_ || !ending_ || sent_ || closed_) {
     return;
   }
 
   std::string request;
+  request_keep_alive_ = true;
+
+  for (const ResponseHeader& header : headers_) {
+    const inox::StringView value = header.value;
+
+    if (equalsIgnoreCase(header.name, inox::StringView("Connection", 10)) &&
+        headerValueHasToken(std::span<const char>(value.bytes, value.len), "close")) {
+      request_keep_alive_ = false;
+      break;
+    }
+  }
 
   try {
     const inox::StringView method = method_;
@@ -3038,7 +3642,7 @@ void HttpClientRequestState::send() {
     }
 
     if (!hasHeader("Connection")) {
-      request.append("Connection: close\r\n");
+      request.append("Connection: keep-alive\r\n");
     }
 
     request.append("\r\n");
@@ -3049,37 +3653,12 @@ void HttpClientRequestState::send() {
   }
 
   sent_ = true;
-
-  if (transport_kind_ == HttpClientTransportKind::tls) {
-    const inox_status status = inox_tls_client_write_with_callback(
-      tls_,
-      request.data(),
-      request.size(),
-      onClientTlsWrite,
-      this
-    );
-
-    if (status != INOX_OK) {
-      sent_ = false;
-      inox::Value error = materializeHttpError("HTTPS request write failed");
+  if (!connection_->write(inox::StringView(request.data(), request.size()))) {
+    sent_ = false;
+    if (!inox::thrown()) {
+      inox::Value error = materializeHttpError("HTTP request write failed");
       if (!inox::thrown()) onError(error);
     }
-
-    return;
-  }
-
-  inox::Callback finish = makeWeakCallback(shared_from_this(), onClientFinish);
-
-  if (inox::thrown()) {
-    sent_ = false;
-    return;
-  }
-
-  (void)socket_.write(inox::StringView(request.data(), request.size()), std::move(finish));
-
-  if (inox::thrown()) {
-    sent_ = false;
-    socket_.destroy();
   }
 }
 
@@ -3343,15 +3922,29 @@ void HttpResponseState::end(std::span<const std::uint8_t> body) {
     return;
   }
 
+  bool keep_alive = connection_->active_keep_alive_;
+
+  for (const ResponseHeader& header : headers_) {
+    const inox::StringView value = header.value;
+
+    if (equalsIgnoreCase(header.name, inox::StringView("Connection", 10)) &&
+        headerValueHasToken(std::span<const char>(value.bytes, value.len), "close")) {
+      keep_alive = false;
+      break;
+    }
+  }
+
   setHeader("Content-Length", inox::StringView(content_length.data(), content_length.size()));
 
   if (!inox::thrown()) {
-    setHeader("Connection", "close");
+    setHeader("Connection", keep_alive ? inox::StringView("keep-alive") : inox::StringView("close"));
   }
 
   if (inox::thrown()) {
     return;
   }
+
+  connection_->active_keep_alive_ = keep_alive;
 
   std::string header_bytes;
 
@@ -3394,17 +3987,25 @@ void HttpResponseState::end(std::span<const std::uint8_t> body) {
     return;
   }
 
-  inox::Callback shutdown = makeWeakCallback(connection_, onResponseShutdown);
+  inox::Callback complete = makeWeakCallback(connection_, onResponseComplete);
 
   if (inox::thrown()) {
     return;
   }
 
   ending_ = true;
-  connection_->socket_.end(
-    inox::StringView(reinterpret_cast<const char*>(response_bytes.data()), response_bytes.size()),
-    std::move(shutdown)
-  );
+
+  if (keep_alive) {
+    (void)connection_->socket_.write(
+      inox::StringView(reinterpret_cast<const char*>(response_bytes.data()), response_bytes.size()),
+      std::move(complete)
+    );
+  } else {
+    connection_->socket_.end(
+      inox::StringView(reinterpret_cast<const char*>(response_bytes.data()), response_bytes.size()),
+      std::move(complete)
+    );
+  }
 
   if (inox::thrown()) {
     ending_ = false;
@@ -3520,7 +4121,7 @@ inox_status onConnectionError(
   return INOX_OK;
 }
 
-inox_status onResponseShutdown(
+inox_status onResponseComplete(
   void* context,
   const inox_value* args,
   std::size_t arg_count,
@@ -3536,7 +4137,7 @@ inox_status onResponseShutdown(
   std::shared_ptr<HttpConnectionState> connection = lockCallbackState<HttpConnectionState>(context);
 
   if (connection && !connection->closed_) {
-    connection->socket_.destroy();
+    connection->completeResponse(connection->active_keep_alive_);
   }
 
   return callbackStatus();
@@ -3555,10 +4156,10 @@ inox_status onClientConnect(
     return INOX_ERR_TYPE;
   }
 
-  std::shared_ptr<HttpClientRequestState> request = lockCallbackState<HttpClientRequestState>(context);
+  std::shared_ptr<HttpClientConnectionState> connection = lockCallbackState<HttpClientConnectionState>(context);
 
-  if (request) {
-    request->onConnect();
+  if (connection) {
+    connection->onConnect();
   }
 
   return callbackStatus();
@@ -3576,10 +4177,10 @@ inox_status onClientData(
     return INOX_ERR_TYPE;
   }
 
-  std::shared_ptr<HttpClientRequestState> request = lockCallbackState<HttpClientRequestState>(context);
+  std::shared_ptr<HttpClientConnectionState> connection = lockCallbackState<HttpClientConnectionState>(context);
 
-  if (request) {
-    request->onData(inox::StringView(inox::String(inox::Value(args[0]))));
+  if (connection) {
+    connection->onData(inox::StringView(inox::String(inox::Value(args[0]))));
   }
 
   return callbackStatus();
@@ -3598,10 +4199,10 @@ inox_status onClientEnd(
     return INOX_ERR_TYPE;
   }
 
-  std::shared_ptr<HttpClientRequestState> request = lockCallbackState<HttpClientRequestState>(context);
+  std::shared_ptr<HttpClientConnectionState> connection = lockCallbackState<HttpClientConnectionState>(context);
 
-  if (request) {
-    request->onEnd();
+  if (connection) {
+    connection->onEnd();
   }
 
   return callbackStatus();
@@ -3619,10 +4220,10 @@ inox_status onClientClose(
     return INOX_ERR_TYPE;
   }
 
-  std::shared_ptr<HttpClientRequestState> request = lockCallbackState<HttpClientRequestState>(context);
+  std::shared_ptr<HttpClientConnectionState> connection = lockCallbackState<HttpClientConnectionState>(context);
 
-  if (request) {
-    request->onClose();
+  if (connection) {
+    connection->onClose();
   }
 
   return callbackStatus();
@@ -3640,10 +4241,10 @@ inox_status onClientError(
     return INOX_ERR_TYPE;
   }
 
-  std::shared_ptr<HttpClientRequestState> request = lockCallbackState<HttpClientRequestState>(context);
+  std::shared_ptr<HttpClientConnectionState> connection = lockCallbackState<HttpClientConnectionState>(context);
 
-  if (request) {
-    request->onError(inox::Value(args[0]));
+  if (connection) {
+    connection->onError(inox::Value(args[0]));
   }
 
   return callbackStatus();
@@ -3672,23 +4273,23 @@ inox_status onClientFinish(
 }
 
 inox_status onClientTlsConnect(void* context, inox_tls_client* client, inox_status status) {
-  auto* raw_request = static_cast<HttpClientRequestState*>(context);
+  auto* raw_connection = static_cast<HttpClientConnectionState*>(context);
 
-  if (raw_request == nullptr || client == nullptr) {
+  if (raw_connection == nullptr || client == nullptr) {
     return INOX_ERR_TYPE;
   }
 
-  std::shared_ptr<HttpClientRequestState> request = raw_request->native_owner_;
+  std::shared_ptr<HttpClientConnectionState> connection = raw_connection->native_owner_;
 
-  if (!request || request->tls_ != client) {
+  if (!connection || connection->tls_ != client) {
     return INOX_OK;
   }
 
   if (status == INOX_OK) {
-    request->onConnect();
+    connection->onConnect();
   } else {
     inox::Value error = materializeHttpError("HTTPS connection failed");
-    if (!inox::thrown()) request->onError(error);
+    if (!inox::thrown()) connection->onError(error);
   }
 
   return callbackStatus();
@@ -3700,58 +4301,53 @@ inox_status onClientTlsData(
   const char* bytes,
   std::size_t length
 ) {
-  auto* raw_request = static_cast<HttpClientRequestState*>(context);
+  auto* raw_connection = static_cast<HttpClientConnectionState*>(context);
 
-  if (raw_request == nullptr || client == nullptr || (bytes == nullptr && length != 0)) {
+  if (raw_connection == nullptr || client == nullptr || (bytes == nullptr && length != 0)) {
     return INOX_ERR_TYPE;
   }
 
-  std::shared_ptr<HttpClientRequestState> request = raw_request->native_owner_;
+  std::shared_ptr<HttpClientConnectionState> connection = raw_connection->native_owner_;
 
-  if (request && request->tls_ == client) {
-    request->onData(inox::StringView(bytes, length));
+  if (connection && connection->tls_ == client) {
+    connection->onData(inox::StringView(bytes, length));
   }
 
   return callbackStatus();
 }
 
 void onClientTlsClose(void* context, inox_tls_client* client) {
-  auto* raw_request = static_cast<HttpClientRequestState*>(context);
+  auto* raw_connection = static_cast<HttpClientConnectionState*>(context);
 
-  if (raw_request == nullptr || client == nullptr) {
+  if (raw_connection == nullptr || client == nullptr) {
     return;
   }
 
-  std::shared_ptr<HttpClientRequestState> request = raw_request->native_owner_;
+  std::shared_ptr<HttpClientConnectionState> connection = raw_connection->native_owner_;
 
-  if (!request || request->tls_ != client) {
+  if (!connection || connection->tls_ != client) {
     return;
   }
 
-  request->tls_ = nullptr;
-  if (!request->failed_) request->onEnd();
-  request->onClose();
+  connection->tls_ = nullptr;
+  connection->onEnd();
+  connection->onClose();
 }
 
 inox_status onClientTlsWrite(void* context, inox_tls_client* client, inox_status status) {
-  auto* raw_request = static_cast<HttpClientRequestState*>(context);
+  auto* raw_connection = static_cast<HttpClientConnectionState*>(context);
 
-  if (raw_request == nullptr || client == nullptr) {
+  if (raw_connection == nullptr || client == nullptr) {
     return INOX_ERR_TYPE;
   }
 
-  std::shared_ptr<HttpClientRequestState> request = raw_request->native_owner_;
+  std::shared_ptr<HttpClientConnectionState> connection = raw_connection->native_owner_;
 
-  if (!request || request->tls_ != client) {
+  if (!connection || connection->tls_ != client) {
     return INOX_OK;
   }
 
-  if (status == INOX_OK) {
-    request->onFinish();
-  } else {
-    inox::Value error = materializeHttpError("HTTPS request write failed");
-    if (!inox::thrown()) request->onError(error);
-  }
+  connection->onWrite(status);
 
   return callbackStatus();
 }

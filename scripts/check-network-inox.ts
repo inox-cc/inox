@@ -18,12 +18,15 @@ const executable = join(buildRoot, 'bin', 'network-acceptance')
 async function main(): Promise<void> {
   const port = await reservePort()
   const httpChunkedServerPort = await reservePort()
+  const httpKeepAliveServerPort = await reservePort()
   const nonce = `network-${process.pid}-${Date.now()}`
 
   await buildExecutable()
   const httpChunkedServer = await startHttpChunkedServer(nonce)
+  const httpKeepAliveClientServer = await startHttpKeepAliveClientServer(nonce)
   const invalidChunkedServer = await startInvalidChunkedServer()
   const httpsServer = await startHttpsServer(nonce)
+  const httpsKeepAliveClientServer = await startHttpsKeepAliveClientServer(nonce)
 
   const application = spawn(
     executable,
@@ -33,7 +36,10 @@ async function main(): Promise<void> {
       String(httpsServer.port),
       String(httpChunkedServer.port),
       String(invalidChunkedServer.port),
-      String(httpChunkedServerPort)
+      String(httpChunkedServerPort),
+      String(httpKeepAliveServerPort),
+      String(httpKeepAliveClientServer.port),
+      String(httpsKeepAliveClientServer.port)
     ],
     {
       cwd: repoRoot,
@@ -63,8 +69,15 @@ async function main(): Promise<void> {
       () => stdout,
       () => stderr
     )
+    await waitForLine(
+      application,
+      `INOX_HTTP_KEEP_ALIVE_SERVER_READY ${nonce} ${httpKeepAliveServerPort}`,
+      () => stdout,
+      () => stderr
+    )
 
     await checkChunkedHttpServer(httpChunkedServerPort, nonce)
+    await checkHttpKeepAliveServer(httpKeepAliveServerPort, nonce)
 
     const response = await fetchWithTimeout(`http://127.0.0.1:${port}/network`, 2_000, {
       'X-Inox-Test': nonce
@@ -110,14 +123,267 @@ async function main(): Promise<void> {
       lines.includes('INOX_HTTP_CHUNKED_SERVER_OK'),
       processFailure('HTTP server неверно обработал chunked requests', stdout, stderr)
     )
+    assert.ok(
+      lines.includes('INOX_HTTP_KEEP_ALIVE_SERVER_OK'),
+      processFailure('HTTP server неверно обработал keep-alive connections', stdout, stderr)
+    )
+    assert.ok(
+      lines.includes('INOX_HTTP_KEEP_ALIVE_CLIENT_OK'),
+      processFailure('HTTP client не переиспользовал keep-alive connection', stdout, stderr)
+    )
+    assert.deepEqual(
+      httpKeepAliveClientServer.stats(),
+      { connections: 1, requests: 2 },
+      processFailure('HTTP client открыл лишнее соединение вместо keep-alive reuse', stdout, stderr)
+    )
+    assert.ok(
+      lines.includes('INOX_HTTPS_KEEP_ALIVE_CLIENT_OK'),
+      processFailure('HTTPS client не переиспользовал keep-alive connection', stdout, stderr)
+    )
+    assert.deepEqual(
+      httpsKeepAliveClientServer.stats(),
+      { connections: 1, requests: 2 },
+      processFailure('HTTPS client открыл лишнее TLS-соединение вместо keep-alive reuse', stdout, stderr)
+    )
     assert.ok(lines.includes('INOX_HTTPS_CLIENT_OK'), processFailure('HTTPS client не получил ответ', stdout, stderr))
   } finally {
     await stopProcess(application)
     await closeHttpServer(httpChunkedServer.server)
+    await closeHttpServer(httpKeepAliveClientServer.server)
     await closeNetServer(invalidChunkedServer.server)
     await closeHttpsServer(httpsServer.server)
+    await closeHttpsServer(httpsKeepAliveClientServer.server)
     await rm(buildRoot, { recursive: true, force: true })
   }
+}
+
+async function startHttpsKeepAliveClientServer(nonce: string): Promise<{
+  readonly server: HttpsServer
+  readonly port: number
+  readonly stats: () => { readonly connections: number; readonly requests: number }
+}> {
+  const certificate = await readFile(join(repoRoot, 'tests/network/fixtures/https-cert.pem'))
+  const key = await readFile(join(repoRoot, 'tests/network/fixtures/https-key.pem'))
+  let connections = 0
+  let requests = 0
+  const server = createHttpsServer({ cert: certificate, key }, (request, response) => {
+    requests = requests + 1
+    const marker = request.headers['x-inox-https-keep-alive']
+    const first = request.url === '/first'
+    const second = request.url === '/second'
+    const valid = request.method === 'GET' && marker === nonce && (first || second)
+
+    response.statusCode = valid ? 200 : 400
+    response.setHeader('Content-Type', 'text/plain')
+
+    if (second) {
+      response.setHeader('Connection', 'close')
+    }
+
+    response.end(valid ? `https-keep-alive-${first ? 'first' : 'second'} ${nonce}` : 'invalid keep-alive request')
+  })
+
+  server.on('secureConnection', () => {
+    connections = connections + 1
+  })
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const address = server.address()
+  assert.ok(address !== null && typeof address !== 'string', 'Не удалось запустить HTTPS keep-alive client server')
+  return {
+    server,
+    port: address.port,
+    stats: () => ({ connections, requests })
+  }
+}
+
+async function startHttpKeepAliveClientServer(nonce: string): Promise<{
+  readonly server: HttpServer
+  readonly port: number
+  readonly stats: () => { readonly connections: number; readonly requests: number }
+}> {
+  let connections = 0
+  let requests = 0
+  const server = createHttpServer((request, response) => {
+    requests = requests + 1
+    const marker = request.headers['x-inox-keep-alive']
+    const first = request.url === '/first'
+    const second = request.url === '/second'
+    const valid = request.method === 'GET' && marker === nonce && (first || second)
+
+    response.statusCode = valid ? 200 : 400
+    response.setHeader('Content-Type', 'text/plain')
+
+    if (second) {
+      response.setHeader('Connection', 'close')
+    }
+
+    response.end(valid ? `keep-alive-${first ? 'first' : 'second'} ${nonce}` : 'invalid keep-alive request')
+  })
+
+  server.on('connection', () => {
+    connections = connections + 1
+  })
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const address = server.address()
+  assert.ok(address !== null && typeof address !== 'string', 'Не удалось запустить keep-alive HTTP client server')
+  return {
+    server,
+    port: address.port,
+    stats: () => ({ connections, requests })
+  }
+}
+
+type RawHttpConnection = {
+  readonly request: (chunks: string[]) => Promise<string>
+  readonly waitForClose: () => Promise<void>
+}
+
+async function openRawHttpConnection(port: number): Promise<RawHttpConnection> {
+  const socket = connectNetSocket(port, '127.0.0.1')
+  let buffered = ''
+  let pendingResolve: ((response: string) => void) | undefined
+  let pendingReject: ((error: Error) => void) | undefined
+  const closed = new Promise<void>((resolve) => {
+    socket.once('close', () => resolve())
+  })
+
+  function flushResponse(): void {
+    if (!pendingResolve) {
+      return
+    }
+
+    const headerEnd = buffered.indexOf('\r\n\r\n')
+
+    if (headerEnd < 0) {
+      return
+    }
+
+    const header = buffered.slice(0, headerEnd + 4)
+    const match = /(?:^|\r\n)Content-Length:\s*(\d+)\r\n/i.exec(header)
+
+    if (!match?.[1]) {
+      const reject = pendingReject
+      pendingResolve = undefined
+      pendingReject = undefined
+      reject?.(new Error(`HTTP response has no Content-Length:\n${header}`))
+      return
+    }
+
+    const bodyLength = Number(match[1])
+    const responseLength = headerEnd + 4 + bodyLength
+
+    if (buffered.length < responseLength) {
+      return
+    }
+
+    const response = buffered.slice(0, responseLength)
+    buffered = buffered.slice(responseLength)
+    const resolve = pendingResolve
+    pendingResolve = undefined
+    pendingReject = undefined
+    resolve(response)
+  }
+
+  socket.setEncoding('utf8')
+  socket.on('data', (chunk) => {
+    buffered = buffered + chunk
+    flushResponse()
+  })
+  socket.on('error', (error) => {
+    const reject = pendingReject
+    pendingResolve = undefined
+    pendingReject = undefined
+    reject?.(error)
+  })
+  await once(socket, 'connect')
+
+  return {
+    request: async (chunks) => {
+      assert.ok(!pendingResolve, 'raw HTTP connection already has a pending request')
+      const response = new Promise<string>((resolve, reject) => {
+        pendingResolve = resolve
+        pendingReject = reject
+      })
+
+      for (const chunk of chunks) {
+        socket.write(chunk)
+        await delay(5)
+      }
+
+      flushResponse()
+      return await Promise.race([
+        response,
+        delay(2_000).then(() => {
+          throw new Error('keep-alive HTTP response timeout')
+        })
+      ])
+    },
+    waitForClose: async () => {
+      await Promise.race([
+        closed,
+        delay(2_000).then(() => {
+          throw new Error('keep-alive HTTP connection did not close')
+        })
+      ])
+    }
+  }
+}
+
+async function checkHttpKeepAliveServer(port: number, nonce: string): Promise<void> {
+  const http11 = await openRawHttpConnection(port)
+  const first = await http11.request([
+    'POST /first HTTP/1.1\r\n' + 'Host: 127.0.0.1\r\n' + 'Content-Length: ' + String(nonce.length) + '\r\n\r\n' + nonce
+  ])
+  assert.match(first, /^HTTP\/1\.1 200 /)
+  assert.match(first, /\r\nConnection: keep-alive\r\n/i)
+  assert.ok(first.endsWith('/first'))
+
+  const chunked = await http11.request([
+    'POST /chunked HTTP/1.1\r\n' + 'Host: 127.0.0.1\r\n' + 'Transfer-Encoding: chunked\r\n\r\n' + '8\r\nchunked \r\n',
+    nonce.length.toString(16) + '\r\n' + nonce + '\r\n0\r\n\r\n'
+  ])
+  assert.match(chunked, /\r\nConnection: keep-alive\r\n/i)
+  assert.ok(chunked.endsWith('/chunked'))
+
+  const closing = await http11.request(['GET /close HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n'])
+  assert.match(closing, /\r\nConnection: close\r\n/i)
+  await http11.waitForClose()
+
+  const pipelined = await openRawHttpConnection(port)
+  const pipelinedFirst = await pipelined.request([
+    'GET /pipelined-first HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n' +
+      'GET /pipelined-close HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n'
+  ])
+  assert.match(pipelinedFirst, /\r\nConnection: keep-alive\r\n/i)
+  assert.ok(pipelinedFirst.endsWith('/pipelined-first'))
+  const pipelinedClosing = await pipelined.request([])
+  assert.match(pipelinedClosing, /\r\nConnection: close\r\n/i)
+  assert.ok(pipelinedClosing.endsWith('/pipelined-close'))
+  await pipelined.waitForClose()
+
+  const http10Close = await openRawHttpConnection(port)
+  const legacyClosing = await http10Close.request(['GET /http10-close HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n'])
+  assert.match(legacyClosing, /\r\nConnection: close\r\n/i)
+  await http10Close.waitForClose()
+
+  const http10KeepAlive = await openRawHttpConnection(port)
+  const legacyFirst = await http10KeepAlive.request([
+    'GET /http10-first HTTP/1.0\r\nHost: 127.0.0.1\r\nConnection: keep-alive\r\n\r\n'
+  ])
+  assert.match(legacyFirst, /\r\nConnection: keep-alive\r\n/i)
+
+  const idle = await openRawHttpConnection(port)
+  const idleResponse = await idle.request(['GET /idle HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n'])
+  assert.match(idleResponse, /\r\nConnection: keep-alive\r\n/i)
+
+  const shutdown = await http10KeepAlive.request([
+    'GET /shutdown HTTP/1.0\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n'
+  ])
+  assert.match(shutdown, /\r\nConnection: close\r\n/i)
+  await http10KeepAlive.waitForClose()
+  await idle.waitForClose()
 }
 
 async function checkChunkedHttpServer(port: number, nonce: string): Promise<void> {
