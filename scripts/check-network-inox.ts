@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { once } from 'node:events'
 import { readFile, rm } from 'node:fs/promises'
-import { createServer as createHttpServer, type Server as HttpServer } from 'node:http'
+import { createServer as createHttpServer, get as getHttp, type Server as HttpServer } from 'node:http'
 import { createServer as createHttpsServer, type Server as HttpsServer } from 'node:https'
 import { connect as connectNetSocket, createServer as createNetServer, type Server as NetServer } from 'node:net'
 import { join } from 'node:path'
@@ -19,6 +19,7 @@ async function main(): Promise<void> {
   const port = await reservePort()
   const httpChunkedServerPort = await reservePort()
   const httpKeepAliveServerPort = await reservePort()
+  const httpStreamingServerPort = await reservePort()
   const nonce = `network-${process.pid}-${Date.now()}`
 
   await buildExecutable()
@@ -27,6 +28,8 @@ async function main(): Promise<void> {
   const invalidChunkedServer = await startInvalidChunkedServer()
   const httpsServer = await startHttpsServer(nonce)
   const httpsKeepAliveClientServer = await startHttpsKeepAliveClientServer(nonce)
+  const httpStreamingClientServer = await startHttpStreamingClientServer(nonce)
+  const httpsStreamingClientServer = await startHttpsStreamingClientServer(nonce)
 
   const application = spawn(
     executable,
@@ -39,7 +42,10 @@ async function main(): Promise<void> {
       String(httpChunkedServerPort),
       String(httpKeepAliveServerPort),
       String(httpKeepAliveClientServer.port),
-      String(httpsKeepAliveClientServer.port)
+      String(httpsKeepAliveClientServer.port),
+      String(httpStreamingServerPort),
+      String(httpStreamingClientServer.port),
+      String(httpsStreamingClientServer.port)
     ],
     {
       cwd: repoRoot,
@@ -75,9 +81,16 @@ async function main(): Promise<void> {
       () => stdout,
       () => stderr
     )
+    await waitForLine(
+      application,
+      `INOX_HTTP_STREAMING_SERVER_READY ${nonce} ${httpStreamingServerPort}`,
+      () => stdout,
+      () => stderr
+    )
 
     await checkChunkedHttpServer(httpChunkedServerPort, nonce)
     await checkHttpKeepAliveServer(httpKeepAliveServerPort, nonce)
+    await checkHttpStreamingServer(httpStreamingServerPort, nonce)
 
     const response = await fetchWithTimeout(`http://127.0.0.1:${port}/network`, 2_000, {
       'X-Inox-Test': nonce
@@ -145,6 +158,28 @@ async function main(): Promise<void> {
       { connections: 1, requests: 2 },
       processFailure('HTTPS client открыл лишнее TLS-соединение вместо keep-alive reuse', stdout, stderr)
     )
+    assert.ok(
+      lines.includes('INOX_HTTP_STREAMING_CLIENT_OK'),
+      processFailure('HTTP client не завершил streaming requests', stdout, stderr)
+    )
+    assert.deepEqual(
+      httpStreamingClientServer.stats(),
+      { connections: 1, requests: 2, chunked: true, fixed: true },
+      processFailure('HTTP client не отправил chunks до end или нарушил framing', stdout, stderr)
+    )
+    assert.ok(
+      lines.includes('INOX_HTTPS_STREAMING_CLIENT_OK'),
+      processFailure('HTTPS client не завершил streaming request', stdout, stderr)
+    )
+    assert.deepEqual(
+      httpsStreamingClientServer.stats(),
+      { requests: 1, chunked: true },
+      processFailure('HTTPS client не отправил chunks до end или нарушил framing', stdout, stderr)
+    )
+    assert.ok(
+      lines.includes('INOX_HTTP_STREAMING_SERVER_OK'),
+      processFailure('HTTP server не завершил streaming responses', stdout, stderr)
+    )
     assert.ok(lines.includes('INOX_HTTPS_CLIENT_OK'), processFailure('HTTPS client не получил ответ', stdout, stderr))
   } finally {
     await stopProcess(application)
@@ -153,6 +188,8 @@ async function main(): Promise<void> {
     await closeNetServer(invalidChunkedServer.server)
     await closeHttpsServer(httpsServer.server)
     await closeHttpsServer(httpsKeepAliveClientServer.server)
+    await closeHttpServer(httpStreamingClientServer.server)
+    await closeHttpsServer(httpsStreamingClientServer.server)
     await rm(buildRoot, { recursive: true, force: true })
   }
 }
@@ -232,6 +269,139 @@ async function startHttpKeepAliveClientServer(nonce: string): Promise<{
     server,
     port: address.port,
     stats: () => ({ connections, requests })
+  }
+}
+
+async function startHttpStreamingClientServer(nonce: string): Promise<{
+  readonly server: HttpServer
+  readonly port: number
+  readonly stats: () => {
+    readonly connections: number
+    readonly requests: number
+    readonly chunked: boolean
+    readonly fixed: boolean
+  }
+}> {
+  let connections = 0
+  let requests = 0
+  let chunked = false
+  let fixed = false
+  const server = createHttpServer((request, response) => {
+    requests = requests + 1
+    let body = ''
+    let chunks = 0
+    let firstChunkAt = 0
+    let lastChunkAt = 0
+
+    request.setEncoding('utf8')
+    request.on('data', (data) => {
+      const now = Date.now()
+
+      if (chunks === 0) {
+        firstChunkAt = now
+      }
+
+      chunks = chunks + 1
+      lastChunkAt = now
+      body = body + data
+    })
+    request.on('end', () => {
+      const separated = chunks >= 2 && lastChunkAt - firstChunkAt >= 100
+
+      if (request.url === '/chunked') {
+        chunked =
+          separated &&
+          request.headers['transfer-encoding'] === 'chunked' &&
+          request.headers['content-length'] === undefined &&
+          body === 'chunked ' + nonce + ' body'
+      }
+
+      if (request.url === '/fixed') {
+        const expected = 'fixed ' + nonce + ' body'
+        fixed =
+          separated &&
+          request.headers['transfer-encoding'] === undefined &&
+          request.headers['content-length'] === String(expected.length) &&
+          body === expected
+        response.setHeader('Connection', 'close')
+      }
+
+      const valid = request.url === '/chunked' ? chunked : request.url === '/fixed' ? fixed : false
+      response.statusCode = valid ? 200 : 400
+      response.end(
+        valid
+          ? request.url === '/chunked'
+            ? 'http-streaming-chunked-ok ' + nonce
+            : 'http-streaming-fixed-ok ' + nonce
+          : 'invalid HTTP streaming request'
+      )
+    })
+  })
+
+  server.on('connection', () => {
+    connections = connections + 1
+  })
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const address = server.address()
+  assert.ok(address !== null && typeof address !== 'string', 'Не удалось запустить HTTP streaming client server')
+  return {
+    server,
+    port: address.port,
+    stats: () => ({ connections, requests, chunked, fixed })
+  }
+}
+
+async function startHttpsStreamingClientServer(nonce: string): Promise<{
+  readonly server: HttpsServer
+  readonly port: number
+  readonly stats: () => { readonly requests: number; readonly chunked: boolean }
+}> {
+  const certificate = await readFile(join(repoRoot, 'tests/network/fixtures/https-cert.pem'))
+  const key = await readFile(join(repoRoot, 'tests/network/fixtures/https-key.pem'))
+  let requests = 0
+  let chunked = false
+  const server = createHttpsServer({ cert: certificate, key }, (request, response) => {
+    requests = requests + 1
+    let body = ''
+    let chunks = 0
+    let firstChunkAt = 0
+    let lastChunkAt = 0
+
+    request.setEncoding('utf8')
+    request.on('data', (data) => {
+      const now = Date.now()
+
+      if (chunks === 0) {
+        firstChunkAt = now
+      }
+
+      chunks = chunks + 1
+      lastChunkAt = now
+      body = body + data
+    })
+    request.on('end', () => {
+      chunked =
+        request.url === '/chunked' &&
+        chunks >= 2 &&
+        lastChunkAt - firstChunkAt >= 100 &&
+        request.headers['transfer-encoding'] === 'chunked' &&
+        request.headers['content-length'] === undefined &&
+        body === 'secure ' + nonce + ' body'
+      response.statusCode = chunked ? 200 : 400
+      response.setHeader('Connection', 'close')
+      response.end(chunked ? 'https-streaming-ok ' + nonce : 'invalid HTTPS streaming request')
+    })
+  })
+
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const address = server.address()
+  assert.ok(address !== null && typeof address !== 'string', 'Не удалось запустить HTTPS streaming client server')
+  return {
+    server,
+    port: address.port,
+    stats: () => ({ requests, chunked })
   }
 }
 
@@ -384,6 +554,92 @@ async function checkHttpKeepAliveServer(port: number, nonce: string): Promise<vo
   assert.match(shutdown, /\r\nConnection: close\r\n/i)
   await http10KeepAlive.waitForClose()
   await idle.waitForClose()
+}
+
+type StreamingHttpResponse = {
+  readonly body: string
+  readonly contentLength: string | undefined
+  readonly transferEncoding: string | undefined
+  readonly chunks: number
+  readonly gap: number
+  readonly statusCode: number | undefined
+}
+
+async function readStreamingHttpResponse(port: number, path: string): Promise<StreamingHttpResponse> {
+  return await new Promise<StreamingHttpResponse>((resolve, reject) => {
+    const request = getHttp(
+      {
+        hostname: '127.0.0.1',
+        port,
+        path,
+        headers: { Connection: 'close' }
+      },
+      (response) => {
+        let body = ''
+        let chunks = 0
+        let firstChunkAt = 0
+        let lastChunkAt = 0
+
+        response.setEncoding('utf8')
+        response.on('data', (chunk) => {
+          const now = Date.now()
+
+          if (chunks === 0) {
+            firstChunkAt = now
+          }
+
+          chunks = chunks + 1
+          lastChunkAt = now
+          body = body + chunk
+        })
+        response.on('end', () => {
+          resolve({
+            body,
+            contentLength: response.headers['content-length'],
+            transferEncoding: response.headers['transfer-encoding'],
+            chunks,
+            gap: lastChunkAt - firstChunkAt,
+            statusCode: response.statusCode
+          })
+        })
+      }
+    )
+
+    request.on('error', reject)
+  })
+}
+
+async function checkHttpStreamingServer(port: number, nonce: string): Promise<void> {
+  const chunked = await readStreamingHttpResponse(port, '/chunked')
+  assert.equal(chunked.statusCode, 200)
+  assert.equal(chunked.transferEncoding, 'chunked')
+  assert.equal(chunked.contentLength, undefined)
+  assert.equal(chunked.body, 'chunked ' + nonce + ' body')
+  assert.ok(chunked.chunks >= 2 && chunked.gap >= 100, 'Chunked server response был буферизован до end()')
+
+  const fixed = await readStreamingHttpResponse(port, '/fixed')
+  assert.equal(fixed.statusCode, 200)
+  assert.equal(fixed.transferEncoding, undefined)
+  assert.equal(fixed.contentLength, String(fixed.body.length))
+  assert.equal(fixed.body, 'fixed ' + nonce + ' body')
+  assert.ok(fixed.chunks >= 2 && fixed.gap >= 100, 'Content-Length server response был буферизован до end()')
+
+  const invalid = await readStreamingHttpResponse(port, '/invalid')
+  assert.equal(invalid.statusCode, 200)
+  assert.equal(invalid.contentLength, '1')
+  assert.equal(invalid.body, 'a')
+
+  const legacy = await sendRawHttpRequest(port, [
+    'GET /legacy HTTP/1.0\r\n' + 'Host: 127.0.0.1\r\n' + 'Connection: close\r\n' + '\r\n'
+  ])
+  assert.match(legacy, /^HTTP\/1\.0 200 /)
+  assert.doesNotMatch(legacy, /\r\n(?:Content-Length|Transfer-Encoding):/i)
+  assert.ok(legacy.endsWith('legacy ' + nonce + ' body'))
+
+  const shutdown = await sendRawHttpRequest(port, [
+    'GET /shutdown HTTP/1.1\r\n' + 'Host: 127.0.0.1\r\n' + 'Connection: close\r\n' + '\r\n'
+  ])
+  assert.match(shutdown, /^HTTP\/1\.1 200 /)
 }
 
 async function checkChunkedHttpServer(port: number, nonce: string): Promise<void> {

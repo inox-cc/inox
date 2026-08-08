@@ -1,6 +1,7 @@
 #include "inox/http.h"
 
 #include <array>
+#include <charconv>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -45,6 +46,13 @@ enum class HttpChunkDecodeState {
   data_crlf,
   trailers,
   complete
+};
+
+enum class HttpOutgoingBodyMode {
+  undecided,
+  content_length,
+  chunked,
+  close_delimited
 };
 
 void throwHttpError(const char* message) {
@@ -304,8 +312,11 @@ class HttpResponseState : public std::enable_shared_from_this<HttpResponseState>
 public:
   std::shared_ptr<HttpConnectionState> connection_;
   std::vector<ResponseHeader> headers_;
-  std::vector<std::uint8_t> body_;
+  std::optional<std::size_t> content_length_;
+  std::size_t body_bytes_written_;
+  HttpOutgoingBodyMode body_mode_;
   double status_code_;
+  bool sent_;
   bool ending_;
   bool ended_;
 
@@ -322,6 +333,11 @@ public:
   void setStatusCode(double value);
   bool write(std::span<const std::uint8_t> body);
   bool writableEnded() const;
+
+private:
+  bool appendBody(std::string& output, std::span<const std::uint8_t> body);
+  bool begin(bool streaming, std::size_t initial_body_size, std::string& output);
+  bool send(std::string& output, bool final);
 };
 
 class HttpServerState : public std::enable_shared_from_this<HttpServerState> {
@@ -351,6 +367,7 @@ public:
   std::shared_ptr<HttpConnectionState> native_owner_;
   std::size_t active_request_bytes_;
   bool active_keep_alive_;
+  bool active_http_1_0_;
   bool request_dispatched_;
   bool closed_;
 
@@ -410,7 +427,7 @@ public:
   void onWrite(inox_status status);
   NetSocket responseSocket() const;
   void setIdle(bool idle);
-  bool write(inox::StringView data);
+  bool write(inox::StringView data, bool final, bool& accepted);
 };
 
 class HttpClientRequestState : public std::enable_shared_from_this<HttpClientRequestState> {
@@ -420,7 +437,7 @@ public:
   inox::String path_;
   double port_;
   std::vector<ResponseHeader> headers_;
-  std::vector<std::uint8_t> body_;
+  std::string pending_write_bytes_;
   std::vector<char> response_bytes_;
   std::vector<inox::Callback> response_listeners_;
   std::vector<inox::Callback> finish_listeners_;
@@ -438,8 +455,12 @@ public:
   std::size_t response_trailer_count_;
   HttpClientResponseBodyMode response_body_mode_;
   HttpChunkDecodeState response_chunk_state_;
+  std::optional<std::size_t> request_content_length_;
+  std::size_t request_body_bytes_;
+  HttpOutgoingBodyMode request_body_mode_;
   bool response_keep_alive_;
   bool request_keep_alive_;
+  bool pending_write_final_;
   bool ending_;
   bool sent_;
   bool finished_;
@@ -476,16 +497,18 @@ public:
   void onError(const inox::Value& error);
   void onFinish();
   void removeHeader(inox::StringView name);
-  void send();
   void setHeader(inox::StringView name, inox::StringView value);
   bool writableEnded() const;
   bool write(std::span<const std::uint8_t> body);
 
 private:
+  bool appendRequestBody(std::string& output, std::span<const std::uint8_t> body);
+  bool beginRequest(bool streaming, std::size_t initial_body_size, std::string& output);
   bool consumeChunkedBody(inox::StringView data);
   bool consumeResponseBody(inox::StringView data);
   bool deliverResponseBody(inox::StringView data);
   void completeResponseBody();
+  bool send(std::string& output, bool final);
 };
 
 template <typename Holder>
@@ -1029,6 +1052,212 @@ inox::String normalizedHeaderName(std::span<const char> name) {
   }
 
   return inox::String(normalized.data(), normalized.size());
+}
+
+std::span<const char> trimOptionalWhitespace(std::span<const char> value) {
+  while (!value.empty() && (value.front() == ' ' || value.front() == '\t')) {
+    value = value.subspan(1);
+  }
+
+  while (!value.empty() && (value.back() == ' ' || value.back() == '\t')) {
+    value = value.first(value.size() - 1);
+  }
+
+  return value;
+}
+
+bool parseOutgoingContentLength(
+  inox::StringView value,
+  std::size_t body_limit,
+  std::size_t& out
+) {
+  const std::span<const char> bytes = trimOptionalWhitespace(
+    std::span<const char>(value.bytes, value.len)
+  );
+
+  if (bytes.empty()) {
+    return false;
+  }
+
+  std::size_t parsed = 0;
+
+  for (const char digit : bytes) {
+    if (digit < '0' || digit > '9') {
+      return false;
+    }
+
+    const std::size_t number = static_cast<std::size_t>(digit - '0');
+
+    if (parsed > (body_limit - number) / 10) {
+      return false;
+    }
+
+    parsed = parsed * 10 + number;
+  }
+
+  out = parsed;
+  return true;
+}
+
+bool appendGeneratedHeader(
+  std::vector<ResponseHeader>& headers,
+  const char* name,
+  inox::StringView value,
+  const char* allocation_error
+) {
+  if (headers.size() >= maxResponseHeaders) {
+    throwHttpError("TypeError: HTTP header limit exceeded");
+    return false;
+  }
+
+  try {
+    headers.push_back(ResponseHeader{inox::String(name), inox::String(value)});
+  } catch (const std::bad_alloc&) {
+    throwHttpError(allocation_error);
+    return false;
+  }
+
+  return !inox::thrown();
+}
+
+bool selectOutgoingBodyMode(
+  std::vector<ResponseHeader>& headers,
+  bool streaming,
+  bool chunked_supported,
+  std::size_t initial_body_size,
+  std::size_t body_limit,
+  const char* framing_error,
+  const char* allocation_error,
+  HttpOutgoingBodyMode& mode,
+  std::optional<std::size_t>& content_length
+) {
+  bool has_content_length = false;
+  bool has_transfer_encoding = false;
+  std::size_t declared_content_length = 0;
+
+  for (const ResponseHeader& header : headers) {
+    const inox::StringView name = header.name;
+    const inox::StringView value = header.value;
+
+    if (equalsIgnoreCase(name, inox::StringView("Content-Length", 14))) {
+      if (has_content_length ||
+          !parseOutgoingContentLength(value, body_limit, declared_content_length)) {
+        throwHttpError(framing_error);
+        return false;
+      }
+
+      has_content_length = true;
+    }
+
+    if (equalsIgnoreCase(name, inox::StringView("Transfer-Encoding", 17))) {
+      const std::span<const char> encoding = trimOptionalWhitespace(
+        std::span<const char>(value.bytes, value.len)
+      );
+
+      if (has_transfer_encoding || !spanEqualsIgnoreCase(encoding, "chunked")) {
+        throwHttpError(framing_error);
+        return false;
+      }
+
+      has_transfer_encoding = true;
+    }
+  }
+
+  if (has_content_length && has_transfer_encoding) {
+    throwHttpError(framing_error);
+    return false;
+  }
+
+  if (has_content_length) {
+    if (initial_body_size > declared_content_length) {
+      throwHttpError(framing_error);
+      return false;
+    }
+
+    mode = HttpOutgoingBodyMode::content_length;
+    content_length = declared_content_length;
+    return true;
+  }
+
+  if (has_transfer_encoding || streaming) {
+    if (!chunked_supported) {
+      if (has_transfer_encoding) {
+        throwHttpError(framing_error);
+        return false;
+      }
+
+      mode = HttpOutgoingBodyMode::close_delimited;
+      content_length.reset();
+      return true;
+    }
+
+    mode = HttpOutgoingBodyMode::chunked;
+    content_length.reset();
+
+    if (!has_transfer_encoding) {
+      return appendGeneratedHeader(
+        headers,
+        "transfer-encoding",
+        inox::StringView("chunked", 7),
+        allocation_error
+      );
+    }
+
+    return true;
+  }
+
+  std::string serialized_length;
+
+  try {
+    serialized_length = std::to_string(initial_body_size);
+  } catch (const std::bad_alloc&) {
+    throwHttpError(allocation_error);
+    return false;
+  }
+
+  mode = HttpOutgoingBodyMode::content_length;
+  content_length = initial_body_size;
+  return appendGeneratedHeader(
+    headers,
+    "content-length",
+    inox::StringView(serialized_length.data(), serialized_length.size()),
+    allocation_error
+  );
+}
+
+bool appendChunk(
+  std::string& output,
+  std::span<const std::uint8_t> body,
+  const char* allocation_error
+) {
+  if (body.empty()) {
+    return true;
+  }
+
+  std::array<char, sizeof(std::size_t) * 2> serialized_size{};
+  const auto result = std::to_chars(
+    serialized_size.data(),
+    serialized_size.data() + serialized_size.size(),
+    body.size(),
+    16
+  );
+
+  if (result.ec != std::errc()) {
+    throwHttpError(allocation_error);
+    return false;
+  }
+
+  try {
+    output.append(serialized_size.data(), static_cast<std::size_t>(result.ptr - serialized_size.data()));
+    output.append("\r\n");
+    output.append(reinterpret_cast<const char*>(body.data()), body.size());
+    output.append("\r\n");
+  } catch (const std::bad_alloc&) {
+    throwHttpError(allocation_error);
+    return false;
+  }
+
+  return true;
 }
 
 inox::Value materializeRequestHeaders(
@@ -1976,6 +2205,7 @@ HttpConnectionState::HttpConnectionState(std::shared_ptr<HttpServerState> server
     native_owner_(),
     active_request_bytes_(0),
     active_keep_alive_(false),
+    active_http_1_0_(false),
     request_dispatched_(false),
     closed_(false) {}
 
@@ -2056,6 +2286,7 @@ void HttpConnectionState::completeResponse(bool keep_alive) {
   );
   active_request_bytes_ = 0;
   active_keep_alive_ = false;
+  active_http_1_0_ = false;
   request_dispatched_ = false;
   onData(inox::StringView());
 }
@@ -2163,6 +2394,9 @@ void HttpConnectionState::onData(inox::StringView data) {
 
   active_request_bytes_ = request_size;
   active_keep_alive_ = parsed.keep_alive;
+  active_http_1_0_ =
+    parsed.version_length == 3 &&
+    std::memcmp(request_bytes_.data() + parsed.version_start, "1.0", 3) == 0;
   request_dispatched_ = true;
   std::shared_ptr<HttpRequestState> request;
   std::shared_ptr<HttpResponseState> response;
@@ -2784,36 +3018,57 @@ void HttpClientConnectionState::setIdle(bool idle) {
   else socket.ref();
 }
 
-bool HttpClientConnectionState::write(inox::StringView data) {
+bool HttpClientConnectionState::write(inox::StringView data, bool final, bool& accepted) {
+  accepted = false;
+
   if (!connected_ || closed_ || destroying_ || !request_) {
     return false;
   }
 
   if (transport_kind_ == HttpClientTransportKind::tls) {
-    const inox_status status = inox_tls_client_write_with_callback(
-      tls_,
-      data.bytes,
-      data.len,
-      onClientTlsWrite,
-      this
-    );
+    const inox_status status = final
+      ? inox_tls_client_write_with_callback(
+          tls_,
+          data.bytes,
+          data.len,
+          onClientTlsWrite,
+          this
+        )
+      : inox_tls_client_write(tls_, data.bytes, data.len);
 
     if (status != INOX_OK) {
-      onWrite(status);
+      if (final) {
+        onWrite(status);
+      } else {
+        inox::Value error = materializeHttpError("HTTPS request write failed");
+        if (!inox::thrown()) onError(error);
+      }
+
       return false;
     }
 
+    accepted = true;
     return true;
   }
 
-  inox::Callback finish = makeWeakCallback(request_, onClientFinish);
+  inox::Callback finish;
+
+  if (final) {
+    finish = makeWeakCallback(request_, onClientFinish);
+
+    if (inox::thrown()) {
+      return false;
+    }
+  }
+
+  const bool writable = socket_.write(data, std::move(finish));
 
   if (inox::thrown()) {
     return false;
   }
 
-  (void)socket_.write(data, std::move(finish));
-  return !inox::thrown();
+  accepted = true;
+  return writable;
 }
 
 HttpClientRequestState::HttpClientRequestState(
@@ -2828,7 +3083,7 @@ HttpClientRequestState::HttpClientRequestState(
     path_(std::move(path)),
     port_(port),
     headers_(),
-    body_(),
+    pending_write_bytes_(),
     response_bytes_(),
     response_listeners_(),
     finish_listeners_(),
@@ -2846,8 +3101,12 @@ HttpClientRequestState::HttpClientRequestState(
     response_trailer_count_(0),
     response_body_mode_(HttpClientResponseBodyMode::close_delimited),
     response_chunk_state_(HttpChunkDecodeState::size),
+    request_content_length_(),
+    request_body_bytes_(0),
+    request_body_mode_(HttpOutgoingBodyMode::undecided),
     response_keep_alive_(false),
     request_keep_alive_(true),
+    pending_write_final_(false),
     ending_(false),
     sent_(false),
     finished_(false),
@@ -2856,7 +3115,7 @@ HttpClientRequestState::HttpClientRequestState(
     closed_(false) {
   try {
     headers_.reserve(8);
-    body_.reserve(1024);
+    pending_write_bytes_.reserve(1024);
     response_bytes_.reserve(4096);
   } catch (const std::bad_alloc&) {
     throwHttpError("TypeError: HttpClientRequest allocation failed");
@@ -3003,12 +3262,36 @@ void HttpClientRequestState::end(std::span<const std::uint8_t> body) {
     return;
   }
 
-  if (!write(body)) {
+  std::string output;
+
+  if (!sent_ && !beginRequest(false, body.size(), output)) {
     return;
   }
 
+  if (!appendRequestBody(output, body)) {
+    if (connection_) connection_->destroy();
+    return;
+  }
+
+  if (request_body_mode_ == HttpOutgoingBodyMode::content_length &&
+      (!request_content_length_ || request_body_bytes_ != *request_content_length_)) {
+    throwHttpError("TypeError: HttpClientRequest Content-Length does not match its body");
+    if (connection_) connection_->destroy();
+    return;
+  }
+
+  if (request_body_mode_ == HttpOutgoingBodyMode::chunked) {
+    try {
+      output.append("0\r\n\r\n");
+    } catch (const std::bad_alloc&) {
+      throwHttpError("TypeError: HttpClientRequest serialization failed");
+      if (connection_) connection_->destroy();
+      return;
+    }
+  }
+
   ending_ = true;
-  send();
+  (void)send(output, true);
 }
 
 inox::Value HttpClientRequestState::getHeader(inox::StringView name) const {
@@ -3104,7 +3387,15 @@ void HttpClientRequestState::onConnect() {
     return;
   }
 
-  send();
+  if (pending_write_bytes_.empty() && !pending_write_final_) {
+    return;
+  }
+
+  std::string output = std::move(pending_write_bytes_);
+  const bool final = pending_write_final_;
+  pending_write_bytes_.clear();
+  pending_write_final_ = false;
+  (void)send(output, final);
 }
 
 bool HttpClientRequestState::deliverResponseBody(inox::StringView data) {
@@ -3584,12 +3875,31 @@ void HttpClientRequestState::removeHeader(inox::StringView name) {
   }
 }
 
-void HttpClientRequestState::send() {
-  if (!connection_ || !connection_->connected_ || !ending_ || sent_ || closed_) {
-    return;
+bool HttpClientRequestState::beginRequest(
+  bool streaming,
+  std::size_t initial_body_size,
+  std::string& output
+) {
+  if (sent_ || request_body_mode_ != HttpOutgoingBodyMode::undecided ||
+      initial_body_size > maxClientRequestBodyBytes ||
+      !selectOutgoingBodyMode(
+        headers_,
+        streaming,
+        true,
+        initial_body_size,
+        maxClientRequestBodyBytes,
+        "TypeError: HttpClientRequest body framing is invalid",
+        "TypeError: HttpClientRequest serialization failed",
+        request_body_mode_,
+        request_content_length_
+      )) {
+    if (!inox::thrown()) {
+      throwHttpError("TypeError: HttpClientRequest body is too large");
+    }
+
+    return false;
   }
 
-  std::string request;
   request_keep_alive_ = true;
 
   for (const ResponseHeader& header : headers_) {
@@ -3606,60 +3916,117 @@ void HttpClientRequestState::send() {
     const inox::StringView method = method_;
     const inox::StringView path = path_;
     const inox::StringView host = host_;
-    request.reserve(256 + body_.size());
-    request.append(method.bytes, method.len);
-    request.push_back(' ');
-    request.append(path.bytes, path.len);
-    request.append(" HTTP/1.1\r\n");
+    output.reserve(256 + initial_body_size);
+    output.append(method.bytes, method.len);
+    output.push_back(' ');
+    output.append(path.bytes, path.len);
+    output.append(" HTTP/1.1\r\n");
 
     if (!hasHeader("Host")) {
-      request.append("Host: ");
-      request.append(host.bytes, host.len);
+      output.append("Host: ");
+      output.append(host.bytes, host.len);
 
       const double default_port = transport_kind_ == HttpClientTransportKind::tls ? 443 : 80;
 
       if (port_ != default_port) {
-        request.push_back(':');
-        request.append(std::to_string(static_cast<int>(port_)));
+        output.push_back(':');
+        output.append(std::to_string(static_cast<int>(port_)));
       }
 
-      request.append("\r\n");
+      output.append("\r\n");
     }
 
     for (const ResponseHeader& header : headers_) {
       const inox::StringView name = header.name;
       const inox::StringView value = header.value;
-      request.append(name.bytes, name.len);
-      request.append(": ");
-      request.append(value.bytes, value.len);
-      request.append("\r\n");
-    }
-
-    if (!hasHeader("Content-Length")) {
-      request.append("Content-Length: ");
-      request.append(std::to_string(body_.size()));
-      request.append("\r\n");
+      output.append(name.bytes, name.len);
+      output.append(": ");
+      output.append(value.bytes, value.len);
+      output.append("\r\n");
     }
 
     if (!hasHeader("Connection")) {
-      request.append("Connection: keep-alive\r\n");
+      output.append("Connection: keep-alive\r\n");
     }
 
-    request.append("\r\n");
-    request.append(reinterpret_cast<const char*>(body_.data()), body_.size());
+    output.append("\r\n");
   } catch (const std::bad_alloc&) {
     throwHttpError("TypeError: HttpClientRequest serialization failed");
-    return;
+    return false;
   }
 
   sent_ = true;
-  if (!connection_->write(inox::StringView(request.data(), request.size()))) {
-    sent_ = false;
-    if (!inox::thrown()) {
-      inox::Value error = materializeHttpError("HTTP request write failed");
-      if (!inox::thrown()) onError(error);
+  return true;
+}
+
+bool HttpClientRequestState::appendRequestBody(
+  std::string& output,
+  std::span<const std::uint8_t> body
+) {
+  if (request_body_mode_ == HttpOutgoingBodyMode::undecided ||
+      request_body_bytes_ > maxClientRequestBodyBytes ||
+      body.size() > maxClientRequestBodyBytes - request_body_bytes_ ||
+      (request_body_mode_ == HttpOutgoingBodyMode::content_length &&
+       (!request_content_length_ ||
+        request_body_bytes_ > *request_content_length_ ||
+        body.size() > *request_content_length_ - request_body_bytes_))) {
+    throwHttpError("TypeError: HttpClientRequest body exceeds its framing limit");
+    return false;
+  }
+
+  if (request_body_mode_ == HttpOutgoingBodyMode::chunked) {
+    if (!appendChunk(output, body, "TypeError: HttpClientRequest serialization failed")) {
+      return false;
+    }
+  } else if (!body.empty()) {
+    try {
+      output.append(reinterpret_cast<const char*>(body.data()), body.size());
+    } catch (const std::bad_alloc&) {
+      throwHttpError("TypeError: HttpClientRequest serialization failed");
+      return false;
     }
   }
+
+  request_body_bytes_ += body.size();
+  return true;
+}
+
+bool HttpClientRequestState::send(std::string& output, bool final) {
+  if (!connection_ || closed_) {
+    throwHttpError("TypeError: HttpClientRequest write failed");
+    return false;
+  }
+
+  if (!connection_->connected_) {
+    try {
+      pending_write_bytes_.append(output);
+    } catch (const std::bad_alloc&) {
+      throwHttpError("TypeError: HttpClientRequest write allocation failed");
+      connection_->destroy();
+      return false;
+    }
+
+    pending_write_final_ = pending_write_final_ || final;
+    return true;
+  }
+
+  if (output.empty() && !final) {
+    return true;
+  }
+
+  bool accepted = false;
+  const bool writable = connection_->write(
+    inox::StringView(output.data(), output.size()),
+    final,
+    accepted
+  );
+
+  if (!accepted && !inox::thrown() && !failed_) {
+    inox::Value error = materializeHttpError("HTTP request write failed");
+    if (!inox::thrown()) onError(error);
+  }
+
+  return accepted && writable;
 }
 
 void HttpClientRequestState::setHeader(inox::StringView name, inox::StringView value) {
@@ -3696,31 +4063,37 @@ bool HttpClientRequestState::writableEnded() const {
 }
 
 bool HttpClientRequestState::write(std::span<const std::uint8_t> body) {
-  if (ending_ || sent_ || closed_) {
+  if (ending_ || closed_) {
     throwHttpError("TypeError: HttpClientRequest.write failed");
     return false;
   }
 
-  if (body.size() > maxClientRequestBodyBytes - body_.size()) {
-    throwHttpError("TypeError: HttpClientRequest body is too large");
+  std::string output;
+
+  if (!sent_ && !beginRequest(true, body.size(), output)) {
     return false;
   }
 
-  try {
-    body_.insert(body_.end(), body.begin(), body.end());
-  } catch (const std::bad_alloc&) {
-    throwHttpError("TypeError: HttpClientRequest body allocation failed");
+  if (!appendRequestBody(output, body)) {
+    if (connection_) connection_->destroy();
     return false;
   }
 
-  return true;
+  return send(output, false);
 }
 
 HttpResponseState::HttpResponseState(std::shared_ptr<HttpConnectionState> connection)
-  : connection_(std::move(connection)), headers_(), body_(), status_code_(200), ending_(false), ended_(false) {
+  : connection_(std::move(connection)),
+    headers_(),
+    content_length_(),
+    body_bytes_written_(0),
+    body_mode_(HttpOutgoingBodyMode::undecided),
+    status_code_(200),
+    sent_(false),
+    ending_(false),
+    ended_(false) {
   try {
     headers_.reserve(8);
-    body_.reserve(1024);
   } catch (const std::bad_alloc&) {
     throwHttpError("TypeError: HttpResponse allocation failed");
   }
@@ -3766,7 +4139,7 @@ void HttpResponseState::applyHeaders(const inox::Value& headers) {
 }
 
 void HttpResponseState::setHeader(inox::StringView name, inox::StringView value) {
-  if (ending_ || ended_ || !validHeaderName(name) || !validHeaderValue(value)) {
+  if (sent_ || ending_ || ended_ || !validHeaderName(name) || !validHeaderValue(value)) {
     throwHttpError("TypeError: HttpResponse.setHeader failed");
     return;
   }
@@ -3841,11 +4214,11 @@ bool HttpResponseState::hasHeader(inox::StringView name) const {
 }
 
 bool HttpResponseState::headersSent() const {
-  return ending_ || ended_;
+  return sent_;
 }
 
 void HttpResponseState::removeHeader(inox::StringView name) {
-  if (ending_ || ended_ || !validHeaderName(name)) {
+  if (sent_ || ending_ || ended_ || !validHeaderName(name)) {
     throwHttpError("TypeError: HttpResponse.removeHeader failed");
     return;
   }
@@ -3863,7 +4236,7 @@ bool HttpResponseState::writableEnded() const {
 }
 
 void HttpResponseState::setStatusCode(double value) {
-  if (ending_ || ended_ || !std::isfinite(value) || std::floor(value) != value || value < 100 || value > 999) {
+  if (sent_ || ending_ || ended_ || !std::isfinite(value) || std::floor(value) != value || value < 100 || value > 999) {
     throwHttpError("TypeError: HttpResponse.statusCode is invalid");
     return;
   }
@@ -3872,24 +4245,23 @@ void HttpResponseState::setStatusCode(double value) {
 }
 
 bool HttpResponseState::write(std::span<const std::uint8_t> body) {
-  if (ending_ || ended_) {
+  if (ending_ || ended_ || !connection_ || connection_->closed_) {
     throwHttpError("TypeError: HttpResponse.write failed");
     return false;
   }
 
-  if (body.size() > maxResponseBodyBytes - body_.size()) {
-    throwHttpError("TypeError: HttpResponse body is too large");
+  std::string output;
+
+  if (!sent_ && !begin(true, body.size(), output)) {
     return false;
   }
 
-  try {
-    body_.insert(body_.end(), body.begin(), body.end());
-  } catch (const std::bad_alloc&) {
-    throwHttpError("TypeError: HttpResponse body allocation failed");
+  if (!appendBody(output, body)) {
+    connection_->socket_.destroy();
     return false;
   }
 
-  return true;
+  return send(output, false);
 }
 
 void HttpResponseState::end(std::span<const std::uint8_t> body) {
@@ -3898,31 +4270,73 @@ void HttpResponseState::end(std::span<const std::uint8_t> body) {
     return;
   }
 
-  if (body.size() > maxResponseBodyBytes - body_.size()) {
-    throwHttpError("TypeError: HttpResponse body is too large");
+  std::string output;
+
+  if (!sent_ && !begin(false, body.size(), output)) {
     return;
   }
 
-  std::vector<std::uint8_t> response_body;
-
-  try {
-    response_body = body_;
-    response_body.insert(response_body.end(), body.begin(), body.end());
-  } catch (const std::bad_alloc&) {
-    throwHttpError("TypeError: HttpResponse body allocation failed");
+  if (!appendBody(output, body)) {
+    connection_->socket_.destroy();
     return;
   }
 
-  std::string content_length;
-
-  try {
-    content_length = std::to_string(response_body.size());
-  } catch (const std::bad_alloc&) {
-    throwHttpError("TypeError: HttpResponse header allocation failed");
+  if (body_mode_ == HttpOutgoingBodyMode::content_length &&
+      (!content_length_ || body_bytes_written_ != *content_length_)) {
+    throwHttpError("TypeError: HttpResponse Content-Length does not match its body");
+    connection_->socket_.destroy();
     return;
   }
 
-  bool keep_alive = connection_->active_keep_alive_;
+  if (body_mode_ == HttpOutgoingBodyMode::chunked) {
+    try {
+      output.append("0\r\n\r\n");
+    } catch (const std::bad_alloc&) {
+      throwHttpError("TypeError: HttpResponse allocation failed");
+      connection_->socket_.destroy();
+      return;
+    }
+  }
+
+  ending_ = true;
+  (void)send(output, true);
+
+  if (inox::thrown()) {
+    ending_ = false;
+    connection_->socket_.destroy();
+    return;
+  }
+
+  ended_ = true;
+}
+
+bool HttpResponseState::begin(
+  bool streaming,
+  std::size_t initial_body_size,
+  std::string& output
+) {
+  if (sent_ || body_mode_ != HttpOutgoingBodyMode::undecided ||
+      initial_body_size > maxResponseBodyBytes ||
+      !selectOutgoingBodyMode(
+        headers_,
+        streaming,
+        !connection_->active_http_1_0_,
+        initial_body_size,
+        maxResponseBodyBytes,
+        "TypeError: HttpResponse body framing is invalid",
+        "TypeError: HttpResponse header allocation failed",
+        body_mode_,
+        content_length_
+      )) {
+    if (!inox::thrown()) {
+      throwHttpError("TypeError: HttpResponse body is too large");
+    }
+
+    return false;
+  }
+
+  bool keep_alive = connection_ && connection_->active_keep_alive_ &&
+    body_mode_ != HttpOutgoingBodyMode::close_delimited;
 
   for (const ResponseHeader& header : headers_) {
     const inox::StringView value = header.value;
@@ -3934,87 +4348,106 @@ void HttpResponseState::end(std::span<const std::uint8_t> body) {
     }
   }
 
-  setHeader("Content-Length", inox::StringView(content_length.data(), content_length.size()));
-
-  if (!inox::thrown()) {
-    setHeader("Connection", keep_alive ? inox::StringView("keep-alive") : inox::StringView("close"));
-  }
+  setHeader("Connection", keep_alive ? inox::StringView("keep-alive") : inox::StringView("close"));
 
   if (inox::thrown()) {
-    return;
+    return false;
   }
 
   connection_->active_keep_alive_ = keep_alive;
 
-  std::string header_bytes;
-
   try {
-    header_bytes.reserve(256);
-    header_bytes.append("HTTP/1.1 ");
-    header_bytes.append(std::to_string(static_cast<int>(status_code_)));
-    header_bytes.push_back(' ');
-    header_bytes.append(statusText(static_cast<int>(status_code_)));
-    header_bytes.append("\r\n");
+    output.reserve(256 + initial_body_size);
+    output.append(connection_->active_http_1_0_ ? "HTTP/1.0 " : "HTTP/1.1 ");
+    output.append(std::to_string(static_cast<int>(status_code_)));
+    output.push_back(' ');
+    output.append(statusText(static_cast<int>(status_code_)));
+    output.append("\r\n");
 
     for (const ResponseHeader& header : headers_) {
       const inox::StringView name = header.name;
       const inox::StringView value = header.value;
-      header_bytes.append(name.bytes, name.len);
-      header_bytes.append(": ");
-      header_bytes.append(value.bytes, value.len);
-      header_bytes.append("\r\n");
+      output.append(name.bytes, name.len);
+      output.append(": ");
+      output.append(value.bytes, value.len);
+      output.append("\r\n");
     }
 
-    header_bytes.append("\r\n");
+    output.append("\r\n");
   } catch (const std::bad_alloc&) {
     throwHttpError("TypeError: HttpResponse header allocation failed");
-    return;
+    return false;
   }
 
-  if (header_bytes.size() > maxResponseHeaderBytes) {
+  if (output.size() > maxResponseHeaderBytes) {
     throwHttpError("TypeError: HttpResponse header is too large");
-    return;
+    return false;
   }
 
-  std::vector<std::uint8_t> response_bytes;
+  sent_ = true;
+  return true;
+}
 
-  try {
-    response_bytes.reserve(header_bytes.size() + response_body.size());
-    response_bytes.insert(response_bytes.end(), header_bytes.begin(), header_bytes.end());
-    response_bytes.insert(response_bytes.end(), response_body.begin(), response_body.end());
-  } catch (const std::bad_alloc&) {
-    throwHttpError("TypeError: HttpResponse allocation failed");
-    return;
+bool HttpResponseState::appendBody(
+  std::string& output,
+  std::span<const std::uint8_t> body
+) {
+  if (body_mode_ == HttpOutgoingBodyMode::undecided ||
+      body_bytes_written_ > maxResponseBodyBytes ||
+      body.size() > maxResponseBodyBytes - body_bytes_written_ ||
+      (body_mode_ == HttpOutgoingBodyMode::content_length &&
+       (!content_length_ ||
+        body_bytes_written_ > *content_length_ ||
+        body.size() > *content_length_ - body_bytes_written_))) {
+    throwHttpError("TypeError: HttpResponse body exceeds its framing limit");
+    return false;
+  }
+
+  if (body_mode_ == HttpOutgoingBodyMode::chunked) {
+    if (!appendChunk(output, body, "TypeError: HttpResponse allocation failed")) {
+      return false;
+    }
+  } else if (!body.empty()) {
+    try {
+      output.append(reinterpret_cast<const char*>(body.data()), body.size());
+    } catch (const std::bad_alloc&) {
+      throwHttpError("TypeError: HttpResponse allocation failed");
+      return false;
+    }
+  }
+
+  body_bytes_written_ += body.size();
+  return true;
+}
+
+bool HttpResponseState::send(std::string& output, bool final) {
+  if (!connection_ || connection_->closed_) {
+    throwHttpError("TypeError: HttpResponse write failed");
+    return false;
+  }
+
+  if (!final) {
+    return connection_->socket_.write(inox::StringView(output.data(), output.size()));
   }
 
   inox::Callback complete = makeWeakCallback(connection_, onResponseComplete);
 
   if (inox::thrown()) {
-    return;
+    return false;
   }
 
-  ending_ = true;
-
-  if (keep_alive) {
-    (void)connection_->socket_.write(
-      inox::StringView(reinterpret_cast<const char*>(response_bytes.data()), response_bytes.size()),
-      std::move(complete)
-    );
-  } else {
-    connection_->socket_.end(
-      inox::StringView(reinterpret_cast<const char*>(response_bytes.data()), response_bytes.size()),
+  if (connection_->active_keep_alive_) {
+    return connection_->socket_.write(
+      inox::StringView(output.data(), output.size()),
       std::move(complete)
     );
   }
 
-  if (inox::thrown()) {
-    ending_ = false;
-    connection_->socket_.destroy();
-    return;
-  }
-
-  body_ = std::move(response_body);
-  ended_ = true;
+  connection_->socket_.end(
+    inox::StringView(output.data(), output.size()),
+    std::move(complete)
+  );
+  return !inox::thrown();
 }
 
 inox_status onServerConnection(
