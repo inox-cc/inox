@@ -4,7 +4,7 @@ import { once } from 'node:events'
 import { readFile, rm } from 'node:fs/promises'
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http'
 import { createServer as createHttpsServer, type Server as HttpsServer } from 'node:https'
-import { createServer as createNetServer, type Server as NetServer } from 'node:net'
+import { connect as connectNetSocket, createServer as createNetServer, type Server as NetServer } from 'node:net'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -17,6 +17,7 @@ const executable = join(buildRoot, 'bin', 'network-acceptance')
 
 async function main(): Promise<void> {
   const port = await reservePort()
+  const httpChunkedServerPort = await reservePort()
   const nonce = `network-${process.pid}-${Date.now()}`
 
   await buildExecutable()
@@ -31,7 +32,8 @@ async function main(): Promise<void> {
       nonce,
       String(httpsServer.port),
       String(httpChunkedServer.port),
-      String(invalidChunkedServer.port)
+      String(invalidChunkedServer.port),
+      String(httpChunkedServerPort)
     ],
     {
       cwd: repoRoot,
@@ -55,6 +57,14 @@ async function main(): Promise<void> {
       () => stdout,
       () => stderr
     )
+    await waitForLine(
+      application,
+      `INOX_HTTP_CHUNKED_SERVER_READY ${nonce} ${httpChunkedServerPort}`,
+      () => stdout,
+      () => stderr
+    )
+
+    await checkChunkedHttpServer(httpChunkedServerPort, nonce)
 
     const response = await fetchWithTimeout(`http://127.0.0.1:${port}/network`, 2_000, {
       'X-Inox-Test': nonce
@@ -96,6 +106,10 @@ async function main(): Promise<void> {
       lines.includes('INOX_HTTP_CHUNKED_ERRORS_OK'),
       processFailure('HTTP client не отверг некорректный chunked framing', stdout, stderr)
     )
+    assert.ok(
+      lines.includes('INOX_HTTP_CHUNKED_SERVER_OK'),
+      processFailure('HTTP server неверно обработал chunked requests', stdout, stderr)
+    )
     assert.ok(lines.includes('INOX_HTTPS_CLIENT_OK'), processFailure('HTTPS client не получил ответ', stdout, stderr))
   } finally {
     await stopProcess(application)
@@ -106,6 +120,124 @@ async function main(): Promise<void> {
   }
 }
 
+async function checkChunkedHttpServer(port: number, nonce: string): Promise<void> {
+  const prefix = 'chunked '
+  const suffixStart = Math.min(3, nonce.length)
+  const requestHeaders =
+    'POST /chunked HTTP/1.1\r\n' +
+    'Host: 127.0.0.1\r\n' +
+    'Transfer-Encoding: chunked\r\n' +
+    'Trailer: X-Inox-Trailer\r\n' +
+    'X-Inox-Test: ' +
+    nonce +
+    '\r\n' +
+    'Connection: close\r\n' +
+    '\r\n'
+  const response = await sendRawHttpRequest(port, [
+    requestHeaders + prefix.length.toString(16) + ';mode=test\r',
+    '\n' + prefix + '\r\n' + nonce.length.toString(16) + '\r\n' + nonce.slice(0, suffixStart),
+    nonce.slice(suffixStart) + '\r\n0\r\nX-Inox-Trailer: complete\r',
+    '\n\r\n'
+  ])
+
+  assert.match(response, /^HTTP\/1\.1 200 /)
+  assert.ok(response.endsWith(`chunked-server-ok ${nonce}`), `Неожиданный chunked response:\n${response}`)
+
+  const conflicting = await sendRawHttpRequest(port, [
+    'POST /conflicting HTTP/1.1\r\n' +
+      'Host: 127.0.0.1\r\n' +
+      'Transfer-Encoding: chunked\r\n' +
+      'Content-Length: 1\r\n' +
+      'Connection: close\r\n' +
+      '\r\n' +
+      '0\r\n\r\n'
+  ])
+  assert.match(conflicting, /^HTTP\/1\.1 400 /)
+
+  const malformed = await sendRawHttpRequest(port, [
+    'POST /malformed HTTP/1.1\r\n' +
+      'Host: 127.0.0.1\r\n' +
+      'Transfer-Encoding: chunked\r\n' +
+      'Connection: close\r\n' +
+      '\r\n' +
+      'z\r\ninvalid\r\n0\r\n\r\n'
+  ])
+  assert.match(malformed, /^HTTP\/1\.1 400 /)
+
+  const oversized = await sendRawHttpRequest(port, [
+    'POST /oversized HTTP/1.1\r\n' +
+      'Host: 127.0.0.1\r\n' +
+      'Transfer-Encoding: chunked\r\n' +
+      'Connection: close\r\n' +
+      '\r\n' +
+      '10000\r\n'
+  ])
+  assert.match(oversized, /^HTTP\/1\.1 413 /)
+
+  const forbiddenTrailer = await sendRawHttpRequest(port, [
+    'POST /forbidden-trailer HTTP/1.1\r\n' +
+      'Host: 127.0.0.1\r\n' +
+      'Transfer-Encoding: chunked\r\n' +
+      'Connection: close\r\n' +
+      '\r\n' +
+      '1\r\na\r\n0\r\nContent-Length: 1\r\n\r\n'
+  ])
+  assert.match(forbiddenTrailer, /^HTTP\/1\.1 400 /)
+
+  const truncated = await sendRawHttpRequest(
+    port,
+    [
+      'POST /truncated HTTP/1.1\r\n' +
+        'Host: 127.0.0.1\r\n' +
+        'Transfer-Encoding: chunked\r\n' +
+        'Connection: close\r\n' +
+        '\r\n' +
+        '5\r\nabc'
+    ],
+    true
+  )
+  assert.doesNotMatch(truncated, /^HTTP\/1\.1 200 /)
+
+  const shutdown = await sendRawHttpRequest(port, [
+    'GET /shutdown HTTP/1.1\r\n' + 'Host: 127.0.0.1\r\n' + 'Connection: close\r\n' + '\r\n'
+  ])
+  assert.match(shutdown, /^HTTP\/1\.1 200 /)
+}
+
+async function sendRawHttpRequest(port: number, chunks: string[], finish = false): Promise<string> {
+  const socket = connectNetSocket(port, '127.0.0.1')
+  let response = ''
+  const closed = new Promise<void>((resolve) => {
+    socket.once('close', () => resolve())
+  })
+
+  socket.setEncoding('utf8')
+  socket.on('data', (chunk) => {
+    response += chunk
+  })
+  socket.on('error', () => {})
+  await once(socket, 'connect')
+
+  for (const chunk of chunks) {
+    socket.write(chunk)
+    await delay(5)
+  }
+
+  if (finish) {
+    socket.end()
+  }
+
+  const completed = await Promise.race([closed.then(() => true), delay(2_000).then(() => false)])
+
+  if (!completed) {
+    socket.destroy()
+    await closed
+  }
+
+  assert.ok(completed, 'raw HTTP request не завершился')
+  return response
+}
+
 async function startInvalidChunkedServer(): Promise<{ server: NetServer; port: number }> {
   const server = createNetServer((socket) => {
     socket.once('data', (data) => {
@@ -114,21 +246,17 @@ async function startInvalidChunkedServer(): Promise<{ server: NetServer; port: n
       if (request.includes(' /conflicting ')) {
         socket.end(
           'HTTP/1.1 200 OK\r\n' +
-          'Transfer-Encoding: chunked\r\n' +
-          'Content-Length: 1\r\n' +
-          'Connection: close\r\n' +
-          '\r\n' +
-          '1\r\nx\r\n0\r\n\r\n'
+            'Transfer-Encoding: chunked\r\n' +
+            'Content-Length: 1\r\n' +
+            'Connection: close\r\n' +
+            '\r\n' +
+            '1\r\nx\r\n0\r\n\r\n'
         )
         return
       }
 
       socket.end(
-        'HTTP/1.1 200 OK\r\n' +
-        'Transfer-Encoding: chunked\r\n' +
-        'Connection: close\r\n' +
-        '\r\n' +
-        '5\r\nabc'
+        'HTTP/1.1 200 OK\r\n' + 'Transfer-Encoding: chunked\r\n' + 'Connection: close\r\n' + '\r\n' + '5\r\nabc'
       )
     })
   })
