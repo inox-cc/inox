@@ -193,10 +193,12 @@ export function createObjectType(
   fields: AnyNode[],
   baseTypes: string[],
   dynamic: boolean,
-  dynamicField: AnyNode | null = null
+  dynamicField: AnyNode | null = null,
+  callSignature: AnyNode | null = null
 ): AnyNode {
   return {
     kind: 'object',
+    callSignature,
     baseTypes,
     dynamic,
     dynamicField,

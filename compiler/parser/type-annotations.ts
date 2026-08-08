@@ -29,6 +29,8 @@ export function readTypeAnnotation(
   let parenDepth = 0
   let position = startPosition
   let lastTokenLine = 0
+  const objectFieldColonSeen: boolean[] = []
+  const objectFieldTypeSeen: boolean[] = []
   const startToken = tokenAt(tokens, position)
   const actualOptions = requiredTypeAnnotationReadOptions(typeAnnotationReadOptionsOrEmpty(options))
 
@@ -40,6 +42,21 @@ export function readTypeAnnotation(
 
   while (currentToken !== null && typeof currentToken !== 'undefined' && currentToken.type !== 'eof') {
     const token = currentToken
+
+    if (
+      braceDepth > 0 &&
+      genericDepth === 0 &&
+      parenDepth === 0 &&
+      bracketDepth === 0 &&
+      token.line > lastTokenLine &&
+      objectFieldColonSeen[braceDepth] === true &&
+      objectFieldTypeSeen[braceDepth] === true &&
+      isObjectFieldStartToken(token)
+    ) {
+      parts.push(';')
+      objectFieldColonSeen[braceDepth] = false
+      objectFieldTypeSeen[braceDepth] = false
+    }
 
     if (
       genericDepth === 0 &&
@@ -79,7 +96,11 @@ export function readTypeAnnotation(
 
     if (token.value === '{') {
       braceDepth = braceDepth + 1
+      objectFieldColonSeen[braceDepth] = false
+      objectFieldTypeSeen[braceDepth] = false
     } else if (token.value === '}' && braceDepth > 0) {
+      objectFieldColonSeen[braceDepth] = false
+      objectFieldTypeSeen[braceDepth] = false
       braceDepth = braceDepth - 1
     } else if (token.value === '<') {
       genericDepth = genericDepth + 1
@@ -110,6 +131,16 @@ export function readTypeAnnotation(
     } else {
       parts.push(token.value)
     }
+
+    recordObjectFieldTypeToken(
+      token,
+      braceDepth,
+      genericDepth,
+      parenDepth,
+      bracketDepth,
+      objectFieldColonSeen,
+      objectFieldTypeSeen
+    )
     lastTokenLine = token.line
     position = position + 1
     currentToken = tokenAt(tokens, position)
@@ -118,6 +149,44 @@ export function readTypeAnnotation(
   return {
     typeName: normalizeTypeName(joinStrings(parts, '')),
     position
+  }
+}
+
+function isObjectFieldStartToken(token: Token): boolean {
+  if (token.type === 'identifier' || token.type === 'string' || token.type === 'number') {
+    return true
+  }
+
+  return token.type === 'keyword' && token.value === 'readonly'
+}
+
+function recordObjectFieldTypeToken(
+  token: Token,
+  braceDepth: number,
+  genericDepth: number,
+  parenDepth: number,
+  bracketDepth: number,
+  colonSeen: boolean[],
+  typeSeen: boolean[]
+): void {
+  if (braceDepth === 0 || genericDepth !== 0 || parenDepth !== 0 || bracketDepth !== 0) {
+    return
+  }
+
+  if (token.value === ',' || token.value === ';') {
+    colonSeen[braceDepth] = false
+    typeSeen[braceDepth] = false
+    return
+  }
+
+  if (token.value === ':') {
+    colonSeen[braceDepth] = true
+    typeSeen[braceDepth] = false
+    return
+  }
+
+  if (colonSeen[braceDepth] === true && token.value !== 'readonly') {
+    typeSeen[braceDepth] = true
   }
 }
 

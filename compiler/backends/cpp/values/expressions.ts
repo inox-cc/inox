@@ -3854,7 +3854,7 @@ function runtimeStringValuesEqualExpression(left: string, right: string): string
   )
 }
 
-function runtimeValuesStrictEqualExpression(left: string, right: string): string {
+function runtimeValuesIdentityEqualExpression(left: string, right: string): string {
   const stringsEqual = runtimeStringValuesEqualExpression(left, right)
 
   return (
@@ -4320,7 +4320,7 @@ function emitPreparedNullableScalarCompareExpression(
   appendLines(lines, right.lines)
   lines.push(`inox_value ${rightName} = ${right.expression};`)
 
-  const equals = runtimeValuesStrictEqualExpression(leftName, rightName)
+  const equals = runtimeValuesIdentityEqualExpression(leftName, rightName)
 
   if (isPositiveEqualityOperator(expression.operator)) {
     return {
@@ -4432,7 +4432,7 @@ function emitPreparedDynamicRuntimeValueCompareExpression(
   appendLines(lines, right.lines)
   lines.push(`inox_value ${rightName} = ${right.expression};`)
 
-  const equals = runtimeValuesStrictEqualExpression(leftName, rightName)
+  const equals = runtimeValuesIdentityEqualExpression(leftName, rightName)
   let result = `(!${equals})`
 
   if (isPositiveEqualityOperator(expression.operator)) {

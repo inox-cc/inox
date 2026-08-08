@@ -672,12 +672,25 @@ class Parser {
   parseObjectType(baseTypes: string[] | null): AnyNode {
     const actualBaseTypes = stringArrayOrEmpty(baseTypes)
     const fields: AnyNode[] = []
+    let callSignature: AnyNode | null = null
     let dynamic = false
     let dynamicField: AnyNode | null = null
 
     this.expectValue('{', 'INOX_EXPECTED_TYPE', 'expected { in object type')
 
     while (!this.isValue('}') && !this.is('eof')) {
+      if (this.isValue('(')) {
+        const signature = this.parseObjectTypeMethodSignature([])
+
+        if (callSignature === null) {
+          callSignature = signature
+        }
+
+        this.matchValue(',')
+        this.matchValue(';')
+        continue
+      }
+
       const modifiers = this.parseFieldModifiers()
 
       if (this.isValue('[')) {
@@ -739,7 +752,7 @@ class Parser {
     this.expectValue('}', 'INOX_EXPECTED_TYPE', 'expected } after object type')
     this.matchValue(';')
 
-    return createObjectType(fields, actualBaseTypes, dynamic, dynamicField)
+    return createObjectType(fields, actualBaseTypes, dynamic, dynamicField, callSignature)
   }
 
   parseObjectTypeMethodSignature(typeParameters: AnyNode[]) {

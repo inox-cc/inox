@@ -146,7 +146,7 @@ export function compileSourceToIr(
 }
 
 export function emitTargetFromIr(target: CompileTarget, ir: IrProgram, options: CompileOptions = {}): string {
-  assertIrLibrarySetFingerprint(ir, options)
+  validateIrLibrarySetFingerprint(ir, options)
 
   if (target === 'cc') {
     const emitOptions: CppEmitOptions = options
@@ -388,7 +388,7 @@ export function compileGraphToIrModulesWithHostSync(
 
 export function runCppStaticChecks(irs: IrProgram[], options: CompileOptions = {}): void {
   for (let index = 0; index < irs.length; index = index + 1) {
-    assertIrLibrarySetFingerprint(irs[index], options)
+    validateIrLibrarySetFingerprint(irs[index], options)
   }
 
   checkCppProfileCapabilities(irs, options)
@@ -490,7 +490,7 @@ function memoryCppModuleCompileOptions(options: MemoryCppModuleCompileOptions, h
   }
 }
 
-function assertIrLibrarySetFingerprint(ir: IrProgram, options: CompileOptions): void {
+function validateIrLibrarySetFingerprint(ir: IrProgram, options: CompileOptions): void {
   const libraries = resolveCompilerLibrarySet(options.libraries)
   const actual = libraries.fingerprint
 
