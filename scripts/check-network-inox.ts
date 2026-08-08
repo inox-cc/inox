@@ -20,6 +20,7 @@ async function main(): Promise<void> {
   const httpChunkedServerPort = await reservePort()
   const httpKeepAliveServerPort = await reservePort()
   const httpStreamingServerPort = await reservePort()
+  const httpIncomingStreamingServerPort = await reservePort()
   const nonce = `network-${process.pid}-${Date.now()}`
 
   await buildExecutable()
@@ -45,7 +46,8 @@ async function main(): Promise<void> {
       String(httpsKeepAliveClientServer.port),
       String(httpStreamingServerPort),
       String(httpStreamingClientServer.port),
-      String(httpsStreamingClientServer.port)
+      String(httpsStreamingClientServer.port),
+      String(httpIncomingStreamingServerPort)
     ],
     {
       cwd: repoRoot,
@@ -87,10 +89,17 @@ async function main(): Promise<void> {
       () => stdout,
       () => stderr
     )
+    await waitForLine(
+      application,
+      `INOX_HTTP_INCOMING_STREAMING_SERVER_READY ${nonce} ${httpIncomingStreamingServerPort}`,
+      () => stdout,
+      () => stderr
+    )
 
     await checkChunkedHttpServer(httpChunkedServerPort, nonce)
     await checkHttpKeepAliveServer(httpKeepAliveServerPort, nonce)
     await checkHttpStreamingServer(httpStreamingServerPort, nonce)
+    await checkHttpIncomingStreamingServer(httpIncomingStreamingServerPort, nonce)
 
     const response = await fetchWithTimeout(`http://127.0.0.1:${port}/network`, 2_000, {
       'X-Inox-Test': nonce
@@ -179,6 +188,10 @@ async function main(): Promise<void> {
     assert.ok(
       lines.includes('INOX_HTTP_STREAMING_SERVER_OK'),
       processFailure('HTTP server не завершил streaming responses', stdout, stderr)
+    )
+    assert.ok(
+      lines.includes('INOX_HTTP_INCOMING_STREAMING_SERVER_OK'),
+      processFailure('HTTP server не доставил входящее тело по мере получения', stdout, stderr)
     )
     assert.ok(lines.includes('INOX_HTTPS_CLIENT_OK'), processFailure('HTTPS client не получил ответ', stdout, stderr))
   } finally {
@@ -635,6 +648,83 @@ async function checkHttpStreamingServer(port: number, nonce: string): Promise<vo
   assert.match(legacy, /^HTTP\/1\.0 200 /)
   assert.doesNotMatch(legacy, /\r\n(?:Content-Length|Transfer-Encoding):/i)
   assert.ok(legacy.endsWith('legacy ' + nonce + ' body'))
+
+  const shutdown = await sendRawHttpRequest(port, [
+    'GET /shutdown HTTP/1.1\r\n' + 'Host: 127.0.0.1\r\n' + 'Connection: close\r\n' + '\r\n'
+  ])
+  assert.match(shutdown, /^HTTP\/1\.1 200 /)
+}
+
+async function sendIncomingStreamingRequest(port: number, headers: string, chunks: string[]): Promise<string> {
+  const socket = connectNetSocket(port, '127.0.0.1')
+  let response = ''
+  const closed = new Promise<void>((resolve) => {
+    socket.once('close', () => resolve())
+  })
+
+  socket.setEncoding('utf8')
+  socket.on('data', (chunk) => {
+    response = response + chunk
+  })
+  socket.on('error', () => {})
+  await once(socket, 'connect')
+  socket.write(headers)
+
+  for (let attempt = 0; attempt < 50 && !response.includes('\r\n\r\nready '); attempt = attempt + 1) {
+    await delay(20)
+  }
+
+  assert.ok(
+    response.includes('\r\n\r\nready '),
+    `HTTP handler не ответил после заголовков, до завершения request body:\n${response}`
+  )
+
+  for (const chunk of chunks) {
+    socket.write(chunk)
+    await delay(150)
+  }
+
+  const completed = await Promise.race([closed.then(() => true), delay(2_000).then(() => false)])
+
+  if (!completed) {
+    socket.destroy()
+    await closed
+  }
+
+  assert.ok(completed, 'streaming HTTP request не завершился')
+  return response
+}
+
+async function checkHttpIncomingStreamingServer(port: number, nonce: string): Promise<void> {
+  const fixedBody = `fixed ${nonce} body`
+  const fixedSplit = Math.max(1, Math.floor(fixedBody.length / 2))
+  const fixed = await sendIncomingStreamingRequest(
+    port,
+    'POST /fixed HTTP/1.1\r\n' +
+      'Host: 127.0.0.1\r\n' +
+      `Content-Length: ${fixedBody.length}\r\n` +
+      'Connection: close\r\n' +
+      '\r\n',
+    [fixedBody.slice(0, fixedSplit), fixedBody.slice(fixedSplit)]
+  )
+  assert.match(fixed, /^HTTP\/1\.1 200 /)
+  assert.ok(fixed.endsWith('ready ok'))
+
+  const chunkedBody = `chunked ${nonce} body`
+  const chunkedSplit = Math.max(1, Math.floor(chunkedBody.length / 2))
+  const first = chunkedBody.slice(0, chunkedSplit)
+  const second = chunkedBody.slice(chunkedSplit)
+  const chunked = await sendIncomingStreamingRequest(
+    port,
+    'POST /chunked HTTP/1.1\r\n' +
+      'Host: 127.0.0.1\r\n' +
+      'Transfer-Encoding: chunked\r\n' +
+      'Connection: close\r\n' +
+      '\r\n',
+    [`${first.length.toString(16)}\r\n${first}\r\n`, `${second.length.toString(16)}\r\n${second}\r\n0\r\n\r\n`]
+  )
+  assert.match(chunked, /^HTTP\/1\.1 200 /)
+  assert.ok(chunked.endsWith('ready ok'))
 
   const shutdown = await sendRawHttpRequest(port, [
     'GET /shutdown HTTP/1.1\r\n' + 'Host: 127.0.0.1\r\n' + 'Connection: close\r\n' + '\r\n'

@@ -364,10 +364,23 @@ public:
   std::shared_ptr<HttpServerState> server_;
   NetSocket socket_;
   std::vector<char> request_bytes_;
+  std::shared_ptr<HttpRequestState> active_request_;
+  std::shared_ptr<HttpResponseState> active_response_;
   std::shared_ptr<HttpConnectionState> native_owner_;
   std::size_t active_request_bytes_;
+  std::size_t active_body_cursor_;
+  std::size_t active_body_expected_;
+  std::size_t active_body_received_;
+  std::size_t active_body_limit_;
+  std::size_t active_chunk_remaining_;
+  std::size_t active_chunk_framing_received_;
+  std::size_t active_trailer_count_;
+  HttpChunkDecodeState active_chunk_state_;
   bool active_keep_alive_;
   bool active_http_1_0_;
+  bool active_chunked_;
+  bool active_request_complete_;
+  bool active_response_complete_;
   bool request_dispatched_;
   bool closed_;
 
@@ -378,8 +391,13 @@ public:
     NetSocket socket
   );
   void completeResponse(bool keep_alive);
+  bool consumeRequestBody();
+  bool consumeChunkedRequestBody();
+  void failRequestBody(double status, const char* message);
+  void finishRequestBody(std::size_t request_bytes);
   void onClose();
   void onData(inox::StringView data);
+  void resetRequest();
   void sendError(double status, inox::StringView message);
 };
 
@@ -948,13 +966,6 @@ struct ParsedRequest {
   bool keep_alive;
 };
 
-enum class ChunkedRequestDecodeResult {
-  incomplete,
-  ready,
-  invalid,
-  too_large,
-};
-
 std::size_t findCrlf(std::span<const char> bytes, std::size_t start) {
   for (std::size_t index = start; index + 1 < bytes.size(); index += 1) {
     if (bytes[index] == '\r' && bytes[index + 1] == '\n') {
@@ -1445,156 +1456,6 @@ inox::Value materializeRequestHeaders(
   return inox::adopt(object);
 }
 
-ChunkedRequestDecodeResult decodeChunkedRequestBody(
-  std::span<const char> bytes,
-  std::size_t body_limit,
-  std::vector<char>& body,
-  std::size_t& consumed
-) {
-  const std::size_t missing = std::numeric_limits<std::size_t>::max();
-  std::size_t cursor = 0;
-  std::size_t framing_bytes = 0;
-  std::size_t trailer_count = 0;
-  body.clear();
-  consumed = 0;
-
-  for (;;) {
-    const std::size_t line_end = findCrlf(bytes, cursor);
-
-    if (line_end == missing) {
-      return bytes.size() - cursor > maxChunkMetadataLineBytes
-        ? ChunkedRequestDecodeResult::too_large
-        : ChunkedRequestDecodeResult::incomplete;
-    }
-
-    const std::size_t extension = findByte(bytes, cursor, line_end, ';');
-    const std::size_t size_end = extension == missing ? line_end : extension;
-
-    if (size_end == cursor ||
-        !validHeaderValue(inox::StringView(bytes.data() + cursor, line_end - cursor))) {
-      return ChunkedRequestDecodeResult::invalid;
-    }
-
-    const std::size_t size_line_bytes = line_end + 2 - cursor;
-
-    if (framing_bytes > maxRequestChunkFramingBytes ||
-        size_line_bytes > maxRequestChunkFramingBytes - framing_bytes) {
-      return ChunkedRequestDecodeResult::too_large;
-    }
-
-    framing_bytes += size_line_bytes;
-    std::size_t chunk_size = 0;
-
-    for (std::size_t index = cursor; index < size_end; index += 1) {
-      const unsigned char byte = static_cast<unsigned char>(bytes[index]);
-      std::size_t digit = 0;
-
-      if (byte >= '0' && byte <= '9') digit = byte - '0';
-      else if (byte >= 'a' && byte <= 'f') digit = byte - 'a' + 10;
-      else if (byte >= 'A' && byte <= 'F') digit = byte - 'A' + 10;
-      else return ChunkedRequestDecodeResult::invalid;
-
-      if (digit > body_limit || chunk_size > (body_limit - digit) / 16) {
-        return ChunkedRequestDecodeResult::too_large;
-      }
-
-      chunk_size = chunk_size * 16 + digit;
-    }
-
-    cursor = line_end + 2;
-
-    if (chunk_size == 0) {
-      break;
-    }
-
-    if (body.size() > body_limit || chunk_size > body_limit - body.size()) {
-      return ChunkedRequestDecodeResult::too_large;
-    }
-
-    if (bytes.size() - cursor < chunk_size) {
-      return ChunkedRequestDecodeResult::incomplete;
-    }
-
-    body.insert(
-      body.end(),
-      bytes.begin() + static_cast<std::ptrdiff_t>(cursor),
-      bytes.begin() + static_cast<std::ptrdiff_t>(cursor + chunk_size)
-    );
-    cursor += chunk_size;
-
-    if (bytes.size() - cursor < 2) {
-      return ChunkedRequestDecodeResult::incomplete;
-    }
-
-    if (bytes[cursor] != '\r' || bytes[cursor + 1] != '\n') {
-      return ChunkedRequestDecodeResult::invalid;
-    }
-
-    if (framing_bytes > maxRequestChunkFramingBytes - 2) {
-      return ChunkedRequestDecodeResult::too_large;
-    }
-
-    framing_bytes += 2;
-    cursor += 2;
-  }
-
-  for (;;) {
-    const std::size_t line_end = findCrlf(bytes, cursor);
-
-    if (line_end == missing) {
-      return bytes.size() - cursor > maxChunkMetadataLineBytes
-        ? ChunkedRequestDecodeResult::too_large
-        : ChunkedRequestDecodeResult::incomplete;
-    }
-
-    const std::size_t trailer_line_bytes = line_end + 2 - cursor;
-
-    if (framing_bytes > maxRequestChunkFramingBytes ||
-        trailer_line_bytes > maxRequestChunkFramingBytes - framing_bytes) {
-      return ChunkedRequestDecodeResult::too_large;
-    }
-
-    framing_bytes += trailer_line_bytes;
-
-    if (line_end == cursor) {
-      cursor += 2;
-      consumed = cursor;
-      return ChunkedRequestDecodeResult::ready;
-    }
-
-    const std::size_t separator = findByte(bytes, cursor, line_end, ':');
-
-    if (separator == missing || separator == cursor) {
-      return ChunkedRequestDecodeResult::invalid;
-    }
-
-    std::size_t value_start = separator + 1;
-    std::size_t value_end = line_end;
-
-    while (value_start < value_end && (bytes[value_start] == ' ' || bytes[value_start] == '\t')) {
-      value_start += 1;
-    }
-
-    while (value_end > value_start && (bytes[value_end - 1] == ' ' || bytes[value_end - 1] == '\t')) {
-      value_end -= 1;
-    }
-
-    const std::span<const char> name = bytes.subspan(cursor, separator - cursor);
-    const inox::StringView value(bytes.data() + value_start, value_end - value_start);
-    trailer_count += 1;
-
-    if (trailer_count > maxRequestHeaders ||
-        !validHeaderName(inox::StringView(name.data(), name.size())) ||
-        !validHeaderValue(value) ||
-        spanEqualsIgnoreCase(name, "Content-Length") ||
-        spanEqualsIgnoreCase(name, "Transfer-Encoding")) {
-      return ChunkedRequestDecodeResult::invalid;
-    }
-
-    cursor = line_end + 2;
-  }
-}
-
 ParsedRequest parseRequest(std::span<const char> bytes) {
   const std::size_t missing = std::numeric_limits<std::size_t>::max();
   const std::size_t header_end = findHeaderEnd(bytes);
@@ -1734,10 +1595,6 @@ ParsedRequest parseRequest(std::span<const char> bytes) {
 
   if (content_length > maxRequestBytes - header_end) {
     return {RequestParseResult::too_large, 0, 0, 0, 0};
-  }
-
-  if (bytes.size() < header_end + content_length) {
-    return {RequestParseResult::incomplete, 0, 0, 0, 0};
   }
 
   return {
@@ -2202,10 +2059,23 @@ HttpConnectionState::HttpConnectionState(std::shared_ptr<HttpServerState> server
   : server_(std::move(server)),
     socket_(std::move(socket)),
     request_bytes_(),
+    active_request_(),
+    active_response_(),
     native_owner_(),
     active_request_bytes_(0),
+    active_body_cursor_(0),
+    active_body_expected_(0),
+    active_body_received_(0),
+    active_body_limit_(0),
+    active_chunk_remaining_(0),
+    active_chunk_framing_received_(0),
+    active_trailer_count_(0),
+    active_chunk_state_(HttpChunkDecodeState::size),
     active_keep_alive_(false),
     active_http_1_0_(false),
+    active_chunked_(false),
+    active_request_complete_(false),
+    active_response_complete_(false),
     request_dispatched_(false),
     closed_(false) {}
 
@@ -2256,12 +2126,18 @@ void HttpConnectionState::onClose() {
   std::shared_ptr<HttpConnectionState> owner = native_owner_;
   closed_ = true;
 
+  if (active_request_) {
+    active_request_->emitClose();
+  }
+
   if (server_) {
     server_->connectionClosed(this);
   }
 
   server_.reset();
   request_bytes_.clear();
+  active_request_.reset();
+  active_response_.reset();
   native_owner_.reset();
 }
 
@@ -2275,6 +2151,20 @@ void HttpConnectionState::completeResponse(bool keep_alive) {
     return;
   }
 
+  active_response_complete_ = true;
+
+  if (!active_request_complete_) {
+    return;
+  }
+
+  resetRequest();
+}
+
+void HttpConnectionState::resetRequest() {
+  if (closed_) {
+    return;
+  }
+
   if (active_request_bytes_ > request_bytes_.size()) {
     socket_.destroy();
     return;
@@ -2285,10 +2175,321 @@ void HttpConnectionState::completeResponse(bool keep_alive) {
     request_bytes_.begin() + static_cast<std::ptrdiff_t>(active_request_bytes_)
   );
   active_request_bytes_ = 0;
+  active_body_cursor_ = 0;
+  active_body_expected_ = 0;
+  active_body_received_ = 0;
+  active_body_limit_ = 0;
+  active_chunk_remaining_ = 0;
+  active_chunk_framing_received_ = 0;
+  active_trailer_count_ = 0;
+  active_chunk_state_ = HttpChunkDecodeState::size;
   active_keep_alive_ = false;
   active_http_1_0_ = false;
+  active_chunked_ = false;
+  active_request_complete_ = false;
+  active_response_complete_ = false;
   request_dispatched_ = false;
+  active_request_.reset();
+  active_response_.reset();
   onData(inox::StringView());
+}
+
+bool HttpConnectionState::consumeRequestBody() {
+  if (!active_request_ || active_request_complete_) {
+    return true;
+  }
+
+  if (active_chunked_) {
+    return consumeChunkedRequestBody();
+  }
+
+  if (active_body_cursor_ > request_bytes_.size() ||
+      active_body_received_ > active_body_expected_) {
+    failRequestBody(400, "bad request");
+    return false;
+  }
+
+  const std::size_t available = request_bytes_.size() - active_body_cursor_;
+  const std::size_t remaining = active_body_expected_ - active_body_received_;
+  const std::size_t length = available < remaining ? available : remaining;
+
+  if (length > 0) {
+    active_request_->emitData(inox::StringView(request_bytes_.data() + active_body_cursor_, length));
+
+    if (inox::thrown()) {
+      socket_.destroy();
+      return false;
+    }
+
+    active_body_cursor_ += length;
+    active_body_received_ += length;
+  }
+
+  if (active_body_received_ == active_body_expected_) {
+    finishRequestBody(active_body_cursor_);
+  }
+
+  return !inox::thrown();
+}
+
+bool HttpConnectionState::consumeChunkedRequestBody() {
+  const std::size_t missing = std::numeric_limits<std::size_t>::max();
+
+  for (;;) {
+    if (active_body_cursor_ > request_bytes_.size()) {
+      failRequestBody(400, "bad request");
+      return false;
+    }
+
+    const std::span<const char> bytes(request_bytes_);
+
+    if (active_chunk_state_ == HttpChunkDecodeState::size) {
+      const std::size_t line_end = findCrlf(bytes, active_body_cursor_);
+
+      if (line_end == missing) {
+        if (bytes.size() - active_body_cursor_ > maxChunkMetadataLineBytes) {
+          failRequestBody(413, "payload too large");
+          return false;
+        }
+
+        return true;
+      }
+
+      const std::size_t extension = findByte(bytes, active_body_cursor_, line_end, ';');
+      const std::size_t size_end = extension == missing ? line_end : extension;
+
+      if (size_end == active_body_cursor_ ||
+          !validHeaderValue(inox::StringView(
+            bytes.data() + active_body_cursor_,
+            line_end - active_body_cursor_
+          ))) {
+        failRequestBody(400, "bad request");
+        return false;
+      }
+
+      const std::size_t framing_length = line_end + 2 - active_body_cursor_;
+
+      if (active_chunk_framing_received_ > maxRequestChunkFramingBytes ||
+          framing_length > maxRequestChunkFramingBytes - active_chunk_framing_received_) {
+        failRequestBody(413, "payload too large");
+        return false;
+      }
+
+      active_chunk_framing_received_ += framing_length;
+      std::size_t chunk_size = 0;
+
+      for (std::size_t index = active_body_cursor_; index < size_end; index += 1) {
+        const unsigned char byte = static_cast<unsigned char>(bytes[index]);
+        std::size_t digit = 0;
+
+        if (byte >= '0' && byte <= '9') digit = byte - '0';
+        else if (byte >= 'a' && byte <= 'f') digit = byte - 'a' + 10;
+        else if (byte >= 'A' && byte <= 'F') digit = byte - 'A' + 10;
+        else {
+          failRequestBody(400, "bad request");
+          return false;
+        }
+
+        if (digit > active_body_limit_ || chunk_size > (active_body_limit_ - digit) / 16) {
+          failRequestBody(413, "payload too large");
+          return false;
+        }
+
+        chunk_size = chunk_size * 16 + digit;
+      }
+
+      if (active_body_received_ > active_body_limit_ ||
+          chunk_size > active_body_limit_ - active_body_received_) {
+        failRequestBody(413, "payload too large");
+        return false;
+      }
+
+      active_body_cursor_ = line_end + 2;
+      active_chunk_remaining_ = chunk_size;
+      active_chunk_state_ = chunk_size == 0
+        ? HttpChunkDecodeState::trailers
+        : HttpChunkDecodeState::data;
+      continue;
+    }
+
+    if (active_chunk_state_ == HttpChunkDecodeState::data) {
+      const std::size_t available = bytes.size() - active_body_cursor_;
+      const std::size_t length = available < active_chunk_remaining_
+        ? available
+        : active_chunk_remaining_;
+
+      if (length > 0) {
+        active_request_->emitData(inox::StringView(bytes.data() + active_body_cursor_, length));
+
+        if (inox::thrown()) {
+          socket_.destroy();
+          return false;
+        }
+
+        active_body_cursor_ += length;
+        active_body_received_ += length;
+        active_chunk_remaining_ -= length;
+      }
+
+      if (active_chunk_remaining_ > 0) {
+        return true;
+      }
+
+      active_chunk_state_ = HttpChunkDecodeState::data_crlf;
+      continue;
+    }
+
+    if (active_chunk_state_ == HttpChunkDecodeState::data_crlf) {
+      if (bytes.size() - active_body_cursor_ < 2) {
+        return true;
+      }
+
+      if (bytes[active_body_cursor_] != '\r' || bytes[active_body_cursor_ + 1] != '\n') {
+        failRequestBody(400, "bad request");
+        return false;
+      }
+
+      if (active_chunk_framing_received_ > maxRequestChunkFramingBytes - 2) {
+        failRequestBody(413, "payload too large");
+        return false;
+      }
+
+      active_chunk_framing_received_ += 2;
+      active_body_cursor_ += 2;
+      active_chunk_state_ = HttpChunkDecodeState::size;
+      continue;
+    }
+
+    if (active_chunk_state_ == HttpChunkDecodeState::trailers) {
+      const std::size_t line_end = findCrlf(bytes, active_body_cursor_);
+
+      if (line_end == missing) {
+        if (bytes.size() - active_body_cursor_ > maxChunkMetadataLineBytes) {
+          failRequestBody(413, "payload too large");
+          return false;
+        }
+
+        return true;
+      }
+
+      const std::size_t framing_length = line_end + 2 - active_body_cursor_;
+
+      if (active_chunk_framing_received_ > maxRequestChunkFramingBytes ||
+          framing_length > maxRequestChunkFramingBytes - active_chunk_framing_received_) {
+        failRequestBody(413, "payload too large");
+        return false;
+      }
+
+      active_chunk_framing_received_ += framing_length;
+
+      if (line_end == active_body_cursor_) {
+        active_body_cursor_ += 2;
+        active_chunk_state_ = HttpChunkDecodeState::complete;
+        finishRequestBody(active_body_cursor_);
+        return !inox::thrown();
+      }
+
+      const std::size_t separator = findByte(bytes, active_body_cursor_, line_end, ':');
+
+      if (separator == missing || separator == active_body_cursor_) {
+        failRequestBody(400, "bad request");
+        return false;
+      }
+
+      std::size_t value_start = separator + 1;
+      std::size_t value_end = line_end;
+
+      while (value_start < value_end && (bytes[value_start] == ' ' || bytes[value_start] == '\t')) {
+        value_start += 1;
+      }
+
+      while (value_end > value_start && (bytes[value_end - 1] == ' ' || bytes[value_end - 1] == '\t')) {
+        value_end -= 1;
+      }
+
+      const std::span<const char> name = bytes.subspan(
+        active_body_cursor_,
+        separator - active_body_cursor_
+      );
+      const inox::StringView value(bytes.data() + value_start, value_end - value_start);
+      active_trailer_count_ += 1;
+
+      if (active_trailer_count_ > maxRequestHeaders ||
+          !validHeaderName(inox::StringView(name.data(), name.size())) ||
+          !validHeaderValue(value) ||
+          spanEqualsIgnoreCase(name, "Content-Length") ||
+          spanEqualsIgnoreCase(name, "Transfer-Encoding")) {
+        failRequestBody(400, "bad request");
+        return false;
+      }
+
+      active_body_cursor_ = line_end + 2;
+      continue;
+    }
+
+    return active_chunk_state_ == HttpChunkDecodeState::complete;
+  }
+}
+
+void HttpConnectionState::failRequestBody(double status, const char* message) {
+  if (closed_) {
+    return;
+  }
+
+  active_keep_alive_ = false;
+  active_request_complete_ = true;
+  inox::Value error = materializeHttpError(
+    status == 413 ? "HTTP request body is too large" : "HTTP request body is invalid"
+  );
+
+  if (!inox::thrown() && active_request_) {
+    active_request_->emitError(error);
+  }
+
+  if (inox::thrown()) {
+    socket_.destroy();
+    return;
+  }
+
+  if (active_response_ && !active_response_->headersSent() && !active_response_->writableEnded()) {
+    active_response_->setStatusCode(status);
+
+    if (!inox::thrown()) {
+      active_response_->setHeader("Content-Type", "text/plain; charset=utf-8");
+    }
+
+    if (!inox::thrown()) {
+      active_response_->end(std::span<const std::uint8_t>(
+        reinterpret_cast<const std::uint8_t*>(message),
+        std::strlen(message)
+      ));
+    }
+  } else {
+    socket_.destroy();
+  }
+
+  if (inox::thrown()) {
+    socket_.destroy();
+  }
+}
+
+void HttpConnectionState::finishRequestBody(std::size_t request_bytes) {
+  if (active_request_complete_ || !active_request_) {
+    return;
+  }
+
+  active_request_bytes_ = request_bytes;
+  active_request_complete_ = true;
+  active_request_->emitEnd();
+
+  if (inox::thrown()) {
+    socket_.destroy();
+    return;
+  }
+
+  if (active_response_complete_) {
+    resetRequest();
+  }
 }
 
 void HttpConnectionState::onData(inox::StringView data) {
@@ -2301,7 +2502,7 @@ void HttpConnectionState::onData(inox::StringView data) {
 
   if (request_bytes_.size() > max_buffered_bytes || data.len > max_buffered_bytes - request_bytes_.size()) {
     if (request_dispatched_) {
-      socket_.destroy();
+      failRequestBody(413, "payload too large");
     } else {
       request_dispatched_ = true;
       sendError(413, "payload too large");
@@ -2314,7 +2515,7 @@ void HttpConnectionState::onData(inox::StringView data) {
       request_bytes_.insert(request_bytes_.end(), data.bytes, data.bytes + data.len);
     } catch (const std::bad_alloc&) {
       if (request_dispatched_) {
-        socket_.destroy();
+        failRequestBody(500, "internal server error");
       } else {
         request_dispatched_ = true;
         sendError(500, "internal server error");
@@ -2324,6 +2525,7 @@ void HttpConnectionState::onData(inox::StringView data) {
   }
 
   if (request_dispatched_) {
+    (void)consumeRequestBody();
     return;
   }
 
@@ -2345,61 +2547,22 @@ void HttpConnectionState::onData(inox::StringView data) {
     return;
   }
 
-  std::vector<char> decoded_body;
-  std::size_t request_size = parsed.body_start + parsed.body_length;
-  std::span<const char> request_body(
-    request_bytes_.data() + parsed.body_start,
-    parsed.body_length
-  );
-
-  if (parsed.chunked) {
-    ChunkedRequestDecodeResult decoded = ChunkedRequestDecodeResult::invalid;
-    std::size_t consumed = 0;
-
-    try {
-      decoded = decodeChunkedRequestBody(
-        std::span<const char>(
-          request_bytes_.data() + parsed.body_start,
-          request_bytes_.size() - parsed.body_start
-        ),
-        maxRequestBytes - parsed.body_start,
-        decoded_body,
-        consumed
-      );
-    } catch (const std::bad_alloc&) {
-      request_dispatched_ = true;
-      sendError(500, "internal server error");
-      return;
-    }
-
-    if (decoded == ChunkedRequestDecodeResult::incomplete) {
-      return;
-    }
-
-    if (decoded == ChunkedRequestDecodeResult::too_large) {
-      request_dispatched_ = true;
-      sendError(413, "payload too large");
-      return;
-    }
-
-    if (decoded != ChunkedRequestDecodeResult::ready) {
-      request_dispatched_ = true;
-      sendError(400, "bad request");
-      return;
-    }
-
-    request_body = decoded_body;
-    request_size = parsed.body_start + consumed;
-  }
-
-  active_request_bytes_ = request_size;
+  active_body_cursor_ = parsed.body_start;
+  active_body_expected_ = parsed.body_length;
+  active_body_received_ = 0;
+  active_body_limit_ = maxRequestBytes - parsed.body_start;
+  active_chunk_remaining_ = 0;
+  active_chunk_framing_received_ = 0;
+  active_trailer_count_ = 0;
+  active_chunk_state_ = HttpChunkDecodeState::size;
   active_keep_alive_ = parsed.keep_alive;
   active_http_1_0_ =
     parsed.version_length == 3 &&
     std::memcmp(request_bytes_.data() + parsed.version_start, "1.0", 3) == 0;
+  active_chunked_ = parsed.chunked;
+  active_request_complete_ = false;
+  active_response_complete_ = false;
   request_dispatched_ = true;
-  std::shared_ptr<HttpRequestState> request;
-  std::shared_ptr<HttpResponseState> response;
   inox::Value headers = materializeRequestHeaders(
     request_bytes_,
     parsed.headers_start,
@@ -2412,14 +2575,14 @@ void HttpConnectionState::onData(inox::StringView data) {
   }
 
   try {
-    request = std::make_shared<HttpRequestState>(
+    active_request_ = std::make_shared<HttpRequestState>(
       std::move(headers),
       inox::String(request_bytes_.data() + parsed.version_start, parsed.version_length),
       inox::String(request_bytes_.data() + parsed.method_start, parsed.method_length),
       socket_,
       inox::String(request_bytes_.data() + parsed.url_start, parsed.url_length)
     );
-    response = std::make_shared<HttpResponseState>(shared_from_this());
+    active_response_ = std::make_shared<HttpResponseState>(shared_from_this());
   } catch (const std::bad_alloc&) {
     sendError(500, "internal server error");
     return;
@@ -2430,32 +2593,23 @@ void HttpConnectionState::onData(inox::StringView data) {
     return;
   }
 
-  HttpRequest request_value = materializeRequest(request);
-  HttpResponse response_value = materializeResponse(response);
+  HttpRequest request_value = materializeRequest(active_request_);
+  HttpResponse response_value = materializeResponse(active_response_);
 
   if (inox::thrown()) {
     socket_.destroy();
     return;
   }
 
-  try {
-    const std::array<inox::Value, 2> arguments = {request_value, response_value};
-    callHttpListeners(server_->request_listeners_, arguments);
-
-    if (!inox::thrown()) {
-      request->emitData(inox::StringView(request_body.data(), request_body.size()));
-    }
-
-    if (!inox::thrown()) {
-      request->emitEnd();
-    }
-  } catch (const std::bad_alloc&) {
-    throwHttpError("TypeError: HTTP request body delivery failed");
-  }
+  const std::array<inox::Value, 2> arguments = {request_value, response_value};
+  callHttpListeners(server_->request_listeners_, arguments);
 
   if (inox::thrown()) {
     socket_.destroy();
+    return;
   }
+
+  (void)consumeRequestBody();
 }
 
 void HttpConnectionState::sendError(double status, inox::StringView message) {

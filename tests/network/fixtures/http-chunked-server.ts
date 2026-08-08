@@ -3,15 +3,12 @@ import http from 'node:http'
 export function startHttpChunkedServerAcceptance(port: number, nonce: string): void {
   const server = http.createServer()
   let accepted = 0
-  let requests = 0
 
   server.on('request', (request, response) => {
-    requests = requests + 1
-
     if (request.url === '/shutdown') {
       response.end('shutdown')
       server.close(() => {
-        if (accepted === 1 && requests === 2) {
+        if (accepted === 1) {
           console.log('INOX_HTTP_CHUNKED_SERVER_OK')
         }
       })
@@ -34,7 +31,7 @@ export function startHttpChunkedServerAcceptance(port: number, nonce: string): v
         request.headers['trailer'] === 'X-Inox-Trailer' &&
         request.headers['x-inox-test'] === nonce &&
         body === 'chunked ' + nonce &&
-        chunks === 1
+        chunks >= 2
 
       if (valid) {
         accepted = accepted + 1

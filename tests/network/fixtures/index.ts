@@ -6,6 +6,7 @@ import { startHttpChunkedErrorAcceptance } from './http-chunked-errors.ts'
 import { startHttpChunkedServerAcceptance } from './http-chunked-server.ts'
 import { startHttpKeepAliveServerAcceptance } from './http-keep-alive-server.ts'
 import { startHttpKeepAliveClientAcceptance } from './http-keep-alive-client.ts'
+import { startHttpIncomingStreamingServerAcceptance } from './http-incoming-streaming-server.ts'
 import { startHttpStreamingClientAcceptance } from './http-streaming-client.ts'
 import { startHttpStreamingServerAcceptance } from './http-streaming-server.ts'
 import { startHttpAcceptance } from './http.ts'
@@ -28,6 +29,7 @@ const httpsKeepAliveClientPort = Number(process.argv[10]) ?? 0
 const httpStreamingServerPort = Number(process.argv[11]) ?? 0
 const httpStreamingClientPort = Number(process.argv[12]) ?? 0
 const httpsStreamingClientPort = Number(process.argv[13]) ?? 0
+const httpIncomingStreamingServerPort = Number(process.argv[14]) ?? 0
 
 startTcpAcceptance()
 startUdpAcceptance()
@@ -44,3 +46,4 @@ startHttpsKeepAliveClientAcceptance(httpsKeepAliveClientPort, nonce)
 startHttpStreamingServerAcceptance(httpStreamingServerPort, nonce)
 startHttpStreamingClientAcceptance(httpStreamingClientPort, nonce)
 startHttpsStreamingClientAcceptance(httpsStreamingClientPort, nonce)
+startHttpIncomingStreamingServerAcceptance(httpIncomingStreamingServerPort, nonce)
