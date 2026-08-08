@@ -136,16 +136,6 @@ inox_status inox_tls_client_socket(inox_tls_client* client, inox_value* out) {
 }
 
 inox_status inox_tls_client_write(inox_tls_client* client, const char* bytes, size_t len) {
-  return inox_tls_client_write_with_callback(client, bytes, len, 0, 0);
-}
-
-inox_status inox_tls_client_write_with_callback(
-  inox_tls_client* client,
-  const char* bytes,
-  size_t len,
-  inox_tls_write_fn callback,
-  void* user
-) {
   if (client == 0 || client->ssl == 0 || client->closing || (bytes == 0 && len != 0)) {
     return INOX_ERR_TYPE;
   }
@@ -183,46 +173,6 @@ inox_status inox_tls_client_write_with_callback(
     }
   }
 
-  if (callback != 0) {
-    return callback(user, client, INOX_OK);
-  }
-
-  return INOX_OK;
-}
-
-inox_status inox_tls_client_end(inox_tls_client* client, const char* bytes, size_t len) {
-  return inox_tls_client_end_with_callback(client, bytes, len, 0, 0);
-}
-
-inox_status inox_tls_client_end_with_callback(
-  inox_tls_client* client,
-  const char* bytes,
-  size_t len,
-  inox_tls_write_fn callback,
-  void* user
-) {
-  if (client == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  inox_status status = INOX_OK;
-
-  if (bytes != 0 || len != 0) {
-    status = inox_tls_client_write_with_callback(client, bytes, len, callback, user);
-  } else if (callback != 0) {
-    status = callback(user, client, INOX_OK);
-  }
-
-  if (status != INOX_OK) {
-    return status;
-  }
-
-  if (client->ssl != 0 && client->handshake_done) {
-    (void)SSL_shutdown(client->ssl);
-    (void)inox_tls_flush_net_bio(client);
-  }
-
-  inox_tls_client_close(client);
   return INOX_OK;
 }
 
@@ -372,19 +322,41 @@ static inox_status inox_tls_on_tcp_data(void* user, const inox_value* args, size
     int written = BIO_write(client->net_bio, bytes.bytes + offset, (int)(bytes.len - offset));
 
     if (written <= 0) {
+      if (BIO_should_retry(client->net_bio)) {
+        inox_status status = client->handshake_done
+          ? inox_tls_drain_plaintext(client)
+          : inox_tls_drive_handshake(client);
+
+        if (status != INOX_OK || client->closing) {
+          return inox_tls_callback_result(out);
+        }
+
+        continue;
+      }
+
       (void)inox_tls_fail_async(client, INOX_ERR_FIELD);
       return inox_tls_callback_result(out);
     }
 
     offset += (size_t)written;
+
+    if (!client->handshake_done) {
+      inox_status status = inox_tls_drive_handshake(client);
+
+      if (status != INOX_OK || client->closing) {
+        return inox_tls_callback_result(out);
+      }
+    }
+
+    if (client->handshake_done) {
+      inox_status status = inox_tls_drain_plaintext(client);
+
+      if (status != INOX_OK || client->closing) {
+        return inox_tls_callback_result(out);
+      }
+    }
   }
 
-  if (!client->handshake_done) {
-    (void)inox_tls_drive_handshake(client);
-    return inox_tls_callback_result(out);
-  }
-
-  (void)inox_tls_drain_plaintext(client);
   return inox_tls_callback_result(out);
 }
 

@@ -23,7 +23,10 @@ const operationIds = [
   'node:http#IncomingMessage.statusCode',
   'node:http#IncomingMessage.statusMessage',
   'node:http#IncomingMessage.url',
+  'node:http#IncomingMessage.isPaused',
   'node:http#IncomingMessage.on',
+  'node:http#IncomingMessage.pause',
+  'node:http#IncomingMessage.resume',
   'node:http#IncomingMessage.setEncoding',
   'node:http#ClientRequest.headersSent',
   'node:http#ClientRequest.writableEnded',
@@ -44,6 +47,7 @@ const operationIds = [
   'node:http#ServerResponse.getHeader',
   'node:http#ServerResponse.getHeaderNames',
   'node:http#ServerResponse.hasHeader',
+  'node:http#ServerResponse.on',
   'node:http#ServerResponse.removeHeader',
   'node:http#ServerResponse.setHeader',
   'node:http#ServerResponse.write',
@@ -106,6 +110,15 @@ test('node:http operations describe results only through TypeRef', async () => {
     operation(operations, 'node:http#IncomingMessage.on'),
     nominalTypeRef('node:http#IncomingMessage', 'borrowed')
   )
+  assertResult(operation(operations, 'node:http#IncomingMessage.isPaused'), primitiveTypeRef('boolean'))
+  assertResult(
+    operation(operations, 'node:http#IncomingMessage.pause'),
+    nominalTypeRef('node:http#IncomingMessage', 'borrowed')
+  )
+  assertResult(
+    operation(operations, 'node:http#IncomingMessage.resume'),
+    nominalTypeRef('node:http#IncomingMessage', 'borrowed')
+  )
   assertResult(
     operation(operations, 'node:http#IncomingMessage.setEncoding'),
     nominalTypeRef('node:http#IncomingMessage', 'borrowed')
@@ -152,6 +165,10 @@ test('node:http operations describe results only through TypeRef', async () => {
     arrayTypeRef(primitiveTypeRef('string'))
   )
   assertResult(operation(operations, 'node:http#ServerResponse.hasHeader'), primitiveTypeRef('boolean'))
+  assertResult(
+    operation(operations, 'node:http#ServerResponse.on'),
+    nominalTypeRef('node:http#ServerResponse', 'borrowed')
+  )
   assertResult(operation(operations, 'node:http#ServerResponse.removeHeader'), primitiveTypeRef('void'))
   assertResult(
     operation(operations, 'node:http#ServerResponse.setHeader'),

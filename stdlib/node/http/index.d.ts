@@ -47,9 +47,12 @@ export class IncomingMessage {
   readonly statusMessage?: string
   readonly url: string
 
+  isPaused(): boolean
   on(eventName: 'data', listener: MessageDataListener): IncomingMessage
   on(eventName: 'end' | 'close', listener: MessageListener): IncomingMessage
   on(eventName: 'error', listener: ErrorListener): IncomingMessage
+  pause(): IncomingMessage
+  resume(): IncomingMessage
   setEncoding(encoding: 'utf8' | 'utf-8'): IncomingMessage
 }
 
@@ -64,7 +67,7 @@ export class ClientRequest {
   hasHeader(name: string): boolean
   on(eventName: 'response', listener: ResponseListener): ClientRequest
   on(eventName: 'error', listener: ErrorListener): ClientRequest
-  on(eventName: 'finish' | 'close', listener: MessageListener): ClientRequest
+  on(eventName: 'finish' | 'close' | 'drain', listener: MessageListener): ClientRequest
   removeHeader(name: string): void
   setHeader(name: string, value: string): ClientRequest
   write(body: string | Uint8Array): boolean
@@ -79,6 +82,7 @@ export class ServerResponse {
   getHeader(name: string): string | undefined
   getHeaderNames(): string[]
   hasHeader(name: string): boolean
+  on(eventName: 'drain', listener: MessageListener): ServerResponse
   removeHeader(name: string): void
   setHeader(name: string, value: string): ServerResponse
   write(body: string | Uint8Array): boolean

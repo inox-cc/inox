@@ -60,40 +60,6 @@ inox_status inox_tls_client_write(inox_tls_client* client, const char* bytes, si
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_tls_client_write_with_callback(
-  inox_tls_client* client,
-  const char* bytes,
-  size_t len,
-  inox_tls_write_fn callback,
-  void* user
-) {
-  (void)client;
-  (void)bytes;
-  (void)len;
-  (void)callback;
-  (void)user;
-  return INOX_ERR_UNSUPPORTED;
-}
-
-inox_status inox_tls_client_end(inox_tls_client* client, const char* bytes, size_t len) {
-  return inox_tls_client_end_with_callback(client, bytes, len, 0, 0);
-}
-
-inox_status inox_tls_client_end_with_callback(
-  inox_tls_client* client,
-  const char* bytes,
-  size_t len,
-  inox_tls_write_fn callback,
-  void* user
-) {
-  (void)client;
-  (void)bytes;
-  (void)len;
-  (void)callback;
-  (void)user;
-  return INOX_ERR_UNSUPPORTED;
-}
-
 inox_status inox_tls_client_destroy(inox_tls_client* client) {
   if (client == 0) {
     return INOX_ERR_TYPE;

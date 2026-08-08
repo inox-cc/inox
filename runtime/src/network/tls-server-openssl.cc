@@ -288,22 +288,41 @@ inox_status onTcpData(
     );
 
     if (written <= 0) {
+      if (BIO_should_retry(connection->net_bio)) {
+        const inox_status status = connection->handshake_done
+          ? drainPlaintext(connection)
+          : driveHandshake(connection);
+
+        if (status != INOX_OK || connection->closing) {
+          return callbackResult(out);
+        }
+
+        continue;
+      }
+
       (void)failConnection(connection, INOX_ERR_FIELD);
       return callbackResult(out);
     }
 
     offset += static_cast<std::size_t>(written);
-  }
 
-  if (!connection->handshake_done) {
-    (void)driveHandshake(connection);
+    if (!connection->handshake_done) {
+      const inox_status status = driveHandshake(connection);
 
-    if (!connection->handshake_done || connection->closing) {
-      return callbackResult(out);
+      if (status != INOX_OK || connection->closing) {
+        return callbackResult(out);
+      }
+    }
+
+    if (connection->handshake_done) {
+      const inox_status status = drainPlaintext(connection);
+
+      if (status != INOX_OK || connection->closing) {
+        return callbackResult(out);
+      }
     }
   }
 
-  (void)drainPlaintext(connection);
   return callbackResult(out);
 }
 

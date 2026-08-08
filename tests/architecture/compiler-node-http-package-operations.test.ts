@@ -36,8 +36,11 @@ test('node:http объявляет server и client operations через packag
     'node:http#ClientRequest.write',
     'node:http#IncomingMessage.headers',
     'node:http#IncomingMessage.httpVersion',
+    'node:http#IncomingMessage.isPaused',
     'node:http#IncomingMessage.method',
     'node:http#IncomingMessage.on',
+    'node:http#IncomingMessage.pause',
+    'node:http#IncomingMessage.resume',
     'node:http#IncomingMessage.setEncoding',
     'node:http#IncomingMessage.socket',
     'node:http#IncomingMessage.statusCode',
@@ -52,6 +55,7 @@ test('node:http объявляет server и client operations через packag
     'node:http#ServerResponse.getHeaderNames',
     'node:http#ServerResponse.hasHeader',
     'node:http#ServerResponse.headersSent',
+    'node:http#ServerResponse.on',
     'node:http#ServerResponse.removeHeader',
     'node:http#ServerResponse.setHeader',
     'node:http#ServerResponse.statusCode.read',
@@ -140,11 +144,17 @@ test('node:http объявляет server и client operations через packag
   }
 
   const requestOn = operation(operations, 'node:http#IncomingMessage.on')
+  const requestIsPaused = operation(operations, 'node:http#IncomingMessage.isPaused')
+  const requestPause = operation(operations, 'node:http#IncomingMessage.pause')
+  const requestResume = operation(operations, 'node:http#IncomingMessage.resume')
   const requestSetEncoding = operation(operations, 'node:http#IncomingMessage.setEncoding')
 
   assert.equal(requestOn.receiverTypeId, requestTypeId)
   assert.equal(requestOn.callbackLifetime, 'event-loop')
   assert.ok(hasEventLoopCallbackVariant(requestOn))
+  assert.deepEqual(requestIsPaused.cArgumentKinds, ['receiver'])
+  assert.equal(requestPause.cResultMode, 'borrowed')
+  assert.equal(requestResume.cResultMode, 'borrowed')
   assert.equal(requestSetEncoding.receiverTypeId, requestTypeId)
   assert.deepEqual(requestSetEncoding.cArgumentKinds, ['receiver', 'string-view'])
 
@@ -182,6 +192,7 @@ test('node:http объявляет server и client operations через packag
   const getHeader = operation(operations, 'node:http#ServerResponse.getHeader')
   const getHeaderNames = operation(operations, 'node:http#ServerResponse.getHeaderNames')
   const hasHeader = operation(operations, 'node:http#ServerResponse.hasHeader')
+  const responseOn = operation(operations, 'node:http#ServerResponse.on')
   const removeHeader = operation(operations, 'node:http#ServerResponse.removeHeader')
   const setHeader = operation(operations, 'node:http#ServerResponse.setHeader')
   const write = operation(operations, 'node:http#ServerResponse.write')
@@ -192,6 +203,7 @@ test('node:http объявляет server и client operations через packag
     getHeader,
     getHeaderNames,
     hasHeader,
+    responseOn,
     removeHeader,
     setHeader,
     write,
@@ -208,6 +220,7 @@ test('node:http объявляет server и client operations через packag
   assert.deepEqual(getHeader.cArgumentKinds, ['receiver', 'string-view'])
   assert.deepEqual(getHeaderNames.cArgumentKinds, ['receiver'])
   assert.deepEqual(hasHeader.cArgumentKinds, ['receiver', 'string-view'])
+  assert.ok(hasEventLoopCallbackVariant(responseOn))
   assert.deepEqual(removeHeader.cArgumentKinds, ['receiver', 'string-view'])
   assertBodyVariants(write)
   assert.equal(writeHead.cResultMode, 'borrowed')

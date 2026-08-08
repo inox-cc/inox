@@ -15,7 +15,6 @@ typedef struct inox_tls_server_connection inox_tls_server_connection;
 typedef inox_status (*inox_tls_connect_fn)(void* user, inox_tls_client* client, inox_status status);
 typedef inox_status (*inox_tls_data_fn)(void* user, inox_tls_client* client, const char* bytes, size_t len);
 typedef void (*inox_tls_close_fn)(void* user, inox_tls_client* client);
-typedef inox_status (*inox_tls_write_fn)(void* user, inox_tls_client* client, inox_status status);
 typedef inox_status (*inox_tls_server_handshake_fn)(
   void* user,
   inox_tls_server_connection* connection,
@@ -51,21 +50,6 @@ inox_status inox_tls_connect(
 );
 inox_status inox_tls_client_socket(inox_tls_client* client, inox_value* out);
 inox_status inox_tls_client_write(inox_tls_client* client, const char* bytes, size_t len);
-inox_status inox_tls_client_write_with_callback(
-  inox_tls_client* client,
-  const char* bytes,
-  size_t len,
-  inox_tls_write_fn callback,
-  void* user
-);
-inox_status inox_tls_client_end(inox_tls_client* client, const char* bytes, size_t len);
-inox_status inox_tls_client_end_with_callback(
-  inox_tls_client* client,
-  const char* bytes,
-  size_t len,
-  inox_tls_write_fn callback,
-  void* user
-);
 inox_status inox_tls_client_destroy(inox_tls_client* client);
 void inox_tls_client_close(inox_tls_client* client);
 

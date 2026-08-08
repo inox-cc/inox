@@ -22,6 +22,8 @@ async function main(): Promise<void> {
   const httpStreamingServerPort = await reservePort()
   const httpIncomingStreamingServerPort = await reservePort()
   const httpsServerPort = await reservePort()
+  const httpBackpressurePort = await reservePort()
+  const httpsBackpressurePort = await reservePort()
   const nonce = `network-${process.pid}-${Date.now()}`
 
   await buildExecutable()
@@ -51,7 +53,9 @@ async function main(): Promise<void> {
       String(httpIncomingStreamingServerPort),
       String(httpsServerPort),
       join(repoRoot, 'tests/network/fixtures/https-cert.pem'),
-      join(repoRoot, 'tests/network/fixtures/https-key.pem')
+      join(repoRoot, 'tests/network/fixtures/https-key.pem'),
+      String(httpBackpressurePort),
+      String(httpsBackpressurePort)
     ],
     {
       cwd: repoRoot,
@@ -102,6 +106,18 @@ async function main(): Promise<void> {
     await waitForLine(
       application,
       `INOX_HTTPS_SERVER_READY ${nonce} ${httpsServerPort}`,
+      () => stdout,
+      () => stderr
+    )
+    await waitForLine(
+      application,
+      'INOX_HTTP_BACKPRESSURE_OK',
+      () => stdout,
+      () => stderr
+    )
+    await waitForLine(
+      application,
+      'INOX_HTTPS_BACKPRESSURE_OK',
       () => stdout,
       () => stderr
     )
@@ -208,6 +224,14 @@ async function main(): Promise<void> {
     assert.ok(
       lines.includes('INOX_HTTPS_SERVER_OK'),
       processFailure('HTTPS server не завершил acceptance', stdout, stderr)
+    )
+    assert.ok(
+      lines.includes('INOX_HTTP_BACKPRESSURE_OK'),
+      processFailure('HTTP backpressure acceptance не завершён', stdout, stderr)
+    )
+    assert.ok(
+      lines.includes('INOX_HTTPS_BACKPRESSURE_OK'),
+      processFailure('HTTPS backpressure acceptance не завершён', stdout, stderr)
     )
   } finally {
     await stopProcess(application)
@@ -872,7 +896,7 @@ async function checkChunkedHttpServer(port: number, nonce: string): Promise<void
       'Transfer-Encoding: chunked\r\n' +
       'Connection: close\r\n' +
       '\r\n' +
-      '10000\r\n'
+      'ffffffffffffffffffffffffffffffff\r\n'
   ])
   assert.match(oversized, /^HTTP\/1\.1 413 /)
 

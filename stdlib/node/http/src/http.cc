@@ -25,16 +25,14 @@ HttpServerConnectionTransport::~HttpServerConnectionTransport() = default;
 
 namespace {
 
-constexpr std::size_t maxRequestBytes = 64 * 1024;
-constexpr std::size_t maxRequestChunkFramingBytes = 64 * 1024;
+constexpr std::size_t maxRequestHeaderBytes = 64 * 1024;
+constexpr std::size_t maxBufferedRequestBytes = 256 * 1024;
 constexpr std::size_t maxRequestHeaders = 64;
-constexpr std::size_t maxResponseBodyBytes = 64 * 1024;
 constexpr std::size_t maxResponseHeaders = 64;
 constexpr std::size_t maxResponseHeaderBytes = 16 * 1024;
-constexpr std::size_t maxClientRequestBodyBytes = 64 * 1024;
-constexpr std::size_t maxClientResponseBytes = 1024 * 1024;
-constexpr std::size_t maxClientChunkFramingBytes = 256 * 1024;
+constexpr std::size_t maxBufferedResponseBytes = 256 * 1024;
 constexpr std::size_t maxChunkMetadataLineBytes = 16 * 1024;
+constexpr std::size_t httpHighWaterMark = 16 * 1024;
 
 enum class HttpClientResponseBodyMode {
   close_delimited,
@@ -256,7 +254,8 @@ public:
   void start(
     inox::Callback close,
     inox::Callback error,
-    inox::Callback data
+    inox::Callback data,
+    inox::Callback drain
   ) override {
     socket_.on("close", std::move(close));
 
@@ -266,6 +265,10 @@ public:
 
     if (!inox::thrown()) {
       socket_.on("data", std::move(data));
+    }
+
+    if (!inox::thrown()) {
+      socket_.on("drain", std::move(drain));
     }
   }
 
@@ -322,6 +325,9 @@ public:
   std::vector<inox::Callback> end_listeners_;
   std::vector<inox::Callback> close_listeners_;
   std::vector<inox::Callback> error_listeners_;
+  std::weak_ptr<HttpConnectionState> server_connection_;
+  std::weak_ptr<HttpClientRequestState> client_request_;
+  bool paused_;
   bool ended_;
   bool closed_;
 
@@ -345,6 +351,9 @@ public:
       end_listeners_(),
       close_listeners_(),
       error_listeners_(),
+      server_connection_(),
+      client_request_(),
+      paused_(false),
       ended_(false),
       closed_(false) {}
 
@@ -352,7 +361,10 @@ public:
   void emitData(inox::StringView data);
   void emitEnd();
   void emitError(const inox::Value& error);
+  bool isPaused() const;
   void on(inox::StringView event_name, inox::Callback listener);
+  void pause();
+  void resume();
 };
 
 class HttpResponseState : public std::enable_shared_from_this<HttpResponseState> {
@@ -361,6 +373,7 @@ public:
   std::vector<ResponseHeader> headers_;
   std::optional<std::size_t> content_length_;
   std::size_t body_bytes_written_;
+  std::vector<inox::Callback> drain_listeners_;
   HttpOutgoingBodyMode body_mode_;
   double status_code_;
   bool sent_;
@@ -375,6 +388,8 @@ public:
   Array getHeaderNames() const;
   bool hasHeader(inox::StringView name) const;
   bool headersSent() const;
+  void emitDrain();
+  void on(inox::StringView event_name, inox::Callback listener);
   void removeHeader(inox::StringView name);
   void setHeader(inox::StringView name, inox::StringView value);
   void setStatusCode(double value);
@@ -416,13 +431,11 @@ public:
   std::shared_ptr<HttpRequestState> active_request_;
   std::shared_ptr<HttpResponseState> active_response_;
   std::shared_ptr<HttpConnectionState> native_owner_;
-  std::size_t active_request_bytes_;
   std::size_t active_body_cursor_;
   std::size_t active_body_expected_;
   std::size_t active_body_received_;
-  std::size_t active_body_limit_;
   std::size_t active_chunk_remaining_;
-  std::size_t active_chunk_framing_received_;
+  std::size_t active_trailer_bytes_;
   std::size_t active_trailer_count_;
   HttpChunkDecodeState active_chunk_state_;
   bool active_keep_alive_;
@@ -431,6 +444,7 @@ public:
   bool active_request_complete_;
   bool active_response_complete_;
   bool request_dispatched_;
+  bool consuming_request_body_;
   bool closed_;
 
   HttpConnectionState(
@@ -443,13 +457,16 @@ public:
     std::shared_ptr<HttpServerConnectionTransport> transport
   );
   void completeResponse(bool keep_alive);
+  void compactRequestBytes(std::size_t consumed);
   bool consumeRequestBody();
   bool consumeChunkedRequestBody();
   void failRequestBody(double status, const char* message);
-  void finishRequestBody(std::size_t request_bytes);
+  void finishRequestBody();
   void onClose();
   void onData(inox::StringView data);
+  void onDrain();
   void resetRequest();
+  void resumeRequestBody();
   void sendError(double status, inox::StringView message);
 };
 
@@ -467,6 +484,7 @@ public:
   bool connected_;
   bool closed_;
   bool destroying_;
+  bool drain_attached_;
   std::size_t idle_generation_;
 
   HttpClientConnectionState(
@@ -492,9 +510,10 @@ public:
   void onClose();
   void onConnect();
   void onData(inox::StringView data);
+  void onDrain();
   void onEnd();
   void onError(const inox::Value& error);
-  void onWrite(inox_status status);
+  bool attachDrain();
   NetSocket responseSocket() const;
   void setIdle(bool idle);
   bool write(inox::StringView data, bool final, bool& accepted);
@@ -509,10 +528,12 @@ public:
   std::vector<ResponseHeader> headers_;
   std::string pending_write_bytes_;
   std::vector<char> response_bytes_;
+  std::vector<char> paused_response_bytes_;
   std::vector<inox::Callback> response_listeners_;
   std::vector<inox::Callback> finish_listeners_;
   std::vector<inox::Callback> close_listeners_;
   std::vector<inox::Callback> error_listeners_;
+  std::vector<inox::Callback> drain_listeners_;
   HttpClientTransportKind transport_kind_;
   std::shared_ptr<HttpClientConnectionState> connection_;
   std::shared_ptr<HttpRequestState> response_;
@@ -520,7 +541,7 @@ public:
   std::optional<std::size_t> response_content_length_;
   std::vector<char> response_chunk_bytes_;
   std::size_t response_body_received_;
-  std::size_t response_chunk_framing_received_;
+  std::size_t response_trailer_bytes_;
   std::size_t response_chunk_remaining_;
   std::size_t response_trailer_count_;
   HttpClientResponseBodyMode response_body_mode_;
@@ -531,10 +552,12 @@ public:
   bool response_keep_alive_;
   bool request_keep_alive_;
   bool pending_write_final_;
+  bool pending_needs_drain_;
   bool ending_;
   bool sent_;
   bool finished_;
   bool response_started_;
+  bool response_transport_ended_;
   bool failed_;
   bool closed_;
 
@@ -563,9 +586,11 @@ public:
   void onClose();
   void onConnect();
   void onData(inox::StringView data);
+  void onDrain();
   void onEnd();
   void onError(const inox::Value& error);
   void onFinish();
+  void resumeResponseBody();
   void removeHeader(inox::StringView name);
   void setHeader(inox::StringView name, inox::StringView value);
   bool writableEnded() const;
@@ -577,6 +602,7 @@ private:
   bool consumeChunkedBody(inox::StringView data);
   bool consumeResponseBody(inox::StringView data);
   bool deliverResponseBody(inox::StringView data);
+  bool bufferPausedResponse(inox::StringView data);
   void completeResponseBody();
   bool send(std::string& output, bool final);
 };
@@ -978,6 +1004,7 @@ inox_status onServerClose(void* context, const inox_value* args, std::size_t arg
 inox_status onConnectionData(void* context, const inox_value* args, std::size_t arg_count, inox_value* out);
 inox_status onConnectionClose(void* context, const inox_value* args, std::size_t arg_count, inox_value* out);
 inox_status onConnectionError(void* context, const inox_value* args, std::size_t arg_count, inox_value* out);
+inox_status onConnectionDrain(void* context, const inox_value* args, std::size_t arg_count, inox_value* out);
 inox_status onResponseComplete(void* context, const inox_value* args, std::size_t arg_count, inox_value* out);
 inox_status onClientConnect(void* context, const inox_value* args, std::size_t arg_count, inox_value* out);
 inox_status onClientData(void* context, const inox_value* args, std::size_t arg_count, inox_value* out);
@@ -985,6 +1012,7 @@ inox_status onClientEnd(void* context, const inox_value* args, std::size_t arg_c
 inox_status onClientClose(void* context, const inox_value* args, std::size_t arg_count, inox_value* out);
 inox_status onClientError(void* context, const inox_value* args, std::size_t arg_count, inox_value* out);
 inox_status onClientFinish(void* context, const inox_value* args, std::size_t arg_count, inox_value* out);
+inox_status onClientDrain(void* context, const inox_value* args, std::size_t arg_count, inox_value* out);
 inox_status onClientTlsConnect(void* context, inox_tls_client* client, inox_status status);
 inox_status onClientTlsData(
   void* context,
@@ -993,7 +1021,6 @@ inox_status onClientTlsData(
   std::size_t length
 );
 void onClientTlsClose(void* context, inox_tls_client* client);
-inox_status onClientTlsWrite(void* context, inox_tls_client* client, inox_status status);
 
 enum class RequestParseResult {
   incomplete,
@@ -1131,7 +1158,6 @@ std::span<const char> trimOptionalWhitespace(std::span<const char> value) {
 
 bool parseOutgoingContentLength(
   inox::StringView value,
-  std::size_t body_limit,
   std::size_t& out
 ) {
   const std::span<const char> bytes = trimOptionalWhitespace(
@@ -1151,7 +1177,7 @@ bool parseOutgoingContentLength(
 
     const std::size_t number = static_cast<std::size_t>(digit - '0');
 
-    if (parsed > (body_limit - number) / 10) {
+    if (parsed > (std::numeric_limits<std::size_t>::max() - number) / 10) {
       return false;
     }
 
@@ -1188,7 +1214,6 @@ bool selectOutgoingBodyMode(
   bool streaming,
   bool chunked_supported,
   std::size_t initial_body_size,
-  std::size_t body_limit,
   const char* framing_error,
   const char* allocation_error,
   HttpOutgoingBodyMode& mode,
@@ -1204,7 +1229,7 @@ bool selectOutgoingBodyMode(
 
     if (equalsIgnoreCase(name, inox::StringView("Content-Length", 14))) {
       if (has_content_length ||
-          !parseOutgoingContentLength(value, body_limit, declared_content_length)) {
+          !parseOutgoingContentLength(value, declared_content_length)) {
         throwHttpError(framing_error);
         return false;
       }
@@ -1513,10 +1538,10 @@ ParsedRequest parseRequest(std::span<const char> bytes) {
   const std::size_t header_end = findHeaderEnd(bytes);
 
   if (header_end == missing) {
-    return {bytes.size() >= maxRequestBytes ? RequestParseResult::too_large : RequestParseResult::incomplete, 0, 0, 0, 0};
+    return {bytes.size() >= maxRequestHeaderBytes ? RequestParseResult::too_large : RequestParseResult::incomplete, 0, 0, 0, 0};
   }
 
-  if (header_end > maxRequestBytes) {
+  if (header_end > maxRequestHeaderBytes) {
     return {RequestParseResult::too_large, 0, 0, 0, 0};
   }
 
@@ -1643,10 +1668,6 @@ ParsedRequest parseRequest(std::span<const char> bytes) {
 
   if (chunked && has_content_length) {
     return {RequestParseResult::invalid, 0, 0, 0, 0};
-  }
-
-  if (content_length > maxRequestBytes - header_end) {
-    return {RequestParseResult::too_large, 0, 0, 0, 0};
   }
 
   return {
@@ -1806,7 +1827,7 @@ ParsedResponse parseResponse(std::span<const char> bytes) {
 
         const std::size_t number = static_cast<std::size_t>(digit - '0');
 
-        if (parsed > (maxClientResponseBytes - number) / 10) {
+        if (parsed > (std::numeric_limits<std::size_t>::max() - number) / 10) {
           return {ResponseParseResult::too_large};
         }
 
@@ -1821,10 +1842,6 @@ ParsedResponse parseResponse(std::span<const char> bytes) {
     }
 
     cursor = line_end + 2;
-  }
-
-  if (content_length && *content_length > maxClientResponseBytes) {
-    return {ResponseParseResult::too_large};
   }
 
   if (chunked && content_length) {
@@ -1904,6 +1921,10 @@ void HttpRequestState::emitError(const inox::Value& error) {
   callHttpListeners(error_listeners_, arguments);
 }
 
+bool HttpRequestState::isPaused() const {
+  return paused_;
+}
+
 void HttpRequestState::on(inox::StringView event_name, inox::Callback listener) {
   if (!listener.valid()) {
     throwHttpError("TypeError: IncomingMessage.on requires a function");
@@ -1925,6 +1946,37 @@ void HttpRequestState::on(inox::StringView event_name, inox::Callback listener) 
     listeners->push_back(std::move(listener));
   } catch (const std::bad_alloc&) {
     throwHttpError("TypeError: IncomingMessage listener allocation failed");
+  }
+}
+
+void HttpRequestState::pause() {
+  if (ended_ || closed_ || paused_) {
+    return;
+  }
+
+  paused_ = true;
+  socket_.pause();
+
+  if (inox::thrown()) {
+    paused_ = false;
+  }
+}
+
+void HttpRequestState::resume() {
+  if (ended_ || closed_ || !paused_) {
+    return;
+  }
+
+  paused_ = false;
+
+  if (const std::shared_ptr<HttpConnectionState> connection = server_connection_.lock()) {
+    connection->resumeRequestBody();
+  } else if (const std::shared_ptr<HttpClientRequestState> request = client_request_.lock()) {
+    request->resumeResponseBody();
+  }
+
+  if (!inox::thrown() && !ended_ && !closed_) {
+    socket_.resume();
   }
 }
 
@@ -2165,13 +2217,11 @@ HttpConnectionState::HttpConnectionState(
     active_request_(),
     active_response_(),
     native_owner_(),
-    active_request_bytes_(0),
     active_body_cursor_(0),
     active_body_expected_(0),
     active_body_received_(0),
-    active_body_limit_(0),
     active_chunk_remaining_(0),
-    active_chunk_framing_received_(0),
+    active_trailer_bytes_(0),
     active_trailer_count_(0),
     active_chunk_state_(HttpChunkDecodeState::size),
     active_keep_alive_(false),
@@ -2180,6 +2230,7 @@ HttpConnectionState::HttpConnectionState(
     active_request_complete_(false),
     active_response_complete_(false),
     request_dispatched_(false),
+    consuming_request_body_(false),
     closed_(false) {}
 
 std::shared_ptr<HttpConnectionState> HttpConnectionState::create(
@@ -2204,13 +2255,19 @@ std::shared_ptr<HttpConnectionState> HttpConnectionState::create(
   inox::Callback close = makeWeakCallback(connection, onConnectionClose);
   inox::Callback data = makeWeakCallback(connection, onConnectionData);
   inox::Callback error = makeWeakCallback(connection, onConnectionError);
+  inox::Callback drain = makeWeakCallback(connection, onConnectionDrain);
 
   if (inox::thrown()) {
     connection->transport_->destroy();
     return {};
   }
 
-  connection->transport_->start(std::move(close), std::move(error), std::move(data));
+  connection->transport_->start(
+    std::move(close),
+    std::move(error),
+    std::move(data),
+    std::move(drain)
+  );
 
   if (inox::thrown()) {
     connection->transport_->destroy();
@@ -2239,6 +2296,18 @@ void HttpConnectionState::onClose() {
   native_owner_.reset();
 }
 
+void HttpConnectionState::onDrain() {
+  if (!closed_ && active_response_) {
+    active_response_->emitDrain();
+  }
+}
+
+void HttpConnectionState::resumeRequestBody() {
+  if (!closed_ && request_dispatched_ && !active_request_complete_) {
+    (void)consumeRequestBody();
+  }
+}
+
 void HttpConnectionState::completeResponse(bool keep_alive) {
   if (closed_) {
     return;
@@ -2263,22 +2332,11 @@ void HttpConnectionState::resetRequest() {
     return;
   }
 
-  if (active_request_bytes_ > request_bytes_.size()) {
-    transport_->destroy();
-    return;
-  }
-
-  request_bytes_.erase(
-    request_bytes_.begin(),
-    request_bytes_.begin() + static_cast<std::ptrdiff_t>(active_request_bytes_)
-  );
-  active_request_bytes_ = 0;
   active_body_cursor_ = 0;
   active_body_expected_ = 0;
   active_body_received_ = 0;
-  active_body_limit_ = 0;
   active_chunk_remaining_ = 0;
-  active_chunk_framing_received_ = 0;
+  active_trailer_bytes_ = 0;
   active_trailer_count_ = 0;
   active_chunk_state_ = HttpChunkDecodeState::size;
   active_keep_alive_ = false;
@@ -2287,15 +2345,43 @@ void HttpConnectionState::resetRequest() {
   active_request_complete_ = false;
   active_response_complete_ = false;
   request_dispatched_ = false;
+  consuming_request_body_ = false;
   active_request_.reset();
   active_response_.reset();
   onData(inox::StringView());
+}
+
+void HttpConnectionState::compactRequestBytes(std::size_t consumed) {
+  if (consumed == 0) {
+    return;
+  }
+
+  if (consumed > request_bytes_.size()) {
+    transport_->destroy();
+    return;
+  }
+
+  request_bytes_.erase(
+    request_bytes_.begin(),
+    request_bytes_.begin() + static_cast<std::ptrdiff_t>(consumed)
+  );
+  active_body_cursor_ = 0;
 }
 
 bool HttpConnectionState::consumeRequestBody() {
   if (!active_request_ || active_request_complete_) {
     return true;
   }
+
+  if (active_request_->paused_ || consuming_request_body_) {
+    return true;
+  }
+
+  consuming_request_body_ = true;
+  struct ConsumeGuard {
+    bool& consuming;
+    ~ConsumeGuard() { consuming = false; }
+  } guard{consuming_request_body_};
 
   if (active_chunked_) {
     return consumeChunkedRequestBody();
@@ -2307,7 +2393,13 @@ bool HttpConnectionState::consumeRequestBody() {
     return false;
   }
 
-  const std::size_t available = request_bytes_.size() - active_body_cursor_;
+  compactRequestBytes(active_body_cursor_);
+
+  if (closed_ || inox::thrown()) {
+    return false;
+  }
+
+  const std::size_t available = request_bytes_.size();
   const std::size_t remaining = active_body_expected_ - active_body_received_;
   const std::size_t length = available < remaining ? available : remaining;
 
@@ -2319,12 +2411,20 @@ bool HttpConnectionState::consumeRequestBody() {
       return false;
     }
 
-    active_body_cursor_ += length;
     active_body_received_ += length;
+    compactRequestBytes(length);
+
+    if (closed_ || inox::thrown()) {
+      return false;
+    }
+
+    if (active_request_->paused_) {
+      return true;
+    }
   }
 
   if (active_body_received_ == active_body_expected_) {
-    finishRequestBody(active_body_cursor_);
+    finishRequestBody();
   }
 
   return !inox::thrown();
@@ -2333,19 +2433,20 @@ bool HttpConnectionState::consumeRequestBody() {
 bool HttpConnectionState::consumeChunkedRequestBody() {
   const std::size_t missing = std::numeric_limits<std::size_t>::max();
 
-  for (;;) {
-    if (active_body_cursor_ > request_bytes_.size()) {
-      failRequestBody(400, "bad request");
-      return false;
-    }
+  compactRequestBytes(active_body_cursor_);
 
+  if (closed_ || inox::thrown()) {
+    return false;
+  }
+
+  for (;;) {
     const std::span<const char> bytes(request_bytes_);
 
     if (active_chunk_state_ == HttpChunkDecodeState::size) {
-      const std::size_t line_end = findCrlf(bytes, active_body_cursor_);
+      const std::size_t line_end = findCrlf(bytes, 0);
 
       if (line_end == missing) {
-        if (bytes.size() - active_body_cursor_ > maxChunkMetadataLineBytes) {
+        if (bytes.size() > maxChunkMetadataLineBytes) {
           failRequestBody(413, "payload too large");
           return false;
         }
@@ -2353,30 +2454,21 @@ bool HttpConnectionState::consumeChunkedRequestBody() {
         return true;
       }
 
-      const std::size_t extension = findByte(bytes, active_body_cursor_, line_end, ';');
+      const std::size_t extension = findByte(bytes, 0, line_end, ';');
       const std::size_t size_end = extension == missing ? line_end : extension;
 
-      if (size_end == active_body_cursor_ ||
+      if (size_end == 0 ||
           !validHeaderValue(inox::StringView(
-            bytes.data() + active_body_cursor_,
-            line_end - active_body_cursor_
+            bytes.data(),
+            line_end
           ))) {
         failRequestBody(400, "bad request");
         return false;
       }
 
-      const std::size_t framing_length = line_end + 2 - active_body_cursor_;
-
-      if (active_chunk_framing_received_ > maxRequestChunkFramingBytes ||
-          framing_length > maxRequestChunkFramingBytes - active_chunk_framing_received_) {
-        failRequestBody(413, "payload too large");
-        return false;
-      }
-
-      active_chunk_framing_received_ += framing_length;
       std::size_t chunk_size = 0;
 
-      for (std::size_t index = active_body_cursor_; index < size_end; index += 1) {
+      for (std::size_t index = 0; index < size_end; index += 1) {
         const unsigned char byte = static_cast<unsigned char>(bytes[index]);
         std::size_t digit = 0;
 
@@ -2388,7 +2480,7 @@ bool HttpConnectionState::consumeChunkedRequestBody() {
           return false;
         }
 
-        if (digit > active_body_limit_ || chunk_size > (active_body_limit_ - digit) / 16) {
+        if (chunk_size > (std::numeric_limits<std::size_t>::max() - digit) / 16) {
           failRequestBody(413, "payload too large");
           return false;
         }
@@ -2396,13 +2488,7 @@ bool HttpConnectionState::consumeChunkedRequestBody() {
         chunk_size = chunk_size * 16 + digit;
       }
 
-      if (active_body_received_ > active_body_limit_ ||
-          chunk_size > active_body_limit_ - active_body_received_) {
-        failRequestBody(413, "payload too large");
-        return false;
-      }
-
-      active_body_cursor_ = line_end + 2;
+      compactRequestBytes(line_end + 2);
       active_chunk_remaining_ = chunk_size;
       active_chunk_state_ = chunk_size == 0
         ? HttpChunkDecodeState::trailers
@@ -2411,22 +2497,35 @@ bool HttpConnectionState::consumeChunkedRequestBody() {
     }
 
     if (active_chunk_state_ == HttpChunkDecodeState::data) {
-      const std::size_t available = bytes.size() - active_body_cursor_;
+      const std::size_t available = bytes.size();
       const std::size_t length = available < active_chunk_remaining_
         ? available
         : active_chunk_remaining_;
 
       if (length > 0) {
-        active_request_->emitData(inox::StringView(bytes.data() + active_body_cursor_, length));
+        active_request_->emitData(inox::StringView(bytes.data(), length));
 
         if (inox::thrown()) {
           transport_->destroy();
           return false;
         }
 
-        active_body_cursor_ += length;
+        if (active_body_received_ > std::numeric_limits<std::size_t>::max() - length) {
+          failRequestBody(413, "payload too large");
+          return false;
+        }
+
         active_body_received_ += length;
         active_chunk_remaining_ -= length;
+        compactRequestBytes(length);
+
+        if (closed_ || inox::thrown()) {
+          return false;
+        }
+
+        if (active_request_->paused_) {
+          return true;
+        }
       }
 
       if (active_chunk_remaining_ > 0) {
@@ -2438,31 +2537,26 @@ bool HttpConnectionState::consumeChunkedRequestBody() {
     }
 
     if (active_chunk_state_ == HttpChunkDecodeState::data_crlf) {
-      if (bytes.size() - active_body_cursor_ < 2) {
+      if (bytes.size() < 2) {
         return true;
       }
 
-      if (bytes[active_body_cursor_] != '\r' || bytes[active_body_cursor_ + 1] != '\n') {
+      if (bytes[0] != '\r' || bytes[1] != '\n') {
         failRequestBody(400, "bad request");
         return false;
       }
 
-      if (active_chunk_framing_received_ > maxRequestChunkFramingBytes - 2) {
-        failRequestBody(413, "payload too large");
-        return false;
-      }
-
-      active_chunk_framing_received_ += 2;
-      active_body_cursor_ += 2;
+      compactRequestBytes(2);
       active_chunk_state_ = HttpChunkDecodeState::size;
       continue;
     }
 
     if (active_chunk_state_ == HttpChunkDecodeState::trailers) {
-      const std::size_t line_end = findCrlf(bytes, active_body_cursor_);
+      const std::size_t line_end = findCrlf(bytes, 0);
 
       if (line_end == missing) {
-        if (bytes.size() - active_body_cursor_ > maxChunkMetadataLineBytes) {
+        if (bytes.size() > maxChunkMetadataLineBytes ||
+            active_trailer_bytes_ > maxRequestHeaderBytes - bytes.size()) {
           failRequestBody(413, "payload too large");
           return false;
         }
@@ -2470,26 +2564,26 @@ bool HttpConnectionState::consumeChunkedRequestBody() {
         return true;
       }
 
-      const std::size_t framing_length = line_end + 2 - active_body_cursor_;
+      const std::size_t framing_length = line_end + 2;
 
-      if (active_chunk_framing_received_ > maxRequestChunkFramingBytes ||
-          framing_length > maxRequestChunkFramingBytes - active_chunk_framing_received_) {
+      if (active_trailer_bytes_ > maxRequestHeaderBytes ||
+          framing_length > maxRequestHeaderBytes - active_trailer_bytes_) {
         failRequestBody(413, "payload too large");
         return false;
       }
 
-      active_chunk_framing_received_ += framing_length;
+      active_trailer_bytes_ += framing_length;
 
-      if (line_end == active_body_cursor_) {
-        active_body_cursor_ += 2;
+      if (line_end == 0) {
+        compactRequestBytes(2);
         active_chunk_state_ = HttpChunkDecodeState::complete;
-        finishRequestBody(active_body_cursor_);
+        finishRequestBody();
         return !inox::thrown();
       }
 
-      const std::size_t separator = findByte(bytes, active_body_cursor_, line_end, ':');
+      const std::size_t separator = findByte(bytes, 0, line_end, ':');
 
-      if (separator == missing || separator == active_body_cursor_) {
+      if (separator == missing || separator == 0) {
         failRequestBody(400, "bad request");
         return false;
       }
@@ -2506,8 +2600,8 @@ bool HttpConnectionState::consumeChunkedRequestBody() {
       }
 
       const std::span<const char> name = bytes.subspan(
-        active_body_cursor_,
-        separator - active_body_cursor_
+        0,
+        separator
       );
       const inox::StringView value(bytes.data() + value_start, value_end - value_start);
       active_trailer_count_ += 1;
@@ -2521,7 +2615,7 @@ bool HttpConnectionState::consumeChunkedRequestBody() {
         return false;
       }
 
-      active_body_cursor_ = line_end + 2;
+      compactRequestBytes(line_end + 2);
       continue;
     }
 
@@ -2571,12 +2665,11 @@ void HttpConnectionState::failRequestBody(double status, const char* message) {
   }
 }
 
-void HttpConnectionState::finishRequestBody(std::size_t request_bytes) {
+void HttpConnectionState::finishRequestBody() {
   if (active_request_complete_ || !active_request_) {
     return;
   }
 
-  active_request_bytes_ = request_bytes;
   active_request_complete_ = true;
   active_request_->emitEnd();
 
@@ -2595,10 +2688,8 @@ void HttpConnectionState::onData(inox::StringView data) {
     return;
   }
 
-  constexpr std::size_t max_wire_bytes = maxRequestBytes + maxRequestChunkFramingBytes;
-  constexpr std::size_t max_buffered_bytes = max_wire_bytes * 2;
-
-  if (request_bytes_.size() > max_buffered_bytes || data.len > max_buffered_bytes - request_bytes_.size()) {
+  if (request_bytes_.size() > maxBufferedRequestBytes ||
+      data.len > maxBufferedRequestBytes - request_bytes_.size()) {
     if (request_dispatched_) {
       failRequestBody(413, "payload too large");
     } else {
@@ -2648,9 +2739,8 @@ void HttpConnectionState::onData(inox::StringView data) {
   active_body_cursor_ = parsed.body_start;
   active_body_expected_ = parsed.body_length;
   active_body_received_ = 0;
-  active_body_limit_ = maxRequestBytes - parsed.body_start;
   active_chunk_remaining_ = 0;
-  active_chunk_framing_received_ = 0;
+  active_trailer_bytes_ = 0;
   active_trailer_count_ = 0;
   active_chunk_state_ = HttpChunkDecodeState::size;
   active_keep_alive_ = parsed.keep_alive;
@@ -2681,6 +2771,7 @@ void HttpConnectionState::onData(inox::StringView data) {
       inox::String(request_bytes_.data() + parsed.url_start, parsed.url_length)
     );
     active_response_ = std::make_shared<HttpResponseState>(shared_from_this());
+    active_request_->server_connection_ = shared_from_this();
   } catch (const std::bad_alloc&) {
     sendError(500, "internal server error");
     return;
@@ -3007,6 +3098,7 @@ HttpClientConnectionState::HttpClientConnectionState(
     connected_(false),
     closed_(false),
     destroying_(false),
+    drain_attached_(false),
     idle_generation_(0) {}
 
 std::shared_ptr<HttpClientConnectionState> HttpClientConnectionState::create(
@@ -3077,6 +3169,7 @@ std::shared_ptr<HttpClientConnectionState> HttpClientConnectionState::create(
   inox::Callback end = makeWeakCallback(connection, onClientEnd);
   inox::Callback close = makeWeakCallback(connection, onClientClose);
   inox::Callback error = makeWeakCallback(connection, onClientError);
+  inox::Callback drain = makeWeakCallback(connection, onClientDrain);
 
   if (inox::thrown()) {
     connection->native_owner_.reset();
@@ -3089,12 +3182,15 @@ std::shared_ptr<HttpClientConnectionState> HttpClientConnectionState::create(
   if (!inox::thrown()) connection->socket_.on("end", std::move(end));
   if (!inox::thrown()) connection->socket_.on("close", std::move(close));
   if (!inox::thrown()) connection->socket_.on("error", std::move(error));
+  if (!inox::thrown()) connection->socket_.on("drain", std::move(drain));
 
   if (inox::thrown()) {
     connection->socket_.destroy();
     connection->native_owner_.reset();
     return {};
   }
+
+  connection->drain_attached_ = true;
 
   return connection;
 }
@@ -3198,9 +3294,41 @@ void HttpClientConnectionState::onConnect() {
 
   connected_ = true;
 
+  if (!attachDrain()) {
+    destroy();
+    return;
+  }
+
   if (request_) {
     request_->onConnect();
   }
+}
+
+bool HttpClientConnectionState::attachDrain() {
+  if (drain_attached_) {
+    return true;
+  }
+
+  NetSocket socket = responseSocket();
+
+  if (inox::thrown()) {
+    return false;
+  }
+
+  inox::Callback drain = makeWeakCallback(shared_from_this(), onClientDrain);
+
+  if (inox::thrown()) {
+    return false;
+  }
+
+  socket.on("drain", std::move(drain));
+
+  if (inox::thrown()) {
+    return false;
+  }
+
+  drain_attached_ = true;
+  return true;
 }
 
 void HttpClientConnectionState::onData(inox::StringView data) {
@@ -3208,6 +3336,12 @@ void HttpClientConnectionState::onData(inox::StringView data) {
     request_->onData(data);
   } else if (data.len > 0) {
     destroy();
+  }
+}
+
+void HttpClientConnectionState::onDrain() {
+  if (request_) {
+    request_->onDrain();
   }
 }
 
@@ -3222,23 +3356,6 @@ void HttpClientConnectionState::onError(const inox::Value& error) {
     request_->onError(error);
   } else {
     destroy();
-  }
-}
-
-void HttpClientConnectionState::onWrite(inox_status status) {
-  if (!request_) {
-    return;
-  }
-
-  if (status == INOX_OK) {
-    request_->onFinish();
-  } else {
-    inox::Value error = materializeHttpError(
-      transport_kind_ == HttpClientTransportKind::tls
-        ? "HTTPS request write failed"
-        : "HTTP request write failed"
-    );
-    if (!inox::thrown()) request_->onError(error);
   }
 }
 
@@ -3278,29 +3395,39 @@ bool HttpClientConnectionState::write(inox::StringView data, bool final, bool& a
   }
 
   if (transport_kind_ == HttpClientTransportKind::tls) {
-    const inox_status status = final
-      ? inox_tls_client_write_with_callback(
-          tls_,
-          data.bytes,
-          data.len,
-          onClientTlsWrite,
-          this
-        )
-      : inox_tls_client_write(tls_, data.bytes, data.len);
+    const inox_status status = inox_tls_client_write(tls_, data.bytes, data.len);
 
     if (status != INOX_OK) {
-      if (final) {
-        onWrite(status);
-      } else {
-        inox::Value error = materializeHttpError("HTTPS request write failed");
-        if (!inox::thrown()) onError(error);
-      }
+      inox::Value error = materializeHttpError("HTTPS request write failed");
+      if (!inox::thrown()) onError(error);
 
       return false;
     }
 
+    NetSocket socket = responseSocket();
+
+    if (inox::thrown()) {
+      return false;
+    }
+
+    inox::Callback finish;
+
+    if (final) {
+      finish = makeWeakCallback(request_, onClientFinish);
+
+      if (inox::thrown()) {
+        return false;
+      }
+    }
+
+    const bool writable = socket.write(inox::StringView(), std::move(finish));
+
+    if (inox::thrown()) {
+      return false;
+    }
+
     accepted = true;
-    return true;
+    return writable;
   }
 
   inox::Callback finish;
@@ -3337,10 +3464,12 @@ HttpClientRequestState::HttpClientRequestState(
     headers_(),
     pending_write_bytes_(),
     response_bytes_(),
+    paused_response_bytes_(),
     response_listeners_(),
     finish_listeners_(),
     close_listeners_(),
     error_listeners_(),
+    drain_listeners_(),
     transport_kind_(transport.kind()),
     connection_(),
     response_(),
@@ -3348,7 +3477,7 @@ HttpClientRequestState::HttpClientRequestState(
     response_content_length_(),
     response_chunk_bytes_(),
     response_body_received_(0),
-    response_chunk_framing_received_(0),
+    response_trailer_bytes_(0),
     response_chunk_remaining_(0),
     response_trailer_count_(0),
     response_body_mode_(HttpClientResponseBodyMode::close_delimited),
@@ -3359,16 +3488,19 @@ HttpClientRequestState::HttpClientRequestState(
     response_keep_alive_(false),
     request_keep_alive_(true),
     pending_write_final_(false),
+    pending_needs_drain_(false),
     ending_(false),
     sent_(false),
     finished_(false),
     response_started_(false),
+    response_transport_ended_(false),
     failed_(false),
     closed_(false) {
   try {
     headers_.reserve(8);
     pending_write_bytes_.reserve(1024);
     response_bytes_.reserve(4096);
+    paused_response_bytes_.reserve(4096);
   } catch (const std::bad_alloc&) {
     throwHttpError("TypeError: HttpClientRequest allocation failed");
   }
@@ -3606,6 +3738,7 @@ void HttpClientRequestState::on(inox::StringView event_name, inox::Callback list
   else if (hasText(event_name, "finish")) listeners = &finish_listeners_;
   else if (hasText(event_name, "close")) listeners = &close_listeners_;
   else if (hasText(event_name, "error")) listeners = &error_listeners_;
+  else if (hasText(event_name, "drain")) listeners = &drain_listeners_;
   else {
     throwHttpError("TypeError: unsupported HttpClientRequest event");
     return;
@@ -3645,9 +3778,21 @@ void HttpClientRequestState::onConnect() {
 
   std::string output = std::move(pending_write_bytes_);
   const bool final = pending_write_final_;
+  const bool needs_drain = pending_needs_drain_;
   pending_write_bytes_.clear();
   pending_write_final_ = false;
-  (void)send(output, final);
+  pending_needs_drain_ = false;
+  const bool writable = send(output, final);
+
+  if (needs_drain && writable && !inox::thrown()) {
+    onDrain();
+  }
+}
+
+void HttpClientRequestState::onDrain() {
+  if (!closed_) {
+    callHttpListeners(drain_listeners_);
+  }
 }
 
 bool HttpClientRequestState::deliverResponseBody(inox::StringView data) {
@@ -3655,8 +3800,7 @@ bool HttpClientRequestState::deliverResponseBody(inox::StringView data) {
     return !inox::thrown();
   }
 
-  if (response_body_received_ > maxClientResponseBytes ||
-      data.len > maxClientResponseBytes - response_body_received_ ||
+  if (data.len > std::numeric_limits<std::size_t>::max() - response_body_received_ ||
       (response_body_mode_ == HttpClientResponseBodyMode::content_length &&
        response_content_length_ &&
        (response_body_received_ > *response_content_length_ ||
@@ -3676,11 +3820,70 @@ bool HttpClientRequestState::deliverResponseBody(inox::StringView data) {
 
   if (response_body_mode_ == HttpClientResponseBodyMode::content_length &&
       response_content_length_ &&
-      response_body_received_ == *response_content_length_) {
+      response_body_received_ == *response_content_length_ &&
+      !response_->paused_) {
     completeResponseBody();
   }
 
   return !inox::thrown();
+}
+
+bool HttpClientRequestState::bufferPausedResponse(inox::StringView data) {
+  if (data.len == 0) {
+    return true;
+  }
+
+  if (paused_response_bytes_.size() > maxBufferedResponseBytes ||
+      data.len > maxBufferedResponseBytes - paused_response_bytes_.size()) {
+    inox::Value error = materializeHttpError("HTTP response paused buffer is too large");
+    if (!inox::thrown()) onError(error);
+    return false;
+  }
+
+  try {
+    paused_response_bytes_.insert(
+      paused_response_bytes_.end(),
+      data.bytes,
+      data.bytes + data.len
+    );
+  } catch (const std::bad_alloc&) {
+    inox::throw_out_of_memory();
+    return false;
+  }
+
+  return true;
+}
+
+void HttpClientRequestState::resumeResponseBody() {
+  if (closed_ || !response_ || response_->paused_) {
+    return;
+  }
+
+  std::vector<char> pending = std::move(paused_response_bytes_);
+  paused_response_bytes_.clear();
+
+  if (!pending.empty() &&
+      !consumeResponseBody(inox::StringView(pending.data(), pending.size()))) {
+    return;
+  }
+
+  if (!closed_ && response_ && !response_->paused_ &&
+      response_body_mode_ == HttpClientResponseBodyMode::chunked &&
+      response_chunk_state_ != HttpChunkDecodeState::complete) {
+    (void)consumeChunkedBody(inox::StringView());
+  }
+
+  if (!closed_ && response_ && !response_->paused_ &&
+      response_body_mode_ == HttpClientResponseBodyMode::content_length &&
+      response_content_length_ &&
+      response_body_received_ == *response_content_length_) {
+    completeResponseBody();
+    return;
+  }
+
+  if (!closed_ && response_ && !response_->paused_ && response_transport_ended_) {
+    onEnd();
+  }
 }
 
 bool HttpClientRequestState::consumeChunkedBody(inox::StringView data) {
@@ -3708,11 +3911,9 @@ bool HttpClientRequestState::consumeChunkedBody(inox::StringView data) {
     return data.len == 0 || fail("HTTP chunked response has data after its terminator");
   }
 
-  constexpr std::size_t max_buffered = maxClientResponseBytes + maxClientChunkFramingBytes;
-
-  if (response_chunk_bytes_.size() > max_buffered ||
-      data.len > max_buffered - response_chunk_bytes_.size()) {
-    return fail("HTTP response is too large");
+  if (response_chunk_bytes_.size() > maxBufferedResponseBytes ||
+      data.len > maxBufferedResponseBytes - response_chunk_bytes_.size()) {
+    return fail("HTTP response buffer is too large");
   }
 
   if (data.len > 0) {
@@ -3751,15 +3952,6 @@ bool HttpClientRequestState::consumeChunkedBody(inox::StringView data) {
         return fail("HTTP chunked response size is invalid");
       }
 
-      const std::size_t framing_length = line_end + 2 - cursor;
-
-      if (response_chunk_framing_received_ > maxClientChunkFramingBytes ||
-          framing_length > maxClientChunkFramingBytes - response_chunk_framing_received_) {
-        return fail("HTTP chunked response metadata is too large");
-      }
-
-      response_chunk_framing_received_ += framing_length;
-
       std::size_t chunk_size = 0;
 
       for (std::size_t index = cursor; index < size_end; index += 1) {
@@ -3771,16 +3963,11 @@ bool HttpClientRequestState::consumeChunkedBody(inox::StringView data) {
         else if (byte >= 'A' && byte <= 'F') digit = byte - 'A' + 10;
         else return fail("HTTP chunked response size is invalid");
 
-        if (chunk_size > (maxClientResponseBytes - digit) / 16) {
+        if (chunk_size > (std::numeric_limits<std::size_t>::max() - digit) / 16) {
           return fail("HTTP response is too large");
         }
 
         chunk_size = chunk_size * 16 + digit;
-      }
-
-      if (response_body_received_ > maxClientResponseBytes ||
-          chunk_size > maxClientResponseBytes - response_body_received_) {
-        return fail("HTTP response is too large");
       }
 
       cursor = line_end + 2;
@@ -3805,6 +3992,11 @@ bool HttpClientRequestState::consumeChunkedBody(inox::StringView data) {
       cursor += length;
       response_chunk_remaining_ -= length;
 
+      if (response_ && response_->paused_) {
+        compact(cursor);
+        return true;
+      }
+
       if (response_chunk_remaining_ != 0) {
         compact(cursor);
         return true;
@@ -3824,11 +4016,6 @@ bool HttpClientRequestState::consumeChunkedBody(inox::StringView data) {
         return fail("HTTP chunked response data terminator is invalid");
       }
 
-      if (response_chunk_framing_received_ > maxClientChunkFramingBytes - 2) {
-        return fail("HTTP chunked response metadata is too large");
-      }
-
-      response_chunk_framing_received_ += 2;
       cursor += 2;
       response_chunk_state_ = HttpChunkDecodeState::size;
       continue;
@@ -3847,11 +4034,11 @@ bool HttpClientRequestState::consumeChunkedBody(inox::StringView data) {
       }
 
       if (line_end == cursor) {
-        if (response_chunk_framing_received_ > maxClientChunkFramingBytes - 2) {
+        if (response_trailer_bytes_ > maxResponseHeaderBytes - 2) {
           return fail("HTTP chunked response trailers are too large");
         }
 
-        response_chunk_framing_received_ += 2;
+        response_trailer_bytes_ += 2;
         cursor += 2;
 
         if (cursor != bytes.size()) {
@@ -3888,8 +4075,8 @@ bool HttpClientRequestState::consumeChunkedBody(inox::StringView data) {
       response_trailer_count_ += 1;
 
       if (response_trailer_count_ > maxResponseHeaders ||
-          response_chunk_framing_received_ > maxClientChunkFramingBytes ||
-          framing_length > maxClientChunkFramingBytes - response_chunk_framing_received_ ||
+          response_trailer_bytes_ > maxResponseHeaderBytes ||
+          framing_length > maxResponseHeaderBytes - response_trailer_bytes_ ||
           !validHeaderName(inox::StringView(name.data(), name.size())) ||
           !validHeaderValue(value) ||
           spanEqualsIgnoreCase(name, "Content-Length") ||
@@ -3897,7 +4084,7 @@ bool HttpClientRequestState::consumeChunkedBody(inox::StringView data) {
         return fail("HTTP chunked response trailer is invalid");
       }
 
-      response_chunk_framing_received_ += framing_length;
+      response_trailer_bytes_ += framing_length;
       cursor = line_end + 2;
       continue;
     }
@@ -3930,12 +4117,20 @@ void HttpClientRequestState::onData(inox::StringView data) {
   }
 
   if (response_started_) {
-    (void)consumeResponseBody(data);
+    if (response_ && response_->paused_) {
+      (void)bufferPausedResponse(data);
+    } else {
+      (void)consumeResponseBody(data);
+    }
     return;
   }
 
-  if (data.len > maxClientResponseBytes + maxResponseHeaderBytes - response_bytes_.size()) {
-    inox::Value error = materializeHttpError("HTTP response is too large");
+  constexpr std::size_t max_initial_response_bytes =
+    maxResponseHeaderBytes + maxBufferedResponseBytes;
+
+  if (response_bytes_.size() > max_initial_response_bytes ||
+      data.len > max_initial_response_bytes - response_bytes_.size()) {
+    inox::Value error = materializeHttpError("HTTP response buffer is too large");
     if (!inox::thrown()) onError(error);
     return;
   }
@@ -3987,6 +4182,7 @@ void HttpClientRequestState::onData(inox::StringView data) {
       parsed.status_code,
       inox::String(response_bytes_.data() + parsed.status_message_start, parsed.status_message_length)
     );
+    response_->client_request_ = shared_from_this();
   } catch (const std::bad_alloc&) {
     throwHttpError("TypeError: IncomingMessage allocation failed");
     return;
@@ -4025,7 +4221,13 @@ void HttpClientRequestState::onData(inox::StringView data) {
 
   const std::size_t body_length = response_bytes_.size() - parsed.body_start;
 
-  if (!consumeResponseBody(inox::StringView(response_bytes_.data() + parsed.body_start, body_length))) {
+  const inox::StringView initial_body(response_bytes_.data() + parsed.body_start, body_length);
+
+  if (response_->paused_) {
+    if (!bufferPausedResponse(initial_body)) {
+      return;
+    }
+  } else if (!consumeResponseBody(initial_body)) {
     return;
   }
 
@@ -4047,6 +4249,12 @@ void HttpClientRequestState::onEnd() {
   if (!response_started_ || !response_) {
     inox::Value error = materializeHttpError("HTTP connection ended before a response was received");
     if (!inox::thrown()) onError(error);
+    return;
+  }
+
+  response_transport_ended_ = true;
+
+  if (response_->paused_) {
     return;
   }
 
@@ -4133,20 +4341,18 @@ bool HttpClientRequestState::beginRequest(
   std::string& output
 ) {
   if (sent_ || request_body_mode_ != HttpOutgoingBodyMode::undecided ||
-      initial_body_size > maxClientRequestBodyBytes ||
       !selectOutgoingBodyMode(
         headers_,
         streaming,
         true,
         initial_body_size,
-        maxClientRequestBodyBytes,
         "TypeError: HttpClientRequest body framing is invalid",
         "TypeError: HttpClientRequest serialization failed",
         request_body_mode_,
         request_content_length_
       )) {
     if (!inox::thrown()) {
-      throwHttpError("TypeError: HttpClientRequest body is too large");
+      throwHttpError("TypeError: HttpClientRequest body has already started");
     }
 
     return false;
@@ -4216,8 +4422,7 @@ bool HttpClientRequestState::appendRequestBody(
   std::span<const std::uint8_t> body
 ) {
   if (request_body_mode_ == HttpOutgoingBodyMode::undecided ||
-      request_body_bytes_ > maxClientRequestBodyBytes ||
-      body.size() > maxClientRequestBodyBytes - request_body_bytes_ ||
+      body.size() > std::numeric_limits<std::size_t>::max() - request_body_bytes_ ||
       (request_body_mode_ == HttpOutgoingBodyMode::content_length &&
        (!request_content_length_ ||
         request_body_bytes_ > *request_content_length_ ||
@@ -4259,7 +4464,9 @@ bool HttpClientRequestState::send(std::string& output, bool final) {
     }
 
     pending_write_final_ = pending_write_final_ || final;
-    return true;
+    pending_needs_drain_ = pending_needs_drain_ ||
+      (!final && pending_write_bytes_.size() >= httpHighWaterMark);
+    return !pending_needs_drain_;
   }
 
   if (output.empty() && !final) {
@@ -4339,6 +4546,7 @@ HttpResponseState::HttpResponseState(std::shared_ptr<HttpConnectionState> connec
     headers_(),
     content_length_(),
     body_bytes_written_(0),
+    drain_listeners_(),
     body_mode_(HttpOutgoingBodyMode::undecided),
     status_code_(200),
     sent_(false),
@@ -4469,6 +4677,25 @@ bool HttpResponseState::headersSent() const {
   return sent_;
 }
 
+void HttpResponseState::emitDrain() {
+  if (!ended_) {
+    callHttpListeners(drain_listeners_);
+  }
+}
+
+void HttpResponseState::on(inox::StringView event_name, inox::Callback listener) {
+  if (!listener.valid() || !hasText(event_name, "drain")) {
+    throwHttpError("TypeError: HttpResponse.on supports only drain listeners");
+    return;
+  }
+
+  try {
+    drain_listeners_.push_back(std::move(listener));
+  } catch (const std::bad_alloc&) {
+    throwHttpError("TypeError: HttpResponse listener allocation failed");
+  }
+}
+
 void HttpResponseState::removeHeader(inox::StringView name) {
   if (sent_ || ending_ || ended_ || !validHeaderName(name)) {
     throwHttpError("TypeError: HttpResponse.removeHeader failed");
@@ -4568,20 +4795,18 @@ bool HttpResponseState::begin(
   std::string& output
 ) {
   if (sent_ || body_mode_ != HttpOutgoingBodyMode::undecided ||
-      initial_body_size > maxResponseBodyBytes ||
       !selectOutgoingBodyMode(
         headers_,
         streaming,
         !connection_->active_http_1_0_,
         initial_body_size,
-        maxResponseBodyBytes,
         "TypeError: HttpResponse body framing is invalid",
         "TypeError: HttpResponse header allocation failed",
         body_mode_,
         content_length_
       )) {
     if (!inox::thrown()) {
-      throwHttpError("TypeError: HttpResponse body is too large");
+      throwHttpError("TypeError: HttpResponse body has already started");
     }
 
     return false;
@@ -4645,8 +4870,7 @@ bool HttpResponseState::appendBody(
   std::span<const std::uint8_t> body
 ) {
   if (body_mode_ == HttpOutgoingBodyMode::undecided ||
-      body_bytes_written_ > maxResponseBodyBytes ||
-      body.size() > maxResponseBodyBytes - body_bytes_written_ ||
+      body.size() > std::numeric_limits<std::size_t>::max() - body_bytes_written_ ||
       (body_mode_ == HttpOutgoingBodyMode::content_length &&
        (!content_length_ ||
         body_bytes_written_ > *content_length_ ||
@@ -4816,6 +5040,28 @@ inox_status onConnectionError(
   return INOX_OK;
 }
 
+inox_status onConnectionDrain(
+  void* context,
+  const inox_value* args,
+  std::size_t arg_count,
+  inox_value* out
+) {
+  setCallbackResult(out);
+  (void)args;
+
+  if (arg_count != 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  std::shared_ptr<HttpConnectionState> connection = lockCallbackState<HttpConnectionState>(context);
+
+  if (connection) {
+    connection->onDrain();
+  }
+
+  return callbackStatus();
+}
+
 inox_status onResponseComplete(
   void* context,
   const inox_value* args,
@@ -4967,6 +5213,28 @@ inox_status onClientFinish(
   return callbackStatus();
 }
 
+inox_status onClientDrain(
+  void* context,
+  const inox_value* args,
+  std::size_t arg_count,
+  inox_value* out
+) {
+  setCallbackResult(out);
+  (void)args;
+
+  if (arg_count != 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  std::shared_ptr<HttpClientConnectionState> connection = lockCallbackState<HttpClientConnectionState>(context);
+
+  if (connection) {
+    connection->onDrain();
+  }
+
+  return callbackStatus();
+}
+
 inox_status onClientTlsConnect(void* context, inox_tls_client* client, inox_status status) {
   auto* raw_connection = static_cast<HttpClientConnectionState*>(context);
 
@@ -5027,24 +5295,6 @@ void onClientTlsClose(void* context, inox_tls_client* client) {
   connection->tls_ = nullptr;
   connection->onEnd();
   connection->onClose();
-}
-
-inox_status onClientTlsWrite(void* context, inox_tls_client* client, inox_status status) {
-  auto* raw_connection = static_cast<HttpClientConnectionState*>(context);
-
-  if (raw_connection == nullptr || client == nullptr) {
-    return INOX_ERR_TYPE;
-  }
-
-  std::shared_ptr<HttpClientConnectionState> connection = raw_connection->native_owner_;
-
-  if (!connection || connection->tls_ != client) {
-    return INOX_OK;
-  }
-
-  connection->onWrite(status);
-
-  return callbackStatus();
 }
 
 } // namespace
@@ -5288,6 +5538,17 @@ inox::String HttpRequest::method() const {
   return state->method_;
 }
 
+bool HttpRequest::isPaused() const {
+  std::shared_ptr<HttpRequestState> state = requestState(*this);
+
+  if (!state) {
+    throwHttpError("TypeError: HttpRequest.isPaused failed");
+    return false;
+  }
+
+  return state->isPaused();
+}
+
 HttpRequest& HttpRequest::on(inox::StringView event_name, inox::Callback listener) {
   std::shared_ptr<HttpRequestState> state = requestState(*this);
 
@@ -5297,6 +5558,30 @@ HttpRequest& HttpRequest::on(inox::StringView event_name, inox::Callback listene
   }
 
   state->on(event_name, std::move(listener));
+  return *this;
+}
+
+HttpRequest& HttpRequest::pause() {
+  std::shared_ptr<HttpRequestState> state = requestState(*this);
+
+  if (!state) {
+    throwHttpError("TypeError: HttpRequest.pause failed");
+    return *this;
+  }
+
+  state->pause();
+  return *this;
+}
+
+HttpRequest& HttpRequest::resume() {
+  std::shared_ptr<HttpRequestState> state = requestState(*this);
+
+  if (!state) {
+    throwHttpError("TypeError: HttpRequest.resume failed");
+    return *this;
+  }
+
+  state->resume();
   return *this;
 }
 
@@ -5600,6 +5885,18 @@ bool HttpResponse::headersSent() const {
   }
 
   return state->headersSent();
+}
+
+HttpResponse& HttpResponse::on(inox::StringView event_name, inox::Callback listener) {
+  std::shared_ptr<HttpResponseState> state = responseState(*this);
+
+  if (!state) {
+    throwHttpError("TypeError: HttpResponse.on failed");
+    return *this;
+  }
+
+  state->on(event_name, std::move(listener));
+  return *this;
 }
 
 void HttpResponse::removeHeader(inox::StringView name) {

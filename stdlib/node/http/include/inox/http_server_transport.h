@@ -19,7 +19,8 @@ public:
   virtual void start(
     inox::Callback close,
     inox::Callback error,
-    inox::Callback data
+    inox::Callback data,
+    inox::Callback drain
   ) = 0;
   virtual bool write(inox::StringView data) = 0;
   virtual bool write(inox::StringView data, inox::Callback callback) = 0;

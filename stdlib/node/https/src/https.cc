@@ -251,7 +251,8 @@ public:
   void start(
     inox::Callback close,
     inox::Callback error,
-    inox::Callback data
+    inox::Callback data,
+    inox::Callback drain
   ) override {
     if (started_ || closed_) {
       throwHttpsError("TypeError: HTTPS connection transport start failed");
@@ -261,11 +262,21 @@ public:
     close_ = std::move(close);
     error_ = std::move(error);
     data_ = std::move(data);
+    socket_.on("drain", std::move(drain));
+
+    if (inox::thrown()) {
+      return;
+    }
+
     started_ = true;
   }
 
   bool write(inox::StringView data) override {
-    return writeTls(data);
+    if (!writeTls(data)) {
+      return false;
+    }
+
+    return socket_.write(inox::StringView());
   }
 
   bool write(inox::StringView data, inox::Callback callback) override {

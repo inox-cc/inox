@@ -30,6 +30,10 @@ test('node:http держит managed state и вызывает lifecycle callbac
   assert.match(source, /request_dispatched_\s*=\s*true;/)
   assert.match(source, /net_server_?\.listen\([^;]*std::move\(callback\)\)/)
   assert.match(source, /net_server_?\.close\(std::move\(callback\)\)/)
+  assert.match(source, /maxBufferedRequestBytes/)
+  assert.match(source, /maxBufferedResponseBytes/)
+  assert.match(source, /callHttpListeners\(drain_listeners_\)/)
+  assert.doesNotMatch(source, /max(?:Request|Response|ClientRequest|ClientResponse)BodyBytes/)
 
   assert.match(compiler, /callbackLifetime:\s*'event-loop'/)
   assert.doesNotMatch(compiler, /emitHttpZeroArgCallbackLines|emitHttpServerListenLines|emitHttpServerCloseLines/)

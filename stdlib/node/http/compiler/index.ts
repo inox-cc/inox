@@ -58,7 +58,10 @@ const operations: LibraryOperationDescriptor[] = [
   requestOptionalMemberReadOperation('statusCode', nullableNumberTypeRef),
   requestOptionalMemberReadOperation('statusMessage', nullableStringTypeRef),
   requestMemberReadOperation('url', stringTypeRef, stringCResultMapping),
+  requestIsPausedOperation(),
   requestOnOperation(),
+  requestFlowOperation('pause'),
+  requestFlowOperation('resume'),
   requestSetEncodingOperation(),
   clientBooleanReadOperation('headersSent'),
   clientBooleanReadOperation('writableEnded'),
@@ -79,6 +82,7 @@ const operations: LibraryOperationDescriptor[] = [
   responseGetHeaderOperation(),
   responseGetHeaderNamesOperation(),
   responseHasHeaderOperation(),
+  responseOnOperation(),
   responseRemoveHeaderOperation(),
   responseSetHeaderOperation(),
   responseWriteOperation(),
@@ -451,6 +455,29 @@ function requestOnOperation(): LibraryOperationDescriptor {
   }
 }
 
+function requestIsPausedOperation(): LibraryOperationDescriptor {
+  return {
+    ...requestReceiverOperation('isPaused'),
+    cArgumentKinds: ['receiver'],
+    minArgs: 0,
+    maxArgs: 0,
+    argumentChecks: [],
+    resultTypeRef: booleanTypeRef
+  }
+}
+
+function requestFlowOperation(name: 'pause' | 'resume'): LibraryOperationDescriptor {
+  return {
+    ...requestReceiverOperation(name),
+    cArgumentKinds: ['receiver'],
+    cResultMode: 'borrowed',
+    minArgs: 0,
+    maxArgs: 0,
+    argumentChecks: [],
+    resultTypeRef: nominalTypeRef(requestTypeId, 'borrowed')
+  }
+}
+
 function requestSetEncodingOperation(): LibraryOperationDescriptor {
   return {
     ...requestReceiverOperation('setEncoding'),
@@ -538,7 +565,7 @@ function clientOnOperation(): LibraryOperationDescriptor {
     argumentChecks: [clientEventArgument(), zeroArgumentCallback()],
     variants: [
       clientEventVariant(['response'], responseCallbackArgument()),
-      clientEventVariant(['finish', 'close'], zeroArgumentCallback()),
+      clientEventVariant(['finish', 'close', 'drain'], zeroArgumentCallback()),
       clientEventVariant(['error'], errorCallbackArgument())
     ],
     cResultMode: 'borrowed',
@@ -684,6 +711,30 @@ function responseRemoveHeaderOperation(): LibraryOperationDescriptor {
     maxArgs: 1,
     argumentChecks: [stringArgument()],
     resultTypeRef: voidTypeRef
+  }
+}
+
+function responseOnOperation(): LibraryOperationDescriptor {
+  const callback = zeroArgumentCallback()
+
+  return {
+    ...responseReceiverOperation('on'),
+    minArgs: 2,
+    maxArgs: 2,
+    argumentChecks: [responseEventArgument(), callback],
+    variants: [
+      operationVariant(2, 2, ['receiver', 'string-view', 'runtime-callback'], {
+        argumentIndex: 0,
+        stringLiterals: ['drain'],
+        argumentChecks: [responseEventArgument(), callback],
+        cArgumentSources: [null, null, { argumentIndex: 1 }],
+        cResultMode: 'borrowed',
+        callbackLifetime: 'event-loop'
+      })
+    ],
+    cResultMode: 'borrowed',
+    resultTypeRef: nominalTypeRef(responseTypeId, 'borrowed'),
+    callbackLifetime: 'event-loop'
   }
 }
 
@@ -1014,7 +1065,11 @@ function requestStreamEventArgument(): LibraryArgumentCheckDescriptor {
 }
 
 function clientEventArgument(): LibraryArgumentCheckDescriptor {
-  return stringLiteralArgument(['response', 'finish', 'close', 'error'], 'INOX_HTTP_CLIENT_REQUEST')
+  return stringLiteralArgument(['response', 'finish', 'close', 'error', 'drain'], 'INOX_HTTP_CLIENT_REQUEST')
+}
+
+function responseEventArgument(): LibraryArgumentCheckDescriptor {
+  return stringLiteralArgument(['drain'], 'INOX_HTTP_RESPONSE')
 }
 
 function encodingArgument(): LibraryArgumentCheckDescriptor {

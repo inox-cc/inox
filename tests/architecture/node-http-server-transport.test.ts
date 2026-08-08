@@ -9,6 +9,7 @@ test('HTTP и HTTPS server используют общую HTTP state machine ч
   const tls = await readFile('runtime/src/network/tls-server-openssl.cc', 'utf8')
 
   assert.match(transport, /class HttpServerConnectionTransport/)
+  assert.match(transport, /inox::Callback drain/)
   assert.match(transport, /HttpServer makeHttpServer\(/)
   assert.match(transport, /void acceptHttpServerConnection\(/)
   assert.doesNotMatch(transport, /\)\s*const\s*\{|\)\s*\{/)
@@ -16,6 +17,7 @@ test('HTTP и HTTPS server используют общую HTTP state machine ч
   assert.match(http, /class NetHttpServerConnectionTransport/)
   assert.match(http, /std::shared_ptr<HttpServerConnectionTransport> transport_/)
   assert.match(https, /class HttpsServerConnectionTransport/)
+  assert.match(https, /socket_\.on\("drain"/)
   assert.match(https, /acceptHttpServerConnection\(/)
   assert.doesNotMatch(https, /HTTP\/1\.1|parseRequest|ParsedRequest/)
 

@@ -10,8 +10,10 @@ import { startHttpIncomingStreamingServerAcceptance } from './http-incoming-stre
 import { startHttpStreamingClientAcceptance } from './http-streaming-client.ts'
 import { startHttpStreamingServerAcceptance } from './http-streaming-server.ts'
 import { startHttpAcceptance } from './http.ts'
+import { startHttpBackpressureAcceptance } from './http-backpressure.ts'
 import { startHttpClientAcceptance } from './http-client.ts'
 import { startHttpsClientAcceptance } from './https-client.ts'
+import { startHttpsBackpressureAcceptance } from './https-backpressure.ts'
 import { startHttpsKeepAliveClientAcceptance } from './https-keep-alive-client.ts'
 import { startHttpsServerAcceptance } from './https-server.ts'
 import { startHttpsStreamingClientAcceptance } from './https-streaming-client.ts'
@@ -34,6 +36,8 @@ const httpIncomingStreamingServerPort = Number(process.argv[14]) ?? 0
 const httpsServerPort = Number(process.argv[15]) ?? 0
 const httpsServerCertificatePath = process.argv[16]
 const httpsServerPrivateKeyPath = process.argv[17]
+const httpBackpressurePort = Number(process.argv[18]) ?? 0
+const httpsBackpressurePort = Number(process.argv[19]) ?? 0
 
 startTcpAcceptance()
 startUdpAcceptance()
@@ -52,3 +56,5 @@ startHttpStreamingClientAcceptance(httpStreamingClientPort, nonce)
 startHttpsStreamingClientAcceptance(httpsStreamingClientPort, nonce)
 startHttpIncomingStreamingServerAcceptance(httpIncomingStreamingServerPort, nonce)
 startHttpsServerAcceptance(httpsServerPort, nonce, httpsServerCertificatePath, httpsServerPrivateKeyPath)
+startHttpBackpressureAcceptance(httpBackpressurePort, nonce)
+startHttpsBackpressureAcceptance(httpsBackpressurePort, nonce, httpsServerCertificatePath, httpsServerPrivateKeyPath)

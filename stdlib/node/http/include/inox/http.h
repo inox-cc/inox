@@ -94,7 +94,10 @@ public:
   inox::Value headers() const;
   inox::String httpVersion() const;
   inox::String method() const;
+  bool isPaused() const;
   HttpRequest& on(inox::StringView event_name, inox::Callback listener);
+  HttpRequest& pause();
+  HttpRequest& resume();
   HttpRequest& setEncoding(inox::StringView encoding);
   NetSocket socket() const;
   inox::Value statusCode() const;
@@ -184,6 +187,7 @@ public:
   Array getHeaderNames() const;
   bool hasHeader(inox::StringView name) const;
   bool headersSent() const;
+  HttpResponse& on(inox::StringView event_name, inox::Callback listener);
   void removeHeader(inox::StringView name);
   HttpResponse& setHeader(inox::StringView name, inox::StringView value);
   void setStatusCode(double value);
