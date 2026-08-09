@@ -1,0 +1,4 @@
+name=mongo-c-driver
+version=2.3.3
+source=https://github.com/mongodb/mongo-c-driver/releases/download/2.3.3/mongo-c-driver-2.3.3.tar.gz
+sha256=798109524c633b5136978bbdc6229e4b0af0a4c6ba2d17b8b8fb39855c55258e

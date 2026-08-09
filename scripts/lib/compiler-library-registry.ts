@@ -45,6 +45,17 @@ export type CompilerLibraryNativeUnit = {
   cmakePackages: string[]
   cmakeLinkLibraries: string[]
   linkerArguments: string[]
+  cmakeProjects?: CompilerLibraryNativeCMakeProject[]
+}
+
+export type CompilerLibraryNativeCMakeProject = {
+  sourceDir: string
+  options: CompilerLibraryNativeCMakeOption[]
+}
+
+export type CompilerLibraryNativeCMakeOption = {
+  name: string
+  value: string
 }
 
 export async function generateCompilerLibraryRegistry(
@@ -97,14 +108,24 @@ export function renderCompilerLibraryRegistry(
         throw new Error(`Native compiler library ${library.id} has no runtime requirements`)
       }
 
-      nativeUnits.push({
+      const cmakeProjects = (library.nativeBuild?.cmakeProjects ?? []).map((project) => ({
+        sourceDir: project.sourceDir,
+        options: project.options.map((option) => ({ name: option.name, value: option.value }))
+      }))
+      const nativeUnit: CompilerLibraryNativeUnit = {
         libraryId: library.id,
         runtimeRequirements: runtimeRequirements.map((requirement) => requirement.id).sort(),
         sources: library.nativeSources.slice().sort(),
         cmakePackages: (library.nativeBuild?.cmakePackages ?? []).slice().sort(),
         cmakeLinkLibraries: (library.nativeBuild?.cmakeLinkLibraries ?? []).slice().sort(),
         linkerArguments: (library.nativeBuild?.linkerArguments ?? []).slice()
-      })
+      }
+
+      if (cmakeProjects.length > 0) {
+        nativeUnit.cmakeProjects = cmakeProjects
+      }
+
+      nativeUnits.push(nativeUnit)
     }
 
     for (const includeDir of library.nativeIncludeDirs) {
@@ -236,7 +257,27 @@ function renderNativePlanCMake(plan: CompilerLibraryNativePlan): string {
       renderNativePlanValueList(`${prefix}_CMAKE_PACKAGES`, unit.cmakePackages) +
       renderNativePlanValueList(`${prefix}_CMAKE_LINK_LIBRARIES`, unit.cmakeLinkLibraries) +
       renderNativePlanValueList(`${prefix}_LINKER_ARGUMENTS`, unit.linkerArguments) +
+      renderNativePlanCMakeProjects(prefix, unit.cmakeProjects ?? []) +
       renderNativePlanCMakeList(`${prefix}_SOURCES`, unit.sources)
+  }
+
+  return source
+}
+
+function renderNativePlanCMakeProjects(prefix: string, projects: CompilerLibraryNativeCMakeProject[]): string {
+  let source = `set(${prefix}_CMAKE_PROJECT_COUNT ${projects.length})\n`
+
+  for (let index = 0; index < projects.length; index = index + 1) {
+    const project = projects[index]
+    const projectPrefix = `${prefix}_CMAKE_PROJECT_${index}`
+
+    source =
+      source +
+      `set(${projectPrefix}_SOURCE_DIR "\${INOX_REPO_ROOT}/${project.sourceDir}")\n` +
+      renderNativePlanValueList(
+        `${projectPrefix}_OPTIONS`,
+        project.options.map((option) => `${option.name}=${option.value}`)
+      )
   }
 
   return source

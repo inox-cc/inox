@@ -119,7 +119,13 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       valueType: 'object',
       cppType: 'DateValue',
       baseTypeIds: [],
-      runtimeRequirements: [runtimeRequirement]
+      runtimeRequirements: [runtimeRequirement],
+      cValueAdapter: 'DateValue(inox::Value($value))',
+      cValueAdapterFailureMode: 'thrown',
+      cValueAdapterPreservesPendingException: true,
+      cRuntimeValueExpression: '$value.runtimeValue().release()',
+      cRuntimeValueOwnership: 'owned',
+      cRuntimeValueValidExpression: 'DateValue::isDate(inox::Value($value))'
     }
   ],
   operations,
@@ -127,7 +133,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: [],
+      dependencies: ['managed-values'],
       cPreludeIncludes: ['inox/time.h'],
       capabilities: []
     },

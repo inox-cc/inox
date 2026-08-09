@@ -2,6 +2,7 @@ import { chmod, copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from
 import { dirname, join, posix, relative, resolve } from 'node:path'
 import { compileMemoryPackageToCppModules, compileMemoryPackageToIrModules } from '../compiler/compiler.ts'
 import { compilerLibraryHasModuleDeclaration } from '../compiler/extensions/library-set.ts'
+import { expandedRuntimeRequirementIds } from '../compiler/extensions/library-options.ts'
 import {
   collectIrFunctionEffectsWithExternalEffects,
   collectIrStoredFunctionEffects,
@@ -128,13 +129,17 @@ async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
   })
 
   console.log('emitting self-hosted compiler C++ modules')
-  await emitCompilerModules(
+  const directCompilerRuntimeRequirements = await emitCompilerModules(
     compilerFiles,
     new Set([driverPath, semanticProbeDriverPath]),
     declarationContracts,
     generatedWorkDir,
     stdlibDeclarationFiles,
     bootstrapLibraries
+  )
+  const compilerRuntimeRequirements = expandedRuntimeRequirementIds(
+    bootstrapLibraries.runtimeRequirements,
+    directCompilerRuntimeRequirements
   )
   await writeFunctionEffectSidecarFiles(generatedWorkDir, declarationContracts)
 
@@ -149,7 +154,11 @@ async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
   })
 
   console.log(`linking ${relative(rootDir, options.out)}`)
-  const compile = await linkNativeCompiler(options, generatedRegistry.nativePlanCMakeSource)
+  const compile = await linkNativeCompiler(
+    options,
+    generatedRegistry.nativePlanCMakeSource,
+    compilerRuntimeRequirements
+  )
 
   if (compile.code !== 0) {
     process.exitCode = compile.code
@@ -266,7 +275,9 @@ async function emitCompilerModules(
   generatedDir: string,
   stdlibDeclarationFiles: SourceFile[],
   bootstrapLibraries: CompilerLibrarySet
-): Promise<void> {
+): Promise<string[]> {
+  const runtimeRequirements = new Set<string>()
+
   for (const file of compilerFiles) {
     console.log(`emitting compiler module ${file.path.slice('/project/'.length)}`)
     const modules = await compileCompilerModule(
@@ -278,8 +289,15 @@ async function emitCompilerModules(
     )
 
     await writeGeneratedFiles(generatedDir, modules.files)
+
+    for (const requirement of modules.irRuntimeRequirements) {
+      runtimeRequirements.add(requirement)
+    }
+
     releaseSelfHostedCompilationMemory()
   }
+
+  return Array.from(runtimeRequirements).sort()
 }
 
 async function compileCompilerModule(
@@ -290,6 +308,7 @@ async function compileCompilerModule(
   bootstrapLibraries: CompilerLibrarySet
 ): Promise<{
   files: GeneratedFile[]
+  irRuntimeRequirements: string[]
 }> {
   const contractFiles = declarationContractSourceFiles(declarationContracts, file.path)
   const declarationImports = declarationImportOptions(declarationContracts, file.path)
@@ -303,7 +322,10 @@ async function compileCompilerModule(
     target: 'cc'
   })
 
-  return { files: result.files }
+  return {
+    files: result.files,
+    irRuntimeRequirements: result.irRuntimeRequirements
+  }
 }
 
 async function compileCompilerModuleIr(
@@ -901,7 +923,11 @@ function generatedPathForSourcePath(sourcePath: string, extension: string): stri
   return `${sourcePath.slice(`${projectSourceRoot}/`.length, -'.ts'.length)}${extension}`
 }
 
-async function linkNativeCompiler(options: BuildOptions, nativePlanCMakeSource: string): Promise<{ code: number }> {
+async function linkNativeCompiler(
+  options: BuildOptions,
+  nativePlanCMakeSource: string,
+  runtimeRequirements: string[]
+): Promise<{ code: number }> {
   await rm(join(cmakeSourceDir, 'CMakeLists.txt'), {
     force: true
   })
@@ -909,7 +935,10 @@ async function linkNativeCompiler(options: BuildOptions, nativePlanCMakeSource: 
     recursive: true
   })
   await writeFile(join(cmakeSourceDir, 'native-plan.cmake'), nativePlanCMakeSource)
-  await writeFile(join(cmakeSourceDir, 'CMakeLists.txt'), nativeCompilerCMakeLists(options.generatedDir))
+  await writeFile(
+    join(cmakeSourceDir, 'CMakeLists.txt'),
+    nativeCompilerCMakeLists(options.generatedDir, runtimeRequirements)
+  )
 
   const configure = await runCommand(
     'cmake',
@@ -1159,7 +1188,11 @@ The native binary is a narrow compiler driver:
 `
 }
 
-function nativeCompilerCMakeLists(generatedDir: string): string {
+function nativeCompilerCMakeLists(generatedDir: string, runtimeRequirements: string[]): string {
+  const renderedRuntimeRequirements = runtimeRequirements
+    .map((requirement) => `  "${cmakeString(requirement)}"`)
+    .join('\n')
+
   return `cmake_minimum_required(VERSION 3.20)
 
 project(inox_selfhost C CXX)
@@ -1170,6 +1203,10 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${cmakeString(cmakeBinDir)}")
 set(INOX_STDLIB_NATIVE_PLAN "${cmakeString(join(compilerDistDir, 'native-plan.cmake'))}")
+set(INOX_STDLIB_FILTER_NATIVE_SOURCES ON)
+set(INOX_STDLIB_INITIAL_RUNTIME_REQUIREMENTS
+${renderedRuntimeRequirements}
+)
 
 add_subdirectory("${cmakeString(join(rootDir, 'runtime'))}" "${cmakeString(join(cmakeBuildDir, 'inox_runtime'))}")
 

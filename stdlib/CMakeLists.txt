@@ -113,6 +113,47 @@ function(inox_configure_stdlib_native_units)
         INOX_STDLIB_UNIT_CMAKE_LINK_LIBRARIES_VARIABLE
         "INOX_STDLIB_NATIVE_UNIT_${INOX_STDLIB_NATIVE_UNIT_INDEX}_CMAKE_LINK_LIBRARIES"
       )
+      set(
+        INOX_STDLIB_UNIT_CMAKE_PROJECT_COUNT_VARIABLE
+        "INOX_STDLIB_NATIVE_UNIT_${INOX_STDLIB_NATIVE_UNIT_INDEX}_CMAKE_PROJECT_COUNT"
+      )
+
+      if(${${INOX_STDLIB_UNIT_CMAKE_PROJECT_COUNT_VARIABLE}} GREATER 0)
+        math(
+          EXPR
+          INOX_STDLIB_UNIT_CMAKE_PROJECT_LAST
+          "${${INOX_STDLIB_UNIT_CMAKE_PROJECT_COUNT_VARIABLE}} - 1"
+        )
+
+        foreach(INOX_STDLIB_CMAKE_PROJECT_INDEX RANGE 0 ${INOX_STDLIB_UNIT_CMAKE_PROJECT_LAST})
+          set(
+            INOX_STDLIB_CMAKE_PROJECT_PREFIX
+            "INOX_STDLIB_NATIVE_UNIT_${INOX_STDLIB_NATIVE_UNIT_INDEX}_CMAKE_PROJECT_${INOX_STDLIB_CMAKE_PROJECT_INDEX}"
+          )
+          set(INOX_STDLIB_CMAKE_PROJECT_SOURCE_VARIABLE "${INOX_STDLIB_CMAKE_PROJECT_PREFIX}_SOURCE_DIR")
+          set(INOX_STDLIB_CMAKE_PROJECT_OPTIONS_VARIABLE "${INOX_STDLIB_CMAKE_PROJECT_PREFIX}_OPTIONS")
+
+          foreach(INOX_STDLIB_CMAKE_OPTION IN LISTS ${INOX_STDLIB_CMAKE_PROJECT_OPTIONS_VARIABLE})
+            if(NOT INOX_STDLIB_CMAKE_OPTION MATCHES "^([^=]+)=(.*)$")
+              message(FATAL_ERROR "invalid stdlib native CMake option: ${INOX_STDLIB_CMAKE_OPTION}")
+            endif()
+
+            set(
+              "${CMAKE_MATCH_1}"
+              "${CMAKE_MATCH_2}"
+              CACHE STRING
+              "Configured by inox stdlib native plan"
+              FORCE
+            )
+          endforeach()
+
+          add_subdirectory(
+            "${${INOX_STDLIB_CMAKE_PROJECT_SOURCE_VARIABLE}}"
+            "${CMAKE_CURRENT_BINARY_DIR}/native-unit-${INOX_STDLIB_NATIVE_UNIT_INDEX}-project-${INOX_STDLIB_CMAKE_PROJECT_INDEX}"
+            EXCLUDE_FROM_ALL
+          )
+        endforeach()
+      endif()
 
       foreach(INOX_STDLIB_CMAKE_PACKAGE IN LISTS ${INOX_STDLIB_UNIT_CMAKE_PACKAGES_VARIABLE})
         find_package(${INOX_STDLIB_CMAKE_PACKAGE} REQUIRED)

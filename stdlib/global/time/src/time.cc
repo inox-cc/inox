@@ -1,10 +1,12 @@
 #include "inox/time.h"
+#include "inox/class_descriptor.h"
 #include "inox/loop.h"
 #include "inox/string.h"
 #include "inox/time_bridge.h"
 
 #include <chrono>
 #include <limits>
+#include <new>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -40,9 +42,64 @@ static inox_number inox_date_from_local(
   inox_number millisecond
 );
 static void inox_time_ensure_initialized(void);
+static inox_status inox_date_copy_instance(inox_allocator* allocator, const void* instance, void** out);
+static void inox_date_destroy_instance(inox_allocator* allocator, void* instance);
+static const inox_class_descriptor* inox_date_class_descriptor(void);
+static void inox_date_throw_type_error(void);
 
 static int inox_time_initialized = 0;
 static inox_number inox_performance_base_ms = 0;
+
+static inox_status inox_date_copy_instance(inox_allocator* allocator, const void* instance, void** out) {
+  if (allocator == 0 || allocator->alloc == 0 || instance == 0 || out == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  void* memory = allocator->alloc(allocator->user, sizeof(DateValue), alignof(DateValue));
+
+  if (memory == 0) {
+    *out = 0;
+    return INOX_ERR_OOM;
+  }
+
+  new (memory) DateValue(*(const DateValue*)instance);
+  *out = memory;
+  return INOX_OK;
+}
+
+static void inox_date_destroy_instance(inox_allocator* allocator, void* instance) {
+  if (allocator == 0 || allocator->free == 0 || instance == 0) {
+    return;
+  }
+
+  ((DateValue*)instance)->~DateValue();
+  allocator->free(allocator->user, instance, sizeof(DateValue), alignof(DateValue));
+}
+
+static const inox_class_descriptor* inox_date_class_descriptor(void) {
+  static const inox_class_descriptor descriptor = {
+    "Date",
+    0,
+    0,
+    0,
+    inox_date_copy_instance,
+    inox_date_destroy_instance,
+    0
+  };
+
+  return &descriptor;
+}
+
+static void inox_date_throw_type_error(void) {
+  inox::String error("TypeError: value is not a Date");
+
+  if (!error.valid()) {
+    inox::throw_out_of_memory();
+    return;
+  }
+
+  inox::throw_value(error);
+}
 
 static void inox_time_ensure_initialized(void) {
   if (inox_time_initialized) {
@@ -461,6 +518,43 @@ static inox::String inox_date_to_string(inox_number value, int kind) {
 DateValue::DateValue() : value_(inox_date_nan()) {}
 
 DateValue::DateValue(inox_number value) : value_(value) {}
+
+DateValue::DateValue(const inox::Value& value) : value_(inox_date_nan()) {
+  if (inox::thrown()) {
+    return;
+  }
+
+  if (!isDate(value)) {
+    inox_date_throw_type_error();
+    return;
+  }
+
+  const inox_class_instance_ref* ref = (const inox_class_instance_ref*)value.as.ref;
+  value_ = ((const DateValue*)ref->instance)->value_;
+}
+
+bool DateValue::isDate(const inox::Value& value) {
+  if (value.tag != INOX_TAG_CLASS_INSTANCE || value.as.ref == 0) {
+    return false;
+  }
+
+  const inox_class_instance_ref* ref = (const inox_class_instance_ref*)value.as.ref;
+  return ref->descriptor == inox_date_class_descriptor() && ref->instance != 0;
+}
+
+inox::Value DateValue::runtimeValue() const {
+  inox_value value = inox_undefined_value();
+  const inox_status status =
+    inox_class_instance_ref_copy(&inox_default_allocator, inox_date_class_descriptor(), this, &value);
+
+  if (status == INOX_ERR_OOM) {
+    inox::throw_out_of_memory();
+  } else if (status != INOX_OK) {
+    inox_date_throw_type_error();
+  }
+
+  return inox::adopt(value);
+}
 
 inox_number DateValue::getDate() const { return inox_date_part(value_, 2, false); }
 inox_number DateValue::getDay() const { return inox_date_part(value_, 3, false); }

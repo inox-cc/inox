@@ -171,6 +171,7 @@ export type LibraryNativeTypeDescriptor = {
   cValueAdapterFailureMode?: 'thrown' | null
   cValueAdapterPreservesPendingException?: boolean
   cRuntimeValueExpression?: string | null
+  cRuntimeValueOwnership?: 'borrowed' | 'owned'
   cRuntimeValueValidExpression?: string | null
   cValidExpression?: string | null
   cAwaitExpression?: string | null
@@ -530,6 +531,17 @@ export type CompilerLibraryNativeBuildDescriptor = {
   cmakePackages: string[]
   cmakeLinkLibraries: string[]
   linkerArguments: string[]
+  cmakeProjects?: CompilerLibraryNativeCMakeProjectDescriptor[]
+}
+
+export type CompilerLibraryNativeCMakeProjectDescriptor = {
+  sourceDir: string
+  options: CompilerLibraryNativeCMakeOptionDescriptor[]
+}
+
+export type CompilerLibraryNativeCMakeOptionDescriptor = {
+  name: string
+  value: string
 }
 
 export type CompilerLibrarySet = {

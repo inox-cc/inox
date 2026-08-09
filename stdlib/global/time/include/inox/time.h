@@ -15,6 +15,10 @@ private:
 public:
   DateValue();
   explicit DateValue(inox_number value);
+  explicit DateValue(const inox::Value& value);
+
+  static bool isDate(const inox::Value& value);
+  inox::Value runtimeValue() const;
 
   inox_number getDate() const;
   inox_number getDay() const;

@@ -20,7 +20,7 @@ test('bare package обнаруживается и удаляется без cen
     resolve(fixture, 'stdlib/packages/example/compiler/index.ts'),
     [
       "export const compilerLibraryPackage = { id: 'example', dependencies: [], operations: [], intrinsicBindings: [], runtimeRequirements: [{ id: 'example', dependencies: [], cPreludeIncludes: ['inox/example.h'], capabilities: [] }] }",
-      "export const compilerLibraryNativeBuild = { cmakePackages: ['Example'], cmakeLinkLibraries: ['Example::Example'], linkerArguments: ['-lexample'] }",
+      "export const compilerLibraryNativeBuild = { cmakePackages: ['Example'], cmakeLinkLibraries: ['Example::Example'], linkerArguments: ['-lexample'], cmakeProjects: [{ sourceDir: 'third_party/example', options: [{ name: 'EXAMPLE_TESTS', value: 'OFF' }] }] }",
       ''
     ].join('\n')
   )
@@ -45,8 +45,16 @@ test('bare package обнаруживается и удаляется без cen
     sources: ['stdlib/packages/example/src/example.cc'],
     cmakePackages: ['Example'],
     cmakeLinkLibraries: ['Example::Example'],
-    linkerArguments: ['-lexample']
+    linkerArguments: ['-lexample'],
+    cmakeProjects: [
+      {
+        sourceDir: 'third_party/example',
+        options: [{ name: 'EXAMPLE_TESTS', value: 'OFF' }]
+      }
+    ]
   })
+  assert.match(rendered.nativePlanCMakeSource, /third_party\/example/)
+  assert.match(rendered.nativePlanCMakeSource, /EXAMPLE_TESTS=OFF/)
 
   await rm(resolve(fixture, 'stdlib/packages/example'), { recursive: true })
   const withoutPackage = await discoverCompilerLibraries(fixture)

@@ -577,6 +577,26 @@ export function compilerLibraryNativeRuntimeValueExpressionForTypeRef(
   return compilerLibraryNativeTypeForId(resolvedLibraries, typeId)?.cRuntimeValueExpression ?? null
 }
 
+export function compilerLibraryNativeRuntimeValueOwnershipForTypeRef(
+  libraries: CCompilerLibrarySet | null | undefined,
+  typeRef: CTypeRef | null | undefined
+): 'borrowed' | 'owned' {
+  const resolvedLibraries = cOptionalCompilerLibrarySetValue(libraries)
+  const resolvedTypeRef = cTypeRefValue(typeRef)
+
+  if (resolvedLibraries === null || resolvedTypeRef === null || resolvedTypeRef.kind !== 'nominal') {
+    return 'borrowed'
+  }
+
+  const typeId = resolvedTypeRef.typeId
+
+  if (typeId === null || typeof typeId === 'undefined' || typeId === '') {
+    return 'borrowed'
+  }
+
+  return compilerLibraryNativeTypeForId(resolvedLibraries, typeId)?.cRuntimeValueOwnership ?? 'borrowed'
+}
+
 export function compilerLibraryNativeRuntimeValueValidExpressionForTypeRef(
   libraries: CCompilerLibrarySet | null | undefined,
   typeRef: CTypeRef | null | undefined

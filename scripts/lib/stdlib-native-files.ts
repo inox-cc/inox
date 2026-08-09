@@ -9,6 +9,10 @@ export async function collectStdlibNativeSources(): Promise<string[]> {
   const sources = new Set<string>()
 
   for (const library of libraries) {
+    if ((library.nativeBuild?.cmakeProjects ?? []).length > 0) {
+      continue
+    }
+
     for (const source of library.nativeSources) {
       sources.add(source)
     }

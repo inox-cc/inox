@@ -1109,6 +1109,10 @@ function validateNativeTypeRuntimeValueExpression(nativeType: LibraryNativeTypeD
   if (expression !== null && typeof expression !== 'undefined' && !expression.includes('$value')) {
     throw new Error(`native type ${nativeType.typeId} C++ runtime value expression requires $value`)
   }
+
+  if (nativeType.cRuntimeValueOwnership === 'owned' && (expression === null || typeof expression === 'undefined')) {
+    throw new Error(`native type ${nativeType.typeId} C++ runtime value ownership requires cRuntimeValueExpression`)
+  }
 }
 
 function validateNativeTypeRuntimeValueValidExpression(nativeType: LibraryNativeTypeDescriptor): void {
@@ -2541,6 +2545,8 @@ function compilerLibrarySetFingerprint(
           (item.cValueAdapterPreservesPendingException === true ? '1' : '') +
           ':runtime-value-expression=' +
           (item.cRuntimeValueExpression ?? '') +
+          ':runtime-value-ownership=' +
+          (item.cRuntimeValueOwnership ?? 'borrowed') +
           ':runtime-value-valid-expression=' +
           (item.cRuntimeValueValidExpression ?? '') +
           ':valid-expression=' +

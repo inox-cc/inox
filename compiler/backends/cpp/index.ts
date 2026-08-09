@@ -174,6 +174,8 @@ import {
   compilerLibraryIntrinsicNativeCAwaitHandlesInvalidSource,
   compilerLibraryIntrinsicNativeCppType,
   compilerLibraryIntrinsicSequenceMaterialization,
+  compilerLibraryNativeRuntimeValueExpressionForTypeRef,
+  compilerLibraryNativeRuntimeValueOwnershipForTypeRef,
   compilerLibraryNativeRuntimeValueValidExpressionForTypeRef,
   requireCompilerLibraryAsyncResultCppType,
   isManagedRuntimeReturnType,
@@ -4202,6 +4204,17 @@ function emitObjectFieldValueExpression(
 
   const value = emitCValueExpression(propertyValue, context)
 
+  const nativeRuntimeValue = emitPreparedNativeRuntimeStoredValue(
+    propertyValue,
+    field.typeRef,
+    value,
+    context
+  )
+
+  if (nativeRuntimeValue !== null) {
+    return nativeRuntimeValue
+  }
+
   if (field.valueType !== 'object') {
     return value
   }
@@ -4222,6 +4235,48 @@ function emitObjectFieldValueExpression(
   }
 
   return value
+}
+
+function emitPreparedNativeRuntimeStoredValue(
+  expression: AnyNode,
+  fallbackTypeRef: CObjectShapeField['typeRef'],
+  value: PreparedExpression,
+  context: CFunctionContext
+): PreparedExpression | null {
+  if (
+    value.cppType === null ||
+    typeof value.cppType === 'undefined' ||
+    value.cppType === 'inox::Value' ||
+    value.cppType === 'inox_value'
+  ) {
+    return null
+  }
+
+  const typeRef = expression.typeRef ?? fallbackTypeRef
+  const runtimeValueExpression = compilerLibraryNativeRuntimeValueExpressionForTypeRef(context.libraries, typeRef)
+
+  if (runtimeValueExpression === null) {
+    return null
+  }
+
+  const converted = runtimeValueExpression.split('$value').join(value.expression)
+  const ownership = compilerLibraryNativeRuntimeValueOwnershipForTypeRef(context.libraries, typeRef)
+  const temp = nextCName(context, 'inox_runtime_value')
+  const lines = value.lines.slice()
+
+  lines.push(
+    ownership === 'owned'
+      ? `auto ${temp} = inox::adopt(${converted});`
+      : `auto ${temp} = inox::Value(${converted});`
+  )
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+
+  return {
+    lines,
+    expression: temp,
+    cppType: 'inox::Value',
+    valueType: value.valueType
+  }
 }
 
 function emitCValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
@@ -4678,8 +4733,12 @@ function emitCArrayLiteralValueExpression(
         element.type === 'ObjectLiteral'
           ? emitCObjectLiteralValueExpression(element, context, null, true)
           : emitCValueExpression(element, context)
-      pushAll(lines, value.lines)
-      values.push(value.expression)
+      const stored =
+        element.type === 'ObjectLiteral'
+          ? value
+          : emitPreparedNativeRuntimeStoredValue(element, element.typeRef, value, context) ?? value
+      pushAll(lines, stored.lines)
+      values.push(stored.expression)
     }
 
     lines.push(
@@ -4755,6 +4814,8 @@ function emitCArrayLiteralValueExpression(
       inferExpressionType(element, context) === 'function'
     ) {
       value = emitRuntimeCallbackValue(element, normalizeFunctionType(elementFunctionType), context)
+    } else {
+      value = emitPreparedNativeRuntimeStoredValue(element, element.typeRef, value, context) ?? value
     }
 
     pushAll(lines, value.lines)

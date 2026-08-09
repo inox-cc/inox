@@ -246,7 +246,42 @@ function isCompilerLibraryNativeBuildDescriptor(value: unknown): value is Compil
     Array.isArray(descriptor.cmakeLinkLibraries) &&
     descriptor.cmakeLinkLibraries.every((item) => typeof item === 'string' && item.length > 0) &&
     Array.isArray(descriptor.linkerArguments) &&
-    descriptor.linkerArguments.every((item) => typeof item === 'string' && item.length > 0)
+    descriptor.linkerArguments.every((item) => typeof item === 'string' && item.length > 0) &&
+    (typeof descriptor.cmakeProjects === 'undefined' ||
+      (Array.isArray(descriptor.cmakeProjects) && descriptor.cmakeProjects.every(isNativeCMakeProject)))
+  )
+}
+
+function isNativeCMakeProject(value: unknown): boolean {
+  if (value === null || typeof value !== 'object') {
+    return false
+  }
+
+  const project = value as { [key: string]: unknown }
+
+  return (
+    typeof project.sourceDir === 'string' &&
+    project.sourceDir.length > 0 &&
+    !project.sourceDir.startsWith('/') &&
+    !project.sourceDir.split('/').includes('..') &&
+    Array.isArray(project.options) &&
+    project.options.every(isNativeCMakeOption)
+  )
+}
+
+function isNativeCMakeOption(value: unknown): boolean {
+  if (value === null || typeof value !== 'object') {
+    return false
+  }
+
+  const option = value as { [key: string]: unknown }
+
+  return (
+    typeof option.name === 'string' &&
+    /^[A-Za-z_][A-Za-z0-9_]*$/.test(option.name) &&
+    typeof option.value === 'string' &&
+    option.value.length > 0 &&
+    !option.value.includes(';')
   )
 }
 
