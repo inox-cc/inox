@@ -7,6 +7,7 @@ import type {
   LibraryCResultMode,
   LibraryOperationDescriptor,
   LibraryOperationVariantDescriptor,
+  LibraryResultShapeFieldDescriptor,
   NominalTypeRef,
   PrimitiveTypeRef,
   TypeOwnership,
@@ -152,7 +153,7 @@ const operations: LibraryOperationDescriptor[] = [
     [],
     3,
     4,
-    [cipherAlgorithmArgument('createCipheriv'), stringOrBytesArgument(), stringOrBytesArgument(), objectArgument()],
+    [cipherAlgorithmArgument('createCipheriv'), secretKeyInputArgument(), stringOrBytesArgument(), objectArgument()],
     cipherRequirements,
     { resultTypeRef: nominalTypeRef(cipherTypeId), cResultMode: 'value' }
   ),
@@ -162,7 +163,7 @@ const operations: LibraryOperationDescriptor[] = [
     [],
     3,
     4,
-    [cipherAlgorithmArgument('createDecipheriv'), stringOrBytesArgument(), stringOrBytesArgument(), objectArgument()],
+    [cipherAlgorithmArgument('createDecipheriv'), secretKeyInputArgument(), stringOrBytesArgument(), objectArgument()],
     cipherRequirements,
     { resultTypeRef: nominalTypeRef(decipherTypeId), cResultMode: 'value' }
   ),
@@ -174,6 +175,7 @@ const operations: LibraryOperationDescriptor[] = [
     resultTypeRef: nominalTypeRef(keyObjectTypeId),
     cResultMode: 'value'
   }),
+  createSecretKeyOperation(),
   rsaCryptOperation('privateDecrypt', privateKeyInputArgument()),
   rsaCryptOperation('publicEncrypt', publicKeyInputArgument()),
   moduleCall(
@@ -202,7 +204,7 @@ const operations: LibraryOperationDescriptor[] = [
     [],
     2,
     2,
-    [hashAlgorithmArgument('createHmac'), stringOrBytesArgument()],
+    [hashAlgorithmArgument('createHmac'), secretKeyInputArgument()],
     hashRequirements,
     { resultTypeRef: nominalTypeRef(hmacTypeId), cResultMode: 'value' }
   ),
@@ -251,7 +253,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
     nativeType(hmacTypeId, 'Hmac', hashRequirements),
     nativeType(cipherTypeId, 'Cipheriv', cipherRequirements),
     nativeType(decipherTypeId, 'Decipheriv', cipherRequirements),
-    nativeType(keyObjectTypeId, 'KeyObject', signatureRequirements, [
+    nativeType(keyObjectTypeId, 'KeyObject', randomRequirements, [
       {
         name: 'type',
         valueType: 'string',
@@ -261,8 +263,18 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       {
         name: 'asymmetricKeyType',
         valueType: 'string',
+        nullable: true,
+        cppType: 'inox::Value',
         readonly: true,
         cGetter: 'asymmetricKeyType'
+      },
+      {
+        name: 'symmetricKeySize',
+        valueType: 'number',
+        nullable: true,
+        cppType: 'inox::Value',
+        readonly: true,
+        cGetter: 'symmetricKeySize'
       }
     ])
   ],
@@ -444,12 +456,64 @@ function keyExportOperation(): LibraryOperationDescriptor {
     cExpression: 'exportKey',
     cCallStyle: 'member',
     cFailureMode: 'thrown',
-    cArgumentKinds: ['receiver', 'value'],
-    cResultMapping: stringResultMapping(),
-    resultTypeRef: stringTypeRef,
-    minArgs: 1,
+    minArgs: 0,
     maxArgs: 1,
-    argumentChecks: [objectArgument()]
+    argumentChecks: [objectArgument()],
+    variants: [
+      {
+        runtimeRequirements: randomRequirements,
+        minArgs: 0,
+        maxArgs: 0,
+        cExpression: 'exportKey',
+        cArgumentKinds: ['receiver'],
+        cResultMode: 'value',
+        resultTypeRef: nominalTypeRef(bufferTypeId)
+      },
+      {
+        runtimeRequirements: signatureRequirements,
+        minArgs: 1,
+        maxArgs: 1,
+        cExpression: 'exportKey',
+        cArgumentKinds: ['receiver', 'value'],
+        cResultMapping: stringResultMapping(),
+        resultTypeRef: stringTypeRef
+      }
+    ]
+  }
+}
+
+function createSecretKeyOperation(): LibraryOperationDescriptor {
+  const resultTypeRef = nominalTypeRef(keyObjectTypeId)
+
+  return {
+    ...moduleCall(
+      'createSecretKey',
+      ['value'],
+      [],
+      1,
+      2,
+      [stringOrBytesArgument(), encodingArgument()],
+      randomRequirements,
+      { resultTypeRef, cResultMode: 'value' }
+    ),
+    variants: [
+      {
+        minArgs: 1,
+        maxArgs: 1,
+        cExpression: 'crypto.createSecretKey',
+        cArgumentKinds: ['value'],
+        cResultMode: 'value',
+        resultTypeRef
+      },
+      {
+        minArgs: 2,
+        maxArgs: 2,
+        cExpression: 'crypto.createSecretKey',
+        cArgumentKinds: ['value', 'optional-string-view', 'argument-presence'],
+        cResultMode: 'value',
+        resultTypeRef
+      }
+    ]
   }
 }
 
@@ -798,12 +862,7 @@ function nativeType(
   typeId: string,
   cppType: string,
   runtimeRequirements: string[],
-  fields: Array<{
-    cGetter: string
-    name: string
-    readonly: boolean
-    valueType: string
-  }> = []
+  fields: LibraryResultShapeFieldDescriptor[] = []
 ) {
   return {
     libraryId,
@@ -915,6 +974,10 @@ function publicKeyInputArgument(): LibraryArgumentCheckDescriptor {
   return privateKeyInputArgument()
 }
 
+function secretKeyInputArgument(): LibraryArgumentCheckDescriptor {
+  return privateKeyInputArgument()
+}
+
 function rsaOaepOptionsArgument(keyCheck: LibraryArgumentCheckDescriptor): LibraryArgumentCheckDescriptor {
   return {
     valueTypes: ['object'],
@@ -969,7 +1032,6 @@ function unsupportedMethods(): string[] {
     'createDiffieHellman',
     'createDiffieHellmanGroup',
     'createECDH',
-    'createSecretKey',
     'createSign',
     'createVerify',
     'decapsulate',

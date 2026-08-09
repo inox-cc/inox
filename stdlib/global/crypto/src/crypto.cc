@@ -16,11 +16,11 @@
 
 #if defined(INOX_TLS_BACKEND_BORINGSSL) || defined(INOX_TLS_BACKEND_OPENSSL)
 #include <openssl/bn.h>
+#include <openssl/crypto.h>
 #include <openssl/ec.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
-#include <openssl/mem.h>
 #include <openssl/objects.h>
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
@@ -98,7 +98,8 @@ static void CryptoHmacState_free(CryptoHmacState* hmac);
 static inox_status CryptoCipherState_create(
   inox_allocator* allocator,
   inox::StringView algorithm,
-  inox_value key,
+  const uint8_t* key_bytes,
+  size_t key_len,
   inox_value iv,
   const inox::Value& options,
   bool encrypt,
@@ -110,6 +111,12 @@ static inox_status CryptoKeyState_create(
   const uint8_t* bytes,
   size_t len,
   bool private_key,
+  CryptoKeyState** out
+);
+static inox_status CryptoKeyState_create_secret(
+  inox_allocator* allocator,
+  const uint8_t* bytes,
+  size_t len,
   CryptoKeyState** out
 );
 static inox_status CryptoKeyState_generate_pair(
@@ -219,7 +226,8 @@ struct CryptoCipherState {
 enum InoxCryptoKeyType {
   INOX_CRYPTO_KEY_RSA = 1,
   INOX_CRYPTO_KEY_RSA_PSS = 2,
-  INOX_CRYPTO_KEY_EC = 3
+  INOX_CRYPTO_KEY_EC = 3,
+  INOX_CRYPTO_KEY_SECRET = 4
 };
 
 struct CryptoKeyState {
@@ -228,6 +236,8 @@ struct CryptoKeyState {
 #if INOX_CRYPTO_HAS_EVP
   EVP_PKEY* key;
 #endif
+  uint8_t* secret_bytes;
+  size_t secret_len;
   int private_key;
   int key_type;
 };
@@ -854,34 +864,64 @@ inox::StringView KeyObject::type() const {
     inox::fatal("crypto.KeyObject.type native facade invariant failed");
   }
 
+  if (handle_->key_type == INOX_CRYPTO_KEY_SECRET) {
+    return inox::StringView("secret", 6);
+  }
+
   return handle_->private_key
     ? inox::StringView("private", 7)
     : inox::StringView("public", 6);
 }
 
-inox::StringView KeyObject::asymmetricKeyType() const {
+inox::Value KeyObject::asymmetricKeyType() const {
   if (handle_ == 0) {
     inox::fatal("crypto.KeyObject.asymmetricKeyType native facade invariant failed");
   }
 
   if (handle_->key_type == INOX_CRYPTO_KEY_RSA) {
-    return inox::StringView("rsa", 3);
+    return inox::String("rsa", 3);
   }
 
   if (handle_->key_type == INOX_CRYPTO_KEY_RSA_PSS) {
-    return inox::StringView("rsa-pss", 7);
+    return inox::String("rsa-pss", 7);
   }
 
   if (handle_->key_type == INOX_CRYPTO_KEY_EC) {
-    return inox::StringView("ec", 2);
+    return inox::String("ec", 2);
+  }
+
+  if (handle_->key_type == INOX_CRYPTO_KEY_SECRET) {
+    return inox::Value();
   }
 
   inox::fatal("crypto.KeyObject.asymmetricKeyType native facade invariant failed");
 }
 
+inox::Value KeyObject::symmetricKeySize() const {
+  if (handle_ == 0) {
+    inox::fatal("crypto.KeyObject.symmetricKeySize native facade invariant failed");
+  }
+
+  if (handle_->key_type == INOX_CRYPTO_KEY_SECRET) {
+    return inox::Value(inox_number_value((double)handle_->secret_len));
+  }
+
+  return inox::Value();
+}
+
+Buffer KeyObject::exportKey() const {
+  if (handle_ == 0 || handle_->key_type != INOX_CRYPTO_KEY_SECRET) {
+    inox_crypto_throw_failed("crypto.KeyObject.export failed");
+    return Buffer();
+  }
+
+  return Buffer(std::span<const uint8_t>(handle_->secret_bytes, handle_->secret_len));
+}
+
 inox::String KeyObject::exportKey(const inox::Value& options) const {
   if (
     handle_ == 0 ||
+    handle_->key_type == INOX_CRYPTO_KEY_SECRET ||
     (options.tag != INOX_TAG_OBJECT && options.tag != INOX_TAG_CLASS_INSTANCE)
   ) {
     inox_crypto_throw_failed("crypto.KeyObject.export failed");
@@ -1408,19 +1448,58 @@ Cipheriv crypto::createCipheriv(
   const inox::Value& iv,
   const inox::Value& options
 ) const {
+  const uint8_t* key_bytes = 0;
+  size_t key_len = 0;
   CryptoCipherState* cipher = 0;
+  inox_status status = inox_crypto_data(key.raw(), &key_bytes, &key_len);
 
-  if (
-    CryptoCipherState_create(
+  if (status == INOX_OK) {
+    status = CryptoCipherState_create(
       &inox_default_allocator,
       algorithm,
-      key.raw(),
+      key_bytes,
+      key_len,
       iv.raw(),
       options,
       true,
       &cipher
-    ) != INOX_OK
-  ) {
+    );
+  }
+
+  if (status != INOX_OK) {
+    CryptoCipherState_free(cipher);
+
+    if (!inox::thrown()) {
+      inox_crypto_throw_failed("crypto.createCipheriv failed");
+    }
+
+    return Cipheriv();
+  }
+
+  return Cipheriv(cipher);
+}
+
+Cipheriv crypto::createCipheriv(
+  inox::StringView algorithm,
+  const KeyObject& key,
+  const inox::Value& iv,
+  const inox::Value& options
+) const {
+  CryptoCipherState* cipher = 0;
+  const inox_status status = key.handle_ != 0 && key.handle_->key_type == INOX_CRYPTO_KEY_SECRET
+    ? CryptoCipherState_create(
+        &inox_default_allocator,
+        algorithm,
+        key.handle_->secret_bytes,
+        key.handle_->secret_len,
+        iv.raw(),
+        options,
+        true,
+        &cipher
+      )
+    : INOX_ERR_TYPE;
+
+  if (status != INOX_OK) {
     CryptoCipherState_free(cipher);
 
     if (!inox::thrown()) {
@@ -1439,19 +1518,25 @@ Decipheriv crypto::createDecipheriv(
   const inox::Value& iv,
   const inox::Value& options
 ) const {
+  const uint8_t* key_bytes = 0;
+  size_t key_len = 0;
   CryptoCipherState* cipher = 0;
+  inox_status status = inox_crypto_data(key.raw(), &key_bytes, &key_len);
 
-  if (
-    CryptoCipherState_create(
+  if (status == INOX_OK) {
+    status = CryptoCipherState_create(
       &inox_default_allocator,
       algorithm,
-      key.raw(),
+      key_bytes,
+      key_len,
       iv.raw(),
       options,
       false,
       &cipher
-    ) != INOX_OK
-  ) {
+    );
+  }
+
+  if (status != INOX_OK) {
     CryptoCipherState_free(cipher);
 
     if (!inox::thrown()) {
@@ -1462,6 +1547,87 @@ Decipheriv crypto::createDecipheriv(
   }
 
   return Decipheriv(cipher);
+}
+
+Decipheriv crypto::createDecipheriv(
+  inox::StringView algorithm,
+  const KeyObject& key,
+  const inox::Value& iv,
+  const inox::Value& options
+) const {
+  CryptoCipherState* cipher = 0;
+  const inox_status status = key.handle_ != 0 && key.handle_->key_type == INOX_CRYPTO_KEY_SECRET
+    ? CryptoCipherState_create(
+        &inox_default_allocator,
+        algorithm,
+        key.handle_->secret_bytes,
+        key.handle_->secret_len,
+        iv.raw(),
+        options,
+        false,
+        &cipher
+      )
+    : INOX_ERR_TYPE;
+
+  if (status != INOX_OK) {
+    CryptoCipherState_free(cipher);
+
+    if (!inox::thrown()) {
+      inox_crypto_throw_failed("crypto.createDecipheriv failed");
+    }
+
+    return Decipheriv();
+  }
+
+  return Decipheriv(cipher);
+}
+
+KeyObject crypto::createSecretKey(
+  const inox::Value& key,
+  inox::StringView encoding,
+  bool has_encoding
+) const {
+  const uint8_t* bytes = 0;
+  size_t len = 0;
+  CryptoKeyState* state = 0;
+  inox_status status = INOX_OK;
+
+  if (has_encoding && key.tag == INOX_TAG_STRING && key.as.ref != 0) {
+    Buffer decoded = Buffer::from(inox::String(key), encoding);
+
+    if (inox::thrown() || !decoded.valid()) {
+      return KeyObject();
+    }
+
+    status = CryptoKeyState_create_secret(
+      &inox_default_allocator,
+      decoded.bytes().data(),
+      decoded.length(),
+      &state
+    );
+  } else {
+    status = inox_crypto_data(key.raw(), &bytes, &len);
+
+    if (status == INOX_OK) {
+      status = CryptoKeyState_create_secret(&inox_default_allocator, bytes, len, &state);
+    }
+  }
+
+  if (status != INOX_OK) {
+    CryptoKeyState_free(state);
+
+    if (!inox::thrown()) {
+      if (status == INOX_ERR_OOM) {
+        inox::throw_out_of_memory();
+      } else {
+        inox_crypto_throw_failed("crypto.createSecretKey failed");
+      }
+    }
+
+    return KeyObject();
+  }
+
+  return KeyObject(state);
 }
 
 KeyObject crypto::createPrivateKey(const inox::Value& key) const {
@@ -1796,6 +1962,29 @@ Hmac crypto::createHmac(inox::StringView algorithm, const inox::Value& key) cons
   CryptoHmacState* hmac = 0;
 
   if (CryptoHmacState_create(&inox_default_allocator, algorithm.bytes, algorithm.len, key.raw(), &hmac) != INOX_OK) {
+    CryptoHmacState_free(hmac);
+    inox_crypto_throw_failed("crypto.createHmac failed");
+    return Hmac();
+  }
+
+  return Hmac(hmac);
+}
+
+Hmac crypto::createHmac(inox::StringView algorithm, const KeyObject& key) const {
+  CryptoHmacState* hmac = 0;
+
+  if (
+    key.handle_ == 0 ||
+    key.handle_->key_type != INOX_CRYPTO_KEY_SECRET ||
+    CryptoHmacState_create(
+      &inox_default_allocator,
+      algorithm.bytes,
+      algorithm.len,
+      key.handle_->secret_bytes,
+      key.handle_->secret_len,
+      &hmac
+    ) != INOX_OK
+  ) {
     CryptoHmacState_free(hmac);
     inox_crypto_throw_failed("crypto.createHmac failed");
     return Hmac();
@@ -2301,7 +2490,8 @@ static int inox_crypto_auth_tag_length(const inox::Value& options, size_t* out) 
 static inox_status CryptoCipherState_create(
   inox_allocator* allocator,
   inox::StringView algorithm,
-  inox_value key,
+  const uint8_t* key_bytes,
+  size_t key_len,
   inox_value iv,
   const inox::Value& options,
   bool encrypt,
@@ -2314,9 +2504,7 @@ static inox_status CryptoCipherState_create(
   *out = 0;
 
 #if INOX_CRYPTO_HAS_EVP
-  const uint8_t* key_bytes = 0;
   const uint8_t* iv_bytes = 0;
-  size_t key_len = 0;
   size_t iv_len = 0;
   size_t expected_key_len = 0;
   size_t auth_tag_len = 0;
@@ -2324,7 +2512,7 @@ static inox_status CryptoCipherState_create(
 
   if (
     cipher == 0 ||
-    inox_crypto_data(key, &key_bytes, &key_len) != INOX_OK ||
+    (key_bytes == 0 && key_len != 0) ||
     inox_crypto_data(iv, &iv_bytes, &iv_len) != INOX_OK ||
     !inox_crypto_auth_tag_length(options, &auth_tag_len) ||
     key_len != expected_key_len ||
@@ -2370,7 +2558,8 @@ static inox_status CryptoCipherState_create(
   return INOX_OK;
 #else
   (void)algorithm;
-  (void)key;
+  (void)key_bytes;
+  (void)key_len;
   (void)iv;
   (void)options;
   (void)encrypt;
@@ -2533,6 +2722,8 @@ static inox_status CryptoKeyState_create(
   state->allocator = allocator;
   state->refs = 1;
   state->key = parsed;
+  state->secret_bytes = 0;
+  state->secret_len = 0;
   state->private_key = private_key ? 1 : 0;
   state->key_type = key_type;
   *out = state;
@@ -2541,6 +2732,67 @@ static inox_status CryptoKeyState_create(
   (void)private_key;
   return INOX_ERR_UNSUPPORTED;
 #endif
+}
+
+static inox_status CryptoKeyState_create_secret(
+  inox_allocator* allocator,
+  const uint8_t* bytes,
+  size_t len,
+  CryptoKeyState** out
+) {
+  if (
+    allocator == 0 ||
+    allocator->alloc == 0 ||
+    allocator->free == 0 ||
+    (bytes == 0 && len != 0) ||
+    out == 0
+  ) {
+    return INOX_ERR_TYPE;
+  }
+
+  *out = 0;
+  CryptoKeyState* state = (CryptoKeyState*)allocator->alloc(
+    allocator->user,
+    sizeof(CryptoKeyState),
+    alignof(CryptoKeyState)
+  );
+
+  if (state == 0) {
+    return INOX_ERR_OOM;
+  }
+
+  state->allocator = allocator;
+  state->refs = 1;
+#if INOX_CRYPTO_HAS_EVP
+  state->key = 0;
+#endif
+  state->secret_bytes = 0;
+  state->secret_len = len;
+  state->private_key = 0;
+  state->key_type = INOX_CRYPTO_KEY_SECRET;
+
+  if (len > 0) {
+    state->secret_bytes = (uint8_t*)allocator->alloc(
+      allocator->user,
+      len,
+      alignof(uint8_t)
+    );
+
+    if (state->secret_bytes == 0) {
+      allocator->free(
+        allocator->user,
+        state,
+        sizeof(CryptoKeyState),
+        alignof(CryptoKeyState)
+      );
+      return INOX_ERR_OOM;
+    }
+
+    std::memcpy(state->secret_bytes, bytes, len);
+  }
+
+  *out = state;
+  return INOX_OK;
 }
 
 static inox_status CryptoKeyState_generate_pair(
@@ -2697,6 +2949,8 @@ static inox_status CryptoKeyState_generate_pair(
   private_state->allocator = allocator;
   private_state->refs = 1;
   private_state->key = generated;
+  private_state->secret_bytes = 0;
+  private_state->secret_len = 0;
   private_state->private_key = 1;
   private_state->key_type = generated_type;
 
@@ -2775,6 +3029,8 @@ static inox_status CryptoKeyState_clone_public(
   state->allocator = allocator;
   state->refs = 1;
   state->key = public_key;
+  state->secret_bytes = 0;
+  state->secret_len = 0;
   state->private_key = 0;
   state->key_type = key->key_type;
   *out = state;
@@ -2803,6 +3059,23 @@ static void CryptoKeyState_free(CryptoKeyState* key) {
 #if INOX_CRYPTO_HAS_EVP
   EVP_PKEY_free(key->key);
 #endif
+
+  if (key->secret_bytes != 0) {
+    volatile uint8_t* bytes = key->secret_bytes;
+
+    for (size_t index = 0; index < key->secret_len; index += 1) {
+      bytes[index] = 0;
+    }
+
+    if (key->allocator != 0 && key->allocator->free != 0) {
+      key->allocator->free(
+        key->allocator->user,
+        key->secret_bytes,
+        key->secret_len,
+        alignof(uint8_t)
+      );
+    }
+  }
 
   if (key->allocator != 0 && key->allocator->free != 0) {
     key->allocator->free(

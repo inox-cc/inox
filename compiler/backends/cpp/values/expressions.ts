@@ -4976,11 +4976,7 @@ export function emitCValueExpression(
     expression.typeRef
   )
 
-  if (
-    runtimeValueExpression === null ||
-    prepared.cppType === 'inox::Value' ||
-    prepared.cppType === 'inox_value'
-  ) {
+  if (runtimeValueExpression === null || prepared.cppType === 'inox::Value' || prepared.cppType === 'inox_value') {
     return prepared
   }
 
@@ -5027,6 +5023,16 @@ function emitCValueExpressionUnadapted(
 
   if (expression.type === 'OptionalCallExpression' && deps.isNullableRuntimeExpression(expression, context)) {
     return deps.emitOptionalCallbackCallValueExpression(expression, context)
+  }
+
+  if (deps.isMemberAccessExpression(expression) && isCompilerLibraryNativeFieldExpression(expression, context)) {
+    const preparedObject =
+      expression.object.type === 'Reference' ? null : deps.emitCValueExpression(expression.object, context)
+    const libraryNativeField = emitPreparedCompilerLibraryNativeFieldExpression(expression, context, preparedObject)
+
+    if (libraryNativeField !== null) {
+      return boxPreparedRuntimeScalarValue(libraryNativeField)
+    }
   }
 
   if (deps.isNullableScalarRuntimeExpression(expression, context)) {
@@ -5393,8 +5399,8 @@ function emitCValueExpressionUnadapted(
     const nativeRuntimeValueExpression =
       cCallExpressionReturnsTypeErasedValue(expression) ||
       callExpressionReturnsNullableRuntimeValue(expression, context)
-      ? null
-      : compilerLibraryNativeRuntimeValueExpressionForTypeRef(context.libraries, expression.typeRef)
+        ? null
+        : compilerLibraryNativeRuntimeValueExpressionForTypeRef(context.libraries, expression.typeRef)
     const returnRuntimeTypeAlternatives = callExpressionReturnRuntimeTypeAlternatives(expression, context)
     const call = deps.emitPreparedCallExpression(expression, context)
 

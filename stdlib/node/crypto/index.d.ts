@@ -4,6 +4,7 @@ export type BinaryLike = string | Buffer | Uint8Array
 export type BinaryBuffer = Buffer | Uint8Array
 export type PrivateKeyInput = BinaryLike | KeyObject
 export type PublicKeyInput = BinaryLike | KeyObject
+export type SecretKeyInput = BinaryLike | KeyObject
 export type RsaOaepHash = 'sha1' | 'sha224' | 'sha256' | 'sha384' | 'sha512'
 
 export interface RsaOaepPrivateKeyOptions {
@@ -58,9 +59,10 @@ export interface AADOptions {
 
 export interface CryptoModule {
   createHash(algorithm: string): Hash
-  createHmac(algorithm: string, key: BinaryLike): Hmac
-  createCipheriv(algorithm: string, key: BinaryLike, iv: BinaryLike, options?: CipherGCMOptions): Cipheriv
-  createDecipheriv(algorithm: string, key: BinaryLike, iv: BinaryLike, options?: CipherGCMOptions): Decipheriv
+  createHmac(algorithm: string, key: SecretKeyInput): Hmac
+  createCipheriv(algorithm: string, key: SecretKeyInput, iv: BinaryLike, options?: CipherGCMOptions): Cipheriv
+  createDecipheriv(algorithm: string, key: SecretKeyInput, iv: BinaryLike, options?: CipherGCMOptions): Decipheriv
+  createSecretKey(key: BinaryLike, encoding?: string): KeyObject
   createPrivateKey(key: BinaryLike): KeyObject
   createPublicKey(key: PublicKeyInput): KeyObject
   generateKeyPairSync(type: 'rsa', options: RsaKeyPairOptions): KeyPairResult
@@ -117,24 +119,32 @@ export class Decipheriv {
 }
 
 export class KeyObject {
-  readonly type: 'private' | 'public'
-  readonly asymmetricKeyType: 'rsa' | 'rsa-pss' | 'ec'
+  readonly type: 'secret' | 'private' | 'public'
+  readonly asymmetricKeyType: 'rsa' | 'rsa-pss' | 'ec' | undefined
+  readonly symmetricKeySize: number | undefined
+  export(): Buffer
   export(options: KeyExportOptions): string
 }
 
-export function createCipheriv(algorithm: string, key: BinaryLike, iv: BinaryLike, options?: CipherGCMOptions): Cipheriv
+export function createCipheriv(
+  algorithm: string,
+  key: SecretKeyInput,
+  iv: BinaryLike,
+  options?: CipherGCMOptions
+): Cipheriv
 export function createDecipheriv(
   algorithm: string,
-  key: BinaryLike,
+  key: SecretKeyInput,
   iv: BinaryLike,
   options?: CipherGCMOptions
 ): Decipheriv
 export function createPrivateKey(key: BinaryLike): KeyObject
 export function createPublicKey(key: PublicKeyInput): KeyObject
+export function createSecretKey(key: BinaryLike, encoding?: string): KeyObject
 export function generateKeyPairSync(type: 'rsa', options: RsaKeyPairOptions): KeyPairResult
 export function generateKeyPairSync(type: 'ec', options: EcKeyPairOptions): KeyPairResult
 export function createHash(algorithm: string): Hash
-export function createHmac(algorithm: string, key: BinaryLike): Hmac
+export function createHmac(algorithm: string, key: SecretKeyInput): Hmac
 export function getHashes(): string[]
 export function getRandomValues(bytes: BinaryBuffer): BinaryBuffer
 export function hkdfSync(digest: string, ikm: BinaryLike, salt: BinaryLike, info: BinaryLike, keylen: number): Buffer

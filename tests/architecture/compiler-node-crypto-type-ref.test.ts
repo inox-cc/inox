@@ -44,8 +44,12 @@ test('node:crypto implemented results принадлежат TypeRef, включ
     nativeType(
       'node:crypto#KeyObject',
       'KeyObject',
-      ['node:crypto', 'node:crypto:signature'],
-      [field('type', 'type'), field('asymmetricKeyType', 'asymmetricKeyType')]
+      ['node:crypto'],
+      [
+        field('type', 'type'),
+        nullableField('asymmetricKeyType', 'string', 'asymmetricKeyType'),
+        nullableField('symmetricKeySize', 'number', 'symmetricKeySize')
+      ]
     )
   ])
 
@@ -65,6 +69,13 @@ test('node:crypto implemented results принадлежат TypeRef, включ
     ['node:crypto#createDecipheriv', [result(nominalType('node:crypto#Decipheriv'), null, 'value')]],
     ['node:crypto#createPrivateKey', [result(nominalType('node:crypto#KeyObject'), null, 'value')]],
     ['node:crypto#createPublicKey', [result(nominalType('node:crypto#KeyObject'), null, 'value')]],
+    [
+      'node:crypto#createSecretKey',
+      [
+        result(nominalType('node:crypto#KeyObject'), null, 'value'),
+        result(nominalType('node:crypto#KeyObject'), null, 'value')
+      ]
+    ],
     [
       'node:crypto#privateDecrypt',
       [
@@ -152,7 +163,10 @@ test('node:crypto implemented results принадлежат TypeRef, включ
     ['node:crypto#Cipheriv#getAuthTag', [result(nominalType('node:buffer#Buffer'), null, 'value')]],
     ['node:crypto#sign', [result(nominalType('node:buffer#Buffer'), null, 'value')]],
     ['node:crypto#verify', [result(primitiveType('boolean'))]],
-    ['node:crypto#KeyObject#export', [result(stringType, stringMapping())]],
+    [
+      'node:crypto#KeyObject#export',
+      [result(nominalType('node:buffer#Buffer'), null, 'value'), result(stringType, stringMapping())]
+    ],
     [
       'node:crypto#Decipheriv#setAuthTag',
       [
@@ -261,6 +275,8 @@ function nativeType(
     valueType: string
     readonly: boolean
     cGetter: string
+    nullable?: boolean
+    cppType?: string
   }> = []
 ) {
   return {
@@ -277,4 +293,8 @@ function nativeType(
 
 function field(name: string, cGetter: string) {
   return { name, valueType: 'string', readonly: true, cGetter }
+}
+
+function nullableField(name: string, valueType: string, cGetter: string) {
+  return { name, valueType, nullable: true, cppType: 'inox::Value', readonly: true, cGetter }
 }

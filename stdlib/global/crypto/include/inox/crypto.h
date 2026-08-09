@@ -155,7 +155,9 @@ public:
   KeyObject& operator=(KeyObject&& other) noexcept;
 
   inox::StringView type() const;
-  inox::StringView asymmetricKeyType() const;
+  inox::Value asymmetricKeyType() const;
+  inox::Value symmetricKeySize() const;
+  Buffer exportKey() const;
   inox::String exportKey(const inox::Value& options) const;
 };
 
@@ -210,11 +212,28 @@ public:
     const inox::Value& iv,
     const inox::Value& options
   ) const;
+  Cipheriv createCipheriv(
+    inox::StringView algorithm,
+    const KeyObject& key,
+    const inox::Value& iv,
+    const inox::Value& options
+  ) const;
   Decipheriv createDecipheriv(
     inox::StringView algorithm,
     const inox::Value& key,
     const inox::Value& iv,
     const inox::Value& options
+  ) const;
+  Decipheriv createDecipheriv(
+    inox::StringView algorithm,
+    const KeyObject& key,
+    const inox::Value& iv,
+    const inox::Value& options
+  ) const;
+  KeyObject createSecretKey(
+    const inox::Value& key,
+    inox::StringView encoding = inox::StringView("", 0),
+    bool has_encoding = false
   ) const;
   KeyObject createPrivateKey(const inox::Value& key) const;
   KeyObject createPublicKey(const inox::Value& key) const;
@@ -255,6 +274,7 @@ public:
   Hash createHash(inox::StringView algorithm) const;
   Hmac createHmac(inox::StringView algorithm, inox::StringView key) const;
   Hmac createHmac(inox::StringView algorithm, const inox::Value& key) const;
+  Hmac createHmac(inox::StringView algorithm, const KeyObject& key) const;
   inox::String hash(inox::StringView algorithm, inox::StringView data) const;
   inox::String hash(inox::StringView algorithm, const inox::Value& data) const;
   inox::String hash(

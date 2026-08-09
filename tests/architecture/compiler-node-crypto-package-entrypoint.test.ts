@@ -22,6 +22,7 @@ test('entrypoint package node:crypto владеет operations и backend requir
   const createHash = operations.find((operation) => operation.operationId === 'node:crypto#createHash')
   const createCipheriv = operations.find((operation) => operation.operationId === 'node:crypto#createCipheriv')
   const createPrivateKey = operations.find((operation) => operation.operationId === 'node:crypto#createPrivateKey')
+  const createSecretKey = operations.find((operation) => operation.operationId === 'node:crypto#createSecretKey')
   const generateKeyPairSync = operations.find(
     (operation) => operation.operationId === 'node:crypto#generateKeyPairSync'
   )
@@ -40,6 +41,7 @@ test('entrypoint package node:crypto владеет operations и backend requir
   assert.deepEqual(createHash?.runtimeRequirements, ['node:crypto', 'node:crypto:hash'])
   assert.deepEqual(createCipheriv?.runtimeRequirements, ['node:crypto', 'node:crypto:cipher'])
   assert.deepEqual(createPrivateKey?.runtimeRequirements, ['node:crypto', 'node:crypto:signature'])
+  assert.deepEqual(createSecretKey?.runtimeRequirements, ['node:crypto'])
   assert.deepEqual(generateKeyPairSync?.runtimeRequirements, ['node:crypto', 'node:crypto:signature'])
   assert.equal(generateKeyPairSync?.cResultMapping?.cppType, 'CryptoKeyPair')
   assert.deepEqual(publicEncrypt?.runtimeRequirements, ['node:crypto', 'node:crypto:signature'])
