@@ -58,6 +58,8 @@ export interface CryptoModule {
   hash(algorithm: string, data: BinaryLike, outputEncoding: 'buffer'): Buffer
   hash(algorithm: string, data: BinaryLike, outputEncoding?: string): string
   pbkdf2Sync(password: BinaryLike, salt: BinaryLike, iterations: number, keylen: number, digest: string): Buffer
+  privateDecrypt(privateKey: PrivateKeyInput, buffer: BinaryBuffer): Buffer
+  publicEncrypt(key: PublicKeyInput, buffer: BinaryBuffer): Buffer
   randomBytes(size: number): Buffer
   randomFillSync(buffer: BinaryBuffer, offset?: number, size?: number): BinaryBuffer
   randomInt(max: number): number
@@ -132,6 +134,8 @@ export function pbkdf2Sync(
   keylen: number,
   digest: string
 ): Buffer
+export function privateDecrypt(privateKey: PrivateKeyInput, buffer: BinaryBuffer): Buffer
+export function publicEncrypt(key: PublicKeyInput, buffer: BinaryBuffer): Buffer
 export function randomBytes(size: number): Buffer
 export function randomFillSync(buffer: BinaryBuffer, offset?: number, size?: number): BinaryBuffer
 export function randomInt(max: number): number

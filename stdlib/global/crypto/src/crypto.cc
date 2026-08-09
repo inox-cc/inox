@@ -130,6 +130,13 @@ static Buffer inox_crypto_sign(
   const uint8_t* bytes,
   size_t len
 );
+static Buffer inox_crypto_rsa_crypt(
+  CryptoKeyState* key,
+  const uint8_t* bytes,
+  size_t len,
+  bool decrypt,
+  const char* message
+);
 static inox_status inox_crypto_verify(
   CryptoKeyState* key,
   inox::StringView algorithm,
@@ -1525,6 +1532,142 @@ KeyObject crypto::createPublicKey(const KeyObject& key) const {
   return KeyObject(state);
 }
 
+Buffer crypto::privateDecrypt(
+  const inox::Value& private_key,
+  const inox::Value& buffer
+) const {
+  const uint8_t* key_bytes = 0;
+  const uint8_t* data_bytes = 0;
+  size_t key_len = 0;
+  size_t data_len = 0;
+  CryptoKeyState* state = 0;
+  inox_status status = inox_crypto_data(private_key.raw(), &key_bytes, &key_len);
+
+  if (status == INOX_OK) {
+    status = inox_crypto_data(buffer.raw(), &data_bytes, &data_len);
+  }
+
+  if (status == INOX_OK) {
+    status = CryptoKeyState_create(&inox_default_allocator, key_bytes, key_len, true, &state);
+  }
+
+  if (status != INOX_OK) {
+    CryptoKeyState_free(state);
+
+    if (!inox::thrown()) {
+      if (status == INOX_ERR_OOM) {
+        inox::throw_out_of_memory();
+      } else {
+        inox_crypto_throw_failed("crypto.privateDecrypt failed");
+      }
+    }
+
+    return Buffer();
+  }
+
+  Buffer result = inox_crypto_rsa_crypt(
+    state,
+    data_bytes,
+    data_len,
+    true,
+    "crypto.privateDecrypt failed"
+  );
+  CryptoKeyState_free(state);
+  return result;
+}
+
+Buffer crypto::privateDecrypt(
+  const KeyObject& private_key,
+  const inox::Value& buffer
+) const {
+  const uint8_t* bytes = 0;
+  size_t len = 0;
+
+  if (inox_crypto_data(buffer.raw(), &bytes, &len) != INOX_OK) {
+    if (!inox::thrown()) {
+      inox_crypto_throw_failed("crypto.privateDecrypt failed");
+    }
+
+    return Buffer();
+  }
+
+  return inox_crypto_rsa_crypt(
+    private_key.handle_,
+    bytes,
+    len,
+    true,
+    "crypto.privateDecrypt failed"
+  );
+}
+
+Buffer crypto::publicEncrypt(
+  const inox::Value& key,
+  const inox::Value& buffer
+) const {
+  const uint8_t* key_bytes = 0;
+  const uint8_t* data_bytes = 0;
+  size_t key_len = 0;
+  size_t data_len = 0;
+  CryptoKeyState* state = 0;
+  inox_status status = inox_crypto_data(key.raw(), &key_bytes, &key_len);
+
+  if (status == INOX_OK) {
+    status = inox_crypto_data(buffer.raw(), &data_bytes, &data_len);
+  }
+
+  if (status == INOX_OK) {
+    status = CryptoKeyState_create(&inox_default_allocator, key_bytes, key_len, false, &state);
+  }
+
+  if (status != INOX_OK) {
+    CryptoKeyState_free(state);
+
+    if (!inox::thrown()) {
+      if (status == INOX_ERR_OOM) {
+        inox::throw_out_of_memory();
+      } else {
+        inox_crypto_throw_failed("crypto.publicEncrypt failed");
+      }
+    }
+
+    return Buffer();
+  }
+
+  Buffer result = inox_crypto_rsa_crypt(
+    state,
+    data_bytes,
+    data_len,
+    false,
+    "crypto.publicEncrypt failed"
+  );
+  CryptoKeyState_free(state);
+  return result;
+}
+
+Buffer crypto::publicEncrypt(
+  const KeyObject& key,
+  const inox::Value& buffer
+) const {
+  const uint8_t* bytes = 0;
+  size_t len = 0;
+
+  if (inox_crypto_data(buffer.raw(), &bytes, &len) != INOX_OK) {
+    if (!inox::thrown()) {
+      inox_crypto_throw_failed("crypto.publicEncrypt failed");
+    }
+
+    return Buffer();
+  }
+
+  return inox_crypto_rsa_crypt(
+    key.handle_,
+    bytes,
+    len,
+    false,
+    "crypto.publicEncrypt failed"
+  );
+}
+
 CryptoKeyPair crypto::generateKeyPairSync(
   inox::StringView type,
   const inox::Value& options
@@ -2681,6 +2824,94 @@ static Buffer inox_crypto_sign(
   (void)bytes;
   (void)len;
   inox_crypto_throw_failed("crypto.sign failed");
+  return Buffer();
+#endif
+}
+
+static Buffer inox_crypto_rsa_crypt(
+  CryptoKeyState* key,
+  const uint8_t* bytes,
+  size_t len,
+  bool decrypt,
+  const char* message
+) {
+  if (
+    key == 0 ||
+    key->key_type != INOX_CRYPTO_KEY_RSA ||
+    (decrypt && !key->private_key) ||
+    (bytes == 0 && len != 0)
+  ) {
+    inox_crypto_throw_failed(message);
+    return Buffer();
+  }
+
+#if INOX_CRYPTO_HAS_EVP
+  if (key->key == 0) {
+    inox_crypto_throw_failed(message);
+    return Buffer();
+  }
+
+  EVP_PKEY_CTX* context = EVP_PKEY_CTX_new(key->key, 0);
+
+  if (context == 0) {
+    inox::throw_out_of_memory();
+    return Buffer();
+  }
+
+  const uint8_t empty = 0;
+  const uint8_t* input = bytes == 0 ? &empty : bytes;
+  size_t output_len = 0;
+  const int initialized = decrypt
+    ? EVP_PKEY_decrypt_init(context)
+    : EVP_PKEY_encrypt_init(context);
+
+  if (
+    initialized != 1 ||
+    EVP_PKEY_CTX_set_rsa_padding(context, RSA_PKCS1_OAEP_PADDING) != 1 ||
+    EVP_PKEY_CTX_set_rsa_oaep_md(context, EVP_sha1()) != 1 ||
+    EVP_PKEY_CTX_set_rsa_mgf1_md(context, EVP_sha1()) != 1 ||
+    (
+      decrypt
+        ? EVP_PKEY_decrypt(context, 0, &output_len, input, len)
+        : EVP_PKEY_encrypt(context, 0, &output_len, input, len)
+    ) != 1 ||
+    output_len == 0
+  ) {
+    EVP_PKEY_CTX_free(context);
+    ERR_clear_error();
+    inox_crypto_throw_failed(message);
+    return Buffer();
+  }
+
+  Buffer output = Buffer::alloc((double)output_len);
+
+  if (inox::thrown() || !output.valid()) {
+    EVP_PKEY_CTX_free(context);
+    return Buffer();
+  }
+
+  size_t actual_len = output_len;
+  const int completed = decrypt
+    ? EVP_PKEY_decrypt(context, output.bytes().data(), &actual_len, input, len)
+    : EVP_PKEY_encrypt(context, output.bytes().data(), &actual_len, input, len);
+  EVP_PKEY_CTX_free(context);
+
+  if (completed != 1 || (!decrypt && actual_len == 0) || actual_len > output_len) {
+    ERR_clear_error();
+    inox_crypto_throw_failed(message);
+    return Buffer();
+  }
+
+  if (actual_len == output_len) {
+    return output;
+  }
+
+  return output.slice(0, (double)actual_len);
+#else
+  (void)bytes;
+  (void)len;
+  (void)decrypt;
+  inox_crypto_throw_failed(message);
   return Buffer();
 #endif
 }

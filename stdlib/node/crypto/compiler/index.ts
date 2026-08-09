@@ -175,6 +175,26 @@ const operations: LibraryOperationDescriptor[] = [
     cResultMode: 'value'
   }),
   moduleCall(
+    'privateDecrypt',
+    ['value', 'value'],
+    [],
+    2,
+    2,
+    [privateKeyInputArgument(), bytesArgument()],
+    signatureRequirements,
+    { resultTypeRef: nominalTypeRef(bufferTypeId), cResultMode: 'value' }
+  ),
+  moduleCall(
+    'publicEncrypt',
+    ['value', 'value'],
+    [],
+    2,
+    2,
+    [publicKeyInputArgument(), bytesArgument()],
+    signatureRequirements,
+    { resultTypeRef: nominalTypeRef(bufferTypeId), cResultMode: 'value' }
+  ),
+  moduleCall(
     'generateKeyPairSync',
     ['string-view', 'value'],
     [],
@@ -909,10 +929,8 @@ function unsupportedMethods(): string[] {
     'getFips',
     'hkdf',
     'pbkdf2',
-    'privateDecrypt',
     'privateEncrypt',
     'publicDecrypt',
-    'publicEncrypt',
     'randomFill',
     'randomUUIDv7',
     'scrypt',
