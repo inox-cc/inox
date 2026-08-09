@@ -22,6 +22,7 @@ test('entrypoint package node:http владеет native API и runtime plan', a
   assert.deepEqual(httpPackage.nativeSources, ['stdlib/node/http/src/http.cc'])
   assert.deepEqual(httpPackage.nativeIncludeDirs, ['stdlib/node/http/include'])
 
+  const agent = httpPackage.compilerPackage.nativeTypes?.find((nativeType) => nativeType.typeId === 'node:http#Agent')
   const server = httpPackage.compilerPackage.nativeTypes?.find((nativeType) => nativeType.typeId === 'node:http#Server')
   const request = httpPackage.compilerPackage.nativeTypes?.find(
     (nativeType) => nativeType.typeId === 'node:http#IncomingMessage'
@@ -33,6 +34,8 @@ test('entrypoint package node:http владеет native API и runtime plan', a
     (nativeType) => nativeType.typeId === 'node:http#ClientRequest'
   )
 
+  assert.equal(agent?.libraryId, 'node:http')
+  assert.equal(agent?.cppType, 'HttpAgent')
   assert.equal(server?.libraryId, 'node:http')
   assert.equal(server?.cppType, 'HttpServer')
   assert.equal(request?.cppType, 'HttpRequest')

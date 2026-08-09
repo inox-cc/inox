@@ -9,6 +9,9 @@ import type {
 import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
 
 const operationIds = [
+  'node:http#Agent.construct',
+  'node:http#globalAgent',
+  'node:http#Agent.destroy',
   'node:http#createServer',
   'node:http#get',
   'node:http#request',
@@ -66,6 +69,10 @@ test('node:http operations describe results only through TypeRef', async () => {
     operations.map((operation) => operation.operationId),
     operationIds
   )
+
+  assertResult(operation(operations, 'node:http#Agent.construct'), nominalTypeRef('node:http#Agent', 'value'))
+  assertResult(operation(operations, 'node:http#globalAgent'), nominalTypeRef('node:http#Agent', 'value'))
+  assertResult(operation(operations, 'node:http#Agent.destroy'), primitiveTypeRef('void'))
 
   assertResult(operation(operations, 'node:http#createServer'), nominalTypeRef('node:http#Server', 'value'))
   assertResult(operation(operations, 'node:http#get'), nominalTypeRef('node:http#ClientRequest', 'value'))

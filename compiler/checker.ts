@@ -5579,6 +5579,7 @@ class Checker {
 
       if (
         booleanLiterals.length > 0 &&
+        valueType === 'boolean' &&
         (property.value.type !== 'BooleanLiteral' || !booleanLiterals.includes(property.value.value))
       ) {
         this.report(
@@ -5592,6 +5593,7 @@ class Checker {
 
       if (
         stringLiterals.length > 0 &&
+        valueType === 'string' &&
         (property.value.type !== 'StringLiteral' || !stringLiterals.includes(property.value.value))
       ) {
         this.report(
@@ -5617,7 +5619,7 @@ class Checker {
 
       const objectTypeIds = field.objectTypeIds ?? []
 
-      if (objectTypeIds.length > 0) {
+      if (objectTypeIds.length > 0 && valueType === 'object') {
         const shape = this.resolveExpressionShape(property.value)
         const objectTypeId = shape?.libraryTypeId
         let assignable = false

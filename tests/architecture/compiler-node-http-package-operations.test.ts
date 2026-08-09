@@ -9,6 +9,7 @@ import type {
 import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
 
 const serverTypeId = 'node:http#Server'
+const agentTypeId = 'node:http#Agent'
 const requestTypeId = 'node:http#IncomingMessage'
 const responseTypeId = 'node:http#ServerResponse'
 const clientRequestTypeId = 'node:http#ClientRequest'
@@ -23,6 +24,8 @@ test('node:http объявляет server и client operations через packag
   const ids = operations.map((operation) => operation.operationId).sort()
 
   assert.deepEqual(ids, [
+    'node:http#Agent.construct',
+    'node:http#Agent.destroy',
     'node:http#ClientRequest.destroy',
     'node:http#ClientRequest.destroyed',
     'node:http#ClientRequest.end',
@@ -68,8 +71,20 @@ test('node:http объявляет server и client operations через packag
     'node:http#ServerResponse.writeHead',
     'node:http#createServer',
     'node:http#get',
+    'node:http#globalAgent',
     'node:http#request'
   ])
+
+  const agentConstruct = operation(operations, 'node:http#Agent.construct')
+  const globalAgent = operation(operations, 'node:http#globalAgent')
+  const agentDestroy = operation(operations, 'node:http#Agent.destroy')
+
+  assert.equal(agentConstruct.kind, 'construct')
+  assert.equal(agentConstruct.cExpression, 'HttpAgent')
+  assert.equal(globalAgent.kind, 'member-read')
+  assert.equal(globalAgent.cExpression, 'http.globalAgent()')
+  assert.equal(agentDestroy.receiverTypeId, agentTypeId)
+  assert.equal(agentDestroy.cReceiverAdapter, 'HttpAgent($value)')
 
   const createServer = operation(operations, 'node:http#createServer')
 
@@ -91,6 +106,13 @@ test('node:http объявляет server и client operations через packag
       nullable: false,
       ownership: 'value',
       traits: []
+    })
+    assert.deepEqual(createClientRequest.argumentChecks?.[0]?.objectLiteralFields?.[0], {
+      name: 'agent',
+      valueTypes: ['boolean', 'object'],
+      booleanLiterals: [false],
+      objectTypeIds: [agentTypeId],
+      optional: true
     })
   }
 

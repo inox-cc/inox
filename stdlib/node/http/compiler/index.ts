@@ -16,6 +16,7 @@ const collectionsLibraryId = 'global:collections'
 const runtimeRequirement = libraryId
 const arrayRuntimeRequirement = `${collectionsLibraryId}#array`
 const arrayTypeId = `${collectionsLibraryId}#Array`
+const agentTypeId = `${libraryId}#Agent`
 const serverTypeId = `${libraryId}#Server`
 const requestTypeId = `${libraryId}#IncomingMessage`
 const responseTypeId = `${libraryId}#ServerResponse`
@@ -45,6 +46,9 @@ const stringCResultMapping = cResultMapping('inox::String')
 const valueCResultMapping = cResultMapping('inox::Value')
 
 const operations: LibraryOperationDescriptor[] = [
+  agentConstructorOperation(),
+  globalAgentReadOperation(),
+  agentDestroyOperation(),
   createServerOperation(),
   clientCreateOperation('get'),
   clientCreateOperation('request'),
@@ -97,6 +101,17 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
   dependencies: ['global:binary', collectionsLibraryId, 'global:error', 'global:fetch', 'global:strings', 'node:net'],
   nativeTypes: [
+    {
+      libraryId,
+      typeId: agentTypeId,
+      declarationNames: ['Agent'],
+      valueType: 'object',
+      cppType: 'HttpAgent',
+      baseTypeIds: [],
+      runtimeRequirements,
+      cValueAdapter: 'HttpAgent(inox::Value($value))',
+      cValueAdapterPreservesPendingException: true
+    },
     {
       libraryId,
       typeId: serverTypeId,
@@ -215,6 +230,64 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       ]
     }
   ]
+}
+
+function agentConstructorOperation(): LibraryOperationDescriptor {
+  const options: LibraryArgumentCheckDescriptor = {
+    valueTypes: ['object'],
+    objectLiteralFields: [
+      { name: 'keepAlive', valueTypes: ['boolean'], optional: true },
+      { name: 'maxFreeSockets', valueTypes: ['number'], optional: true },
+      { name: 'timeout', valueTypes: ['number'], optional: true }
+    ]
+  }
+
+  return {
+    libraryId,
+    bindingId: moduleBinding('Agent'),
+    bindingAliases: [moduleBinding('default.Agent')],
+    operationId: `${libraryId}#Agent.construct`,
+    kind: 'construct',
+    runtimeRequirements,
+    cExpression: 'HttpAgent',
+    cFailureMode: 'thrown',
+    minArgs: 0,
+    maxArgs: 1,
+    argumentChecks: [options],
+    variants: [
+      operationVariant(0, 0, []),
+      operationVariant(1, 1, ['value'], {
+        argumentChecks: [options],
+        cArgumentAdapters: ['HttpAgentOptions($value)']
+      })
+    ],
+    resultTypeRef: nominalTypeRef(agentTypeId, 'value')
+  }
+}
+
+function globalAgentReadOperation(): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: moduleBinding('globalAgent'),
+    bindingAliases: [moduleBinding('default.globalAgent')],
+    operationId: `${libraryId}#globalAgent`,
+    kind: 'member-read',
+    runtimeRequirements,
+    cExpression: 'http.globalAgent()',
+    cFailureMode: 'thrown',
+    resultTypeRef: nominalTypeRef(agentTypeId, 'value')
+  }
+}
+
+function agentDestroyOperation(): LibraryOperationDescriptor {
+  return {
+    ...receiverOperation(agentTypeId, 'Agent', 'HttpAgent($value)', 'destroy'),
+    cArgumentKinds: ['receiver'],
+    minArgs: 0,
+    maxArgs: 0,
+    argumentChecks: [],
+    resultTypeRef: voidTypeRef
+  }
 }
 
 function createServerOperation(): LibraryOperationDescriptor {
@@ -1092,6 +1165,13 @@ function requestOptionsArgument(): LibraryArgumentCheckDescriptor {
   return {
     valueTypes: ['object'],
     objectLiteralFields: [
+      {
+        name: 'agent',
+        valueTypes: ['boolean', 'object'],
+        booleanLiterals: [false],
+        objectTypeIds: [agentTypeId],
+        optional: true
+      },
       { name: 'headers', valueTypes: ['object'], optional: true },
       { name: 'host', valueTypes: ['string'], optional: true },
       { name: 'hostname', valueTypes: ['string'], optional: true },

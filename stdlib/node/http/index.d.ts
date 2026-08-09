@@ -16,7 +16,14 @@ export interface IncomingHttpHeaders {
   readonly [name: string]: string | undefined
 }
 
+export interface AgentOptions {
+  readonly keepAlive?: boolean
+  readonly maxFreeSockets?: number
+  readonly timeout?: number
+}
+
 export interface RequestOptions {
+  readonly agent?: Agent | false
   readonly headers?: Record<string, string>
   readonly host?: string
   readonly hostname?: string
@@ -28,9 +35,11 @@ export interface RequestOptions {
 }
 
 export interface HttpModule {
+  readonly Agent: typeof Agent
   readonly IncomingMessage: typeof IncomingMessage
   readonly Server: typeof Server
   readonly ServerResponse: typeof ServerResponse
+  readonly globalAgent: Agent
 
   createServer(listener?: RequestListener): Server
   get(url: string, listener?: ResponseListener): ClientRequest
@@ -39,6 +48,11 @@ export interface HttpModule {
   request(url: string, listener?: ResponseListener): ClientRequest
   request(url: string, options: RequestOptions, listener?: ResponseListener): ClientRequest
   request(options: RequestOptions, listener?: ResponseListener): ClientRequest
+}
+
+export class Agent {
+  constructor(options?: AgentOptions)
+  destroy(): void
 }
 
 export class IncomingMessage {
@@ -105,6 +119,7 @@ export class Server {
 }
 
 export function createServer(listener?: RequestListener): Server
+export const globalAgent: Agent
 export function get(url: string, listener?: ResponseListener): ClientRequest
 export function get(url: string, options: RequestOptions, listener?: ResponseListener): ClientRequest
 export function get(options: RequestOptions, listener?: ResponseListener): ClientRequest

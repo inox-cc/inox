@@ -194,8 +194,8 @@ async function main(): Promise<void> {
     )
     assert.deepEqual(
       httpKeepAliveClientServer.stats(),
-      { connections: 1, requests: 2 },
-      processFailure('HTTP client открыл лишнее соединение вместо keep-alive reuse', stdout, stderr)
+      { connections: 5, requests: 6 },
+      processFailure('HTTP Agent неверно переиспользовал или изолировал соединения', stdout, stderr)
     )
     assert.ok(
       lines.includes('INOX_HTTPS_KEEP_ALIVE_CLIENT_OK'),
@@ -326,16 +326,34 @@ async function startHttpKeepAliveClientServer(nonce: string): Promise<{
     const marker = request.headers['x-inox-keep-alive']
     const first = request.url === '/first'
     const second = request.url === '/second'
-    const valid = request.method === 'GET' && marker === nonce && (first || second)
+    const afterDestroy = request.url === '/after-destroy'
+    const isolatedFirst = request.url === '/isolated-first'
+    const isolatedSecond = request.url === '/isolated-second'
+    const global = request.url === '/global'
+    const valid =
+      request.method === 'GET' &&
+      marker === nonce &&
+      (first || second || afterDestroy || isolatedFirst || isolatedSecond || global)
 
     response.statusCode = valid ? 200 : 400
     response.setHeader('Content-Type', 'text/plain')
 
-    if (second) {
+    if (afterDestroy || isolatedFirst || isolatedSecond || global) {
       response.setHeader('Connection', 'close')
     }
 
-    response.end(valid ? `keep-alive-${first ? 'first' : 'second'} ${nonce}` : 'invalid keep-alive request')
+    const name = first
+      ? 'first'
+      : second
+        ? 'second'
+        : afterDestroy
+          ? 'after-destroy'
+          : isolatedFirst
+            ? 'isolated-first'
+            : isolatedSecond
+              ? 'isolated-second'
+              : 'global'
+    response.end(valid ? `keep-alive-${name} ${nonce}` : 'invalid keep-alive request')
   })
 
   server.on('connection', () => {

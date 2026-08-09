@@ -25,10 +25,38 @@ private:
   friend class HttpServer;
 };
 
+class HttpAgentOptions {
+public:
+  HttpAgentOptions();
+  explicit HttpAgentOptions(const inox::Value& value);
+
+private:
+  bool valid_;
+  bool keep_alive_;
+  double max_free_sockets_;
+  double timeout_;
+
+  friend class HttpAgent;
+};
+
+class HttpAgent : public inox::Value {
+public:
+  HttpAgent();
+  explicit HttpAgent(const HttpAgentOptions& options);
+  explicit HttpAgent(const inox::Value& value);
+  explicit HttpAgent(inox::Value&& value);
+
+  using inox::Value::operator=;
+
+  void destroy();
+};
+
 class HttpRequestOptions {
 public:
   HttpRequestOptions();
   explicit HttpRequestOptions(const inox::Value& value);
+  const inox::Value& agent() const;
+  bool agentDisabled() const;
   const inox::Value& headers() const;
   const std::optional<inox::String>& host() const;
   const std::optional<inox::String>& hostname() const;
@@ -41,6 +69,8 @@ public:
 
 private:
   bool valid_;
+  inox::Value agent_;
+  bool agent_disabled_;
   std::optional<inox::String> host_;
   std::optional<inox::String> hostname_;
   std::optional<inox::String> method_;
@@ -214,6 +244,7 @@ class HttpModule {
 public:
   HttpServer createServer() const;
   HttpServer createServer(inox::Callback listener) const;
+  HttpAgent globalAgent() const;
   HttpClientRequest get(inox::StringView url) const;
   HttpClientRequest get(inox::StringView url, inox::Callback listener) const;
   HttpClientRequest get(inox::StringView url, const HttpRequestOptions& options) const;

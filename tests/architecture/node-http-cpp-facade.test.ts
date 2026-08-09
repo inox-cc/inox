@@ -9,6 +9,9 @@ test('node:http использует declarations-only JS-shaped Value facade б
 
   assert.match(header, /#include "inox\/callback\.h"/)
   assert.match(header, /class HttpListenOptions[\s\S]*explicit HttpListenOptions\(const inox::Value&/)
+  assert.match(header, /class HttpAgentOptions[\s\S]*explicit HttpAgentOptions\(const inox::Value&/)
+  assert.match(header, /class HttpAgent\s*:\s*public inox::Value/)
+  assert.match(header, /class HttpAgent[\s\S]*void destroy\(\)/)
   assert.match(header, /class HttpHeaders[\s\S]*explicit HttpHeaders\(const inox::Value&/)
   assert.match(header, /class HttpServer\s*:\s*public inox::Value/)
   assert.match(header, /class HttpRequest\s*:\s*public inox::Value/)
