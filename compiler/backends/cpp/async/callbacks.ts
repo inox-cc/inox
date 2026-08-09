@@ -120,6 +120,7 @@ type CallbackFunctionContext = CallbackEmitContext & {
   externalEventLoop: boolean
   functionTypes: CallbackFunctionTypeMap
   localValueNames: CallbackStringSet
+  nullableVariables?: CallbackStringSet
   objectShapes: CallbackObjectShapeMap
   asyncResultConstructorHandlers: CallbackAsyncResultConstructorHandlerMap
   returnShape?: CObjectShape | null
@@ -4596,6 +4597,10 @@ function emitRuntimeArrowCallbackParamPrelude(
     pushLines(lines, emitRuntimeCallbackWrapperArgChecks(param, index, context.libraries))
     context.variables.set(name, param.valueType)
 
+    if ((param.nullable === true || param.optional === true) && isNullableScalarType(param.valueType)) {
+      context.nullableVariables?.add(name)
+    }
+
     const nativeCppType = libraryNativeBoundaryCppType(
       param.valueType,
       param.nullable === true,
@@ -4612,7 +4617,7 @@ function emitRuntimeArrowCallbackParamPrelude(
       continue
     }
 
-    if (param.nullable === true && isNullableScalarType(param.valueType)) {
+    if ((param.nullable === true || param.optional === true) && isNullableScalarType(param.valueType)) {
       lines.push(`inox_value ${cName} = ${value};`)
       index = index + 1
       continue

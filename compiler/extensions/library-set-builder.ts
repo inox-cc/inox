@@ -2796,6 +2796,8 @@ function callbackParametersFingerprint(parameters: LibraryCallbackParameterDescr
         ':' +
         (parameter.nullable === true ? 'nullable' : '') +
         ':' +
+        (parameter.optional === true ? 'optional' : '') +
+        ':' +
         typeRefFingerprintOrEmpty(parameter.typeRef) +
         ':' +
         (parameter.resultTypeId ?? '') +

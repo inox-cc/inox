@@ -3,6 +3,13 @@ import type { Buffer, Uint8Array } from 'node:buffer';
 export type FsPath = string;
 export type FsEncoding = 'utf8';
 export type FsData = string | Buffer | Uint8Array;
+export type NoParamCallback = (error: Error | null) => void;
+export type BufferCallback = (error: Error | null, data: Buffer) => void;
+export type StringCallback = (error: Error | null, value: string) => void;
+export type StringArrayCallback = (error: Error | null, values: string[]) => void;
+export type DirentArrayCallback = (error: Error | null, values: Dirent[]) => void;
+export type StatsCallback = (error: Error | null, stats: Stats) => void;
+export type MakeDirectoryCallback = (error: Error | null, path?: string) => void;
 
 export interface AccessConstants {
   readonly F_OK: number;
@@ -29,6 +36,10 @@ export interface Stats {
 
 export interface MakeDirectoryOptions {
   readonly recursive?: boolean;
+}
+
+export interface RecursiveMakeDirectoryOptions {
+  readonly recursive: true;
 }
 
 export interface ReadDirOptions {
@@ -68,6 +79,31 @@ export interface FsModule {
   readonly constants: AccessConstants;
   readonly promises: FsPromises;
 
+  access(path: FsPath, callback: NoParamCallback): void;
+  access(path: FsPath, mode: number, callback: NoParamCallback): void;
+  appendFile(path: FsPath, data: FsData, callback: NoParamCallback): void;
+  appendFile(path: FsPath, data: FsData, encoding: FsEncoding, callback: NoParamCallback): void;
+  copyFile(src: FsPath, dest: FsPath, callback: NoParamCallback): void;
+  lstat(path: FsPath, callback: StatsCallback): void;
+  mkdir(path: FsPath, callback: NoParamCallback): void;
+  mkdir(path: FsPath, options: RecursiveMakeDirectoryOptions, callback: MakeDirectoryCallback): void;
+  mkdir(path: FsPath, options: MakeDirectoryOptions, callback: NoParamCallback): void;
+  readFile(path: FsPath, callback: BufferCallback): void;
+  readFile(path: FsPath, encoding: FsEncoding, callback: StringCallback): void;
+  readdir(path: FsPath, callback: StringArrayCallback): void;
+  readdir(path: FsPath, options: FsEncoding | ReadDirOptions, callback: StringArrayCallback): void;
+  readdir(path: FsPath, options: ReadDirWithFileTypesOptions, callback: DirentArrayCallback): void;
+  readlink(path: FsPath, callback: StringCallback): void;
+  realpath(path: FsPath, callback: StringCallback): void;
+  rename(oldPath: FsPath, newPath: FsPath, callback: NoParamCallback): void;
+  rm(path: FsPath, callback: NoParamCallback): void;
+  rm(path: FsPath, options: RmOptions, callback: NoParamCallback): void;
+  stat(path: FsPath, callback: StatsCallback): void;
+  symlink(target: FsPath, path: FsPath, callback: NoParamCallback): void;
+  unlink(path: FsPath, callback: NoParamCallback): void;
+  writeFile(path: FsPath, data: FsData, callback: NoParamCallback): void;
+  writeFile(path: FsPath, data: FsData, encoding: FsEncoding, callback: NoParamCallback): void;
+
   accessSync(path: FsPath, mode?: number): void;
   appendFileSync(path: FsPath, data: FsData, encoding?: FsEncoding): void;
   copyFileSync(src: FsPath, dest: FsPath): void;
@@ -90,6 +126,31 @@ export interface FsModule {
 
 export const constants: AccessConstants;
 export const promises: FsPromises;
+
+export function access(path: FsPath, callback: NoParamCallback): void;
+export function access(path: FsPath, mode: number, callback: NoParamCallback): void;
+export function appendFile(path: FsPath, data: FsData, callback: NoParamCallback): void;
+export function appendFile(path: FsPath, data: FsData, encoding: FsEncoding, callback: NoParamCallback): void;
+export function copyFile(src: FsPath, dest: FsPath, callback: NoParamCallback): void;
+export function lstat(path: FsPath, callback: StatsCallback): void;
+export function mkdir(path: FsPath, callback: NoParamCallback): void;
+export function mkdir(path: FsPath, options: RecursiveMakeDirectoryOptions, callback: MakeDirectoryCallback): void;
+export function mkdir(path: FsPath, options: MakeDirectoryOptions, callback: NoParamCallback): void;
+export function readFile(path: FsPath, callback: BufferCallback): void;
+export function readFile(path: FsPath, encoding: FsEncoding, callback: StringCallback): void;
+export function readdir(path: FsPath, callback: StringArrayCallback): void;
+export function readdir(path: FsPath, options: FsEncoding | ReadDirOptions, callback: StringArrayCallback): void;
+export function readdir(path: FsPath, options: ReadDirWithFileTypesOptions, callback: DirentArrayCallback): void;
+export function readlink(path: FsPath, callback: StringCallback): void;
+export function realpath(path: FsPath, callback: StringCallback): void;
+export function rename(oldPath: FsPath, newPath: FsPath, callback: NoParamCallback): void;
+export function rm(path: FsPath, callback: NoParamCallback): void;
+export function rm(path: FsPath, options: RmOptions, callback: NoParamCallback): void;
+export function stat(path: FsPath, callback: StatsCallback): void;
+export function symlink(target: FsPath, path: FsPath, callback: NoParamCallback): void;
+export function unlink(path: FsPath, callback: NoParamCallback): void;
+export function writeFile(path: FsPath, data: FsData, callback: NoParamCallback): void;
+export function writeFile(path: FsPath, data: FsData, encoding: FsEncoding, callback: NoParamCallback): void;
 
 export function accessSync(path: FsPath, mode?: number): void;
 export function appendFileSync(path: FsPath, data: FsData, encoding?: FsEncoding): void;

@@ -57,6 +57,21 @@ test('node:fs и node:fs/promises описывают все implemented results 
     ['node:fs#Stats.isDirectory', [result(booleanType)]],
     ['node:fs#Dirent.isFile', [result(booleanType)]],
     ['node:fs#Dirent.isDirectory', [result(booleanType)]],
+    ['node:fs#access', repeated(voidType, 2)],
+    ['node:fs#appendFile', repeated(voidType, 4)],
+    ['node:fs#copyFile', [result(voidType)]],
+    ['node:fs#lstat', [result(voidType)]],
+    ['node:fs#mkdir', repeated(voidType, 3)],
+    ['node:fs#readFile', repeated(voidType, 2)],
+    ['node:fs#readdir', repeated(voidType, 4)],
+    ['node:fs#readlink', [result(voidType)]],
+    ['node:fs#realpath', [result(voidType)]],
+    ['node:fs#rename', [result(voidType)]],
+    ['node:fs#rm', repeated(voidType, 2)],
+    ['node:fs#stat', [result(voidType)]],
+    ['node:fs#symlink', [result(voidType)]],
+    ['node:fs#unlink', [result(voidType)]],
+    ['node:fs#writeFile', repeated(voidType, 4)],
     ['node:fs/promises#access', repeated(promiseType(voidType), 2)],
     ['node:fs/promises#appendFile', repeated(promiseType(voidType), 2)],
     ['node:fs/promises#copyFile', [result(promiseType(voidType))]],
@@ -86,12 +101,12 @@ test('node:fs и node:fs/promises описывают все implemented results 
     ...fsPromisesPackage.operations.filter((operation) => !operation.diagnosticCode)
   ]
 
-  assert.equal(operations.length, 39)
+  assert.equal(operations.length, expected.size)
   assert.deepEqual(
     operations.map((operation) => operation.operationId),
     [...expected.keys()]
   )
-  assert.equal(operations.flatMap((operation) => operation.variants ?? []).length, 24)
+  assert.equal(operations.flatMap((operation) => operation.variants ?? []).length, 45)
 
   for (const operation of operations) {
     assert.deepEqual(effectiveResults(operation), expected.get(operation.operationId))
@@ -106,14 +121,19 @@ function effectiveResults(operation: LibraryOperationDescriptor): EffectiveResul
     return [effectiveResult(operation)]
   }
 
-  assert.equal(operation.resultTypeRef, undefined)
-  assert.equal(operation.cResultMapping, undefined)
-  return variants.map(effectiveResult)
+  return variants.map((variant) => effectiveResult(variant, operation))
 }
 
-function effectiveResult(value: LibraryOperationDescriptor | LibraryOperationVariantDescriptor): EffectiveResult {
-  assert.ok(value.resultTypeRef)
-  return result(value.resultTypeRef, value.cResultMapping ?? null)
+function effectiveResult(
+  value: LibraryOperationDescriptor | LibraryOperationVariantDescriptor,
+  fallback?: LibraryOperationDescriptor
+): EffectiveResult {
+  const resultTypeRef = value.resultTypeRef ?? fallback?.resultTypeRef
+  const cResultMapping =
+    typeof value.cResultMapping === 'undefined' ? (fallback?.cResultMapping ?? null) : value.cResultMapping
+
+  assert.ok(resultTypeRef)
+  return result(resultTypeRef, cResultMapping)
 }
 
 function assertNoLegacyResultMetadata(operation: LibraryOperationDescriptor): void {

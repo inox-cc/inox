@@ -358,6 +358,7 @@ export type LibraryCallbackParameterDescriptor = {
   valueType: string
   typeRef?: TypeRef | null
   nullable?: boolean
+  optional?: boolean
   resultTypeId?: LibraryObjectTypeId | null
   shapeFields?: LibraryResultShapeFieldDescriptor[]
 }

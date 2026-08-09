@@ -5435,6 +5435,7 @@ class Checker {
         name: parameter.name,
         valueType: parameter.valueType,
         nullable: parameter.nullable === true,
+        optional: parameter.optional === true,
         loc: callbackLoc
       }
       const parameterTypeRefTemplate = parameter.typeRef
@@ -7642,7 +7643,7 @@ class Checker {
 
           paramInfo = {
             valueType: expectedValueType,
-            nullable: expected.nullable === true,
+            nullable: expected.nullable === true || expected.optional === true,
             typeRef: expected.typeRef ?? null,
             asyncResultValueType: paramAsyncResultValueType,
             functionType: expectedFunctionType,
@@ -7681,6 +7682,9 @@ class Checker {
 
         param.valueType = paramInfo.valueType
         param.typeRef = paramInfo.typeRef
+        if (expected?.optional === true) {
+          param.optional = true
+        }
         param.nullable =
           paramInfo.nullable ||
           (param.optional === true && (param.defaultValue === null || typeof param.defaultValue === 'undefined'))

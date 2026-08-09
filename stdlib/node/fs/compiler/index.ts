@@ -1,6 +1,7 @@
 import type {
   CompilerLibraryPackageDescriptor,
   LibraryArgumentCheckDescriptor,
+  LibraryCallbackParameterDescriptor,
   LibraryCArgumentKind,
   LibraryCResultMappingDescriptor,
   LibraryObjectLiteralFieldDescriptor,
@@ -60,7 +61,7 @@ const operations: LibraryOperationDescriptor[] = [
   receiverBooleanOperation(statsTypeId, 'Stats', 'isDirectory'),
   receiverBooleanOperation(direntTypeId, 'Dirent', 'isFile'),
   receiverBooleanOperation(direntTypeId, 'Dirent', 'isDirectory'),
-  ...callbackMethodNames().map(unsupportedCallbackOperation)
+  ...createFsCallbackOperations()
 ]
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
@@ -99,7 +100,14 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: ['async-runtime', arrayRuntimeRequirement, 'managed-values', 'node:buffer', 'string-bytes'],
+      dependencies: [
+        'async-runtime',
+        arrayRuntimeRequirement,
+        'callback-values',
+        'managed-values',
+        'node:buffer',
+        'string-bytes'
+      ],
       cPreludeIncludes: ['inox/fs.h'],
       capabilities: ['fs']
     }
@@ -500,16 +508,347 @@ function errorTypeRef(): NominalTypeRef {
   return nominalTypeRef(errorTypeId)
 }
 
-function unsupportedCallbackOperation(name: string): LibraryOperationDescriptor {
+function createFsCallbackOperations(): LibraryOperationDescriptor[] {
+  return [
+    callbackAccessOperation(),
+    callbackWriteOperation('appendFile'),
+    callbackTwoPathOperation('copyFile'),
+    callbackValuePathOperation('lstat', callbackArgument('stats', 'object', statsTypeRef)),
+    callbackMkdirOperation(),
+    callbackReadFileOperation(),
+    callbackReaddirOperation(),
+    callbackValuePathOperation('readlink', callbackArgument('linkString', 'string', stringTypeRef)),
+    callbackValuePathOperation('realpath', callbackArgument('resolvedPath', 'string', stringTypeRef)),
+    callbackTwoPathOperation('rename'),
+    callbackRmOperation(),
+    callbackValuePathOperation('stat', callbackArgument('stats', 'object', statsTypeRef)),
+    callbackTwoPathOperation('symlink'),
+    callbackVoidPathOperation('unlink'),
+    callbackWriteOperation('writeFile')
+  ]
+}
+
+function callbackAccessOperation(): LibraryOperationDescriptor {
+  const callback = callbackArgument()
+
+  return callbackOperation(
+    'access',
+    2,
+    3,
+    [stringArgument(), { valueTypes: ['number', 'function'] }, callback],
+    [
+      callbackVariant(2, ['string-view', 'runtime-callback'], [stringArgument(), callback]),
+      callbackVariant(3, ['string-view', 'number', 'runtime-callback'], [stringArgument(), numberArgument(), callback])
+    ]
+  )
+}
+
+function callbackWriteOperation(name: 'appendFile' | 'writeFile'): LibraryOperationDescriptor {
+  const callback = callbackArgument()
+  const variants: LibraryOperationVariantDescriptor[] = []
+
+  for (const argumentCount of [3, 4]) {
+    const callbackIndex = argumentCount - 1
+    const checks =
+      argumentCount === 3
+        ? [stringArgument(), { valueTypes: ['string', 'bytes'] }, callback]
+        : [stringArgument(), { valueTypes: ['string', 'bytes'] }, utf8Argument(name), callback]
+    const sources = [{ argumentIndex: 0 }, { argumentIndex: 1 }, { argumentIndex: callbackIndex }]
+
+    variants.push({
+      ...callbackVariant(argumentCount, ['string-view', 'string-view', 'runtime-callback'], checks),
+      argumentIndex: 1,
+      argumentValueTypes: ['string'],
+      cArgumentSources: sources
+    })
+    variants.push({
+      ...callbackVariant(argumentCount, ['string-view', 'value', 'runtime-callback'], checks),
+      argumentIndex: 1,
+      argumentValueTypes: ['bytes'],
+      cArgumentAdapters: ['', 'Uint8Array($value)', ''],
+      cArgumentAdapterTypeIds: ['', uint8ArrayTypeId, ''],
+      cArgumentSources: sources
+    })
+  }
+
+  return callbackOperation(
+    name,
+    3,
+    4,
+    [stringArgument(), { valueTypes: ['string', 'bytes'] }, { valueTypes: ['string', 'function'] }, callback],
+    variants
+  )
+}
+
+function callbackTwoPathOperation(name: 'copyFile' | 'rename' | 'symlink'): LibraryOperationDescriptor {
+  const callback = callbackArgument()
+
+  return callbackCallOperation(
+    name,
+    ['string-view', 'string-view', 'runtime-callback'],
+    [stringArgument(), stringArgument(), callback]
+  )
+}
+
+function callbackValuePathOperation(
+  name: 'lstat' | 'readlink' | 'realpath' | 'stat',
+  callback: LibraryArgumentCheckDescriptor
+): LibraryOperationDescriptor {
+  return callbackCallOperation(name, ['string-view', 'runtime-callback'], [stringArgument(), callback])
+}
+
+function callbackVoidPathOperation(name: 'unlink'): LibraryOperationDescriptor {
+  return callbackCallOperation(name, ['string-view', 'runtime-callback'], [stringArgument(), callbackArgument()])
+}
+
+function callbackMkdirOperation(): LibraryOperationDescriptor {
+  const callback = callbackArgument()
+  const recursiveCallback = callbackArgument('path', 'string', stringTypeRef, true)
+
+  return callbackOperation(
+    'mkdir',
+    2,
+    3,
+    [stringArgument(), { valueTypes: ['object', 'function'] }, callback],
+    [
+      callbackVariant(2, ['string-view', 'runtime-callback'], [stringArgument(), callback]),
+      {
+        ...callbackVariant(
+          3,
+          ['string-view', 'object-boolean-field', 'runtime-callback'],
+          [stringArgument(), recursiveMkdirArgument(), recursiveCallback]
+        ),
+        argumentIndex: 1,
+        argumentValueTypes: ['object'],
+        objectFieldName: 'recursive',
+        booleanLiterals: [true],
+        cArgumentSources: [null, optionSource(1, 'recursive'), { argumentIndex: 2 }]
+      },
+      {
+        ...callbackVariant(
+          3,
+          ['string-view', 'object-boolean-field', 'runtime-callback'],
+          [stringArgument(), objectArgument([booleanOption('recursive')]), callback]
+        ),
+        cArgumentSources: [null, optionSource(1, 'recursive'), { argumentIndex: 2 }]
+      }
+    ]
+  )
+}
+
+function callbackReadFileOperation(): LibraryOperationDescriptor {
+  const bytesCallback = callbackArgument('data', 'bytes', bufferTypeRef)
+  const stringCallback = callbackArgument('data', 'string', stringTypeRef)
+
+  return callbackOperation(
+    'readFile',
+    2,
+    3,
+    [stringArgument(), { valueTypes: ['string', 'function'] }, stringCallback],
+    [
+      callbackVariant(2, ['string-view', 'runtime-callback'], [stringArgument(), bytesCallback]),
+      callbackVariant(
+        3,
+        ['string-view', 'string-view', 'runtime-callback'],
+        [stringArgument(), utf8Argument('readFile'), stringCallback]
+      )
+    ]
+  )
+}
+
+function callbackReaddirOperation(): LibraryOperationDescriptor {
+  const stringCallback = callbackArgument('files', 'array', arrayTypeRef(stringTypeRef))
+  const direntCallback = callbackArgument('files', 'array', arrayTypeRef(direntTypeRef))
+
+  return callbackOperation(
+    'readdir',
+    2,
+    3,
+    [stringArgument(), { valueTypes: ['string', 'object', 'function'] }, stringCallback],
+    [
+      callbackVariant(2, ['string-view', 'runtime-callback'], [stringArgument(), stringCallback]),
+      {
+        ...callbackVariant(
+          3,
+          ['string-view', 'object-boolean-field', 'runtime-callback'],
+          [stringArgument(), readdirWithFileTypesArgument(), direntCallback]
+        ),
+        argumentIndex: 1,
+        argumentValueTypes: ['object'],
+        objectFieldName: 'withFileTypes',
+        booleanLiterals: [true],
+        cArgumentAdapters: ['', 'FsReadDirOptions{$value}', ''],
+        cArgumentSources: [null, optionSource(1, 'withFileTypes'), { argumentIndex: 2 }]
+      },
+      {
+        ...callbackVariant(
+          3,
+          ['string-view', 'string-view', 'runtime-callback'],
+          [stringArgument(), utf8Argument('readdir'), stringCallback]
+        ),
+        argumentIndex: 1,
+        argumentValueTypes: ['string']
+      },
+      {
+        ...callbackVariant(
+          3,
+          ['string-view', 'runtime-callback'],
+          [stringArgument(), readdirArgument('readdir'), stringCallback]
+        ),
+        argumentIndex: 1,
+        argumentValueTypes: ['object'],
+        cArgumentSources: [{ argumentIndex: 0 }, { argumentIndex: 2 }]
+      }
+    ]
+  )
+}
+
+function callbackRmOperation(): LibraryOperationDescriptor {
+  const callback = callbackArgument()
+
+  return callbackOperation(
+    'rm',
+    2,
+    3,
+    [stringArgument(), { valueTypes: ['object', 'function'] }, callback],
+    [
+      callbackVariant(2, ['string-view', 'runtime-callback'], [stringArgument(), callback]),
+      {
+        ...callbackVariant(
+          3,
+          ['string-view', 'object-boolean-field', 'object-boolean-field', 'runtime-callback'],
+          [stringArgument(), objectArgument([booleanOption('recursive'), booleanOption('force')]), callback]
+        ),
+        cArgumentSources: [null, optionSource(1, 'recursive'), optionSource(1, 'force'), { argumentIndex: 2 }]
+      }
+    ]
+  )
+}
+
+function callbackCallOperation(
+  name: string,
+  cArgumentKinds: LibraryCArgumentKind[],
+  argumentChecks: LibraryArgumentCheckDescriptor[]
+): LibraryOperationDescriptor {
   return {
     libraryId,
     bindingId: binding(libraryId, name),
     bindingAliases: [binding(libraryId, `default.${name}`)],
-    operationId: `${libraryId}#callback:${name}`,
+    operationId: `${libraryId}#${name}`,
     kind: 'call',
-    runtimeRequirements: [],
-    diagnosticCode: 'INOX_FS_UNSUPPORTED',
-    diagnosticMessage: `Node fs.${name} callback API is not supported yet; use fs.promises.${name}`
+    runtimeRequirements: [runtimeRequirement],
+    cExpression: `fs.${name}`,
+    cArgumentKinds,
+    cFailureMode: 'thrown',
+    minArgs: argumentChecks.length,
+    maxArgs: argumentChecks.length,
+    argumentChecks,
+    resultTypeRef: voidTypeRef,
+    callbackLifetime: 'event-loop'
+  }
+}
+
+function callbackOperation(
+  name: string,
+  minArgs: number,
+  maxArgs: number,
+  argumentChecks: LibraryArgumentCheckDescriptor[],
+  variants: LibraryOperationVariantDescriptor[]
+): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: binding(libraryId, name),
+    bindingAliases: [binding(libraryId, `default.${name}`)],
+    operationId: `${libraryId}#${name}`,
+    kind: 'call',
+    runtimeRequirements: [runtimeRequirement],
+    cExpression: `fs.${name}`,
+    cFailureMode: 'thrown',
+    minArgs,
+    maxArgs,
+    argumentChecks,
+    variants,
+    resultTypeRef: voidTypeRef,
+    callbackLifetime: 'event-loop'
+  }
+}
+
+function callbackVariant(
+  argumentCount: number,
+  cArgumentKinds: LibraryCArgumentKind[],
+  argumentChecks: LibraryArgumentCheckDescriptor[]
+): LibraryOperationVariantDescriptor {
+  return {
+    minArgs: argumentCount,
+    maxArgs: argumentCount,
+    cArgumentKinds,
+    argumentChecks
+  }
+}
+
+function callbackArgument(
+  resultName?: string,
+  resultValueType?: string,
+  resultTypeRef?: TypeRef,
+  resultOptional = false
+): LibraryArgumentCheckDescriptor {
+  const parameters: LibraryCallbackParameterDescriptor[] = [
+    {
+      name: 'error',
+      valueType: 'object',
+      nullable: true,
+      shapeFields: [
+        { name: 'message', valueType: 'string', readonly: true },
+        { name: 'code', valueType: 'string', readonly: true }
+      ]
+    }
+  ]
+
+  if (
+    typeof resultName !== 'undefined' &&
+    typeof resultValueType !== 'undefined' &&
+    typeof resultTypeRef !== 'undefined'
+  ) {
+    parameters.push({
+      name: resultName,
+      valueType: resultValueType,
+      typeRef: resultTypeRef,
+      optional: resultOptional
+    })
+  }
+
+  return {
+    valueTypes: ['function'],
+    functionParameters: parameters,
+    functionReturnType: 'void'
+  }
+}
+
+function recursiveMkdirArgument(): LibraryArgumentCheckDescriptor {
+  return {
+    valueTypes: ['object'],
+    objectLiteralFields: [
+      {
+        name: 'recursive',
+        valueTypes: ['boolean'],
+        booleanLiterals: [true],
+        optional: false
+      }
+    ]
+  }
+}
+
+function readdirWithFileTypesArgument(): LibraryArgumentCheckDescriptor {
+  return {
+    valueTypes: ['object'],
+    objectLiteralFields: [
+      {
+        name: 'withFileTypes',
+        valueTypes: ['boolean'],
+        booleanLiterals: [true],
+        optional: false
+      }
+    ]
   }
 }
 
@@ -589,24 +928,4 @@ function booleanOption(name: string): LibraryObjectLiteralFieldDescriptor {
     booleanLiterals: [false, true],
     optional: true
   }
-}
-
-function callbackMethodNames(): string[] {
-  return [
-    'access',
-    'appendFile',
-    'copyFile',
-    'lstat',
-    'mkdir',
-    'readFile',
-    'readdir',
-    'readlink',
-    'realpath',
-    'rename',
-    'rm',
-    'stat',
-    'symlink',
-    'unlink',
-    'writeFile'
-  ]
 }

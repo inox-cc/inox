@@ -3,6 +3,7 @@
 
 #include "inox/array.h"
 #include "inox/buffer.h"
+#include "inox/callback.h"
 #include "inox/promise.h"
 #include "inox/string.h"
 #include "inox/string_view.h"
@@ -66,6 +67,30 @@ class fs {
 public:
   const FsConstants constants;
   fs_promises promises;
+
+  void access(inox::StringView path, inox::Callback callback);
+  void access(inox::StringView path, int mode, inox::Callback callback);
+  void appendFile(inox::StringView path, inox::StringView bytes, inox::Callback callback);
+  void appendFile(inox::StringView path, Uint8Array bytes, inox::Callback callback);
+  void copyFile(inox::StringView src_path, inox::StringView dest_path, inox::Callback callback);
+  void lstat(inox::StringView path, inox::Callback callback);
+  void mkdir(inox::StringView path, inox::Callback callback);
+  void mkdir(inox::StringView path, bool recursive, inox::Callback callback);
+  void readFile(inox::StringView path, inox::Callback callback);
+  void readFile(inox::StringView path, inox::StringView encoding, inox::Callback callback);
+  void readdir(inox::StringView path, inox::Callback callback);
+  void readdir(inox::StringView path, inox::StringView encoding, inox::Callback callback);
+  void readdir(inox::StringView path, FsReadDirOptions options, inox::Callback callback);
+  void readlink(inox::StringView path, inox::Callback callback);
+  void realpath(inox::StringView path, inox::Callback callback);
+  void rename(inox::StringView old_path, inox::StringView new_path, inox::Callback callback);
+  void rm(inox::StringView path, inox::Callback callback);
+  void rm(inox::StringView path, bool recursive, bool force, inox::Callback callback);
+  void stat(inox::StringView path, inox::Callback callback);
+  void symlink(inox::StringView target, inox::StringView path, inox::Callback callback);
+  void unlink(inox::StringView path, inox::Callback callback);
+  void writeFile(inox::StringView path, inox::StringView bytes, inox::Callback callback);
+  void writeFile(inox::StringView path, Uint8Array bytes, inox::Callback callback);
 
   Buffer readFileSync(inox::StringView path);
   inox::String readFileSync(inox::StringView path, inox::StringView encoding);

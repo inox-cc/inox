@@ -1,9 +1,12 @@
 #include <stdint.h>
+#include <array>
+#include <new>
 #include <span>
 #include <string.h>
 #include <utility>
 #include "inox/array.h"
 #include "inox/buffer.h"
+#include "inox/callback.h"
 #include "inox/fs.h"
 #include "inox/loop.h"
 #include "inox/object.h"
@@ -66,18 +69,19 @@ enum FsRequestKind {
 };
 
 struct FsRequest {
-  inox_loop* loop;
-  inox_promise* promise;
-  FsRequestKind kind;
-  char* path;
-  size_t path_len;
-  char* path2;
-  size_t path2_len;
-  char* bytes;
-  size_t byte_len;
-  int mode;
-  bool recursive;
-  bool force;
+  inox_loop* loop = nullptr;
+  inox_promise* promise = nullptr;
+  inox::Callback callback;
+  FsRequestKind kind = INOX_FS_REQUEST_READ_FILE;
+  char* path = nullptr;
+  size_t path_len = 0;
+  char* path2 = nullptr;
+  size_t path2_len = 0;
+  char* bytes = nullptr;
+  size_t byte_len = 0;
+  int mode = 0;
+  bool recursive = false;
+  bool force = false;
 };
 
 static inox_status inox_fs_copy_bytes(inox_allocator* allocator, const char* bytes, size_t len, char** out);
@@ -124,7 +128,8 @@ static inox_status inox_fs_libuv_queue_request(
   int mode,
   bool recursive,
   bool force,
-  inox_promise** out
+  inox_promise** out,
+  inox::Callback callback = inox::Callback()
 );
 #endif
 #ifndef INOX_FS_DISABLE_HOST
@@ -170,15 +175,25 @@ static inox_status inox_fs_queue_request(
   int mode,
   bool recursive,
   bool force,
-  inox_promise** out
+  inox_promise** out,
+  inox::Callback callback = inox::Callback()
 );
 static inox_status inox_fs_run_request(void* context);
+static bool inox_fs_request_has_result(FsRequestKind kind);
+static inox_status inox_fs_callback_default_value(inox_allocator* allocator, FsRequestKind kind, inox_value* out);
+static inox_status inox_fs_complete_value(
+  inox_loop* loop,
+  inox_promise* promise,
+  const inox::Callback& callback,
+  FsRequestKind kind,
+  inox_status status,
+  inox_value value
+);
+static inox_status inox_fs_complete_thrown(inox_promise* promise, const inox::Callback& callback, FsRequestKind kind);
 static inox_status inox_fs_reject_status(inox_loop* loop, inox_promise* promise, inox_status status);
-static inox_status inox_fs_reject_request_status(FsRequest* request, inox_status status);
 static inox_status inox_fs_error_from_status(inox_allocator* allocator, inox_status status, inox_value* out);
 static void inox_fs_throw_status(inox_status status);
 static void inox_fs_throw_status_if_needed(inox_status status);
-static inox_status inox_fs_reject_thrown(inox_promise* promise);
 static const char* inox_fs_error_code(inox_status status);
 static const char* inox_fs_error_message(inox_status status);
 static void inox_fs_request_finalizer(void* context);
@@ -899,6 +914,174 @@ void fs::writeFileSync(inox::StringView path, Uint8Array bytes) {
   }
 }
 
+static void inox_fs_queue_callback_request(
+  FsRequestKind kind,
+  inox::StringView path,
+  inox::StringView path2,
+  inox::StringView bytes,
+  int mode,
+  bool recursive,
+  bool force,
+  inox::Callback callback
+) {
+  inox_status status = INOX_ERR_UNSUPPORTED;
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  status = inox_fs_libuv_queue_request(
+    inox::loop(), kind, path.bytes, path.len, path2.bytes, path2.len, bytes.bytes, bytes.len, mode,
+    recursive, force, nullptr, std::move(callback)
+  );
+#else
+  status = inox_fs_queue_request(
+    inox::loop(), kind, path.bytes, path.len, path2.bytes, path2.len, bytes.bytes, bytes.len, mode, recursive, force, nullptr,
+    std::move(callback)
+  );
+#endif
+
+  inox_fs_throw_status_if_needed(status);
+}
+
+void fs::access(inox::StringView path, inox::Callback callback) {
+  access(path, 0, std::move(callback));
+}
+
+void fs::access(inox::StringView path, int mode, inox::Callback callback) {
+  inox_fs_queue_callback_request(
+    INOX_FS_REQUEST_ACCESS, path, inox::StringView(), inox::StringView(), mode, false, false, std::move(callback)
+  );
+}
+
+void fs::appendFile(inox::StringView path, inox::StringView bytes, inox::Callback callback) {
+  inox_fs_queue_callback_request(
+    INOX_FS_REQUEST_APPEND_FILE, path, inox::StringView(), bytes, 0, false, false, std::move(callback)
+  );
+}
+
+void fs::appendFile(inox::StringView path, Uint8Array bytes, inox::Callback callback) {
+  const auto data = bytes.bytes();
+
+  if (inox::thrown()) {
+    return;
+  }
+
+  appendFile(path, inox::StringView(reinterpret_cast<const char*>(data.data()), data.size()), std::move(callback));
+}
+
+void fs::copyFile(inox::StringView src_path, inox::StringView dest_path, inox::Callback callback) {
+  inox_fs_queue_callback_request(
+    INOX_FS_REQUEST_COPY_FILE, src_path, dest_path, inox::StringView(), 0, false, false, std::move(callback)
+  );
+}
+
+void fs::lstat(inox::StringView path, inox::Callback callback) {
+  inox_fs_queue_callback_request(
+    INOX_FS_REQUEST_LSTAT, path, inox::StringView(), inox::StringView(), 0, false, false, std::move(callback)
+  );
+}
+
+void fs::mkdir(inox::StringView path, inox::Callback callback) {
+  mkdir(path, false, std::move(callback));
+}
+
+void fs::mkdir(inox::StringView path, bool recursive, inox::Callback callback) {
+  inox_fs_queue_callback_request(
+    INOX_FS_REQUEST_MKDIR, path, inox::StringView(), inox::StringView(), 0, recursive, false, std::move(callback)
+  );
+}
+
+void fs::readFile(inox::StringView path, inox::Callback callback) {
+  inox_fs_queue_callback_request(
+    INOX_FS_REQUEST_READ_FILE_BYTES, path, inox::StringView(), inox::StringView(), 0, false, false, std::move(callback)
+  );
+}
+
+void fs::readFile(inox::StringView path, inox::StringView encoding, inox::Callback callback) {
+  (void)encoding;
+  inox_fs_queue_callback_request(
+    INOX_FS_REQUEST_READ_FILE, path, inox::StringView(), inox::StringView(), 0, false, false, std::move(callback)
+  );
+}
+
+void fs::readdir(inox::StringView path, inox::Callback callback) {
+  inox_fs_queue_callback_request(
+    INOX_FS_REQUEST_READ_DIR, path, inox::StringView(), inox::StringView(), 0, false, false, std::move(callback)
+  );
+}
+
+void fs::readdir(inox::StringView path, inox::StringView encoding, inox::Callback callback) {
+  (void)encoding;
+  readdir(path, std::move(callback));
+}
+
+void fs::readdir(inox::StringView path, FsReadDirOptions options, inox::Callback callback) {
+  (void)options;
+  inox_fs_queue_callback_request(
+    INOX_FS_REQUEST_READ_DIR_DIRENTS, path, inox::StringView(), inox::StringView(), 0, false, false, std::move(callback)
+  );
+}
+
+void fs::readlink(inox::StringView path, inox::Callback callback) {
+  inox_fs_queue_callback_request(
+    INOX_FS_REQUEST_READLINK, path, inox::StringView(), inox::StringView(), 0, false, false, std::move(callback)
+  );
+}
+
+void fs::realpath(inox::StringView path, inox::Callback callback) {
+  inox_fs_queue_callback_request(
+    INOX_FS_REQUEST_REALPATH, path, inox::StringView(), inox::StringView(), 0, false, false, std::move(callback)
+  );
+}
+
+void fs::rename(inox::StringView old_path, inox::StringView new_path, inox::Callback callback) {
+  inox_fs_queue_callback_request(
+    INOX_FS_REQUEST_RENAME, old_path, new_path, inox::StringView(), 0, false, false, std::move(callback)
+  );
+}
+
+void fs::rm(inox::StringView path, inox::Callback callback) {
+  rm(path, false, false, std::move(callback));
+}
+
+void fs::rm(inox::StringView path, bool recursive, bool force, inox::Callback callback) {
+  inox_fs_queue_callback_request(
+    INOX_FS_REQUEST_RM, path, inox::StringView(), inox::StringView(), 0, recursive, force, std::move(callback)
+  );
+}
+
+void fs::stat(inox::StringView path, inox::Callback callback) {
+  inox_fs_queue_callback_request(
+    INOX_FS_REQUEST_STAT, path, inox::StringView(), inox::StringView(), 0, false, false, std::move(callback)
+  );
+}
+
+void fs::symlink(inox::StringView target, inox::StringView path, inox::Callback callback) {
+  inox_fs_queue_callback_request(
+    INOX_FS_REQUEST_SYMLINK, target, path, inox::StringView(), 0, false, false, std::move(callback)
+  );
+}
+
+void fs::unlink(inox::StringView path, inox::Callback callback) {
+  inox_fs_queue_callback_request(
+    INOX_FS_REQUEST_UNLINK, path, inox::StringView(), inox::StringView(), 0, false, false, std::move(callback)
+  );
+}
+
+void fs::writeFile(inox::StringView path, inox::StringView bytes, inox::Callback callback) {
+  inox_fs_queue_callback_request(
+    INOX_FS_REQUEST_WRITE_FILE, path, inox::StringView(), bytes, 0, false, false, std::move(callback)
+  );
+}
+
+void fs::writeFile(inox::StringView path, Uint8Array bytes, inox::Callback callback) {
+  const auto data = bytes.bytes();
+
+  if (inox::thrown()) {
+    return;
+  }
+
+  writeFile(path, inox::StringView(reinterpret_cast<const char*>(data.data()), data.size()), std::move(callback));
+}
+
 inox::Promise fs_promises::readFile(inox::StringView path, inox::StringView encoding) {
   (void)encoding;
   inox_promise* promise = 0;
@@ -1318,27 +1501,28 @@ enum FsLibuvStage {
 };
 
 struct FsLibuvRequest {
-  inox_loop* loop;
-  inox_promise* promise;
-  FsRequestKind kind;
-  FsLibuvStage stage;
-  uv_fs_t req;
-  uv_file file;
-  int file_open;
-  char* path;
-  size_t path_len;
-  char* path2;
-  size_t path2_len;
-  char* bytes;
-  size_t byte_len;
-  size_t byte_offset;
-  int mode;
-  bool recursive;
-  bool force;
-  char* data;
-  size_t data_len;
-  size_t data_cap;
-  inox_status close_status;
+  inox_loop* loop = nullptr;
+  inox_promise* promise = nullptr;
+  inox::Callback callback;
+  FsRequestKind kind = INOX_FS_REQUEST_READ_FILE;
+  FsLibuvStage stage = INOX_FS_LIBUV_STAGE_OPEN;
+  uv_fs_t req = {};
+  uv_file file = 0;
+  int file_open = 0;
+  char* path = nullptr;
+  size_t path_len = 0;
+  char* path2 = nullptr;
+  size_t path2_len = 0;
+  char* bytes = nullptr;
+  size_t byte_len = 0;
+  size_t byte_offset = 0;
+  int mode = 0;
+  bool recursive = false;
+  bool force = false;
+  char* data = nullptr;
+  size_t data_len = 0;
+  size_t data_cap = 0;
+  inox_status close_status = INOX_OK;
 };
 
 static inox_status inox_fs_status_from_uv(ssize_t result);
@@ -2137,13 +2321,16 @@ static inox_status inox_fs_libuv_queue_request(
   int mode,
   bool recursive,
   bool force,
-  inox_promise** out
+  inox_promise** out,
+  inox::Callback callback
 ) {
-  if (out == 0) {
+  if (out == nullptr && !callback.valid()) {
     return INOX_ERR_TYPE;
   }
 
-  *out = 0;
+  if (out != nullptr) {
+    *out = nullptr;
+  }
 
   if (
     loop == 0 || loop->allocator == 0 || loop->allocator->alloc == 0 || (path == 0 && path_len != 0) ||
@@ -2153,11 +2340,15 @@ static inox_status inox_fs_libuv_queue_request(
     return INOX_ERR_TYPE;
   }
 
-  inox_promise* promise = 0;
-  inox_status status = inox_promise_new(loop, &promise);
+  inox_promise* promise = nullptr;
+  inox_status status = INOX_OK;
 
-  if (status != INOX_OK) {
-    return status;
+  if (out != nullptr) {
+    status = inox_promise_new(loop, &promise);
+
+    if (status != INOX_OK) {
+      return status;
+    }
   }
 
   FsLibuvRequest* request =
@@ -2168,9 +2359,10 @@ static inox_status inox_fs_libuv_queue_request(
     return INOX_ERR_OOM;
   }
 
-  memset(request, 0, sizeof(FsLibuvRequest));
+  new (request) FsLibuvRequest();
   request->loop = loop;
   request->promise = promise;
+  request->callback = std::move(callback);
   request->kind = kind;
   request->stage = INOX_FS_LIBUV_STAGE_OPEN;
   request->file = 0;
@@ -2210,7 +2402,9 @@ static inox_status inox_fs_libuv_queue_request(
     return status;
   }
 
-  *out = promise;
+  if (out != nullptr) {
+    *out = promise;
+  }
 
   return INOX_OK;
 }
@@ -2515,13 +2709,17 @@ static inox_status inox_fs_libuv_settle(FsLibuvRequest* request, inox_status sta
 }
 
 static inox_status inox_fs_libuv_settle_value(FsLibuvRequest* request, inox_status status, inox_value value) {
-  if (request == 0 || request->loop == 0 || request->promise == 0) {
+  if (
+    request == nullptr || request->loop == nullptr ||
+    (request->promise == nullptr && !request->callback.valid())
+  ) {
     inox_release(value);
     return INOX_ERR_TYPE;
   }
 
-  inox_status settle_status =
-    status == INOX_OK ? inox_promise_resolve(request->promise, value) : inox_fs_reject_status(request->loop, request->promise, status);
+  inox_status settle_status = inox_fs_complete_value(
+    request->loop, request->promise, request->callback, request->kind, status, value
+  );
 
   inox_release(value);
   inox_libuv_loop_release_request(request->loop);
@@ -2782,6 +2980,7 @@ static void inox_fs_libuv_request_finalizer(FsLibuvRequest* request) {
   }
 
   inox_promise_release(request->promise);
+  request->~FsLibuvRequest();
   allocator->free(allocator->user, request, sizeof(FsLibuvRequest), alignof(FsLibuvRequest));
 }
 #endif
@@ -3598,13 +3797,16 @@ static inox_status inox_fs_queue_request(
   int mode,
   bool recursive,
   bool force,
-  inox_promise** out
+  inox_promise** out,
+  inox::Callback callback
 ) {
-  if (out == 0) {
+  if (out == nullptr && !callback.valid()) {
     return INOX_ERR_TYPE;
   }
 
-  *out = 0;
+  if (out != nullptr) {
+    *out = nullptr;
+  }
 
   if (
     loop == 0 || loop->allocator == 0 || loop->allocator->alloc == 0 || (path == 0 && path_len != 0) ||
@@ -3614,11 +3816,15 @@ static inox_status inox_fs_queue_request(
     return INOX_ERR_TYPE;
   }
 
-  inox_promise* promise = 0;
-  inox_status status = inox_promise_new(loop, &promise);
+  inox_promise* promise = nullptr;
+  inox_status status = INOX_OK;
 
-  if (status != INOX_OK) {
-    return status;
+  if (out != nullptr) {
+    status = inox_promise_new(loop, &promise);
+
+    if (status != INOX_OK) {
+      return status;
+    }
   }
 
   FsRequest* request = (FsRequest*)loop->allocator->alloc(loop->allocator->user, sizeof(FsRequest), alignof(FsRequest));
@@ -3628,8 +3834,10 @@ static inox_status inox_fs_queue_request(
     return INOX_ERR_OOM;
   }
 
+  new (request) FsRequest();
   request->loop = loop;
   request->promise = promise;
+  request->callback = std::move(callback);
   request->kind = kind;
   request->path = 0;
   request->path_len = path_len;
@@ -3662,7 +3870,9 @@ static inox_status inox_fs_queue_request(
     return status;
   }
 
-  *out = promise;
+  if (out != nullptr) {
+    *out = promise;
+  }
 
   return INOX_OK;
 }
@@ -3670,9 +3880,22 @@ static inox_status inox_fs_queue_request(
 static inox_status inox_fs_run_request(void* context) {
   FsRequest* request = (FsRequest*)context;
 
-  if (request == 0 || request->loop == 0 || request->promise == 0) {
+  if (
+    request == nullptr || request->loop == nullptr ||
+    (request->promise == nullptr && !request->callback.valid())
+  ) {
     return INOX_ERR_TYPE;
   }
+
+  const auto complete_void = [request]() -> inox_status {
+    if (inox::thrown()) {
+      return inox_fs_complete_thrown(request->promise, request->callback, request->kind);
+    }
+
+    return inox_fs_complete_value(
+      request->loop, request->promise, request->callback, request->kind, INOX_OK, inox_undefined_value()
+    );
+  };
 
   if (request->kind == INOX_FS_REQUEST_READ_FILE) {
     inox_value result = inox_undefined_value();
@@ -3684,11 +3907,9 @@ static inox_status inox_fs_run_request(void* context) {
     status = inox_fs_default_read_file(0, request->loop->allocator, request->path, request->path_len, &result);
 #endif
 
-    if (status != INOX_OK) {
-      return inox_fs_reject_status(request->loop, request->promise, status);
-    }
-
-    inox_status resolve_status = inox_promise_resolve(request->promise, result);
+    inox_status resolve_status = inox_fs_complete_value(
+      request->loop, request->promise, request->callback, request->kind, status, result
+    );
     inox_release(result);
 
     return resolve_status;
@@ -3698,11 +3919,9 @@ static inox_status inox_fs_run_request(void* context) {
     inox_value result = inox_undefined_value();
     inox_status status = fs_read_file_bytes_sync_status(request->loop->allocator, request->path, request->path_len, &result);
 
-    if (status != INOX_OK) {
-      return inox_fs_reject_request_status(request, status);
-    }
-
-    inox_status resolve_status = inox_promise_resolve(request->promise, result);
+    inox_status resolve_status = status == INOX_ERR_THROW
+      ? inox_fs_complete_thrown(request->promise, request->callback, request->kind)
+      : inox_fs_complete_value(request->loop, request->promise, request->callback, request->kind, status, result);
     inox_release(result);
 
     return resolve_status;
@@ -3718,11 +3937,9 @@ static inox_status inox_fs_run_request(void* context) {
     status = inox_fs_default_read_dir(0, request->loop->allocator, request->path, request->path_len, &result);
 #endif
 
-    if (status != INOX_OK) {
-      return inox_fs_reject_status(request->loop, request->promise, status);
-    }
-
-    inox_status resolve_status = inox_promise_resolve(request->promise, result);
+    inox_status resolve_status = inox_fs_complete_value(
+      request->loop, request->promise, request->callback, request->kind, status, result
+    );
     inox_release(result);
 
     return resolve_status;
@@ -3738,11 +3955,9 @@ static inox_status inox_fs_run_request(void* context) {
     status = inox_fs_default_read_dir_dirents(0, request->loop->allocator, request->path, request->path_len, &result);
 #endif
 
-    if (status != INOX_OK) {
-      return inox_fs_reject_status(request->loop, request->promise, status);
-    }
-
-    inox_status resolve_status = inox_promise_resolve(request->promise, result);
+    inox_status resolve_status = inox_fs_complete_value(
+      request->loop, request->promise, request->callback, request->kind, status, result
+    );
     inox_release(result);
 
     return resolve_status;
@@ -3766,11 +3981,9 @@ static inox_status inox_fs_run_request(void* context) {
 #endif
     }
 
-    if (status != INOX_OK) {
-      return inox_fs_reject_status(request->loop, request->promise, status);
-    }
-
-    inox_status resolve_status = inox_promise_resolve(request->promise, result);
+    inox_status resolve_status = inox_fs_complete_value(
+      request->loop, request->promise, request->callback, request->kind, status, result
+    );
     inox_release(result);
 
     return resolve_status;
@@ -3794,11 +4007,9 @@ static inox_status inox_fs_run_request(void* context) {
 #endif
     }
 
-    if (status != INOX_OK) {
-      return inox_fs_reject_status(request->loop, request->promise, status);
-    }
-
-    inox_status resolve_status = inox_promise_resolve(request->promise, result);
+    inox_status resolve_status = inox_fs_complete_value(
+      request->loop, request->promise, request->callback, request->kind, status, result
+    );
     inox_release(result);
 
     return resolve_status;
@@ -3807,41 +4018,25 @@ static inox_status inox_fs_run_request(void* context) {
   if (request->kind == INOX_FS_REQUEST_ACCESS) {
     fs.accessSync(inox::StringView(request->path, request->path_len), request->mode);
 
-    if (inox::thrown()) {
-      return inox_fs_reject_thrown(request->promise);
-    }
-
-    return inox_promise_resolve(request->promise, inox_undefined_value());
+    return complete_void();
   }
 
   if (request->kind == INOX_FS_REQUEST_MKDIR) {
     fs.mkdirSync(inox::StringView(request->path, request->path_len), request->recursive);
 
-    if (inox::thrown()) {
-      return inox_fs_reject_thrown(request->promise);
-    }
-
-    return inox_promise_resolve(request->promise, inox_undefined_value());
+    return complete_void();
   }
 
   if (request->kind == INOX_FS_REQUEST_UNLINK) {
     fs.unlinkSync(inox::StringView(request->path, request->path_len));
 
-    if (inox::thrown()) {
-      return inox_fs_reject_thrown(request->promise);
-    }
-
-    return inox_promise_resolve(request->promise, inox_undefined_value());
+    return complete_void();
   }
 
   if (request->kind == INOX_FS_REQUEST_RM) {
     fs.rmSync(inox::StringView(request->path, request->path_len), request->recursive, request->force);
 
-    if (inox::thrown()) {
-      return inox_fs_reject_thrown(request->promise);
-    }
-
-    return inox_promise_resolve(request->promise, inox_undefined_value());
+    return complete_void();
   }
 
   if (request->kind == INOX_FS_REQUEST_RENAME) {
@@ -3850,11 +4045,7 @@ static inox_status inox_fs_run_request(void* context) {
       inox::StringView(request->path2, request->path2_len)
     );
 
-    if (inox::thrown()) {
-      return inox_fs_reject_thrown(request->promise);
-    }
-
-    return inox_promise_resolve(request->promise, inox_undefined_value());
+    return complete_void();
   }
 
   if (request->kind == INOX_FS_REQUEST_APPEND_FILE) {
@@ -3863,11 +4054,7 @@ static inox_status inox_fs_run_request(void* context) {
       inox::StringView(request->bytes, request->byte_len)
     );
 
-    if (inox::thrown()) {
-      return inox_fs_reject_thrown(request->promise);
-    }
-
-    return inox_promise_resolve(request->promise, inox_undefined_value());
+    return complete_void();
   }
 
   if (request->kind == INOX_FS_REQUEST_COPY_FILE) {
@@ -3876,11 +4063,7 @@ static inox_status inox_fs_run_request(void* context) {
       inox::StringView(request->path2, request->path2_len)
     );
 
-    if (inox::thrown()) {
-      return inox_fs_reject_thrown(request->promise);
-    }
-
-    return inox_promise_resolve(request->promise, inox_undefined_value());
+    return complete_void();
   }
 
   if (request->kind == INOX_FS_REQUEST_SYMLINK) {
@@ -3889,11 +4072,7 @@ static inox_status inox_fs_run_request(void* context) {
       inox::StringView(request->path2, request->path2_len)
     );
 
-    if (inox::thrown()) {
-      return inox_fs_reject_thrown(request->promise);
-    }
-
-    return inox_promise_resolve(request->promise, inox_undefined_value());
+    return complete_void();
   }
 
   fs.writeFileSync(
@@ -3901,11 +4080,127 @@ static inox_status inox_fs_run_request(void* context) {
     inox::StringView(request->bytes, request->byte_len)
   );
 
-  if (inox::thrown()) {
-    return inox_fs_reject_thrown(request->promise);
+  return complete_void();
+}
+
+static bool inox_fs_request_has_result(FsRequestKind kind) {
+  return kind == INOX_FS_REQUEST_READ_FILE || kind == INOX_FS_REQUEST_READ_FILE_BYTES ||
+         kind == INOX_FS_REQUEST_READ_DIR || kind == INOX_FS_REQUEST_READ_DIR_DIRENTS ||
+         kind == INOX_FS_REQUEST_STAT || kind == INOX_FS_REQUEST_LSTAT ||
+         kind == INOX_FS_REQUEST_REALPATH || kind == INOX_FS_REQUEST_READLINK ||
+         kind == INOX_FS_REQUEST_MKDIR;
+}
+
+static inox_status inox_fs_callback_default_value(inox_allocator* allocator, FsRequestKind kind, inox_value* out) {
+  if (allocator == nullptr || out == nullptr) {
+    return INOX_ERR_TYPE;
   }
 
-  return inox_promise_resolve(request->promise, inox_undefined_value());
+  *out = inox_undefined_value();
+
+  if (kind == INOX_FS_REQUEST_READ_FILE || kind == INOX_FS_REQUEST_REALPATH || kind == INOX_FS_REQUEST_READLINK) {
+    inox::String value("");
+    return value.valid() ? value.copy_to(out) : INOX_ERR_OOM;
+  }
+
+  if (kind == INOX_FS_REQUEST_READ_FILE_BYTES) {
+    Buffer value{std::span<const uint8_t>()};
+    return value.valid() ? value.copy_to(out) : INOX_ERR_OOM;
+  }
+
+  if (kind == INOX_FS_REQUEST_READ_DIR || kind == INOX_FS_REQUEST_READ_DIR_DIRENTS) {
+    Array value = Array::create(0);
+    return value.valid() ? value.copy_to(out) : INOX_ERR_OOM;
+  }
+
+  if (kind == INOX_FS_REQUEST_STAT || kind == INOX_FS_REQUEST_LSTAT) {
+    return inox_fs_stats_new(allocator, 0, 0, 0, false, false, out);
+  }
+
+  return INOX_OK;
+}
+
+static inox_status inox_fs_call_callback(
+  const inox::Callback& callback,
+  FsRequestKind kind,
+  inox::Value error,
+  inox_value value
+) {
+  if (!callback.valid()) {
+    return INOX_ERR_TYPE;
+  }
+
+  const std::array<inox::Value, 2> arguments = { std::move(error), inox::Value(value) };
+  const size_t argument_count = inox_fs_request_has_result(kind) ? 2 : 1;
+  inox::Value callback_result = callback.call(std::span<const inox::Value>(arguments.data(), argument_count));
+  (void)callback_result;
+
+  return inox::thrown() ? INOX_ERR_THROW : INOX_OK;
+}
+
+static inox_status inox_fs_complete_value(
+  inox_loop* loop,
+  inox_promise* promise,
+  const inox::Callback& callback,
+  FsRequestKind kind,
+  inox_status status,
+  inox_value value
+) {
+  if (promise != nullptr) {
+    return status == INOX_OK ? inox_promise_resolve(promise, value) : inox_fs_reject_status(loop, promise, status);
+  }
+
+  if (loop == nullptr || loop->allocator == nullptr || !callback.valid()) {
+    return INOX_ERR_TYPE;
+  }
+
+  if (status == INOX_OK) {
+    return inox_fs_call_callback(callback, kind, inox::Value(inox_null_value()), value);
+  }
+
+  inox_value error = inox_undefined_value();
+  const inox_status error_status = inox_fs_error_from_status(loop->allocator, status, &error);
+  inox_value callback_value = inox_undefined_value();
+  const inox_status value_status = inox_fs_request_has_result(kind)
+    ? inox_fs_callback_default_value(loop->allocator, kind, &callback_value)
+    : INOX_OK;
+
+  if (value_status != INOX_OK) {
+    inox_release(error);
+    return value_status;
+  }
+
+  if (error_status != INOX_OK) {
+    const inox_status callback_status = inox_fs_call_callback(
+      callback, kind, inox::Value(inox_number_value(static_cast<inox_number>(status))), callback_value
+    );
+    inox_release(callback_value);
+    return callback_status;
+  }
+
+  const inox_status callback_status = inox_fs_call_callback(
+    callback, kind, inox::Value(inox::adopt_value, error), callback_value
+  );
+  inox_release(callback_value);
+  return callback_status;
+}
+
+static inox_status inox_fs_complete_thrown(
+  inox_promise* promise,
+  const inox::Callback& callback,
+  FsRequestKind kind
+) {
+  if (!inox::thrown()) {
+    return INOX_ERR_TYPE;
+  }
+
+  inox::Value error = inox::take_exception();
+
+  if (promise != nullptr) {
+    return inox_promise_reject(promise, error.raw());
+  }
+
+  return inox_fs_call_callback(callback, kind, std::move(error), inox_undefined_value());
 }
 
 static inox_status inox_fs_reject_status(inox_loop* loop, inox_promise* promise, inox_status status) {
@@ -3924,23 +4219,6 @@ static inox_status inox_fs_reject_status(inox_loop* loop, inox_promise* promise,
   inox_release(error);
 
   return reject_status == INOX_OK ? INOX_OK : reject_status;
-}
-
-static inox_status inox_fs_reject_request_status(FsRequest* request, inox_status status) {
-  if (status == INOX_ERR_THROW) {
-    return inox_fs_reject_thrown(request == 0 ? 0 : request->promise);
-  }
-
-  return inox_fs_reject_status(request == 0 ? 0 : request->loop, request == 0 ? 0 : request->promise, status);
-}
-
-static inox_status inox_fs_reject_thrown(inox_promise* promise) {
-  if (promise == 0 || !inox::thrown()) {
-    return INOX_ERR_TYPE;
-  }
-
-  inox::Value error = inox::take_exception();
-  return inox_promise_reject(promise, error.raw());
 }
 
 static void inox_fs_throw_status(inox_status status) {
@@ -4087,5 +4365,6 @@ static void inox_fs_request_finalizer(void* context) {
   }
 
   inox_promise_release(request->promise);
+  request->~FsRequest();
   allocator->free(allocator->user, request, sizeof(FsRequest), alignof(FsRequest));
 }
