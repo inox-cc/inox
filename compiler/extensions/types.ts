@@ -478,12 +478,7 @@ export type LibraryEffectiveReceiverOperationDescriptor = {
 }
 
 export type IntrinsicRole =
-  | 'array-literal'
-  | 'async-result'
-  | 'exception-value'
-  | 'dynamic-object'
-  | 'regexp-literal'
-  | 'string-conversion'
+  'array-literal' | 'async-result' | 'exception-value' | 'dynamic-object' | 'regexp-literal' | 'string-conversion'
 
 export type IntrinsicRoleBinding = {
   role: IntrinsicRole
@@ -528,6 +523,12 @@ export type CompilerLibraryPackageDescriptor = {
   operations: LibraryOperationDescriptor[]
   intrinsicBindings: IntrinsicRoleBinding[]
   runtimeRequirements: RuntimeRequirementDescriptor[]
+}
+
+export type CompilerLibraryNativeBuildDescriptor = {
+  cmakePackages: string[]
+  cmakeLinkLibraries: string[]
+  linkerArguments: string[]
 }
 
 export type CompilerLibrarySet = {

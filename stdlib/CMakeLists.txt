@@ -65,6 +65,77 @@ function(inox_stdlib_sources_for_runtime_requirements output)
   set(${output} "${INOX_STDLIB_SELECTED_SOURCES}" PARENT_SCOPE)
 endfunction()
 
+function(inox_configure_stdlib_native_units)
+  get_property(
+    INOX_STDLIB_CONFIGURED_NATIVE_UNITS
+    TARGET inox_runtime_configuration
+    PROPERTY INOX_STDLIB_CONFIGURED_NATIVE_UNITS
+  )
+
+  if(INOX_STDLIB_NATIVE_UNIT_COUNT GREATER 0)
+    math(EXPR INOX_STDLIB_NATIVE_UNIT_LAST "${INOX_STDLIB_NATIVE_UNIT_COUNT} - 1")
+
+    foreach(INOX_STDLIB_NATIVE_UNIT_INDEX RANGE 0 ${INOX_STDLIB_NATIVE_UNIT_LAST})
+      list(FIND INOX_STDLIB_CONFIGURED_NATIVE_UNITS "${INOX_STDLIB_NATIVE_UNIT_INDEX}" INOX_STDLIB_CONFIGURED_INDEX)
+
+      if(NOT INOX_STDLIB_CONFIGURED_INDEX EQUAL -1)
+        continue()
+      endif()
+
+      set(
+        INOX_STDLIB_UNIT_REQUIREMENTS_VARIABLE
+        "INOX_STDLIB_NATIVE_UNIT_${INOX_STDLIB_NATIVE_UNIT_INDEX}_RUNTIME_REQUIREMENTS"
+      )
+      set(INOX_STDLIB_UNIT_SELECTED OFF)
+
+      if(NOT INOX_STDLIB_FILTER_NATIVE_SOURCES)
+        set(INOX_STDLIB_UNIT_SELECTED ON)
+      else()
+        foreach(INOX_STDLIB_UNIT_REQUIREMENT IN LISTS ${INOX_STDLIB_UNIT_REQUIREMENTS_VARIABLE})
+          list(FIND ARGN "${INOX_STDLIB_UNIT_REQUIREMENT}" INOX_STDLIB_REQUIREMENT_INDEX)
+
+          if(NOT INOX_STDLIB_REQUIREMENT_INDEX EQUAL -1)
+            set(INOX_STDLIB_UNIT_SELECTED ON)
+            break()
+          endif()
+        endforeach()
+      endif()
+
+      if(NOT INOX_STDLIB_UNIT_SELECTED)
+        continue()
+      endif()
+
+      set(
+        INOX_STDLIB_UNIT_CMAKE_PACKAGES_VARIABLE
+        "INOX_STDLIB_NATIVE_UNIT_${INOX_STDLIB_NATIVE_UNIT_INDEX}_CMAKE_PACKAGES"
+      )
+      set(
+        INOX_STDLIB_UNIT_CMAKE_LINK_LIBRARIES_VARIABLE
+        "INOX_STDLIB_NATIVE_UNIT_${INOX_STDLIB_NATIVE_UNIT_INDEX}_CMAKE_LINK_LIBRARIES"
+      )
+
+      foreach(INOX_STDLIB_CMAKE_PACKAGE IN LISTS ${INOX_STDLIB_UNIT_CMAKE_PACKAGES_VARIABLE})
+        find_package(${INOX_STDLIB_CMAKE_PACKAGE} REQUIRED)
+      endforeach()
+
+      if(DEFINED ${INOX_STDLIB_UNIT_CMAKE_LINK_LIBRARIES_VARIABLE})
+        target_link_libraries(
+          inox_runtime_configuration
+          INTERFACE
+          ${${INOX_STDLIB_UNIT_CMAKE_LINK_LIBRARIES_VARIABLE}}
+        )
+      endif()
+
+      list(APPEND INOX_STDLIB_CONFIGURED_NATIVE_UNITS "${INOX_STDLIB_NATIVE_UNIT_INDEX}")
+    endforeach()
+  endif()
+
+  set_property(
+    TARGET inox_runtime_configuration
+    PROPERTY INOX_STDLIB_CONFIGURED_NATIVE_UNITS "${INOX_STDLIB_CONFIGURED_NATIVE_UNITS}"
+  )
+endfunction()
+
 if(INOX_STDLIB_FILTER_NATIVE_SOURCES)
   inox_stdlib_sources_for_runtime_requirements(
     INOX_STDLIB_INITIAL_SOURCES
@@ -96,6 +167,8 @@ else()
   )
 endif()
 
+inox_configure_stdlib_native_units(${INOX_STDLIB_INITIAL_RUNTIME_REQUIREMENTS})
+
 function(inox_add_stdlib_runtime_requirements)
   if(NOT INOX_STDLIB_FILTER_NATIVE_SOURCES)
     return()
@@ -122,4 +195,5 @@ function(inox_add_stdlib_runtime_requirements)
     TARGET inox_stdlib_objects
     PROPERTY INOX_STDLIB_ADDED_SOURCES "${INOX_STDLIB_ADDED_SOURCES}"
   )
+  inox_configure_stdlib_native_units(${ARGN})
 endfunction()

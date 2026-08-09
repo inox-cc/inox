@@ -12,7 +12,10 @@ test('native plan связывает каждый stdlib source с runtime requi
   assert.deepEqual(consoleUnit, {
     libraryId: 'global:console',
     runtimeRequirements: ['global:console'],
-    sources: ['stdlib/global/console/src/console.cc']
+    sources: ['stdlib/global/console/src/console.cc'],
+    cmakePackages: [],
+    cmakeLinkLibraries: [],
+    linkerArguments: []
   })
   assert.deepEqual(collectionsUnit?.sources, ['stdlib/global/collections/src/collections.cc'])
   assert.deepEqual(collectionsUnit?.runtimeRequirements, [
@@ -23,4 +26,7 @@ test('native plan связывает каждый stdlib source с runtime requi
   ])
   assert.match(rendered.nativePlanCMakeSource, /INOX_STDLIB_NATIVE_UNIT_COUNT/)
   assert.match(rendered.nativePlanCMakeSource, /INOX_STDLIB_NATIVE_UNIT_\d+_RUNTIME_REQUIREMENTS/)
+  assert.match(rendered.nativePlanCMakeSource, /INOX_STDLIB_NATIVE_UNIT_\d+_CMAKE_PACKAGES/)
+  assert.match(rendered.nativePlanCMakeSource, /INOX_STDLIB_NATIVE_UNIT_\d+_CMAKE_LINK_LIBRARIES/)
+  assert.match(rendered.nativePlanCMakeSource, /INOX_STDLIB_NATIVE_UNIT_\d+_LINKER_ARGUMENTS/)
 })

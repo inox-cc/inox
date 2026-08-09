@@ -42,6 +42,9 @@ export type CompilerLibraryNativeUnit = {
   libraryId: string
   runtimeRequirements: string[]
   sources: string[]
+  cmakePackages: string[]
+  cmakeLinkLibraries: string[]
+  linkerArguments: string[]
 }
 
 export async function generateCompilerLibraryRegistry(
@@ -97,7 +100,10 @@ export function renderCompilerLibraryRegistry(
       nativeUnits.push({
         libraryId: library.id,
         runtimeRequirements: runtimeRequirements.map((requirement) => requirement.id).sort(),
-        sources: library.nativeSources.slice().sort()
+        sources: library.nativeSources.slice().sort(),
+        cmakePackages: (library.nativeBuild?.cmakePackages ?? []).slice().sort(),
+        cmakeLinkLibraries: (library.nativeBuild?.cmakeLinkLibraries ?? []).slice().sort(),
+        linkerArguments: (library.nativeBuild?.linkerArguments ?? []).slice()
       })
     }
 
@@ -193,7 +199,7 @@ export function renderCompilerLibraryRegistry(
     '  if (!result.ok) {\n' +
     '    process.exitCode = 1\n' +
     '  } else {\n' +
-    "    console.log(`INOX_DECOUPLING_CONTRACT ${JSON.stringify({ contract: result.snapshot, nativePlan })}`)\n" +
+    '    console.log(`INOX_DECOUPLING_CONTRACT ${JSON.stringify({ contract: result.snapshot, nativePlan })}`)\n' +
     '  }\n' +
     '} catch {\n' +
     "  console.error('Compiler/stdlib decoupling contract threw unexpectedly')\n" +
@@ -227,6 +233,9 @@ function renderNativePlanCMake(plan: CompilerLibraryNativePlan): string {
       source +
       `set(${prefix}_LIBRARY_ID "${unit.libraryId}")\n` +
       renderNativePlanValueList(`${prefix}_RUNTIME_REQUIREMENTS`, unit.runtimeRequirements) +
+      renderNativePlanValueList(`${prefix}_CMAKE_PACKAGES`, unit.cmakePackages) +
+      renderNativePlanValueList(`${prefix}_CMAKE_LINK_LIBRARIES`, unit.cmakeLinkLibraries) +
+      renderNativePlanValueList(`${prefix}_LINKER_ARGUMENTS`, unit.linkerArguments) +
       renderNativePlanCMakeList(`${prefix}_SOURCES`, unit.sources)
   }
 

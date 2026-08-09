@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { compileSource } from '../../compiler/compiler.ts'
 import {
   collectStdlibNativeIncludeArgs,
+  collectStdlibNativeLinkerArguments,
   collectStdlibNativeSources
 } from '../../scripts/lib/stdlib-native-files.ts'
 
@@ -28,10 +29,7 @@ const cxxGeneratedCompileArgs = ['-std=c++20']
 const defaultRuntimeArchiveEnv = 'INOX_TEST_RUNTIME_ARCHIVE'
 const weakRuntimeArchiveEnv = 'INOX_TEST_RUNTIME_ARCHIVE_WEAK'
 const runtimeArchiveRoot = join(repoRoot, 'dist/test-runtime')
-const runtimeBaseIncludeArgs = [
-  '-Iruntime/include',
-  '-Iruntime/src/async'
-]
+const runtimeBaseIncludeArgs = ['-Iruntime/include', '-Iruntime/src/async']
 const runtimeBaseSources = [
   'runtime/src/core/value.c',
   'runtime/src/core/allocator.c',
@@ -50,6 +48,7 @@ const runtimeBaseSources = [
 ]
 let runtimeIncludeArgsPromise: Promise<string[]> | null = null
 let runtimeSourcesPromise: Promise<string[]> | null = null
+let runtimeLinkerArgumentsPromise: Promise<string[]> | null = null
 
 export async function createTestTempDir(prefix: string): Promise<string> {
   const root = join(repoRoot, 'dist/test-tmp')
@@ -77,10 +76,20 @@ export async function compileRuntimeProgram(
   extraArgs: string[] = []
 ): Promise<CommandResult> {
   const includeArgs = await runtimeIncludeArgs()
+  const linkerArguments = await runtimeLinkerArguments()
   const archive = preparedRuntimeArchiveForArgs(extraArgs)
 
   if (archive) {
-    return await runCommand('c++', [...cxxGeneratedCompileArgs, ...includeArgs, ...extraArgs, source, archive, '-o', output])
+    return await runCommand('c++', [
+      ...cxxGeneratedCompileArgs,
+      ...includeArgs,
+      ...extraArgs,
+      source,
+      archive,
+      ...linkerArguments,
+      '-o',
+      output
+    ])
   }
 
   const runtimeObjects = await compileRuntimeObjectFiles(output, includeArgs, extraArgs)
@@ -95,6 +104,7 @@ export async function compileRuntimeProgram(
     ...extraArgs,
     source,
     ...runtimeObjects.objects,
+    ...linkerArguments,
     '-o',
     output
   ])
@@ -113,10 +123,15 @@ async function compileRuntimeObjectFiles(
 
   for (const source of await runtimeSources()) {
     const object = join(objectDir, runtimeObjectName(source))
-    const compile = await runCommand(
-      'cc',
-      [...runtimeSourceCompileArgs(source), ...includeArgs, ...compileArgs, '-c', source, '-o', object]
-    )
+    const compile = await runCommand('cc', [
+      ...runtimeSourceCompileArgs(source),
+      ...includeArgs,
+      ...compileArgs,
+      '-c',
+      source,
+      '-o',
+      object
+    ])
 
     if (compile.code !== 0) {
       return {
@@ -160,10 +175,15 @@ async function prepareRuntimeArchive(variant: RuntimeArchiveVariant): Promise<st
 
   for (const source of sources) {
     const object = join(objectDir, runtimeObjectName(source))
-    const compile = await runCommand(
-      'cc',
-      [...runtimeSourceCompileArgs(source), ...includeArgs, ...compileArgs, '-c', source, '-o', object]
-    )
+    const compile = await runCommand('cc', [
+      ...runtimeSourceCompileArgs(source),
+      ...includeArgs,
+      ...compileArgs,
+      '-c',
+      source,
+      '-o',
+      object
+    ])
 
     assert.equal(
       compile.code,
@@ -312,6 +332,14 @@ async function runtimeSources(): Promise<string[]> {
   }
 
   return await runtimeSourcesPromise
+}
+
+async function runtimeLinkerArguments(): Promise<string[]> {
+  if (runtimeLinkerArgumentsPromise === null) {
+    runtimeLinkerArgumentsPromise = collectStdlibNativeLinkerArguments()
+  }
+
+  return await runtimeLinkerArgumentsPromise
 }
 
 async function collectRuntimeSources(): Promise<string[]> {

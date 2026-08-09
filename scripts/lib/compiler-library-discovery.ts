@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url'
 
 import type {
   CompilerLibraryLiteralTypeInference,
+  CompilerLibraryNativeBuildDescriptor,
   CompilerLibraryPackageDescriptor
 } from '../../compiler/extensions/types.ts'
 import { rootDir } from './repo-root.ts'
@@ -19,6 +20,7 @@ export type DiscoveredCompilerLibrary = {
   declarationSource: string | null
   compilerEntrypoint: string | null
   compilerPackage: CompilerLibraryPackageDescriptor | null
+  nativeBuild: CompilerLibraryNativeBuildDescriptor | null
   literalTypeInference: CompilerLibraryLiteralTypeInference | null
   nativeSources: string[]
   nativeIncludeDirs: string[]
@@ -101,6 +103,7 @@ async function discoverPackage(
   let declarationSource: string | null = null
   let compilerEntrypoint: string | null = null
   let compilerPackage: CompilerLibraryPackageDescriptor | null = null
+  let nativeBuild: CompilerLibraryNativeBuildDescriptor | null = null
   let literalTypeInference: CompilerLibraryLiteralTypeInference | null = null
   const nativeSources: string[] = []
   const nativeIncludeDirs: string[] = []
@@ -114,6 +117,7 @@ async function discoverPackage(
     compilerEntrypoint = projectPath(projectRoot, compilerFile)
     const loaded = await loadCompilerLibraryPackage(compilerFile, id)
     compilerPackage = loaded.descriptor
+    nativeBuild = loaded.nativeBuild
     literalTypeInference = loaded.literalTypeInference
   }
 
@@ -134,6 +138,7 @@ async function discoverPackage(
     declarationSource,
     compilerEntrypoint,
     compilerPackage,
+    nativeBuild,
     literalTypeInference,
     nativeSources,
     nativeIncludeDirs
@@ -146,6 +151,7 @@ async function loadCompilerLibraryPackage(
 ): Promise<LoadedCompilerLibraryPackage> {
   const module = (await import(pathToFileURL(compilerFile).href)) as {
     compilerLibraryPackage?: unknown
+    compilerLibraryNativeBuild?: unknown
     inferCompilerLibraryLiteralTypeRef?: unknown
   }
   const descriptor = module.compilerLibraryPackage
@@ -160,6 +166,11 @@ async function loadCompilerLibraryPackage(
 
   const hasLiteralProviders = compilerLibraryPackageHasLiteralProviders(descriptor)
   const inference = module.inferCompilerLibraryLiteralTypeRef
+  const nativeBuild = module.compilerLibraryNativeBuild
+
+  if (typeof nativeBuild !== 'undefined' && !isCompilerLibraryNativeBuildDescriptor(nativeBuild)) {
+    throw new Error(`Invalid native build descriptor in compiler library ${expectedId}`)
+  }
 
   if (hasLiteralProviders && typeof inference !== 'function') {
     throw new Error(`Compiler library package ${expectedId} requires literal type inference export`)
@@ -171,13 +182,32 @@ async function loadCompilerLibraryPackage(
 
   return {
     descriptor,
-    literalTypeInference: typeof inference === 'function' ? (inference as CompilerLibraryLiteralTypeInference) : null
+    literalTypeInference: typeof inference === 'function' ? (inference as CompilerLibraryLiteralTypeInference) : null,
+    nativeBuild: nativeBuild ?? null
   }
 }
 
 type LoadedCompilerLibraryPackage = {
   descriptor: CompilerLibraryPackageDescriptor
   literalTypeInference: CompilerLibraryLiteralTypeInference | null
+  nativeBuild: CompilerLibraryNativeBuildDescriptor | null
+}
+
+function isCompilerLibraryNativeBuildDescriptor(value: unknown): value is CompilerLibraryNativeBuildDescriptor {
+  if (value === null || typeof value !== 'object') {
+    return false
+  }
+
+  const descriptor = value as { [key: string]: unknown }
+
+  return (
+    Array.isArray(descriptor.cmakePackages) &&
+    descriptor.cmakePackages.every((item) => typeof item === 'string' && item.length > 0) &&
+    Array.isArray(descriptor.cmakeLinkLibraries) &&
+    descriptor.cmakeLinkLibraries.every((item) => typeof item === 'string' && item.length > 0) &&
+    Array.isArray(descriptor.linkerArguments) &&
+    descriptor.linkerArguments.every((item) => typeof item === 'string' && item.length > 0)
+  )
 }
 
 function compilerLibraryPackageHasLiteralProviders(descriptor: CompilerLibraryPackageDescriptor): boolean {

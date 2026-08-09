@@ -2,6 +2,7 @@ import { readdir } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
 
 import { rootDir } from './repo-root.ts'
+import { discoverCompilerLibraries } from './compiler-library-discovery.ts'
 
 const stdlibNodeRoot = join(rootDir, 'stdlib/node')
 const stdlibGlobalRoot = join(rootDir, 'stdlib/global')
@@ -17,6 +18,19 @@ export async function collectStdlibNativeIncludeArgs(): Promise<string[]> {
   const includeDirs = await collectNativeIncludeDirsFromRoots(stdlibNativeRoots)
 
   return includeDirs.map((directory) => `-I${repoRelativePath(directory)}`).sort()
+}
+
+export async function collectStdlibNativeLinkerArguments(): Promise<string[]> {
+  const libraries = await discoverCompilerLibraries()
+  const argumentsSet = new Set<string>()
+
+  for (const library of libraries) {
+    for (const argument of library.nativeBuild?.linkerArguments ?? []) {
+      argumentsSet.add(argument)
+    }
+  }
+
+  return Array.from(argumentsSet)
 }
 
 async function collectNativeSourceFilesFromRoots(roots: string[]): Promise<string[]> {
