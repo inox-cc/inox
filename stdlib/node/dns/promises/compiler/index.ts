@@ -6,7 +6,12 @@ import type {
   NominalTypeRef,
   TypeRef
 } from '../../../../../compiler/extensions/types.ts'
-import { lookupAddressTypeRef, moduleBinding } from '../../compiler/index.ts'
+import {
+  lookupAddressArrayTypeRef,
+  lookupAddressTypeRef,
+  lookupServiceResultTypeRef,
+  moduleBinding
+} from '../../compiler/index.ts'
 
 const libraryId = 'node:dns/promises'
 const dnsLibraryId = 'node:dns'
@@ -16,7 +21,7 @@ const errorTypeId = 'global:error#Error'
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
   dependencies: ['global:error', 'global:promise', dnsLibraryId],
-  operations: [lookupOperation()],
+  operations: [lookupOperation(), lookupServiceOperation()],
   intrinsicBindings: [],
   runtimeRequirements: []
 }
@@ -41,12 +46,19 @@ function lookupOperation(): LibraryOperationDescriptor {
     maxArgs: 2,
     argumentChecks: [stringArgument(), { valueTypes: ['number', 'object'] }],
     variants: [
-      variant(1, ['string-view'], [stringArgument()]),
-      variant(2, ['string-view', 'number'], [stringArgument(), numberArgument()], {
+      variant(1, ['string-view'], [stringArgument()], lookupAddressTypeRef),
+      variant(2, ['string-view', 'number'], [stringArgument(), numberArgument()], lookupAddressTypeRef, {
         argumentIndex: 1,
         argumentValueTypes: ['number']
       }),
-      variant(2, ['string-view', 'value'], [stringArgument(), options], {
+      variant(2, ['string-view', 'value'], [stringArgument(), lookupAllOptionsArgument()], lookupAddressArrayTypeRef, {
+        argumentIndex: 1,
+        argumentValueTypes: ['object'],
+        objectFieldName: 'all',
+        booleanLiterals: [true],
+        cArgumentAdapters: ['', 'DnsLookupOptions($value)']
+      }),
+      variant(2, ['string-view', 'value'], [stringArgument(), options], lookupAddressTypeRef, {
         argumentIndex: 1,
         argumentValueTypes: ['object'],
         cArgumentAdapters: ['', 'DnsLookupOptions($value)']
@@ -56,10 +68,33 @@ function lookupOperation(): LibraryOperationDescriptor {
   }
 }
 
+function lookupServiceOperation(): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: moduleBinding(libraryId, 'lookupService'),
+    bindingAliases: [
+      moduleBinding(libraryId, 'default.lookupService'),
+      moduleBinding(dnsLibraryId, 'promises.lookupService'),
+      moduleBinding(dnsLibraryId, 'default.promises.lookupService')
+    ],
+    operationId: `${libraryId}#lookupService`,
+    kind: 'call',
+    runtimeRequirements: [dnsLibraryId, 'global:promise#promise'],
+    cExpression: 'dns.promises.lookupService',
+    cArgumentKinds: ['string-view', 'number'],
+    cFailureMode: null,
+    minArgs: 2,
+    maxArgs: 2,
+    argumentChecks: [stringArgument(), numberArgument()],
+    resultTypeRef: promiseTypeRef(lookupServiceResultTypeRef)
+  }
+}
+
 function variant(
   argumentCount: number,
   cArgumentKinds: LibraryOperationVariantDescriptor['cArgumentKinds'],
   argumentChecks: LibraryArgumentCheckDescriptor[],
+  fulfilledType: TypeRef,
   options: Partial<LibraryOperationVariantDescriptor> = {}
 ): LibraryOperationVariantDescriptor {
   return {
@@ -67,7 +102,7 @@ function variant(
     maxArgs: argumentCount,
     cArgumentKinds,
     argumentChecks,
-    resultTypeRef: promiseTypeRef(lookupAddressTypeRef),
+    resultTypeRef: promiseTypeRef(fulfilledType),
     ...options
   }
 }
@@ -95,7 +130,27 @@ function promiseTypeRef(fulfilledType: TypeRef): NominalTypeRef {
 function lookupOptionsArgument(): LibraryArgumentCheckDescriptor {
   return {
     valueTypes: ['object'],
-    objectLiteralFields: [{ name: 'family', valueTypes: ['number'], optional: true }]
+    objectLiteralFields: [
+      { name: 'family', valueTypes: ['number'], optional: true },
+      { name: 'all', valueTypes: ['boolean'], booleanLiterals: [false, true], optional: true },
+      {
+        name: 'order',
+        valueTypes: ['string'],
+        stringLiterals: ['verbatim', 'ipv4first', 'ipv6first'],
+        optional: true
+      }
+    ]
+  }
+}
+
+function lookupAllOptionsArgument(): LibraryArgumentCheckDescriptor {
+  const options = lookupOptionsArgument()
+
+  return {
+    ...options,
+    objectLiteralFields: options.objectLiteralFields?.map((field) =>
+      field.name === 'all' ? { ...field, booleanLiterals: [true], optional: false } : field
+    )
   }
 }
 

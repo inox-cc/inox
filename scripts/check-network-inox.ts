@@ -168,6 +168,14 @@ async function main(): Promise<void> {
     )
     assert.ok(lines.includes('INOX_UDP_OK'), processFailure('UDP acceptance не завершён', stdout, stderr))
     assert.ok(lines.includes('INOX_DNS_CALLBACK_OK'), processFailure('DNS callback lookup не завершён', stdout, stderr))
+    assert.ok(
+      lines.includes('INOX_DNS_ALL_CALLBACK_OK'),
+      processFailure('DNS callback lookup all не завершён', stdout, stderr)
+    )
+    assert.ok(
+      lines.includes('INOX_DNS_SERVICE_CALLBACK_OK'),
+      processFailure('DNS callback lookupService не завершён', stdout, stderr)
+    )
     assert.ok(lines.includes('INOX_DNS_PROMISE_OK'), processFailure('DNS promise lookup не завершён', stdout, stderr))
     assert.ok(lines.includes('INOX_HTTP_CLOSED'), processFailure('HTTP server не закрылся', stdout, stderr))
     assert.ok(lines.includes('INOX_HTTP_CLIENT_OK'), processFailure('HTTP client не получил ответ', stdout, stderr))

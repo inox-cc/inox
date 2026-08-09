@@ -3,7 +3,7 @@ import { test } from 'node:test'
 
 import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
 
-test('node:dns и node:dns/promises владеют lookup API и native plan', async () => {
+test('node:dns и node:dns/promises владеют lookup API, lookupService и native plan', async () => {
   const discovered = await discoverCompilerLibraries()
   const dns = discovered.find((library) => library.id === 'node:dns')
   const promises = discovered.find((library) => library.id === 'node:dns/promises')
@@ -12,7 +12,7 @@ test('node:dns и node:dns/promises владеют lookup API и native plan', a
   assert.ok(promises?.compilerPackage)
   assert.equal(dns.compilerEntrypoint, 'stdlib/node/dns/compiler/index.ts')
   assert.equal(promises.compilerEntrypoint, 'stdlib/node/dns/promises/compiler/index.ts')
-  assert.deepEqual(dns.compilerPackage.dependencies, ['global:error', 'global:strings'])
+  assert.deepEqual(dns.compilerPackage.dependencies, ['global:collections', 'global:error', 'global:strings'])
   assert.deepEqual(promises.compilerPackage.dependencies, ['global:error', 'global:promise', 'node:dns'])
   assert.deepEqual(dns.nativeSources, ['stdlib/node/dns/src/dns.cc'])
   assert.deepEqual(dns.nativeIncludeDirs, ['stdlib/node/dns/include'])
@@ -20,6 +20,8 @@ test('node:dns и node:dns/promises владеют lookup API и native plan', a
 
   const lookup = dns.compilerPackage.operations[0]
   const promiseLookup = promises.compilerPackage.operations[0]
+  const lookupService = dns.compilerPackage.operations[1]
+  const promiseLookupService = promises.compilerPackage.operations[1]
 
   assert.equal(lookup.operationId, 'node:dns#lookup')
   assert.equal(lookup.cExpression, 'dns.lookup')
@@ -28,6 +30,12 @@ test('node:dns и node:dns/promises владеют lookup API и native plan', a
   assert.equal(promiseLookup.cExpression, 'dns.promises.lookup')
   assert.ok(promiseLookup.bindingAliases?.includes('node:dns#module:node:dns:default.promises.lookup'))
   assert.deepEqual(promiseLookup.runtimeRequirements, ['node:dns', 'global:promise#promise'])
+  assert.equal(lookupService.operationId, 'node:dns#lookupService')
+  assert.equal(lookupService.cExpression, 'dns.lookupService')
+  assert.equal(promiseLookupService.operationId, 'node:dns/promises#lookupService')
+  assert.equal(promiseLookupService.cExpression, 'dns.promises.lookupService')
+  assert.ok(lookup.variants?.some((variant) => variant.objectFieldName === 'all'))
+  assert.ok(promiseLookup.variants?.some((variant) => variant.objectFieldName === 'all'))
 
   const runtime = dns.compilerPackage.runtimeRequirements[0]
 
@@ -35,5 +43,6 @@ test('node:dns и node:dns/promises владеют lookup API и native plan', a
   assert.deepEqual(runtime.cPreludeIncludes, ['inox/dns.h'])
   assert.deepEqual(runtime.capabilities, ['dns'])
   assert.ok(runtime.dependencies.includes('global:strings#strings'))
+  assert.ok(runtime.dependencies.includes('global:collections#array'))
   assert.deepEqual(runtime.optionConstraints?.[0]?.allowedValues, ['libuv'])
 })

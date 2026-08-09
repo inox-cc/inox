@@ -28,6 +28,7 @@ import type { StringLoweringDependencies } from './values/strings.ts'
 import {
   compilerLibraryIntrinsicAsyncResultCValidExpression,
   compilerLibraryNativeRuntimeValueExpressionForId,
+  compilerLibraryNativeRuntimeValueExpressionForTypeRef,
   isManagedRuntimeReturnType
 } from './value-types.ts'
 
@@ -322,6 +323,7 @@ export function emitPreparedCompilerLibraryCallExpression(
 
   if (
     (expression.type !== 'CallExpression' &&
+      expression.type !== 'OptionalCallExpression' &&
       expression.type !== 'NewExpression' &&
       expression.type !== 'AssignmentExpression' &&
       expression.type !== 'MemberExpression' &&
@@ -988,7 +990,30 @@ export function emitPreparedCompilerLibraryCallExpression(
     }
 
     if (cppType !== 'inox::Value' && cppType !== 'inox_value') {
-      return null
+      const runtimeValueExpression = compilerLibraryNativeRuntimeValueExpressionForTypeRef(
+        context.libraries,
+        item.typeRef
+      )
+
+      if (runtimeValueExpression === null) {
+        return null
+      }
+
+      const out = options?.out ?? nextCName(context, 'inox_library_optional_result')
+      const boxedCall = `inox::Value(${applyCompilerLibraryValueAdapter(callExpression, runtimeValueExpression)})`
+
+      lines.push(`auto ${out} = ((${optionalReceiverCondition}) ? ${boxedCall} : inox::Value(inox_undefined_value()));`)
+      pushCompilerLibraryFailureCheck(lines, item.libraryCFailureMode, out, context, dependencies)
+
+      return {
+        lines,
+        expression: out,
+        cppType: 'inox::Value',
+        nullable: true,
+        runtimeTypeChecked: true,
+        valueType: item.valueType ?? undefined,
+        cppDeclaredName: out
+      }
     }
 
     const undefinedExpression =
@@ -1758,7 +1783,7 @@ function compilerLibraryReceiver(expression: AnyNode): AnyNode | null {
   }
 
   if (
-    expression.type === 'CallExpression' &&
+    (expression.type === 'CallExpression' || expression.type === 'OptionalCallExpression') &&
     (expression.callee.type === 'MemberExpression' || expression.callee.type === 'OptionalMemberExpression')
   ) {
     return expression.callee.object
@@ -1771,7 +1796,8 @@ function compilerLibraryHasOptionalReceiver(expression: AnyNode): boolean {
   return (
     expression.type === 'OptionalMemberExpression' ||
     expression.type === 'OptionalIndexExpression' ||
-    (expression.type === 'CallExpression' && expression.callee.type === 'OptionalMemberExpression')
+    ((expression.type === 'CallExpression' || expression.type === 'OptionalCallExpression') &&
+      expression.callee.type === 'OptionalMemberExpression')
   )
 }
 
