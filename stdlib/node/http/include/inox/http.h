@@ -33,6 +33,7 @@ public:
 private:
   bool valid_;
   bool keep_alive_;
+  std::optional<double> max_sockets_;
   double max_free_sockets_;
   double timeout_;
 

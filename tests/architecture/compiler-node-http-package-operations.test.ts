@@ -81,6 +81,10 @@ test('node:http объявляет server и client operations через packag
 
   assert.equal(agentConstruct.kind, 'construct')
   assert.equal(agentConstruct.cExpression, 'HttpAgent')
+  assert.deepEqual(
+    agentConstruct.argumentChecks?.[0]?.objectLiteralFields?.map((field) => field.name),
+    ['keepAlive', 'maxSockets', 'maxFreeSockets', 'timeout']
+  )
   assert.equal(globalAgent.kind, 'member-read')
   assert.equal(globalAgent.cExpression, 'http.globalAgent()')
   assert.equal(agentDestroy.receiverTypeId, agentTypeId)

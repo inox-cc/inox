@@ -18,6 +18,7 @@ export interface IncomingHttpHeaders {
 
 export interface AgentOptions {
   readonly keepAlive?: boolean
+  readonly maxSockets?: number
   readonly maxFreeSockets?: number
   readonly timeout?: number
 }

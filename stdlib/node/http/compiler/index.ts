@@ -237,6 +237,7 @@ function agentConstructorOperation(): LibraryOperationDescriptor {
     valueTypes: ['object'],
     objectLiteralFields: [
       { name: 'keepAlive', valueTypes: ['boolean'], optional: true },
+      { name: 'maxSockets', valueTypes: ['number'], optional: true },
       { name: 'maxFreeSockets', valueTypes: ['number'], optional: true },
       { name: 'timeout', valueTypes: ['number'], optional: true }
     ]

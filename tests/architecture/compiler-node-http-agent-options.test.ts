@@ -16,7 +16,7 @@ test('node:http Agent принимает package-native instance и literal fals
   const result = compileSource(
     `
       import http from 'node:http'
-      const agent = new http.Agent({ keepAlive: true, maxFreeSockets: 1, timeout: 1000 })
+      const agent = new http.Agent({ keepAlive: true, maxSockets: 1, maxFreeSockets: 1, timeout: 1000 })
       http.get({ hostname: '127.0.0.1', agent })
       http.get({ hostname: '127.0.0.1', agent: false })
       const globalAgent = http.globalAgent

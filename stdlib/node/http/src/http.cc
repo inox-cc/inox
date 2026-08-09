@@ -521,15 +521,25 @@ public:
 class HttpAgentState : public std::enable_shared_from_this<HttpAgentState> {
 public:
   bool keep_alive_;
+  std::size_t max_sockets_;
   std::size_t max_free_sockets_;
   double timeout_ms_;
   std::vector<std::weak_ptr<HttpClientConnectionState>> connections_;
   std::vector<std::shared_ptr<HttpClientConnectionState>> idle_connections_;
+  std::vector<std::shared_ptr<HttpClientRequestState>> pending_requests_;
 
-  HttpAgentState(bool keep_alive, std::size_t max_free_sockets, double timeout_ms);
+  HttpAgentState(
+    bool keep_alive,
+    std::size_t max_sockets,
+    std::size_t max_free_sockets,
+    double timeout_ms
+  );
   ~HttpAgentState();
 
+  bool acquire(const std::shared_ptr<HttpClientRequestState>& request);
+  void cancel(const HttpClientRequestState* request);
   void destroy();
+  void dispatchPending();
   void expire(const std::shared_ptr<HttpClientConnectionState>& connection, std::size_t generation);
   void release(const std::shared_ptr<HttpClientConnectionState>& connection);
   void remove(const HttpClientConnectionState* connection);
@@ -539,6 +549,11 @@ public:
     const HttpClientTransportOptions& transport
   );
   bool track(const std::shared_ptr<HttpClientConnectionState>& connection);
+
+private:
+  std::size_t activeConnectionCount(const HttpClientRequestState& request);
+  bool attachPending(const std::shared_ptr<HttpClientConnectionState>& connection);
+  bool enqueue(const std::shared_ptr<HttpClientRequestState>& request);
 };
 
 class HttpClientConnectionState : public std::enable_shared_from_this<HttpClientConnectionState> {
@@ -610,6 +625,7 @@ public:
   std::vector<inox::Callback> drain_listeners_;
   std::vector<inox::Callback> timeout_listeners_;
   HttpClientTransportKind transport_kind_;
+  HttpClientTransportOptions transport_;
   std::shared_ptr<HttpAgentState> agent_;
   std::shared_ptr<HttpClientConnectionState> connection_;
   std::shared_ptr<HttpRequestState> response_;
@@ -637,6 +653,7 @@ public:
   bool failed_;
   bool closed_;
   bool destroyed_;
+  bool queued_;
   double timeout_ms_;
   inox_timer_handle* timeout_timer_;
   inox::Value abort_signal_;
@@ -3270,15 +3287,187 @@ bool sameClientConnectionOrigin(
   return !left.server_name_ || sameString(*left.server_name_, *right.server_name_);
 }
 
-HttpAgentState::HttpAgentState(bool keep_alive, std::size_t max_free_sockets, double timeout_ms)
+bool sameClientRequestOrigin(
+  const HttpClientConnectionState& connection,
+  const HttpClientRequestState& request
+) {
+  const std::optional<inox::String>& server_name = request.transport_.serverName();
+
+  if (connection.port_ != request.port_ ||
+      connection.transport_kind_ != request.transport_.kind() ||
+      connection.verify_peer_ != request.transport_.verifyPeer() ||
+      !sameString(connection.host_, request.host_) ||
+      connection.server_name_.has_value() != server_name.has_value()) {
+    return false;
+  }
+
+  return !connection.server_name_ || sameString(*connection.server_name_, *server_name);
+}
+
+HttpAgentState::HttpAgentState(
+  bool keep_alive,
+  std::size_t max_sockets,
+  std::size_t max_free_sockets,
+  double timeout_ms
+)
   : keep_alive_(keep_alive),
+    max_sockets_(max_sockets),
     max_free_sockets_(max_free_sockets),
     timeout_ms_(timeout_ms),
     connections_(),
-    idle_connections_() {}
+    idle_connections_(),
+    pending_requests_() {}
 
 HttpAgentState::~HttpAgentState() {
   destroy();
+}
+
+std::size_t HttpAgentState::activeConnectionCount(const HttpClientRequestState& request) {
+  std::size_t count = 0;
+
+  for (auto iterator = connections_.begin(); iterator != connections_.end();) {
+    std::shared_ptr<HttpClientConnectionState> connection = iterator->lock();
+
+    if (!connection || connection->closed_) {
+      iterator = connections_.erase(iterator);
+      continue;
+    }
+
+    if (connection->request_ && sameClientRequestOrigin(*connection, request)) {
+      count += 1;
+    }
+
+    iterator += 1;
+  }
+
+  return count;
+}
+
+bool HttpAgentState::enqueue(const std::shared_ptr<HttpClientRequestState>& request) {
+  if (!request || request->closed_ || request->destroyed_) return false;
+
+  try {
+    pending_requests_.push_back(request);
+  } catch (const std::bad_alloc&) {
+    inox::throw_out_of_memory();
+    return false;
+  }
+
+  request->queued_ = true;
+  return true;
+}
+
+bool HttpAgentState::acquire(const std::shared_ptr<HttpClientRequestState>& request) {
+  if (!request || request->closed_ || request->destroyed_) return false;
+
+  std::shared_ptr<HttpClientConnectionState> connection = take(
+    request->host_,
+    request->port_,
+    request->transport_
+  );
+
+  if (!connection && activeConnectionCount(*request) >= max_sockets_) {
+    return enqueue(request);
+  }
+
+  if (!connection) {
+    connection = HttpClientConnectionState::create(
+      request->host_,
+      request->port_,
+      request->transport_,
+      shared_from_this()
+    );
+  }
+
+  if (!connection || !connection->attach(request)) {
+    if (connection) connection->destroy();
+    return false;
+  }
+
+  return true;
+}
+
+void HttpAgentState::cancel(const HttpClientRequestState* request) {
+  if (request == nullptr) return;
+
+  for (auto iterator = pending_requests_.begin(); iterator != pending_requests_.end(); iterator += 1) {
+    if (iterator->get() == request) {
+      (*iterator)->queued_ = false;
+      pending_requests_.erase(iterator);
+      return;
+    }
+  }
+}
+
+bool HttpAgentState::attachPending(
+  const std::shared_ptr<HttpClientConnectionState>& connection
+) {
+  if (!connection || connection->closed_ || connection->destroying_) return false;
+
+  for (auto iterator = pending_requests_.begin(); iterator != pending_requests_.end();) {
+    std::shared_ptr<HttpClientRequestState> request = *iterator;
+
+    if (!request || request->closed_ || request->destroyed_) {
+      if (request) request->queued_ = false;
+      iterator = pending_requests_.erase(iterator);
+      continue;
+    }
+
+    if (!sameClientRequestOrigin(*connection, *request)) {
+      iterator += 1;
+      continue;
+    }
+
+    pending_requests_.erase(iterator);
+    request->queued_ = false;
+
+    if (!connection->attach(request)) connection->destroy();
+    return true;
+  }
+
+  return false;
+}
+
+void HttpAgentState::dispatchPending() {
+  for (std::size_t index = 0; index < pending_requests_.size();) {
+    std::shared_ptr<HttpClientRequestState> request = pending_requests_[index];
+
+    if (!request || request->closed_ || request->destroyed_) {
+      if (request) request->queued_ = false;
+      pending_requests_.erase(pending_requests_.begin() + static_cast<std::ptrdiff_t>(index));
+      continue;
+    }
+
+    std::shared_ptr<HttpClientConnectionState> connection = take(
+      request->host_,
+      request->port_,
+      request->transport_
+    );
+
+    if (!connection && activeConnectionCount(*request) >= max_sockets_) {
+      index += 1;
+      continue;
+    }
+
+    pending_requests_.erase(pending_requests_.begin() + static_cast<std::ptrdiff_t>(index));
+    request->queued_ = false;
+
+    if (!connection) {
+      connection = HttpClientConnectionState::create(
+        request->host_,
+        request->port_,
+        request->transport_,
+        shared_from_this()
+      );
+    }
+
+    if (!connection) {
+      request->onClose();
+      continue;
+    }
+
+    if (!connection->attach(request)) connection->destroy();
+  }
 }
 
 void HttpAgentState::destroy() {
@@ -3320,6 +3509,8 @@ void HttpAgentState::remove(const HttpClientConnectionState* connection) {
     if (!*iterator || iterator->get() == connection) iterator = idle_connections_.erase(iterator);
     else iterator += 1;
   }
+
+  dispatchPending();
 }
 
 std::shared_ptr<HttpClientConnectionState> HttpAgentState::take(
@@ -3372,6 +3563,10 @@ void HttpAgentState::release(const std::shared_ptr<HttpClientConnectionState>& c
   }
 
   if (!connection || connection->closed_) {
+    return;
+  }
+
+  if (attachPending(connection)) {
     return;
   }
 
@@ -3432,11 +3627,12 @@ void HttpAgentState::release(const std::shared_ptr<HttpClientConnectionState>& c
 
 std::shared_ptr<HttpAgentState> makeHttpAgentState(
   bool keep_alive,
+  std::size_t max_sockets,
   std::size_t max_free_sockets,
   double timeout_ms
 ) {
   try {
-    return std::make_shared<HttpAgentState>(keep_alive, max_free_sockets, timeout_ms);
+    return std::make_shared<HttpAgentState>(keep_alive, max_sockets, max_free_sockets, timeout_ms);
   } catch (const std::bad_alloc&) {
     inox::throw_out_of_memory();
     return {};
@@ -3446,7 +3642,14 @@ std::shared_ptr<HttpAgentState> makeHttpAgentState(
 std::shared_ptr<HttpAgentState> globalHttpAgentState() {
   static std::shared_ptr<HttpAgentState> state;
 
-  if (!state) state = makeHttpAgentState(true, 256, 5000);
+  if (!state) {
+    state = makeHttpAgentState(
+      true,
+      std::numeric_limits<std::size_t>::max(),
+      256,
+      5000
+    );
+  }
   return state;
 }
 
@@ -3855,6 +4058,7 @@ HttpClientRequestState::HttpClientRequestState(
     drain_listeners_(),
     timeout_listeners_(),
     transport_kind_(transport.kind()),
+    transport_(transport),
     agent_(),
     connection_(),
     response_(),
@@ -3882,6 +4086,7 @@ HttpClientRequestState::HttpClientRequestState(
     failed_(false),
     closed_(false),
     destroyed_(false),
+    queued_(false),
     timeout_ms_(0),
     timeout_timer_(nullptr),
     abort_signal_(),
@@ -3906,9 +4111,10 @@ std::shared_ptr<HttpClientRequestState> HttpClientRequestState::create(
   inox::String method("GET");
   inox::String path("/");
   double port = transport.kind() == HttpClientTransportKind::tls ? 443 : 80;
-  std::shared_ptr<HttpAgentState> agent = globalHttpAgentState();
+  std::shared_ptr<HttpAgentState> agent;
+  bool use_global_agent = true;
 
-  if (inox::thrown() || !agent || !parseClientUrl(url, transport.kind(), host, port, path)) {
+  if (inox::thrown() || !parseClientUrl(url, transport.kind(), host, port, path)) {
     return {};
   }
 
@@ -3929,15 +4135,22 @@ std::shared_ptr<HttpClientRequestState> HttpClientRequestState::create(
     if (options->port()) port = *options->port();
 
     if (options->agentDisabled()) {
-      agent.reset();
+      use_global_agent = false;
     } else if (options->agent().tag != INOX_TAG_UNDEFINED) {
       agent = agentState(HttpAgent(options->agent()));
+      use_global_agent = false;
 
       if (!agent) {
         throwHttpError("TypeError: node:http request agent is invalid");
         return {};
       }
     }
+  }
+
+  if (use_global_agent) {
+    agent = globalHttpAgentState();
+
+    if (inox::thrown() || !agent) return {};
   }
 
   if (!validClientConfiguration(host, port, method, path, transport.kind())) {
@@ -3988,22 +4201,25 @@ std::shared_ptr<HttpClientRequestState> HttpClientRequestState::create(
   }
 
   request->native_owner_ = request;
-  std::shared_ptr<HttpClientConnectionState> connection = agent
-    ? agent->take(request->host_, request->port_, transport)
-    : std::shared_ptr<HttpClientConnectionState>();
+  std::shared_ptr<HttpClientConnectionState> connection;
 
-  if (!connection) {
+  if (agent) {
+    if (!agent->acquire(request)) {
+      request->native_owner_.reset();
+      return {};
+    }
+  } else {
     connection = HttpClientConnectionState::create(request->host_, request->port_, transport, agent);
-  }
 
-  if (!connection || !connection->attach(request)) {
-    if (connection) connection->destroy();
-    request->native_owner_.reset();
-    return {};
+    if (!connection || !connection->attach(request)) {
+      if (connection) connection->destroy();
+      request->native_owner_.reset();
+      return {};
+    }
   }
 
   if (!request->startAbortPolling()) {
-    connection->destroy();
+    request->destroy();
     request->native_owner_.reset();
     return {};
   }
@@ -4054,8 +4270,13 @@ void HttpClientRequestState::destroy() {
   stopTimeout();
   stopAbortPolling();
 
-  if (connection_) connection_->destroy();
-  else onClose();
+  if (connection_) {
+    connection_->destroy();
+  } else {
+    if (queued_ && agent_) agent_->cancel(this);
+    queued_ = false;
+    onClose();
+  }
 }
 
 void HttpClientRequestState::destroy(const inox::Value& error) {
@@ -4982,17 +5203,18 @@ bool HttpClientRequestState::appendRequestBody(
 }
 
 bool HttpClientRequestState::send(std::string& output, bool final) {
-  if (!connection_ || closed_) {
+  if (closed_ || (!connection_ && !queued_)) {
     throwHttpError("TypeError: HttpClientRequest write failed");
     return false;
   }
 
-  if (!connection_->connected_) {
+  if (!connection_ || !connection_->connected_) {
     try {
       pending_write_bytes_.append(output);
     } catch (const std::bad_alloc&) {
       throwHttpError("TypeError: HttpClientRequest write allocation failed");
-      connection_->destroy();
+      if (connection_) connection_->destroy();
+      else destroy();
       return false;
     }
 
@@ -5883,14 +6105,16 @@ HttpListenOptions::HttpListenOptions(const inox::Value& value)
 }
 
 HttpAgentOptions::HttpAgentOptions()
-  : valid_(true), keep_alive_(false), max_free_sockets_(256), timeout_(0) {}
+  : valid_(true), keep_alive_(false), max_sockets_(), max_free_sockets_(256), timeout_(0) {}
 
 HttpAgentOptions::HttpAgentOptions(const inox::Value& value)
-  : valid_(false), keep_alive_(false), max_free_sockets_(256), timeout_(0) {
+  : valid_(false), keep_alive_(false), max_sockets_(), max_free_sockets_(256), timeout_(0) {
+  std::optional<double> max_sockets;
   std::optional<double> max_free_sockets;
   std::optional<double> timeout;
 
   if (!readOptionalBoolean(value, "keepAlive", keep_alive_, false) ||
+      !readOptionalNumber(value, "maxSockets", max_sockets, 1, std::numeric_limits<int>::max()) ||
       !readOptionalNumber(
         value,
         "maxFreeSockets",
@@ -5902,12 +6126,24 @@ HttpAgentOptions::HttpAgentOptions(const inox::Value& value)
     return;
   }
 
+  if ((max_sockets && std::floor(*max_sockets) != *max_sockets) ||
+      (max_free_sockets && std::floor(*max_free_sockets) != *max_free_sockets)) {
+    return;
+  }
+
+  max_sockets_ = max_sockets;
   max_free_sockets_ = max_free_sockets.value_or(256);
   timeout_ = timeout.value_or(0);
   valid_ = true;
 }
 
-HttpAgent::HttpAgent() : inox::Value(materializeAgent(makeHttpAgentState(false, 256, 0))) {}
+HttpAgent::HttpAgent()
+  : inox::Value(materializeAgent(makeHttpAgentState(
+      false,
+      std::numeric_limits<std::size_t>::max(),
+      256,
+      0
+    ))) {}
 
 HttpAgent::HttpAgent(const HttpAgentOptions& options) : inox::Value() {
   if (!options.valid_) {
@@ -5917,6 +6153,9 @@ HttpAgent::HttpAgent(const HttpAgentOptions& options) : inox::Value() {
 
   *this = materializeAgent(makeHttpAgentState(
     options.keep_alive_,
+    options.max_sockets_
+      ? static_cast<std::size_t>(*options.max_sockets_)
+      : std::numeric_limits<std::size_t>::max(),
     static_cast<std::size_t>(options.max_free_sockets_),
     options.timeout_
   ));

@@ -29,10 +29,15 @@ async function main(): Promise<void> {
   const httpServerTimeoutPort = await reservePort()
   const httpsServerTimeoutPort = await reservePort()
   const nonce = `network-${process.pid}-${Date.now()}`
+  const httpAgentOriginState = {
+    primaryReleased: false,
+    secondaryBeforePrimaryRelease: false
+  }
 
   await buildExecutable()
   const httpChunkedServer = await startHttpChunkedServer(nonce)
-  const httpKeepAliveClientServer = await startHttpKeepAliveClientServer(nonce)
+  const httpKeepAliveClientServer = await startHttpKeepAliveClientServer(nonce, httpAgentOriginState)
+  const httpKeepAliveOtherOriginServer = await startHttpKeepAliveClientServer(nonce, httpAgentOriginState)
   const invalidChunkedServer = await startInvalidChunkedServer()
   const httpsServer = await startHttpsServer(nonce)
   const httpsKeepAliveClientServer = await startHttpsKeepAliveClientServer(nonce)
@@ -63,7 +68,8 @@ async function main(): Promise<void> {
       String(httpClientLifecyclePort),
       String(httpsClientLifecyclePort),
       String(httpServerTimeoutPort),
-      String(httpsServerTimeoutPort)
+      String(httpsServerTimeoutPort),
+      String(httpKeepAliveOtherOriginServer.port)
     ],
     {
       cwd: repoRoot,
@@ -194,8 +200,18 @@ async function main(): Promise<void> {
     )
     assert.deepEqual(
       httpKeepAliveClientServer.stats(),
-      { connections: 5, requests: 6 },
+      { connections: 5, requests: 9 },
       processFailure('HTTP Agent неверно переиспользовал или изолировал соединения', stdout, stderr)
+    )
+    assert.deepEqual(
+      httpKeepAliveOtherOriginServer.stats(),
+      { connections: 1, requests: 1 },
+      processFailure('HTTP Agent применил maxSockets сразу к нескольким origin', stdout, stderr)
+    )
+    assert.equal(
+      httpAgentOriginState.secondaryBeforePrimaryRelease,
+      true,
+      processFailure('HTTP Agent сериализовал запросы к разным origin', stdout, stderr)
     )
     assert.ok(
       lines.includes('INOX_HTTPS_KEEP_ALIVE_CLIENT_OK'),
@@ -265,6 +281,7 @@ async function main(): Promise<void> {
     await stopProcess(application)
     await closeHttpServer(httpChunkedServer.server)
     await closeHttpServer(httpKeepAliveClientServer.server)
+    await closeHttpServer(httpKeepAliveOtherOriginServer.server)
     await closeNetServer(invalidChunkedServer.server)
     await closeHttpsServer(httpsServer.server)
     await closeHttpsServer(httpsKeepAliveClientServer.server)
@@ -314,7 +331,10 @@ async function startHttpsKeepAliveClientServer(nonce: string): Promise<{
   }
 }
 
-async function startHttpKeepAliveClientServer(nonce: string): Promise<{
+async function startHttpKeepAliveClientServer(
+  nonce: string,
+  originState: { primaryReleased: boolean; secondaryBeforePrimaryRelease: boolean }
+): Promise<{
   readonly server: HttpServer
   readonly port: number
   readonly stats: () => { readonly connections: number; readonly requests: number }
@@ -326,6 +346,10 @@ async function startHttpKeepAliveClientServer(nonce: string): Promise<{
     const marker = request.headers['x-inox-keep-alive']
     const first = request.url === '/first'
     const second = request.url === '/second'
+    const queuedFirst = request.url === '/queued-first'
+    const queuedSecond = request.url === '/queued-second'
+    const originBlock = request.url === '/origin-block'
+    const otherOrigin = request.url === '/other-origin'
     const afterDestroy = request.url === '/after-destroy'
     const isolatedFirst = request.url === '/isolated-first'
     const isolatedSecond = request.url === '/isolated-second'
@@ -333,10 +357,23 @@ async function startHttpKeepAliveClientServer(nonce: string): Promise<{
     const valid =
       request.method === 'GET' &&
       marker === nonce &&
-      (first || second || afterDestroy || isolatedFirst || isolatedSecond || global)
+      (first ||
+        second ||
+        queuedFirst ||
+        queuedSecond ||
+        originBlock ||
+        otherOrigin ||
+        afterDestroy ||
+        isolatedFirst ||
+        isolatedSecond ||
+        global)
 
     response.statusCode = valid ? 200 : 400
     response.setHeader('Content-Type', 'text/plain')
+
+    if (otherOrigin && !originState.primaryReleased) {
+      originState.secondaryBeforePrimaryRelease = true
+    }
 
     if (afterDestroy || isolatedFirst || isolatedSecond || global) {
       response.setHeader('Connection', 'close')
@@ -346,14 +383,37 @@ async function startHttpKeepAliveClientServer(nonce: string): Promise<{
       ? 'first'
       : second
         ? 'second'
-        : afterDestroy
-          ? 'after-destroy'
-          : isolatedFirst
-            ? 'isolated-first'
-            : isolatedSecond
-              ? 'isolated-second'
-              : 'global'
-    response.end(valid ? `keep-alive-${name} ${nonce}` : 'invalid keep-alive request')
+        : queuedFirst
+          ? 'queued-first'
+          : queuedSecond
+            ? 'queued-second'
+            : originBlock
+              ? 'origin-block'
+              : otherOrigin
+                ? 'other-origin'
+                : afterDestroy
+                  ? 'after-destroy'
+                  : isolatedFirst
+                    ? 'isolated-first'
+                    : isolatedSecond
+                      ? 'isolated-second'
+                      : 'global'
+    const body = valid ? `keep-alive-${name} ${nonce}` : 'invalid keep-alive request'
+
+    if (queuedFirst || originBlock) {
+      setTimeout(
+        () => {
+          if (originBlock) {
+            originState.primaryReleased = true
+          }
+          response.end(body)
+        },
+        originBlock ? 250 : 100
+      )
+      return
+    }
+
+    response.end(body)
   })
 
   server.on('connection', () => {
