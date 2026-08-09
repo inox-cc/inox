@@ -3,6 +3,7 @@
 #include <limits.h>
 #include <stdint.h>
 #include <span>
+#include <string_view>
 #include <utility>
 #include "inox/array.h"
 #include "inox/binary.h"
@@ -33,7 +34,9 @@
 static inox_status inox_crypto_random_bytes_raw(uint8_t* out, size_t len);
 static int inox_crypto_number_to_size(inox_number value, size_t* out);
 static int inox_crypto_number_is_integer(inox_number value);
-static int CryptoHashState_algorithm_is_sha256(const char* algorithm, size_t algorithm_len);
+#if INOX_CRYPTO_HASH_HAS_EVP
+static const EVP_MD* CryptoHashState_algorithm(const char* algorithm, size_t algorithm_len);
+#endif
 static inox_status CryptoHashState_data(inox_value data, const uint8_t** bytes, size_t* len);
 static inox_status CryptoHashState_create(
   inox_allocator* allocator,
@@ -297,24 +300,18 @@ inox::String Hmac::digest(inox::StringView encoding) {
 
 Array crypto::getHashes() const {
 #if INOX_CRYPTO_HASH_HAS_EVP
-  auto hashes = Array::create(1);
+  auto hashes = Array::from({
+    inox::String("sha1", 4),
+    inox::String("sha224", 6),
+    inox::String("sha256", 6),
+    inox::String("sha384", 6),
+    inox::String("sha512", 6)
+  });
 
   if (inox::thrown() || !hashes.valid()) {
-    inox_crypto_throw_failed("crypto.getHashes failed");
-    return Array();
-  }
-
-  auto sha256 = inox::String("sha256", 6);
-
-  if (!sha256.valid()) {
-    inox_crypto_throw_failed("crypto.getHashes failed");
-    return Array();
-  }
-
-  hashes.set(0, sha256);
-
-  if (inox::thrown()) {
-    inox_crypto_throw_failed("crypto.getHashes failed");
+    if (!inox::thrown()) {
+      inox_crypto_throw_failed("crypto.getHashes failed");
+    }
     return Array();
   }
 
@@ -704,11 +701,13 @@ static inox_status CryptoHashState_create(
 
   *out = 0;
 
-  if (!CryptoHashState_algorithm_is_sha256(algorithm, algorithm_len)) {
+#if INOX_CRYPTO_HASH_HAS_EVP
+  const EVP_MD* digest = CryptoHashState_algorithm(algorithm, algorithm_len);
+
+  if (digest == 0) {
     return INOX_ERR_UNSUPPORTED;
   }
 
-#if INOX_CRYPTO_HASH_HAS_EVP
   CryptoHashState* hash = (CryptoHashState*)allocator->alloc(allocator->user, sizeof(CryptoHashState), alignof(CryptoHashState));
 
   if (hash == 0) {
@@ -724,7 +723,7 @@ static inox_status CryptoHashState_create(
     return INOX_ERR_OOM;
   }
 
-  if (EVP_DigestInit_ex(hash->ctx, EVP_sha256(), 0) != 1) {
+  if (EVP_DigestInit_ex(hash->ctx, digest, 0) != 1) {
     CryptoHashState_free(hash);
     return INOX_ERR_UNSUPPORTED;
   }
@@ -769,10 +768,6 @@ static inox_status CryptoHmacState_create(
 
   *out = 0;
 
-  if (!CryptoHashState_algorithm_is_sha256(algorithm, algorithm_len)) {
-    return INOX_ERR_UNSUPPORTED;
-  }
-
   if (key_bytes == 0 && key_len != 0) {
     return INOX_ERR_TYPE;
   }
@@ -782,6 +777,12 @@ static inox_status CryptoHmacState_create(
   }
 
 #if INOX_CRYPTO_HASH_HAS_EVP
+  const EVP_MD* digest = CryptoHashState_algorithm(algorithm, algorithm_len);
+
+  if (digest == 0) {
+    return INOX_ERR_UNSUPPORTED;
+  }
+
   CryptoHmacState* hmac = (CryptoHmacState*)allocator->alloc(allocator->user, sizeof(CryptoHmacState), alignof(CryptoHmacState));
 
   if (hmac == 0) {
@@ -797,7 +798,7 @@ static inox_status CryptoHmacState_create(
     return INOX_ERR_OOM;
   }
 
-  if (HMAC_Init_ex(hmac->ctx, key_bytes, (int)key_len, EVP_sha256(), 0) != 1) {
+  if (HMAC_Init_ex(hmac->ctx, key_bytes, (int)key_len, digest, 0) != 1) {
     CryptoHmacState_free(hmac);
     return INOX_ERR_UNSUPPORTED;
   }
@@ -826,10 +827,6 @@ static inox_status CryptoHmacState_create(
   }
 
   *out = 0;
-
-  if (!CryptoHashState_algorithm_is_sha256(algorithm, algorithm_len)) {
-    return INOX_ERR_UNSUPPORTED;
-  }
 
   const uint8_t* key_bytes = 0;
   size_t key_len = 0;
@@ -931,15 +928,33 @@ static int inox_crypto_number_is_integer(inox_number value) {
   return (inox_number)converted == value;
 }
 
-static int CryptoHashState_algorithm_is_sha256(const char* algorithm, size_t algorithm_len) {
-  return algorithm_len == 6 &&
-         algorithm[0] == 's' &&
-         algorithm[1] == 'h' &&
-         algorithm[2] == 'a' &&
-         algorithm[3] == '2' &&
-         algorithm[4] == '5' &&
-         algorithm[5] == '6';
+#if INOX_CRYPTO_HASH_HAS_EVP
+static const EVP_MD* CryptoHashState_algorithm(const char* algorithm, size_t algorithm_len) {
+  const std::string_view name(algorithm, algorithm_len);
+
+  if (name == "sha1") {
+    return EVP_sha1();
+  }
+
+  if (name == "sha224") {
+    return EVP_sha224();
+  }
+
+  if (name == "sha256") {
+    return EVP_sha256();
+  }
+
+  if (name == "sha384") {
+    return EVP_sha384();
+  }
+
+  if (name == "sha512") {
+    return EVP_sha512();
+  }
+
+  return 0;
 }
+#endif
 
 static inox_status CryptoHashState_data(inox_value data, const uint8_t** bytes, size_t* len) {
   if (bytes == 0 || len == 0) {

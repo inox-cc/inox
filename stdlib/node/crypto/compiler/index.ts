@@ -28,6 +28,7 @@ const bufferTypeId = 'node:buffer#Buffer'
 
 const randomRequirements = [runtimeRequirement]
 const hashRequirements = [runtimeRequirement, hashRuntimeRequirement]
+const hashAlgorithms = ['sha1', 'sha224', 'sha256', 'sha384', 'sha512']
 const stringTypeRef = primitiveTypeRef('string')
 
 const operations: LibraryOperationDescriptor[] = [
@@ -77,7 +78,7 @@ const operations: LibraryOperationDescriptor[] = [
     randomRequirements,
     { resultTypeRef: primitiveTypeRef('boolean') }
   ),
-  moduleCall('createHash', ['string-view'], [], 1, 1, [sha256Argument('createHash')], hashRequirements, {
+  moduleCall('createHash', ['string-view'], [], 1, 1, [hashAlgorithmArgument('createHash')], hashRequirements, {
     resultTypeRef: nominalTypeRef(hashTypeId),
     cResultMode: 'value'
   }),
@@ -87,7 +88,7 @@ const operations: LibraryOperationDescriptor[] = [
     [],
     2,
     2,
-    [sha256Argument('createHmac'), stringOrBytesArgument()],
+    [hashAlgorithmArgument('createHmac'), stringOrBytesArgument()],
     hashRequirements,
     { resultTypeRef: nominalTypeRef(hmacTypeId), cResultMode: 'value' }
   ),
@@ -206,7 +207,7 @@ function hashOperation(): LibraryOperationDescriptor {
     minArgs: 2,
     maxArgs: 3,
     argumentChecks: [
-      sha256Argument('hash'),
+      hashAlgorithmArgument('hash'),
       stringOrBytesArgument(),
       literalArgument(
         ['hex', 'base64', 'base64url', 'buffer'],
@@ -410,10 +411,10 @@ function encodingArgument(): LibraryArgumentCheckDescriptor {
   return { valueTypes: ['string'] }
 }
 
-function sha256Argument(method: string): LibraryArgumentCheckDescriptor {
+function hashAlgorithmArgument(method: string): LibraryArgumentCheckDescriptor {
   return literalArgument(
-    ['sha256'],
-    `node:crypto ${method} only supports the 'sha256' algorithm in the current C++ backend`
+    hashAlgorithms,
+    `node:crypto ${method} only supports 'sha1', 'sha224', 'sha256', 'sha384' and 'sha512' in the current C++ backend`
   )
 }
 

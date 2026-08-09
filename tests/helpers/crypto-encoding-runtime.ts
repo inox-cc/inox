@@ -35,14 +35,24 @@ console.log('${resultPrefix.trim()}', base64, base64url, decodedText, bytes, hma
 `
 
 export async function assertCryptoEncodingRuntime(compiler: CryptoEncodingCompiler): Promise<void> {
-  const workspace = join(rootDir, `dist/test-tmp/crypto-encoding-runtime-${compiler.label}`)
+  await assertCryptoRuntime(compiler, 'encoding', source, resultPrefix, [`${resultPrefix}${expectedResult}`])
+}
+
+export async function assertCryptoRuntime(
+  compiler: CryptoEncodingCompiler,
+  caseName: string,
+  programSource: string,
+  resultLinePrefix: string,
+  expectedLines: string[]
+): Promise<void> {
+  const workspace = join(rootDir, `dist/test-tmp/crypto-${caseName}-runtime-${compiler.label}`)
   const input = join(workspace, 'index.ts')
   const output = join(workspace, 'output')
 
   try {
     await rm(workspace, { recursive: true, force: true })
     await mkdir(workspace, { recursive: true })
-    await writeFile(input, source)
+    await writeFile(input, programSource)
 
     const result = await runCommand(compiler.command, [
       ...compiler.args,
@@ -57,15 +67,13 @@ export async function assertCryptoEncodingRuntime(compiler: CryptoEncodingCompil
     assert.equal(
       result.code,
       0,
-      `${compiler.label} crypto encoding runtime failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
+      `${compiler.label} crypto ${caseName} runtime failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
     )
     assert.equal(result.stderr, '')
 
-    const resultLine = result.stdout
-      .split('\n')
-      .find((line) => line.startsWith(resultPrefix))
+    const resultLines = result.stdout.split('\n').filter((line) => line.startsWith(resultLinePrefix))
 
-    assert.equal(resultLine, `${resultPrefix}${expectedResult}`)
+    assert.deepEqual(resultLines, expectedLines)
   } finally {
     await rm(workspace, { recursive: true, force: true })
   }
