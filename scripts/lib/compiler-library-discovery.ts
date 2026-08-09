@@ -9,7 +9,7 @@ import type {
 } from '../../compiler/extensions/types.ts'
 import { rootDir } from './repo-root.ts'
 
-export type DiscoveredCompilerLibraryKind = 'global' | 'node'
+export type DiscoveredCompilerLibraryKind = 'global' | 'node' | 'package'
 
 export type DiscoveredCompilerLibrary = {
   id: string
@@ -33,9 +33,49 @@ export async function discoverCompilerLibraries(projectRoot: string = rootDir): 
 
   await discoverGlobalLibraries(projectRoot, libraries)
   await discoverNodeLibraries(projectRoot, libraries)
+  await discoverBarePackageLibraries(projectRoot, libraries)
 
   libraries.sort((left, right) => left.id.localeCompare(right.id))
   return libraries
+}
+
+async function discoverBarePackageLibraries(
+  projectRoot: string,
+  libraries: DiscoveredCompilerLibrary[]
+): Promise<void> {
+  const packageRoot = join(projectRoot, 'stdlib/packages')
+
+  if (!(await isDirectory(packageRoot))) {
+    return
+  }
+
+  await discoverBarePackageDirectory(projectRoot, packageRoot, '', libraries)
+}
+
+async function discoverBarePackageDirectory(
+  projectRoot: string,
+  directory: string,
+  relativeName: string,
+  libraries: DiscoveredCompilerLibrary[]
+): Promise<void> {
+  const declarationPath = join(directory, 'index.d.ts')
+
+  if (relativeName !== '' && (await isFile(declarationPath))) {
+    libraries.push(await discoverPackage(projectRoot, directory, 'package', relativeName, relativeName))
+  }
+
+  const entries = await readdir(directory, { withFileTypes: true })
+  entries.sort((left, right) => left.name.localeCompare(right.name))
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || nodePackageChildSkipNames.has(entry.name)) {
+      continue
+    }
+
+    const childName = relativeName === '' ? entry.name : `${relativeName}/${entry.name}`
+
+    await discoverBarePackageDirectory(projectRoot, join(directory, entry.name), childName, libraries)
+  }
 }
 
 async function discoverGlobalLibraries(projectRoot: string, libraries: DiscoveredCompilerLibrary[]): Promise<void> {

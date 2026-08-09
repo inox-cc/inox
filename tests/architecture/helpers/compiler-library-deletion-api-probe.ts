@@ -38,9 +38,9 @@ export async function compilerLibraryDeletionApiProbe(
     }
   }
 
-  if (library.kind === 'node') {
+  if (library.kind !== 'global') {
     if (library.importSource === null) {
-      throw new Error(`${library.id}: node package requires an import source`)
+      throw new Error(`${library.id}: imported package requires an import source`)
     }
 
     const unsupported = library.compilerPackage === null ? ['INOX_UNSUPPORTED_IMPORT_SOURCE'] : []

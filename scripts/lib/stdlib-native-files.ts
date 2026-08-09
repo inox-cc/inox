@@ -1,23 +1,50 @@
 import { readdir } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
 
-import { rootDir } from './repo-root.ts'
 import { discoverCompilerLibraries } from './compiler-library-discovery.ts'
-
-const stdlibNodeRoot = join(rootDir, 'stdlib/node')
-const stdlibGlobalRoot = join(rootDir, 'stdlib/global')
-const stdlibNativeRoots = [stdlibGlobalRoot, stdlibNodeRoot]
+import { rootDir } from './repo-root.ts'
 
 export async function collectStdlibNativeSources(): Promise<string[]> {
-  const sources = await collectNativeSourceFilesFromRoots(stdlibNativeRoots)
+  const libraries = await discoverCompilerLibraries()
+  const sources = new Set<string>()
 
-  return sources.map(repoRelativePath).sort()
+  for (const library of libraries) {
+    for (const source of library.nativeSources) {
+      sources.add(source)
+    }
+  }
+
+  return Array.from(sources).sort()
+}
+
+export async function collectStdlibNativeHeaders(): Promise<string[]> {
+  const libraries = await discoverCompilerLibraries()
+  const headers = new Set<string>()
+
+  for (const library of libraries) {
+    for (const includeDir of library.nativeIncludeDirs) {
+      for (const header of await collectHeaderFiles(join(rootDir, includeDir))) {
+        headers.add(repoRelativePath(header))
+      }
+    }
+  }
+
+  return Array.from(headers).sort()
 }
 
 export async function collectStdlibNativeIncludeArgs(): Promise<string[]> {
-  const includeDirs = await collectNativeIncludeDirsFromRoots(stdlibNativeRoots)
+  const libraries = await discoverCompilerLibraries()
+  const includeDirs = new Set<string>()
 
-  return includeDirs.map((directory) => `-I${repoRelativePath(directory)}`).sort()
+  for (const library of libraries) {
+    for (const includeDir of library.nativeIncludeDirs) {
+      includeDirs.add(includeDir)
+    }
+  }
+
+  return Array.from(includeDirs)
+    .sort()
+    .map((directory) => `-I${directory}`)
 }
 
 export async function collectStdlibNativeLinkerArguments(): Promise<string[]> {
@@ -33,102 +60,21 @@ export async function collectStdlibNativeLinkerArguments(): Promise<string[]> {
   return Array.from(argumentsSet)
 }
 
-async function collectNativeSourceFilesFromRoots(roots: string[]): Promise<string[]> {
-  const files: string[] = []
-
-  for (let index = 0; index < roots.length; index = index + 1) {
-    files.push(...(await collectNativeSourceFiles(roots[index])))
-  }
-
-  return files
-}
-
-async function collectNativeIncludeDirsFromRoots(roots: string[]): Promise<string[]> {
-  const directories: string[] = []
-
-  for (let index = 0; index < roots.length; index = index + 1) {
-    directories.push(...(await collectNativeIncludeDirs(roots[index])))
-  }
-
-  return directories
-}
-
-async function collectNativeSourceFiles(directory: string): Promise<string[]> {
-  const entries = await readdir(directory, {
-    withFileTypes: true
-  })
-  const files: string[] = []
-
-  for (const entry of entries) {
-    const path = join(directory, entry.name)
-
-    if (!entry.isDirectory()) {
-      continue
-    }
-
-    if (entry.name === 'src') {
-      files.push(...(await collectPackageSourceFiles(path)))
-      continue
-    }
-
-    if (entry.name !== 'include') {
-      files.push(...(await collectNativeSourceFiles(path)))
-    }
-  }
-
-  return files
-}
-
-async function collectPackageSourceFiles(directory: string): Promise<string[]> {
-  const entries = await readdir(directory, {
-    withFileTypes: true
-  })
-  const files: string[] = []
+async function collectHeaderFiles(directory: string): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true })
+  const headers: string[] = []
 
   for (const entry of entries) {
     const path = join(directory, entry.name)
 
     if (entry.isDirectory()) {
-      files.push(...(await collectPackageSourceFiles(path)))
-      continue
-    }
-
-    if (entry.isFile() && nativeSourceFileName(entry.name)) {
-      files.push(path)
+      headers.push(...(await collectHeaderFiles(path)))
+    } else if (entry.isFile() && entry.name.endsWith('.h')) {
+      headers.push(path)
     }
   }
 
-  return files
-}
-
-function nativeSourceFileName(name: string): boolean {
-  return name.endsWith('.c') || name.endsWith('.cc')
-}
-
-async function collectNativeIncludeDirs(directory: string): Promise<string[]> {
-  const entries = await readdir(directory, {
-    withFileTypes: true
-  })
-  const directories: string[] = []
-
-  for (const entry of entries) {
-    const path = join(directory, entry.name)
-
-    if (!entry.isDirectory()) {
-      continue
-    }
-
-    if (entry.name === 'include') {
-      directories.push(path)
-      continue
-    }
-
-    if (entry.name !== 'src') {
-      directories.push(...(await collectNativeIncludeDirs(path)))
-    }
-  }
-
-  return directories
+  return headers
 }
 
 function repoRelativePath(path: string): string {

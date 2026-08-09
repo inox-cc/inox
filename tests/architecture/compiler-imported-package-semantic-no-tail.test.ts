@@ -41,7 +41,7 @@ test('portable compiler не содержит descriptor-derived vocabulary impo
 })
 
 async function importedPackageVocabulary(): Promise<VocabularyEntry[]> {
-  const libraries = (await discoverCompilerLibraries()).filter((library) => library.kind === 'node')
+  const libraries = (await discoverCompilerLibraries()).filter((library) => library.kind !== 'global')
   const entries: VocabularyEntry[] = []
 
   for (const library of libraries) {

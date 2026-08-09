@@ -7,6 +7,7 @@ import { createServer } from 'node:tls'
 import { fileURLToPath } from 'node:url'
 import { compileSource } from '../../compiler/compiler.ts'
 import {
+  collectStdlibNativeHeaders,
   collectStdlibNativeIncludeArgs,
   collectStdlibNativeLinkerArguments,
   collectStdlibNativeSources
@@ -296,7 +297,7 @@ async function runtimeArchiveFingerprint(
     ...sources,
     ...(await collectRuntimeFiles('runtime/include')),
     ...(await collectRuntimeFiles('runtime/src', '.h')),
-    ...(await collectRuntimeFiles('stdlib/node', '.h'))
+    ...(await collectStdlibNativeHeaders())
   ].sort()
 
   hash.update(`version:${runtimeArchiveVersion}\n`)
