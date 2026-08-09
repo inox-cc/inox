@@ -2,6 +2,8 @@ import type { Buffer, Uint8Array } from 'node:buffer'
 
 export type BinaryLike = string | Buffer | Uint8Array
 export type BinaryBuffer = Buffer | Uint8Array
+export type PrivateKeyInput = BinaryLike | KeyObject
+export type PublicKeyInput = BinaryLike | KeyObject
 
 export interface ScryptOptions {
   cost?: number
@@ -27,6 +29,8 @@ export interface CryptoModule {
   createHmac(algorithm: string, key: BinaryLike): Hmac
   createCipheriv(algorithm: string, key: BinaryLike, iv: BinaryLike, options?: CipherGCMOptions): Cipheriv
   createDecipheriv(algorithm: string, key: BinaryLike, iv: BinaryLike, options?: CipherGCMOptions): Decipheriv
+  createPrivateKey(key: BinaryLike): KeyObject
+  createPublicKey(key: PublicKeyInput): KeyObject
   getHashes(): string[]
   getRandomValues(bytes: BinaryBuffer): BinaryBuffer
   hkdfSync(digest: string, ikm: BinaryLike, salt: BinaryLike, info: BinaryLike, keylen: number): Buffer
@@ -39,7 +43,9 @@ export interface CryptoModule {
   randomInt(min: number, max: number): number
   randomUUID(): string
   scryptSync(password: BinaryLike, salt: BinaryLike, keylen: number, options?: ScryptOptions): Buffer
+  sign(algorithm: string, data: BinaryLike, key: PrivateKeyInput): Buffer
   timingSafeEqual(a: BinaryBuffer, b: BinaryBuffer): boolean
+  verify(algorithm: string, data: BinaryLike, key: PublicKeyInput, signature: BinaryBuffer): boolean
 }
 
 export class Hash {
@@ -74,6 +80,11 @@ export class Decipheriv {
   setAuthTag(buffer: BinaryLike, encoding?: string): Decipheriv
 }
 
+export class KeyObject {
+  readonly type: 'private' | 'public'
+  readonly asymmetricKeyType: 'rsa' | 'rsa-pss' | 'ec'
+}
+
 export function createCipheriv(algorithm: string, key: BinaryLike, iv: BinaryLike, options?: CipherGCMOptions): Cipheriv
 export function createDecipheriv(
   algorithm: string,
@@ -81,6 +92,8 @@ export function createDecipheriv(
   iv: BinaryLike,
   options?: CipherGCMOptions
 ): Decipheriv
+export function createPrivateKey(key: BinaryLike): KeyObject
+export function createPublicKey(key: PublicKeyInput): KeyObject
 export function createHash(algorithm: string): Hash
 export function createHmac(algorithm: string, key: BinaryLike): Hmac
 export function getHashes(): string[]
@@ -101,7 +114,9 @@ export function randomInt(max: number): number
 export function randomInt(min: number, max: number): number
 export function randomUUID(): string
 export function scryptSync(password: BinaryLike, salt: BinaryLike, keylen: number, options?: ScryptOptions): Buffer
+export function sign(algorithm: string, data: BinaryLike, key: PrivateKeyInput): Buffer
 export function timingSafeEqual(a: BinaryBuffer, b: BinaryBuffer): boolean
+export function verify(algorithm: string, data: BinaryLike, key: PublicKeyInput, signature: BinaryBuffer): boolean
 
 declare const crypto: CryptoModule
 export default crypto

@@ -129,6 +129,7 @@ async function runHostedIntegrationTests(): Promise<void> {
   const { assertHostedCryptoHashAlgorithmsRuntime } =
     await import('./integration/crypto-hash-algorithms-runtime-hosted.test.ts')
   const { assertHostedCryptoKdfRuntime } = await import('./integration/crypto-kdf-runtime-hosted.test.ts')
+  const { assertHostedCryptoSignatureRuntime } = await import('./integration/crypto-signature-runtime-hosted.test.ts')
   const { assertHostedCryptoScryptRuntime } = await import('./integration/crypto-scrypt-runtime-hosted.test.ts')
   const { assertDateLowersToGlobalObject } = await import('./integration/date-global-object-lowering.test.ts')
   const { assertPerformanceLowersToGlobalObject } =
@@ -296,6 +297,10 @@ async function runHostedIntegrationTests(): Promise<void> {
 
     await t.test('crypto-kdf-runtime-hosted', async () => {
       await assertHostedCryptoKdfRuntime()
+    })
+
+    await t.test('crypto-signature-runtime-hosted', async () => {
+      await assertHostedCryptoSignatureRuntime()
     })
 
     await t.test('crypto-scrypt-runtime-hosted', async () => {
@@ -603,6 +608,7 @@ async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<
   const { assertNativeCryptoHashAlgorithmsRuntime } =
     await import('./integration/crypto-hash-algorithms-runtime-native.test.ts')
   const { assertNativeCryptoKdfRuntime } = await import('./integration/crypto-kdf-runtime-native.test.ts')
+  const { assertNativeCryptoSignatureRuntime } = await import('./integration/crypto-signature-runtime-native.test.ts')
   const { assertNativeCryptoScryptRuntime } = await import('./integration/crypto-scrypt-runtime-native.test.ts')
   const { assertNativeCompilerUsesDirectNativeInitializers } =
     await import('./integration/direct-native-variable-lowering.test.ts')
@@ -647,6 +653,10 @@ async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<
 
     await t.test('crypto-kdf-runtime-native', async () => {
       await assertNativeCryptoKdfRuntime(compilerPath)
+    })
+
+    await t.test('crypto-signature-runtime-native', async () => {
+      await assertNativeCryptoSignatureRuntime(compilerPath)
     })
 
     await t.test('crypto-scrypt-runtime-native', async () => {

@@ -21,6 +21,8 @@ test('entrypoint package node:crypto владеет operations и backend requir
   const operations = cryptoPackage.compilerPackage.operations
   const createHash = operations.find((operation) => operation.operationId === 'node:crypto#createHash')
   const createCipheriv = operations.find((operation) => operation.operationId === 'node:crypto#createCipheriv')
+  const createPrivateKey = operations.find((operation) => operation.operationId === 'node:crypto#createPrivateKey')
+  const sign = operations.find((operation) => operation.operationId === 'node:crypto#sign')
   const hash = operations.find((operation) => operation.operationId === 'node:crypto#hash')
   const update = operations.find((operation) => operation.operationId === 'node:crypto#Hash#update')
   const digest = operations.find((operation) => operation.operationId === 'node:crypto#Hash#digest')
@@ -33,6 +35,8 @@ test('entrypoint package node:crypto владеет operations и backend requir
   )
   assert.deepEqual(createHash?.runtimeRequirements, ['node:crypto', 'node:crypto:hash'])
   assert.deepEqual(createCipheriv?.runtimeRequirements, ['node:crypto', 'node:crypto:cipher'])
+  assert.deepEqual(createPrivateKey?.runtimeRequirements, ['node:crypto', 'node:crypto:signature'])
+  assert.deepEqual(sign?.runtimeRequirements, ['node:crypto', 'node:crypto:signature'])
   assert.ok(createHash?.bindingAliases?.includes('node:crypto#module:node:crypto:default.createHash'))
   assert.equal(hash?.variants?.[0].resultTypeRef?.kind, 'primitive')
   assert.equal(hash?.variants?.[0].cResultMapping?.cppType, 'inox::String')
@@ -47,6 +51,7 @@ test('entrypoint package node:crypto владеет operations и backend requir
   const randomRequirement = cryptoPackage.compilerPackage.runtimeRequirements[0]
   const hashRequirement = cryptoPackage.compilerPackage.runtimeRequirements[1]
   const cipherRequirement = cryptoPackage.compilerPackage.runtimeRequirements[2]
+  const signatureRequirement = cryptoPackage.compilerPackage.runtimeRequirements[3]
 
   assert.equal(randomRequirement.id, 'node:crypto')
   assert.deepEqual(randomRequirement.dependencies, [
@@ -80,5 +85,13 @@ test('entrypoint package node:crypto владеет operations и backend requir
     diagnosticCode: 'INOX_NOT_IMPLEMENTED',
     diagnosticMessage:
       'node:crypto cipher APIs require --tls-backend boringssl or --tls-backend openssl in the current C++ backend'
+  })
+  assert.equal(signatureRequirement.id, 'node:crypto:signature')
+  assert.deepEqual(signatureRequirement.optionConstraints?.[0], {
+    optionId: 'target:runtime#tls-backend',
+    allowedValues: ['boringssl', 'openssl'],
+    diagnosticCode: 'INOX_NOT_IMPLEMENTED',
+    diagnosticMessage:
+      'node:crypto signature APIs require --tls-backend boringssl or --tls-backend openssl in the current C++ backend'
   })
 })

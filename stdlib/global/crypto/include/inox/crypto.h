@@ -11,6 +11,7 @@
 struct CryptoHashState;
 struct CryptoHmacState;
 struct CryptoCipherState;
+struct CryptoKeyState;
 
 class Hash {
 private:
@@ -137,6 +138,26 @@ public:
   Decipheriv& setAuthTag(const inox::Value& tag, inox::StringView encoding);
 };
 
+class KeyObject {
+private:
+  CryptoKeyState* handle_;
+
+  explicit KeyObject(CryptoKeyState* handle);
+
+  friend class crypto;
+
+public:
+  KeyObject();
+  ~KeyObject();
+  KeyObject(const KeyObject& other) = delete;
+  KeyObject& operator=(const KeyObject& other) = delete;
+  KeyObject(KeyObject&& other) noexcept;
+  KeyObject& operator=(KeyObject&& other) noexcept;
+
+  inox::StringView type() const;
+  inox::StringView asymmetricKeyType() const;
+};
+
 class crypto {
 public:
   Array getHashes() const;
@@ -180,6 +201,9 @@ public:
     const inox::Value& iv,
     const inox::Value& options
   ) const;
+  KeyObject createPrivateKey(const inox::Value& key) const;
+  KeyObject createPublicKey(const inox::Value& key) const;
+  KeyObject createPublicKey(const KeyObject& key) const;
   Hash createHash(inox::StringView algorithm) const;
   Hmac createHmac(inox::StringView algorithm, inox::StringView key) const;
   Hmac createHmac(inox::StringView algorithm, const inox::Value& key) const;
@@ -197,7 +221,21 @@ public:
   ) const;
   Buffer hashBuffer(inox::StringView algorithm, inox::StringView data) const;
   Buffer hashBuffer(inox::StringView algorithm, const inox::Value& data) const;
+  Buffer sign(inox::StringView algorithm, const inox::Value& data, const inox::Value& key) const;
+  Buffer sign(inox::StringView algorithm, const inox::Value& data, const KeyObject& key) const;
   bool timingSafeEqual(const Uint8Array& left, const Uint8Array& right) const;
+  bool verify(
+    inox::StringView algorithm,
+    const inox::Value& data,
+    const inox::Value& key,
+    const inox::Value& signature
+  ) const;
+  bool verify(
+    inox::StringView algorithm,
+    const inox::Value& data,
+    const KeyObject& key,
+    const inox::Value& signature
+  ) const;
 };
 
 extern crypto crypto;

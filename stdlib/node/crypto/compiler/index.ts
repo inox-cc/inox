@@ -22,18 +22,22 @@ const arrayTypeId = `${collectionsLibraryId}#Array`
 const runtimeRequirement = 'node:crypto'
 const hashRuntimeRequirement = 'node:crypto:hash'
 const cipherRuntimeRequirement = 'node:crypto:cipher'
+const signatureRuntimeRequirement = 'node:crypto:signature'
 const hashTypeId = `${libraryId}#Hash`
 const hmacTypeId = `${libraryId}#Hmac`
 const cipherTypeId = `${libraryId}#Cipheriv`
 const decipherTypeId = `${libraryId}#Decipheriv`
+const keyObjectTypeId = `${libraryId}#KeyObject`
 const uint8ArrayTypeId = 'global:binary#Uint8Array'
 const bufferTypeId = 'node:buffer#Buffer'
 
 const randomRequirements = [runtimeRequirement]
 const hashRequirements = [runtimeRequirement, hashRuntimeRequirement]
 const cipherRequirements = [runtimeRequirement, cipherRuntimeRequirement]
+const signatureRequirements = [runtimeRequirement, signatureRuntimeRequirement]
 const hashAlgorithms = ['sha1', 'sha224', 'sha256', 'sha384', 'sha512']
 const cipherAlgorithms = ['aes-128-gcm', 'aes-192-gcm', 'aes-256-gcm']
+const signatureAlgorithms = ['sha256', 'sha384', 'sha512']
 const stringTypeRef = primitiveTypeRef('string')
 
 const operations: LibraryOperationDescriptor[] = [
@@ -145,6 +149,14 @@ const operations: LibraryOperationDescriptor[] = [
     cipherRequirements,
     { resultTypeRef: nominalTypeRef(decipherTypeId), cResultMode: 'value' }
   ),
+  moduleCall('createPrivateKey', ['value'], [], 1, 1, [stringOrBytesArgument()], signatureRequirements, {
+    resultTypeRef: nominalTypeRef(keyObjectTypeId),
+    cResultMode: 'value'
+  }),
+  moduleCall('createPublicKey', ['value'], [], 1, 1, [publicKeyInputArgument()], signatureRequirements, {
+    resultTypeRef: nominalTypeRef(keyObjectTypeId),
+    cResultMode: 'value'
+  }),
   moduleCall('createHash', ['string-view'], [], 1, 1, [hashAlgorithmArgument('createHash')], hashRequirements, {
     resultTypeRef: nominalTypeRef(hashTypeId),
     cResultMode: 'value'
@@ -172,6 +184,26 @@ const operations: LibraryOperationDescriptor[] = [
   cipherSetAadOperation(decipherTypeId),
   cipherGetAuthTagOperation(),
   cipherSetAuthTagOperation(),
+  moduleCall(
+    'sign',
+    ['string-view', 'value', 'value'],
+    [],
+    3,
+    3,
+    [signatureAlgorithmArgument('sign'), stringOrBytesArgument(), privateKeyInputArgument()],
+    signatureRequirements,
+    { resultTypeRef: nominalTypeRef(bufferTypeId), cResultMode: 'value' }
+  ),
+  moduleCall(
+    'verify',
+    ['string-view', 'value', 'value', 'value'],
+    [],
+    4,
+    4,
+    [signatureAlgorithmArgument('verify'), stringOrBytesArgument(), publicKeyInputArgument(), bytesArgument()],
+    signatureRequirements,
+    { resultTypeRef: primitiveTypeRef('boolean') }
+  ),
   ...unsupportedMethods().map(unsupportedOperation)
 ]
 
@@ -182,7 +214,21 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
     nativeType(hashTypeId, 'Hash', hashRequirements),
     nativeType(hmacTypeId, 'Hmac', hashRequirements),
     nativeType(cipherTypeId, 'Cipheriv', cipherRequirements),
-    nativeType(decipherTypeId, 'Decipheriv', cipherRequirements)
+    nativeType(decipherTypeId, 'Decipheriv', cipherRequirements),
+    nativeType(keyObjectTypeId, 'KeyObject', signatureRequirements, [
+      {
+        name: 'type',
+        valueType: 'string',
+        readonly: true,
+        cGetter: 'type'
+      },
+      {
+        name: 'asymmetricKeyType',
+        valueType: 'string',
+        readonly: true,
+        cGetter: 'asymmetricKeyType'
+      }
+    ])
   ],
   operations,
   intrinsicBindings: [],
@@ -237,6 +283,21 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
           diagnosticCode: 'INOX_NOT_IMPLEMENTED',
           diagnosticMessage:
             'node:crypto cipher APIs require --tls-backend boringssl or --tls-backend openssl in the current C++ backend'
+        }
+      ]
+    },
+    {
+      id: signatureRuntimeRequirement,
+      dependencies: [],
+      cPreludeIncludes: ['inox/crypto.h'],
+      capabilities: [],
+      optionConstraints: [
+        {
+          optionId: 'target:runtime#tls-backend',
+          allowedValues: ['boringssl', 'openssl'],
+          diagnosticCode: 'INOX_NOT_IMPLEMENTED',
+          diagnosticMessage:
+            'node:crypto signature APIs require --tls-backend boringssl or --tls-backend openssl in the current C++ backend'
         }
       ]
     }
@@ -625,7 +686,17 @@ function receiverScalarVariant(
   }
 }
 
-function nativeType(typeId: string, cppType: string, runtimeRequirements: string[]) {
+function nativeType(
+  typeId: string,
+  cppType: string,
+  runtimeRequirements: string[],
+  fields: Array<{
+    cGetter: string
+    name: string
+    readonly: boolean
+    valueType: string
+  }> = []
+) {
   return {
     libraryId,
     typeId,
@@ -633,7 +704,8 @@ function nativeType(typeId: string, cppType: string, runtimeRequirements: string
     valueType: 'object',
     cppType,
     baseTypeIds: [],
-    runtimeRequirements
+    runtimeRequirements,
+    fields
   }
 }
 
@@ -717,6 +789,24 @@ function cipherOutputEncodingArgument(values: string[]): LibraryArgumentCheckDes
   )
 }
 
+function signatureAlgorithmArgument(method: string): LibraryArgumentCheckDescriptor {
+  return literalArgument(
+    signatureAlgorithms,
+    `node:crypto ${method} only supports 'sha256', 'sha384' and 'sha512' in the current C++ backend`
+  )
+}
+
+function privateKeyInputArgument(): LibraryArgumentCheckDescriptor {
+  return {
+    valueTypes: ['string', 'bytes', 'object'],
+    objectTypeIds: [keyObjectTypeId]
+  }
+}
+
+function publicKeyInputArgument(): LibraryArgumentCheckDescriptor {
+  return privateKeyInputArgument()
+}
+
 function literalArgument(values: string[], message: string): LibraryArgumentCheckDescriptor {
   return {
     valueTypes: ['string'],
@@ -747,8 +837,6 @@ function unsupportedMethods(): string[] {
     'createDiffieHellman',
     'createDiffieHellmanGroup',
     'createECDH',
-    'createPrivateKey',
-    'createPublicKey',
     'createSecretKey',
     'createSign',
     'createVerify',
@@ -777,8 +865,6 @@ function unsupportedMethods(): string[] {
     'scrypt',
     'secureHeapUsed',
     'setEngine',
-    'setFips',
-    'sign',
-    'verify'
+    'setFips'
   ]
 }

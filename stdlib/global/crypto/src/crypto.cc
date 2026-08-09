@@ -13,8 +13,10 @@
 #include "inox/string.h"
 
 #if defined(INOX_TLS_BACKEND_BORINGSSL) || defined(INOX_TLS_BACKEND_OPENSSL)
+#include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
+#include <openssl/pem.h>
 #define INOX_CRYPTO_HAS_EVP 1
 #else
 #define INOX_CRYPTO_HAS_EVP 0
@@ -96,6 +98,34 @@ static inox_status CryptoCipherState_create(
   CryptoCipherState** out
 );
 static void CryptoCipherState_free(CryptoCipherState* cipher);
+static inox_status CryptoKeyState_create(
+  inox_allocator* allocator,
+  const uint8_t* bytes,
+  size_t len,
+  bool private_key,
+  CryptoKeyState** out
+);
+static inox_status CryptoKeyState_clone_public(
+  inox_allocator* allocator,
+  const CryptoKeyState* key,
+  CryptoKeyState** out
+);
+static void CryptoKeyState_free(CryptoKeyState* key);
+static Buffer inox_crypto_sign(
+  CryptoKeyState* key,
+  inox::StringView algorithm,
+  const uint8_t* bytes,
+  size_t len
+);
+static inox_status inox_crypto_verify(
+  CryptoKeyState* key,
+  inox::StringView algorithm,
+  const uint8_t* bytes,
+  size_t len,
+  const uint8_t* signature,
+  size_t signature_len,
+  bool* out
+);
 static Buffer inox_crypto_cipher_update_raw(
   CryptoCipherState* cipher,
   const uint8_t* bytes,
@@ -159,6 +189,21 @@ struct CryptoCipherState {
   int finalized;
   int updated;
   int auth_tag_set;
+};
+
+enum InoxCryptoKeyType {
+  INOX_CRYPTO_KEY_RSA = 1,
+  INOX_CRYPTO_KEY_RSA_PSS = 2,
+  INOX_CRYPTO_KEY_EC = 3
+};
+
+struct CryptoKeyState {
+  inox_allocator* allocator;
+#if INOX_CRYPTO_HAS_EVP
+  EVP_PKEY* key;
+#endif
+  int private_key;
+  int key_type;
 };
 
 Hash::Hash() : handle_(0) {}
@@ -742,6 +787,58 @@ Decipheriv& Decipheriv::setAuthTag(const inox::Value& tag, inox::StringView enco
   return *this;
 }
 
+KeyObject::KeyObject() : handle_(0) {}
+
+KeyObject::KeyObject(CryptoKeyState* handle) : handle_(handle) {}
+
+KeyObject::~KeyObject() {
+  CryptoKeyState_free(handle_);
+}
+
+KeyObject::KeyObject(KeyObject&& other) noexcept : handle_(other.handle_) {
+  other.handle_ = 0;
+}
+
+KeyObject& KeyObject::operator=(KeyObject&& other) noexcept {
+  if (this != &other) {
+    CryptoKeyState_free(handle_);
+    handle_ = other.handle_;
+    other.handle_ = 0;
+  }
+
+  return *this;
+}
+
+inox::StringView KeyObject::type() const {
+  if (handle_ == 0) {
+    inox::fatal("crypto.KeyObject.type native facade invariant failed");
+  }
+
+  return handle_->private_key
+    ? inox::StringView("private", 7)
+    : inox::StringView("public", 6);
+}
+
+inox::StringView KeyObject::asymmetricKeyType() const {
+  if (handle_ == 0) {
+    inox::fatal("crypto.KeyObject.asymmetricKeyType native facade invariant failed");
+  }
+
+  if (handle_->key_type == INOX_CRYPTO_KEY_RSA) {
+    return inox::StringView("rsa", 3);
+  }
+
+  if (handle_->key_type == INOX_CRYPTO_KEY_RSA_PSS) {
+    return inox::StringView("rsa-pss", 7);
+  }
+
+  if (handle_->key_type == INOX_CRYPTO_KEY_EC) {
+    return inox::StringView("ec", 2);
+  }
+
+  inox::fatal("crypto.KeyObject.asymmetricKeyType native facade invariant failed");
+}
+
 Array crypto::getHashes() const {
 #if INOX_CRYPTO_HAS_EVP
   auto hashes = Array::from({
@@ -1227,6 +1324,79 @@ Decipheriv crypto::createDecipheriv(
   return Decipheriv(cipher);
 }
 
+KeyObject crypto::createPrivateKey(const inox::Value& key) const {
+  const uint8_t* bytes = 0;
+  size_t len = 0;
+  CryptoKeyState* state = 0;
+  inox_status status = inox_crypto_data(key.raw(), &bytes, &len);
+
+  if (status == INOX_OK) {
+    status = CryptoKeyState_create(&inox_default_allocator, bytes, len, true, &state);
+  }
+
+  if (status != INOX_OK) {
+    CryptoKeyState_free(state);
+
+    if (!inox::thrown()) {
+      if (status == INOX_ERR_OOM) {
+        inox::throw_out_of_memory();
+      } else {
+        inox_crypto_throw_failed("crypto.createPrivateKey failed");
+      }
+    }
+
+    return KeyObject();
+  }
+
+  return KeyObject(state);
+}
+
+KeyObject crypto::createPublicKey(const inox::Value& key) const {
+  const uint8_t* bytes = 0;
+  size_t len = 0;
+  CryptoKeyState* state = 0;
+  inox_status status = inox_crypto_data(key.raw(), &bytes, &len);
+
+  if (status == INOX_OK) {
+    status = CryptoKeyState_create(&inox_default_allocator, bytes, len, false, &state);
+  }
+
+  if (status != INOX_OK) {
+    CryptoKeyState_free(state);
+
+    if (!inox::thrown()) {
+      if (status == INOX_ERR_OOM) {
+        inox::throw_out_of_memory();
+      } else {
+        inox_crypto_throw_failed("crypto.createPublicKey failed");
+      }
+    }
+
+    return KeyObject();
+  }
+
+  return KeyObject(state);
+}
+
+KeyObject crypto::createPublicKey(const KeyObject& key) const {
+  CryptoKeyState* state = 0;
+  inox_status status = CryptoKeyState_clone_public(&inox_default_allocator, key.handle_, &state);
+
+  if (status != INOX_OK) {
+    CryptoKeyState_free(state);
+
+    if (status == INOX_ERR_OOM) {
+      inox::throw_out_of_memory();
+    } else {
+      inox_crypto_throw_failed("crypto.createPublicKey failed");
+    }
+
+    return KeyObject();
+  }
+
+  return KeyObject(state);
+}
+
 Hash crypto::createHash(inox::StringView algorithm) const {
   CryptoHashState* hash = 0;
 
@@ -1374,6 +1544,159 @@ Buffer crypto::hashBuffer(inox::StringView algorithm, const inox::Value& data) c
   }
 
   return hash.digest();
+}
+
+Buffer crypto::sign(
+  inox::StringView algorithm,
+  const inox::Value& data,
+  const KeyObject& key
+) const {
+  const uint8_t* bytes = 0;
+  size_t len = 0;
+
+  if (inox_crypto_data(data.raw(), &bytes, &len) != INOX_OK) {
+    inox_crypto_throw_failed("crypto.sign failed");
+    return Buffer();
+  }
+
+  return inox_crypto_sign(key.handle_, algorithm, bytes, len);
+}
+
+Buffer crypto::sign(
+  inox::StringView algorithm,
+  const inox::Value& data,
+  const inox::Value& key
+) const {
+  const uint8_t* data_bytes = 0;
+  const uint8_t* key_bytes = 0;
+  size_t data_len = 0;
+  size_t key_len = 0;
+  CryptoKeyState* state = 0;
+  inox_status status = inox_crypto_data(data.raw(), &data_bytes, &data_len);
+
+  if (status == INOX_OK) {
+    status = inox_crypto_data(key.raw(), &key_bytes, &key_len);
+  }
+
+  if (status == INOX_OK) {
+    status = CryptoKeyState_create(&inox_default_allocator, key_bytes, key_len, true, &state);
+  }
+
+  if (status != INOX_OK) {
+    CryptoKeyState_free(state);
+
+    if (status == INOX_ERR_OOM) {
+      inox::throw_out_of_memory();
+    } else {
+      inox_crypto_throw_failed("crypto.sign failed");
+    }
+
+    return Buffer();
+  }
+
+  Buffer result = inox_crypto_sign(state, algorithm, data_bytes, data_len);
+  CryptoKeyState_free(state);
+  return result;
+}
+
+bool crypto::verify(
+  inox::StringView algorithm,
+  const inox::Value& data,
+  const KeyObject& key,
+  const inox::Value& signature
+) const {
+  const uint8_t* data_bytes = 0;
+  const uint8_t* signature_bytes = 0;
+  size_t data_len = 0;
+  size_t signature_len = 0;
+  bool result = false;
+  inox_status status = INOX_OK;
+
+  status = inox_crypto_data(data.raw(), &data_bytes, &data_len);
+
+  if (status == INOX_OK) {
+    status = inox_crypto_data(signature.raw(), &signature_bytes, &signature_len);
+  }
+
+  if (status == INOX_OK) {
+    status = inox_crypto_verify(
+      key.handle_,
+      algorithm,
+      data_bytes,
+      data_len,
+      signature_bytes,
+      signature_len,
+      &result
+    );
+  }
+
+  if (status != INOX_OK) {
+    if (status == INOX_ERR_OOM) {
+      inox::throw_out_of_memory();
+    } else {
+      inox_crypto_throw_failed("crypto.verify failed");
+    }
+
+    return false;
+  }
+
+  return result;
+}
+
+bool crypto::verify(
+  inox::StringView algorithm,
+  const inox::Value& data,
+  const inox::Value& key,
+  const inox::Value& signature
+) const {
+  const uint8_t* data_bytes = 0;
+  const uint8_t* key_bytes = 0;
+  const uint8_t* signature_bytes = 0;
+  size_t data_len = 0;
+  size_t key_len = 0;
+  size_t signature_len = 0;
+  CryptoKeyState* state = 0;
+  inox_status status = inox_crypto_data(data.raw(), &data_bytes, &data_len);
+
+  if (status == INOX_OK) {
+    status = inox_crypto_data(key.raw(), &key_bytes, &key_len);
+  }
+
+  if (status == INOX_OK) {
+    status = inox_crypto_data(signature.raw(), &signature_bytes, &signature_len);
+  }
+
+  if (status == INOX_OK) {
+    status = CryptoKeyState_create(&inox_default_allocator, key_bytes, key_len, false, &state);
+  }
+
+  bool result = false;
+
+  if (status == INOX_OK) {
+    status = inox_crypto_verify(
+      state,
+      algorithm,
+      data_bytes,
+      data_len,
+      signature_bytes,
+      signature_len,
+      &result
+    );
+  }
+
+  CryptoKeyState_free(state);
+
+  if (status != INOX_OK) {
+    if (status == INOX_ERR_OOM) {
+      inox::throw_out_of_memory();
+    } else {
+      inox_crypto_throw_failed("crypto.verify failed");
+    }
+
+    return false;
+  }
+
+  return result;
 }
 
 bool crypto::timingSafeEqual(const Uint8Array& left, const Uint8Array& right) const {
@@ -1713,6 +2036,356 @@ static void CryptoCipherState_free(CryptoCipherState* cipher) {
       alignof(CryptoCipherState)
     );
   }
+}
+
+#if INOX_CRYPTO_HAS_EVP
+static int inox_crypto_no_pem_password(char* buffer, int size, int writing, void* user) {
+  (void)buffer;
+  (void)size;
+  (void)writing;
+  (void)user;
+  return 0;
+}
+
+static int inox_crypto_key_type(EVP_PKEY* key) {
+  if (key == 0) {
+    return 0;
+  }
+
+  const int type = EVP_PKEY_id(key);
+
+  if (type == EVP_PKEY_RSA) {
+    return INOX_CRYPTO_KEY_RSA;
+  }
+
+  if (type == EVP_PKEY_RSA_PSS) {
+    return INOX_CRYPTO_KEY_RSA_PSS;
+  }
+
+  if (type == EVP_PKEY_EC) {
+    return INOX_CRYPTO_KEY_EC;
+  }
+
+  return 0;
+}
+
+static EVP_PKEY* inox_crypto_read_pem_key(const uint8_t* bytes, size_t len, bool private_key) {
+  if (bytes == 0 || len == 0 || len > (size_t)INT_MAX) {
+    return 0;
+  }
+
+  BIO* input = BIO_new_mem_buf(bytes, (int)len);
+
+  if (input == 0) {
+    return 0;
+  }
+
+  EVP_PKEY* key = private_key
+    ? PEM_read_bio_PrivateKey(input, 0, inox_crypto_no_pem_password, 0)
+    : PEM_read_bio_PUBKEY(input, 0, inox_crypto_no_pem_password, 0);
+
+  BIO_free(input);
+
+  if (key != 0 || private_key) {
+    return key;
+  }
+
+  ERR_clear_error();
+  input = BIO_new_mem_buf(bytes, (int)len);
+
+  if (input == 0) {
+    return 0;
+  }
+
+  key = PEM_read_bio_PrivateKey(input, 0, inox_crypto_no_pem_password, 0);
+  BIO_free(input);
+  return key;
+}
+
+static const EVP_MD* inox_crypto_signature_algorithm(inox::StringView algorithm) {
+  const std::string_view name(algorithm.bytes, algorithm.len);
+
+  if (name == "sha256") {
+    return EVP_sha256();
+  }
+
+  if (name == "sha384") {
+    return EVP_sha384();
+  }
+
+  if (name == "sha512") {
+    return EVP_sha512();
+  }
+
+  return 0;
+}
+#endif
+
+static inox_status CryptoKeyState_create(
+  inox_allocator* allocator,
+  const uint8_t* bytes,
+  size_t len,
+  bool private_key,
+  CryptoKeyState** out
+) {
+  if (
+    allocator == 0 ||
+    allocator->alloc == 0 ||
+    allocator->free == 0 ||
+    bytes == 0 ||
+    len == 0 ||
+    out == 0
+  ) {
+    return INOX_ERR_TYPE;
+  }
+
+  *out = 0;
+
+#if INOX_CRYPTO_HAS_EVP
+  EVP_PKEY* parsed = inox_crypto_read_pem_key(bytes, len, private_key);
+  const int key_type = inox_crypto_key_type(parsed);
+
+  if (parsed == 0 || key_type == 0) {
+    EVP_PKEY_free(parsed);
+    ERR_clear_error();
+    return INOX_ERR_TYPE;
+  }
+
+  CryptoKeyState* state = (CryptoKeyState*)allocator->alloc(
+    allocator->user,
+    sizeof(CryptoKeyState),
+    alignof(CryptoKeyState)
+  );
+
+  if (state == 0) {
+    EVP_PKEY_free(parsed);
+    return INOX_ERR_OOM;
+  }
+
+  state->allocator = allocator;
+  state->key = parsed;
+  state->private_key = private_key ? 1 : 0;
+  state->key_type = key_type;
+  *out = state;
+  return INOX_OK;
+#else
+  (void)private_key;
+  return INOX_ERR_UNSUPPORTED;
+#endif
+}
+
+static inox_status CryptoKeyState_clone_public(
+  inox_allocator* allocator,
+  const CryptoKeyState* key,
+  CryptoKeyState** out
+) {
+  if (
+    allocator == 0 ||
+    allocator->alloc == 0 ||
+    allocator->free == 0 ||
+    key == 0 ||
+    out == 0
+  ) {
+    return INOX_ERR_TYPE;
+  }
+
+  *out = 0;
+
+#if INOX_CRYPTO_HAS_EVP
+  if (key->key == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  BIO* public_pem = BIO_new(BIO_s_mem());
+
+  if (public_pem == 0) {
+    return INOX_ERR_OOM;
+  }
+
+  if (PEM_write_bio_PUBKEY(public_pem, key->key) != 1) {
+    BIO_free(public_pem);
+    ERR_clear_error();
+    return INOX_ERR_TYPE;
+  }
+
+  EVP_PKEY* public_key = PEM_read_bio_PUBKEY(public_pem, 0, inox_crypto_no_pem_password, 0);
+  BIO_free(public_pem);
+
+  if (public_key == 0) {
+    ERR_clear_error();
+    return INOX_ERR_TYPE;
+  }
+
+  CryptoKeyState* state = (CryptoKeyState*)allocator->alloc(
+    allocator->user,
+    sizeof(CryptoKeyState),
+    alignof(CryptoKeyState)
+  );
+
+  if (state == 0) {
+    EVP_PKEY_free(public_key);
+    return INOX_ERR_OOM;
+  }
+
+  state->allocator = allocator;
+  state->key = public_key;
+  state->private_key = 0;
+  state->key_type = key->key_type;
+  *out = state;
+  return INOX_OK;
+#else
+  return INOX_ERR_UNSUPPORTED;
+#endif
+}
+
+static void CryptoKeyState_free(CryptoKeyState* key) {
+  if (key == 0) {
+    return;
+  }
+
+#if INOX_CRYPTO_HAS_EVP
+  EVP_PKEY_free(key->key);
+#endif
+
+  if (key->allocator != 0 && key->allocator->free != 0) {
+    key->allocator->free(
+      key->allocator->user,
+      key,
+      sizeof(CryptoKeyState),
+      alignof(CryptoKeyState)
+    );
+  }
+}
+
+static Buffer inox_crypto_sign(
+  CryptoKeyState* key,
+  inox::StringView algorithm,
+  const uint8_t* bytes,
+  size_t len
+) {
+  if (key == 0 || !key->private_key || (bytes == 0 && len != 0)) {
+    inox_crypto_throw_failed("crypto.sign failed");
+    return Buffer();
+  }
+
+#if INOX_CRYPTO_HAS_EVP
+  const EVP_MD* digest = inox_crypto_signature_algorithm(algorithm);
+  EVP_MD_CTX* context = EVP_MD_CTX_new();
+
+  if (context == 0) {
+    inox::throw_out_of_memory();
+    return Buffer();
+  }
+
+  const uint8_t empty = 0;
+  const uint8_t* input = bytes == 0 ? &empty : bytes;
+  size_t signature_len = 0;
+
+  if (
+    digest == 0 ||
+    key->key == 0 ||
+    EVP_DigestSignInit(context, 0, digest, 0, key->key) != 1 ||
+    EVP_DigestSign(context, 0, &signature_len, input, len) != 1 ||
+    signature_len == 0
+  ) {
+    EVP_MD_CTX_free(context);
+    ERR_clear_error();
+    inox_crypto_throw_failed("crypto.sign failed");
+    return Buffer();
+  }
+
+  Buffer signature = Buffer::alloc((double)signature_len);
+
+  if (inox::thrown() || !signature.valid()) {
+    EVP_MD_CTX_free(context);
+    return Buffer();
+  }
+
+  size_t actual_len = signature_len;
+
+  if (
+    EVP_DigestSign(context, signature.bytes().data(), &actual_len, input, len) != 1 ||
+    actual_len == 0 ||
+    actual_len > signature_len
+  ) {
+    EVP_MD_CTX_free(context);
+    ERR_clear_error();
+    inox_crypto_throw_failed("crypto.sign failed");
+    return Buffer();
+  }
+
+  EVP_MD_CTX_free(context);
+
+  if (actual_len == signature_len) {
+    return signature;
+  }
+
+  return signature.slice(0, (double)actual_len);
+#else
+  (void)algorithm;
+  (void)bytes;
+  (void)len;
+  inox_crypto_throw_failed("crypto.sign failed");
+  return Buffer();
+#endif
+}
+
+static inox_status inox_crypto_verify(
+  CryptoKeyState* key,
+  inox::StringView algorithm,
+  const uint8_t* bytes,
+  size_t len,
+  const uint8_t* signature,
+  size_t signature_len,
+  bool* out
+) {
+  if (
+    key == 0 ||
+    (bytes == 0 && len != 0) ||
+    signature == 0 ||
+    signature_len == 0 ||
+    out == 0
+  ) {
+    return INOX_ERR_TYPE;
+  }
+
+  *out = false;
+
+#if INOX_CRYPTO_HAS_EVP
+  const EVP_MD* digest = inox_crypto_signature_algorithm(algorithm);
+  EVP_MD_CTX* context = EVP_MD_CTX_new();
+
+  if (context == 0) {
+    return INOX_ERR_OOM;
+  }
+
+  const uint8_t empty = 0;
+  const uint8_t* input = bytes == 0 ? &empty : bytes;
+
+  if (digest == 0 || key->key == 0 || EVP_DigestVerifyInit(context, 0, digest, 0, key->key) != 1) {
+    EVP_MD_CTX_free(context);
+    ERR_clear_error();
+    return INOX_ERR_UNSUPPORTED;
+  }
+
+  const int result = EVP_DigestVerify(context, signature, signature_len, input, len);
+  EVP_MD_CTX_free(context);
+
+  if (result == 1) {
+    *out = true;
+    return INOX_OK;
+  }
+
+  ERR_clear_error();
+  return result == 0 ? INOX_OK : INOX_ERR_UNSUPPORTED;
+#else
+  (void)algorithm;
+  (void)bytes;
+  (void)len;
+  (void)signature;
+  (void)signature_len;
+  return INOX_ERR_UNSUPPORTED;
+#endif
 }
 
 static Buffer inox_crypto_cipher_update_raw(
