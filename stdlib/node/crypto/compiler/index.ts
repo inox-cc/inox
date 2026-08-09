@@ -15,7 +15,9 @@ import type {
 
 const libraryId = 'node:crypto'
 const collectionsLibraryId = 'global:collections'
+const stringsLibraryId = 'global:strings'
 const arrayRuntimeRequirement = `${collectionsLibraryId}#array`
+const stringsRuntimeRequirement = `${stringsLibraryId}#strings`
 const arrayTypeId = `${collectionsLibraryId}#Array`
 const runtimeRequirement = 'node:crypto'
 const hashRuntimeRequirement = 'node:crypto:hash'
@@ -90,23 +92,31 @@ const operations: LibraryOperationDescriptor[] = [
     { resultTypeRef: nominalTypeRef(hmacTypeId), cResultMode: 'value' }
   ),
   hashOperation(),
-  updateOperation(hashTypeId, 'Hash'),
-  updateOperation(hmacTypeId, 'Hmac'),
-  digestOperation(hashTypeId, 'Hash'),
-  digestOperation(hmacTypeId, 'Hmac'),
+  updateOperation(hashTypeId),
+  updateOperation(hmacTypeId),
+  digestOperation(hashTypeId),
+  digestOperation(hmacTypeId),
   ...unsupportedMethods().map(unsupportedOperation)
 ]
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:crypto', 'global:binary', collectionsLibraryId, 'node:buffer'],
+  dependencies: ['global:crypto', 'global:binary', collectionsLibraryId, stringsLibraryId, 'node:buffer'],
   nativeTypes: [nativeType(hashTypeId, 'Hash'), nativeType(hmacTypeId, 'Hmac')],
   operations,
   intrinsicBindings: [],
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: ['global:binary', arrayRuntimeRequirement, 'managed-values', 'string-bytes'],
+      dependencies: [
+        'global:crypto',
+        'global:binary',
+        arrayRuntimeRequirement,
+        stringsRuntimeRequirement,
+        'node:buffer',
+        'managed-values',
+        'string-bytes'
+      ],
       cPreludeIncludes: ['inox/crypto.h'],
       capabilities: [],
       optionConstraints: [
@@ -199,28 +209,37 @@ function hashOperation(): LibraryOperationDescriptor {
       sha256Argument('hash'),
       stringOrBytesArgument(),
       literalArgument(
-        ['hex', 'buffer'],
-        "node:crypto hash only supports the 'hex' and 'buffer' output encodings in the current C++ backend"
+        ['hex', 'base64', 'base64url', 'buffer'],
+        "node:crypto hash only supports the 'hex', 'base64', 'base64url' and 'buffer' output encodings in the current C++ backend"
       )
     ],
     variants: [
       callVariant(2, 2, null, [], ['string-view', 'string-view-or-value'], stringTypeRef, stringResultMapping()),
-      callVariant(3, 3, 2, ['hex'], ['string-view', 'string-view-or-value'], stringTypeRef, stringResultMapping()),
+      callVariant(
+        3,
+        3,
+        2,
+        ['hex', 'base64', 'base64url'],
+        ['string-view', 'string-view-or-value', 'string-view'],
+        stringTypeRef,
+        stringResultMapping()
+      ),
       callVariant(
         3,
         3,
         2,
         ['buffer'],
-        ['string-view', 'string-view-or-value', 'string-view'],
+        ['string-view', 'string-view-or-value'],
         nominalTypeRef(bufferTypeId),
         null,
-        'value'
+        'value',
+        'crypto.hashBuffer'
       )
     ]
   }
 }
 
-function updateOperation(receiverTypeId: string, label: string): LibraryOperationDescriptor {
+function updateOperation(receiverTypeId: string): LibraryOperationDescriptor {
   return {
     libraryId,
     bindingId: receiverBinding(receiverTypeId, 'update'),
@@ -235,13 +254,7 @@ function updateOperation(receiverTypeId: string, label: string): LibraryOperatio
     resultTypeRef: nominalTypeRef(receiverTypeId, 'borrowed'),
     minArgs: 1,
     maxArgs: 2,
-    argumentChecks: [
-      stringOrBytesArgument(),
-      literalArgument(
-        ['utf8'],
-        `node:crypto ${label}.update only supports the 'utf8' input encoding in the current C++ backend`
-      )
-    ],
+    argumentChecks: [stringOrBytesArgument(), encodingArgument()],
     variants: [
       receiverVariant(1, 1, ['receiver', 'string-view-or-value']),
       receiverVariant(2, 2, ['receiver', 'string-view-or-value', 'string-view'])
@@ -249,7 +262,7 @@ function updateOperation(receiverTypeId: string, label: string): LibraryOperatio
   }
 }
 
-function digestOperation(receiverTypeId: string, label: string): LibraryOperationDescriptor {
+function digestOperation(receiverTypeId: string): LibraryOperationDescriptor {
   return {
     libraryId,
     bindingId: receiverBinding(receiverTypeId, 'digest'),
@@ -262,15 +275,10 @@ function digestOperation(receiverTypeId: string, label: string): LibraryOperatio
     cFailureMode: 'thrown',
     minArgs: 0,
     maxArgs: 1,
-    argumentChecks: [
-      literalArgument(
-        ['hex'],
-        `node:crypto ${label}.digest only supports the 'hex' encoding in the current C++ backend`
-      )
-    ],
+    argumentChecks: [encodingArgument()],
     variants: [
       receiverScalarVariant(0, 0, null, [], ['receiver'], nominalTypeRef(bufferTypeId), null, 'value'),
-      receiverScalarVariant(1, 1, 0, ['hex'], ['receiver', 'string-view'], stringTypeRef, stringResultMapping())
+      receiverScalarVariant(1, 1, null, [], ['receiver', 'string-view'], stringTypeRef, stringResultMapping())
     ]
   }
 }
@@ -283,14 +291,15 @@ function callVariant(
   cArgumentKinds: LibraryCArgumentKind[],
   resultTypeRef: TypeRef,
   cResultMapping: LibraryCResultMappingDescriptor | null,
-  cResultMode: LibraryCResultMode | null = null
+  cResultMode: LibraryCResultMode | null = null,
+  cExpression = 'crypto.hash'
 ): LibraryOperationVariantDescriptor {
   return {
     minArgs,
     maxArgs,
     argumentIndex,
     stringLiterals,
-    cExpression: 'crypto.hash',
+    cExpression,
     cArgumentKinds,
     cResultMode,
     cResultMapping,
@@ -395,6 +404,10 @@ function bytesArgument(): LibraryArgumentCheckDescriptor {
 
 function stringOrBytesArgument(): LibraryArgumentCheckDescriptor {
   return { valueTypes: ['string', 'bytes'] }
+}
+
+function encodingArgument(): LibraryArgumentCheckDescriptor {
+  return { valueTypes: ['string'] }
 }
 
 function sha256Argument(method: string): LibraryArgumentCheckDescriptor {

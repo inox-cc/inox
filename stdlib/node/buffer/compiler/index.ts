@@ -14,7 +14,9 @@ import type {
 const libraryId = 'node:buffer'
 const binaryLibraryId = 'global:binary'
 const collectionsLibraryId = 'global:collections'
+const stringsLibraryId = 'global:strings'
 const runtimeRequirement = libraryId
+const stringsRuntimeRequirement = `${stringsLibraryId}#strings`
 const arrayTypeId = `${collectionsLibraryId}#Array`
 const uint8ArrayTypeId = `${binaryLibraryId}#Uint8Array`
 const bufferTypeId = `${libraryId}#Buffer`
@@ -68,7 +70,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: [binaryLibraryId, collectionsLibraryId],
+  dependencies: [binaryLibraryId, collectionsLibraryId, stringsLibraryId],
   nativeTypes: [
     {
       libraryId,
@@ -89,7 +91,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   runtimeRequirements: [
     {
       id: runtimeRequirement,
-      dependencies: [binaryLibraryId],
+      dependencies: [binaryLibraryId, stringsRuntimeRequirement],
       cPreludeIncludes: ['inox/buffer.h'],
       capabilities: []
     }

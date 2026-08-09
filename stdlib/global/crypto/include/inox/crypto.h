@@ -75,8 +75,18 @@ public:
   Hmac createHmac(inox::StringView algorithm, const inox::Value& key) const;
   inox::String hash(inox::StringView algorithm, inox::StringView data) const;
   inox::String hash(inox::StringView algorithm, const inox::Value& data) const;
-  Buffer hash(inox::StringView algorithm, inox::StringView data, inox::StringView output_encoding) const;
-  Buffer hash(inox::StringView algorithm, const inox::Value& data, inox::StringView output_encoding) const;
+  inox::String hash(
+    inox::StringView algorithm,
+    inox::StringView data,
+    inox::StringView output_encoding
+  ) const;
+  inox::String hash(
+    inox::StringView algorithm,
+    const inox::Value& data,
+    inox::StringView output_encoding
+  ) const;
+  Buffer hashBuffer(inox::StringView algorithm, inox::StringView data) const;
+  Buffer hashBuffer(inox::StringView algorithm, const inox::Value& data) const;
   bool timingSafeEqual(const Uint8Array& left, const Uint8Array& right) const;
 };
 

@@ -14,6 +14,7 @@ test('entrypoint package node:crypto владеет operations и backend requir
     'global:crypto',
     'global:binary',
     'global:collections',
+    'global:strings',
     'node:buffer'
   ])
 
@@ -45,12 +46,20 @@ test('entrypoint package node:crypto владеет operations и backend requir
   const hashRequirement = cryptoPackage.compilerPackage.runtimeRequirements[1]
 
   assert.equal(randomRequirement.id, 'node:crypto')
+  assert.deepEqual(randomRequirement.dependencies, [
+    'global:crypto',
+    'global:binary',
+    'global:collections#array',
+    'global:strings#strings',
+    'node:buffer',
+    'managed-values',
+    'string-bytes'
+  ])
   assert.deepEqual(randomRequirement.optionConstraints?.[0], {
     optionId: 'target:runtime#loop-backend',
     allowedValues: ['libuv'],
     diagnosticCode: 'INOX_NOT_IMPLEMENTED',
-    diagnosticMessage:
-      'node:crypto is not implemented for C without libuv; select --loop-backend libuv'
+    diagnosticMessage: 'node:crypto is not implemented for C without libuv; select --loop-backend libuv'
   })
   assert.equal(hashRequirement.id, 'node:crypto:hash')
   assert.deepEqual(hashRequirement.optionConstraints?.[0], {
