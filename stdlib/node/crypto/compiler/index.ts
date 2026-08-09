@@ -101,6 +101,16 @@ const operations: LibraryOperationDescriptor[] = [
     { resultTypeRef: nominalTypeRef(bufferTypeId), cResultMode: 'value' }
   ),
   moduleCall(
+    'scryptSync',
+    ['value', 'value', 'number', 'optional-value'],
+    [],
+    3,
+    4,
+    [stringOrBytesArgument(), stringOrBytesArgument(), numberArgument(), objectArgument()],
+    hashRequirements,
+    { resultTypeRef: nominalTypeRef(bufferTypeId), cResultMode: 'value' }
+  ),
+  moduleCall(
     'timingSafeEqual',
     ['value', 'value'],
     ['Uint8Array($value)', 'Uint8Array($value)'],
@@ -148,6 +158,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
         stringsRuntimeRequirement,
         'node:buffer',
         'managed-values',
+        'objects',
         'string-bytes'
       ],
       cPreludeIncludes: ['inox/crypto.h'],
@@ -439,6 +450,10 @@ function stringOrBytesArgument(): LibraryArgumentCheckDescriptor {
   return { valueTypes: ['string', 'bytes'] }
 }
 
+function objectArgument(): LibraryArgumentCheckDescriptor {
+  return { valueTypes: ['object'] }
+}
+
 function encodingArgument(): LibraryArgumentCheckDescriptor {
   return { valueTypes: ['string'] }
 }
@@ -510,7 +525,6 @@ function unsupportedMethods(): string[] {
     'randomFill',
     'randomUUIDv7',
     'scrypt',
-    'scryptSync',
     'secureHeapUsed',
     'setEngine',
     'setFips',

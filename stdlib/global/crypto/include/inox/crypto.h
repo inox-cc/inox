@@ -84,6 +84,12 @@ public:
     const inox::Value& info,
     inox_number keylen
   ) const;
+  Buffer scryptSync(
+    const inox::Value& password,
+    const inox::Value& salt,
+    inox_number keylen,
+    const inox::Value& options
+  ) const;
   Hash createHash(inox::StringView algorithm) const;
   Hmac createHmac(inox::StringView algorithm, inox::StringView key) const;
   Hmac createHmac(inox::StringView algorithm, const inox::Value& key) const;

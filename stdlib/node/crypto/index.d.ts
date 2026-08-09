@@ -3,6 +3,16 @@ import type { Buffer, Uint8Array } from 'node:buffer'
 export type BinaryLike = string | Buffer | Uint8Array
 export type BinaryBuffer = Buffer | Uint8Array
 
+export interface ScryptOptions {
+  cost?: number
+  N?: number
+  blockSize?: number
+  r?: number
+  parallelization?: number
+  p?: number
+  maxmem?: number
+}
+
 export interface CryptoModule {
   createHash(algorithm: string): Hash
   createHmac(algorithm: string, key: BinaryLike): Hmac
@@ -17,6 +27,7 @@ export interface CryptoModule {
   randomInt(max: number): number
   randomInt(min: number, max: number): number
   randomUUID(): string
+  scryptSync(password: BinaryLike, salt: BinaryLike, keylen: number, options?: ScryptOptions): Buffer
   timingSafeEqual(a: BinaryBuffer, b: BinaryBuffer): boolean
 }
 
@@ -51,6 +62,7 @@ export function randomFillSync(buffer: BinaryBuffer, offset?: number, size?: num
 export function randomInt(max: number): number
 export function randomInt(min: number, max: number): number
 export function randomUUID(): string
+export function scryptSync(password: BinaryLike, salt: BinaryLike, keylen: number, options?: ScryptOptions): Buffer
 export function timingSafeEqual(a: BinaryBuffer, b: BinaryBuffer): boolean
 
 declare const crypto: CryptoModule

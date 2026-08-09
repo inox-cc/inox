@@ -53,6 +53,7 @@ test('entrypoint package node:crypto владеет operations и backend requir
     'global:strings#strings',
     'node:buffer',
     'managed-values',
+    'objects',
     'string-bytes'
   ])
   assert.deepEqual(randomRequirement.optionConstraints?.[0], {

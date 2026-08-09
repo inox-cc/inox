@@ -9,6 +9,7 @@
 #include "inox/binary.h"
 #include "inox/buffer.h"
 #include "inox/loop.h"
+#include "inox/object.h"
 #include "inox/string.h"
 
 #if defined(INOX_TLS_BACKEND_BORINGSSL) || defined(INOX_TLS_BACKEND_OPENSSL)
@@ -39,6 +40,17 @@ static const EVP_MD* inox_crypto_digest_algorithm(const char* algorithm, size_t 
 #endif
 static inox_status inox_crypto_data(inox_value data, const uint8_t** bytes, size_t* len);
 #if INOX_CRYPTO_HASH_HAS_EVP
+struct InoxCryptoScryptOptions {
+  size_t cost;
+  size_t block_size;
+  size_t parallelization;
+  size_t max_memory;
+};
+
+static int inox_crypto_scrypt_options(
+  const inox::Value& value,
+  InoxCryptoScryptOptions* out
+);
 static inox_status inox_crypto_hkdf(
   const EVP_MD* digest,
   const uint8_t* ikm,
@@ -672,6 +684,68 @@ Buffer crypto::hkdfSync(
 #endif
 }
 
+Buffer crypto::scryptSync(
+  const inox::Value& password,
+  const inox::Value& salt,
+  inox_number keylen_value,
+  const inox::Value& options_value
+) const {
+#if INOX_CRYPTO_HASH_HAS_EVP
+  const uint8_t* password_bytes = 0;
+  const uint8_t* salt_bytes = 0;
+  size_t password_len = 0;
+  size_t salt_len = 0;
+  size_t keylen = 0;
+  InoxCryptoScryptOptions options;
+
+  if (
+    inox_crypto_data(password.raw(), &password_bytes, &password_len) != INOX_OK ||
+    inox_crypto_data(salt.raw(), &salt_bytes, &salt_len) != INOX_OK ||
+    !inox_crypto_number_to_size(keylen_value, &keylen) ||
+    !inox_crypto_scrypt_options(options_value, &options)
+  ) {
+    if (!inox::thrown()) {
+      inox_crypto_throw_failed("crypto.scryptSync failed");
+    }
+
+    return Buffer();
+  }
+
+  Buffer result = Buffer::alloc((double)keylen);
+
+  if (inox::thrown() || !result.valid()) {
+    return Buffer();
+  }
+
+  if (
+    EVP_PBE_scrypt(
+      (const char*)password_bytes,
+      password_len,
+      salt_bytes,
+      salt_len,
+      options.cost,
+      options.block_size,
+      options.parallelization,
+      options.max_memory,
+      result.bytes().data(),
+      keylen
+    ) != 1
+  ) {
+    inox_crypto_throw_failed("crypto.scryptSync failed");
+    return Buffer();
+  }
+
+  return result;
+#else
+  (void)password;
+  (void)salt;
+  (void)keylen_value;
+  (void)options_value;
+  inox_crypto_throw_failed("crypto.scryptSync failed");
+  return Buffer();
+#endif
+}
+
 Hash crypto::createHash(inox::StringView algorithm) const {
   CryptoHashState* hash = 0;
 
@@ -1146,6 +1220,107 @@ static inox_status inox_crypto_data(inox_value data, const uint8_t** bytes, size
 }
 
 #if INOX_CRYPTO_HASH_HAS_EVP
+static int inox_crypto_scrypt_option(
+  const inox::Value& options,
+  const char* name,
+  size_t* out,
+  bool* present
+) {
+  inox::Value value = inox::get(options.raw(), name);
+
+  if (inox::thrown()) {
+    return 0;
+  }
+
+  if (value.tag == INOX_TAG_UNDEFINED) {
+    *present = false;
+    return 1;
+  }
+
+  if (value.tag != INOX_TAG_NUMBER || !inox_crypto_number_to_size(value.as.number, out)) {
+    return 0;
+  }
+
+  *present = true;
+  return 1;
+}
+
+static int inox_crypto_scrypt_options(
+  const inox::Value& value,
+  InoxCryptoScryptOptions* out
+) {
+  static const size_t default_max_memory = 32u * 1024u * 1024u;
+
+  if (out == 0) {
+    return 0;
+  }
+
+  out->cost = 16384;
+  out->block_size = 8;
+  out->parallelization = 1;
+  out->max_memory = default_max_memory;
+
+  if (value.tag == INOX_TAG_UNDEFINED || value.tag == INOX_TAG_NULL) {
+    return 1;
+  }
+
+  if (value.tag != INOX_TAG_OBJECT && value.tag != INOX_TAG_CLASS_INSTANCE) {
+    return 0;
+  }
+
+  size_t cost = 0;
+  size_t cost_alias = 0;
+  size_t block_size = 0;
+  size_t block_size_alias = 0;
+  size_t parallelization = 0;
+  size_t parallelization_alias = 0;
+  size_t max_memory = 0;
+  bool has_cost = false;
+  bool has_cost_alias = false;
+  bool has_block_size = false;
+  bool has_block_size_alias = false;
+  bool has_parallelization = false;
+  bool has_parallelization_alias = false;
+  bool has_max_memory = false;
+
+  if (
+    !inox_crypto_scrypt_option(value, "cost", &cost, &has_cost) ||
+    !inox_crypto_scrypt_option(value, "N", &cost_alias, &has_cost_alias) ||
+    !inox_crypto_scrypt_option(value, "blockSize", &block_size, &has_block_size) ||
+    !inox_crypto_scrypt_option(value, "r", &block_size_alias, &has_block_size_alias) ||
+    !inox_crypto_scrypt_option(value, "parallelization", &parallelization, &has_parallelization) ||
+    !inox_crypto_scrypt_option(value, "p", &parallelization_alias, &has_parallelization_alias) ||
+    !inox_crypto_scrypt_option(value, "maxmem", &max_memory, &has_max_memory) ||
+    (has_cost && has_cost_alias) ||
+    (has_block_size && has_block_size_alias) ||
+    (has_parallelization && has_parallelization_alias)
+  ) {
+    return 0;
+  }
+
+  if (has_cost || has_cost_alias) {
+    out->cost = has_cost ? cost : cost_alias;
+  }
+
+  if (has_block_size || has_block_size_alias) {
+    out->block_size = has_block_size ? block_size : block_size_alias;
+  }
+
+  if (has_parallelization || has_parallelization_alias) {
+    out->parallelization = has_parallelization ? parallelization : parallelization_alias;
+  }
+
+  if (has_max_memory && max_memory != 0) {
+    out->max_memory = max_memory;
+  }
+
+  return
+    out->cost >= 2 &&
+    (out->cost & (out->cost - 1)) == 0 &&
+    out->block_size > 0 &&
+    out->parallelization > 0;
+}
+
 static inox_status inox_crypto_hkdf(
   const EVP_MD* digest,
   const uint8_t* ikm,
