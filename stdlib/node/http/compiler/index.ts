@@ -23,6 +23,7 @@ const clientRequestTypeId = `${libraryId}#ClientRequest`
 const netSocketTypeId = 'node:net#Socket'
 const netAddressTypeId = 'node:net#AddressInfo'
 const uint8ArrayTypeId = 'global:binary#Uint8Array'
+const abortSignalTypeId = 'global:fetch#AbortSignal'
 const stringRuntimeRequirement = 'global:strings#strings'
 const runtimeRequirements = [runtimeRequirement]
 const stringTypeRef = primitiveTypeRef('string')
@@ -51,6 +52,7 @@ const operations: LibraryOperationDescriptor[] = [
   serverCloseOperation(),
   serverListenOperation(),
   serverOnOperation(),
+  serverSetTimeoutOperation(),
   requestMemberReadOperation('headers', headersTypeRef, valueCResultMapping),
   requestMemberReadOperation('httpVersion', stringTypeRef, stringCResultMapping),
   requestMemberReadOperation('method', stringTypeRef, stringCResultMapping),
@@ -63,6 +65,7 @@ const operations: LibraryOperationDescriptor[] = [
   requestFlowOperation('pause'),
   requestFlowOperation('resume'),
   requestSetEncodingOperation(),
+  clientBooleanReadOperation('destroyed'),
   clientBooleanReadOperation('headersSent'),
   clientBooleanReadOperation('writableEnded'),
   clientDestroyOperation(),
@@ -73,6 +76,7 @@ const operations: LibraryOperationDescriptor[] = [
   clientOnOperation(),
   clientRemoveHeaderOperation(),
   clientSetHeaderOperation(),
+  clientSetTimeoutOperation(),
   clientWriteOperation(),
   responseBooleanReadOperation('headersSent'),
   responseStatusReadOperation(),
@@ -91,7 +95,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:binary', collectionsLibraryId, 'global:strings', 'node:net'],
+  dependencies: ['global:binary', collectionsLibraryId, 'global:error', 'global:fetch', 'global:strings', 'node:net'],
   nativeTypes: [
     {
       libraryId,
@@ -177,6 +181,7 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       cValueAdapter: 'HttpClientRequest(inox::Value($value))',
       cValueAdapterPreservesPendingException: true,
       fields: [
+        { name: 'destroyed', valueType: 'boolean', readonly: true, cGetter: 'destroyed' },
         { name: 'headersSent', valueType: 'boolean', readonly: true, cGetter: 'headersSent' },
         { name: 'writableEnded', valueType: 'boolean', readonly: true, cGetter: 'writableEnded' }
       ]
@@ -388,17 +393,25 @@ function serverListenOperation(): LibraryOperationDescriptor {
 
 function serverOnOperation(): LibraryOperationDescriptor {
   const callback = requestCallbackArgument()
+  const timeoutCallback = serverTimeoutCallbackArgument()
 
   return {
     ...serverReceiverOperation('on'),
     minArgs: 2,
     maxArgs: 2,
-    argumentChecks: [requestEventArgument(), callback],
+    argumentChecks: [serverEventArgument(), { valueTypes: ['function'] }],
     variants: [
       serverVariant(2, 2, ['receiver', 'string-view', 'runtime-callback'], {
         argumentIndex: 0,
         stringLiterals: ['request'],
-        argumentChecks: [requestEventArgument(), callback],
+        argumentChecks: [serverEventArgument(), callback],
+        cArgumentSources: [null, null, { argumentIndex: 1 }],
+        callbackLifetime: 'event-loop'
+      }),
+      serverVariant(2, 2, ['receiver', 'string-view', 'runtime-callback'], {
+        argumentIndex: 0,
+        stringLiterals: ['timeout'],
+        argumentChecks: [serverEventArgument(), timeoutCallback],
         cArgumentSources: [null, null, { argumentIndex: 1 }],
         callbackLifetime: 'event-loop'
       })
@@ -406,6 +419,27 @@ function serverOnOperation(): LibraryOperationDescriptor {
     cResultMode: 'borrowed',
     resultTypeRef: nominalTypeRef(serverTypeId, 'borrowed'),
     callbackLifetime: 'event-loop'
+  }
+}
+
+function serverSetTimeoutOperation(): LibraryOperationDescriptor {
+  const callback = serverTimeoutCallbackArgument()
+
+  return {
+    ...serverReceiverOperation('setTimeout'),
+    minArgs: 0,
+    maxArgs: 2,
+    argumentChecks: [numberArgument(), callback],
+    variants: [
+      serverVariant(0, 0, ['receiver']),
+      serverVariant(1, 1, ['receiver', 'number'], { argumentChecks: [numberArgument()] }),
+      serverVariant(2, 2, ['receiver', 'number', 'runtime-callback'], {
+        argumentChecks: [numberArgument(), callback],
+        cArgumentSources: [null, null, { argumentIndex: 1 }],
+        callbackLifetime: 'event-loop'
+      })
+    ],
+    resultTypeRef: nominalTypeRef(serverTypeId, 'borrowed')
   }
 }
 
@@ -490,7 +524,7 @@ function requestSetEncodingOperation(): LibraryOperationDescriptor {
   }
 }
 
-function clientBooleanReadOperation(name: 'headersSent' | 'writableEnded'): LibraryOperationDescriptor {
+function clientBooleanReadOperation(name: 'destroyed' | 'headersSent' | 'writableEnded'): LibraryOperationDescriptor {
   return {
     ...clientReceiverOperation(name),
     kind: 'member-read',
@@ -502,11 +536,35 @@ function clientBooleanReadOperation(name: 'headersSent' | 'writableEnded'): Libr
 function clientDestroyOperation(): LibraryOperationDescriptor {
   return {
     ...clientReceiverOperation('destroy'),
-    cArgumentKinds: ['receiver'],
     cResultMode: 'borrowed',
     minArgs: 0,
-    maxArgs: 0,
-    argumentChecks: [],
+    maxArgs: 1,
+    argumentChecks: [{ valueTypes: ['object'] }],
+    variants: [
+      clientVariant(0, 0, ['receiver']),
+      clientVariant(1, 1, ['receiver', 'value'], { argumentChecks: [{ valueTypes: ['object'] }] })
+    ],
+    resultTypeRef: nominalTypeRef(clientRequestTypeId, 'borrowed')
+  }
+}
+
+function clientSetTimeoutOperation(): LibraryOperationDescriptor {
+  const callback = zeroArgumentCallback()
+
+  return {
+    ...clientReceiverOperation('setTimeout'),
+    minArgs: 1,
+    maxArgs: 2,
+    argumentChecks: [numberArgument(), callback],
+    variants: [
+      clientVariant(1, 1, ['receiver', 'number'], { argumentChecks: [numberArgument()] }),
+      clientVariant(2, 2, ['receiver', 'number', 'runtime-callback'], {
+        argumentChecks: [numberArgument(), callback],
+        cArgumentSources: [null, null, { argumentIndex: 1 }],
+        callbackLifetime: 'event-loop'
+      })
+    ],
+    cResultMode: 'borrowed',
     resultTypeRef: nominalTypeRef(clientRequestTypeId, 'borrowed')
   }
 }
@@ -565,7 +623,7 @@ function clientOnOperation(): LibraryOperationDescriptor {
     argumentChecks: [clientEventArgument(), zeroArgumentCallback()],
     variants: [
       clientEventVariant(['response'], responseCallbackArgument()),
-      clientEventVariant(['finish', 'close', 'drain'], zeroArgumentCallback()),
+      clientEventVariant(['finish', 'close', 'drain', 'timeout'], zeroArgumentCallback()),
       clientEventVariant(['error'], errorCallbackArgument())
     ],
     cResultMode: 'borrowed',
@@ -1039,7 +1097,14 @@ function requestOptionsArgument(): LibraryArgumentCheckDescriptor {
       { name: 'hostname', valueTypes: ['string'], optional: true },
       { name: 'method', valueTypes: ['string'], optional: true },
       { name: 'path', valueTypes: ['string'], optional: true },
-      { name: 'port', valueTypes: ['number'], optional: true }
+      { name: 'port', valueTypes: ['number'], optional: true },
+      {
+        name: 'signal',
+        valueTypes: ['object'],
+        objectTypeIds: [abortSignalTypeId],
+        optional: true
+      },
+      { name: 'timeout', valueTypes: ['number'], optional: true }
     ]
   }
 }
@@ -1051,13 +1116,17 @@ function headersArgument(): LibraryArgumentCheckDescriptor {
   }
 }
 
-function requestEventArgument(): LibraryArgumentCheckDescriptor {
+function serverEventArgument(): LibraryArgumentCheckDescriptor {
   return {
     valueTypes: ['string'],
-    stringLiterals: ['request'],
+    stringLiterals: ['request', 'timeout'],
     literalDiagnosticCode: 'INOX_HTTP_SERVER',
-    literalDiagnosticMessage: "node:http Server.on supports only the 'request' event"
+    literalDiagnosticMessage: "node:http Server.on supports only the 'request' and 'timeout' events"
   }
+}
+
+function serverTimeoutCallbackArgument(): LibraryArgumentCheckDescriptor {
+  return callbackArgument([callbackParameter('socket', netSocketTypeId)])
 }
 
 function requestStreamEventArgument(): LibraryArgumentCheckDescriptor {
@@ -1065,7 +1134,7 @@ function requestStreamEventArgument(): LibraryArgumentCheckDescriptor {
 }
 
 function clientEventArgument(): LibraryArgumentCheckDescriptor {
-  return stringLiteralArgument(['response', 'finish', 'close', 'error', 'drain'], 'INOX_HTTP_CLIENT_REQUEST')
+  return stringLiteralArgument(['response', 'finish', 'close', 'error', 'drain', 'timeout'], 'INOX_HTTP_CLIENT_REQUEST')
 }
 
 function responseEventArgument(): LibraryArgumentCheckDescriptor {

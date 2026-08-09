@@ -2046,6 +2046,10 @@ function declareCallbackVariable(
 
   syncCallbackVariableFunctionType(statement, functionType)
 
+  if (functionType !== null) {
+    valueType = 'function'
+  }
+
   if (valueType === 'unknown') {
     valueType = inferCapturedExpressionValueType(statement.init, scopes)
   }
@@ -2082,7 +2086,7 @@ function callbackVariableIsRuntimeCallback(
 }
 
 function isRuntimeManagedCaptureBinding(statement: AnyNode, scopes: CallbackScope[], valueType: string): boolean {
-  if (valueType === 'object' || valueType === 'bytes') {
+  if (valueType === 'object' || valueType === 'bytes' || valueType === 'function') {
     return true
   }
 
@@ -3020,12 +3024,16 @@ function addRuntimeArrowCaptureReference(reference: AnyNode, state: RuntimeArrow
   }
 
   const moduleValueNames = context.moduleValueNames
+  const outer = findCallbackBinding(name, state.outerScopes)
 
-  if (moduleValueNames !== null && typeof moduleValueNames !== 'undefined' && moduleValueNames.has(name)) {
+  if (
+    moduleValueNames !== null &&
+    typeof moduleValueNames !== 'undefined' &&
+    moduleValueNames.has(name) &&
+    (outer === null || outer.valueType !== 'function')
+  ) {
     return
   }
-
-  const outer = findCallbackBinding(name, state.outerScopes)
 
   if (outer !== null && typeof outer !== 'undefined' && !state.captures.has(name)) {
     state.captures.set(name, runtimeArrowCaptureFromBinding(name, outer))
@@ -4506,6 +4514,10 @@ export function emitRuntimeArrowCallbackContextLocals(
     }
 
     context.variables.set(capture.name, capture.valueType)
+
+    if (capture.valueType === 'function') {
+      context.runtimeCallbacks.add(capture.name)
+    }
 
     if (isSupportedMutableRuntimeArrowCapture(capture, context)) {
       context.boxedVariables.add(capture.name)

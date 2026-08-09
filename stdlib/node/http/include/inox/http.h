@@ -35,6 +35,8 @@ public:
   const std::optional<inox::String>& method() const;
   const std::optional<inox::String>& path() const;
   const std::optional<double>& port() const;
+  const inox::Value& signal() const;
+  const std::optional<double>& timeout() const;
   bool valid() const;
 
 private:
@@ -45,6 +47,8 @@ private:
   std::optional<inox::String> path_;
   std::optional<double> port_;
   inox::Value headers_;
+  inox::Value signal_;
+  std::optional<double> timeout_;
 
   friend class HttpModule;
 };
@@ -81,6 +85,9 @@ public:
   HttpServer& listen(const HttpListenOptions& options);
   HttpServer& listen(const HttpListenOptions& options, inox::Callback callback);
   HttpServer& on(inox::StringView event_name, inox::Callback listener);
+  HttpServer& setTimeout();
+  HttpServer& setTimeout(double milliseconds);
+  HttpServer& setTimeout(double milliseconds, inox::Callback callback);
 };
 
 class HttpRequest : public inox::Value {
@@ -114,6 +121,8 @@ public:
   using inox::Value::operator=;
 
   HttpClientRequest& destroy();
+  HttpClientRequest& destroy(const inox::Value& error);
+  bool destroyed() const;
   HttpClientRequest& end();
   HttpClientRequest& end(inox::StringView body);
   HttpClientRequest& end(const Uint8Array& body);
@@ -124,6 +133,8 @@ public:
   HttpClientRequest& on(inox::StringView event_name, inox::Callback listener);
   void removeHeader(inox::StringView name);
   HttpClientRequest& setHeader(inox::StringView name, inox::StringView value);
+  HttpClientRequest& setTimeout(double timeout);
+  HttpClientRequest& setTimeout(double timeout, inox::Callback callback);
   bool writableEnded() const;
   bool write(inox::StringView body);
   bool write(const Uint8Array& body);

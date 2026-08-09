@@ -24,6 +24,10 @@ async function main(): Promise<void> {
   const httpsServerPort = await reservePort()
   const httpBackpressurePort = await reservePort()
   const httpsBackpressurePort = await reservePort()
+  const httpClientLifecyclePort = await reservePort()
+  const httpsClientLifecyclePort = await reservePort()
+  const httpServerTimeoutPort = await reservePort()
+  const httpsServerTimeoutPort = await reservePort()
   const nonce = `network-${process.pid}-${Date.now()}`
 
   await buildExecutable()
@@ -55,7 +59,11 @@ async function main(): Promise<void> {
       join(repoRoot, 'tests/network/fixtures/https-cert.pem'),
       join(repoRoot, 'tests/network/fixtures/https-key.pem'),
       String(httpBackpressurePort),
-      String(httpsBackpressurePort)
+      String(httpsBackpressurePort),
+      String(httpClientLifecyclePort),
+      String(httpsClientLifecyclePort),
+      String(httpServerTimeoutPort),
+      String(httpsServerTimeoutPort)
     ],
     {
       cwd: repoRoot,
@@ -232,6 +240,22 @@ async function main(): Promise<void> {
     assert.ok(
       lines.includes('INOX_HTTPS_BACKPRESSURE_OK'),
       processFailure('HTTPS backpressure acceptance не завершён', stdout, stderr)
+    )
+    assert.ok(
+      lines.includes('INOX_HTTP_CLIENT_LIFECYCLE_OK'),
+      processFailure('HTTP client timeout/abort/destroy lifecycle не завершён', stdout, stderr)
+    )
+    assert.ok(
+      lines.includes('INOX_HTTPS_CLIENT_LIFECYCLE_OK'),
+      processFailure('HTTPS client timeout/abort lifecycle не завершён', stdout, stderr)
+    )
+    assert.ok(
+      lines.includes('INOX_HTTP_SERVER_TIMEOUT_OK'),
+      processFailure('HTTP server inactivity timeout не завершён', stdout, stderr)
+    )
+    assert.ok(
+      lines.includes('INOX_HTTPS_SERVER_TIMEOUT_OK'),
+      processFailure('HTTPS server inactivity timeout не завершён', stdout, stderr)
     )
   } finally {
     await stopProcess(application)

@@ -4,6 +4,7 @@ export type ErrorListener = (error: Error) => void
 export type MessageListener = () => void
 export type MessageDataListener = (chunk: string) => void
 export type ServerCallback = () => void
+export type ServerTimeoutListener = (socket: import('node:net').Socket) => void
 
 export interface ListenOptions {
   readonly port?: number
@@ -22,6 +23,8 @@ export interface RequestOptions {
   readonly method?: string
   readonly path?: string
   readonly port?: number
+  readonly signal?: AbortSignal
+  readonly timeout?: number
 }
 
 export interface HttpModule {
@@ -57,19 +60,21 @@ export class IncomingMessage {
 }
 
 export class ClientRequest {
+  readonly destroyed: boolean
   readonly headersSent: boolean
   readonly writableEnded: boolean
 
-  destroy(): ClientRequest
+  destroy(error?: Error): ClientRequest
   end(body?: string | Uint8Array): ClientRequest
   getHeader(name: string): string | undefined
   getHeaderNames(): string[]
   hasHeader(name: string): boolean
   on(eventName: 'response', listener: ResponseListener): ClientRequest
   on(eventName: 'error', listener: ErrorListener): ClientRequest
-  on(eventName: 'finish' | 'close' | 'drain', listener: MessageListener): ClientRequest
+  on(eventName: 'finish' | 'close' | 'drain' | 'timeout', listener: MessageListener): ClientRequest
   removeHeader(name: string): void
   setHeader(name: string, value: string): ClientRequest
+  setTimeout(timeout: number, callback?: MessageListener): ClientRequest
   write(body: string | Uint8Array): boolean
 }
 
@@ -95,6 +100,8 @@ export class Server {
   listen(port?: number, host?: string, callback?: ServerCallback): Server
   listen(options: ListenOptions, callback?: ServerCallback): Server
   on(eventName: 'request', listener: RequestListener): Server
+  on(eventName: 'timeout', listener: ServerTimeoutListener): Server
+  setTimeout(milliseconds?: number, callback?: ServerTimeoutListener): Server
 }
 
 export function createServer(listener?: RequestListener): Server

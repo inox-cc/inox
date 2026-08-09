@@ -17,6 +17,8 @@ export interface RequestOptions {
   readonly method?: string
   readonly path?: string
   readonly port?: number
+  readonly signal?: AbortSignal
+  readonly timeout?: number
   readonly rejectUnauthorized?: boolean
   readonly servername?: string
 }

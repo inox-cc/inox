@@ -24,6 +24,7 @@ test('node:http объявляет server и client operations через packag
 
   assert.deepEqual(ids, [
     'node:http#ClientRequest.destroy',
+    'node:http#ClientRequest.destroyed',
     'node:http#ClientRequest.end',
     'node:http#ClientRequest.getHeader',
     'node:http#ClientRequest.getHeaderNames',
@@ -32,6 +33,7 @@ test('node:http объявляет server и client operations через packag
     'node:http#ClientRequest.on',
     'node:http#ClientRequest.removeHeader',
     'node:http#ClientRequest.setHeader',
+    'node:http#ClientRequest.setTimeout',
     'node:http#ClientRequest.writableEnded',
     'node:http#ClientRequest.write',
     'node:http#IncomingMessage.headers',
@@ -50,6 +52,7 @@ test('node:http объявляет server и client operations через packag
     'node:http#Server.close',
     'node:http#Server.listen',
     'node:http#Server.on',
+    'node:http#Server.setTimeout',
     'node:http#ServerResponse.end',
     'node:http#ServerResponse.getHeader',
     'node:http#ServerResponse.getHeaderNames',
@@ -160,6 +163,7 @@ test('node:http объявляет server и client operations через packag
 
   for (const operationId of [
     'node:http#ClientRequest.destroy',
+    'node:http#ClientRequest.destroyed',
     'node:http#ClientRequest.end',
     'node:http#ClientRequest.getHeader',
     'node:http#ClientRequest.getHeaderNames',
@@ -168,6 +172,7 @@ test('node:http объявляет server и client operations через packag
     'node:http#ClientRequest.on',
     'node:http#ClientRequest.removeHeader',
     'node:http#ClientRequest.setHeader',
+    'node:http#ClientRequest.setTimeout',
     'node:http#ClientRequest.writableEnded',
     'node:http#ClientRequest.write'
   ]) {

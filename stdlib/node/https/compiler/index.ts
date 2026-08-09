@@ -14,6 +14,7 @@ const requestTypeId = 'node:http#IncomingMessage'
 const clientRequestTypeId = 'node:http#ClientRequest'
 const serverTypeId = 'node:http#Server'
 const responseTypeId = 'node:http#ServerResponse'
+const abortSignalTypeId = 'global:fetch#AbortSignal'
 
 const operations: LibraryOperationDescriptor[] = [
   createServerOperation(),
@@ -226,6 +227,13 @@ function requestOptionsArgument(): LibraryArgumentCheckDescriptor {
       { name: 'method', valueTypes: ['string'], optional: true },
       { name: 'path', valueTypes: ['string'], optional: true },
       { name: 'port', valueTypes: ['number'], optional: true },
+      {
+        name: 'signal',
+        valueTypes: ['object'],
+        objectTypeIds: [abortSignalTypeId],
+        optional: true
+      },
+      { name: 'timeout', valueTypes: ['number'], optional: true },
       { name: 'rejectUnauthorized', valueTypes: ['boolean'], optional: true },
       { name: 'servername', valueTypes: ['string'], optional: true }
     ]

@@ -16,6 +16,7 @@ const operationIds = [
   'node:http#Server.close',
   'node:http#Server.listen',
   'node:http#Server.on',
+  'node:http#Server.setTimeout',
   'node:http#IncomingMessage.headers',
   'node:http#IncomingMessage.httpVersion',
   'node:http#IncomingMessage.method',
@@ -28,6 +29,7 @@ const operationIds = [
   'node:http#IncomingMessage.pause',
   'node:http#IncomingMessage.resume',
   'node:http#IncomingMessage.setEncoding',
+  'node:http#ClientRequest.destroyed',
   'node:http#ClientRequest.headersSent',
   'node:http#ClientRequest.writableEnded',
   'node:http#ClientRequest.destroy',
@@ -38,6 +40,7 @@ const operationIds = [
   'node:http#ClientRequest.on',
   'node:http#ClientRequest.removeHeader',
   'node:http#ClientRequest.setHeader',
+  'node:http#ClientRequest.setTimeout',
   'node:http#ClientRequest.write',
   'node:http#ServerResponse.headersSent',
   'node:http#ServerResponse.statusCode.read',
@@ -69,7 +72,12 @@ test('node:http operations describe results only through TypeRef', async () => {
   assertResult(operation(operations, 'node:http#request'), nominalTypeRef('node:http#ClientRequest', 'value'))
   assertResult(operation(operations, 'node:http#Server.address'), nominalTypeRef('node:net#AddressInfo', 'value'))
 
-  for (const operationId of ['node:http#Server.close', 'node:http#Server.listen', 'node:http#Server.on']) {
+  for (const operationId of [
+    'node:http#Server.close',
+    'node:http#Server.listen',
+    'node:http#Server.on',
+    'node:http#Server.setTimeout'
+  ]) {
     assertResult(operation(operations, operationId), nominalTypeRef('node:http#Server', 'borrowed'))
   }
 
@@ -124,7 +132,11 @@ test('node:http operations describe results only through TypeRef', async () => {
     nominalTypeRef('node:http#IncomingMessage', 'borrowed')
   )
 
-  for (const operationId of ['node:http#ClientRequest.headersSent', 'node:http#ClientRequest.writableEnded']) {
+  for (const operationId of [
+    'node:http#ClientRequest.destroyed',
+    'node:http#ClientRequest.headersSent',
+    'node:http#ClientRequest.writableEnded'
+  ]) {
     assertResult(operation(operations, operationId), primitiveTypeRef('boolean'))
   }
 
@@ -132,7 +144,8 @@ test('node:http operations describe results only through TypeRef', async () => {
     'node:http#ClientRequest.destroy',
     'node:http#ClientRequest.end',
     'node:http#ClientRequest.on',
-    'node:http#ClientRequest.setHeader'
+    'node:http#ClientRequest.setHeader',
+    'node:http#ClientRequest.setTimeout'
   ]) {
     assertResult(operation(operations, operationId), nominalTypeRef('node:http#ClientRequest', 'borrowed'))
   }

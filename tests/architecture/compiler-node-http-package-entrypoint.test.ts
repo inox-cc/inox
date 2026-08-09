@@ -14,6 +14,8 @@ test('entrypoint package node:http владеет native API и runtime plan', a
   assert.deepEqual(httpPackage.compilerPackage.dependencies, [
     'global:binary',
     'global:collections',
+    'global:error',
+    'global:fetch',
     'global:strings',
     'node:net'
   ])
@@ -36,6 +38,8 @@ test('entrypoint package node:http владеет native API и runtime plan', a
   assert.equal(request?.cppType, 'HttpRequest')
   assert.equal(response?.cppType, 'HttpResponse')
   assert.equal(clientRequest?.cppType, 'HttpClientRequest')
+  assert.equal(response?.fields?.some((field) => field.name === 'destroyed'), false)
+  assert.equal(clientRequest?.fields?.some((field) => field.name === 'destroyed'), true)
 
   const runtime = httpPackage.compilerPackage.runtimeRequirements.find((requirement) => requirement.id === 'node:http')
 

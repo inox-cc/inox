@@ -3949,6 +3949,10 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
       return call.lines
     }
 
+    if (call.valueType === 'void') {
+      return call.lines
+    }
+
     if (call.cppDeclaredName === call.expression) {
       return emitDiscardedPreparedValueLines(call)
     }

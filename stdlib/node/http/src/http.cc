@@ -177,6 +177,19 @@ bool readOptionalObject(const inox::Value& object, const char* name, inox::Value
   return true;
 }
 
+bool readAbortState(const inox::Value& signal, bool& aborted) {
+  inox::Value field;
+  bool present = false;
+
+  if (!readObjectField(signal, "aborted", field, present) || !present || field.tag != INOX_TAG_BOOL) {
+    if (!inox::thrown()) throwHttpError("TypeError: HTTP AbortSignal is invalid");
+    return false;
+  }
+
+  aborted = field.as.boolean != 0;
+  return true;
+}
+
 bool equalsIgnoreCase(inox::StringView left, inox::StringView right) {
   if (left.len != right.len) {
     return false;
@@ -406,9 +419,11 @@ class HttpServerState : public std::enable_shared_from_this<HttpServerState> {
 public:
   NetServer net_server_;
   std::vector<inox::Callback> request_listeners_;
+  std::vector<inox::Callback> timeout_listeners_;
   std::vector<std::weak_ptr<HttpConnectionState>> connections_;
   std::shared_ptr<HttpServerState> native_owner_;
   bool closed_;
+  double timeout_ms_;
 
   HttpServerState();
 
@@ -420,6 +435,7 @@ public:
   void listen(double port, inox::StringView host, double backlog, inox::Callback callback);
   void on(inox::StringView event_name, inox::Callback listener);
   void onNetClosed();
+  void setTimeout(double milliseconds, inox::Callback callback);
 };
 
 class HttpConnectionState : public std::enable_shared_from_this<HttpConnectionState> {
@@ -446,6 +462,8 @@ public:
   bool request_dispatched_;
   bool consuming_request_body_;
   bool closed_;
+  double timeout_ms_;
+  inox_timer_handle* timeout_timer_;
 
   HttpConnectionState(
     std::shared_ptr<HttpServerState> server,
@@ -465,9 +483,12 @@ public:
   void onClose();
   void onData(inox::StringView data);
   void onDrain();
+  void onTimeout();
   void resetRequest();
   void resumeRequestBody();
   void sendError(double status, inox::StringView message);
+  void stopTimeout();
+  void touchTimeout();
 };
 
 class HttpClientConnectionState : public std::enable_shared_from_this<HttpClientConnectionState> {
@@ -534,6 +555,7 @@ public:
   std::vector<inox::Callback> close_listeners_;
   std::vector<inox::Callback> error_listeners_;
   std::vector<inox::Callback> drain_listeners_;
+  std::vector<inox::Callback> timeout_listeners_;
   HttpClientTransportKind transport_kind_;
   std::shared_ptr<HttpClientConnectionState> connection_;
   std::shared_ptr<HttpRequestState> response_;
@@ -560,6 +582,11 @@ public:
   bool response_transport_ended_;
   bool failed_;
   bool closed_;
+  bool destroyed_;
+  double timeout_ms_;
+  inox_timer_handle* timeout_timer_;
+  inox::Value abort_signal_;
+  inox_timer_handle* abort_timer_;
 
   HttpClientRequestState(
     inox::String host,
@@ -577,6 +604,8 @@ public:
   );
   void applyHeaders(const inox::Value& headers);
   void destroy();
+  void destroy(const inox::Value& error);
+  bool destroyed() const;
   void end(std::span<const std::uint8_t> body);
   inox::Value getHeader(inox::StringView name) const;
   Array getHeaderNames() const;
@@ -589,10 +618,13 @@ public:
   void onDrain();
   void onEnd();
   void onError(const inox::Value& error);
+  void onAbortPoll();
   void onFinish();
+  void onTimeout();
   void resumeResponseBody();
   void removeHeader(inox::StringView name);
   void setHeader(inox::StringView name, inox::StringView value);
+  void setTimeout(double milliseconds, inox::Callback callback);
   bool writableEnded() const;
   bool write(std::span<const std::uint8_t> body);
 
@@ -605,7 +637,25 @@ private:
   bool bufferPausedResponse(inox::StringView data);
   void completeResponseBody();
   bool send(std::string& output, bool final);
+  bool startAbortPolling();
+  void stopAbortPolling();
+  void stopTimeout();
+  void touchTimeout();
 };
+
+template <typename State>
+struct HttpTimerContext {
+  std::weak_ptr<State> state;
+};
+
+template <typename State>
+void finalizeHttpTimer(void* raw_context) {
+  delete static_cast<HttpTimerContext<State>*>(raw_context);
+}
+
+inox_status onServerConnectionTimeout(void* context);
+inox_status onClientRequestTimeout(void* context);
+inox_status onClientAbortPoll(void* context);
 
 template <typename Holder>
 inox_status copyHolder(inox_allocator* allocator, const void* instance, void** out) {
@@ -669,6 +719,7 @@ const inox_class_field_descriptor responseFields[] = {
 };
 
 const inox_class_field_descriptor clientRequestFields[] = {
+  {"destroyed", "boolean", "boolean", "value", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
   {"headersSent", "boolean", "boolean", "value", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
   {"writableEnded", "boolean", "boolean", "value", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
 };
@@ -693,7 +744,7 @@ const inox_class_descriptor requestDescriptor = {
 
 const inox_class_descriptor clientRequestDescriptor = {
   "ClientRequest",
-  2,
+  3,
   clientRequestFields,
   readClientRequestField,
   copyHolder<HttpClientRequestHolder>,
@@ -899,11 +950,16 @@ inox_status readClientRequestField(const void* instance, std::uint32_t index, in
   }
 
   if (index == 0) {
-    *out = inox_bool_value(holder->state->headersSent());
+    *out = inox_bool_value(holder->state->destroyed());
     return INOX_OK;
   }
 
   if (index == 1) {
+    *out = inox_bool_value(holder->state->headersSent());
+    return INOX_OK;
+  }
+
+  if (index == 2) {
     *out = inox_bool_value(holder->state->writableEnded());
     return INOX_OK;
   }
@@ -2021,8 +2077,38 @@ const char* statusText(int status) {
   }
 }
 
+inox_status onServerConnectionTimeout(void* context) {
+  const auto* timer = static_cast<HttpTimerContext<HttpConnectionState>*>(context);
+  const std::shared_ptr<HttpConnectionState> connection = timer == nullptr ? nullptr : timer->state.lock();
+
+  if (connection) connection->onTimeout();
+  return callbackStatus();
+}
+
+inox_status onClientRequestTimeout(void* context) {
+  const auto* timer = static_cast<HttpTimerContext<HttpClientRequestState>*>(context);
+  const std::shared_ptr<HttpClientRequestState> request = timer == nullptr ? nullptr : timer->state.lock();
+
+  if (request) request->onTimeout();
+  return callbackStatus();
+}
+
+inox_status onClientAbortPoll(void* context) {
+  const auto* timer = static_cast<HttpTimerContext<HttpClientRequestState>*>(context);
+  const std::shared_ptr<HttpClientRequestState> request = timer == nullptr ? nullptr : timer->state.lock();
+
+  if (request) request->onAbortPoll();
+  return callbackStatus();
+}
+
 HttpServerState::HttpServerState()
-  : net_server_(), request_listeners_(), connections_(), native_owner_(), closed_(false) {}
+  : net_server_(),
+    request_listeners_(),
+    timeout_listeners_(),
+    connections_(),
+    native_owner_(),
+    closed_(false),
+    timeout_ms_(0) {}
 
 std::shared_ptr<HttpServerState> HttpServerState::create(inox::Callback listener) {
   std::shared_ptr<HttpServerState> server;
@@ -2188,15 +2274,41 @@ void HttpServerState::listen(
 }
 
 void HttpServerState::on(inox::StringView event_name, inox::Callback listener) {
-  if (!hasText(event_name, "request") || !listener.valid() || closed_) {
-    throwHttpError("TypeError: HttpServer.on supports only request listeners");
+  if (!listener.valid() || closed_) {
+    throwHttpError("TypeError: HttpServer.on requires an active server and listener");
+    return;
+  }
+
+  std::vector<inox::Callback>* listeners = nullptr;
+
+  if (hasText(event_name, "request")) listeners = &request_listeners_;
+  else if (hasText(event_name, "timeout")) listeners = &timeout_listeners_;
+  else {
+    throwHttpError("TypeError: HttpServer.on supports only request and timeout listeners");
     return;
   }
 
   try {
-    request_listeners_.push_back(std::move(listener));
+    listeners->push_back(std::move(listener));
   } catch (const std::bad_alloc&) {
     throwHttpError("TypeError: HttpServer listener allocation failed");
+  }
+}
+
+void HttpServerState::setTimeout(double milliseconds, inox::Callback callback) {
+  if (closed_ || !std::isfinite(milliseconds) || std::floor(milliseconds) != milliseconds || milliseconds < 0) {
+    throwHttpError("TypeError: HttpServer.setTimeout requires a non-negative integer");
+    return;
+  }
+
+  timeout_ms_ = milliseconds;
+
+  if (!callback.valid()) return;
+
+  try {
+    timeout_listeners_.push_back(std::move(callback));
+  } catch (const std::bad_alloc&) {
+    throwHttpError("TypeError: HttpServer timeout listener allocation failed");
   }
 }
 
@@ -2231,7 +2343,9 @@ HttpConnectionState::HttpConnectionState(
     active_response_complete_(false),
     request_dispatched_(false),
     consuming_request_body_(false),
-    closed_(false) {}
+    closed_(false),
+    timeout_ms_(server_ ? server_->timeout_ms_ : 0),
+    timeout_timer_(nullptr) {}
 
 std::shared_ptr<HttpConnectionState> HttpConnectionState::create(
   const std::shared_ptr<HttpServerState>& server,
@@ -2274,12 +2388,20 @@ std::shared_ptr<HttpConnectionState> HttpConnectionState::create(
     return {};
   }
 
+  connection->touchTimeout();
+
+  if (inox::thrown()) {
+    connection->transport_->destroy();
+    return {};
+  }
+
   return connection;
 }
 
 void HttpConnectionState::onClose() {
   std::shared_ptr<HttpConnectionState> owner = native_owner_;
   closed_ = true;
+  stopTimeout();
 
   if (active_request_) {
     active_request_->emitClose();
@@ -2298,8 +2420,55 @@ void HttpConnectionState::onClose() {
 
 void HttpConnectionState::onDrain() {
   if (!closed_ && active_response_) {
+    touchTimeout();
     active_response_->emitDrain();
   }
+}
+
+void HttpConnectionState::stopTimeout() {
+  if (timeout_timer_ == nullptr) return;
+  inox_timer_handle* timer = timeout_timer_;
+  timeout_timer_ = nullptr;
+  inox_loop_clear_timer(timer);
+}
+
+void HttpConnectionState::touchTimeout() {
+  stopTimeout();
+
+  if (closed_ || timeout_ms_ <= 0) return;
+
+  auto* context = new (std::nothrow) HttpTimerContext<HttpConnectionState>{weak_from_this()};
+
+  if (context == nullptr ||
+      inox_loop_set_timeout(
+        inox::loop(),
+        timeout_ms_,
+        onServerConnectionTimeout,
+        context,
+        finalizeHttpTimer<HttpConnectionState>,
+        &timeout_timer_
+      ) != INOX_OK) {
+    delete context;
+    timeout_timer_ = nullptr;
+    throwHttpError("TypeError: HTTP server timeout allocation failed");
+    return;
+  }
+
+  inox_loop_unref_timer(timeout_timer_);
+}
+
+void HttpConnectionState::onTimeout() {
+  timeout_timer_ = nullptr;
+
+  if (closed_ || !server_) return;
+
+  if (server_->timeout_listeners_.empty()) {
+    transport_->destroy();
+    return;
+  }
+
+  const std::array<inox::Value, 1> arguments = {socket_};
+  callHttpListeners(server_->timeout_listeners_, arguments);
 }
 
 void HttpConnectionState::resumeRequestBody() {
@@ -2687,6 +2856,8 @@ void HttpConnectionState::onData(inox::StringView data) {
   if (closed_) {
     return;
   }
+
+  if (data.len > 0) touchTimeout();
 
   if (request_bytes_.size() > maxBufferedRequestBytes ||
       data.len > maxBufferedRequestBytes - request_bytes_.size()) {
@@ -3470,6 +3641,7 @@ HttpClientRequestState::HttpClientRequestState(
     close_listeners_(),
     error_listeners_(),
     drain_listeners_(),
+    timeout_listeners_(),
     transport_kind_(transport.kind()),
     connection_(),
     response_(),
@@ -3495,7 +3667,12 @@ HttpClientRequestState::HttpClientRequestState(
     response_started_(false),
     response_transport_ended_(false),
     failed_(false),
-    closed_(false) {
+    closed_(false),
+    destroyed_(false),
+    timeout_ms_(0),
+    timeout_timer_(nullptr),
+    abort_signal_(),
+    abort_timer_(nullptr) {
   try {
     headers_.reserve(8);
     pending_write_bytes_.reserve(1024);
@@ -3567,6 +3744,9 @@ std::shared_ptr<HttpClientRequestState> HttpClientRequestState::create(
     if (inox::thrown()) {
       return {};
     }
+
+    request->timeout_ms_ = options->timeout().value_or(0);
+    request->abort_signal_ = options->signal();
   }
 
   if (listener.valid()) {
@@ -3591,6 +3771,12 @@ std::shared_ptr<HttpClientRequestState> HttpClientRequestState::create(
 
   if (!connection || !connection->attach(request)) {
     if (connection) connection->destroy();
+    request->native_owner_.reset();
+    return {};
+  }
+
+  if (!request->startAbortPolling()) {
+    connection->destroy();
     request->native_owner_.reset();
     return {};
   }
@@ -3635,9 +3821,22 @@ void HttpClientRequestState::applyHeaders(const inox::Value& headers) {
 }
 
 void HttpClientRequestState::destroy() {
-  if (!closed_ && connection_) {
-    connection_->destroy();
-  }
+  if (destroyed_ || closed_) return;
+
+  destroyed_ = true;
+  stopTimeout();
+  stopAbortPolling();
+
+  if (connection_) connection_->destroy();
+  else onClose();
+}
+
+void HttpClientRequestState::destroy(const inox::Value& error) {
+  if (!destroyed_ && !closed_) onError(error);
+}
+
+bool HttpClientRequestState::destroyed() const {
+  return destroyed_;
 }
 
 void HttpClientRequestState::end(std::span<const std::uint8_t> body) {
@@ -3739,6 +3938,7 @@ void HttpClientRequestState::on(inox::StringView event_name, inox::Callback list
   else if (hasText(event_name, "close")) listeners = &close_listeners_;
   else if (hasText(event_name, "error")) listeners = &error_listeners_;
   else if (hasText(event_name, "drain")) listeners = &drain_listeners_;
+  else if (hasText(event_name, "timeout")) listeners = &timeout_listeners_;
   else {
     throwHttpError("TypeError: unsupported HttpClientRequest event");
     return;
@@ -3758,6 +3958,8 @@ void HttpClientRequestState::onClose() {
 
   std::shared_ptr<HttpClientRequestState> owner = native_owner_;
   closed_ = true;
+  stopTimeout();
+  stopAbortPolling();
 
   if (response_) {
     response_->emitClose();
@@ -3771,6 +3973,8 @@ void HttpClientRequestState::onConnect() {
   if (closed_) {
     return;
   }
+
+  touchTimeout();
 
   if (pending_write_bytes_.empty() && !pending_write_final_) {
     return;
@@ -3791,6 +3995,7 @@ void HttpClientRequestState::onConnect() {
 
 void HttpClientRequestState::onDrain() {
   if (!closed_) {
+    touchTimeout();
     callHttpListeners(drain_listeners_);
   }
 }
@@ -4116,6 +4321,8 @@ void HttpClientRequestState::onData(inox::StringView data) {
     return;
   }
 
+  touchTimeout();
+
   if (response_started_) {
     if (response_ && response_->paused_) {
       (void)bufferPausedResponse(data);
@@ -4291,6 +4498,105 @@ void HttpClientRequestState::onError(const inox::Value& error) {
   if (!closed_) {
     destroy();
   }
+}
+
+void HttpClientRequestState::stopTimeout() {
+  if (timeout_timer_ == nullptr) return;
+  inox_timer_handle* timer = timeout_timer_;
+  timeout_timer_ = nullptr;
+  inox_loop_clear_timer(timer);
+}
+
+void HttpClientRequestState::touchTimeout() {
+  stopTimeout();
+
+  if (closed_ || destroyed_ || timeout_ms_ <= 0 || !connection_ || !connection_->connected_) return;
+
+  auto* context = new (std::nothrow) HttpTimerContext<HttpClientRequestState>{weak_from_this()};
+
+  if (context == nullptr ||
+      inox_loop_set_timeout(
+        inox::loop(),
+        timeout_ms_,
+        onClientRequestTimeout,
+        context,
+        finalizeHttpTimer<HttpClientRequestState>,
+        &timeout_timer_
+      ) != INOX_OK) {
+    delete context;
+    timeout_timer_ = nullptr;
+    throwHttpError("TypeError: HTTP client timeout allocation failed");
+    return;
+  }
+
+  inox_loop_unref_timer(timeout_timer_);
+}
+
+void HttpClientRequestState::onTimeout() {
+  timeout_timer_ = nullptr;
+  if (!closed_ && !destroyed_) callHttpListeners(timeout_listeners_);
+}
+
+void HttpClientRequestState::setTimeout(double milliseconds, inox::Callback callback) {
+  if (closed_ || destroyed_ || !std::isfinite(milliseconds) || std::floor(milliseconds) != milliseconds ||
+      milliseconds < 0) {
+    throwHttpError("TypeError: HttpClientRequest.setTimeout requires a non-negative integer");
+    return;
+  }
+
+  timeout_ms_ = milliseconds;
+
+  if (callback.valid()) {
+    try {
+      timeout_listeners_.push_back(std::move(callback));
+    } catch (const std::bad_alloc&) {
+      throwHttpError("TypeError: HttpClientRequest timeout listener allocation failed");
+      return;
+    }
+  }
+
+  touchTimeout();
+}
+
+bool HttpClientRequestState::startAbortPolling() {
+  if (abort_signal_.tag == INOX_TAG_UNDEFINED || abort_timer_ != nullptr) return true;
+
+  auto* context = new (std::nothrow) HttpTimerContext<HttpClientRequestState>{weak_from_this()};
+
+  if (context == nullptr ||
+      inox_loop_set_interval(
+        inox::loop(),
+        1,
+        onClientAbortPoll,
+        context,
+        finalizeHttpTimer<HttpClientRequestState>,
+        &abort_timer_
+      ) != INOX_OK) {
+    delete context;
+    abort_timer_ = nullptr;
+    throwHttpError("TypeError: HTTP AbortSignal polling allocation failed");
+    return false;
+  }
+
+  inox_loop_unref_timer(abort_timer_);
+  return true;
+}
+
+void HttpClientRequestState::stopAbortPolling() {
+  if (abort_timer_ == nullptr) return;
+  inox_timer_handle* timer = abort_timer_;
+  abort_timer_ = nullptr;
+  inox_loop_clear_timer(timer);
+}
+
+void HttpClientRequestState::onAbortPoll() {
+  if (closed_ || destroyed_) return;
+
+  bool aborted = false;
+  if (!readAbortState(abort_signal_, aborted) || !aborted) return;
+
+  inox::Value error = materializeHttpError("The operation was aborted");
+  if (!inox::thrown()) onError(error);
 }
 
 void HttpClientRequestState::onFinish() {
@@ -4484,6 +4790,8 @@ bool HttpClientRequestState::send(std::string& output, bool final) {
     inox::Value error = materializeHttpError("HTTP request write failed");
     if (!inox::thrown()) onError(error);
   }
+
+  if (accepted && !inox::thrown()) touchTimeout();
 
   return accepted && writable;
 }
@@ -4903,7 +5211,9 @@ bool HttpResponseState::send(std::string& output, bool final) {
   }
 
   if (!final) {
-    return connection_->transport_->write(inox::StringView(output.data(), output.size()));
+    const bool writable = connection_->transport_->write(inox::StringView(output.data(), output.size()));
+    if (!inox::thrown()) connection_->touchTimeout();
+    return writable;
   }
 
   inox::Callback complete = makeWeakCallback(connection_, onResponseComplete);
@@ -4913,16 +5223,19 @@ bool HttpResponseState::send(std::string& output, bool final) {
   }
 
   if (connection_->active_keep_alive_) {
-    return connection_->transport_->write(
+    const bool writable = connection_->transport_->write(
       inox::StringView(output.data(), output.size()),
       std::move(complete)
     );
+    if (!inox::thrown()) connection_->touchTimeout();
+    return writable;
   }
 
   connection_->transport_->end(
     inox::StringView(output.data(), output.size()),
     std::move(complete)
   );
+  if (!inox::thrown()) connection_->touchTimeout();
   return !inox::thrown();
 }
 
@@ -5343,16 +5656,18 @@ HttpListenOptions::HttpListenOptions(const inox::Value& value)
 }
 
 HttpRequestOptions::HttpRequestOptions()
-  : valid_(true), host_(), hostname_(), method_(), path_(), port_(), headers_() {}
+  : valid_(true), host_(), hostname_(), method_(), path_(), port_(), headers_(), signal_(), timeout_() {}
 
 HttpRequestOptions::HttpRequestOptions(const inox::Value& value)
-  : valid_(false), host_(), hostname_(), method_(), path_(), port_(), headers_() {
+  : valid_(false), host_(), hostname_(), method_(), path_(), port_(), headers_(), signal_(), timeout_() {
   if (!readOptionalObject(value, "headers", headers_) ||
       !readOptionalString(value, "host", host_) ||
       !readOptionalString(value, "hostname", hostname_) ||
       !readOptionalString(value, "method", method_) ||
       !readOptionalString(value, "path", path_) ||
-      !readOptionalNumber(value, "port", port_, 1, 65535)) {
+      !readOptionalNumber(value, "port", port_, 1, 65535) ||
+      !readOptionalObject(value, "signal", signal_) ||
+      !readOptionalNumber(value, "timeout", timeout_, 0, std::numeric_limits<int>::max())) {
     return;
   }
 
@@ -5381,6 +5696,14 @@ const std::optional<inox::String>& HttpRequestOptions::path() const {
 
 const std::optional<double>& HttpRequestOptions::port() const {
   return port_;
+}
+
+const inox::Value& HttpRequestOptions::signal() const {
+  return signal_;
+}
+
+const std::optional<double>& HttpRequestOptions::timeout() const {
+  return timeout_;
 }
 
 bool HttpRequestOptions::valid() const {
@@ -5496,6 +5819,26 @@ HttpServer& HttpServer::on(inox::StringView event_name, inox::Callback listener)
   }
 
   state->on(event_name, std::move(listener));
+  return *this;
+}
+
+HttpServer& HttpServer::setTimeout() {
+  return setTimeout(0);
+}
+
+HttpServer& HttpServer::setTimeout(double milliseconds) {
+  return setTimeout(milliseconds, inox::Callback());
+}
+
+HttpServer& HttpServer::setTimeout(double milliseconds, inox::Callback callback) {
+  std::shared_ptr<HttpServerState> state = serverState(*this);
+
+  if (!state) {
+    throwHttpError("TypeError: HttpServer.setTimeout failed");
+    return *this;
+  }
+
+  state->setTimeout(milliseconds, std::move(callback));
   return *this;
 }
 
@@ -5655,6 +5998,29 @@ HttpClientRequest& HttpClientRequest::destroy() {
   return *this;
 }
 
+HttpClientRequest& HttpClientRequest::destroy(const inox::Value& error) {
+  std::shared_ptr<HttpClientRequestState> state = clientRequestState(*this);
+
+  if (!state) {
+    throwHttpError("TypeError: HttpClientRequest.destroy failed");
+    return *this;
+  }
+
+  state->destroy(error);
+  return *this;
+}
+
+bool HttpClientRequest::destroyed() const {
+  std::shared_ptr<HttpClientRequestState> state = clientRequestState(*this);
+
+  if (!state) {
+    throwHttpError("TypeError: HttpClientRequest.destroyed failed");
+    return false;
+  }
+
+  return state->destroyed();
+}
+
 HttpClientRequest& HttpClientRequest::end() {
   return end(inox::StringView());
 }
@@ -5764,6 +6130,22 @@ HttpClientRequest& HttpClientRequest::setHeader(inox::StringView name, inox::Str
   }
 
   state->setHeader(name, value);
+  return *this;
+}
+
+HttpClientRequest& HttpClientRequest::setTimeout(double timeout) {
+  return setTimeout(timeout, inox::Callback());
+}
+
+HttpClientRequest& HttpClientRequest::setTimeout(double timeout, inox::Callback callback) {
+  std::shared_ptr<HttpClientRequestState> state = clientRequestState(*this);
+
+  if (!state) {
+    throwHttpError("TypeError: HttpClientRequest.setTimeout failed");
+    return *this;
+  }
+
+  state->setTimeout(timeout, std::move(callback));
   return *this;
 }
 

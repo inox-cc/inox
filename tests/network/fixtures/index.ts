@@ -12,10 +12,14 @@ import { startHttpStreamingServerAcceptance } from './http-streaming-server.ts'
 import { startHttpAcceptance } from './http.ts'
 import { startHttpBackpressureAcceptance } from './http-backpressure.ts'
 import { startHttpClientAcceptance } from './http-client.ts'
+import { startHttpClientLifecycleAcceptance } from './http-client-lifecycle.ts'
+import { startHttpServerTimeoutAcceptance } from './http-server-timeout.ts'
 import { startHttpsClientAcceptance } from './https-client.ts'
 import { startHttpsBackpressureAcceptance } from './https-backpressure.ts'
+import { startHttpsClientLifecycleAcceptance } from './https-client-lifecycle.ts'
 import { startHttpsKeepAliveClientAcceptance } from './https-keep-alive-client.ts'
 import { startHttpsServerAcceptance } from './https-server.ts'
+import { startHttpsServerTimeoutAcceptance } from './https-server-timeout.ts'
 import { startHttpsStreamingClientAcceptance } from './https-streaming-client.ts'
 import { startTcpAcceptance } from './tcp.ts'
 import { startUdpAcceptance } from './udp.ts'
@@ -38,6 +42,10 @@ const httpsServerCertificatePath = process.argv[16]
 const httpsServerPrivateKeyPath = process.argv[17]
 const httpBackpressurePort = Number(process.argv[18]) ?? 0
 const httpsBackpressurePort = Number(process.argv[19]) ?? 0
+const httpClientLifecyclePort = Number(process.argv[20]) ?? 0
+const httpsClientLifecyclePort = Number(process.argv[21]) ?? 0
+const httpServerTimeoutPort = Number(process.argv[22]) ?? 0
+const httpsServerTimeoutPort = Number(process.argv[23]) ?? 0
 
 startTcpAcceptance()
 startUdpAcceptance()
@@ -58,3 +66,7 @@ startHttpIncomingStreamingServerAcceptance(httpIncomingStreamingServerPort, nonc
 startHttpsServerAcceptance(httpsServerPort, nonce, httpsServerCertificatePath, httpsServerPrivateKeyPath)
 startHttpBackpressureAcceptance(httpBackpressurePort, nonce)
 startHttpsBackpressureAcceptance(httpsBackpressurePort, nonce, httpsServerCertificatePath, httpsServerPrivateKeyPath)
+startHttpClientLifecycleAcceptance(httpClientLifecyclePort, nonce)
+startHttpsClientLifecycleAcceptance(httpsClientLifecyclePort, httpsServerCertificatePath, httpsServerPrivateKeyPath)
+startHttpServerTimeoutAcceptance(httpServerTimeoutPort)
+startHttpsServerTimeoutAcceptance(httpsServerTimeoutPort, httpsServerCertificatePath, httpsServerPrivateKeyPath)
