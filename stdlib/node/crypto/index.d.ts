@@ -5,6 +5,25 @@ export type BinaryBuffer = Buffer | Uint8Array
 export type PrivateKeyInput = BinaryLike | KeyObject
 export type PublicKeyInput = BinaryLike | KeyObject
 
+export interface KeyExportOptions {
+  format: 'pem'
+  type: 'spki' | 'pkcs8'
+}
+
+export interface RsaKeyPairOptions {
+  modulusLength: number
+  publicExponent?: number
+}
+
+export interface EcKeyPairOptions {
+  namedCurve: string
+}
+
+export interface KeyPairResult {
+  publicKey: KeyObject
+  privateKey: KeyObject
+}
+
 export interface ScryptOptions {
   cost?: number
   N?: number
@@ -31,6 +50,8 @@ export interface CryptoModule {
   createDecipheriv(algorithm: string, key: BinaryLike, iv: BinaryLike, options?: CipherGCMOptions): Decipheriv
   createPrivateKey(key: BinaryLike): KeyObject
   createPublicKey(key: PublicKeyInput): KeyObject
+  generateKeyPairSync(type: 'rsa', options: RsaKeyPairOptions): KeyPairResult
+  generateKeyPairSync(type: 'ec', options: EcKeyPairOptions): KeyPairResult
   getHashes(): string[]
   getRandomValues(bytes: BinaryBuffer): BinaryBuffer
   hkdfSync(digest: string, ikm: BinaryLike, salt: BinaryLike, info: BinaryLike, keylen: number): Buffer
@@ -83,6 +104,7 @@ export class Decipheriv {
 export class KeyObject {
   readonly type: 'private' | 'public'
   readonly asymmetricKeyType: 'rsa' | 'rsa-pss' | 'ec'
+  export(options: KeyExportOptions): string
 }
 
 export function createCipheriv(algorithm: string, key: BinaryLike, iv: BinaryLike, options?: CipherGCMOptions): Cipheriv
@@ -94,6 +116,8 @@ export function createDecipheriv(
 ): Decipheriv
 export function createPrivateKey(key: BinaryLike): KeyObject
 export function createPublicKey(key: PublicKeyInput): KeyObject
+export function generateKeyPairSync(type: 'rsa', options: RsaKeyPairOptions): KeyPairResult
+export function generateKeyPairSync(type: 'ec', options: EcKeyPairOptions): KeyPairResult
 export function createHash(algorithm: string): Hash
 export function createHmac(algorithm: string, key: BinaryLike): Hmac
 export function getHashes(): string[]

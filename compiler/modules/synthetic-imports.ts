@@ -296,9 +296,9 @@ export function createValueImportTypeDeclarations(
   importedProgram: ProgramNode,
   externalTypeNames: Set<string> = new Set()
 ): AnyNode[] {
-  const exported = findExportedDeclaration(importedProgram, specifier.imported)
+  const exported = findExportedDeclarations(importedProgram, specifier.imported)
 
-  if (exported === null || typeof exported === 'undefined') {
+  if (exported.length === 0) {
     return []
   }
 
@@ -307,8 +307,22 @@ export function createValueImportTypeDeclarations(
   const added: Set<string> = new Set()
   const visiting: Set<string> = new Set()
 
-  for (const name of declarationTypeDependencyNames(exported)) {
-    addTypeImportDependency(name, '', aliases, externalTypeNames, added, visiting, declarations)
+  for (const overload of exported) {
+    for (const name of declarationTypeDependencyNames(overload)) {
+      addTypeImportDependency(name, '', aliases, externalTypeNames, added, visiting, declarations)
+    }
+  }
+
+  return declarations
+}
+
+function findExportedDeclarations(program: ProgramNode, name: string): SyntheticImportNode[] {
+  const declarations: SyntheticImportNode[] = []
+
+  for (const item of program.body) {
+    if (item.exported === true && item.name === name) {
+      declarations.push(item)
+    }
   }
 
   return declarations

@@ -39,6 +39,23 @@ const hashAlgorithms = ['sha1', 'sha224', 'sha256', 'sha384', 'sha512']
 const cipherAlgorithms = ['aes-128-gcm', 'aes-192-gcm', 'aes-256-gcm']
 const signatureAlgorithms = ['sha256', 'sha384', 'sha512']
 const stringTypeRef = primitiveTypeRef('string')
+const keyPairResultTypeRef: TypeRef = {
+  kind: 'object',
+  fields: [
+    { name: 'publicKey', typeRef: nominalTypeRef(keyObjectTypeId), readonly: true },
+    { name: 'privateKey', typeRef: nominalTypeRef(keyObjectTypeId), readonly: true }
+  ],
+  nullable: false,
+  ownership: 'value',
+  traits: []
+}
+const keyPairResultMapping: LibraryCResultMappingDescriptor = {
+  cppType: 'CryptoKeyPair',
+  fields: [
+    { name: 'publicKey', cMember: 'publicKey', cppType: 'KeyObject' },
+    { name: 'privateKey', cMember: 'privateKey', cppType: 'KeyObject' }
+  ]
+}
 
 const operations: LibraryOperationDescriptor[] = [
   moduleCall('getHashes', [], [], 0, 0, [], hashRequirements, {
@@ -157,6 +174,22 @@ const operations: LibraryOperationDescriptor[] = [
     resultTypeRef: nominalTypeRef(keyObjectTypeId),
     cResultMode: 'value'
   }),
+  moduleCall(
+    'generateKeyPairSync',
+    ['string-view', 'value'],
+    [],
+    2,
+    2,
+    [
+      literalArgument(
+        ['rsa', 'ec'],
+        "node:crypto generateKeyPairSync only supports 'rsa' and 'ec' in the current C++ backend"
+      ),
+      objectArgument()
+    ],
+    signatureRequirements,
+    { resultTypeRef: keyPairResultTypeRef, cResultMapping: keyPairResultMapping }
+  ),
   moduleCall('createHash', ['string-view'], [], 1, 1, [hashAlgorithmArgument('createHash')], hashRequirements, {
     resultTypeRef: nominalTypeRef(hashTypeId),
     cResultMode: 'value'
@@ -184,6 +217,7 @@ const operations: LibraryOperationDescriptor[] = [
   cipherSetAadOperation(decipherTypeId),
   cipherGetAuthTagOperation(),
   cipherSetAuthTagOperation(),
+  keyExportOperation(),
   moduleCall(
     'sign',
     ['string-view', 'value', 'value'],
@@ -394,6 +428,26 @@ function hashOperation(): LibraryOperationDescriptor {
         'crypto.hashBuffer'
       )
     ]
+  }
+}
+
+function keyExportOperation(): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: receiverBinding(keyObjectTypeId, 'export'),
+    operationId: `${keyObjectTypeId}#export`,
+    kind: 'call',
+    runtimeRequirements: signatureRequirements,
+    receiverTypeId: keyObjectTypeId,
+    cExpression: 'exportKey',
+    cCallStyle: 'member',
+    cFailureMode: 'thrown',
+    cArgumentKinds: ['receiver', 'value'],
+    cResultMapping: stringResultMapping(),
+    resultTypeRef: stringTypeRef,
+    minArgs: 1,
+    maxArgs: 1,
+    argumentChecks: [objectArgument()]
   }
 }
 
@@ -845,7 +899,6 @@ function unsupportedMethods(): string[] {
     'encapsulate',
     'generateKey',
     'generateKeyPair',
-    'generateKeyPairSync',
     'generateKeySync',
     'generatePrime',
     'generatePrimeSync',

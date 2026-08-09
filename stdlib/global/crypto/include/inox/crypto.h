@@ -149,13 +149,28 @@ private:
 public:
   KeyObject();
   ~KeyObject();
-  KeyObject(const KeyObject& other) = delete;
-  KeyObject& operator=(const KeyObject& other) = delete;
+  KeyObject(const KeyObject& other);
+  KeyObject& operator=(const KeyObject& other);
   KeyObject(KeyObject&& other) noexcept;
   KeyObject& operator=(KeyObject&& other) noexcept;
 
   inox::StringView type() const;
   inox::StringView asymmetricKeyType() const;
+  inox::String exportKey(const inox::Value& options) const;
+};
+
+class CryptoKeyPair {
+public:
+  KeyObject publicKey;
+  KeyObject privateKey;
+
+  CryptoKeyPair();
+  CryptoKeyPair(KeyObject&& public_key, KeyObject&& private_key);
+  ~CryptoKeyPair();
+  CryptoKeyPair(const CryptoKeyPair& other);
+  CryptoKeyPair& operator=(const CryptoKeyPair& other);
+  CryptoKeyPair(CryptoKeyPair&& other) noexcept;
+  CryptoKeyPair& operator=(CryptoKeyPair&& other) noexcept;
 };
 
 class crypto {
@@ -204,6 +219,7 @@ public:
   KeyObject createPrivateKey(const inox::Value& key) const;
   KeyObject createPublicKey(const inox::Value& key) const;
   KeyObject createPublicKey(const KeyObject& key) const;
+  CryptoKeyPair generateKeyPairSync(inox::StringView type, const inox::Value& options) const;
   Hash createHash(inox::StringView algorithm) const;
   Hmac createHmac(inox::StringView algorithm, inox::StringView key) const;
   Hmac createHmac(inox::StringView algorithm, const inox::Value& key) const;

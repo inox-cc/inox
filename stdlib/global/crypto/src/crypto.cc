@@ -3,6 +3,7 @@
 #include <limits.h>
 #include <stdint.h>
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 #include "inox/array.h"
@@ -13,10 +14,14 @@
 #include "inox/string.h"
 
 #if defined(INOX_TLS_BACKEND_BORINGSSL) || defined(INOX_TLS_BACKEND_OPENSSL)
+#include <openssl/bn.h>
+#include <openssl/ec.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
+#include <openssl/objects.h>
 #include <openssl/pem.h>
+#include <openssl/rsa.h>
 #define INOX_CRYPTO_HAS_EVP 1
 #else
 #define INOX_CRYPTO_HAS_EVP 0
@@ -105,11 +110,19 @@ static inox_status CryptoKeyState_create(
   bool private_key,
   CryptoKeyState** out
 );
+static inox_status CryptoKeyState_generate_pair(
+  inox_allocator* allocator,
+  inox::StringView type,
+  const inox::Value& options,
+  CryptoKeyState** public_key,
+  CryptoKeyState** private_key
+);
 static inox_status CryptoKeyState_clone_public(
   inox_allocator* allocator,
   const CryptoKeyState* key,
   CryptoKeyState** out
 );
+static void CryptoKeyState_retain(CryptoKeyState* key);
 static void CryptoKeyState_free(CryptoKeyState* key);
 static Buffer inox_crypto_sign(
   CryptoKeyState* key,
@@ -199,6 +212,7 @@ enum InoxCryptoKeyType {
 
 struct CryptoKeyState {
   inox_allocator* allocator;
+  size_t refs;
 #if INOX_CRYPTO_HAS_EVP
   EVP_PKEY* key;
 #endif
@@ -795,6 +809,20 @@ KeyObject::~KeyObject() {
   CryptoKeyState_free(handle_);
 }
 
+KeyObject::KeyObject(const KeyObject& other) : handle_(other.handle_) {
+  CryptoKeyState_retain(handle_);
+}
+
+KeyObject& KeyObject::operator=(const KeyObject& other) {
+  if (this != &other) {
+    CryptoKeyState_retain(other.handle_);
+    CryptoKeyState_free(handle_);
+    handle_ = other.handle_;
+  }
+
+  return *this;
+}
+
 KeyObject::KeyObject(KeyObject&& other) noexcept : handle_(other.handle_) {
   other.handle_ = 0;
 }
@@ -837,6 +865,106 @@ inox::StringView KeyObject::asymmetricKeyType() const {
   }
 
   inox::fatal("crypto.KeyObject.asymmetricKeyType native facade invariant failed");
+}
+
+inox::String KeyObject::exportKey(const inox::Value& options) const {
+  if (
+    handle_ == 0 ||
+    (options.tag != INOX_TAG_OBJECT && options.tag != INOX_TAG_CLASS_INSTANCE)
+  ) {
+    inox_crypto_throw_failed("crypto.KeyObject.export failed");
+    return inox::String();
+  }
+
+  inox::Value format_value = inox::get(options.raw(), "format");
+  inox::Value type_value = inox::get(options.raw(), "type");
+
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
+  if (
+    format_value.tag != INOX_TAG_STRING ||
+    format_value.as.ref == 0 ||
+    type_value.tag != INOX_TAG_STRING ||
+    type_value.as.ref == 0
+  ) {
+    inox_crypto_throw_failed("crypto.KeyObject.export failed");
+    return inox::String();
+  }
+
+  const inox::String format(format_value);
+  const inox::String key_type(type_value);
+  const std::string_view format_name(format.bytes(), format.length());
+  const std::string_view type_name(key_type.bytes(), key_type.length());
+
+  if (
+    format_name != "pem" ||
+    (handle_->private_key ? type_name != "pkcs8" : type_name != "spki")
+  ) {
+    inox_crypto_throw_failed("crypto.KeyObject.export failed");
+    return inox::String();
+  }
+
+#if INOX_CRYPTO_HAS_EVP
+  BIO* output = BIO_new(BIO_s_mem());
+
+  if (output == 0) {
+    inox::throw_out_of_memory();
+    return inox::String();
+  }
+
+  const int written = handle_->private_key
+    ? PEM_write_bio_PrivateKey(output, handle_->key, 0, 0, 0, 0, 0)
+    : PEM_write_bio_PUBKEY(output, handle_->key);
+  char* bytes = 0;
+  const long length = written == 1 ? BIO_get_mem_data(output, &bytes) : 0;
+
+  if (written != 1 || length <= 0 || bytes == 0) {
+    BIO_free(output);
+    ERR_clear_error();
+    inox_crypto_throw_failed("crypto.KeyObject.export failed");
+    return inox::String();
+  }
+
+  inox::String result(bytes, (size_t)length);
+  BIO_free(output);
+  return result;
+#else
+  inox_crypto_throw_failed("crypto.KeyObject.export failed");
+  return inox::String();
+#endif
+}
+
+CryptoKeyPair::CryptoKeyPair() : publicKey(), privateKey() {}
+
+CryptoKeyPair::CryptoKeyPair(KeyObject&& public_key, KeyObject&& private_key)
+  : publicKey(std::move(public_key)), privateKey(std::move(private_key)) {}
+
+CryptoKeyPair::~CryptoKeyPair() {}
+
+CryptoKeyPair::CryptoKeyPair(const CryptoKeyPair& other)
+  : publicKey(other.publicKey), privateKey(other.privateKey) {}
+
+CryptoKeyPair& CryptoKeyPair::operator=(const CryptoKeyPair& other) {
+  if (this != &other) {
+    publicKey = other.publicKey;
+    privateKey = other.privateKey;
+  }
+
+  return *this;
+}
+
+CryptoKeyPair::CryptoKeyPair(CryptoKeyPair&& other) noexcept
+  : publicKey(std::move(other.publicKey)), privateKey(std::move(other.privateKey)) {}
+
+CryptoKeyPair& CryptoKeyPair::operator=(CryptoKeyPair&& other) noexcept {
+  if (this != &other) {
+    publicKey = std::move(other.publicKey);
+    privateKey = std::move(other.privateKey);
+  }
+
+  return *this;
 }
 
 Array crypto::getHashes() const {
@@ -1395,6 +1523,38 @@ KeyObject crypto::createPublicKey(const KeyObject& key) const {
   }
 
   return KeyObject(state);
+}
+
+CryptoKeyPair crypto::generateKeyPairSync(
+  inox::StringView type,
+  const inox::Value& options
+) const {
+  CryptoKeyState* public_state = 0;
+  CryptoKeyState* private_state = 0;
+  const inox_status status = CryptoKeyState_generate_pair(
+    &inox_default_allocator,
+    type,
+    options,
+    &public_state,
+    &private_state
+  );
+
+  if (status != INOX_OK) {
+    CryptoKeyState_free(public_state);
+    CryptoKeyState_free(private_state);
+
+    if (!inox::thrown()) {
+      if (status == INOX_ERR_OOM) {
+        inox::throw_out_of_memory();
+      } else {
+        inox_crypto_throw_failed("crypto.generateKeyPairSync failed");
+      }
+    }
+
+    return CryptoKeyPair();
+  }
+
+  return CryptoKeyPair(KeyObject(public_state), KeyObject(private_state));
 }
 
 Hash crypto::createHash(inox::StringView algorithm) const {
@@ -2143,9 +2303,15 @@ static inox_status CryptoKeyState_create(
 
 #if INOX_CRYPTO_HAS_EVP
   EVP_PKEY* parsed = inox_crypto_read_pem_key(bytes, len, private_key);
+
+  if (parsed == 0) {
+    ERR_clear_error();
+    return INOX_ERR_TYPE;
+  }
+
   const int key_type = inox_crypto_key_type(parsed);
 
-  if (parsed == 0 || key_type == 0) {
+  if (key_type == 0) {
     EVP_PKEY_free(parsed);
     ERR_clear_error();
     return INOX_ERR_TYPE;
@@ -2163,6 +2329,7 @@ static inox_status CryptoKeyState_create(
   }
 
   state->allocator = allocator;
+  state->refs = 1;
   state->key = parsed;
   state->private_key = private_key ? 1 : 0;
   state->key_type = key_type;
@@ -2170,6 +2337,182 @@ static inox_status CryptoKeyState_create(
   return INOX_OK;
 #else
   (void)private_key;
+  return INOX_ERR_UNSUPPORTED;
+#endif
+}
+
+static inox_status CryptoKeyState_generate_pair(
+  inox_allocator* allocator,
+  inox::StringView type,
+  const inox::Value& options,
+  CryptoKeyState** public_key,
+  CryptoKeyState** private_key
+) {
+  if (
+    allocator == 0 ||
+    allocator->alloc == 0 ||
+    allocator->free == 0 ||
+    public_key == 0 ||
+    private_key == 0 ||
+    (options.tag != INOX_TAG_OBJECT && options.tag != INOX_TAG_CLASS_INSTANCE)
+  ) {
+    return INOX_ERR_TYPE;
+  }
+
+  *public_key = 0;
+  *private_key = 0;
+
+#if INOX_CRYPTO_HAS_EVP
+  const std::string_view key_type(type.bytes, type.len);
+  EVP_PKEY_CTX* context = 0;
+  BIGNUM* exponent = 0;
+
+  if (key_type == "rsa") {
+    inox::Value modulus_value = inox::get(options.raw(), "modulusLength");
+    inox::Value exponent_value = inox::get(options.raw(), "publicExponent");
+
+    if (inox::thrown()) {
+      return INOX_ERR_THROW;
+    }
+
+    size_t modulus_length = 0;
+
+    if (
+      modulus_value.tag != INOX_TAG_NUMBER ||
+      !inox_crypto_number_to_size(modulus_value.as.number, &modulus_length) ||
+      modulus_length < 512 ||
+      modulus_length > (size_t)INT_MAX
+    ) {
+      return INOX_ERR_TYPE;
+    }
+
+    size_t public_exponent = 65537;
+
+    if (
+      exponent_value.tag != INOX_TAG_UNDEFINED &&
+      (
+        exponent_value.tag != INOX_TAG_NUMBER ||
+        !inox_crypto_number_to_size(exponent_value.as.number, &public_exponent)
+      )
+    ) {
+      return INOX_ERR_TYPE;
+    }
+
+    if (public_exponent < 3 || (public_exponent & 1u) == 0 || public_exponent > (size_t)ULONG_MAX) {
+      return INOX_ERR_TYPE;
+    }
+
+    context = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, 0);
+    exponent = BN_new();
+
+    if (context == 0 || exponent == 0) {
+      EVP_PKEY_CTX_free(context);
+      BN_free(exponent);
+      return INOX_ERR_OOM;
+    }
+
+    if (
+      EVP_PKEY_keygen_init(context) != 1 ||
+      EVP_PKEY_CTX_set_rsa_keygen_bits(context, (int)modulus_length) != 1 ||
+      BN_set_word(exponent, (BN_ULONG)public_exponent) != 1 ||
+      EVP_PKEY_CTX_set_rsa_keygen_pubexp(context, exponent) != 1
+    ) {
+      EVP_PKEY_CTX_free(context);
+      BN_free(exponent);
+      ERR_clear_error();
+      return INOX_ERR_TYPE;
+    }
+
+    exponent = 0;
+  } else if (key_type == "ec") {
+    inox::Value curve_value = inox::get(options.raw(), "namedCurve");
+
+    if (inox::thrown()) {
+      return INOX_ERR_THROW;
+    }
+
+    if (curve_value.tag != INOX_TAG_STRING || curve_value.as.ref == 0) {
+      return INOX_ERR_TYPE;
+    }
+
+    const inox::String curve(curve_value);
+    const std::string curve_name(curve.bytes(), curve.length());
+    int curve_id = EC_curve_nist2nid(curve_name.c_str());
+
+    if (curve_id == NID_undef) {
+      curve_id = OBJ_txt2nid(curve_name.c_str());
+    }
+
+    if (curve_id == NID_undef) {
+      return INOX_ERR_TYPE;
+    }
+
+    context = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, 0);
+
+    if (context == 0) {
+      return INOX_ERR_OOM;
+    }
+
+    if (
+      EVP_PKEY_keygen_init(context) != 1 ||
+      EVP_PKEY_CTX_set_ec_paramgen_curve_nid(context, curve_id) != 1
+    ) {
+      EVP_PKEY_CTX_free(context);
+      ERR_clear_error();
+      return INOX_ERR_TYPE;
+    }
+  } else {
+    return INOX_ERR_TYPE;
+  }
+
+  EVP_PKEY* generated = 0;
+
+  if (EVP_PKEY_keygen(context, &generated) != 1 || generated == 0) {
+    EVP_PKEY_CTX_free(context);
+    ERR_clear_error();
+    return INOX_ERR_TYPE;
+  }
+
+  EVP_PKEY_CTX_free(context);
+  const int generated_type = inox_crypto_key_type(generated);
+
+  if (generated_type == 0) {
+    EVP_PKEY_free(generated);
+    return INOX_ERR_TYPE;
+  }
+
+  CryptoKeyState* private_state = (CryptoKeyState*)allocator->alloc(
+    allocator->user,
+    sizeof(CryptoKeyState),
+    alignof(CryptoKeyState)
+  );
+
+  if (private_state == 0) {
+    EVP_PKEY_free(generated);
+    return INOX_ERR_OOM;
+  }
+
+  private_state->allocator = allocator;
+  private_state->refs = 1;
+  private_state->key = generated;
+  private_state->private_key = 1;
+  private_state->key_type = generated_type;
+
+  const inox_status public_status = CryptoKeyState_clone_public(
+    allocator,
+    private_state,
+    public_key
+  );
+
+  if (public_status != INOX_OK) {
+    CryptoKeyState_free(private_state);
+    return public_status;
+  }
+
+  *private_key = private_state;
+  return INOX_OK;
+#else
+  (void)type;
   return INOX_ERR_UNSUPPORTED;
 #endif
 }
@@ -2228,6 +2571,7 @@ static inox_status CryptoKeyState_clone_public(
   }
 
   state->allocator = allocator;
+  state->refs = 1;
   state->key = public_key;
   state->private_key = 0;
   state->key_type = key->key_type;
@@ -2238,8 +2582,19 @@ static inox_status CryptoKeyState_clone_public(
 #endif
 }
 
+static void CryptoKeyState_retain(CryptoKeyState* key) {
+  if (key != 0) {
+    key->refs += 1;
+  }
+}
+
 static void CryptoKeyState_free(CryptoKeyState* key) {
   if (key == 0) {
+    return;
+  }
+
+  if (key->refs > 1) {
+    key->refs -= 1;
     return;
   }
 

@@ -65,6 +65,18 @@ test('node:crypto implemented results принадлежат TypeRef, включ
     ['node:crypto#createDecipheriv', [result(nominalType('node:crypto#Decipheriv'), null, 'value')]],
     ['node:crypto#createPrivateKey', [result(nominalType('node:crypto#KeyObject'), null, 'value')]],
     ['node:crypto#createPublicKey', [result(nominalType('node:crypto#KeyObject'), null, 'value')]],
+    [
+      'node:crypto#generateKeyPairSync',
+      [
+        result(keyPairType(), {
+          cppType: 'CryptoKeyPair',
+          fields: [
+            { name: 'publicKey', cMember: 'publicKey', cppType: 'KeyObject' },
+            { name: 'privateKey', cMember: 'privateKey', cppType: 'KeyObject' }
+          ]
+        })
+      ]
+    ],
     ['node:crypto#createHash', [result(nominalType('node:crypto#Hash'), null, 'value')]],
     ['node:crypto#createHmac', [result(nominalType('node:crypto#Hmac'), null, 'value')]],
     [
@@ -126,6 +138,7 @@ test('node:crypto implemented results принадлежат TypeRef, включ
     ['node:crypto#Cipheriv#getAuthTag', [result(nominalType('node:buffer#Buffer'), null, 'value')]],
     ['node:crypto#sign', [result(nominalType('node:buffer#Buffer'), null, 'value')]],
     ['node:crypto#verify', [result(primitiveType('boolean'))]],
+    ['node:crypto#KeyObject#export', [result(stringType, stringMapping())]],
     [
       'node:crypto#Decipheriv#setAuthTag',
       [
@@ -205,6 +218,19 @@ function arrayType(elementType: TypeRef): TypeRef {
     nullable: false,
     ownership: 'value',
     traits: [{ traitId: 'iterable', args: [elementType] }]
+  }
+}
+
+function keyPairType(): TypeRef {
+  return {
+    kind: 'object',
+    fields: [
+      { name: 'publicKey', typeRef: nominalType('node:crypto#KeyObject'), readonly: true },
+      { name: 'privateKey', typeRef: nominalType('node:crypto#KeyObject'), readonly: true }
+    ],
+    nullable: false,
+    ownership: 'value',
+    traits: []
   }
 }
 
