@@ -8,8 +8,10 @@ export interface CryptoModule {
   createHmac(algorithm: string, key: BinaryLike): Hmac
   getHashes(): string[]
   getRandomValues(bytes: BinaryBuffer): BinaryBuffer
+  hkdfSync(digest: string, ikm: BinaryLike, salt: BinaryLike, info: BinaryLike, keylen: number): Buffer
   hash(algorithm: string, data: BinaryLike, outputEncoding: 'buffer'): Buffer
   hash(algorithm: string, data: BinaryLike, outputEncoding?: string): string
+  pbkdf2Sync(password: BinaryLike, salt: BinaryLike, iterations: number, keylen: number, digest: string): Buffer
   randomBytes(size: number): Buffer
   randomFillSync(buffer: BinaryBuffer, offset?: number, size?: number): BinaryBuffer
   randomInt(max: number): number
@@ -34,8 +36,16 @@ export function createHash(algorithm: string): Hash
 export function createHmac(algorithm: string, key: BinaryLike): Hmac
 export function getHashes(): string[]
 export function getRandomValues(bytes: BinaryBuffer): BinaryBuffer
+export function hkdfSync(digest: string, ikm: BinaryLike, salt: BinaryLike, info: BinaryLike, keylen: number): Buffer
 export function hash(algorithm: string, data: BinaryLike, outputEncoding: 'buffer'): Buffer
 export function hash(algorithm: string, data: BinaryLike, outputEncoding?: string): string
+export function pbkdf2Sync(
+  password: BinaryLike,
+  salt: BinaryLike,
+  iterations: number,
+  keylen: number,
+  digest: string
+): Buffer
 export function randomBytes(size: number): Buffer
 export function randomFillSync(buffer: BinaryBuffer, offset?: number, size?: number): BinaryBuffer
 export function randomInt(max: number): number

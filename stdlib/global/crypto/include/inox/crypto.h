@@ -70,6 +70,20 @@ public:
   inox_number randomInt(inox_number max) const;
   inox_number randomInt(inox_number min, inox_number max) const;
   inox::String randomUUID() const;
+  Buffer pbkdf2Sync(
+    const inox::Value& password,
+    const inox::Value& salt,
+    inox_number iterations,
+    inox_number keylen,
+    inox::StringView digest
+  ) const;
+  Buffer hkdfSync(
+    inox::StringView digest,
+    const inox::Value& ikm,
+    const inox::Value& salt,
+    const inox::Value& info,
+    inox_number keylen
+  ) const;
   Hash createHash(inox::StringView algorithm) const;
   Hmac createHmac(inox::StringView algorithm, inox::StringView key) const;
   Hmac createHmac(inox::StringView algorithm, const inox::Value& key) const;

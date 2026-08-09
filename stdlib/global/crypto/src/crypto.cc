@@ -35,9 +35,22 @@ static inox_status inox_crypto_random_bytes_raw(uint8_t* out, size_t len);
 static int inox_crypto_number_to_size(inox_number value, size_t* out);
 static int inox_crypto_number_is_integer(inox_number value);
 #if INOX_CRYPTO_HASH_HAS_EVP
-static const EVP_MD* CryptoHashState_algorithm(const char* algorithm, size_t algorithm_len);
+static const EVP_MD* inox_crypto_digest_algorithm(const char* algorithm, size_t algorithm_len);
 #endif
-static inox_status CryptoHashState_data(inox_value data, const uint8_t** bytes, size_t* len);
+static inox_status inox_crypto_data(inox_value data, const uint8_t** bytes, size_t* len);
+#if INOX_CRYPTO_HASH_HAS_EVP
+static inox_status inox_crypto_hkdf(
+  const EVP_MD* digest,
+  const uint8_t* ikm,
+  size_t ikm_len,
+  const uint8_t* salt,
+  size_t salt_len,
+  const uint8_t* info,
+  size_t info_len,
+  uint8_t* out,
+  size_t out_len
+);
+#endif
 static inox_status CryptoHashState_create(
   inox_allocator* allocator,
   const char* algorithm,
@@ -144,7 +157,7 @@ Hash& Hash::update(const inox::Value& data) {
   size_t len = 0;
 
   if (
-    CryptoHashState_data(data.raw(), &bytes, &len) != INOX_OK ||
+    inox_crypto_data(data.raw(), &bytes, &len) != INOX_OK ||
     CryptoHashState_update(handle_, bytes, len) != INOX_OK
   ) {
     inox_crypto_throw_failed("crypto.Hash.update failed");
@@ -248,7 +261,7 @@ Hmac& Hmac::update(const inox::Value& data) {
   size_t len = 0;
 
   if (
-    CryptoHashState_data(data.raw(), &bytes, &len) != INOX_OK ||
+    inox_crypto_data(data.raw(), &bytes, &len) != INOX_OK ||
     CryptoHmacState_update(handle_, bytes, len) != INOX_OK
   ) {
     inox_crypto_throw_failed("crypto.Hmac.update failed");
@@ -523,6 +536,142 @@ inox::String crypto::randomUUID() const {
   return inox::String(uuid, sizeof(uuid));
 }
 
+Buffer crypto::pbkdf2Sync(
+  const inox::Value& password,
+  const inox::Value& salt,
+  inox_number iterations_value,
+  inox_number keylen_value,
+  inox::StringView digest_name
+) const {
+#if INOX_CRYPTO_HASH_HAS_EVP
+  const EVP_MD* digest = inox_crypto_digest_algorithm(digest_name.bytes, digest_name.len);
+  const uint8_t* password_bytes = 0;
+  const uint8_t* salt_bytes = 0;
+  size_t password_len = 0;
+  size_t salt_len = 0;
+  size_t iterations = 0;
+  size_t keylen = 0;
+
+  if (
+    digest == 0 ||
+    inox_crypto_data(password.raw(), &password_bytes, &password_len) != INOX_OK ||
+    inox_crypto_data(salt.raw(), &salt_bytes, &salt_len) != INOX_OK ||
+    !inox_crypto_number_to_size(iterations_value, &iterations) ||
+    !inox_crypto_number_to_size(keylen_value, &keylen) ||
+    iterations == 0 ||
+    keylen == 0 ||
+    password_len > (size_t)INT_MAX ||
+    salt_len > (size_t)INT_MAX ||
+    iterations > (size_t)INT_MAX ||
+    keylen > (size_t)INT_MAX
+  ) {
+    inox_crypto_throw_failed("crypto.pbkdf2Sync failed");
+    return Buffer();
+  }
+
+  Buffer result = Buffer::alloc((double)keylen);
+
+  if (inox::thrown() || !result.valid()) {
+    return Buffer();
+  }
+
+  if (
+    PKCS5_PBKDF2_HMAC(
+      (const char*)password_bytes,
+      password_len,
+      salt_bytes,
+      salt_len,
+      iterations,
+      digest,
+      keylen,
+      result.bytes().data()
+    ) != 1
+  ) {
+    inox_crypto_throw_failed("crypto.pbkdf2Sync failed");
+    return Buffer();
+  }
+
+  return result;
+#else
+  (void)password;
+  (void)salt;
+  (void)iterations_value;
+  (void)keylen_value;
+  (void)digest_name;
+  inox_crypto_throw_failed("crypto.pbkdf2Sync failed");
+  return Buffer();
+#endif
+}
+
+Buffer crypto::hkdfSync(
+  inox::StringView digest_name,
+  const inox::Value& ikm,
+  const inox::Value& salt,
+  const inox::Value& info,
+  inox_number keylen_value
+) const {
+#if INOX_CRYPTO_HASH_HAS_EVP
+  const EVP_MD* digest = inox_crypto_digest_algorithm(digest_name.bytes, digest_name.len);
+  const uint8_t* ikm_bytes = 0;
+  const uint8_t* salt_bytes = 0;
+  const uint8_t* info_bytes = 0;
+  size_t ikm_len = 0;
+  size_t salt_len = 0;
+  size_t info_len = 0;
+  size_t keylen = 0;
+  size_t digest_len = digest == 0 ? 0 : (size_t)EVP_MD_size(digest);
+
+  if (
+    digest == 0 ||
+    digest_len == 0 ||
+    inox_crypto_data(ikm.raw(), &ikm_bytes, &ikm_len) != INOX_OK ||
+    inox_crypto_data(salt.raw(), &salt_bytes, &salt_len) != INOX_OK ||
+    inox_crypto_data(info.raw(), &info_bytes, &info_len) != INOX_OK ||
+    !inox_crypto_number_to_size(keylen_value, &keylen) ||
+    keylen == 0 ||
+    keylen > 255 * digest_len ||
+    salt_len > (size_t)INT_MAX ||
+    info_len > 1024
+  ) {
+    inox_crypto_throw_failed("crypto.hkdfSync failed");
+    return Buffer();
+  }
+
+  Buffer result = Buffer::alloc((double)keylen);
+
+  if (inox::thrown() || !result.valid()) {
+    return Buffer();
+  }
+
+  if (
+    inox_crypto_hkdf(
+      digest,
+      ikm_bytes,
+      ikm_len,
+      salt_bytes,
+      salt_len,
+      info_bytes,
+      info_len,
+      result.bytes().data(),
+      keylen
+    ) != INOX_OK
+  ) {
+    inox_crypto_throw_failed("crypto.hkdfSync failed");
+    return Buffer();
+  }
+
+  return result;
+#else
+  (void)digest_name;
+  (void)ikm;
+  (void)salt;
+  (void)info;
+  (void)keylen_value;
+  inox_crypto_throw_failed("crypto.hkdfSync failed");
+  return Buffer();
+#endif
+}
+
 Hash crypto::createHash(inox::StringView algorithm) const {
   CryptoHashState* hash = 0;
 
@@ -702,7 +851,7 @@ static inox_status CryptoHashState_create(
   *out = 0;
 
 #if INOX_CRYPTO_HASH_HAS_EVP
-  const EVP_MD* digest = CryptoHashState_algorithm(algorithm, algorithm_len);
+  const EVP_MD* digest = inox_crypto_digest_algorithm(algorithm, algorithm_len);
 
   if (digest == 0) {
     return INOX_ERR_UNSUPPORTED;
@@ -777,7 +926,7 @@ static inox_status CryptoHmacState_create(
   }
 
 #if INOX_CRYPTO_HASH_HAS_EVP
-  const EVP_MD* digest = CryptoHashState_algorithm(algorithm, algorithm_len);
+  const EVP_MD* digest = inox_crypto_digest_algorithm(algorithm, algorithm_len);
 
   if (digest == 0) {
     return INOX_ERR_UNSUPPORTED;
@@ -830,7 +979,7 @@ static inox_status CryptoHmacState_create(
 
   const uint8_t* key_bytes = 0;
   size_t key_len = 0;
-  inox_status status = CryptoHashState_data(key, &key_bytes, &key_len);
+  inox_status status = inox_crypto_data(key, &key_bytes, &key_len);
 
   if (status != INOX_OK) {
     return status;
@@ -929,7 +1078,7 @@ static int inox_crypto_number_is_integer(inox_number value) {
 }
 
 #if INOX_CRYPTO_HASH_HAS_EVP
-static const EVP_MD* CryptoHashState_algorithm(const char* algorithm, size_t algorithm_len) {
+static const EVP_MD* inox_crypto_digest_algorithm(const char* algorithm, size_t algorithm_len) {
   const std::string_view name(algorithm, algorithm_len);
 
   if (name == "sha1") {
@@ -956,7 +1105,7 @@ static const EVP_MD* CryptoHashState_algorithm(const char* algorithm, size_t alg
 }
 #endif
 
-static inox_status CryptoHashState_data(inox_value data, const uint8_t** bytes, size_t* len) {
+static inox_status inox_crypto_data(inox_value data, const uint8_t** bytes, size_t* len) {
   if (bytes == 0 || len == 0) {
     return INOX_ERR_TYPE;
   }
@@ -995,6 +1144,64 @@ static inox_status CryptoHashState_data(inox_value data, const uint8_t** bytes, 
 
   return INOX_ERR_TYPE;
 }
+
+#if INOX_CRYPTO_HASH_HAS_EVP
+static inox_status inox_crypto_hkdf(
+  const EVP_MD* digest,
+  const uint8_t* ikm,
+  size_t ikm_len,
+  const uint8_t* salt,
+  size_t salt_len,
+  const uint8_t* info,
+  size_t info_len,
+  uint8_t* out,
+  size_t out_len
+) {
+  uint8_t prk[EVP_MAX_MD_SIZE];
+  uint8_t previous[EVP_MAX_MD_SIZE];
+  unsigned int prk_len = 0;
+  unsigned int previous_len = 0;
+
+  if (HMAC(digest, salt, salt_len, ikm, ikm_len, prk, &prk_len) == 0) {
+    return INOX_ERR_UNSUPPORTED;
+  }
+
+  HMAC_CTX* ctx = HMAC_CTX_new();
+
+  if (ctx == 0) {
+    return INOX_ERR_OOM;
+  }
+
+  size_t written = 0;
+  uint8_t counter = 1;
+
+  while (written < out_len) {
+    if (
+      HMAC_Init_ex(ctx, prk, prk_len, digest, 0) != 1 ||
+      (previous_len > 0 && HMAC_Update(ctx, previous, previous_len) != 1) ||
+      (info_len > 0 && HMAC_Update(ctx, info, info_len) != 1) ||
+      HMAC_Update(ctx, &counter, 1) != 1 ||
+      HMAC_Final(ctx, previous, &previous_len) != 1
+    ) {
+      HMAC_CTX_free(ctx);
+      return INOX_ERR_UNSUPPORTED;
+    }
+
+    size_t remaining = out_len - written;
+    size_t count = remaining < previous_len ? remaining : previous_len;
+
+    for (size_t index = 0; index < count; index += 1) {
+      out[written + index] = previous[index];
+    }
+
+    written += count;
+    counter += 1;
+  }
+
+  HMAC_CTX_free(ctx);
+  return INOX_OK;
+}
+#endif
 
 static inox_status CryptoHashState_update(CryptoHashState* hash, const uint8_t* bytes, size_t len) {
   if (hash == 0 || hash->finalized || (bytes == 0 && len != 0)) {

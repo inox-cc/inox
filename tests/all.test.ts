@@ -127,6 +127,7 @@ async function runHostedIntegrationTests(): Promise<void> {
   const { assertHostedCryptoEncodingRuntime } = await import('./integration/crypto-encoding-runtime-hosted.test.ts')
   const { assertHostedCryptoHashAlgorithmsRuntime } =
     await import('./integration/crypto-hash-algorithms-runtime-hosted.test.ts')
+  const { assertHostedCryptoKdfRuntime } = await import('./integration/crypto-kdf-runtime-hosted.test.ts')
   const { assertDateLowersToGlobalObject } = await import('./integration/date-global-object-lowering.test.ts')
   const { assertPerformanceLowersToGlobalObject } =
     await import('./integration/performance-global-object-lowering.test.ts')
@@ -285,6 +286,10 @@ async function runHostedIntegrationTests(): Promise<void> {
 
     await t.test('crypto-hash-algorithms-runtime-hosted', async () => {
       await assertHostedCryptoHashAlgorithmsRuntime()
+    })
+
+    await t.test('crypto-kdf-runtime-hosted', async () => {
+      await assertHostedCryptoKdfRuntime()
     })
 
     await t.test('date-global-object-lowering', () => {
@@ -586,6 +591,7 @@ async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<
   const { assertNativeCryptoEncodingRuntime } = await import('./integration/crypto-encoding-runtime-native.test.ts')
   const { assertNativeCryptoHashAlgorithmsRuntime } =
     await import('./integration/crypto-hash-algorithms-runtime-native.test.ts')
+  const { assertNativeCryptoKdfRuntime } = await import('./integration/crypto-kdf-runtime-native.test.ts')
   const { assertNativeCompilerUsesDirectNativeInitializers } =
     await import('./integration/direct-native-variable-lowering.test.ts')
   const { assertNativeCompilerRuntimeLogValuesUseDirectRaiiAssignment } =
@@ -621,6 +627,10 @@ async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<
 
     await t.test('crypto-hash-algorithms-runtime-native', async () => {
       await assertNativeCryptoHashAlgorithmsRuntime(compilerPath)
+    })
+
+    await t.test('crypto-kdf-runtime-native', async () => {
+      await assertNativeCryptoKdfRuntime(compilerPath)
     })
 
     await t.test('native-direct-variable-lowering', async () => {

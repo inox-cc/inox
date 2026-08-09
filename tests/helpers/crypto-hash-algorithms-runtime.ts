@@ -1,4 +1,4 @@
-import { assertCryptoRuntime, type CryptoEncodingCompiler } from './crypto-encoding-runtime.ts'
+import { assertCryptoRuntime, type CryptoRuntimeCompiler } from './crypto-encoding-runtime.ts'
 
 const resultPrefix = 'INOX_CRYPTO_ALGORITHMS '
 const hashes = [
@@ -37,7 +37,7 @@ console.log(
 )
 `
 
-export async function assertCryptoHashAlgorithmsRuntime(compiler: CryptoEncodingCompiler): Promise<void> {
+export async function assertCryptoHashAlgorithmsRuntime(compiler: CryptoRuntimeCompiler): Promise<void> {
   await assertCryptoRuntime(compiler, 'hash-algorithms', source, resultPrefix, [
     `${resultPrefix}hashes sha1,sha224,sha256,sha384,sha512`,
     `${resultPrefix}digest ${hashes.join(' ')}`,

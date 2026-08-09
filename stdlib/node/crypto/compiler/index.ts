@@ -69,6 +69,38 @@ const operations: LibraryOperationDescriptor[] = [
     cResultMapping: stringResultMapping()
   }),
   moduleCall(
+    'pbkdf2Sync',
+    ['value', 'value', 'number', 'number', 'string-view'],
+    [],
+    5,
+    5,
+    [
+      stringOrBytesArgument(),
+      stringOrBytesArgument(),
+      numberArgument(),
+      numberArgument(),
+      hashAlgorithmArgument('pbkdf2Sync')
+    ],
+    hashRequirements,
+    { resultTypeRef: nominalTypeRef(bufferTypeId), cResultMode: 'value' }
+  ),
+  moduleCall(
+    'hkdfSync',
+    ['string-view', 'value', 'value', 'value', 'number'],
+    [],
+    5,
+    5,
+    [
+      hashAlgorithmArgument('hkdfSync'),
+      stringOrBytesArgument(),
+      stringOrBytesArgument(),
+      stringOrBytesArgument(),
+      numberArgument()
+    ],
+    hashRequirements,
+    { resultTypeRef: nominalTypeRef(bufferTypeId), cResultMode: 'value' }
+  ),
+  moduleCall(
     'timingSafeEqual',
     ['value', 'value'],
     ['Uint8Array($value)', 'Uint8Array($value)'],
@@ -470,9 +502,7 @@ function unsupportedMethods(): string[] {
     'getDiffieHellman',
     'getFips',
     'hkdf',
-    'hkdfSync',
     'pbkdf2',
-    'pbkdf2Sync',
     'privateDecrypt',
     'privateEncrypt',
     'publicDecrypt',

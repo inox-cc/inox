@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { rootDir } from '../../scripts/lib/repo-root.ts'
 import { runCommand } from '../../scripts/lib/run-command.ts'
 
-export type CryptoEncodingCompiler = {
+export type CryptoRuntimeCompiler = {
   args: string[]
   command: string
   label: string
@@ -34,12 +34,12 @@ const raw = hash('sha256', 'hi', 'buffer').toString('hex')
 console.log('${resultPrefix.trim()}', base64, base64url, decodedText, bytes, hmac, raw)
 `
 
-export async function assertCryptoEncodingRuntime(compiler: CryptoEncodingCompiler): Promise<void> {
+export async function assertCryptoEncodingRuntime(compiler: CryptoRuntimeCompiler): Promise<void> {
   await assertCryptoRuntime(compiler, 'encoding', source, resultPrefix, [`${resultPrefix}${expectedResult}`])
 }
 
 export async function assertCryptoRuntime(
-  compiler: CryptoEncodingCompiler,
+  compiler: CryptoRuntimeCompiler,
   caseName: string,
   programSource: string,
   resultLinePrefix: string,

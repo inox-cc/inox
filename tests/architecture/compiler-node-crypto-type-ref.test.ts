@@ -49,6 +49,8 @@ test('node:crypto implemented results принадлежат TypeRef, включ
     ['node:crypto#randomFillSync', [result(nominalType('global:binary#Uint8Array'), null, 'value')]],
     ['node:crypto#randomInt', [result(primitiveType('number'))]],
     ['node:crypto#randomUUID', [result(stringType, stringMapping())]],
+    ['node:crypto#pbkdf2Sync', [result(nominalType('node:buffer#Buffer'), null, 'value')]],
+    ['node:crypto#hkdfSync', [result(nominalType('node:buffer#Buffer'), null, 'value')]],
     ['node:crypto#timingSafeEqual', [result(primitiveType('boolean'))]],
     ['node:crypto#createHash', [result(nominalType('node:crypto#Hash'), null, 'value')]],
     ['node:crypto#createHmac', [result(nominalType('node:crypto#Hmac'), null, 'value')]],
