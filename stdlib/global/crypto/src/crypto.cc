@@ -2,6 +2,7 @@
 
 #include <limits.h>
 #include <stdint.h>
+#include <cstring>
 #include <span>
 #include <string>
 #include <string_view>
@@ -19,6 +20,7 @@
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
+#include <openssl/mem.h>
 #include <openssl/objects.h>
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
@@ -135,6 +137,9 @@ static Buffer inox_crypto_rsa_crypt(
   const uint8_t* bytes,
   size_t len,
   bool decrypt,
+  inox::StringView oaep_hash,
+  const uint8_t* oaep_label,
+  size_t oaep_label_len,
   const char* message
 );
 static inox_status inox_crypto_verify(
@@ -1534,17 +1539,27 @@ KeyObject crypto::createPublicKey(const KeyObject& key) const {
 
 Buffer crypto::privateDecrypt(
   const inox::Value& private_key,
-  const inox::Value& buffer
+  const inox::Value& buffer,
+  inox::StringView oaep_hash,
+  bool has_oaep_hash,
+  const inox::Value& oaep_label,
+  bool has_oaep_label
 ) const {
   const uint8_t* key_bytes = 0;
   const uint8_t* data_bytes = 0;
+  const uint8_t* label_bytes = 0;
   size_t key_len = 0;
   size_t data_len = 0;
+  size_t label_len = 0;
   CryptoKeyState* state = 0;
   inox_status status = inox_crypto_data(private_key.raw(), &key_bytes, &key_len);
 
   if (status == INOX_OK) {
     status = inox_crypto_data(buffer.raw(), &data_bytes, &data_len);
+  }
+
+  if (status == INOX_OK && has_oaep_label) {
+    status = inox_crypto_data(oaep_label.raw(), &label_bytes, &label_len);
   }
 
   if (status == INOX_OK) {
@@ -1570,6 +1585,9 @@ Buffer crypto::privateDecrypt(
     data_bytes,
     data_len,
     true,
+    has_oaep_hash ? oaep_hash : inox::StringView("sha1", 4),
+    label_bytes,
+    label_len,
     "crypto.privateDecrypt failed"
   );
   CryptoKeyState_free(state);
@@ -1578,12 +1596,23 @@ Buffer crypto::privateDecrypt(
 
 Buffer crypto::privateDecrypt(
   const KeyObject& private_key,
-  const inox::Value& buffer
+  const inox::Value& buffer,
+  inox::StringView oaep_hash,
+  bool has_oaep_hash,
+  const inox::Value& oaep_label,
+  bool has_oaep_label
 ) const {
   const uint8_t* bytes = 0;
+  const uint8_t* label_bytes = 0;
   size_t len = 0;
+  size_t label_len = 0;
+  inox_status status = inox_crypto_data(buffer.raw(), &bytes, &len);
 
-  if (inox_crypto_data(buffer.raw(), &bytes, &len) != INOX_OK) {
+  if (status == INOX_OK && has_oaep_label) {
+    status = inox_crypto_data(oaep_label.raw(), &label_bytes, &label_len);
+  }
+
+  if (status != INOX_OK) {
     if (!inox::thrown()) {
       inox_crypto_throw_failed("crypto.privateDecrypt failed");
     }
@@ -1596,23 +1625,36 @@ Buffer crypto::privateDecrypt(
     bytes,
     len,
     true,
+    has_oaep_hash ? oaep_hash : inox::StringView("sha1", 4),
+    label_bytes,
+    label_len,
     "crypto.privateDecrypt failed"
   );
 }
 
 Buffer crypto::publicEncrypt(
   const inox::Value& key,
-  const inox::Value& buffer
+  const inox::Value& buffer,
+  inox::StringView oaep_hash,
+  bool has_oaep_hash,
+  const inox::Value& oaep_label,
+  bool has_oaep_label
 ) const {
   const uint8_t* key_bytes = 0;
   const uint8_t* data_bytes = 0;
+  const uint8_t* label_bytes = 0;
   size_t key_len = 0;
   size_t data_len = 0;
+  size_t label_len = 0;
   CryptoKeyState* state = 0;
   inox_status status = inox_crypto_data(key.raw(), &key_bytes, &key_len);
 
   if (status == INOX_OK) {
     status = inox_crypto_data(buffer.raw(), &data_bytes, &data_len);
+  }
+
+  if (status == INOX_OK && has_oaep_label) {
+    status = inox_crypto_data(oaep_label.raw(), &label_bytes, &label_len);
   }
 
   if (status == INOX_OK) {
@@ -1638,6 +1680,9 @@ Buffer crypto::publicEncrypt(
     data_bytes,
     data_len,
     false,
+    has_oaep_hash ? oaep_hash : inox::StringView("sha1", 4),
+    label_bytes,
+    label_len,
     "crypto.publicEncrypt failed"
   );
   CryptoKeyState_free(state);
@@ -1646,12 +1691,23 @@ Buffer crypto::publicEncrypt(
 
 Buffer crypto::publicEncrypt(
   const KeyObject& key,
-  const inox::Value& buffer
+  const inox::Value& buffer,
+  inox::StringView oaep_hash,
+  bool has_oaep_hash,
+  const inox::Value& oaep_label,
+  bool has_oaep_label
 ) const {
   const uint8_t* bytes = 0;
+  const uint8_t* label_bytes = 0;
   size_t len = 0;
+  size_t label_len = 0;
+  inox_status status = inox_crypto_data(buffer.raw(), &bytes, &len);
 
-  if (inox_crypto_data(buffer.raw(), &bytes, &len) != INOX_OK) {
+  if (status == INOX_OK && has_oaep_label) {
+    status = inox_crypto_data(oaep_label.raw(), &label_bytes, &label_len);
+  }
+
+  if (status != INOX_OK) {
     if (!inox::thrown()) {
       inox_crypto_throw_failed("crypto.publicEncrypt failed");
     }
@@ -1664,6 +1720,9 @@ Buffer crypto::publicEncrypt(
     bytes,
     len,
     false,
+    has_oaep_hash ? oaep_hash : inox::StringView("sha1", 4),
+    label_bytes,
+    label_len,
     "crypto.publicEncrypt failed"
   );
 }
@@ -2833,13 +2892,18 @@ static Buffer inox_crypto_rsa_crypt(
   const uint8_t* bytes,
   size_t len,
   bool decrypt,
+  inox::StringView oaep_hash,
+  const uint8_t* oaep_label,
+  size_t oaep_label_len,
   const char* message
 ) {
   if (
     key == 0 ||
     key->key_type != INOX_CRYPTO_KEY_RSA ||
     (decrypt && !key->private_key) ||
-    (bytes == 0 && len != 0)
+    (bytes == 0 && len != 0) ||
+    (oaep_label == 0 && oaep_label_len != 0) ||
+    oaep_label_len > INT_MAX
   ) {
     inox_crypto_throw_failed(message);
     return Buffer();
@@ -2847,6 +2911,13 @@ static Buffer inox_crypto_rsa_crypt(
 
 #if INOX_CRYPTO_HAS_EVP
   if (key->key == 0) {
+    inox_crypto_throw_failed(message);
+    return Buffer();
+  }
+
+  const EVP_MD* digest = inox_crypto_digest_algorithm(oaep_hash.bytes, oaep_hash.len);
+
+  if (digest == 0) {
     inox_crypto_throw_failed(message);
     return Buffer();
   }
@@ -2868,8 +2939,36 @@ static Buffer inox_crypto_rsa_crypt(
   if (
     initialized != 1 ||
     EVP_PKEY_CTX_set_rsa_padding(context, RSA_PKCS1_OAEP_PADDING) != 1 ||
-    EVP_PKEY_CTX_set_rsa_oaep_md(context, EVP_sha1()) != 1 ||
-    EVP_PKEY_CTX_set_rsa_mgf1_md(context, EVP_sha1()) != 1 ||
+    EVP_PKEY_CTX_set_rsa_oaep_md(context, digest) != 1 ||
+    EVP_PKEY_CTX_set_rsa_mgf1_md(context, digest) != 1
+  ) {
+    EVP_PKEY_CTX_free(context);
+    ERR_clear_error();
+    inox_crypto_throw_failed(message);
+    return Buffer();
+  }
+
+  if (oaep_label_len > 0) {
+    uint8_t* label_copy = static_cast<uint8_t*>(OPENSSL_malloc(oaep_label_len));
+
+    if (label_copy == 0) {
+      EVP_PKEY_CTX_free(context);
+      inox::throw_out_of_memory();
+      return Buffer();
+    }
+
+    std::memcpy(label_copy, oaep_label, oaep_label_len);
+
+    if (EVP_PKEY_CTX_set0_rsa_oaep_label(context, label_copy, (int)oaep_label_len) != 1) {
+      OPENSSL_free(label_copy);
+      EVP_PKEY_CTX_free(context);
+      ERR_clear_error();
+      inox_crypto_throw_failed(message);
+      return Buffer();
+    }
+  }
+
+  if (
     (
       decrypt
         ? EVP_PKEY_decrypt(context, 0, &output_len, input, len)
@@ -2911,6 +3010,9 @@ static Buffer inox_crypto_rsa_crypt(
   (void)bytes;
   (void)len;
   (void)decrypt;
+  (void)oaep_hash;
+  (void)oaep_label;
+  (void)oaep_label_len;
   inox_crypto_throw_failed(message);
   return Buffer();
 #endif

@@ -219,10 +219,38 @@ public:
   KeyObject createPrivateKey(const inox::Value& key) const;
   KeyObject createPublicKey(const inox::Value& key) const;
   KeyObject createPublicKey(const KeyObject& key) const;
-  Buffer privateDecrypt(const inox::Value& private_key, const inox::Value& buffer) const;
-  Buffer privateDecrypt(const KeyObject& private_key, const inox::Value& buffer) const;
-  Buffer publicEncrypt(const inox::Value& key, const inox::Value& buffer) const;
-  Buffer publicEncrypt(const KeyObject& key, const inox::Value& buffer) const;
+  Buffer privateDecrypt(
+    const inox::Value& private_key,
+    const inox::Value& buffer,
+    inox::StringView oaep_hash = inox::StringView("", 0),
+    bool has_oaep_hash = false,
+    const inox::Value& oaep_label = inox::Value(),
+    bool has_oaep_label = false
+  ) const;
+  Buffer privateDecrypt(
+    const KeyObject& private_key,
+    const inox::Value& buffer,
+    inox::StringView oaep_hash = inox::StringView("", 0),
+    bool has_oaep_hash = false,
+    const inox::Value& oaep_label = inox::Value(),
+    bool has_oaep_label = false
+  ) const;
+  Buffer publicEncrypt(
+    const inox::Value& key,
+    const inox::Value& buffer,
+    inox::StringView oaep_hash = inox::StringView("", 0),
+    bool has_oaep_hash = false,
+    const inox::Value& oaep_label = inox::Value(),
+    bool has_oaep_label = false
+  ) const;
+  Buffer publicEncrypt(
+    const KeyObject& key,
+    const inox::Value& buffer,
+    inox::StringView oaep_hash = inox::StringView("", 0),
+    bool has_oaep_hash = false,
+    const inox::Value& oaep_label = inox::Value(),
+    bool has_oaep_label = false
+  ) const;
   CryptoKeyPair generateKeyPairSync(inox::StringView type, const inox::Value& options) const;
   Hash createHash(inox::StringView algorithm) const;
   Hmac createHmac(inox::StringView algorithm, inox::StringView key) const;

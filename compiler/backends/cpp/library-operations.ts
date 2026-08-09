@@ -606,10 +606,24 @@ export function emitPreparedCompilerLibraryCallExpression(
     }
 
     if (kind === 'value') {
-      const sourceArgument = sourceArguments[sourceArgumentIndex]
-      sourceArgumentIndex = sourceArgumentIndex + 1
+      let sourceArgument: AnyNode | null = null
 
-      if (sourceArgument === null || typeof sourceArgument === 'undefined') {
+      if (argumentSource !== null) {
+        sourceArgument = sourceArguments[argumentSource.argumentIndex] ?? null
+
+        if (
+          sourceArgument !== null &&
+          argumentSource.objectFieldName !== null &&
+          typeof argumentSource.objectFieldName !== 'undefined'
+        ) {
+          sourceArgument = compilerLibraryObjectField(sourceArgument, argumentSource.objectFieldName)
+        }
+      } else {
+        sourceArgument = sourceArguments[sourceArgumentIndex] ?? null
+        sourceArgumentIndex = sourceArgumentIndex + 1
+      }
+
+      if (sourceArgument === null) {
         return null
       }
 
@@ -686,14 +700,26 @@ export function emitPreparedCompilerLibraryCallExpression(
 
     if (kind === 'optional-value') {
       let argumentExpression = 'inox_undefined_value()'
+      let sourceArgument: AnyNode | null = null
 
-      if (sourceArgumentIndex < sourceArguments.length) {
-        const sourceArgument = sourceArguments[sourceArgumentIndex]
+      if (argumentSource !== null) {
+        sourceArgument = sourceArguments[argumentSource.argumentIndex] ?? null
 
-        if (sourceArgument === null || typeof sourceArgument === 'undefined') {
-          return null
+        if (
+          sourceArgument !== null &&
+          argumentSource.objectFieldName !== null &&
+          typeof argumentSource.objectFieldName !== 'undefined'
+        ) {
+          sourceArgument = compilerLibraryObjectField(sourceArgument, argumentSource.objectFieldName)
         }
+      } else if (sourceArgumentIndex < sourceArguments.length) {
+        sourceArgument = sourceArguments[sourceArgumentIndex] ?? null
+        sourceArgumentIndex = sourceArgumentIndex + 1
+      } else {
+        sourceArgumentIndex = sourceArgumentIndex + 1
+      }
 
+      if (sourceArgument !== null) {
         const prepared = dependencies.emitCValueExpression(sourceArgument, context)
         pushLines(lines, prepared.lines)
         argumentExpression = prepared.expression
@@ -705,7 +731,6 @@ export function emitPreparedCompilerLibraryCallExpression(
         optionalArgumentPresent = false
       }
 
-      sourceArgumentIndex = sourceArgumentIndex + 1
       argumentsList.push(argumentExpression)
       continue
     }

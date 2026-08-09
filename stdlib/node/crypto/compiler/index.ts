@@ -174,26 +174,8 @@ const operations: LibraryOperationDescriptor[] = [
     resultTypeRef: nominalTypeRef(keyObjectTypeId),
     cResultMode: 'value'
   }),
-  moduleCall(
-    'privateDecrypt',
-    ['value', 'value'],
-    [],
-    2,
-    2,
-    [privateKeyInputArgument(), bytesArgument()],
-    signatureRequirements,
-    { resultTypeRef: nominalTypeRef(bufferTypeId), cResultMode: 'value' }
-  ),
-  moduleCall(
-    'publicEncrypt',
-    ['value', 'value'],
-    [],
-    2,
-    2,
-    [publicKeyInputArgument(), bytesArgument()],
-    signatureRequirements,
-    { resultTypeRef: nominalTypeRef(bufferTypeId), cResultMode: 'value' }
-  ),
+  rsaCryptOperation('privateDecrypt', privateKeyInputArgument()),
+  rsaCryptOperation('publicEncrypt', publicKeyInputArgument()),
   moduleCall(
     'generateKeyPairSync',
     ['string-view', 'value'],
@@ -468,6 +450,58 @@ function keyExportOperation(): LibraryOperationDescriptor {
     minArgs: 1,
     maxArgs: 1,
     argumentChecks: [objectArgument()]
+  }
+}
+
+function rsaCryptOperation(
+  name: 'privateDecrypt' | 'publicEncrypt',
+  directKeyCheck: LibraryArgumentCheckDescriptor
+): LibraryOperationDescriptor {
+  const resultTypeRef = nominalTypeRef(bufferTypeId)
+
+  return {
+    ...moduleCall(name, ['value', 'value'], [], 2, 2, [directKeyCheck, bytesArgument()], signatureRequirements, {
+      resultTypeRef,
+      cResultMode: 'value'
+    }),
+    variants: [
+      {
+        minArgs: 2,
+        maxArgs: 2,
+        argumentIndex: 0,
+        argumentValueTypes: ['object'],
+        objectFieldName: 'key',
+        cExpression: `crypto.${name}`,
+        cArgumentKinds: [
+          'value',
+          'value',
+          'object-string-field',
+          'argument-presence',
+          'optional-value',
+          'argument-presence'
+        ],
+        cArgumentSources: [
+          { argumentIndex: 0, objectFieldName: 'key' },
+          { argumentIndex: 1 },
+          { argumentIndex: 0, objectFieldName: 'oaepHash' },
+          null,
+          { argumentIndex: 0, objectFieldName: 'oaepLabel' },
+          null
+        ],
+        argumentChecks: [rsaOaepOptionsArgument(directKeyCheck), bytesArgument()],
+        cResultMode: 'value',
+        resultTypeRef
+      },
+      {
+        minArgs: 2,
+        maxArgs: 2,
+        cExpression: `crypto.${name}`,
+        cArgumentKinds: ['value', 'value'],
+        argumentChecks: [directKeyCheck, bytesArgument()],
+        cResultMode: 'value',
+        resultTypeRef
+      }
+    ]
   }
 }
 
@@ -879,6 +913,30 @@ function privateKeyInputArgument(): LibraryArgumentCheckDescriptor {
 
 function publicKeyInputArgument(): LibraryArgumentCheckDescriptor {
   return privateKeyInputArgument()
+}
+
+function rsaOaepOptionsArgument(keyCheck: LibraryArgumentCheckDescriptor): LibraryArgumentCheckDescriptor {
+  return {
+    valueTypes: ['object'],
+    objectLiteralFields: [
+      {
+        name: 'key',
+        valueTypes: keyCheck.valueTypes ?? [],
+        objectTypeIds: keyCheck.objectTypeIds
+      },
+      {
+        name: 'oaepHash',
+        valueTypes: ['string'],
+        stringLiterals: hashAlgorithms,
+        optional: true
+      },
+      {
+        name: 'oaepLabel',
+        valueTypes: ['string', 'bytes'],
+        optional: true
+      }
+    ]
+  }
 }
 
 function literalArgument(values: string[], message: string): LibraryArgumentCheckDescriptor {

@@ -65,8 +65,20 @@ test('node:crypto implemented results принадлежат TypeRef, включ
     ['node:crypto#createDecipheriv', [result(nominalType('node:crypto#Decipheriv'), null, 'value')]],
     ['node:crypto#createPrivateKey', [result(nominalType('node:crypto#KeyObject'), null, 'value')]],
     ['node:crypto#createPublicKey', [result(nominalType('node:crypto#KeyObject'), null, 'value')]],
-    ['node:crypto#privateDecrypt', [result(nominalType('node:buffer#Buffer'), null, 'value')]],
-    ['node:crypto#publicEncrypt', [result(nominalType('node:buffer#Buffer'), null, 'value')]],
+    [
+      'node:crypto#privateDecrypt',
+      [
+        result(nominalType('node:buffer#Buffer'), null, 'value'),
+        result(nominalType('node:buffer#Buffer'), null, 'value')
+      ]
+    ],
+    [
+      'node:crypto#publicEncrypt',
+      [
+        result(nominalType('node:buffer#Buffer'), null, 'value'),
+        result(nominalType('node:buffer#Buffer'), null, 'value')
+      ]
+    ],
     [
       'node:crypto#generateKeyPairSync',
       [
