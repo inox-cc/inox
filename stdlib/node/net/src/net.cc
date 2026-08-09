@@ -217,6 +217,7 @@ inox_status readSocketField(const void* instance, std::uint32_t index, inox_valu
 
 const inox_class_field_descriptor serverFields[] = {
   {"listening", "boolean", "boolean", "value", INOX_CLASS_FIELD_READONLY | INOX_CLASS_FIELD_ENUMERABLE},
+  {"maxConnections", "number", "number", "value", INOX_CLASS_FIELD_OPTIONAL | INOX_CLASS_FIELD_ENUMERABLE},
 };
 
 const inox_class_field_descriptor socketFields[] = {
@@ -234,7 +235,7 @@ const inox_class_field_descriptor socketFields[] = {
 
 const inox_class_descriptor serverDescriptor = {
   "Server",
-  1,
+  2,
   serverFields,
   readServerField,
   copyServerHolder,
@@ -475,7 +476,10 @@ public:
   std::vector<inox::Callback> close_listeners_;
   std::vector<inox::Callback> error_listeners_;
   std::vector<inox::Callback> drain_listeners_;
+  std::vector<inox::Callback> timeout_listeners_;
+  std::vector<inox::Callback> timeout_once_listeners_;
   std::shared_ptr<NetSocketState> native_owner_;
+  std::weak_ptr<NetServerState> server_;
   std::size_t bytes_read_;
   std::size_t bytes_written_;
   bool initialized_;
@@ -491,6 +495,9 @@ public:
   bool ending_;
   bool shutdown_started_;
   bool had_error_;
+  bool server_connection_counted_;
+  double timeout_ms_;
+  inox_timer_handle* timeout_timer_;
 
   NetSocketState();
   ~NetSocketState();
@@ -513,7 +520,10 @@ public:
   void setEncoding(inox::StringView encoding);
   void setKeepAlive(bool enabled, double initial_delay);
   void setNoDelay(bool enabled);
+  void setTimeout(double timeout, inox::Callback callback);
   void startReading();
+  void stopTimeout();
+  void touchTimeout();
   void unref();
   bool write(inox::StringView text, inox::Callback callback);
   void reportError(const char* message, int status);
@@ -525,6 +535,7 @@ public:
 class NetServerState : public std::enable_shared_from_this<NetServerState> {
 public:
   struct ImmediateRequest;
+  struct ConnectionCountRequest;
 
   inox_loop* loop_;
   uv_tcp_t handle_;
@@ -537,6 +548,9 @@ public:
   bool listening_;
   bool closing_;
   bool closed_;
+  bool handle_closed_;
+  std::size_t connection_count_;
+  std::optional<std::size_t> max_connections_;
 
   NetServerState();
   ~NetServerState();
@@ -544,12 +558,16 @@ public:
   static std::shared_ptr<NetServerState> create(inox::Callback listener);
   NetAddress address() const;
   void close(inox::Callback callback);
+  void connectionClosed();
+  void finishClose();
+  void getConnections(inox::Callback callback);
   void listen(double port, inox::StringView host, double backlog, inox::Callback callback);
   void on(inox::StringView event_name, inox::Callback listener);
   void ref();
   void reportError(const char* message, int status);
   void unref();
   void queueListening();
+  void setMaxConnections(double maximum);
 
   static void closeExternalHandle(void* context);
 };
@@ -578,6 +596,15 @@ struct NetServerState::ImmediateRequest {
   std::shared_ptr<NetServerState> server;
 };
 
+struct NetServerState::ConnectionCountRequest {
+  std::shared_ptr<NetServerState> server;
+  inox::Callback callback;
+};
+
+struct NetSocketTimerContext {
+  std::weak_ptr<NetSocketState> socket;
+};
+
 void net_server_connection_cb(uv_stream_t* stream, int status);
 void net_connect_cb(uv_connect_t* request, int status);
 void net_alloc_cb(uv_handle_t* handle, std::size_t suggested_size, uv_buf_t* buffer);
@@ -586,6 +613,8 @@ void net_write_cb(uv_write_t* request, int status);
 void net_shutdown_cb(uv_shutdown_t* request, int status);
 void net_server_close_cb(uv_handle_t* handle);
 void net_socket_close_cb(uv_handle_t* handle);
+inox_status net_socket_timeout_cb(void* context);
+void finalize_net_socket_timeout(void* context);
 
 NetSocketState::NetSocketState()
   : loop_(nullptr),
@@ -597,7 +626,10 @@ NetSocketState::NetSocketState()
     close_listeners_(),
     error_listeners_(),
     drain_listeners_(),
+    timeout_listeners_(),
+    timeout_once_listeners_(),
     native_owner_(),
+    server_(),
     bytes_read_(0),
     bytes_written_(0),
     initialized_(false),
@@ -612,7 +644,10 @@ NetSocketState::NetSocketState()
     needs_drain_(false),
     ending_(false),
     shutdown_started_(false),
-    had_error_(false) {}
+    had_error_(false),
+    server_connection_counted_(false),
+    timeout_ms_(0),
+    timeout_timer_(nullptr) {}
 
 NetSocketState::~NetSocketState() {}
 
@@ -820,6 +855,7 @@ void NetSocketState::on(inox::StringView event_name, inox::Callback listener) {
   else if (hasText(event_name, "close")) listeners = &close_listeners_;
   else if (hasText(event_name, "error")) listeners = &error_listeners_;
   else if (hasText(event_name, "drain")) listeners = &drain_listeners_;
+  else if (hasText(event_name, "timeout")) listeners = &timeout_listeners_;
   else {
     throwNetError("TypeError: unsupported NetSocket event");
     return;
@@ -853,6 +889,7 @@ void NetSocketState::close(inox::Callback callback, bool had_error) {
   }
 
   closing_ = true;
+  stopTimeout();
 
   if (reading_) {
     uv_read_stop(reinterpret_cast<uv_stream_t*>(&handle_));
@@ -1041,6 +1078,57 @@ void NetSocketState::setNoDelay(bool enabled) {
   }
 }
 
+void NetSocketState::stopTimeout() {
+  if (timeout_timer_ == nullptr) return;
+  inox_timer_handle* timer = timeout_timer_;
+  timeout_timer_ = nullptr;
+  inox_loop_clear_timer(timer);
+}
+
+void NetSocketState::touchTimeout() {
+  stopTimeout();
+
+  if (timeout_ms_ <= 0 || !connected_ || closing_ || closed_) return;
+
+  auto* context = new (std::nothrow) NetSocketTimerContext{weak_from_this()};
+
+  if (context == nullptr ||
+      inox_loop_set_timeout(
+        loop_,
+        timeout_ms_,
+        net_socket_timeout_cb,
+        context,
+        finalize_net_socket_timeout,
+        &timeout_timer_
+      ) != INOX_OK) {
+    delete context;
+    timeout_timer_ = nullptr;
+    throwNetError("TypeError: NetSocket timeout allocation failed");
+    return;
+  }
+
+  inox_loop_unref_timer(timeout_timer_);
+}
+
+void NetSocketState::setTimeout(double timeout, inox::Callback callback) {
+  if (!std::isfinite(timeout) || std::floor(timeout) != timeout || timeout < 0) {
+    throwNetError("TypeError: NetSocket.setTimeout requires a non-negative integer");
+    return;
+  }
+
+  if (callback.valid()) {
+    try {
+      timeout_once_listeners_.push_back(std::move(callback));
+    } catch (const std::bad_alloc&) {
+      throwNetError("TypeError: NetSocket timeout listener allocation failed");
+      return;
+    }
+  }
+
+  timeout_ms_ = timeout;
+  touchTimeout();
+}
+
 void NetSocketState::ref() {
   if (!referenced_) {
     uv_ref(reinterpret_cast<uv_handle_t*>(&handle_));
@@ -1066,8 +1154,34 @@ void NetSocketState::closeExternalHandle(void* context) {
     socket->close_listeners_.clear();
     socket->error_listeners_.clear();
     socket->drain_listeners_.clear();
+    socket->timeout_listeners_.clear();
+    socket->timeout_once_listeners_.clear();
     socket->close(inox::Callback());
   }
+}
+
+inox_status net_socket_timeout_cb(void* context) {
+  const auto* timer = static_cast<NetSocketTimerContext*>(context);
+  const std::shared_ptr<NetSocketState> socket = timer == nullptr ? nullptr : timer->socket.lock();
+
+  if (!socket) return INOX_OK;
+
+  socket->timeout_timer_ = nullptr;
+
+  if (socket->closing_ || socket->closed_) return INOX_OK;
+
+  std::vector<inox::Callback> once_listeners = std::move(socket->timeout_once_listeners_);
+  callListeners(socket->loop_, once_listeners);
+
+  if (!inox::thrown()) {
+    callListeners(socket->loop_, socket->timeout_listeners_);
+  }
+
+  return inox::thrown() ? INOX_ERR_THROW : INOX_OK;
+}
+
+void finalize_net_socket_timeout(void* context) {
+  delete static_cast<NetSocketTimerContext*>(context);
 }
 
 NetServerState::NetServerState()
@@ -1081,7 +1195,10 @@ NetServerState::NetServerState()
     initialized_(false),
     listening_(false),
     closing_(false),
-    closed_(false) {}
+    closed_(false),
+    handle_closed_(false),
+    connection_count_(0),
+    max_connections_() {}
 
 NetServerState::~NetServerState() {}
 
@@ -1193,6 +1310,26 @@ void finalizeListeningImmediate(void* context) {
   delete static_cast<NetServerState::ImmediateRequest*>(context);
 }
 
+inox_status runConnectionCountImmediate(void* context) {
+  auto* request = static_cast<NetServerState::ConnectionCountRequest*>(context);
+
+  if (request == nullptr || !request->server || !request->callback.valid()) {
+    return INOX_OK;
+  }
+
+  const std::array<inox::Value, 2> arguments = {
+    inox::Value(inox_null_value()),
+    inox::Value(inox_number_value(static_cast<double>(request->server->connection_count_))),
+  };
+  inox::Value result = request->callback.call(std::span<const inox::Value>(arguments));
+  (void)result;
+  return inox::thrown() ? INOX_ERR_THROW : INOX_OK;
+}
+
+void finalizeConnectionCountImmediate(void* context) {
+  delete static_cast<NetServerState::ConnectionCountRequest*>(context);
+}
+
 void NetServerState::queueListening() {
   ImmediateRequest* request = new (std::nothrow) ImmediateRequest{shared_from_this()};
 
@@ -1210,6 +1347,30 @@ void NetServerState::queueListening() {
       ) != INOX_OK) {
     delete request;
     throwNetError("TypeError: NetServer listening callback queue failed");
+  }
+}
+
+void NetServerState::getConnections(inox::Callback callback) {
+  if (!callback.valid()) {
+    throwNetError("TypeError: NetServer.getConnections requires a function");
+    return;
+  }
+
+  ConnectionCountRequest* request = new (std::nothrow) ConnectionCountRequest{
+    shared_from_this(),
+    std::move(callback),
+  };
+
+  if (request == nullptr ||
+      inox_loop_queue_immediate(
+        loop_,
+        runConnectionCountImmediate,
+        request,
+        finalizeConnectionCountImmediate,
+        nullptr
+      ) != INOX_OK) {
+    delete request;
+    throwNetError("TypeError: NetServer.getConnections callback queue failed");
   }
 }
 
@@ -1305,6 +1466,18 @@ void NetServerState::unref() {
   uv_unref(reinterpret_cast<uv_handle_t*>(&handle_));
 }
 
+void NetServerState::setMaxConnections(double maximum) {
+  constexpr double maxSafeInteger = 9007199254740991.0;
+
+  if (!std::isfinite(maximum) || std::floor(maximum) != maximum || maximum < 0 ||
+      maximum > maxSafeInteger || maximum > static_cast<double>(std::numeric_limits<std::size_t>::max())) {
+    throwNetError("TypeError: NetServer.maxConnections requires a non-negative integer");
+    return;
+  }
+
+  max_connections_ = static_cast<std::size_t>(maximum);
+}
+
 void NetServerState::close(inox::Callback callback) {
   if (closed_) {
     throwNetError("TypeError: NetServer.close failed: server is not running");
@@ -1326,6 +1499,26 @@ void NetServerState::close(inox::Callback callback) {
 
   closing_ = true;
   uv_close(reinterpret_cast<uv_handle_t*>(&handle_), net_server_close_cb);
+}
+
+void NetServerState::connectionClosed() {
+  if (connection_count_ > 0) {
+    connection_count_ -= 1;
+  }
+
+  finishClose();
+}
+
+void NetServerState::finishClose() {
+  if (closed_ || !handle_closed_ || connection_count_ != 0) return;
+
+  closed_ = true;
+  std::vector<inox::Callback> close_listeners = std::move(close_listeners_);
+  connection_listeners_.clear();
+  listening_listeners_.clear();
+  error_listeners_.clear();
+  callListeners(loop_, close_listeners);
+  native_owner_.reset();
 }
 
 void NetServerState::closeExternalHandle(void* context) {
@@ -1367,12 +1560,23 @@ void net_server_connection_cb(uv_stream_t* stream, int status) {
     return;
   }
 
+  if (server->max_connections_ && server->connection_count_ >= *server->max_connections_) {
+    socket->connected_ = true;
+    socket->close(inox::Callback());
+    return;
+  }
+
   socket->connected_ = true;
+  socket->server_ = server->weak_from_this();
+  socket->server_connection_counted_ = true;
+  server->connection_count_ += 1;
   socket->startReading();
   NetSocket facade = materializeSocket(socket);
 
   if (!inox::thrown()) {
     callListeners(server->loop_, server->connection_listeners_, facade);
+  } else {
+    socket->close(inox::Callback(), true);
   }
 }
 
@@ -1398,6 +1602,13 @@ void net_connect_cb(uv_connect_t* raw_request, int status) {
 
   socket->connected_ = true;
   socket->startReading();
+  socket->touchTimeout();
+
+  if (inox::thrown()) {
+    reportCallbackStatus(socket->loop_);
+    socket->close(inox::Callback(), true);
+    return;
+  }
 
   if (callback.valid()) {
     inox::Value result = callback.call();
@@ -1427,6 +1638,15 @@ void net_read_cb(uv_stream_t* stream, ssize_t size, const uv_buf_t* buffer) {
 
   if (size > 0) {
     socket->bytes_read_ += static_cast<std::size_t>(size);
+    socket->touchTimeout();
+
+    if (inox::thrown()) {
+      reportCallbackStatus(socket->loop_);
+      socket->close(inox::Callback(), true);
+      delete[] bytes;
+      return;
+    }
+
     inox::String data(bytes, static_cast<std::size_t>(size));
 
     if (data.valid() && !inox::thrown()) {
@@ -1477,6 +1697,13 @@ void net_write_cb(uv_write_t* raw_request, int status) {
   }
 
   socket->bytes_written_ += length;
+  socket->touchTimeout();
+
+  if (inox::thrown()) {
+    reportCallbackStatus(socket->loop_);
+    socket->close(inox::Callback(), true);
+    return;
+  }
 
   if (shutdown_after) {
     socket->startShutdown(std::move(callback));
@@ -1536,16 +1763,11 @@ void net_server_close_cb(uv_handle_t* handle) {
   }
 
   std::shared_ptr<NetServerState> owner = server->native_owner_;
-  server->closed_ = true;
   server->initialized_ = false;
   server->listening_ = false;
+  server->handle_closed_ = true;
   inox_libuv_loop_unregister_external_handle(server->loop_, server);
-  std::vector<inox::Callback> close_listeners_ = std::move(server->close_listeners_);
-  server->connection_listeners_.clear();
-  server->listening_listeners_.clear();
-  server->error_listeners_.clear();
-  callListeners(server->loop_, close_listeners_);
-  server->native_owner_.reset();
+  server->finishClose();
 }
 
 void net_socket_close_cb(uv_handle_t* handle) {
@@ -1560,6 +1782,7 @@ void net_socket_close_cb(uv_handle_t* handle) {
   socket->initialized_ = false;
   socket->connecting_ = false;
   socket->connected_ = false;
+  socket->stopTimeout();
   inox_libuv_loop_unregister_external_handle(socket->loop_, socket);
   std::vector<inox::Callback> close_listeners_ = std::move(socket->close_listeners_);
   socket->connect_listeners_.clear();
@@ -1568,8 +1791,18 @@ void net_socket_close_cb(uv_handle_t* handle) {
   socket->end_listeners_.clear();
   socket->error_listeners_.clear();
   socket->drain_listeners_.clear();
+  socket->timeout_listeners_.clear();
+  socket->timeout_once_listeners_.clear();
   const inox::Value had_error(inox_bool_value(socket->had_error_));
   callListeners(socket->loop_, close_listeners_, had_error);
+
+  if (socket->server_connection_counted_) {
+    socket->server_connection_counted_ = false;
+    const std::shared_ptr<NetServerState> server = socket->server_.lock();
+    socket->server_.reset();
+    if (server) server->connectionClosed();
+  }
+
   socket->native_owner_.reset();
 }
 
@@ -1581,7 +1814,7 @@ class NetSocketState {};
 #endif
 
 inox_status readServerField(const void* instance, std::uint32_t index, inox_value* out) {
-  if (instance == nullptr || out == nullptr || index != 0) {
+  if (instance == nullptr || out == nullptr) {
     return INOX_ERR_FIELD;
   }
 
@@ -1592,8 +1825,16 @@ inox_status readServerField(const void* instance, std::uint32_t index, inox_valu
     return INOX_ERR_TYPE;
   }
 
-  *out = inox_bool_value(server.listening());
-  return inox::thrown() ? INOX_ERR_TYPE : INOX_OK;
+  if (index == 0) {
+    *out = inox_bool_value(server.listening());
+    return inox::thrown() ? INOX_ERR_TYPE : INOX_OK;
+  }
+
+  if (index == 1) {
+    return server.maxConnections().copy_to(out);
+  }
+
+  return INOX_ERR_FIELD;
 }
 
 inox_status readSocketField(const void* instance, std::uint32_t index, inox_value* out) {
@@ -1723,6 +1964,21 @@ NetServer& NetServer::close(inox::Callback callback) {
   return *this;
 }
 
+NetServer& NetServer::getConnections(inox::Callback callback) {
+  std::shared_ptr<NetServerState> state = serverState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) state->getConnections(std::move(callback));
+  else throwNetError("TypeError: NetServer.getConnections failed");
+#else
+  (void)state;
+  (void)callback;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return *this;
+}
+
 bool NetServer::listening() const {
   std::shared_ptr<NetServerState> state = serverState(*this);
 
@@ -1812,6 +2068,24 @@ NetServer& NetServer::listen(const NetListenOptions& options, inox::Callback cal
   return listen(port, host, options.backlog_.value_or(128), std::move(callback));
 }
 
+inox::Value NetServer::maxConnections() const {
+  std::shared_ptr<NetServerState> state = serverState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) {
+    if (!state->max_connections_) return inox::Value(inox_undefined_value());
+    return inox::Value(inox_number_value(static_cast<double>(*state->max_connections_)));
+  }
+
+  throwNetError("TypeError: NetServer.maxConnections failed");
+#else
+  (void)state;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return inox::Value();
+}
+
 NetServer& NetServer::on(inox::StringView event_name, inox::Callback listener) {
   std::shared_ptr<NetServerState> state = serverState(*this);
 
@@ -1840,6 +2114,19 @@ NetServer& NetServer::ref() {
 #endif
 
   return *this;
+}
+
+void NetServer::setMaxConnections(double maximum) {
+  std::shared_ptr<NetServerState> state = serverState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) state->setMaxConnections(maximum);
+  else throwNetError("TypeError: NetServer.maxConnections assignment failed");
+#else
+  (void)state;
+  (void)maximum;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
 }
 
 NetServer& NetServer::unref() {
@@ -2135,6 +2422,26 @@ NetSocket& NetSocket::setNoDelay(bool enabled) {
 #else
   (void)state;
   (void)enabled;
+  throwNetError("TypeError: node:net is unsupported without libuv");
+#endif
+
+  return *this;
+}
+
+NetSocket& NetSocket::setTimeout(double timeout) {
+  return setTimeout(timeout, inox::Callback());
+}
+
+NetSocket& NetSocket::setTimeout(double timeout, inox::Callback callback) {
+  std::shared_ptr<NetSocketState> state = socketState(*this);
+
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  if (state) state->setTimeout(timeout, std::move(callback));
+  else throwNetError("TypeError: NetSocket.setTimeout failed");
+#else
+  (void)state;
+  (void)timeout;
+  (void)callback;
   throwNetError("TypeError: node:net is unsupported without libuv");
 #endif
 

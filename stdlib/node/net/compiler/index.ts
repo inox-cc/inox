@@ -23,6 +23,7 @@ const socketBorrowedTypeRef = nominalTypeRef(socketTypeId, 'borrowed')
 const addressTypeRef = nominalTypeRef(addressTypeId, 'value')
 const booleanTypeRef = primitiveTypeRef('boolean')
 const numberTypeRef = primitiveTypeRef('number')
+const nullableNumberTypeRef = primitiveTypeRef('number', true)
 const stringTypeRef = primitiveTypeRef('string')
 const stringCResultMapping: LibraryCResultMappingDescriptor = {
   cppType: 'inox::String',
@@ -34,8 +35,14 @@ const operations: LibraryOperationDescriptor[] = [
   connectOperation(),
   serverAddressOperation(),
   serverCloseOperation(),
+  serverGetConnectionsOperation(),
   serverScalarMemberReadOperation('listening', booleanTypeRef),
   serverListenOperation(),
+  serverScalarMemberReadOperation('maxConnections', nullableNumberTypeRef, {
+    cppType: 'inox::Value',
+    fields: []
+  }),
+  serverMaxConnectionsWriteOperation(),
   serverOnOperation(),
   serverResultOperation('ref'),
   serverResultOperation('unref'),
@@ -60,6 +67,7 @@ const operations: LibraryOperationDescriptor[] = [
   socketSetEncodingOperation(),
   socketSetKeepAliveOperation(),
   socketSetNoDelayOperation(),
+  socketSetTimeoutOperation(),
   socketResultOperation('unref'),
   socketWriteOperation()
 ]
@@ -253,6 +261,21 @@ function serverCloseOperation(): LibraryOperationDescriptor {
   }
 }
 
+function serverGetConnectionsOperation(): LibraryOperationDescriptor {
+  const callback = connectionsCallbackArgument()
+
+  return {
+    ...serverReceiverOperation('getConnections'),
+    cArgumentKinds: ['receiver', 'runtime-callback'],
+    cResultMode: 'borrowed',
+    minArgs: 1,
+    maxArgs: 1,
+    argumentChecks: [callback],
+    callbackLifetime: 'event-loop',
+    resultTypeRef: serverBorrowedTypeRef
+  }
+}
+
 function serverListenOperation(): LibraryOperationDescriptor {
   const callback = zeroArgumentCallback()
   const options = listenOptionsArgument()
@@ -357,6 +380,24 @@ function serverOnOperation(): LibraryOperationDescriptor {
   }
 }
 
+function serverMaxConnectionsWriteOperation(): LibraryOperationDescriptor {
+  return {
+    ...serverReceiverOperation('setMaxConnections'),
+    bindingId: `${serverTypeId}.maxConnections`,
+    operationId: `${libraryId}#Server.maxConnections.write`,
+    kind: 'member-write',
+    cArgumentKinds: ['receiver', 'number'],
+    minArgs: 1,
+    maxArgs: 1,
+    argumentChecks: [numberArgument()],
+    resultTypeRef: numberTypeRef,
+    cResultMapping: {
+      cppType: 'void',
+      fields: []
+    }
+  }
+}
+
 function serverResultOperation(name: 'ref' | 'unref'): LibraryOperationDescriptor {
   return {
     ...serverReceiverOperation(name),
@@ -369,8 +410,12 @@ function serverResultOperation(name: 'ref' | 'unref'): LibraryOperationDescripto
   }
 }
 
-function serverScalarMemberReadOperation(name: string, resultTypeRef: TypeRef): LibraryOperationDescriptor {
-  return scalarMemberReadOperation(serverTypeId, 'Server', 'NetServer($value)', name, resultTypeRef)
+function serverScalarMemberReadOperation(
+  name: string,
+  resultTypeRef: TypeRef,
+  cResultMapping?: LibraryCResultMappingDescriptor
+): LibraryOperationDescriptor {
+  return scalarMemberReadOperation(serverTypeId, 'Server', 'NetServer($value)', name, resultTypeRef, cResultMapping)
 }
 
 function socketAddressOperation(): LibraryOperationDescriptor {
@@ -424,7 +469,7 @@ function socketOnOperation(): LibraryOperationDescriptor {
     argumentChecks: [socketEventArgument(), zeroArgumentCallback()],
     variants: [
       socketEventVariant(['data'], dataCallbackArgument()),
-      socketEventVariant(['connect', 'ready', 'end', 'drain'], zeroArgumentCallback()),
+      socketEventVariant(['connect', 'ready', 'end', 'drain', 'timeout'], zeroArgumentCallback()),
       socketEventVariant(['close'], closeCallbackArgument()),
       socketEventVariant(['error'], errorCallbackArgument())
     ],
@@ -474,6 +519,28 @@ function socketSetNoDelayOperation(): LibraryOperationDescriptor {
       socketVariant(0, 0, ['receiver']),
       socketVariant(1, 1, ['receiver', 'number'], {
         argumentChecks: [booleanArgument()]
+      })
+    ],
+    resultTypeRef: socketBorrowedTypeRef
+  }
+}
+
+function socketSetTimeoutOperation(): LibraryOperationDescriptor {
+  const callback = zeroArgumentCallback()
+
+  return {
+    ...socketReceiverOperation('setTimeout'),
+    minArgs: 1,
+    maxArgs: 2,
+    argumentChecks: [numberArgument(), callback],
+    variants: [
+      socketVariant(1, 1, ['receiver', 'number'], {
+        argumentChecks: [numberArgument()]
+      }),
+      socketVariant(2, 2, ['receiver', 'number', 'runtime-callback'], {
+        argumentChecks: [numberArgument(), callback],
+        cArgumentSources: [null, null, { argumentIndex: 1 }],
+        callbackLifetime: 'event-loop'
       })
     ],
     resultTypeRef: socketBorrowedTypeRef
@@ -640,11 +707,11 @@ function nominalTypeRef(typeId: string, ownership: 'borrowed' | 'value'): TypeRe
   }
 }
 
-function primitiveTypeRef(name: 'boolean' | 'number' | 'string'): TypeRef {
+function primitiveTypeRef(name: 'boolean' | 'number' | 'string', nullable = false): TypeRef {
   return {
     kind: 'primitive',
     name,
-    nullable: false,
+    nullable,
     ownership: 'value',
     traits: []
   }
@@ -734,6 +801,18 @@ function closeCallbackArgument(): LibraryArgumentCheckDescriptor {
   return callbackArgument([{ name: 'hadError', valueType: 'boolean' }])
 }
 
+function connectionsCallbackArgument(): LibraryArgumentCheckDescriptor {
+  return callbackArgument([
+    {
+      name: 'error',
+      valueType: 'object',
+      nullable: true,
+      shapeFields: [{ name: 'message', valueType: 'string', readonly: true }]
+    },
+    { name: 'count', valueType: 'number' }
+  ])
+}
+
 function errorCallbackArgument(): LibraryArgumentCheckDescriptor {
   return callbackArgument([
     {
@@ -803,7 +882,10 @@ function serverEventArgument(): LibraryArgumentCheckDescriptor {
 }
 
 function socketEventArgument(): LibraryArgumentCheckDescriptor {
-  return stringLiteralArgument(['connect', 'ready', 'data', 'end', 'close', 'error', 'drain'], 'INOX_NET_SOCKET')
+  return stringLiteralArgument(
+    ['connect', 'ready', 'data', 'end', 'close', 'error', 'drain', 'timeout'],
+    'INOX_NET_SOCKET'
+  )
 }
 
 function stringLiteralArgument(values: string[], code: string): LibraryArgumentCheckDescriptor {

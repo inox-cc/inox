@@ -150,6 +150,10 @@ async function main(): Promise<void> {
 
     const lines = stdout.split(/\r?\n/)
     assert.ok(lines.includes('INOX_TCP_OK'), processFailure('TCP acceptance не завершён', stdout, stderr))
+    assert.ok(
+      lines.includes('INOX_TCP_LIFECYCLE_OK'),
+      processFailure('TCP lifecycle acceptance не завершён', stdout, stderr)
+    )
     assert.ok(lines.includes('INOX_UDP_OK'), processFailure('UDP acceptance не завершён', stdout, stderr))
     assert.ok(lines.includes('INOX_DNS_CALLBACK_OK'), processFailure('DNS callback lookup не завершён', stdout, stderr))
     assert.ok(lines.includes('INOX_DNS_PROMISE_OK'), processFailure('DNS promise lookup не завершён', stdout, stderr))

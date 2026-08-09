@@ -37,9 +37,11 @@ export interface NetModule {
 
 export class Server {
   readonly listening: boolean;
+  maxConnections?: number;
 
   address(): AddressInfo;
   close(callback?: ListenCallback): Server;
+  getConnections(callback: (error: Error | null, count: number) => void): Server;
   listen(callback?: ListenCallback): Server;
   listen(port: number, callback?: ListenCallback): Server;
   listen(port: number, backlog: number, callback?: ListenCallback): Server;
@@ -73,13 +75,14 @@ export class Socket {
   on(eventName: 'data', listener: SocketDataListener): Socket;
   on(eventName: 'close', listener: SocketCloseListener): Socket;
   on(eventName: 'error', listener: ErrorListener): Socket;
-  on(eventName: 'connect' | 'ready' | 'end' | 'drain', listener: SocketCallback): Socket;
+  on(eventName: 'connect' | 'ready' | 'end' | 'drain' | 'timeout', listener: SocketCallback): Socket;
   pause(): Socket;
   ref(): Socket;
   resume(): Socket;
   setEncoding(encoding: string): Socket;
   setKeepAlive(enabled?: boolean, initialDelay?: number): Socket;
   setNoDelay(enabled?: boolean): Socket;
+  setTimeout(timeout: number, callback?: SocketCallback): Socket;
   unref(): Socket;
   write(text: string, callback?: SocketCallback): boolean;
 }

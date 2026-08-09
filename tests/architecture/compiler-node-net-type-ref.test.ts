@@ -13,8 +13,11 @@ const expectedResults = [
   ['node:net#connect', nominalTypeRef('node:net#Socket', 'value')],
   ['node:net#Server.address', nominalTypeRef('node:net#AddressInfo', 'value')],
   ['node:net#Server.close', serverTypeRef()],
+  ['node:net#Server.getConnections', serverTypeRef()],
   ['node:net#Server.listening', primitiveTypeRef('boolean')],
   ['node:net#Server.listen', serverTypeRef()],
+  ['node:net#Server.maxConnections', primitiveTypeRef('number', true)],
+  ['node:net#Server.maxConnections.write', primitiveTypeRef('number')],
   ['node:net#Server.on', serverTypeRef()],
   ['node:net#Server.ref', serverTypeRef()],
   ['node:net#Server.unref', serverTypeRef()],
@@ -39,6 +42,7 @@ const expectedResults = [
   ['node:net#Socket.setEncoding', socketTypeRef()],
   ['node:net#Socket.setKeepAlive', socketTypeRef()],
   ['node:net#Socket.setNoDelay', socketTypeRef()],
+  ['node:net#Socket.setTimeout', socketTypeRef()],
   ['node:net#Socket.unref', socketTypeRef()],
   ['node:net#Socket.write', primitiveTypeRef('boolean')]
 ] as const
@@ -63,6 +67,10 @@ test('node:net operations describe results only through TypeRef', async () => {
       operation.operationId === 'node:net#Socket.readyState'
     ) {
       assert.deepEqual(operation.cResultMapping, { cppType: 'inox::String', fields: [] })
+    } else if (operation.operationId === 'node:net#Server.maxConnections') {
+      assert.deepEqual(operation.cResultMapping, { cppType: 'inox::Value', fields: [] })
+    } else if (operation.operationId === 'node:net#Server.maxConnections.write') {
+      assert.deepEqual(operation.cResultMapping, { cppType: 'void', fields: [] })
     } else {
       assert.equal(operation.cResultMapping, undefined)
     }
@@ -97,11 +105,11 @@ function nominalTypeRef(typeId: string, ownership: 'borrowed' | 'value'): TypeRe
   }
 }
 
-function primitiveTypeRef(name: 'boolean' | 'number' | 'string'): TypeRef {
+function primitiveTypeRef(name: 'boolean' | 'number' | 'string', nullable = false): TypeRef {
   return {
     kind: 'primitive',
     name,
-    nullable: false,
+    nullable,
     ownership: 'value',
     traits: []
   }

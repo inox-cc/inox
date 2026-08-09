@@ -22,6 +22,7 @@ import { startHttpsServerAcceptance } from './https-server.ts'
 import { startHttpsServerTimeoutAcceptance } from './https-server-timeout.ts'
 import { startHttpsStreamingClientAcceptance } from './https-streaming-client.ts'
 import { startTcpAcceptance } from './tcp.ts'
+import { startTcpLifecycleAcceptance } from './tcp-lifecycle.ts'
 import { startUdpAcceptance } from './udp.ts'
 
 const port = Number(process.argv[2]) ?? 0
@@ -48,6 +49,7 @@ const httpServerTimeoutPort = Number(process.argv[22]) ?? 0
 const httpsServerTimeoutPort = Number(process.argv[23]) ?? 0
 
 startTcpAcceptance()
+startTcpLifecycleAcceptance()
 startUdpAcceptance()
 startDnsAcceptance()
 startHttpAcceptance(port, nonce)

@@ -16,8 +16,11 @@ test('node:net объявляет module, Server и Socket operations через
   assert.deepEqual(ids, [
     'node:net#Server.address',
     'node:net#Server.close',
+    'node:net#Server.getConnections',
     'node:net#Server.listen',
     'node:net#Server.listening',
+    'node:net#Server.maxConnections',
+    'node:net#Server.maxConnections.write',
     'node:net#Server.on',
     'node:net#Server.ref',
     'node:net#Server.unref',
@@ -42,6 +45,7 @@ test('node:net объявляет module, Server и Socket operations через
     'node:net#Socket.setEncoding',
     'node:net#Socket.setKeepAlive',
     'node:net#Socket.setNoDelay',
+    'node:net#Socket.setTimeout',
     'node:net#Socket.unref',
     'node:net#Socket.write',
     'node:net#connect',
@@ -77,10 +81,12 @@ test('node:net объявляет module, Server и Socket operations через
 
   for (const operationId of [
     'node:net#Server.close',
+    'node:net#Server.getConnections',
     'node:net#Server.listen',
     'node:net#Server.on',
     'node:net#Socket.end',
     'node:net#Socket.on',
+    'node:net#Socket.setTimeout',
     'node:net#Socket.write'
   ]) {
     const callbackOperation = operation(operations, operationId)
@@ -100,6 +106,7 @@ test('node:net объявляет module, Server и Socket operations через
 
   for (const operationId of [
     'node:net#Server.listening',
+    'node:net#Server.maxConnections',
     'node:net#Socket.bytesRead',
     'node:net#Socket.bytesWritten',
     'node:net#Socket.connecting',
@@ -113,6 +120,8 @@ test('node:net объявляет module, Server и Socket operations через
   ]) {
     assert.equal(operation(operations, operationId).kind, 'member-read')
   }
+
+  assert.equal(operation(operations, 'node:net#Server.maxConnections.write').kind, 'member-write')
 })
 
 function operation(operations: LibraryOperationDescriptor[], operationId: string): LibraryOperationDescriptor {

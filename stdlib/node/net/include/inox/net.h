@@ -52,6 +52,7 @@ public:
   NetAddress address() const;
   NetServer& close();
   NetServer& close(inox::Callback callback);
+  NetServer& getConnections(inox::Callback callback);
   bool listening() const;
   NetServer& listen();
   NetServer& listen(inox::Callback callback);
@@ -65,8 +66,10 @@ public:
   NetServer& listen(double port, inox::StringView host, double backlog, inox::Callback callback);
   NetServer& listen(const NetListenOptions& options);
   NetServer& listen(const NetListenOptions& options, inox::Callback callback);
+  inox::Value maxConnections() const;
   NetServer& on(inox::StringView event_name, inox::Callback listener);
   NetServer& ref();
+  void setMaxConnections(double maximum);
   NetServer& unref();
 };
 
@@ -105,6 +108,8 @@ public:
   NetSocket& setKeepAlive(bool enabled, double initial_delay);
   NetSocket& setNoDelay();
   NetSocket& setNoDelay(bool enabled);
+  NetSocket& setTimeout(double timeout);
+  NetSocket& setTimeout(double timeout, inox::Callback callback);
   NetSocket& unref();
   bool write(inox::StringView text);
   bool write(inox::StringView text, inox::Callback callback);
