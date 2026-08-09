@@ -674,6 +674,11 @@ HttpServer HttpsModule::createServer(
   return state ? state->http_server_ : HttpServer();
 }
 
+HttpAgent HttpsModule::globalAgent() const {
+  static HttpAgent agent = HttpAgent::global(HttpClientTransportKind::tls);
+  return agent;
+}
+
 HttpClientRequest HttpsModule::get(inox::StringView url) const {
   return createHttpsClientRequest(url, nullptr, inox::Callback(), true);
 }

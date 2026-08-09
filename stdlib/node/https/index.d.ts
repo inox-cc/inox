@@ -4,6 +4,12 @@ export type RequestListener = (
   response: import('node:http').ServerResponse
 ) => void
 export type Server = import('node:http').Server
+export type AgentOptions = import('node:http').AgentOptions
+
+export class Agent {
+  constructor(options?: AgentOptions)
+  destroy(): void
+}
 
 export interface ServerOptions {
   readonly cert: string | Uint8Array
@@ -11,6 +17,7 @@ export interface ServerOptions {
 }
 
 export interface RequestOptions {
+  readonly agent?: Agent | import('node:http').Agent | false
   readonly headers?: Record<string, string>
   readonly host?: string
   readonly hostname?: string
@@ -24,6 +31,8 @@ export interface RequestOptions {
 }
 
 export interface HttpsModule {
+  readonly Agent: typeof Agent
+  readonly globalAgent: Agent
   createServer(options: ServerOptions, listener?: RequestListener): Server
   get(url: string, listener?: ResponseListener): import('node:http').ClientRequest
   get(url: string, options: RequestOptions, listener?: ResponseListener): import('node:http').ClientRequest
@@ -33,6 +42,7 @@ export interface HttpsModule {
   request(options: RequestOptions, listener?: ResponseListener): import('node:http').ClientRequest
 }
 
+export const globalAgent: Agent
 export function createServer(options: ServerOptions, listener?: RequestListener): Server
 export function get(url: string, listener?: ResponseListener): import('node:http').ClientRequest
 export function get(

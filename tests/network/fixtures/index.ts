@@ -48,6 +48,7 @@ const httpsClientLifecyclePort = Number(process.argv[21]) ?? 0
 const httpServerTimeoutPort = Number(process.argv[22]) ?? 0
 const httpsServerTimeoutPort = Number(process.argv[23]) ?? 0
 const httpKeepAliveOtherOriginPort = Number(process.argv[24]) ?? 0
+const httpsKeepAliveOtherOriginPort = Number(process.argv[25]) ?? 0
 
 startTcpAcceptance()
 startTcpLifecycleAcceptance()
@@ -61,7 +62,7 @@ startHttpChunkedErrorAcceptance(httpChunkedErrorPort)
 startHttpChunkedServerAcceptance(httpChunkedServerPort, nonce)
 startHttpKeepAliveServerAcceptance(httpKeepAliveServerPort, nonce)
 startHttpKeepAliveClientAcceptance(httpKeepAliveClientPort, httpKeepAliveOtherOriginPort, nonce)
-startHttpsKeepAliveClientAcceptance(httpsKeepAliveClientPort, nonce)
+startHttpsKeepAliveClientAcceptance(httpsKeepAliveClientPort, httpsKeepAliveOtherOriginPort, nonce)
 startHttpStreamingServerAcceptance(httpStreamingServerPort, nonce)
 startHttpStreamingClientAcceptance(httpStreamingClientPort, nonce)
 startHttpsStreamingClientAcceptance(httpsStreamingClientPort, nonce)

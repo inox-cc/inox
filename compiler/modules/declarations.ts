@@ -735,6 +735,11 @@ function normalizeModuleDeclarationContractSource(
       continue
     }
 
+    if (isTypeAliasSignatureStart(tokens, position)) {
+      position = appendNormalizedTypeAliasSignature(parts, tokens, position)
+      continue
+    }
+
     if (isDefaultExportDeclarationStart(tokens, position)) {
       position = appendNormalizedDefaultExport(parts, defaultExports, declareConstTypes, tokens, position)
       continue
@@ -1547,6 +1552,90 @@ function appendNormalizedVariableSignature(parts: string[], tokens: Token[], pos
   return boundary.position
 }
 
+function appendNormalizedTypeAliasSignature(parts: string[], tokens: Token[], position: number): number {
+  const boundary = findTypeAliasSignatureBoundary(tokens, position)
+
+  if (boundary === null) {
+    parts.push(tokenSource(tokenAt(tokens, position)))
+    return position + 1
+  }
+
+  let current = position
+
+  while (current < boundary.end) {
+    parts.push(tokenSource(tokenAt(tokens, current)))
+    current = current + 1
+  }
+
+  parts.push(';')
+  return boundary.position
+}
+
+function findTypeAliasSignatureBoundary(tokens: Token[], position: number): FunctionSignatureBoundary | null {
+  let current = position
+
+  if (tokenValue(tokens, current) === 'export') {
+    current = current + 1
+  }
+
+  if (
+    tokenValue(tokens, current) !== 'type' ||
+    !isDeclarationLocalNameToken(tokenAt(tokens, current + 1)) ||
+    tokenValue(tokens, current + 2) !== '='
+  ) {
+    return null
+  }
+
+  current = current + 3
+  const typeStart = current
+  let braceDepth = 0
+  let bracketDepth = 0
+  let genericDepth = 0
+  let parenDepth = 0
+
+  while (!tokenIs(tokens, current, 'eof', '<eof>')) {
+    const token = tokenAt(tokens, current)
+
+    if (
+      current > typeStart &&
+      braceDepth === 0 &&
+      bracketDepth === 0 &&
+      genericDepth === 0 &&
+      parenDepth === 0 &&
+      token.line > tokenAt(tokens, current - 1).line &&
+      isDeclarationContractStatementStart(tokens, current)
+    ) {
+      return { end: current, position: current }
+    }
+
+    const value = token.value
+
+    if (value === '{') {
+      braceDepth = braceDepth + 1
+    } else if (value === '}' && braceDepth > 0) {
+      braceDepth = braceDepth - 1
+    } else if (value === '[') {
+      bracketDepth = bracketDepth + 1
+    } else if (value === ']' && bracketDepth > 0) {
+      bracketDepth = bracketDepth - 1
+    } else if (value === '<') {
+      genericDepth = genericDepth + 1
+    } else if (value === '>' && genericDepth > 0) {
+      genericDepth = genericDepth - 1
+    } else if (value === '(') {
+      parenDepth = parenDepth + 1
+    } else if (value === ')' && parenDepth > 0) {
+      parenDepth = parenDepth - 1
+    } else if (value === ';' && braceDepth === 0 && bracketDepth === 0 && genericDepth === 0 && parenDepth === 0) {
+      return { end: current, position: current + 1 }
+    }
+
+    current = current + 1
+  }
+
+  return { end: current, position: current }
+}
+
 function findVariableSignatureBoundary(tokens: Token[], position: number): FunctionSignatureBoundary | null {
   let current = position
 
@@ -1765,6 +1854,20 @@ function isVariableSignatureStart(tokens: Token[], position: number): boolean {
   }
 
   return isDeclarationLocalNameToken(tokenAt(tokens, current + 1)) && tokenValue(tokens, current + 2) === ':'
+}
+
+function isTypeAliasSignatureStart(tokens: Token[], position: number): boolean {
+  let current = position
+
+  if (tokenValue(tokens, current) === 'export') {
+    current = current + 1
+  }
+
+  return (
+    tokenValue(tokens, current) === 'type' &&
+    isDeclarationLocalNameToken(tokenAt(tokens, current + 1)) &&
+    tokenValue(tokens, current + 2) === '='
+  )
 }
 
 function isFunctionDeclarationNameToken(token: Token): boolean {

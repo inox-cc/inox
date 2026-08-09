@@ -821,14 +821,11 @@ class Checker {
       const item = this.program.body[index]
 
       if (item.type === 'ImportDeclaration') {
-        if (item.typeOnly) {
-          continue
-        }
-
         for (let specifierIndex = 0; specifierIndex < item.specifiers.length; specifierIndex = specifierIndex + 1) {
           const specifier = item.specifiers[specifierIndex]
 
-          if (specifier.typeOnly) {
+          if (item.typeOnly === true || specifier.typeOnly === true) {
+            this.declareImportedTypeSpecifier(specifier)
             continue
           }
 
@@ -952,6 +949,30 @@ class Checker {
         }
       }
     }
+  }
+
+  declareImportedTypeSpecifier(specifier: AnyNode): void {
+    const typeRef: TypeRef | null | undefined = specifier.typeRef
+
+    if (typeRef === null || typeof typeRef === 'undefined') {
+      return
+    }
+
+    const metadata = typeRefCompatibilityMetadata(
+      typeRef,
+      resolveCompilerLibrarySet(this.options.libraries),
+      nodeSourceLocation(specifier)
+    )
+
+    this.typeSymbols.set(specifier.local, {
+      kind: 'type-import',
+      valueType: metadata.valueType,
+      typeRef,
+      nullable: metadata.nullable,
+      asyncResultValueType: metadata.asyncResultValueType,
+      shape: metadata.shape,
+      loc: specifier.loc
+    })
   }
 
   resolveClassConstructorMetadata(item: AnyNode): CheckerClassConstructorMetadata {

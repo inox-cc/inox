@@ -287,6 +287,27 @@ export function resolveDeclaredType(
     }
   }
 
+  const importedType = context.symbols.get(name)
+
+  if (
+    importedType !== null &&
+    typeof importedType !== 'undefined' &&
+    importedType.kind === 'type-import' &&
+    importedType.typeRef !== null &&
+    typeof importedType.typeRef !== 'undefined'
+  ) {
+    const metadata = typeRefCompatibilityMetadata(importedType.typeRef, context.libraries, loc)
+
+    return {
+      valueType: metadata.valueType,
+      nullable: metadata.nullable,
+      typeRef: importedType.typeRef,
+      functionType: importedType.functionType ?? null,
+      shape: metadata.shape,
+      asyncResultValueType: metadata.asyncResultValueType
+    }
+  }
+
   const nativeType = compilerLibraryNativeTypeForName(context.libraries, name)
 
   if (nativeType !== null) {

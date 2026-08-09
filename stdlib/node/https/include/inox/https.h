@@ -48,6 +48,7 @@ public:
     const HttpsServerOptions& options,
     inox::Callback listener
   ) const;
+  HttpAgent globalAgent() const;
   HttpClientRequest get(inox::StringView url) const;
   HttpClientRequest get(inox::StringView url, inox::Callback listener) const;
   HttpClientRequest get(inox::StringView url, const HttpsRequestOptions& options) const;

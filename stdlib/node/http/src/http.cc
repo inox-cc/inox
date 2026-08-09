@@ -3639,8 +3639,12 @@ std::shared_ptr<HttpAgentState> makeHttpAgentState(
   }
 }
 
-std::shared_ptr<HttpAgentState> globalHttpAgentState() {
-  static std::shared_ptr<HttpAgentState> state;
+std::shared_ptr<HttpAgentState> globalHttpAgentState(HttpClientTransportKind transport_kind) {
+  static std::shared_ptr<HttpAgentState> plain_state;
+  static std::shared_ptr<HttpAgentState> tls_state;
+  std::shared_ptr<HttpAgentState>& state = transport_kind == HttpClientTransportKind::tls
+    ? tls_state
+    : plain_state;
 
   if (!state) {
     state = makeHttpAgentState(
@@ -4148,7 +4152,7 @@ std::shared_ptr<HttpClientRequestState> HttpClientRequestState::create(
   }
 
   if (use_global_agent) {
-    agent = globalHttpAgentState();
+    agent = globalHttpAgentState(transport.kind());
 
     if (inox::thrown() || !agent) return {};
   }
@@ -6165,6 +6169,10 @@ HttpAgent::HttpAgent(const inox::Value& value) : inox::Value(value) {}
 
 HttpAgent::HttpAgent(inox::Value&& value) : inox::Value(std::move(value)) {}
 
+HttpAgent HttpAgent::global(HttpClientTransportKind transport_kind) {
+  return materializeAgent(globalHttpAgentState(transport_kind));
+}
+
 void HttpAgent::destroy() {
   std::shared_ptr<HttpAgentState> state = agentState(*this);
 
@@ -6958,7 +6966,7 @@ HttpServer HttpModule::createServer(inox::Callback listener) const {
 }
 
 HttpAgent HttpModule::globalAgent() const {
-  static HttpAgent agent = materializeAgent(globalHttpAgentState());
+  static HttpAgent agent = HttpAgent::global(HttpClientTransportKind::plain);
   return agent;
 }
 

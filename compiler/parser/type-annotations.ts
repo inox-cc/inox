@@ -191,7 +191,7 @@ function recordObjectFieldTypeToken(
 }
 
 function typeAnnotationStringToken(parts: string[], value: string): string {
-  if (!typeAnnotationNeedsStringLiteral(parts)) {
+  if (!typeAnnotationNeedsStringLiteral(parts) && !typeAnnotationNeedsModuleSpecifier(parts)) {
     return 'string'
   }
 
@@ -208,6 +208,10 @@ function typeAnnotationStringToken(parts: string[], value: string): string {
   }
 
   return `'${escaped}'`
+}
+
+function typeAnnotationNeedsModuleSpecifier(parts: string[]): boolean {
+  return parts.length >= 2 && parts[parts.length - 2] === 'import' && parts[parts.length - 1] === '('
 }
 
 function typeAnnotationNeedsStringLiteral(parts: string[]): boolean {

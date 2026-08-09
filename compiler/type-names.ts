@@ -34,6 +34,11 @@ export type FunctionTypeNames = {
   result: string
 }
 
+export type ModuleImportTypeName = {
+  source: string
+  name: string
+}
+
 export function arrayElementTypeNameFromTypeName(name: string): string | null {
   return genericTypeInner(name, 'array')
 }
@@ -157,6 +162,32 @@ export function typeQueryTargetNameFromTypeName(name: string): string | null {
   return isIdentifierTypeName(target) ? target : null
 }
 
+export function moduleImportTypeNameFromTypeName(name: string): ModuleImportTypeName | null {
+  const prefix = "import('"
+
+  if (!name.startsWith(prefix)) {
+    return null
+  }
+
+  const sourceEnd = name.indexOf("').", prefix.length)
+
+  if (sourceEnd < prefix.length) {
+    return null
+  }
+
+  const source = name.slice(prefix.length, sourceEnd)
+  const importedName = name.slice(sourceEnd + 3)
+
+  if (source.length === 0 || !isIdentifierTypeName(importedName)) {
+    return null
+  }
+
+  return {
+    source,
+    name: importedName
+  }
+}
+
 export function functionTypeNamesFromTypeName(name: string): FunctionTypeNames | null {
   if (!name.startsWith('(')) {
     return null
@@ -216,6 +247,12 @@ export function unionTypeNamesFromTypeName(name: string): string[] | null {
 }
 
 export function normalizeTypeName(name: string): string {
+  const moduleImportType = moduleImportTypeNameFromTypeName(name)
+
+  if (moduleImportType !== null) {
+    return `import('${moduleImportType.source}').${moduleImportType.name}`
+  }
+
   const typeQueryTarget = typeQueryTargetNameFromTypeName(name)
 
   if (typeQueryTarget !== null) {

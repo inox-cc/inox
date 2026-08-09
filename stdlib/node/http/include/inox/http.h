@@ -40,8 +40,12 @@ private:
   friend class HttpAgent;
 };
 
+enum class HttpClientTransportKind;
+
 class HttpAgent : public inox::Value {
 public:
+  static HttpAgent global(HttpClientTransportKind transport_kind);
+
   HttpAgent();
   explicit HttpAgent(const HttpAgentOptions& options);
   explicit HttpAgent(const inox::Value& value);

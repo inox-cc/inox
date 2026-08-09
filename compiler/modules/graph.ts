@@ -4,6 +4,7 @@ import { compilerLibraryGlobalTypeNames } from '../extensions/global-declaration
 import {
   compilerLibraryHasModuleDeclaration,
   compilerLibraryModuleDeclarationForSource,
+  compilerLibraryNativeTypeForName,
   resolveCompilerLibrarySet
 } from '../extensions/library-set.ts'
 import { compilerLibraryOptionsFingerprint } from '../extensions/library-options.ts'
@@ -33,6 +34,7 @@ import type {
 import { collectExports } from './exports.ts'
 import { parseModuleFunctionEffectsContractResult } from './function-effects.ts'
 import { isRelativeSpecifier, resolveExistingSource, resolveImport as resolveImportSpecifier } from './resolve.ts'
+import { moduleImportTypeNameFromTypeName } from '../type-names.ts'
 import {
   createExportAliasDeclaration,
   createImportAliasDeclaration,
@@ -216,7 +218,7 @@ function visitModuleGraphFile(
     }
 
     if (compilerLibraryHasModuleDeclaration(context.libraries, item.source)) {
-      prepareLibraryRuntimeImportDeclarations(context, item, declarationIndex, importTypeDeclarations)
+      prepareLibraryImportDeclarations(context, item, declarationIndex, importTypeDeclarations)
       continue
     }
 
@@ -801,19 +803,16 @@ function hasTypeOnlyImportSpecifier(item: AnyNode): boolean {
   return false
 }
 
-function prepareLibraryRuntimeImportDeclarations(
+function prepareLibraryImportDeclarations(
   context: ModuleGraphContext,
   item: AnyNode,
   declarationIndex: number,
   importTypeDeclarations: Map<number, AnyNode[]>
 ): void {
-  if (item.typeOnly === true) {
-    return
-  }
-
   const importedProgram = libraryRuntimeImportDeclarationProgram(context, item.source)
+  const libraryDeclaration = compilerLibraryModuleDeclarationForSource(context.libraries, item.source)
 
-  if (importedProgram === null || typeof importedProgram === 'undefined') {
+  if (importedProgram === null || typeof importedProgram === 'undefined' || libraryDeclaration === null) {
     return
   }
 
@@ -823,7 +822,8 @@ function prepareLibraryRuntimeImportDeclarations(
   for (let specifierIndex = 0; specifierIndex < item.specifiers.length; specifierIndex = specifierIndex + 1) {
     const specifier = item.specifiers[specifierIndex]
 
-    if (specifier.typeOnly) {
+    if (item.typeOnly === true || specifier.typeOnly === true) {
+      prepareLibraryTypeImportSpecifier(context, specifier, item.source, importedProgram, typeNames, types, new Set())
       continue
     }
 
@@ -854,6 +854,83 @@ function prepareLibraryRuntimeImportDeclarations(
   if (types.length > 0) {
     mergeImportTypeDeclarations(importTypeDeclarations, declarationIndex, types)
   }
+}
+
+function prepareLibraryTypeImportSpecifier(
+  context: ModuleGraphContext,
+  specifier: AnyNode,
+  source: string,
+  importedProgram: ProgramNode,
+  typeNames: Set<string>,
+  types: AnyNode[],
+  visiting: Set<string>
+): void {
+  const visitKey = `${source}#${specifier.imported}`
+
+  if (visiting.has(visitKey)) {
+    return
+  }
+
+  visiting.add(visitKey)
+  const exported = findModuleDeclarationExport(importedProgram, specifier.imported)
+
+  if (exported?.type === 'TypeAliasDeclaration') {
+    const target = moduleImportTypeAliasTarget(exported)
+
+    if (target !== null) {
+      const targetProgram = libraryRuntimeImportDeclarationProgram(context, target.source)
+
+      if (targetProgram !== null) {
+        prepareLibraryTypeImportSpecifier(
+          context,
+          { ...specifier, imported: target.name },
+          target.source,
+          targetProgram,
+          typeNames,
+          types,
+          visiting
+        )
+      }
+    } else {
+      const declarations = createTypeImportDeclarations(specifier, importedProgram, context.libraryGlobalTypeNames)
+
+      for (const declaration of declarations) {
+        if (!typeNames.has(declaration.name)) {
+          typeNames.add(declaration.name)
+          types.push(declaration)
+        }
+      }
+    }
+  } else if (exported?.type === 'ClassDeclaration') {
+    const libraryDeclaration = compilerLibraryModuleDeclarationForSource(context.libraries, source)
+    const nativeType = compilerLibraryNativeTypeForName(
+      context.libraries,
+      specifier.imported,
+      libraryDeclaration?.libraryId
+    )
+
+    if (nativeType !== null) {
+      specifier.valueType = nativeType.valueType
+      specifier.typeRef = {
+        kind: 'nominal',
+        typeId: nativeType.typeId,
+        args: [],
+        nullable: false,
+        ownership: 'value',
+        traits: nativeType.traits ?? []
+      }
+    }
+  }
+
+  visiting.delete(visitKey)
+}
+
+function moduleImportTypeAliasTarget(alias: AnyNode): { source: string; name: string } | null {
+  if (alias.valueType?.kind !== 'alias') {
+    return null
+  }
+
+  return moduleImportTypeNameFromTypeName(alias.valueType.valueType)
 }
 
 function mergeImportTypeDeclarations(

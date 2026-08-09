@@ -33,6 +33,10 @@ async function main(): Promise<void> {
     primaryReleased: false,
     secondaryBeforePrimaryRelease: false
   }
+  const httpsAgentOriginState = {
+    primaryReleased: false,
+    secondaryBeforePrimaryRelease: false
+  }
 
   await buildExecutable()
   const httpChunkedServer = await startHttpChunkedServer(nonce)
@@ -40,7 +44,8 @@ async function main(): Promise<void> {
   const httpKeepAliveOtherOriginServer = await startHttpKeepAliveClientServer(nonce, httpAgentOriginState)
   const invalidChunkedServer = await startInvalidChunkedServer()
   const httpsServer = await startHttpsServer(nonce)
-  const httpsKeepAliveClientServer = await startHttpsKeepAliveClientServer(nonce)
+  const httpsKeepAliveClientServer = await startHttpsKeepAliveClientServer(nonce, httpsAgentOriginState)
+  const httpsKeepAliveOtherOriginServer = await startHttpsKeepAliveClientServer(nonce, httpsAgentOriginState)
   const httpStreamingClientServer = await startHttpStreamingClientServer(nonce)
   const httpsStreamingClientServer = await startHttpsStreamingClientServer(nonce)
 
@@ -69,7 +74,8 @@ async function main(): Promise<void> {
       String(httpsClientLifecyclePort),
       String(httpServerTimeoutPort),
       String(httpsServerTimeoutPort),
-      String(httpKeepAliveOtherOriginServer.port)
+      String(httpKeepAliveOtherOriginServer.port),
+      String(httpsKeepAliveOtherOriginServer.port)
     ],
     {
       cwd: repoRoot,
@@ -219,8 +225,18 @@ async function main(): Promise<void> {
     )
     assert.deepEqual(
       httpsKeepAliveClientServer.stats(),
-      { connections: 1, requests: 2 },
-      processFailure('HTTPS client открыл лишнее TLS-соединение вместо keep-alive reuse', stdout, stderr)
+      { connections: 6, requests: 10 },
+      processFailure('HTTPS Agent неверно переиспользовал или изолировал TLS-соединения', stdout, stderr)
+    )
+    assert.deepEqual(
+      httpsKeepAliveOtherOriginServer.stats(),
+      { connections: 1, requests: 1 },
+      processFailure('HTTPS Agent применил maxSockets сразу к нескольким origin', stdout, stderr)
+    )
+    assert.equal(
+      httpsAgentOriginState.secondaryBeforePrimaryRelease,
+      true,
+      processFailure('HTTPS Agent сериализовал запросы к разным origin', stdout, stderr)
     )
     assert.ok(
       lines.includes('INOX_HTTP_STREAMING_CLIENT_OK'),
@@ -285,13 +301,17 @@ async function main(): Promise<void> {
     await closeNetServer(invalidChunkedServer.server)
     await closeHttpsServer(httpsServer.server)
     await closeHttpsServer(httpsKeepAliveClientServer.server)
+    await closeHttpsServer(httpsKeepAliveOtherOriginServer.server)
     await closeHttpServer(httpStreamingClientServer.server)
     await closeHttpsServer(httpsStreamingClientServer.server)
     await rm(buildRoot, { recursive: true, force: true })
   }
 }
 
-async function startHttpsKeepAliveClientServer(nonce: string): Promise<{
+async function startHttpsKeepAliveClientServer(
+  nonce: string,
+  originState: { primaryReleased: boolean; secondaryBeforePrimaryRelease: boolean }
+): Promise<{
   readonly server: HttpsServer
   readonly port: number
   readonly stats: () => { readonly connections: number; readonly requests: number }
@@ -305,16 +325,78 @@ async function startHttpsKeepAliveClientServer(nonce: string): Promise<{
     const marker = request.headers['x-inox-https-keep-alive']
     const first = request.url === '/first'
     const second = request.url === '/second'
-    const valid = request.method === 'GET' && marker === nonce && (first || second)
+    const queuedFirst = request.url === '/queued-first'
+    const queuedSecond = request.url === '/queued-second'
+    const originBlock = request.url === '/origin-block'
+    const otherOrigin = request.url === '/other-origin'
+    const tlsPolicy = request.url === '/tls-policy'
+    const afterDestroy = request.url === '/after-destroy'
+    const isolatedFirst = request.url === '/isolated-first'
+    const isolatedSecond = request.url === '/isolated-second'
+    const global = request.url === '/global'
+    const valid =
+      request.method === 'GET' &&
+      marker === nonce &&
+      (first ||
+        second ||
+        queuedFirst ||
+        queuedSecond ||
+        originBlock ||
+        otherOrigin ||
+        tlsPolicy ||
+        afterDestroy ||
+        isolatedFirst ||
+        isolatedSecond ||
+        global)
 
     response.statusCode = valid ? 200 : 400
     response.setHeader('Content-Type', 'text/plain')
 
-    if (second) {
+    if (otherOrigin && !originState.primaryReleased) {
+      originState.secondaryBeforePrimaryRelease = true
+    }
+
+    if (afterDestroy || isolatedFirst || isolatedSecond || global) {
       response.setHeader('Connection', 'close')
     }
 
-    response.end(valid ? `https-keep-alive-${first ? 'first' : 'second'} ${nonce}` : 'invalid keep-alive request')
+    const name = first
+      ? 'first'
+      : second
+        ? 'second'
+        : queuedFirst
+          ? 'queued-first'
+          : queuedSecond
+            ? 'queued-second'
+            : originBlock
+              ? 'origin-block'
+              : otherOrigin
+                ? 'other-origin'
+                : tlsPolicy
+                  ? 'tls-policy'
+                  : afterDestroy
+                    ? 'after-destroy'
+                    : isolatedFirst
+                      ? 'isolated-first'
+                      : isolatedSecond
+                        ? 'isolated-second'
+                        : 'global'
+    const body = valid ? `https-keep-alive-${name} ${nonce}` : 'invalid keep-alive request'
+
+    if (queuedFirst || originBlock) {
+      setTimeout(
+        () => {
+          if (originBlock) {
+            originState.primaryReleased = true
+          }
+          response.end(body)
+        },
+        originBlock ? 250 : 100
+      )
+      return
+    }
+
+    response.end(body)
   })
 
   server.on('secureConnection', () => {
