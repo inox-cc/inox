@@ -100,7 +100,7 @@ function bufferFromOperation(): LibraryOperationDescriptor {
   return {
     ...staticCall('from', ['value'], 'Buffer::from', bufferTypeRef, null, 1, 2, [
       { valueTypes: ['bytes', 'string'] },
-      utf8Argument('Buffer.from')
+      encodingArgument()
     ]),
     variants: [
       {
@@ -141,7 +141,7 @@ function bufferByteLengthOperation(): LibraryOperationDescriptor {
   return {
     ...staticCall('byteLength', ['string-view'], 'Buffer::byteLength', numberTypeRef, null, 1, 2, [
       stringArgument(),
-      utf8Argument('Buffer.byteLength')
+      encodingArgument()
     ]),
     variants: [
       {
@@ -235,7 +235,7 @@ function bufferReceiverBytesOperation(
 function bufferToStringOperation(): LibraryOperationDescriptor {
   return {
     ...receiverCall('toString', ['receiver'], 'toString', stringTypeRef, stringCResultMapping, 0, 1, [
-      utf8Argument('Buffer.toString')
+      encodingArgument()
     ]),
     variants: [receiverVariant(0, 0, ['receiver']), receiverVariant(1, 1, ['receiver', 'string-view'])]
   }
@@ -454,12 +454,9 @@ function uint8ArrayTypeRef(): NominalTypeRef {
   }
 }
 
-function utf8Argument(label: string): LibraryArgumentCheckDescriptor {
+function encodingArgument(): LibraryArgumentCheckDescriptor {
   return {
-    valueTypes: ['string'],
-    stringLiterals: ['utf8'],
-    literalDiagnosticCode: 'INOX_TYPE_MISMATCH',
-    literalDiagnosticMessage: `${label} encoding must be 'utf8' in the MVP`
+    valueTypes: ['string']
   }
 }
 
