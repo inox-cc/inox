@@ -124,6 +124,8 @@ async function runHostedIntegrationTests(): Promise<void> {
   const { assertCPreludeIncludeOrder } = await import('./integration/c-prelude-include-order.test.ts')
   const { assertConsoleLowersToGlobalObject } = await import('./integration/console-global-object-lowering.test.ts')
   const { assertCompilerIndexNodeHelp } = await import('./integration/compiler-index-node-help.test.ts')
+  const { assertHostedCryptoEncodingRuntime } =
+    await import('./integration/crypto-encoding-runtime-hosted.test.ts')
   const { assertDateLowersToGlobalObject } = await import('./integration/date-global-object-lowering.test.ts')
   const { assertPerformanceLowersToGlobalObject } =
     await import('./integration/performance-global-object-lowering.test.ts')
@@ -274,6 +276,10 @@ async function runHostedIntegrationTests(): Promise<void> {
 
     await t.test('compiler-index-node-help', async () => {
       await assertCompilerIndexNodeHelp()
+    })
+
+    await t.test('crypto-encoding-runtime-hosted', async () => {
+      await assertHostedCryptoEncodingRuntime()
     })
 
     await t.test('date-global-object-lowering', () => {
@@ -572,6 +578,8 @@ async function runHostedIntegrationTests(): Promise<void> {
 
 async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<void> {
   const { assertCliEntryModuleMain } = await import('./integration/cli-entry-module-main.test.ts')
+  const { assertNativeCryptoEncodingRuntime } =
+    await import('./integration/crypto-encoding-runtime-native.test.ts')
   const { assertNativeCompilerUsesDirectNativeInitializers } =
     await import('./integration/direct-native-variable-lowering.test.ts')
   const { assertNativeCompilerRuntimeLogValuesUseDirectRaiiAssignment } =
@@ -599,6 +607,10 @@ async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<
   await test('native compiler integration checks', async (t) => {
     await t.test('cli-entry-module-main', async () => {
       await assertCliEntryModuleMain(compilerPath)
+    })
+
+    await t.test('crypto-encoding-runtime-native', async () => {
+      await assertNativeCryptoEncodingRuntime(compilerPath)
     })
 
     await t.test('native-direct-variable-lowering', async () => {
