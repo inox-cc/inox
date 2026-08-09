@@ -21,14 +21,19 @@ const stringsRuntimeRequirement = `${stringsLibraryId}#strings`
 const arrayTypeId = `${collectionsLibraryId}#Array`
 const runtimeRequirement = 'node:crypto'
 const hashRuntimeRequirement = 'node:crypto:hash'
+const cipherRuntimeRequirement = 'node:crypto:cipher'
 const hashTypeId = `${libraryId}#Hash`
 const hmacTypeId = `${libraryId}#Hmac`
+const cipherTypeId = `${libraryId}#Cipheriv`
+const decipherTypeId = `${libraryId}#Decipheriv`
 const uint8ArrayTypeId = 'global:binary#Uint8Array'
 const bufferTypeId = 'node:buffer#Buffer'
 
 const randomRequirements = [runtimeRequirement]
 const hashRequirements = [runtimeRequirement, hashRuntimeRequirement]
+const cipherRequirements = [runtimeRequirement, cipherRuntimeRequirement]
 const hashAlgorithms = ['sha1', 'sha224', 'sha256', 'sha384', 'sha512']
+const cipherAlgorithms = ['aes-128-gcm', 'aes-192-gcm', 'aes-256-gcm']
 const stringTypeRef = primitiveTypeRef('string')
 
 const operations: LibraryOperationDescriptor[] = [
@@ -120,6 +125,26 @@ const operations: LibraryOperationDescriptor[] = [
     randomRequirements,
     { resultTypeRef: primitiveTypeRef('boolean') }
   ),
+  moduleCall(
+    'createCipheriv',
+    ['string-view', 'value', 'value', 'optional-value'],
+    [],
+    3,
+    4,
+    [cipherAlgorithmArgument('createCipheriv'), stringOrBytesArgument(), stringOrBytesArgument(), objectArgument()],
+    cipherRequirements,
+    { resultTypeRef: nominalTypeRef(cipherTypeId), cResultMode: 'value' }
+  ),
+  moduleCall(
+    'createDecipheriv',
+    ['string-view', 'value', 'value', 'optional-value'],
+    [],
+    3,
+    4,
+    [cipherAlgorithmArgument('createDecipheriv'), stringOrBytesArgument(), stringOrBytesArgument(), objectArgument()],
+    cipherRequirements,
+    { resultTypeRef: nominalTypeRef(decipherTypeId), cResultMode: 'value' }
+  ),
   moduleCall('createHash', ['string-view'], [], 1, 1, [hashAlgorithmArgument('createHash')], hashRequirements, {
     resultTypeRef: nominalTypeRef(hashTypeId),
     cResultMode: 'value'
@@ -139,13 +164,26 @@ const operations: LibraryOperationDescriptor[] = [
   updateOperation(hmacTypeId),
   digestOperation(hashTypeId),
   digestOperation(hmacTypeId),
+  cipherUpdateOperation(cipherTypeId, ['hex']),
+  cipherUpdateOperation(decipherTypeId, ['hex', 'utf8', 'utf-8']),
+  cipherFinalOperation(cipherTypeId, ['hex']),
+  cipherFinalOperation(decipherTypeId, ['hex', 'utf8', 'utf-8']),
+  cipherSetAadOperation(cipherTypeId),
+  cipherSetAadOperation(decipherTypeId),
+  cipherGetAuthTagOperation(),
+  cipherSetAuthTagOperation(),
   ...unsupportedMethods().map(unsupportedOperation)
 ]
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
   dependencies: ['global:crypto', 'global:binary', collectionsLibraryId, stringsLibraryId, 'node:buffer'],
-  nativeTypes: [nativeType(hashTypeId, 'Hash'), nativeType(hmacTypeId, 'Hmac')],
+  nativeTypes: [
+    nativeType(hashTypeId, 'Hash', hashRequirements),
+    nativeType(hmacTypeId, 'Hmac', hashRequirements),
+    nativeType(cipherTypeId, 'Cipheriv', cipherRequirements),
+    nativeType(decipherTypeId, 'Decipheriv', cipherRequirements)
+  ],
   operations,
   intrinsicBindings: [],
   runtimeRequirements: [
@@ -184,6 +222,21 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
           diagnosticCode: 'INOX_NOT_IMPLEMENTED',
           diagnosticMessage:
             'node:crypto hash APIs require --tls-backend boringssl or --tls-backend openssl in the current C++ backend'
+        }
+      ]
+    },
+    {
+      id: cipherRuntimeRequirement,
+      dependencies: [],
+      cPreludeIncludes: ['inox/crypto.h'],
+      capabilities: [],
+      optionConstraints: [
+        {
+          optionId: 'target:runtime#tls-backend',
+          allowedValues: ['boringssl', 'openssl'],
+          diagnosticCode: 'INOX_NOT_IMPLEMENTED',
+          diagnosticMessage:
+            'node:crypto cipher APIs require --tls-backend boringssl or --tls-backend openssl in the current C++ backend'
         }
       ]
     }
@@ -327,6 +380,158 @@ function digestOperation(receiverTypeId: string): LibraryOperationDescriptor {
   }
 }
 
+function cipherUpdateOperation(receiverTypeId: string, outputEncodings: string[]): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: receiverBinding(receiverTypeId, 'update'),
+    operationId: `${receiverTypeId}#update`,
+    kind: 'call',
+    runtimeRequirements: cipherRequirements,
+    receiverTypeId,
+    cExpression: 'update',
+    cCallStyle: 'member',
+    cFailureMode: 'thrown',
+    minArgs: 1,
+    maxArgs: 3,
+    argumentChecks: [stringOrBytesArgument(), encodingArgument(), cipherOutputEncodingArgument(outputEncodings)],
+    variants: [
+      memberResultVariant(
+        'update',
+        1,
+        1,
+        null,
+        [],
+        ['receiver', 'string-view-or-value'],
+        nominalTypeRef(bufferTypeId),
+        null,
+        'value'
+      ),
+      memberResultVariant(
+        'update',
+        2,
+        2,
+        null,
+        [],
+        ['receiver', 'string-view-or-value', 'string-view'],
+        nominalTypeRef(bufferTypeId),
+        null,
+        'value'
+      ),
+      memberResultVariant(
+        'update',
+        3,
+        3,
+        2,
+        outputEncodings,
+        ['receiver', 'string-view-or-value', 'string-view', 'string-view'],
+        stringTypeRef,
+        stringResultMapping()
+      )
+    ]
+  }
+}
+
+function cipherFinalOperation(receiverTypeId: string, outputEncodings: string[]): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: receiverBinding(receiverTypeId, 'final'),
+    operationId: `${receiverTypeId}#final`,
+    kind: 'call',
+    runtimeRequirements: cipherRequirements,
+    receiverTypeId,
+    cExpression: 'final',
+    cCallStyle: 'member',
+    cFailureMode: 'thrown',
+    minArgs: 0,
+    maxArgs: 1,
+    argumentChecks: [cipherOutputEncodingArgument(outputEncodings)],
+    variants: [
+      memberResultVariant('final', 0, 0, null, [], ['receiver'], nominalTypeRef(bufferTypeId), null, 'value'),
+      memberResultVariant(
+        'final',
+        1,
+        1,
+        0,
+        outputEncodings,
+        ['receiver', 'string-view'],
+        stringTypeRef,
+        stringResultMapping()
+      )
+    ]
+  }
+}
+
+function cipherSetAadOperation(receiverTypeId: string): LibraryOperationDescriptor {
+  return borrowedCipherOperation(
+    receiverTypeId,
+    'setAAD',
+    ['receiver', 'string-view-or-value', 'optional-value'],
+    1,
+    2,
+    [stringOrBytesArgument(), objectArgument()]
+  )
+}
+
+function cipherGetAuthTagOperation(): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: receiverBinding(cipherTypeId, 'getAuthTag'),
+    operationId: `${cipherTypeId}#getAuthTag`,
+    kind: 'call',
+    runtimeRequirements: cipherRequirements,
+    receiverTypeId: cipherTypeId,
+    cExpression: 'getAuthTag',
+    cArgumentKinds: ['receiver'],
+    cCallStyle: 'member',
+    cFailureMode: 'thrown',
+    cResultMode: 'value',
+    resultTypeRef: nominalTypeRef(bufferTypeId),
+    minArgs: 0,
+    maxArgs: 0,
+    argumentChecks: []
+  }
+}
+
+function cipherSetAuthTagOperation(): LibraryOperationDescriptor {
+  return {
+    ...borrowedCipherOperation(decipherTypeId, 'setAuthTag', ['receiver', 'string-view-or-value'], 1, 2, [
+      stringOrBytesArgument(),
+      encodingArgument()
+    ]),
+    variants: [
+      memberVariant('setAuthTag', 1, 1, ['receiver', 'string-view-or-value']),
+      memberVariant('setAuthTag', 2, 2, ['receiver', 'string-view-or-value', 'string-view'])
+    ]
+  }
+}
+
+function borrowedCipherOperation(
+  receiverTypeId: string,
+  name: string,
+  cArgumentKinds: LibraryCArgumentKind[],
+  minArgs: number,
+  maxArgs: number,
+  argumentChecks: LibraryArgumentCheckDescriptor[]
+): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: receiverBinding(receiverTypeId, name),
+    operationId: `${receiverTypeId}#${name}`,
+    kind: 'call',
+    runtimeRequirements: cipherRequirements,
+    receiverTypeId,
+    cExpression: name,
+    cArgumentKinds,
+    cCallStyle: 'member',
+    cFailureMode: 'thrown',
+    cResultMode: 'borrowed',
+    resultTypeRef: nominalTypeRef(receiverTypeId, 'borrowed'),
+    minArgs,
+    maxArgs,
+    argumentChecks
+  }
+}
+
 function callVariant(
   minArgs: number,
   maxArgs: number,
@@ -364,6 +569,39 @@ function receiverVariant(
   }
 }
 
+function memberVariant(
+  cExpression: string,
+  minArgs: number,
+  maxArgs: number,
+  cArgumentKinds: LibraryCArgumentKind[]
+): LibraryOperationVariantDescriptor {
+  return { minArgs, maxArgs, cExpression, cArgumentKinds }
+}
+
+function memberResultVariant(
+  cExpression: string,
+  minArgs: number,
+  maxArgs: number,
+  argumentIndex: number | null,
+  stringLiterals: string[],
+  cArgumentKinds: LibraryCArgumentKind[],
+  resultTypeRef: TypeRef,
+  cResultMapping: LibraryCResultMappingDescriptor | null,
+  cResultMode: LibraryCResultMode | null = null
+): LibraryOperationVariantDescriptor {
+  return {
+    minArgs,
+    maxArgs,
+    argumentIndex,
+    stringLiterals,
+    cExpression,
+    cArgumentKinds,
+    cResultMode,
+    cResultMapping,
+    resultTypeRef
+  }
+}
+
 function receiverScalarVariant(
   minArgs: number,
   maxArgs: number,
@@ -387,7 +625,7 @@ function receiverScalarVariant(
   }
 }
 
-function nativeType(typeId: string, cppType: string) {
+function nativeType(typeId: string, cppType: string, runtimeRequirements: string[]) {
   return {
     libraryId,
     typeId,
@@ -395,7 +633,7 @@ function nativeType(typeId: string, cppType: string) {
     valueType: 'object',
     cppType,
     baseTypeIds: [],
-    runtimeRequirements: hashRequirements
+    runtimeRequirements
   }
 }
 
@@ -465,6 +703,20 @@ function hashAlgorithmArgument(method: string): LibraryArgumentCheckDescriptor {
   )
 }
 
+function cipherAlgorithmArgument(method: string): LibraryArgumentCheckDescriptor {
+  return literalArgument(
+    cipherAlgorithms,
+    `node:crypto ${method} only supports 'aes-128-gcm', 'aes-192-gcm' and 'aes-256-gcm' in the current C++ backend`
+  )
+}
+
+function cipherOutputEncodingArgument(values: string[]): LibraryArgumentCheckDescriptor {
+  return literalArgument(
+    values,
+    `node:crypto cipher output only supports ${values.map((value) => `'${value}'`).join(', ')} in the current C++ backend`
+  )
+}
+
 function literalArgument(values: string[], message: string): LibraryArgumentCheckDescriptor {
   return {
     valueTypes: ['string'],
@@ -492,8 +744,6 @@ function unsupportedMethods(): string[] {
     'argon2Sync',
     'checkPrime',
     'checkPrimeSync',
-    'createCipheriv',
-    'createDecipheriv',
     'createDiffieHellman',
     'createDiffieHellmanGroup',
     'createECDH',

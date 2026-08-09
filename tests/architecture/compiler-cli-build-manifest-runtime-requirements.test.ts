@@ -36,6 +36,7 @@ test('build manifest содержит замыкание используемы�
     assert.deepEqual(manifest.runtimeRequirements, [
       'global:collections#array',
       'global:console',
+      'global:strings#strings',
       'managed-values',
       'objects',
       'string-bytes'

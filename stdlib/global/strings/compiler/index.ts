@@ -79,18 +79,8 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       1
     ),
     stringCall('repeat', stringTypeRef, ['number'], [numberArgument()]),
-    stringCall(
-      'replace',
-      stringTypeRef,
-      ['string-view', 'string-view'],
-      [stringArgument(), stringArgument()]
-    ),
-    stringCall(
-      'replaceAll',
-      stringTypeRef,
-      ['string-view', 'string-view'],
-      [stringArgument(), stringArgument()]
-    ),
+    stringCall('replace', stringTypeRef, ['string-view', 'string-view'], [stringArgument(), stringArgument()]),
+    stringCall('replaceAll', stringTypeRef, ['string-view', 'string-view'], [stringArgument(), stringArgument()]),
     stringCall(
       'slice',
       stringTypeRef,
@@ -128,8 +118,14 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   intrinsicBindings: [],
   runtimeRequirements: [
     {
+      id: 'string-bytes',
+      dependencies: [runtimeRequirement],
+      cPreludeIncludes: [],
+      capabilities: []
+    },
+    {
       id: runtimeRequirement,
-      dependencies: [arrayRuntimeRequirement, 'managed-values', 'string-bytes'],
+      dependencies: [arrayRuntimeRequirement, 'managed-values'],
       cPreludeIncludes: [],
       capabilities: []
     }

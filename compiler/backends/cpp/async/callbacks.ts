@@ -2417,6 +2417,16 @@ function visitCallbackExpression(
     return
   }
 
+  if (expression.type === 'TemplateLiteral') {
+    const placeholders = deps.collectTemplatePlaceholderExpressions(expression)
+
+    for (let index = 0; index < placeholders.length; index = index + 1) {
+      visitCallbackExpression(placeholders[index], scopes, wrappers, pendingPlainFunctionArgs, context, deps)
+    }
+
+    return
+  }
+
   if (expression.type === 'CallExpression') {
     visitCallbackCallExpression(expression, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
     return

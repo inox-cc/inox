@@ -10,6 +10,7 @@
 
 struct CryptoHashState;
 struct CryptoHmacState;
+struct CryptoCipherState;
 
 class Hash {
 private:
@@ -59,6 +60,83 @@ public:
   inox::String digest(inox::StringView encoding);
 };
 
+class Cipheriv {
+private:
+  CryptoCipherState* handle_;
+
+  explicit Cipheriv(CryptoCipherState* handle);
+
+  friend class crypto;
+
+public:
+  Cipheriv();
+  ~Cipheriv();
+  Cipheriv(const Cipheriv& other) = delete;
+  Cipheriv& operator=(const Cipheriv& other) = delete;
+  Cipheriv(Cipheriv&& other) noexcept;
+  Cipheriv& operator=(Cipheriv&& other) noexcept;
+
+  Buffer update(inox::StringView data);
+  Buffer update(const inox::Value& data);
+  Buffer update(inox::StringView data, inox::StringView input_encoding);
+  Buffer update(const inox::Value& data, inox::StringView input_encoding);
+  inox::String update(
+    inox::StringView data,
+    inox::StringView input_encoding,
+    inox::StringView output_encoding
+  );
+  inox::String update(
+    const inox::Value& data,
+    inox::StringView input_encoding,
+    inox::StringView output_encoding
+  );
+  Buffer final();
+  inox::String final(inox::StringView output_encoding);
+  Buffer getAuthTag();
+  Cipheriv& setAAD(inox::StringView data, const inox::Value& options);
+  Cipheriv& setAAD(const inox::Value& data, const inox::Value& options);
+};
+
+class Decipheriv {
+private:
+  CryptoCipherState* handle_;
+
+  explicit Decipheriv(CryptoCipherState* handle);
+
+  friend class crypto;
+
+public:
+  Decipheriv();
+  ~Decipheriv();
+  Decipheriv(const Decipheriv& other) = delete;
+  Decipheriv& operator=(const Decipheriv& other) = delete;
+  Decipheriv(Decipheriv&& other) noexcept;
+  Decipheriv& operator=(Decipheriv&& other) noexcept;
+
+  Buffer update(inox::StringView data);
+  Buffer update(const inox::Value& data);
+  Buffer update(inox::StringView data, inox::StringView input_encoding);
+  Buffer update(const inox::Value& data, inox::StringView input_encoding);
+  inox::String update(
+    inox::StringView data,
+    inox::StringView input_encoding,
+    inox::StringView output_encoding
+  );
+  inox::String update(
+    const inox::Value& data,
+    inox::StringView input_encoding,
+    inox::StringView output_encoding
+  );
+  Buffer final();
+  inox::String final(inox::StringView output_encoding);
+  Decipheriv& setAAD(inox::StringView data, const inox::Value& options);
+  Decipheriv& setAAD(const inox::Value& data, const inox::Value& options);
+  Decipheriv& setAuthTag(inox::StringView tag);
+  Decipheriv& setAuthTag(const inox::Value& tag);
+  Decipheriv& setAuthTag(inox::StringView tag, inox::StringView encoding);
+  Decipheriv& setAuthTag(const inox::Value& tag, inox::StringView encoding);
+};
+
 class crypto {
 public:
   Array getHashes() const;
@@ -88,6 +166,18 @@ public:
     const inox::Value& password,
     const inox::Value& salt,
     inox_number keylen,
+    const inox::Value& options
+  ) const;
+  Cipheriv createCipheriv(
+    inox::StringView algorithm,
+    const inox::Value& key,
+    const inox::Value& iv,
+    const inox::Value& options
+  ) const;
+  Decipheriv createDecipheriv(
+    inox::StringView algorithm,
+    const inox::Value& key,
+    const inox::Value& iv,
     const inox::Value& options
   ) const;
   Hash createHash(inox::StringView algorithm) const;

@@ -37,8 +37,10 @@ test('node:crypto implemented results принадлежат TypeRef, включ
     'node:buffer'
   ])
   assert.deepEqual(compilerLibraryPackage.nativeTypes, [
-    nativeType('node:crypto#Hash', 'Hash'),
-    nativeType('node:crypto#Hmac', 'Hmac')
+    nativeType('node:crypto#Hash', 'Hash', ['node:crypto', 'node:crypto:hash']),
+    nativeType('node:crypto#Hmac', 'Hmac', ['node:crypto', 'node:crypto:hash']),
+    nativeType('node:crypto#Cipheriv', 'Cipheriv', ['node:crypto', 'node:crypto:cipher']),
+    nativeType('node:crypto#Decipheriv', 'Decipheriv', ['node:crypto', 'node:crypto:cipher'])
   ])
 
   const stringType = primitiveType('string')
@@ -53,6 +55,8 @@ test('node:crypto implemented results принадлежат TypeRef, включ
     ['node:crypto#hkdfSync', [result(nominalType('node:buffer#Buffer'), null, 'value')]],
     ['node:crypto#scryptSync', [result(nominalType('node:buffer#Buffer'), null, 'value')]],
     ['node:crypto#timingSafeEqual', [result(primitiveType('boolean'))]],
+    ['node:crypto#createCipheriv', [result(nominalType('node:crypto#Cipheriv'), null, 'value')]],
+    ['node:crypto#createDecipheriv', [result(nominalType('node:crypto#Decipheriv'), null, 'value')]],
     ['node:crypto#createHash', [result(nominalType('node:crypto#Hash'), null, 'value')]],
     ['node:crypto#createHmac', [result(nominalType('node:crypto#Hmac'), null, 'value')]],
     [
@@ -84,6 +88,40 @@ test('node:crypto implemented results принадлежат TypeRef, включ
     [
       'node:crypto#Hmac#digest',
       [result(nominalType('node:buffer#Buffer'), null, 'value'), result(stringType, stringMapping())]
+    ],
+    [
+      'node:crypto#Cipheriv#update',
+      [
+        result(nominalType('node:buffer#Buffer'), null, 'value'),
+        result(nominalType('node:buffer#Buffer'), null, 'value'),
+        result(stringType, stringMapping())
+      ]
+    ],
+    [
+      'node:crypto#Decipheriv#update',
+      [
+        result(nominalType('node:buffer#Buffer'), null, 'value'),
+        result(nominalType('node:buffer#Buffer'), null, 'value'),
+        result(stringType, stringMapping())
+      ]
+    ],
+    [
+      'node:crypto#Cipheriv#final',
+      [result(nominalType('node:buffer#Buffer'), null, 'value'), result(stringType, stringMapping())]
+    ],
+    [
+      'node:crypto#Decipheriv#final',
+      [result(nominalType('node:buffer#Buffer'), null, 'value'), result(stringType, stringMapping())]
+    ],
+    ['node:crypto#Cipheriv#setAAD', [result(nominalType('node:crypto#Cipheriv', 'borrowed'), null, 'borrowed')]],
+    ['node:crypto#Decipheriv#setAAD', [result(nominalType('node:crypto#Decipheriv', 'borrowed'), null, 'borrowed')]],
+    ['node:crypto#Cipheriv#getAuthTag', [result(nominalType('node:buffer#Buffer'), null, 'value')]],
+    [
+      'node:crypto#Decipheriv#setAuthTag',
+      [
+        result(nominalType('node:crypto#Decipheriv', 'borrowed'), null, 'borrowed'),
+        result(nominalType('node:crypto#Decipheriv', 'borrowed'), null, 'borrowed')
+      ]
     ]
   ])
   const implemented = compilerLibraryPackage.operations.filter((operation) => !operation.diagnosticCode)
@@ -164,7 +202,7 @@ function stringMapping(): LibraryCResultMappingDescriptor {
   return { cppType: 'inox::String', fields: [] }
 }
 
-function nativeType(typeId: string, cppType: string) {
+function nativeType(typeId: string, cppType: string, runtimeRequirements: string[]) {
   return {
     libraryId: 'node:crypto',
     typeId,
@@ -172,6 +210,6 @@ function nativeType(typeId: string, cppType: string) {
     valueType: 'object',
     cppType,
     baseTypeIds: [],
-    runtimeRequirements: ['node:crypto', 'node:crypto:hash']
+    runtimeRequirements
   }
 }

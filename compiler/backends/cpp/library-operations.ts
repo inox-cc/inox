@@ -1849,6 +1849,10 @@ function emitCompilerLibraryResultShape(
 }
 
 function emitCompilerLibraryStringArgument(operand: PreparedStringBytesOperand): string {
+  if (operand.cppExpression && operand.cppType === 'inox::String') {
+    return `static_cast<inox::StringView>(${operand.cppExpression})`
+  }
+
   return operand.cppExpression ?? `inox::StringView(${operand.bytes}, ${operand.length})`
 }
 

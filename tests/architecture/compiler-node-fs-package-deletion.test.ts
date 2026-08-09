@@ -5,9 +5,7 @@ import { test } from 'node:test'
 
 import { compileSource } from '../../compiler/core.ts'
 import { CompileError } from '../../compiler/diagnostics.ts'
-import {
-  compilerLibraryOperationForImport
-} from '../../compiler/extensions/library-set.ts'
+import { compilerLibraryOperationForImport } from '../../compiler/extensions/library-set.ts'
 import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
 import {
   createCompilerLibrarySetFromDiscovered,
@@ -22,16 +20,10 @@ test('удаление node:fs/promises и node:fs независимо убир
   await generateCompilerLibraryRegistry(fixtureRoot, outputRoot)
 
   const before = await generatedSources()
-  const beforeLibraries = createCompilerLibrarySetFromDiscovered(
-    await discoverCompilerLibraries(fixtureRoot)
-  )
+  const beforeLibraries = createCompilerLibrarySetFromDiscovered(await discoverCompilerLibraries(fixtureRoot))
   const fsDeclaration = beforeLibraries.declarations.find((item) => item.source === 'node:fs')
-  const promisesDeclaration = beforeLibraries.declarations.find(
-    (item) => item.source === 'node:fs/promises'
-  )
-  const bufferDeclaration = beforeLibraries.declarations.find(
-    (item) => item.source === 'node:buffer'
-  )
+  const promisesDeclaration = beforeLibraries.declarations.find((item) => item.source === 'node:fs/promises')
+  const bufferDeclaration = beforeLibraries.declarations.find((item) => item.source === 'node:buffer')
 
   assert.equal(fsDeclaration?.compilerImplemented, true)
   assert.equal(promisesDeclaration?.compilerImplemented, true)
@@ -41,24 +33,8 @@ test('удаление node:fs/promises и node:fs независимо убир
   assert.match(before.nativePlan, /stdlib\/node\/fs\/src\/fs\.cc/)
   assert.match(before.nativePlanCMake, /stdlib\/node\/fs\/src\/fs\.cc/)
   assert.match(before.nativePlan, /stdlib\/node\/buffer\/src\/buffer\.cc/)
-  assert.ok(
-    compilerLibraryOperationForImport(
-      beforeLibraries,
-      'node:fs',
-      'default',
-      ['readFileSync'],
-      'call'
-    )
-  )
-  assert.ok(
-    compilerLibraryOperationForImport(
-      beforeLibraries,
-      'node:fs/promises',
-      'readFile',
-      [],
-      'call'
-    )
-  )
+  assert.ok(compilerLibraryOperationForImport(beforeLibraries, 'node:fs', 'default', ['readFileSync'], 'call'))
+  assert.ok(compilerLibraryOperationForImport(beforeLibraries, 'node:fs/promises', 'readFile', [], 'call'))
   compileSource("import fs from 'node:fs'\nfs.readFileSync('/tmp/item')\n", {
     libraries: beforeLibraries
   })
@@ -70,9 +46,7 @@ test('удаление node:fs/promises и node:fs независимо убир
   await generateCompilerLibraryRegistry(fixtureRoot, outputRoot)
 
   const withoutPromises = await generatedSources()
-  const fsOnlyLibraries = createCompilerLibrarySetFromDiscovered(
-    await discoverCompilerLibraries(fixtureRoot)
-  )
+  const fsOnlyLibraries = createCompilerLibrarySetFromDiscovered(await discoverCompilerLibraries(fixtureRoot))
 
   assert.ok(fsOnlyLibraries.declarations.find((item) => item.source === 'node:fs'))
   assert.equal(
@@ -83,16 +57,7 @@ test('удаление node:fs/promises и node:fs независимо убир
   assert.doesNotMatch(withoutPromises.registry, /stdlib\/node\/fs\/promises/)
   assert.match(withoutPromises.nativePlan, /stdlib\/node\/fs\/src\/fs\.cc/)
   assert.match(withoutPromises.nativePlan, /stdlib\/node\/buffer\/src\/buffer\.cc/)
-  assert.equal(
-    compilerLibraryOperationForImport(
-      fsOnlyLibraries,
-      'node:fs/promises',
-      'readFile',
-      [],
-      'call'
-    ),
-    null
-  )
+  assert.equal(compilerLibraryOperationForImport(fsOnlyLibraries, 'node:fs/promises', 'readFile', [], 'call'), null)
   assert.throws(
     () =>
       compileSource("import { readFile } from 'node:fs/promises'\nreadFile('/tmp/item')\n", {
@@ -108,9 +73,7 @@ test('удаление node:fs/promises и node:fs независимо убир
   await generateCompilerLibraryRegistry(fixtureRoot, outputRoot)
 
   const withoutFs = await generatedSources()
-  const remainingLibraries = createCompilerLibrarySetFromDiscovered(
-    await discoverCompilerLibraries(fixtureRoot)
-  )
+  const remainingLibraries = createCompilerLibrarySetFromDiscovered(await discoverCompilerLibraries(fixtureRoot))
 
   assert.doesNotMatch(withoutFs.manifest, /node:fs/)
   assert.doesNotMatch(withoutFs.registry, /stdlib\/node\/fs/)
@@ -118,19 +81,9 @@ test('удаление node:fs/promises и node:fs независимо убир
   assert.doesNotMatch(withoutFs.nativePlanCMake, /stdlib\/node\/fs/)
   assert.match(withoutFs.manifest, /node:buffer/)
   assert.match(withoutFs.nativePlan, /stdlib\/node\/buffer\/src\/buffer\.cc/)
+  assert.equal(remainingLibraries.declarations.find((item) => item.source === 'node:buffer')?.compilerImplemented, true)
   assert.equal(
-    remainingLibraries.declarations.find((item) => item.source === 'node:buffer')
-      ?.compilerImplemented,
-    true
-  )
-  assert.equal(
-    compilerLibraryOperationForImport(
-      remainingLibraries,
-      'node:fs',
-      'default',
-      ['readFileSync'],
-      'call'
-    ),
+    compilerLibraryOperationForImport(remainingLibraries, 'node:fs', 'default', ['readFileSync'], 'call'),
     null
   )
   assert.throws(
@@ -140,15 +93,7 @@ test('удаление node:fs/promises и node:fs независимо убир
       }),
     isUnsupportedModuleError
   )
-  assert.ok(
-    compilerLibraryOperationForImport(
-      remainingLibraries,
-      'node:buffer',
-      'Buffer',
-      ['alloc'],
-      'call'
-    )
-  )
+  assert.ok(compilerLibraryOperationForImport(remainingLibraries, 'node:buffer', 'Buffer', ['alloc'], 'call'))
   compileSource("import { Buffer } from 'node:buffer'\nBuffer.alloc(1)\n", {
     libraries: remainingLibraries
   })
@@ -161,15 +106,14 @@ async function createFixture(): Promise<void> {
   await cp(resolve('stdlib/global/binary'), resolve(fixtureRoot, 'stdlib/global/binary'), {
     recursive: true
   })
-  await cp(
-    resolve('stdlib/global/collections'),
-    resolve(fixtureRoot, 'stdlib/global/collections'),
-    { recursive: true }
-  )
+  await cp(resolve('stdlib/global/collections'), resolve(fixtureRoot, 'stdlib/global/collections'), { recursive: true })
   await cp(resolve('stdlib/global/error'), resolve(fixtureRoot, 'stdlib/global/error'), {
     recursive: true
   })
   await cp(resolve('stdlib/global/promise'), resolve(fixtureRoot, 'stdlib/global/promise'), {
+    recursive: true
+  })
+  await cp(resolve('stdlib/global/strings'), resolve(fixtureRoot, 'stdlib/global/strings'), {
     recursive: true
   })
   await cp(resolve('stdlib/node/buffer'), resolve(fixtureRoot, 'stdlib/node/buffer'), {
@@ -195,8 +139,5 @@ async function generatedSources(): Promise<{
 }
 
 function isUnsupportedModuleError(error: unknown): boolean {
-  return (
-    error instanceof CompileError &&
-    error.diagnostics[0].code === 'INOX_UNSUPPORTED_IMPORT_SOURCE'
-  )
+  return error instanceof CompileError && error.diagnostics[0].code === 'INOX_UNSUPPORTED_IMPORT_SOURCE'
 }

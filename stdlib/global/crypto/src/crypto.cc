@@ -15,9 +15,9 @@
 #if defined(INOX_TLS_BACKEND_BORINGSSL) || defined(INOX_TLS_BACKEND_OPENSSL)
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
-#define INOX_CRYPTO_HASH_HAS_EVP 1
+#define INOX_CRYPTO_HAS_EVP 1
 #else
-#define INOX_CRYPTO_HASH_HAS_EVP 0
+#define INOX_CRYPTO_HAS_EVP 0
 #endif
 
 #if defined(INOX_LOOP_BACKEND_LIBUV)
@@ -35,11 +35,11 @@
 static inox_status inox_crypto_random_bytes_raw(uint8_t* out, size_t len);
 static int inox_crypto_number_to_size(inox_number value, size_t* out);
 static int inox_crypto_number_is_integer(inox_number value);
-#if INOX_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HAS_EVP
 static const EVP_MD* inox_crypto_digest_algorithm(const char* algorithm, size_t algorithm_len);
 #endif
 static inox_status inox_crypto_data(inox_value data, const uint8_t** bytes, size_t* len);
-#if INOX_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HAS_EVP
 struct InoxCryptoScryptOptions {
   size_t cost;
   size_t block_size;
@@ -86,6 +86,40 @@ static inox_status CryptoHmacState_create(
   CryptoHmacState** out
 );
 static void CryptoHmacState_free(CryptoHmacState* hmac);
+static inox_status CryptoCipherState_create(
+  inox_allocator* allocator,
+  inox::StringView algorithm,
+  inox_value key,
+  inox_value iv,
+  const inox::Value& options,
+  bool encrypt,
+  CryptoCipherState** out
+);
+static void CryptoCipherState_free(CryptoCipherState* cipher);
+static Buffer inox_crypto_cipher_update_raw(
+  CryptoCipherState* cipher,
+  const uint8_t* bytes,
+  size_t len,
+  const char* message
+);
+static Buffer inox_crypto_cipher_final(CryptoCipherState* cipher, const char* message);
+static Buffer inox_crypto_cipher_auth_tag(CryptoCipherState* cipher, const char* message);
+static inox_status inox_crypto_cipher_set_aad(
+  CryptoCipherState* cipher,
+  const uint8_t* bytes,
+  size_t len
+);
+static inox_status inox_crypto_cipher_set_aad(
+  CryptoCipherState* cipher,
+  inox::StringView data,
+  const inox::Value& options
+);
+static inox_status inox_crypto_cipher_set_auth_tag(
+  CryptoCipherState* cipher,
+  const uint8_t* bytes,
+  size_t len
+);
+static int inox_crypto_cipher_output_encoding(inox::StringView encoding, bool decrypt);
 static inox_status CryptoHashState_digest_raw(CryptoHashState* hash, uint8_t* digest, size_t* len);
 static inox_status CryptoHmacState_digest_raw(CryptoHmacState* hmac, uint8_t* digest, size_t* len);
 static inox_status CryptoHashState_update(CryptoHashState* hash, const uint8_t* bytes, size_t len);
@@ -101,7 +135,7 @@ static void inox_crypto_throw_failed(const char* message);
 
 struct CryptoHashState {
   inox_allocator* allocator;
-#if INOX_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HAS_EVP
   EVP_MD_CTX* ctx;
 #endif
   int finalized;
@@ -109,10 +143,22 @@ struct CryptoHashState {
 
 struct CryptoHmacState {
   inox_allocator* allocator;
-#if INOX_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HAS_EVP
   HMAC_CTX* ctx;
 #endif
   int finalized;
+};
+
+struct CryptoCipherState {
+  inox_allocator* allocator;
+#if INOX_CRYPTO_HAS_EVP
+  EVP_CIPHER_CTX* ctx;
+#endif
+  size_t auth_tag_length;
+  int encrypt;
+  int finalized;
+  int updated;
+  int auth_tag_set;
 };
 
 Hash::Hash() : handle_(0) {}
@@ -185,7 +231,7 @@ Hash& Hash::update(const inox::Value& data, inox::StringView encoding) {
 }
 
 Buffer Hash::digest() {
-#if INOX_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HAS_EVP
   uint8_t digest[EVP_MAX_MD_SIZE];
   size_t len = 0;
   inox_status status = CryptoHashState_digest_raw(handle_, digest, &len);
@@ -289,7 +335,7 @@ Hmac& Hmac::update(const inox::Value& data, inox::StringView encoding) {
 }
 
 Buffer Hmac::digest() {
-#if INOX_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HAS_EVP
   uint8_t digest[EVP_MAX_MD_SIZE];
   size_t len = 0;
   inox_status status = CryptoHmacState_digest_raw(handle_, digest, &len);
@@ -323,8 +369,381 @@ inox::String Hmac::digest(inox::StringView encoding) {
   return result.toString(encoding);
 }
 
+static Buffer inox_crypto_cipher_update_value(
+  CryptoCipherState* cipher,
+  const inox::Value& data,
+  const char* message
+) {
+  const uint8_t* bytes = 0;
+  size_t len = 0;
+
+  if (inox_crypto_data(data.raw(), &bytes, &len) != INOX_OK) {
+    if (!inox::thrown()) {
+      inox_crypto_throw_failed(message);
+    }
+
+    return Buffer();
+  }
+
+  return inox_crypto_cipher_update_raw(cipher, bytes, len, message);
+}
+
+static Buffer inox_crypto_cipher_update_string(
+  CryptoCipherState* cipher,
+  inox::StringView data,
+  inox::StringView input_encoding,
+  const char* message
+) {
+  Buffer decoded = Buffer::from(data, input_encoding);
+
+  if (inox::thrown() || !decoded.valid()) {
+    if (!inox::thrown()) {
+      inox_crypto_throw_failed(message);
+    }
+
+    return Buffer();
+  }
+
+  return inox_crypto_cipher_update_raw(cipher, decoded.bytes().data(), decoded.length(), message);
+}
+
+static inox::String inox_crypto_cipher_output(
+  Buffer& bytes,
+  inox::StringView encoding,
+  bool decrypt,
+  const char* message
+) {
+  if (!inox_crypto_cipher_output_encoding(encoding, decrypt)) {
+    inox_crypto_throw_failed(message);
+    return inox::String();
+  }
+
+  inox::String output = bytes.toString(encoding);
+
+  if (!output.valid() && !inox::thrown()) {
+    inox_crypto_throw_failed(message);
+  }
+
+  return output;
+}
+
+Cipheriv::Cipheriv() : handle_(0) {}
+
+Cipheriv::Cipheriv(CryptoCipherState* handle) : handle_(handle) {}
+
+Cipheriv::~Cipheriv() {
+  CryptoCipherState_free(handle_);
+}
+
+Cipheriv::Cipheriv(Cipheriv&& other) noexcept : handle_(other.handle_) {
+  other.handle_ = 0;
+}
+
+Cipheriv& Cipheriv::operator=(Cipheriv&& other) noexcept {
+  if (this != &other) {
+    CryptoCipherState_free(handle_);
+    handle_ = other.handle_;
+    other.handle_ = 0;
+  }
+
+  return *this;
+}
+
+Buffer Cipheriv::update(inox::StringView data) {
+  return inox_crypto_cipher_update_raw(handle_, (const uint8_t*)data.bytes, data.len, "crypto.Cipheriv.update failed");
+}
+
+Buffer Cipheriv::update(const inox::Value& data) {
+  return inox_crypto_cipher_update_value(handle_, data, "crypto.Cipheriv.update failed");
+}
+
+Buffer Cipheriv::update(inox::StringView data, inox::StringView input_encoding) {
+  return inox_crypto_cipher_update_string(handle_, data, input_encoding, "crypto.Cipheriv.update failed");
+}
+
+Buffer Cipheriv::update(const inox::Value& data, inox::StringView input_encoding) {
+  (void)input_encoding;
+  return inox_crypto_cipher_update_value(handle_, data, "crypto.Cipheriv.update failed");
+}
+
+inox::String Cipheriv::update(
+  inox::StringView data,
+  inox::StringView input_encoding,
+  inox::StringView output_encoding
+) {
+  if (!inox_crypto_cipher_output_encoding(output_encoding, false)) {
+    inox_crypto_throw_failed("crypto.Cipheriv.update failed");
+    return inox::String();
+  }
+
+  Buffer result = inox_crypto_cipher_update_string(handle_, data, input_encoding, "crypto.Cipheriv.update failed");
+
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
+  return inox_crypto_cipher_output(result, output_encoding, false, "crypto.Cipheriv.update failed");
+}
+
+inox::String Cipheriv::update(
+  const inox::Value& data,
+  inox::StringView input_encoding,
+  inox::StringView output_encoding
+) {
+  (void)input_encoding;
+
+  if (!inox_crypto_cipher_output_encoding(output_encoding, false)) {
+    inox_crypto_throw_failed("crypto.Cipheriv.update failed");
+    return inox::String();
+  }
+
+  Buffer result = inox_crypto_cipher_update_value(handle_, data, "crypto.Cipheriv.update failed");
+
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
+  return inox_crypto_cipher_output(result, output_encoding, false, "crypto.Cipheriv.update failed");
+}
+
+Buffer Cipheriv::final() {
+  return inox_crypto_cipher_final(handle_, "crypto.Cipheriv.final failed");
+}
+
+inox::String Cipheriv::final(inox::StringView output_encoding) {
+  if (!inox_crypto_cipher_output_encoding(output_encoding, false)) {
+    inox_crypto_throw_failed("crypto.Cipheriv.final failed");
+    return inox::String();
+  }
+
+  Buffer result = inox_crypto_cipher_final(handle_, "crypto.Cipheriv.final failed");
+
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
+  return inox_crypto_cipher_output(result, output_encoding, false, "crypto.Cipheriv.final failed");
+}
+
+Buffer Cipheriv::getAuthTag() {
+  return inox_crypto_cipher_auth_tag(handle_, "crypto.Cipheriv.getAuthTag failed");
+}
+
+Cipheriv& Cipheriv::setAAD(inox::StringView data, const inox::Value& options) {
+  if (inox_crypto_cipher_set_aad(handle_, data, options) != INOX_OK && !inox::thrown()) {
+    inox_crypto_throw_failed("crypto.Cipheriv.setAAD failed");
+  }
+
+  return *this;
+}
+
+Cipheriv& Cipheriv::setAAD(const inox::Value& data, const inox::Value& options) {
+  const uint8_t* bytes = 0;
+  size_t len = 0;
+
+  if (
+    (options.tag != INOX_TAG_UNDEFINED &&
+     options.tag != INOX_TAG_NULL &&
+     options.tag != INOX_TAG_OBJECT &&
+     options.tag != INOX_TAG_CLASS_INSTANCE) ||
+    inox_crypto_data(data.raw(), &bytes, &len) != INOX_OK ||
+    inox_crypto_cipher_set_aad(handle_, bytes, len) != INOX_OK
+  ) {
+    if (!inox::thrown()) {
+      inox_crypto_throw_failed("crypto.Cipheriv.setAAD failed");
+    }
+  }
+
+  return *this;
+}
+
+Decipheriv::Decipheriv() : handle_(0) {}
+
+Decipheriv::Decipheriv(CryptoCipherState* handle) : handle_(handle) {}
+
+Decipheriv::~Decipheriv() {
+  CryptoCipherState_free(handle_);
+}
+
+Decipheriv::Decipheriv(Decipheriv&& other) noexcept : handle_(other.handle_) {
+  other.handle_ = 0;
+}
+
+Decipheriv& Decipheriv::operator=(Decipheriv&& other) noexcept {
+  if (this != &other) {
+    CryptoCipherState_free(handle_);
+    handle_ = other.handle_;
+    other.handle_ = 0;
+  }
+
+  return *this;
+}
+
+Buffer Decipheriv::update(inox::StringView data) {
+  return inox_crypto_cipher_update_raw(handle_, (const uint8_t*)data.bytes, data.len, "crypto.Decipheriv.update failed");
+}
+
+Buffer Decipheriv::update(const inox::Value& data) {
+  return inox_crypto_cipher_update_value(handle_, data, "crypto.Decipheriv.update failed");
+}
+
+Buffer Decipheriv::update(inox::StringView data, inox::StringView input_encoding) {
+  return inox_crypto_cipher_update_string(handle_, data, input_encoding, "crypto.Decipheriv.update failed");
+}
+
+Buffer Decipheriv::update(const inox::Value& data, inox::StringView input_encoding) {
+  (void)input_encoding;
+  return inox_crypto_cipher_update_value(handle_, data, "crypto.Decipheriv.update failed");
+}
+
+inox::String Decipheriv::update(
+  inox::StringView data,
+  inox::StringView input_encoding,
+  inox::StringView output_encoding
+) {
+  if (!inox_crypto_cipher_output_encoding(output_encoding, true)) {
+    inox_crypto_throw_failed("crypto.Decipheriv.update failed");
+    return inox::String();
+  }
+
+  Buffer result = inox_crypto_cipher_update_string(handle_, data, input_encoding, "crypto.Decipheriv.update failed");
+
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
+  return inox_crypto_cipher_output(result, output_encoding, true, "crypto.Decipheriv.update failed");
+}
+
+inox::String Decipheriv::update(
+  const inox::Value& data,
+  inox::StringView input_encoding,
+  inox::StringView output_encoding
+) {
+  (void)input_encoding;
+
+  if (!inox_crypto_cipher_output_encoding(output_encoding, true)) {
+    inox_crypto_throw_failed("crypto.Decipheriv.update failed");
+    return inox::String();
+  }
+
+  Buffer result = inox_crypto_cipher_update_value(handle_, data, "crypto.Decipheriv.update failed");
+
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
+  return inox_crypto_cipher_output(result, output_encoding, true, "crypto.Decipheriv.update failed");
+}
+
+Buffer Decipheriv::final() {
+  return inox_crypto_cipher_final(handle_, "crypto.Decipheriv.final failed");
+}
+
+inox::String Decipheriv::final(inox::StringView output_encoding) {
+  if (!inox_crypto_cipher_output_encoding(output_encoding, true)) {
+    inox_crypto_throw_failed("crypto.Decipheriv.final failed");
+    return inox::String();
+  }
+
+  Buffer result = inox_crypto_cipher_final(handle_, "crypto.Decipheriv.final failed");
+
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
+  return inox_crypto_cipher_output(result, output_encoding, true, "crypto.Decipheriv.final failed");
+}
+
+Decipheriv& Decipheriv::setAAD(inox::StringView data, const inox::Value& options) {
+  if (inox_crypto_cipher_set_aad(handle_, data, options) != INOX_OK && !inox::thrown()) {
+    inox_crypto_throw_failed("crypto.Decipheriv.setAAD failed");
+  }
+
+  return *this;
+}
+
+Decipheriv& Decipheriv::setAAD(const inox::Value& data, const inox::Value& options) {
+  const uint8_t* bytes = 0;
+  size_t len = 0;
+
+  if (
+    (options.tag != INOX_TAG_UNDEFINED &&
+     options.tag != INOX_TAG_NULL &&
+     options.tag != INOX_TAG_OBJECT &&
+     options.tag != INOX_TAG_CLASS_INSTANCE) ||
+    inox_crypto_data(data.raw(), &bytes, &len) != INOX_OK ||
+    inox_crypto_cipher_set_aad(handle_, bytes, len) != INOX_OK
+  ) {
+    if (!inox::thrown()) {
+      inox_crypto_throw_failed("crypto.Decipheriv.setAAD failed");
+    }
+  }
+
+  return *this;
+}
+
+Decipheriv& Decipheriv::setAuthTag(inox::StringView tag) {
+  if (inox_crypto_cipher_set_auth_tag(handle_, (const uint8_t*)tag.bytes, tag.len) != INOX_OK && !inox::thrown()) {
+    inox_crypto_throw_failed("crypto.Decipheriv.setAuthTag failed");
+  }
+
+  return *this;
+}
+
+Decipheriv& Decipheriv::setAuthTag(const inox::Value& tag) {
+  const uint8_t* bytes = 0;
+  size_t len = 0;
+
+  if (
+    inox_crypto_data(tag.raw(), &bytes, &len) != INOX_OK ||
+    inox_crypto_cipher_set_auth_tag(handle_, bytes, len) != INOX_OK
+  ) {
+    if (!inox::thrown()) {
+      inox_crypto_throw_failed("crypto.Decipheriv.setAuthTag failed");
+    }
+  }
+
+  return *this;
+}
+
+Decipheriv& Decipheriv::setAuthTag(inox::StringView tag, inox::StringView encoding) {
+  Buffer decoded = Buffer::from(tag, encoding);
+
+  if (
+    !inox::thrown() &&
+    decoded.valid() &&
+    inox_crypto_cipher_set_auth_tag(handle_, decoded.bytes().data(), decoded.length()) == INOX_OK
+  ) {
+    return *this;
+  }
+
+  if (!inox::thrown()) {
+    inox_crypto_throw_failed("crypto.Decipheriv.setAuthTag failed");
+  }
+
+  return *this;
+}
+
+Decipheriv& Decipheriv::setAuthTag(const inox::Value& tag, inox::StringView encoding) {
+  (void)encoding;
+  const uint8_t* bytes = 0;
+  size_t len = 0;
+
+  if (
+    inox_crypto_data(tag.raw(), &bytes, &len) != INOX_OK ||
+    inox_crypto_cipher_set_auth_tag(handle_, bytes, len) != INOX_OK
+  ) {
+    if (!inox::thrown()) {
+      inox_crypto_throw_failed("crypto.Decipheriv.setAuthTag failed");
+    }
+  }
+
+  return *this;
+}
+
 Array crypto::getHashes() const {
-#if INOX_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HAS_EVP
   auto hashes = Array::from({
     inox::String("sha1", 4),
     inox::String("sha224", 6),
@@ -555,7 +974,7 @@ Buffer crypto::pbkdf2Sync(
   inox_number keylen_value,
   inox::StringView digest_name
 ) const {
-#if INOX_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HAS_EVP
   const EVP_MD* digest = inox_crypto_digest_algorithm(digest_name.bytes, digest_name.len);
   const uint8_t* password_bytes = 0;
   const uint8_t* salt_bytes = 0;
@@ -622,7 +1041,7 @@ Buffer crypto::hkdfSync(
   const inox::Value& info,
   inox_number keylen_value
 ) const {
-#if INOX_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HAS_EVP
   const EVP_MD* digest = inox_crypto_digest_algorithm(digest_name.bytes, digest_name.len);
   const uint8_t* ikm_bytes = 0;
   const uint8_t* salt_bytes = 0;
@@ -690,7 +1109,7 @@ Buffer crypto::scryptSync(
   inox_number keylen_value,
   const inox::Value& options_value
 ) const {
-#if INOX_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HAS_EVP
   const uint8_t* password_bytes = 0;
   const uint8_t* salt_bytes = 0;
   size_t password_len = 0;
@@ -744,6 +1163,68 @@ Buffer crypto::scryptSync(
   inox_crypto_throw_failed("crypto.scryptSync failed");
   return Buffer();
 #endif
+}
+
+Cipheriv crypto::createCipheriv(
+  inox::StringView algorithm,
+  const inox::Value& key,
+  const inox::Value& iv,
+  const inox::Value& options
+) const {
+  CryptoCipherState* cipher = 0;
+
+  if (
+    CryptoCipherState_create(
+      &inox_default_allocator,
+      algorithm,
+      key.raw(),
+      iv.raw(),
+      options,
+      true,
+      &cipher
+    ) != INOX_OK
+  ) {
+    CryptoCipherState_free(cipher);
+
+    if (!inox::thrown()) {
+      inox_crypto_throw_failed("crypto.createCipheriv failed");
+    }
+
+    return Cipheriv();
+  }
+
+  return Cipheriv(cipher);
+}
+
+Decipheriv crypto::createDecipheriv(
+  inox::StringView algorithm,
+  const inox::Value& key,
+  const inox::Value& iv,
+  const inox::Value& options
+) const {
+  CryptoCipherState* cipher = 0;
+
+  if (
+    CryptoCipherState_create(
+      &inox_default_allocator,
+      algorithm,
+      key.raw(),
+      iv.raw(),
+      options,
+      false,
+      &cipher
+    ) != INOX_OK
+  ) {
+    CryptoCipherState_free(cipher);
+
+    if (!inox::thrown()) {
+      inox_crypto_throw_failed("crypto.createDecipheriv failed");
+    }
+
+    return Decipheriv();
+  }
+
+  return Decipheriv(cipher);
 }
 
 Hash crypto::createHash(inox::StringView algorithm) const {
@@ -924,7 +1405,7 @@ static inox_status CryptoHashState_create(
 
   *out = 0;
 
-#if INOX_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HAS_EVP
   const EVP_MD* digest = inox_crypto_digest_algorithm(algorithm, algorithm_len);
 
   if (digest == 0) {
@@ -966,7 +1447,7 @@ static void CryptoHashState_free(CryptoHashState* hash) {
     return;
   }
 
-#if INOX_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HAS_EVP
   if (hash->ctx != 0) {
     EVP_MD_CTX_free(hash->ctx);
   }
@@ -999,7 +1480,7 @@ static inox_status CryptoHmacState_create(
     return INOX_ERR_TYPE;
   }
 
-#if INOX_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HAS_EVP
   const EVP_MD* digest = inox_crypto_digest_algorithm(algorithm, algorithm_len);
 
   if (digest == 0) {
@@ -1067,7 +1548,7 @@ static void CryptoHmacState_free(CryptoHmacState* hmac) {
     return;
   }
 
-#if INOX_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HAS_EVP
   if (hmac->ctx != 0) {
     HMAC_CTX_free(hmac->ctx);
   }
@@ -1076,6 +1557,391 @@ static void CryptoHmacState_free(CryptoHmacState* hmac) {
   if (hmac->allocator != 0 && hmac->allocator->free != 0) {
     hmac->allocator->free(hmac->allocator->user, hmac, sizeof(CryptoHmacState), alignof(CryptoHmacState));
   }
+}
+
+#if INOX_CRYPTO_HAS_EVP
+static const EVP_CIPHER* inox_crypto_cipher_algorithm(
+  inox::StringView algorithm,
+  size_t* key_length
+) {
+  const std::string_view name(algorithm.bytes, algorithm.len);
+
+  if (name == "aes-128-gcm") {
+    *key_length = 16;
+    return EVP_aes_128_gcm();
+  }
+
+  if (name == "aes-192-gcm") {
+    *key_length = 24;
+    return EVP_aes_192_gcm();
+  }
+
+  if (name == "aes-256-gcm") {
+    *key_length = 32;
+    return EVP_aes_256_gcm();
+  }
+
+  return 0;
+}
+
+static int inox_crypto_auth_tag_length(const inox::Value& options, size_t* out) {
+  *out = 16;
+
+  if (options.tag == INOX_TAG_UNDEFINED || options.tag == INOX_TAG_NULL) {
+    return 1;
+  }
+
+  if (options.tag != INOX_TAG_OBJECT && options.tag != INOX_TAG_CLASS_INSTANCE) {
+    return 0;
+  }
+
+  inox::Value value = inox::get(options.raw(), "authTagLength");
+
+  if (inox::thrown()) {
+    return 0;
+  }
+
+  if (value.tag == INOX_TAG_UNDEFINED) {
+    return 1;
+  }
+
+  if (value.tag != INOX_TAG_NUMBER || !inox_crypto_number_to_size(value.as.number, out)) {
+    return 0;
+  }
+
+  return *out == 4 || *out == 8 || (*out >= 12 && *out <= 16);
+}
+#endif
+
+static inox_status CryptoCipherState_create(
+  inox_allocator* allocator,
+  inox::StringView algorithm,
+  inox_value key,
+  inox_value iv,
+  const inox::Value& options,
+  bool encrypt,
+  CryptoCipherState** out
+) {
+  if (allocator == 0 || allocator->alloc == 0 || allocator->free == 0 || out == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  *out = 0;
+
+#if INOX_CRYPTO_HAS_EVP
+  const uint8_t* key_bytes = 0;
+  const uint8_t* iv_bytes = 0;
+  size_t key_len = 0;
+  size_t iv_len = 0;
+  size_t expected_key_len = 0;
+  size_t auth_tag_len = 0;
+  const EVP_CIPHER* cipher = inox_crypto_cipher_algorithm(algorithm, &expected_key_len);
+
+  if (
+    cipher == 0 ||
+    inox_crypto_data(key, &key_bytes, &key_len) != INOX_OK ||
+    inox_crypto_data(iv, &iv_bytes, &iv_len) != INOX_OK ||
+    !inox_crypto_auth_tag_length(options, &auth_tag_len) ||
+    key_len != expected_key_len ||
+    iv_len == 0 ||
+    iv_len > (size_t)INT_MAX
+  ) {
+    return inox::thrown() ? INOX_ERR_THROW : INOX_ERR_TYPE;
+  }
+
+  CryptoCipherState* state = (CryptoCipherState*)allocator->alloc(
+    allocator->user,
+    sizeof(CryptoCipherState),
+    alignof(CryptoCipherState)
+  );
+
+  if (state == 0) {
+    return INOX_ERR_OOM;
+  }
+
+  state->allocator = allocator;
+  state->ctx = EVP_CIPHER_CTX_new();
+  state->auth_tag_length = auth_tag_len;
+  state->encrypt = encrypt ? 1 : 0;
+  state->finalized = 0;
+  state->updated = 0;
+  state->auth_tag_set = 0;
+
+  if (state->ctx == 0) {
+    allocator->free(allocator->user, state, sizeof(CryptoCipherState), alignof(CryptoCipherState));
+    return INOX_ERR_OOM;
+  }
+
+  if (
+    EVP_CipherInit_ex(state->ctx, cipher, 0, 0, 0, encrypt ? 1 : 0) != 1 ||
+    EVP_CIPHER_CTX_ctrl(state->ctx, EVP_CTRL_GCM_SET_IVLEN, (int)iv_len, 0) != 1 ||
+    EVP_CipherInit_ex(state->ctx, 0, 0, key_bytes, iv_bytes, encrypt ? 1 : 0) != 1
+  ) {
+    CryptoCipherState_free(state);
+    return INOX_ERR_UNSUPPORTED;
+  }
+
+  *out = state;
+  return INOX_OK;
+#else
+  (void)algorithm;
+  (void)key;
+  (void)iv;
+  (void)options;
+  (void)encrypt;
+
+  return INOX_ERR_UNSUPPORTED;
+#endif
+}
+
+static void CryptoCipherState_free(CryptoCipherState* cipher) {
+  if (cipher == 0) {
+    return;
+  }
+
+#if INOX_CRYPTO_HAS_EVP
+  if (cipher->ctx != 0) {
+    EVP_CIPHER_CTX_free(cipher->ctx);
+  }
+#endif
+
+  if (cipher->allocator != 0 && cipher->allocator->free != 0) {
+    cipher->allocator->free(
+      cipher->allocator->user,
+      cipher,
+      sizeof(CryptoCipherState),
+      alignof(CryptoCipherState)
+    );
+  }
+}
+
+static Buffer inox_crypto_cipher_update_raw(
+  CryptoCipherState* cipher,
+  const uint8_t* bytes,
+  size_t len,
+  const char* message
+) {
+  if (
+    cipher == 0 ||
+    cipher->finalized ||
+    (bytes == 0 && len != 0) ||
+    len > (size_t)INT_MAX
+  ) {
+    inox_crypto_throw_failed(message);
+    return Buffer();
+  }
+
+#if INOX_CRYPTO_HAS_EVP
+  Buffer result = Buffer::alloc((double)len);
+
+  if (inox::thrown() || !result.valid()) {
+    if (!inox::thrown()) {
+      inox_crypto_throw_failed(message);
+    }
+
+    return Buffer();
+  }
+
+  int output_len = 0;
+
+  if (
+    EVP_CipherUpdate(cipher->ctx, result.bytes().data(), &output_len, bytes, (int)len) != 1 ||
+    output_len < 0 ||
+    (size_t)output_len > len
+  ) {
+    inox_crypto_throw_failed(message);
+    return Buffer();
+  }
+
+  cipher->updated = 1;
+
+  if ((size_t)output_len == len) {
+    return result;
+  }
+
+  return result.slice(0, (double)output_len);
+#else
+  (void)bytes;
+  (void)len;
+  inox_crypto_throw_failed(message);
+  return Buffer();
+#endif
+}
+
+static Buffer inox_crypto_cipher_final(CryptoCipherState* cipher, const char* message) {
+  if (cipher == 0 || cipher->finalized) {
+    inox_crypto_throw_failed(message);
+    return Buffer();
+  }
+
+  cipher->finalized = 1;
+
+#if INOX_CRYPTO_HAS_EVP
+  uint8_t output[EVP_MAX_BLOCK_LENGTH];
+  int output_len = 0;
+
+  if (EVP_CipherFinal_ex(cipher->ctx, output, &output_len) != 1 || output_len < 0) {
+    inox_crypto_throw_failed(message);
+    return Buffer();
+  }
+
+  Buffer result(std::span<const uint8_t>(output, (size_t)output_len));
+
+  if (inox::thrown() || !result.valid()) {
+    if (!inox::thrown()) {
+      inox_crypto_throw_failed(message);
+    }
+
+    return Buffer();
+  }
+
+  return result;
+#else
+  inox_crypto_throw_failed(message);
+  return Buffer();
+#endif
+}
+
+static Buffer inox_crypto_cipher_auth_tag(CryptoCipherState* cipher, const char* message) {
+  if (cipher == 0 || !cipher->encrypt || !cipher->finalized) {
+    inox_crypto_throw_failed(message);
+    return Buffer();
+  }
+
+#if INOX_CRYPTO_HAS_EVP
+  Buffer tag = Buffer::alloc((double)cipher->auth_tag_length);
+
+  if (inox::thrown() || !tag.valid()) {
+    if (!inox::thrown()) {
+      inox_crypto_throw_failed(message);
+    }
+
+    return Buffer();
+  }
+
+  if (
+    EVP_CIPHER_CTX_ctrl(
+      cipher->ctx,
+      EVP_CTRL_GCM_GET_TAG,
+      (int)cipher->auth_tag_length,
+      tag.bytes().data()
+    ) != 1
+  ) {
+    inox_crypto_throw_failed(message);
+    return Buffer();
+  }
+
+  return tag;
+#else
+  inox_crypto_throw_failed(message);
+  return Buffer();
+#endif
+}
+
+static inox_status inox_crypto_cipher_set_aad(
+  CryptoCipherState* cipher,
+  const uint8_t* bytes,
+  size_t len
+) {
+  if (
+    cipher == 0 ||
+    cipher->finalized ||
+    cipher->updated ||
+    (bytes == 0 && len != 0) ||
+    len > (size_t)INT_MAX
+  ) {
+    return INOX_ERR_FIELD;
+  }
+
+#if INOX_CRYPTO_HAS_EVP
+  int output_len = 0;
+  return EVP_CipherUpdate(cipher->ctx, 0, &output_len, bytes, (int)len) == 1
+    ? INOX_OK
+    : INOX_ERR_UNSUPPORTED;
+#else
+  (void)bytes;
+  (void)len;
+  return INOX_ERR_UNSUPPORTED;
+#endif
+}
+
+static inox_status inox_crypto_cipher_set_aad(
+  CryptoCipherState* cipher,
+  inox::StringView data,
+  const inox::Value& options
+) {
+  if (options.tag == INOX_TAG_UNDEFINED || options.tag == INOX_TAG_NULL) {
+    return inox_crypto_cipher_set_aad(cipher, (const uint8_t*)data.bytes, data.len);
+  }
+
+  if (options.tag != INOX_TAG_OBJECT && options.tag != INOX_TAG_CLASS_INSTANCE) {
+    return INOX_ERR_TYPE;
+  }
+
+  inox::Value encoding_value = inox::get(options.raw(), "encoding");
+
+  if (inox::thrown()) {
+    return INOX_ERR_THROW;
+  }
+
+  if (encoding_value.tag == INOX_TAG_UNDEFINED) {
+    return inox_crypto_cipher_set_aad(cipher, (const uint8_t*)data.bytes, data.len);
+  }
+
+  if (encoding_value.tag != INOX_TAG_STRING || encoding_value.as.ref == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  Buffer decoded = Buffer::from(data, inox::String(encoding_value));
+
+  if (inox::thrown() || !decoded.valid()) {
+    return inox::thrown() ? INOX_ERR_THROW : INOX_ERR_TYPE;
+  }
+
+  return inox_crypto_cipher_set_aad(cipher, decoded.bytes().data(), decoded.length());
+}
+
+static inox_status inox_crypto_cipher_set_auth_tag(
+  CryptoCipherState* cipher,
+  const uint8_t* bytes,
+  size_t len
+) {
+  if (
+    cipher == 0 ||
+    cipher->encrypt ||
+    cipher->finalized ||
+    cipher->auth_tag_set ||
+    bytes == 0 ||
+    len != cipher->auth_tag_length
+  ) {
+    return INOX_ERR_FIELD;
+  }
+
+#if INOX_CRYPTO_HAS_EVP
+  if (
+    EVP_CIPHER_CTX_ctrl(
+      cipher->ctx,
+      EVP_CTRL_GCM_SET_TAG,
+      (int)len,
+      (void*)bytes
+    ) != 1
+  ) {
+    return INOX_ERR_UNSUPPORTED;
+  }
+
+  cipher->auth_tag_set = 1;
+  return INOX_OK;
+#else
+  (void)bytes;
+  (void)len;
+  return INOX_ERR_UNSUPPORTED;
+#endif
+}
+
+static int inox_crypto_cipher_output_encoding(inox::StringView encoding, bool decrypt) {
+  const std::string_view name(encoding.bytes, encoding.len);
+
+  return name == "hex" || (decrypt && (name == "utf8" || name == "utf-8"));
 }
 
 static void inox_crypto_throw_failed(const char* message) {
@@ -1151,7 +2017,7 @@ static int inox_crypto_number_is_integer(inox_number value) {
   return (inox_number)converted == value;
 }
 
-#if INOX_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HAS_EVP
 static const EVP_MD* inox_crypto_digest_algorithm(const char* algorithm, size_t algorithm_len) {
   const std::string_view name(algorithm, algorithm_len);
 
@@ -1219,7 +2085,7 @@ static inox_status inox_crypto_data(inox_value data, const uint8_t** bytes, size
   return INOX_ERR_TYPE;
 }
 
-#if INOX_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HAS_EVP
 static int inox_crypto_scrypt_option(
   const inox::Value& options,
   const char* name,
@@ -1383,7 +2249,7 @@ static inox_status CryptoHashState_update(CryptoHashState* hash, const uint8_t* 
     return INOX_ERR_FIELD;
   }
 
-#if INOX_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HAS_EVP
   return EVP_DigestUpdate(hash->ctx, bytes, len) == 1 ? INOX_OK : INOX_ERR_UNSUPPORTED;
 #else
   (void)bytes;
@@ -1398,7 +2264,7 @@ static inox_status CryptoHmacState_update(CryptoHmacState* hmac, const uint8_t* 
     return INOX_ERR_FIELD;
   }
 
-#if INOX_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HAS_EVP
   return HMAC_Update(hmac->ctx, bytes, len) == 1 ? INOX_OK : INOX_ERR_UNSUPPORTED;
 #else
   (void)bytes;
@@ -1413,7 +2279,7 @@ static inox_status CryptoHashState_digest_raw(CryptoHashState* hash, uint8_t* di
     return INOX_ERR_FIELD;
   }
 
-#if INOX_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HAS_EVP
   unsigned int digest_len = 0;
 
   if (EVP_DigestFinal_ex(hash->ctx, digest, &digest_len) != 1) {
@@ -1444,7 +2310,7 @@ static inox_status CryptoHmacState_digest_raw(CryptoHmacState* hmac, uint8_t* di
     return INOX_ERR_FIELD;
   }
 
-#if INOX_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HAS_EVP
   unsigned int digest_len = 0;
 
   if (HMAC_Final(hmac->ctx, digest, &digest_len) != 1) {
