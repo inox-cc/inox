@@ -35,6 +35,97 @@ export interface DeleteResult {
   readonly deletedCount: number;
 }
 
+export interface BulkWriteOptions {
+  readonly ordered?: boolean;
+}
+
+export interface BulkWriteResult {
+  readonly acknowledged: boolean;
+  readonly insertedCount: number;
+  readonly matchedCount: number;
+  readonly modifiedCount: number;
+  readonly deletedCount: number;
+  readonly upsertedCount: number;
+}
+
+export interface InsertOneModel<TSchema extends Document = Document> {
+  readonly insertOne: {
+    readonly document: TSchema;
+  };
+}
+
+export interface UpdateOneModel<TSchema extends Document = Document> {
+  readonly updateOne: {
+    readonly filter: Filter<TSchema>;
+    readonly update: UpdateFilter<TSchema>;
+    readonly upsert?: boolean;
+  };
+}
+
+export interface UpdateManyModel<TSchema extends Document = Document> {
+  readonly updateMany: {
+    readonly filter: Filter<TSchema>;
+    readonly update: UpdateFilter<TSchema>;
+    readonly upsert?: boolean;
+  };
+}
+
+export interface ReplaceOneModel<TSchema extends Document = Document> {
+  readonly replaceOne: {
+    readonly filter: Filter<TSchema>;
+    readonly replacement: TSchema;
+    readonly upsert?: boolean;
+  };
+}
+
+export interface DeleteOneModel<TSchema extends Document = Document> {
+  readonly deleteOne: {
+    readonly filter: Filter<TSchema>;
+  };
+}
+
+export interface DeleteManyModel<TSchema extends Document = Document> {
+  readonly deleteMany: {
+    readonly filter: Filter<TSchema>;
+  };
+}
+
+export type AnyBulkWriteOperation<TSchema extends Document = Document> =
+  | InsertOneModel<TSchema>
+  | UpdateOneModel<TSchema>
+  | UpdateManyModel<TSchema>
+  | ReplaceOneModel<TSchema>
+  | DeleteOneModel<TSchema>
+  | DeleteManyModel<TSchema>;
+
+export interface ClientBulkWriteModel {
+  readonly namespace: string;
+  readonly name: string;
+  readonly document?: Document;
+  readonly filter?: Document;
+  readonly update?: Document;
+  readonly replacement?: Document;
+  readonly upsert?: boolean;
+}
+
+export type IndexSpecification = Document;
+
+export interface CreateIndexesOptions {
+  readonly commitQuorum?: string | number;
+}
+
+export interface CreateIndexOptions {
+  readonly name?: string;
+  readonly unique?: boolean;
+  readonly sparse?: boolean;
+  readonly expireAfterSeconds?: number;
+  readonly partialFilterExpression?: Document;
+}
+
+export interface IndexDescription extends CreateIndexOptions {
+  readonly key: IndexSpecification;
+}
+
 export class MongoClient {
   constructor(uri: string, options?: MongoClientOptions);
 
@@ -43,6 +134,7 @@ export class MongoClient {
   connect(): Promise<MongoClient>;
   db(): Db;
   db(name: string): Db;
+  bulkWrite(models: ClientBulkWriteModel[], options?: BulkWriteOptions): Promise<BulkWriteResult>;
   close(): Promise<void>;
 }
 
@@ -72,6 +164,9 @@ export class Collection<TSchema extends Document = Document> {
   distinct(key: string, filter?: Filter<TSchema>): Promise<unknown[]>;
   countDocuments(filter?: Filter<TSchema>): Promise<number>;
   estimatedDocumentCount(): Promise<number>;
+  createIndex(indexSpec: IndexSpecification, options?: CreateIndexOptions): Promise<string>;
+  createIndexes(indexSpecs: IndexDescription[], options?: CreateIndexesOptions): Promise<string[]>;
+  bulkWrite(operations: AnyBulkWriteOperation<TSchema>[], options?: BulkWriteOptions): Promise<BulkWriteResult>;
   insertOne(document: TSchema): Promise<InsertOneResult<TSchema>>;
   insertMany(documents: TSchema[]): Promise<InsertManyResult<TSchema>>;
   updateOne(filter: Filter<TSchema>, update: UpdateFilter<TSchema>): Promise<UpdateResult<TSchema>>;

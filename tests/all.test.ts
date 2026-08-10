@@ -138,6 +138,8 @@ async function runHostedIntegrationTests(): Promise<void> {
   const { assertHostedCryptoScryptRuntime } = await import('./integration/crypto-scrypt-runtime-hosted.test.ts')
   const { assertHostedMongoBsonRuntime } = await import('./integration/mongodb-bson-runtime-hosted.test.ts')
   const { assertHostedMongoCrudRuntime } = await import('./integration/mongodb-crud-runtime-hosted.test.ts')
+  const { assertHostedMongoIndexBulkRuntime } =
+    await import('./integration/mongodb-index-bulk-runtime-hosted.test.ts')
   const { assertHostedMongoQueryRuntime } = await import('./integration/mongodb-query-runtime-hosted.test.ts')
   const { assertDateLowersToGlobalObject } = await import('./integration/date-global-object-lowering.test.ts')
   const { assertPerformanceLowersToGlobalObject } =
@@ -333,6 +335,10 @@ async function runHostedIntegrationTests(): Promise<void> {
 
     await t.test('mongodb-crud-runtime-hosted', async () => {
       await assertHostedMongoCrudRuntime()
+    })
+
+    await t.test('mongodb-index-bulk-runtime-hosted', async () => {
+      await assertHostedMongoIndexBulkRuntime()
     })
 
     await t.test('mongodb-query-runtime-hosted', async () => {
@@ -649,6 +655,8 @@ async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<
   const { assertNativeCryptoScryptRuntime } = await import('./integration/crypto-scrypt-runtime-native.test.ts')
   const { assertNativeMongoBsonRuntime } = await import('./integration/mongodb-bson-runtime-native.test.ts')
   const { assertNativeMongoCrudRuntime } = await import('./integration/mongodb-crud-runtime-native.test.ts')
+  const { assertNativeMongoIndexBulkRuntime } =
+    await import('./integration/mongodb-index-bulk-runtime-native.test.ts')
   const { assertNativeMongoQueryRuntime } = await import('./integration/mongodb-query-runtime-native.test.ts')
   const { assertNativeCompilerUsesDirectNativeInitializers } =
     await import('./integration/direct-native-variable-lowering.test.ts')
@@ -721,6 +729,10 @@ async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<
 
     await t.test('mongodb-crud-runtime-native', async () => {
       await assertNativeMongoCrudRuntime(compilerPath)
+    })
+
+    await t.test('mongodb-index-bulk-runtime-native', async () => {
+      await assertNativeMongoIndexBulkRuntime(compilerPath)
     })
 
     await t.test('mongodb-query-runtime-native', async () => {

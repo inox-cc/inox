@@ -28,6 +28,9 @@ test('mongodb package подключается только через bare-pack
   assert.ok(descriptor?.operations.some((item) => item.bindingId === 'mongodb#module:mongodb:BSON.deserialize'))
   assert.ok(descriptor?.operations.some((item) => item.bindingId === 'mongodb#Collection.find'))
   assert.ok(descriptor?.operations.some((item) => item.bindingId === 'mongodb#Cursor.toArray'))
+  assert.ok(descriptor?.operations.some((item) => item.bindingId === 'mongodb#Collection.createIndexes'))
+  assert.ok(descriptor?.operations.some((item) => item.bindingId === 'mongodb#Collection.bulkWrite'))
+  assert.ok(descriptor?.operations.some((item) => item.bindingId === 'mongodb#MongoClient.bulkWrite'))
 })
 
 test('mongodb facade не раскрывает заголовки C Driver', async () => {

@@ -64,6 +64,8 @@ public:
   inox::Promise connect() const;
   MongoDatabase db() const;
   MongoDatabase db(inox::StringView name) const;
+  inox::Promise bulkWrite(const inox::Value& models) const;
+  inox::Promise bulkWrite(const inox::Value& models, const inox::Value& options) const;
   inox::Promise close() const;
   bool valid() const;
   inox::Value runtimeValue() const;
@@ -137,6 +139,12 @@ public:
   inox::Promise countDocuments() const;
   inox::Promise countDocuments(const inox::Value& filter) const;
   inox::Promise estimatedDocumentCount() const;
+  inox::Promise createIndex(const inox::Value& indexSpec) const;
+  inox::Promise createIndex(const inox::Value& indexSpec, const inox::Value& options) const;
+  inox::Promise createIndexes(const inox::Value& indexSpecs) const;
+  inox::Promise createIndexes(const inox::Value& indexSpecs, const inox::Value& options) const;
+  inox::Promise bulkWrite(const inox::Value& operations) const;
+  inox::Promise bulkWrite(const inox::Value& operations, const inox::Value& options) const;
   inox::Promise insertOne(const inox::Value& document) const;
   inox::Promise insertMany(const inox::Value& documents) const;
   inox::Promise updateOne(const inox::Value& filter, const inox::Value& update) const;

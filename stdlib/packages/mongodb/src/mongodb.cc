@@ -813,11 +813,15 @@ public:
 
 enum class MongoJobKind {
   connect,
+  clientBulkWrite,
   cursorNext,
   cursorToArray,
   distinct,
   countDocuments,
   estimatedDocumentCount,
+  createIndex,
+  createIndexes,
+  collectionBulkWrite,
   findOne,
   findOneAndUpdate,
   insertOne,
@@ -841,10 +845,12 @@ struct MongoJob final {
   std::vector<bson_t*> documents;
   bson_t* result = nullptr;
   std::string text;
+  std::string textResult;
   double numberResult = 0;
   std::size_t resultCount = 0;
   bool arrayResult = false;
   bool nullResult = false;
+  bool stringResult = false;
   std::array<char, 512> error{};
 
   ~MongoJob() {
@@ -874,6 +880,18 @@ struct MongoJob final {
     return error[0] != '\0';
   }
 };
+
+using MongoIndexModelHandle = std::unique_ptr<mongoc_index_model_t, decltype(&mongoc_index_model_destroy)>;
+using MongoCollectionBulkHandle = std::unique_ptr<mongoc_bulk_operation_t, decltype(&mongoc_bulk_operation_destroy)>;
+using MongoClientBulkHandle = std::unique_ptr<mongoc_bulkwrite_t, decltype(&mongoc_bulkwrite_destroy)>;
+using MongoClientBulkOptionsHandle =
+  std::unique_ptr<mongoc_bulkwriteopts_t, decltype(&mongoc_bulkwriteopts_destroy)>;
+using MongoClientUpdateOneOptionsHandle =
+  std::unique_ptr<mongoc_bulkwrite_updateoneopts_t, decltype(&mongoc_bulkwrite_updateoneopts_destroy)>;
+using MongoClientUpdateManyOptionsHandle =
+  std::unique_ptr<mongoc_bulkwrite_updatemanyopts_t, decltype(&mongoc_bulkwrite_updatemanyopts_destroy)>;
+using MongoClientReplaceOneOptionsHandle =
+  std::unique_ptr<mongoc_bulkwrite_replaceoneopts_t, decltype(&mongoc_bulkwrite_replaceoneopts_destroy)>;
 
 template <typename T>
 static inox_status inox_mongodb_facade_copy(inox_allocator* allocator, const void* instance, void** out) {
@@ -1299,6 +1317,658 @@ static bson_t* inox_mongodb_normalize_delete_result(const bson_t* reply) {
   return result;
 }
 
+static bool inox_mongodb_bson_document_field(const bson_t* source, const char* name, bson_t& result) {
+  bson_iter_t iterator;
+
+  if (!bson_iter_init_find(&iterator, source, name) || !BSON_ITER_HOLDS_DOCUMENT(&iterator)) {
+    return false;
+  }
+
+  std::uint32_t length = 0;
+  const std::uint8_t* data = nullptr;
+  bson_iter_document(&iterator, &length, &data);
+  return data != nullptr && bson_init_static(&result, data, length);
+}
+
+static bool inox_mongodb_bson_string_field(
+  const bson_t* source,
+  const char* name,
+  std::string& result
+) {
+  bson_iter_t iterator;
+
+  if (!bson_iter_init_find(&iterator, source, name) || !BSON_ITER_HOLDS_UTF8(&iterator)) {
+    return false;
+  }
+
+  std::uint32_t length = 0;
+  const char* value = bson_iter_utf8(&iterator, &length);
+  result.assign(value, length);
+  return true;
+}
+
+static bool inox_mongodb_bson_optional_bool(
+  const bson_t* source,
+  const char* name,
+  bool& result,
+  MongoJob& job
+) {
+  bson_iter_t iterator;
+
+  if (!bson_iter_init_find(&iterator, source, name)) {
+    return true;
+  }
+
+  if (!BSON_ITER_HOLDS_BOOL(&iterator)) {
+    job.fail("TypeError: MongoDB bulk write boolean option is invalid");
+    return false;
+  }
+
+  result = bson_iter_bool(&iterator);
+  return true;
+}
+
+static bool inox_mongodb_index_direction(const bson_iter_t& iterator, std::string& result) {
+  char buffer[64];
+  int length = -1;
+
+  if (BSON_ITER_HOLDS_DOUBLE(&iterator)) {
+    const double value = bson_iter_double(&iterator);
+
+    if (!std::isfinite(value)) {
+      return false;
+    }
+
+    length = std::snprintf(buffer, sizeof(buffer), "%.17g", value);
+  } else if (BSON_ITER_HOLDS_INT32(&iterator)) {
+    length = std::snprintf(buffer, sizeof(buffer), "%d", bson_iter_int32(&iterator));
+  } else if (BSON_ITER_HOLDS_INT64(&iterator)) {
+    length = std::snprintf(buffer, sizeof(buffer), "%lld", (long long)bson_iter_int64(&iterator));
+  } else if (BSON_ITER_HOLDS_UTF8(&iterator)) {
+    std::uint32_t valueLength = 0;
+    const char* value = bson_iter_utf8(&iterator, &valueLength);
+    result.assign(value, valueLength);
+    return true;
+  } else {
+    return false;
+  }
+
+  if (length < 0 || (std::size_t)length >= sizeof(buffer)) {
+    return false;
+  }
+
+  result.assign(buffer, (std::size_t)length);
+  return true;
+}
+
+static bool inox_mongodb_index_name(
+  const bson_t* keys,
+  const bson_t* options,
+  std::string& result,
+  MongoJob& job
+) {
+  bson_iter_t customName;
+
+  if (options != nullptr && bson_iter_init_find(&customName, options, "name")) {
+    if (!BSON_ITER_HOLDS_UTF8(&customName)) {
+      job.fail("TypeError: MongoDB index name must be a string");
+      return false;
+    }
+
+    std::uint32_t length = 0;
+    const char* value = bson_iter_utf8(&customName, &length);
+    result.assign(value, length);
+    return true;
+  }
+
+  bson_iter_t iterator;
+
+  if (!bson_iter_init(&iterator, keys)) {
+    job.fail("TypeError: MongoDB index specification is invalid");
+    return false;
+  }
+
+  while (bson_iter_next(&iterator)) {
+    std::string direction;
+
+    if (!inox_mongodb_index_direction(iterator, direction)) {
+      job.fail("TypeError: MongoDB index direction must be a number or string");
+      return false;
+    }
+
+    if (!result.empty()) {
+      result.push_back('_');
+    }
+
+    result.append(bson_iter_key(&iterator), bson_iter_key_len(&iterator));
+    result.push_back('_');
+    result.append(direction);
+  }
+
+  if (result.empty()) {
+    job.fail("MongoInvalidArgumentError: MongoDB index specification must not be empty");
+    return false;
+  }
+
+  return true;
+}
+
+static bool inox_mongodb_run_create_indexes_job(
+  MongoJob& job,
+  mongoc_collection_t* collection,
+  bson_error_t& error
+) {
+  std::vector<MongoIndexModelHandle> models;
+  std::vector<std::string> names;
+
+  if (job.kind == MongoJobKind::createIndex) {
+    std::string name;
+
+    if (!inox_mongodb_index_name(job.first, job.second, name, job)) {
+      return false;
+    }
+
+    if (!bson_has_field(job.second, "name") && !BSON_APPEND_UTF8(job.second, "name", name.c_str())) {
+      return false;
+    }
+
+    MongoIndexModelHandle model(mongoc_index_model_new(job.first, job.second), mongoc_index_model_destroy);
+
+    if (!model) {
+      job.fail("MongoRuntimeError: MongoDB index model could not be created");
+      return false;
+    }
+
+    models.push_back(std::move(model));
+    names.push_back(std::move(name));
+  } else {
+    bson_iter_t iterator;
+
+    if (!bson_iter_init(&iterator, job.first)) {
+      job.fail("TypeError: MongoDB index descriptions are invalid");
+      return false;
+    }
+
+    while (bson_iter_next(&iterator)) {
+      if (!BSON_ITER_HOLDS_DOCUMENT(&iterator)) {
+        job.fail("TypeError: MongoDB index description must be an object");
+        return false;
+      }
+
+      std::uint32_t length = 0;
+      const std::uint8_t* data = nullptr;
+      bson_iter_document(&iterator, &length, &data);
+      bson_t description;
+      bson_t keys;
+      bson_t options;
+      bson_init(&options);
+
+      if (
+        data == nullptr || !bson_init_static(&description, data, length) ||
+        !inox_mongodb_bson_document_field(&description, "key", keys)
+      ) {
+        bson_destroy(&options);
+        job.fail("TypeError: MongoDB index description requires a key document");
+        return false;
+      }
+
+      bson_copy_to_excluding_noinit(&description, &options, "key", nullptr);
+      std::string name;
+
+      if (!inox_mongodb_index_name(&keys, &options, name, job)) {
+        bson_destroy(&options);
+        return false;
+      }
+
+      if (!bson_has_field(&options, "name") && !BSON_APPEND_UTF8(&options, "name", name.c_str())) {
+        bson_destroy(&options);
+        return false;
+      }
+
+      MongoIndexModelHandle model(mongoc_index_model_new(&keys, &options), mongoc_index_model_destroy);
+      bson_destroy(&options);
+
+      if (!model) {
+        job.fail("MongoRuntimeError: MongoDB index model could not be created");
+        return false;
+      }
+
+      models.push_back(std::move(model));
+      names.push_back(std::move(name));
+    }
+  }
+
+  if (models.empty()) {
+    job.fail("MongoInvalidArgumentError: MongoDB index list must not be empty");
+    return false;
+  }
+
+  bson_t reply;
+  bson_init(&reply);
+  std::vector<mongoc_index_model_t*> modelPointers;
+  modelPointers.reserve(models.size());
+
+  for (const MongoIndexModelHandle& model : models) {
+    modelPointers.push_back(model.get());
+  }
+
+  const bool succeeded = mongoc_collection_create_indexes_with_opts(
+    collection,
+    modelPointers.data(),
+    modelPointers.size(),
+    job.kind == MongoJobKind::createIndexes ? job.second : nullptr,
+    &reply,
+    &error
+  );
+  bson_destroy(&reply);
+
+  if (!succeeded) {
+    return false;
+  }
+
+  if (job.kind == MongoJobKind::createIndex) {
+    job.stringResult = true;
+    job.textResult = std::move(names[0]);
+    return true;
+  }
+
+  job.result = bson_new();
+  job.arrayResult = true;
+
+  if (job.result == nullptr) {
+    return false;
+  }
+
+  for (std::size_t index = 0; index < names.size(); index += 1) {
+    char key[32];
+    const int keyLength = std::snprintf(key, sizeof(key), "%zu", index);
+
+    if (
+      keyLength < 0 || (std::size_t)keyLength >= sizeof(key) ||
+      !bson_append_utf8(job.result, key, keyLength, names[index].data(), names[index].size())
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+static bson_t* inox_mongodb_normalize_bulk_result(const bson_t* reply) {
+  bson_t* result = bson_new();
+
+  if (result == nullptr || !BSON_APPEND_BOOL(result, "acknowledged", true)) {
+    bson_destroy(result);
+    return nullptr;
+  }
+
+  struct CountField final {
+    const char* source;
+    const char* target;
+  };
+
+  const CountField fields[] = {
+    { "nInserted", "insertedCount" },
+    { "nMatched", "matchedCount" },
+    { "nModified", "modifiedCount" },
+    { "nRemoved", "deletedCount" },
+    { "nUpserted", "upsertedCount" }
+  };
+
+  for (const CountField& field : fields) {
+    bson_iter_t iterator;
+
+    if (bson_iter_init_find(&iterator, reply, field.source)) {
+      if (!bson_append_value(result, field.target, -1, bson_iter_value(&iterator))) {
+        bson_destroy(result);
+        return nullptr;
+      }
+    } else if (!BSON_APPEND_INT32(result, field.target, 0)) {
+      bson_destroy(result);
+      return nullptr;
+    }
+  }
+
+  return result;
+}
+
+static bool inox_mongodb_bulk_operation_document(
+  const bson_t& operation,
+  const char* name,
+  bson_t& result,
+  MongoJob& job
+) {
+  if (!inox_mongodb_bson_document_field(&operation, name, result)) {
+    job.fail("TypeError: MongoDB bulk write model is missing a required document");
+    return false;
+  }
+
+  return true;
+}
+
+static bool inox_mongodb_append_collection_bulk_operation(
+  MongoJob& job,
+  mongoc_bulk_operation_t* bulk,
+  const bson_t& model,
+  bson_error_t& error
+) {
+  bson_iter_t iterator;
+
+  if (!bson_iter_init(&iterator, &model) || !bson_iter_next(&iterator) || !BSON_ITER_HOLDS_DOCUMENT(&iterator)) {
+    job.fail("TypeError: MongoDB bulk write model is invalid");
+    return false;
+  }
+
+  const std::string name(bson_iter_key(&iterator), bson_iter_key_len(&iterator));
+  std::uint32_t length = 0;
+  const std::uint8_t* data = nullptr;
+  bson_iter_document(&iterator, &length, &data);
+  bson_t operation;
+
+  if (data == nullptr || !bson_init_static(&operation, data, length) || bson_iter_next(&iterator)) {
+    job.fail("TypeError: MongoDB collection bulk write model must contain one operation");
+    return false;
+  }
+
+  bson_t first;
+  bson_t second;
+  bool upsert = false;
+
+  if (name == "insertOne") {
+    return inox_mongodb_bulk_operation_document(operation, "document", first, job) &&
+      mongoc_bulk_operation_insert_with_opts(bulk, &first, nullptr, &error);
+  }
+
+  if (!inox_mongodb_bulk_operation_document(operation, "filter", first, job)) {
+    return false;
+  }
+
+  if (name == "deleteOne") {
+    return mongoc_bulk_operation_remove_one_with_opts(bulk, &first, nullptr, &error);
+  }
+
+  if (name == "deleteMany") {
+    return mongoc_bulk_operation_remove_many_with_opts(bulk, &first, nullptr, &error);
+  }
+
+  const char* documentField = name == "replaceOne" ? "replacement" : "update";
+
+  if (
+    !inox_mongodb_bulk_operation_document(operation, documentField, second, job) ||
+    !inox_mongodb_bson_optional_bool(&operation, "upsert", upsert, job)
+  ) {
+    return false;
+  }
+
+  bson_t options;
+  bson_init(&options);
+  const bool optionsReady = !upsert || BSON_APPEND_BOOL(&options, "upsert", true);
+  bool appended = false;
+
+  if (optionsReady && name == "updateOne") {
+    appended = mongoc_bulk_operation_update_one_with_opts(bulk, &first, &second, &options, &error);
+  } else if (optionsReady && name == "updateMany") {
+    appended = mongoc_bulk_operation_update_many_with_opts(bulk, &first, &second, &options, &error);
+  } else if (optionsReady && name == "replaceOne") {
+    appended = mongoc_bulk_operation_replace_one_with_opts(bulk, &first, &second, &options, &error);
+  } else if (optionsReady) {
+    job.fail("MongoInvalidArgumentError: unsupported MongoDB bulk write operation");
+  }
+
+  bson_destroy(&options);
+  return appended;
+}
+
+static bool inox_mongodb_run_collection_bulk_job(
+  MongoJob& job,
+  mongoc_collection_t* collection,
+  bson_error_t& error
+) {
+  MongoCollectionBulkHandle bulk(
+    mongoc_collection_create_bulk_operation_with_opts(collection, job.second),
+    mongoc_bulk_operation_destroy
+  );
+
+  if (!bulk) {
+    job.fail("MongoRuntimeError: MongoDB bulk operation could not be created");
+    return false;
+  }
+
+  bson_iter_t iterator;
+  bool appended = bson_iter_init(&iterator, job.first);
+  std::size_t count = 0;
+
+  while (appended && bson_iter_next(&iterator)) {
+    if (!BSON_ITER_HOLDS_DOCUMENT(&iterator)) {
+      job.fail("TypeError: MongoDB bulk write operations must be objects");
+      appended = false;
+      break;
+    }
+
+    std::uint32_t length = 0;
+    const std::uint8_t* data = nullptr;
+    bson_iter_document(&iterator, &length, &data);
+    bson_t model;
+    appended = data != nullptr && bson_init_static(&model, data, length) &&
+      inox_mongodb_append_collection_bulk_operation(job, bulk.get(), model, error);
+    count += appended ? 1 : 0;
+  }
+
+  if (appended && count == 0) {
+    job.fail("MongoInvalidArgumentError: MongoDB bulk write operations must not be empty");
+    appended = false;
+  }
+
+  bson_t reply;
+  bson_init(&reply);
+  const std::uint32_t serverId = appended ? mongoc_bulk_operation_execute(bulk.get(), &reply, &error) : 0;
+
+  if (serverId != 0) {
+    job.result = inox_mongodb_normalize_bulk_result(&reply);
+  }
+
+  bson_destroy(&reply);
+  return serverId != 0 && job.result != nullptr;
+}
+
+static bool inox_mongodb_append_client_bulk_operation(
+  MongoJob& job,
+  mongoc_bulkwrite_t* bulk,
+  const bson_t& model,
+  bson_error_t& error
+) {
+  std::string name;
+  std::string namespaceName;
+
+  if (
+    !inox_mongodb_bson_string_field(&model, "name", name) ||
+    !inox_mongodb_bson_string_field(&model, "namespace", namespaceName) ||
+    namespaceName.empty()
+  ) {
+    job.fail("TypeError: MongoClient bulk write model requires name and namespace strings");
+    return false;
+  }
+
+  bson_t first;
+  bson_t second;
+  bool upsert = false;
+
+  if (name == "insertOne") {
+    return inox_mongodb_bulk_operation_document(model, "document", first, job) &&
+      mongoc_bulkwrite_append_insertone(bulk, namespaceName.c_str(), &first, nullptr, &error);
+  }
+
+  if (!inox_mongodb_bulk_operation_document(model, "filter", first, job)) {
+    return false;
+  }
+
+  if (name == "deleteOne") {
+    return mongoc_bulkwrite_append_deleteone(bulk, namespaceName.c_str(), &first, nullptr, &error);
+  }
+
+  if (name == "deleteMany") {
+    return mongoc_bulkwrite_append_deletemany(bulk, namespaceName.c_str(), &first, nullptr, &error);
+  }
+
+  const char* documentField = name == "replaceOne" ? "replacement" : "update";
+
+  if (
+    !inox_mongodb_bulk_operation_document(model, documentField, second, job) ||
+    !inox_mongodb_bson_optional_bool(&model, "upsert", upsert, job)
+  ) {
+    return false;
+  }
+
+  bool appended = false;
+
+  if (name == "updateOne") {
+    MongoClientUpdateOneOptionsHandle options(
+      mongoc_bulkwrite_updateoneopts_new(),
+      mongoc_bulkwrite_updateoneopts_destroy
+    );
+
+    if (options) {
+      mongoc_bulkwrite_updateoneopts_set_upsert(options.get(), upsert);
+      appended = mongoc_bulkwrite_append_updateone(
+        bulk,
+        namespaceName.c_str(),
+        &first,
+        &second,
+        options.get(),
+        &error
+      );
+    }
+  } else if (name == "updateMany") {
+    MongoClientUpdateManyOptionsHandle options(
+      mongoc_bulkwrite_updatemanyopts_new(),
+      mongoc_bulkwrite_updatemanyopts_destroy
+    );
+
+    if (options) {
+      mongoc_bulkwrite_updatemanyopts_set_upsert(options.get(), upsert);
+      appended = mongoc_bulkwrite_append_updatemany(
+        bulk,
+        namespaceName.c_str(),
+        &first,
+        &second,
+        options.get(),
+        &error
+      );
+    }
+  } else if (name == "replaceOne") {
+    MongoClientReplaceOneOptionsHandle options(
+      mongoc_bulkwrite_replaceoneopts_new(),
+      mongoc_bulkwrite_replaceoneopts_destroy
+    );
+
+    if (options) {
+      mongoc_bulkwrite_replaceoneopts_set_upsert(options.get(), upsert);
+      appended = mongoc_bulkwrite_append_replaceone(
+        bulk,
+        namespaceName.c_str(),
+        &first,
+        &second,
+        options.get(),
+        &error
+      );
+    }
+  } else {
+    job.fail("MongoInvalidArgumentError: unsupported MongoClient bulk write operation");
+  }
+
+  if (!appended && !job.failed() && error.message[0] == '\0') {
+    job.fail("MongoRuntimeError: MongoClient bulk write operation could not be created");
+  }
+
+  return appended;
+}
+
+static bson_t* inox_mongodb_normalize_client_bulk_result(const mongoc_bulkwriteresult_t* source) {
+  bson_t* result = bson_new();
+
+  if (
+    result == nullptr || !BSON_APPEND_BOOL(result, "acknowledged", true) ||
+    !BSON_APPEND_INT64(result, "insertedCount", mongoc_bulkwriteresult_insertedcount(source)) ||
+    !BSON_APPEND_INT64(result, "matchedCount", mongoc_bulkwriteresult_matchedcount(source)) ||
+    !BSON_APPEND_INT64(result, "modifiedCount", mongoc_bulkwriteresult_modifiedcount(source)) ||
+    !BSON_APPEND_INT64(result, "deletedCount", mongoc_bulkwriteresult_deletedcount(source)) ||
+    !BSON_APPEND_INT64(result, "upsertedCount", mongoc_bulkwriteresult_upsertedcount(source))
+  ) {
+    bson_destroy(result);
+    return nullptr;
+  }
+
+  return result;
+}
+
+static bool inox_mongodb_run_client_bulk_job(
+  MongoJob& job,
+  mongoc_client_t* client,
+  bson_error_t& error
+) {
+  MongoClientBulkHandle bulk(mongoc_client_bulkwrite_new(client), mongoc_bulkwrite_destroy);
+  MongoClientBulkOptionsHandle options(mongoc_bulkwriteopts_new(), mongoc_bulkwriteopts_destroy);
+
+  if (!bulk || !options) {
+    job.fail("MongoRuntimeError: MongoClient bulk write could not be created");
+    return false;
+  }
+
+  bool ordered = true;
+
+  if (!inox_mongodb_bson_optional_bool(job.second, "ordered", ordered, job)) {
+    return false;
+  }
+
+  mongoc_bulkwriteopts_set_ordered(options.get(), ordered);
+  bson_iter_t iterator;
+  bool appended = bson_iter_init(&iterator, job.first);
+  std::size_t count = 0;
+
+  while (appended && bson_iter_next(&iterator)) {
+    if (!BSON_ITER_HOLDS_DOCUMENT(&iterator)) {
+      job.fail("TypeError: MongoClient bulk write models must be objects");
+      appended = false;
+      break;
+    }
+
+    std::uint32_t length = 0;
+    const std::uint8_t* data = nullptr;
+    bson_iter_document(&iterator, &length, &data);
+    bson_t model;
+    appended = data != nullptr && bson_init_static(&model, data, length) &&
+      inox_mongodb_append_client_bulk_operation(job, bulk.get(), model, error);
+    count += appended ? 1 : 0;
+  }
+
+  if (appended && count == 0) {
+    job.fail("MongoInvalidArgumentError: MongoClient bulk write models must not be empty");
+    appended = false;
+  }
+
+  mongoc_bulkwritereturn_t writeResult{};
+
+  if (appended) {
+    writeResult = mongoc_bulkwrite_execute(bulk.get(), options.get());
+  }
+
+  if (writeResult.exc != nullptr) {
+    bson_error_t writeError{};
+
+    if (mongoc_bulkwriteexception_error(writeResult.exc, &writeError)) {
+      job.fail(writeError);
+    } else {
+      job.fail("MongoBulkWriteError: one or more MongoClient bulk writes failed");
+    }
+  } else if (writeResult.res != nullptr) {
+    job.result = inox_mongodb_normalize_client_bulk_result(writeResult.res);
+  }
+
+  mongoc_bulkwriteresult_destroy(writeResult.res);
+  mongoc_bulkwriteexception_destroy(writeResult.exc);
+  return appended && !job.failed() && job.result != nullptr;
+}
+
 static bool inox_mongodb_append_array_document(bson_t* array, std::size_t index, const bson_t* document) {
   char key[32];
   const int keyLength = std::snprintf(key, sizeof(key), "%zu", index);
@@ -1510,6 +2180,8 @@ static void inox_mongodb_run_job(uv_work_t* request) {
       BSON_APPEND_INT32(&command, "ping", 1);
       succeeded = mongoc_client_command_simple(client, "admin", &command, nullptr, &reply, &error);
       bson_destroy(&command);
+    } else if (job->kind == MongoJobKind::clientBulkWrite) {
+      succeeded = inox_mongodb_run_client_bulk_job(*job, client, error);
     } else {
       collection = mongoc_client_get_collection(client, job->database.c_str(), job->collection.c_str());
 
@@ -1570,6 +2242,10 @@ static void inox_mongodb_run_job(uv_work_t* request) {
         if (succeeded) {
           job->numberResult = (double)count;
         }
+      } else if (job->kind == MongoJobKind::createIndex || job->kind == MongoJobKind::createIndexes) {
+        succeeded = inox_mongodb_run_create_indexes_job(*job, collection, error);
+      } else if (job->kind == MongoJobKind::collectionBulkWrite) {
+        succeeded = inox_mongodb_run_collection_bulk_job(*job, collection, error);
       } else if (job->kind == MongoJobKind::findOne) {
         bson_t options;
         bson_init(&options);
@@ -1732,6 +2408,16 @@ static void inox_mongodb_complete_job(uv_work_t* request, int status) {
     }
   } else if (job->kind == MongoJobKind::countDocuments || job->kind == MongoJobKind::estimatedDocumentCount) {
     settleStatus = job->promise.fulfill(inox::Value(inox_number_value(job->numberResult)));
+  } else if (job->stringResult) {
+    inox::String value(job->textResult.data(), job->textResult.size());
+
+    if (!value.valid()) {
+      settleStatus = job->promise.rejectWith(
+        inox::thrown() ? inox::take_exception() : inox_mongodb_error_value("MongoRuntimeError: out of memory")
+      );
+    } else {
+      settleStatus = job->promise.fulfill(value);
+    }
   } else if (job->nullResult) {
     settleStatus = job->promise.fulfill(inox::Value(inox_null_value()));
   } else {
@@ -1835,6 +2521,42 @@ static std::unique_ptr<MongoJob> inox_mongodb_collection_job(
     inox_mongodb_throw_oom();
     return {};
   }
+}
+
+static bool inox_mongodb_job_array_and_options(
+  MongoJob& job,
+  const inox::Value& values,
+  const inox::Value* options,
+  const char* label
+) {
+  job.first = inox_mongodb_encode_owned_array(values, label);
+  job.second = options == nullptr ? bson_new() : inox_mongodb_encode_owned_document(*options);
+
+  if (job.first == nullptr || job.second == nullptr) {
+    if (job.second == nullptr && !inox::thrown()) {
+      inox_mongodb_throw_oom();
+    }
+
+    return false;
+  }
+
+  return true;
+}
+
+static inox::Promise inox_mongodb_collection_array_job(
+  const std::shared_ptr<MongoCollectionState>& state,
+  MongoJobKind kind,
+  const inox::Value& values,
+  const inox::Value* options,
+  const char* label
+) {
+  std::unique_ptr<MongoJob> job = inox_mongodb_collection_job(state, kind);
+
+  if (!job || !inox_mongodb_job_array_and_options(*job, values, options, label)) {
+    return inox::Promise();
+  }
+
+  return inox_mongodb_queue_job(std::move(job));
 }
 
 static inox::Promise inox_mongodb_two_document_job(
@@ -2038,6 +2760,60 @@ MongoDatabase MongoClient::db(inox::StringView name) const {
     inox_mongodb_throw_oom();
     return MongoDatabase();
   }
+}
+
+inox::Promise MongoClient::bulkWrite(const inox::Value& models) const {
+  if (!valid()) {
+    return inox_mongodb_rejected_promise("MongoClientClosedError: MongoClient is closed");
+  }
+
+  std::unique_ptr<MongoJob> job(new (std::nothrow) MongoJob());
+
+  if (!job) {
+    inox_mongodb_throw_oom();
+    return inox::Promise();
+  }
+
+  job->kind = MongoJobKind::clientBulkWrite;
+  job->client = state_;
+
+  if (!inox_mongodb_job_array_and_options(
+    *job,
+    models,
+    nullptr,
+    "TypeError: MongoClient.bulkWrite expects an array of models"
+  )) {
+    return inox::Promise();
+  }
+
+  return inox_mongodb_queue_job(std::move(job));
+}
+
+inox::Promise MongoClient::bulkWrite(const inox::Value& models, const inox::Value& options) const {
+  if (!valid()) {
+    return inox_mongodb_rejected_promise("MongoClientClosedError: MongoClient is closed");
+  }
+
+  std::unique_ptr<MongoJob> job(new (std::nothrow) MongoJob());
+
+  if (!job) {
+    inox_mongodb_throw_oom();
+    return inox::Promise();
+  }
+
+  job->kind = MongoJobKind::clientBulkWrite;
+  job->client = state_;
+
+  if (!inox_mongodb_job_array_and_options(
+    *job,
+    models,
+    std::addressof(options),
+    "TypeError: MongoClient.bulkWrite expects an array of models"
+  )) {
+    return inox::Promise();
+  }
+
+  return inox_mongodb_queue_job(std::move(job));
 }
 
 inox::Promise MongoClient::close() const {
@@ -2382,6 +3158,77 @@ inox::Promise MongoCollection::countDocuments(const inox::Value& filter) const {
 inox::Promise MongoCollection::estimatedDocumentCount() const {
   std::unique_ptr<MongoJob> job = inox_mongodb_collection_job(state_, MongoJobKind::estimatedDocumentCount);
   return job ? inox_mongodb_queue_job(std::move(job)) : inox::Promise();
+}
+
+inox::Promise MongoCollection::createIndex(const inox::Value& indexSpec) const {
+  std::unique_ptr<MongoJob> job = inox_mongodb_collection_job(state_, MongoJobKind::createIndex);
+
+  if (!job) {
+    return inox::Promise();
+  }
+
+  job->first = inox_mongodb_encode_owned_document(indexSpec);
+  job->second = bson_new();
+
+  if (job->first == nullptr || job->second == nullptr) {
+    if (job->second == nullptr && !inox::thrown()) {
+      inox_mongodb_throw_oom();
+    }
+
+    return inox::Promise();
+  }
+
+  return inox_mongodb_queue_job(std::move(job));
+}
+
+inox::Promise MongoCollection::createIndex(const inox::Value& indexSpec, const inox::Value& options) const {
+  return inox_mongodb_two_document_job(state_, MongoJobKind::createIndex, indexSpec, options);
+}
+
+inox::Promise MongoCollection::createIndexes(const inox::Value& indexSpecs) const {
+  return inox_mongodb_collection_array_job(
+    state_,
+    MongoJobKind::createIndexes,
+    indexSpecs,
+    nullptr,
+    "TypeError: createIndexes expects an array of index descriptions"
+  );
+}
+
+inox::Promise MongoCollection::createIndexes(
+  const inox::Value& indexSpecs,
+  const inox::Value& options
+) const {
+  return inox_mongodb_collection_array_job(
+    state_,
+    MongoJobKind::createIndexes,
+    indexSpecs,
+    std::addressof(options),
+    "TypeError: createIndexes expects an array of index descriptions"
+  );
+}
+
+inox::Promise MongoCollection::bulkWrite(const inox::Value& operations) const {
+  return inox_mongodb_collection_array_job(
+    state_,
+    MongoJobKind::collectionBulkWrite,
+    operations,
+    nullptr,
+    "TypeError: Collection.bulkWrite expects an array of operations"
+  );
+}
+
+inox::Promise MongoCollection::bulkWrite(
+  const inox::Value& operations,
+  const inox::Value& options
+) const {
+  return inox_mongodb_collection_array_job(
+    state_,
+    MongoJobKind::collectionBulkWrite,
+    operations,
+    std::addressof(options),
+    "TypeError: Collection.bulkWrite expects an array of operations"
+  );
 }
 
 inox::Promise MongoCollection::insertOne(const inox::Value& document) const {

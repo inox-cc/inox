@@ -80,6 +80,7 @@ const operations: LibraryOperationDescriptor[] = [
   mongoClientStaticConnect(),
   mongoClientReceiverCall('connect', [], promiseTypeRef(mongoClientTypeRef)),
   mongoClientDbCall(),
+  mongoClientBulkWriteCall(),
   mongoClientReceiverCall('close', [], promiseTypeRef(voidTypeRef)),
   databaseCollectionCall(),
   collectionFindCall(),
@@ -93,6 +94,9 @@ const operations: LibraryOperationDescriptor[] = [
   collectionDistinctCall(),
   collectionCountDocumentsCall(),
   collectionReceiverCall('estimatedDocumentCount', [], promiseTypeRef(numberTypeRef)),
+  collectionCreateIndexCall(),
+  collectionCreateIndexesCall(),
+  collectionBulkWriteCall(),
   collectionReceiverCall('insertOne', [schemaArgument()], promiseTypeRef(insertOneResultTypeRef())),
   collectionReceiverCall('insertMany', [arrayArgument()], promiseTypeRef(insertManyResultTypeRef())),
   collectionReceiverCall('updateOne', [documentArgument(), documentArgument()], promiseTypeRef(updateResultTypeRef())),
@@ -387,6 +391,15 @@ function mongoClientDbCall(): LibraryOperationDescriptor {
   }
 }
 
+function mongoClientBulkWriteCall(): LibraryOperationDescriptor {
+  return optionalOptionsReceiverCall(
+    mongoClientTypeId,
+    'bulkWrite',
+    documentArrayArgument(),
+    promiseTypeRef(bulkWriteResultTypeRef())
+  )
+}
+
 function databaseCollectionCall(): LibraryOperationDescriptor {
   const typeParameters: LibraryOperationTypeParameterDescriptor[] = [
     {
@@ -477,6 +490,56 @@ function collectionCountDocumentsCall(): LibraryOperationDescriptor {
     variants: [
       callVariant('countDocuments', 0, ['receiver'], []),
       callVariant('countDocuments', 1, ['receiver', 'runtime-value'], [documentArgument()])
+    ]
+  }
+}
+
+function collectionCreateIndexCall(): LibraryOperationDescriptor {
+  return optionalOptionsReceiverCall(
+    collectionTypeId,
+    'createIndex',
+    documentArgument(),
+    promiseTypeRef(stringTypeRef),
+    [{ name: 'TSchema', sources: [{ source: 'receiver-type-argument', argumentIndex: 0 }] }]
+  )
+}
+
+function collectionCreateIndexesCall(): LibraryOperationDescriptor {
+  return optionalOptionsReceiverCall(
+    collectionTypeId,
+    'createIndexes',
+    documentArrayArgument(),
+    promiseTypeRef(arrayTypeRef(stringTypeRef)),
+    [{ name: 'TSchema', sources: [{ source: 'receiver-type-argument', argumentIndex: 0 }] }]
+  )
+}
+
+function collectionBulkWriteCall(): LibraryOperationDescriptor {
+  return optionalOptionsReceiverCall(
+    collectionTypeId,
+    'bulkWrite',
+    documentArrayArgument(),
+    promiseTypeRef(bulkWriteResultTypeRef()),
+    [{ name: 'TSchema', sources: [{ source: 'receiver-type-argument', argumentIndex: 0 }] }]
+  )
+}
+
+function optionalOptionsReceiverCall(
+  receiverTypeId: string,
+  name: string,
+  firstArgument: LibraryArgumentCheckDescriptor,
+  resultTypeRef: TypeRef,
+  typeParameters?: LibraryOperationTypeParameterDescriptor[]
+): LibraryOperationDescriptor {
+  return {
+    ...receiverCall(receiverTypeId, name, [firstArgument], resultTypeRef),
+    minArgs: 1,
+    maxArgs: 2,
+    argumentChecks: [firstArgument, documentArgument()],
+    typeParameters,
+    variants: [
+      callVariant(name, 1, ['receiver', 'runtime-value'], [firstArgument]),
+      callVariant(name, 2, ['receiver', 'runtime-value', 'runtime-value'], [firstArgument, documentArgument()])
     ]
   }
 }
@@ -655,6 +718,17 @@ function deleteResultTypeRef(): ObjectTypeRef {
   return resultObjectTypeRef('DeleteResult', [
     { name: 'acknowledged', typeRef: booleanTypeRef },
     { name: 'deletedCount', typeRef: numberTypeRef }
+  ])
+}
+
+function bulkWriteResultTypeRef(): ObjectTypeRef {
+  return resultObjectTypeRef('BulkWriteResult', [
+    { name: 'acknowledged', typeRef: booleanTypeRef },
+    { name: 'insertedCount', typeRef: numberTypeRef },
+    { name: 'matchedCount', typeRef: numberTypeRef },
+    { name: 'modifiedCount', typeRef: numberTypeRef },
+    { name: 'deletedCount', typeRef: numberTypeRef },
+    { name: 'upsertedCount', typeRef: numberTypeRef }
   ])
 }
 
