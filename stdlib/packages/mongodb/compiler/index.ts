@@ -20,6 +20,7 @@ const objectIdTypeId = `${libraryId}#ObjectId`
 const mongoClientTypeId = `${libraryId}#MongoClient`
 const databaseTypeId = `${libraryId}#Db`
 const collectionTypeId = `${libraryId}#Collection`
+const cursorTypeId = `${libraryId}#Cursor`
 const uint8ArrayTypeId = 'global:binary#Uint8Array'
 const arrayTypeId = 'global:collections#Array'
 const promiseTypeId = 'global:promise#Promise'
@@ -35,6 +36,7 @@ const mongoClientTypeRef = nominalTypeRef(mongoClientTypeId)
 const databaseTypeRef = nominalTypeRef(databaseTypeId)
 const schemaParameterTypeRef: TypeRef = { kind: 'parameter', name: 'TSchema' }
 const nullableSchemaParameterTypeRef: TypeRef = { kind: 'parameter', name: 'TSchema', nullable: true }
+const resultParameterTypeRef: TypeRef = { kind: 'parameter', name: 'TResult' }
 const documentTypeRef: ObjectTypeRef = {
   kind: 'object',
   fields: [],
@@ -80,14 +82,27 @@ const operations: LibraryOperationDescriptor[] = [
   mongoClientDbCall(),
   mongoClientReceiverCall('close', [], promiseTypeRef(voidTypeRef)),
   databaseCollectionCall(),
+  collectionFindCall(),
   collectionFindOneCall(),
-  collectionReceiverCall('findOneAndUpdate', [documentArgument(), documentArgument()], promiseTypeRef(nullableSchemaParameterTypeRef)),
+  collectionReceiverCall(
+    'findOneAndUpdate',
+    [documentArgument(), documentArgument()],
+    promiseTypeRef(nullableSchemaParameterTypeRef)
+  ),
+  collectionAggregateCall(),
+  collectionDistinctCall(),
+  collectionCountDocumentsCall(),
+  collectionReceiverCall('estimatedDocumentCount', [], promiseTypeRef(numberTypeRef)),
   collectionReceiverCall('insertOne', [schemaArgument()], promiseTypeRef(insertOneResultTypeRef())),
   collectionReceiverCall('insertMany', [arrayArgument()], promiseTypeRef(insertManyResultTypeRef())),
   collectionReceiverCall('updateOne', [documentArgument(), documentArgument()], promiseTypeRef(updateResultTypeRef())),
   collectionReceiverCall('updateMany', [documentArgument(), documentArgument()], promiseTypeRef(updateResultTypeRef())),
   collectionReceiverCall('deleteOne', [documentArgument()], promiseTypeRef(deleteResultTypeRef())),
-  collectionReceiverCall('deleteMany', [documentArgument()], promiseTypeRef(deleteResultTypeRef()))
+  collectionReceiverCall('deleteMany', [documentArgument()], promiseTypeRef(deleteResultTypeRef())),
+  cursorReceiverCall('sort', [documentArgument()], cursorTypeRef(schemaParameterTypeRef)),
+  cursorLimitCall(),
+  cursorReceiverCall('next', [], promiseTypeRef(nullableSchemaParameterTypeRef)),
+  cursorReceiverCall('toArray', [], promiseTypeRef(arrayTypeRef(schemaParameterTypeRef)))
 ]
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
@@ -113,6 +128,11 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
     nativeFacadeType(databaseTypeId, 'Db', 'MongoDatabase'),
     {
       ...nativeFacadeType(collectionTypeId, 'Collection', 'MongoCollection'),
+      typeParameters: ['TSchema']
+    },
+    {
+      ...nativeFacadeType(cursorTypeId, 'FindCursor', 'MongoCursor'),
+      declarationNames: ['FindCursor', 'AggregationCursor'],
       typeParameters: ['TSchema']
     }
   ],
@@ -385,6 +405,19 @@ function databaseCollectionCall(): LibraryOperationDescriptor {
   }
 }
 
+function collectionFindCall(): LibraryOperationDescriptor {
+  return {
+    ...collectionReceiverCall('find', [], cursorTypeRef(schemaParameterTypeRef)),
+    minArgs: 0,
+    maxArgs: 1,
+    argumentChecks: [documentArgument()],
+    variants: [
+      callVariant('find', 0, ['receiver'], []),
+      callVariant('find', 1, ['receiver', 'runtime-value'], [documentArgument()])
+    ]
+  }
+}
+
 function collectionFindOneCall(): LibraryOperationDescriptor {
   return {
     ...collectionReceiverCall('findOne', [], promiseTypeRef(nullableSchemaParameterTypeRef)),
@@ -398,6 +431,56 @@ function collectionFindOneCall(): LibraryOperationDescriptor {
   }
 }
 
+function collectionAggregateCall(): LibraryOperationDescriptor {
+  const typeParameters: LibraryOperationTypeParameterDescriptor[] = [
+    {
+      name: 'TResult',
+      sources: [
+        { source: 'explicit-type-argument', argumentIndex: 0 },
+        { source: 'contextual-type-argument', argumentIndex: 0 }
+      ]
+    }
+  ]
+
+  return {
+    ...collectionReceiverCall('aggregate', [], cursorTypeRef(resultParameterTypeRef)),
+    minArgs: 0,
+    maxArgs: 1,
+    argumentChecks: [documentArrayArgument()],
+    typeParameters,
+    variants: [
+      callVariant('aggregate', 0, ['receiver'], []),
+      callVariant('aggregate', 1, ['receiver', 'runtime-value'], [documentArrayArgument()])
+    ]
+  }
+}
+
+function collectionDistinctCall(): LibraryOperationDescriptor {
+  return {
+    ...collectionReceiverCall('distinct', [stringArgument()], promiseTypeRef(arrayTypeRef(unknownTypeRef()))),
+    minArgs: 1,
+    maxArgs: 2,
+    argumentChecks: [stringArgument(), documentArgument()],
+    variants: [
+      callVariant('distinct', 1, ['receiver', 'string-view'], [stringArgument()]),
+      callVariant('distinct', 2, ['receiver', 'string-view', 'runtime-value'], [stringArgument(), documentArgument()])
+    ]
+  }
+}
+
+function collectionCountDocumentsCall(): LibraryOperationDescriptor {
+  return {
+    ...collectionReceiverCall('countDocuments', [], promiseTypeRef(numberTypeRef)),
+    minArgs: 0,
+    maxArgs: 1,
+    argumentChecks: [documentArgument()],
+    variants: [
+      callVariant('countDocuments', 0, ['receiver'], []),
+      callVariant('countDocuments', 1, ['receiver', 'runtime-value'], [documentArgument()])
+    ]
+  }
+}
+
 function collectionReceiverCall(
   name: string,
   argumentChecks: LibraryArgumentCheckDescriptor[],
@@ -406,6 +489,24 @@ function collectionReceiverCall(
   return {
     ...receiverCall(collectionTypeId, name, argumentChecks, resultTypeRef),
     typeParameters: [{ name: 'TSchema', sources: [{ source: 'receiver-type-argument', argumentIndex: 0 }] }]
+  }
+}
+
+function cursorReceiverCall(
+  name: string,
+  argumentChecks: LibraryArgumentCheckDescriptor[],
+  resultTypeRef: TypeRef
+): LibraryOperationDescriptor {
+  return {
+    ...receiverCall(cursorTypeId, name, argumentChecks, resultTypeRef),
+    typeParameters: [{ name: 'TSchema', sources: [{ source: 'receiver-type-argument', argumentIndex: 0 }] }]
+  }
+}
+
+function cursorLimitCall(): LibraryOperationDescriptor {
+  return {
+    ...cursorReceiverCall('limit', [numberArgument()], cursorTypeRef(schemaParameterTypeRef)),
+    cArgumentKinds: ['receiver', 'number']
   }
 }
 
@@ -468,6 +569,17 @@ function collectionTypeRef(schema: TypeRef): NominalTypeRef {
   return {
     kind: 'nominal',
     typeId: collectionTypeId,
+    args: [schema],
+    nullable: false,
+    ownership: 'value',
+    traits: []
+  }
+}
+
+function cursorTypeRef(schema: TypeRef): NominalTypeRef {
+  return {
+    kind: 'nominal',
+    typeId: cursorTypeId,
     args: [schema],
     nullable: false,
     ownership: 'value',
@@ -592,6 +704,14 @@ function schemaArgument(): LibraryArgumentCheckDescriptor {
 
 function arrayArgument(): LibraryArgumentCheckDescriptor {
   return { valueTypes: ['object'], objectTypeIds: [arrayTypeId], typeRef: arrayTypeRef(schemaParameterTypeRef) }
+}
+
+function documentArrayArgument(): LibraryArgumentCheckDescriptor {
+  return {
+    valueTypes: ['object'],
+    objectTypeIds: [arrayTypeId],
+    typeRef: arrayTypeRef(documentTypeRef)
+  }
 }
 
 function uint8ArrayArgument(): LibraryArgumentCheckDescriptor {

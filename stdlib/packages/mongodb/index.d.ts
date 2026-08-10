@@ -50,9 +50,28 @@ export class Db {
   collection<TSchema extends Document = Document>(name: string): Collection<TSchema>;
 }
 
+export class FindCursor<TSchema extends Document = Document> {
+  sort(sort: Document): FindCursor<TSchema>;
+  limit(limit: number): FindCursor<TSchema>;
+  next(): Promise<TSchema | null>;
+  toArray(): Promise<TSchema[]>;
+}
+
+export class AggregationCursor<TSchema extends Document = Document> {
+  sort(sort: Document): AggregationCursor<TSchema>;
+  limit(limit: number): AggregationCursor<TSchema>;
+  next(): Promise<TSchema | null>;
+  toArray(): Promise<TSchema[]>;
+}
+
 export class Collection<TSchema extends Document = Document> {
+  find(filter?: Filter<TSchema>): FindCursor<TSchema>;
   findOne(filter?: Filter<TSchema>): Promise<TSchema | null>;
   findOneAndUpdate(filter: Filter<TSchema>, update: UpdateFilter<TSchema>): Promise<TSchema | null>;
+  aggregate<TResult extends Document = Document>(pipeline?: Document[]): AggregationCursor<TResult>;
+  distinct(key: string, filter?: Filter<TSchema>): Promise<unknown[]>;
+  countDocuments(filter?: Filter<TSchema>): Promise<number>;
+  estimatedDocumentCount(): Promise<number>;
   insertOne(document: TSchema): Promise<InsertOneResult<TSchema>>;
   insertMany(documents: TSchema[]): Promise<InsertManyResult<TSchema>>;
   updateOne(filter: Filter<TSchema>, update: UpdateFilter<TSchema>): Promise<UpdateResult<TSchema>>;

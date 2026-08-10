@@ -787,8 +787,37 @@ public:
   std::string name;
 };
 
+enum class MongoCursorMode {
+  find,
+  aggregate
+};
+
+class MongoCursorState final {
+public:
+  std::shared_ptr<MongoClientState> client;
+  std::string database;
+  std::string collection;
+  MongoCursorMode mode = MongoCursorMode::find;
+  bson_t* source = nullptr;
+  bson_t* sort = nullptr;
+  std::int64_t limit = 0;
+  std::int64_t offset = 0;
+  bool active = false;
+  bool exhausted = false;
+
+  ~MongoCursorState() {
+    bson_destroy(source);
+    bson_destroy(sort);
+  }
+};
+
 enum class MongoJobKind {
   connect,
+  cursorNext,
+  cursorToArray,
+  distinct,
+  countDocuments,
+  estimatedDocumentCount,
   findOne,
   findOneAndUpdate,
   insertOne,
@@ -803,6 +832,7 @@ struct MongoJob final {
   uv_work_t request{};
   MongoJobKind kind = MongoJobKind::connect;
   std::shared_ptr<MongoClientState> client;
+  std::shared_ptr<MongoCursorState> cursor;
   inox::Promise promise;
   std::string database;
   std::string collection;
@@ -810,6 +840,10 @@ struct MongoJob final {
   bson_t* second = nullptr;
   std::vector<bson_t*> documents;
   bson_t* result = nullptr;
+  std::string text;
+  double numberResult = 0;
+  std::size_t resultCount = 0;
+  bool arrayResult = false;
   bool nullResult = false;
   std::array<char, 512> error{};
 
@@ -903,6 +937,19 @@ static const inox_class_descriptor* inox_mongodb_collection_descriptor() {
     nullptr,
     inox_mongodb_facade_copy<MongoCollection>,
     inox_mongodb_facade_destroy<MongoCollection>,
+    nullptr
+  };
+  return &descriptor;
+}
+
+static const inox_class_descriptor* inox_mongodb_cursor_descriptor() {
+  static const inox_class_descriptor descriptor = {
+    "MongoCursor",
+    0,
+    nullptr,
+    nullptr,
+    inox_mongodb_facade_copy<MongoCursor>,
+    inox_mongodb_facade_destroy<MongoCursor>,
     nullptr
   };
   return &descriptor;
@@ -1115,6 +1162,27 @@ static bson_t* inox_mongodb_encode_owned_document(const inox::Value& value) {
   return document;
 }
 
+static bson_t* inox_mongodb_encode_owned_array(const inox::Value& value, const char* label) {
+  bson_t* array = bson_new();
+
+  if (array == nullptr) {
+    inox_mongodb_throw_oom();
+    return nullptr;
+  }
+
+  if (value.tag != INOX_TAG_ARRAY || !MongoBsonCodec::encodeArray(array, value, 0)) {
+    bson_destroy(array);
+
+    if (!inox::thrown()) {
+      inox_mongodb_throw(label);
+    }
+
+    return nullptr;
+  }
+
+  return array;
+}
+
 static bool inox_mongodb_ensure_id(bson_t* document) {
   if (document == nullptr) {
     return false;
@@ -1231,6 +1299,187 @@ static bson_t* inox_mongodb_normalize_delete_result(const bson_t* reply) {
   return result;
 }
 
+static bool inox_mongodb_append_array_document(bson_t* array, std::size_t index, const bson_t* document) {
+  char key[32];
+  const int keyLength = std::snprintf(key, sizeof(key), "%zu", index);
+  return keyLength >= 0 && (std::size_t)keyLength < sizeof(key) &&
+    bson_append_document(array, key, keyLength, document);
+}
+
+static bool inox_mongodb_append_aggregate_document_stage(
+  bson_t* pipeline,
+  std::size_t index,
+  const char* name,
+  const bson_t* value
+) {
+  bson_t stage;
+  bson_init(&stage);
+  const bool appended = BSON_APPEND_DOCUMENT(&stage, name, value) &&
+    inox_mongodb_append_array_document(pipeline, index, &stage);
+  bson_destroy(&stage);
+  return appended;
+}
+
+static bool inox_mongodb_append_aggregate_number_stage(
+  bson_t* pipeline,
+  std::size_t index,
+  const char* name,
+  std::int64_t value
+) {
+  bson_t stage;
+  bson_init(&stage);
+  const bool appended = BSON_APPEND_INT64(&stage, name, value) &&
+    inox_mongodb_append_array_document(pipeline, index, &stage);
+  bson_destroy(&stage);
+  return appended;
+}
+
+static bson_t* inox_mongodb_cursor_aggregate_pipeline(const MongoCursorState& state, std::int64_t maximum) {
+  bson_t* pipeline = bson_new();
+
+  if (pipeline == nullptr) {
+    return nullptr;
+  }
+
+  bson_iter_t iterator;
+  std::size_t index = 0;
+
+  if (!bson_iter_init(&iterator, state.source)) {
+    bson_destroy(pipeline);
+    return nullptr;
+  }
+
+  while (bson_iter_next(&iterator)) {
+    if (!BSON_ITER_HOLDS_DOCUMENT(&iterator)) {
+      bson_destroy(pipeline);
+      return nullptr;
+    }
+
+    std::uint32_t length = 0;
+    const std::uint8_t* data = nullptr;
+    bson_iter_document(&iterator, &length, &data);
+    bson_t stage;
+
+    if (data == nullptr || !bson_init_static(&stage, data, length) ||
+      !inox_mongodb_append_array_document(pipeline, index, &stage)) {
+      bson_destroy(pipeline);
+      return nullptr;
+    }
+
+    index += 1;
+  }
+
+  if (state.sort != nullptr && !inox_mongodb_append_aggregate_document_stage(pipeline, index++, "$sort", state.sort)) {
+    bson_destroy(pipeline);
+    return nullptr;
+  }
+
+  if (state.offset > 0 && !inox_mongodb_append_aggregate_number_stage(pipeline, index++, "$skip", state.offset)) {
+    bson_destroy(pipeline);
+    return nullptr;
+  }
+
+  if (maximum > 0 && !inox_mongodb_append_aggregate_number_stage(pipeline, index, "$limit", maximum)) {
+    bson_destroy(pipeline);
+    return nullptr;
+  }
+
+  return pipeline;
+}
+
+static bool inox_mongodb_run_cursor_job(
+  MongoJob& job,
+  mongoc_collection_t* collection,
+  bson_error_t& error
+) {
+  if (!job.cursor || job.cursor->source == nullptr) {
+    job.fail("MongoCursorClosedError: Cursor is not available");
+    return false;
+  }
+
+  const bool one = job.kind == MongoJobKind::cursorNext;
+  std::int64_t maximum = one ? 1 : 0;
+
+  if (job.cursor->limit > 0) {
+    const std::int64_t remaining = job.cursor->limit - job.cursor->offset;
+
+    if (remaining <= 0) {
+      job.nullResult = one;
+      job.arrayResult = !one;
+      job.result = one ? nullptr : bson_new();
+      return one || job.result != nullptr;
+    }
+
+    maximum = one ? 1 : remaining;
+  }
+
+  bson_t options;
+  bson_init(&options);
+  bson_t* pipeline = nullptr;
+  mongoc_cursor_t* cursor = nullptr;
+
+  if (job.cursor->mode == MongoCursorMode::find) {
+    if (
+      (job.cursor->sort != nullptr && !BSON_APPEND_DOCUMENT(&options, "sort", job.cursor->sort)) ||
+      (job.cursor->offset > 0 && !BSON_APPEND_INT64(&options, "skip", job.cursor->offset)) ||
+      (maximum > 0 && !BSON_APPEND_INT64(&options, "limit", maximum))
+    ) {
+      bson_destroy(&options);
+      return false;
+    }
+
+    cursor = mongoc_collection_find_with_opts(collection, job.cursor->source, &options, nullptr);
+  } else {
+    pipeline = inox_mongodb_cursor_aggregate_pipeline(*job.cursor, maximum);
+
+    if (pipeline != nullptr) {
+      cursor = mongoc_collection_aggregate(collection, MONGOC_QUERY_NONE, pipeline, &options, nullptr);
+    }
+  }
+
+  if (cursor == nullptr) {
+    bson_destroy(pipeline);
+    bson_destroy(&options);
+    return false;
+  }
+
+  if (!one) {
+    job.result = bson_new();
+    job.arrayResult = true;
+  }
+
+  const bson_t* document = nullptr;
+  bool appended = !one ? job.result != nullptr : true;
+
+  while (appended && mongoc_cursor_next(cursor, &document)) {
+    if (one) {
+      job.result = bson_copy(document);
+      appended = job.result != nullptr;
+      job.resultCount = appended ? 1 : 0;
+      break;
+    }
+
+    appended = inox_mongodb_append_array_document(job.result, job.resultCount, document);
+
+    if (appended) {
+      job.resultCount += 1;
+    }
+  }
+
+  if (appended && !mongoc_cursor_error(cursor, &error)) {
+    if (one && job.result == nullptr) {
+      job.nullResult = true;
+    }
+  } else {
+    appended = false;
+  }
+
+  mongoc_cursor_destroy(cursor);
+  bson_destroy(pipeline);
+  bson_destroy(&options);
+  return appended;
+}
+
 static void inox_mongodb_run_job(uv_work_t* request) {
   MongoJob* job = request == nullptr ? nullptr : (MongoJob*)request->data;
 
@@ -1266,6 +1515,61 @@ static void inox_mongodb_run_job(uv_work_t* request) {
 
       if (collection == nullptr) {
         job->fail("MongoRuntimeError: MongoDB collection could not be created");
+      } else if (job->kind == MongoJobKind::cursorNext || job->kind == MongoJobKind::cursorToArray) {
+        succeeded = inox_mongodb_run_cursor_job(*job, collection, error);
+      } else if (job->kind == MongoJobKind::distinct) {
+        bson_t command;
+        bson_init(&command);
+        succeeded = BSON_APPEND_UTF8(&command, "distinct", job->collection.c_str()) &&
+          BSON_APPEND_UTF8(&command, "key", job->text.c_str()) &&
+          BSON_APPEND_DOCUMENT(&command, "query", job->first) &&
+          mongoc_collection_command_simple(collection, &command, nullptr, &reply, &error);
+        bson_destroy(&command);
+
+        if (succeeded) {
+          bson_iter_t values;
+          std::uint32_t length = 0;
+          const std::uint8_t* data = nullptr;
+
+          if (bson_iter_init_find(&values, &reply, "values") && BSON_ITER_HOLDS_ARRAY(&values)) {
+            bson_iter_array(&values, &length, &data);
+            bson_t array;
+
+            if (data != nullptr && bson_init_static(&array, data, length)) {
+              job->result = bson_copy(&array);
+            }
+          }
+
+          job->arrayResult = true;
+          succeeded = job->result != nullptr;
+        }
+      } else if (job->kind == MongoJobKind::countDocuments) {
+        const std::int64_t count = mongoc_collection_count_documents(
+          collection,
+          job->first,
+          nullptr,
+          nullptr,
+          &reply,
+          &error
+        );
+        succeeded = count >= 0;
+
+        if (succeeded) {
+          job->numberResult = (double)count;
+        }
+      } else if (job->kind == MongoJobKind::estimatedDocumentCount) {
+        const std::int64_t count = mongoc_collection_estimated_document_count(
+          collection,
+          nullptr,
+          nullptr,
+          &reply,
+          &error
+        );
+        succeeded = count >= 0;
+
+        if (succeeded) {
+          job->numberResult = (double)count;
+        }
       } else if (job->kind == MongoJobKind::findOne) {
         bson_t options;
         bson_init(&options);
@@ -1400,6 +1704,21 @@ static void inox_mongodb_complete_job(uv_work_t* request, int status) {
     job->fail(uv_strerror(status));
   }
 
+  if (job->cursor) {
+    job->cursor->active = false;
+
+    if (!job->failed()) {
+      job->cursor->offset += (std::int64_t)job->resultCount;
+
+      if (
+        job->kind == MongoJobKind::cursorToArray || job->nullResult ||
+        (job->cursor->limit > 0 && job->cursor->offset >= job->cursor->limit)
+      ) {
+        job->cursor->exhausted = true;
+      }
+    }
+  }
+
   if (job->failed()) {
     settleStatus = job->promise.rejectWith(inox_mongodb_error_value(job->error.data()));
   } else if (job->kind == MongoJobKind::connect) {
@@ -1411,10 +1730,12 @@ static void inox_mongodb_complete_job(uv_work_t* request, int status) {
     } else {
       settleStatus = job->promise.fulfill(std::move(value));
     }
+  } else if (job->kind == MongoJobKind::countDocuments || job->kind == MongoJobKind::estimatedDocumentCount) {
+    settleStatus = job->promise.fulfill(inox::Value(inox_number_value(job->numberResult)));
   } else if (job->nullResult) {
     settleStatus = job->promise.fulfill(inox::Value(inox_null_value()));
   } else {
-    inox::Value value = MongoBsonCodec::decodeDocument(job->result, false, 0);
+    inox::Value value = MongoBsonCodec::decodeDocument(job->result, job->arrayResult, 0);
 
     if (inox::thrown()) {
       settleStatus = job->promise.rejectWith(inox::take_exception());
@@ -1436,12 +1757,20 @@ static inox::Promise inox_mongodb_rejected_promise(const char* message) {
 
 static inox::Promise inox_mongodb_queue_job(std::unique_ptr<MongoJob> job) {
   if (!job || !job->client || job->client->closed || job->client->pool == nullptr) {
+    if (job && job->cursor) {
+      job->cursor->active = false;
+    }
+
     return inox_mongodb_rejected_promise("MongoClientClosedError: MongoClient is closed");
   }
 
   inox_loop* loop = inox::loop();
 
   if (loop == nullptr) {
+    if (job->cursor) {
+      job->cursor->active = false;
+    }
+
     inox_mongodb_throw("MongoRuntimeError: MongoDB requires an active event loop");
     return inox::Promise();
   }
@@ -1449,6 +1778,10 @@ static inox::Promise inox_mongodb_queue_job(std::unique_ptr<MongoJob> job) {
   job->promise = inox::Promise::create();
 
   if (!job->promise.valid()) {
+    if (job->cursor) {
+      job->cursor->active = false;
+    }
+
     return inox::Promise();
   }
 
@@ -1464,6 +1797,11 @@ static inox::Promise inox_mongodb_queue_job(std::unique_ptr<MongoJob> job) {
 
   if (status != 0) {
     job->client->activeJobs -= 1;
+
+    if (job->cursor) {
+      job->cursor->active = false;
+    }
+
     result.rejectWith(inox_mongodb_error_value(uv_strerror(status)));
     return result;
   }
@@ -1544,6 +1882,79 @@ static inox::Promise inox_mongodb_one_document_job(
   }
 
   return inox_mongodb_queue_job(std::move(job));
+}
+
+static MongoCursor inox_mongodb_collection_cursor(
+  const std::shared_ptr<MongoCollectionState>& collection,
+  MongoCursorMode mode,
+  bson_t* source
+) {
+  if (!collection || !collection->client || collection->client->closed || collection->client->pool == nullptr) {
+    bson_destroy(source);
+    inox_mongodb_throw("MongoClientClosedError: MongoClient is closed");
+    return MongoCursor();
+  }
+
+  if (source == nullptr) {
+    return MongoCursor();
+  }
+
+  try {
+    std::shared_ptr<MongoCursorState> state = std::make_shared<MongoCursorState>();
+    state->client = collection->client;
+    state->database = collection->database;
+    state->collection = collection->name;
+    state->mode = mode;
+    state->source = source;
+    return MongoCursor(std::move(state));
+  } catch (const std::bad_alloc&) {
+    bson_destroy(source);
+    inox_mongodb_throw_oom();
+    return MongoCursor();
+  }
+}
+
+static inox::Promise inox_mongodb_cursor_job(
+  const std::shared_ptr<MongoCursorState>& state,
+  MongoJobKind kind
+) {
+  if (!state || !state->client || state->client->closed || state->client->pool == nullptr) {
+    return inox_mongodb_rejected_promise("MongoClientClosedError: MongoClient is closed");
+  }
+
+  if (state->active) {
+    return inox_mongodb_rejected_promise("MongoCursorInUseError: Cursor already has an active operation");
+  }
+
+  if (state->exhausted) {
+    if (kind == MongoJobKind::cursorNext) {
+      return inox::Promise::resolve(inox::Value(inox_null_value()));
+    }
+
+    Array empty = Array::create(0);
+    return inox::thrown() ? inox::Promise() : inox::Promise::resolve(empty);
+  }
+
+  std::unique_ptr<MongoJob> job(new (std::nothrow) MongoJob());
+
+  if (!job) {
+    inox_mongodb_throw_oom();
+    return inox::Promise();
+  }
+
+  try {
+    job->kind = kind;
+    job->client = state->client;
+    job->cursor = state;
+    job->database = state->database;
+    job->collection = state->collection;
+    state->active = true;
+    return inox_mongodb_queue_job(std::move(job));
+  } catch (const std::bad_alloc&) {
+    state->active = false;
+    inox_mongodb_throw_oom();
+    return inox::Promise();
+  }
 }
 
 MongoClient::MongoClient() : state_() {}
@@ -1725,6 +2136,90 @@ inox::Value MongoDatabase::runtimeValue() const {
   return inox_mongodb_facade_runtime_value(*this, inox_mongodb_database_descriptor());
 }
 
+MongoCursor::MongoCursor() : state_() {}
+
+MongoCursor::MongoCursor(const inox::Value& value) : state_() {
+  if (inox::thrown()) {
+    return;
+  }
+
+  const MongoCursor* cursor = inox_mongodb_facade_instance<MongoCursor>(value, inox_mongodb_cursor_descriptor());
+
+  if (cursor == nullptr) {
+    inox_mongodb_throw("TypeError: value is not a MongoDB cursor");
+    return;
+  }
+
+  state_ = cursor->state_;
+}
+
+MongoCursor::MongoCursor(std::shared_ptr<MongoCursorState> state) : state_(std::move(state)) {}
+
+bool MongoCursor::isMongoCursor(const inox::Value& value) {
+  return inox_mongodb_is_facade<MongoCursor>(value, inox_mongodb_cursor_descriptor());
+}
+
+MongoCursor MongoCursor::sort(const inox::Value& sortValue) const {
+  if (!valid()) {
+    inox_mongodb_throw("MongoClientClosedError: MongoClient is closed");
+    return MongoCursor();
+  }
+
+  if (state_->active || state_->offset > 0 || state_->exhausted) {
+    inox_mongodb_throw("MongoCursorInUseError: Cursor is already initialized");
+    return MongoCursor();
+  }
+
+  bson_t* sort = inox_mongodb_encode_owned_document(sortValue);
+
+  if (sort == nullptr) {
+    return MongoCursor();
+  }
+
+  bson_destroy(state_->sort);
+  state_->sort = sort;
+  return MongoCursor(state_);
+}
+
+MongoCursor MongoCursor::limit(double limitValue) const {
+  if (!valid()) {
+    inox_mongodb_throw("MongoClientClosedError: MongoClient is closed");
+    return MongoCursor();
+  }
+
+  if (state_->active || state_->offset > 0 || state_->exhausted) {
+    inox_mongodb_throw("MongoCursorInUseError: Cursor is already initialized");
+    return MongoCursor();
+  }
+
+  if (
+    !std::isfinite(limitValue) || limitValue != std::trunc(limitValue) || limitValue < 0 ||
+    limitValue > (double)std::numeric_limits<std::int64_t>::max()
+  ) {
+    inox_mongodb_throw("MongoInvalidArgumentError: Cursor limit must be a non-negative integer");
+    return MongoCursor();
+  }
+
+  state_->limit = (std::int64_t)limitValue;
+  return MongoCursor(state_);
+}
+
+inox::Promise MongoCursor::next() const {
+  return inox_mongodb_cursor_job(state_, MongoJobKind::cursorNext);
+}
+
+inox::Promise MongoCursor::toArray() const {
+  return inox_mongodb_cursor_job(state_, MongoJobKind::cursorToArray);
+}
+
+bool MongoCursor::valid() const {
+  return state_ != nullptr && state_->client != nullptr && !state_->client->closed && state_->client->pool != nullptr;
+}
+
+inox::Value MongoCursor::runtimeValue() const {
+  return inox_mongodb_facade_runtime_value(*this, inox_mongodb_cursor_descriptor());
+}
+
 MongoCollection::MongoCollection() : state_() {}
 
 MongoCollection::MongoCollection(const inox::Value& value) : state_() {
@@ -1746,6 +2241,25 @@ MongoCollection::MongoCollection(std::shared_ptr<MongoCollectionState> state) : 
 
 bool MongoCollection::isMongoCollection(const inox::Value& value) {
   return inox_mongodb_is_facade<MongoCollection>(value, inox_mongodb_collection_descriptor());
+}
+
+MongoCursor MongoCollection::find() const {
+  bson_t* filter = bson_new();
+
+  if (filter == nullptr) {
+    inox_mongodb_throw_oom();
+    return MongoCursor();
+  }
+
+  return inox_mongodb_collection_cursor(state_, MongoCursorMode::find, filter);
+}
+
+MongoCursor MongoCollection::find(const inox::Value& filter) const {
+  return inox_mongodb_collection_cursor(
+    state_,
+    MongoCursorMode::find,
+    inox_mongodb_encode_owned_document(filter)
+  );
 }
 
 inox::Promise MongoCollection::findOne() const {
@@ -1771,6 +2285,103 @@ inox::Promise MongoCollection::findOne(const inox::Value& filter) const {
 
 inox::Promise MongoCollection::findOneAndUpdate(const inox::Value& filter, const inox::Value& update) const {
   return inox_mongodb_two_document_job(state_, MongoJobKind::findOneAndUpdate, filter, update);
+}
+
+MongoCursor MongoCollection::aggregate() const {
+  bson_t* pipeline = bson_new();
+
+  if (pipeline == nullptr) {
+    inox_mongodb_throw_oom();
+    return MongoCursor();
+  }
+
+  return inox_mongodb_collection_cursor(state_, MongoCursorMode::aggregate, pipeline);
+}
+
+MongoCursor MongoCollection::aggregate(const inox::Value& pipeline) const {
+  return inox_mongodb_collection_cursor(
+    state_,
+    MongoCursorMode::aggregate,
+    inox_mongodb_encode_owned_array(pipeline, "TypeError: aggregate expects an array of pipeline stages")
+  );
+}
+
+inox::Promise MongoCollection::distinct(inox::StringView key) const {
+  bson_t* filter = bson_new();
+
+  if (filter == nullptr) {
+    inox_mongodb_throw_oom();
+    return inox::Promise();
+  }
+
+  std::unique_ptr<MongoJob> job = inox_mongodb_collection_job(state_, MongoJobKind::distinct);
+
+  if (!job) {
+    bson_destroy(filter);
+    return inox::Promise();
+  }
+
+  job->first = filter;
+
+  if (!inox_mongodb_copy_string(key, job->text, "TypeError: distinct key is invalid") || job->text.empty()) {
+    if (!inox::thrown()) {
+      inox_mongodb_throw("MongoInvalidArgumentError: distinct key must not be empty");
+    }
+
+    return inox::Promise();
+  }
+
+  return inox_mongodb_queue_job(std::move(job));
+}
+
+inox::Promise MongoCollection::distinct(inox::StringView key, const inox::Value& filter) const {
+  std::unique_ptr<MongoJob> job = inox_mongodb_collection_job(state_, MongoJobKind::distinct);
+
+  if (!job) {
+    return inox::Promise();
+  }
+
+  job->first = inox_mongodb_encode_owned_document(filter);
+
+  if (
+    job->first == nullptr ||
+    !inox_mongodb_copy_string(key, job->text, "TypeError: distinct key is invalid") ||
+    job->text.empty()
+  ) {
+    if (!inox::thrown() && job->text.empty()) {
+      inox_mongodb_throw("MongoInvalidArgumentError: distinct key must not be empty");
+    }
+
+    return inox::Promise();
+  }
+
+  return inox_mongodb_queue_job(std::move(job));
+}
+
+inox::Promise MongoCollection::countDocuments() const {
+  std::unique_ptr<MongoJob> job = inox_mongodb_collection_job(state_, MongoJobKind::countDocuments);
+
+  if (!job) {
+    return inox::Promise();
+  }
+
+  job->first = bson_new();
+
+  if (job->first == nullptr) {
+    inox_mongodb_throw_oom();
+    return inox::Promise();
+  }
+
+  return inox_mongodb_queue_job(std::move(job));
+}
+
+inox::Promise MongoCollection::countDocuments(const inox::Value& filter) const {
+  return inox_mongodb_one_document_job(state_, MongoJobKind::countDocuments, filter);
+}
+
+inox::Promise MongoCollection::estimatedDocumentCount() const {
+  std::unique_ptr<MongoJob> job = inox_mongodb_collection_job(state_, MongoJobKind::estimatedDocumentCount);
+  return job ? inox_mongodb_queue_job(std::move(job)) : inox::Promise();
 }
 
 inox::Promise MongoCollection::insertOne(const inox::Value& document) const {

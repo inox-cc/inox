@@ -19,11 +19,15 @@ test('mongodb package подключается только через bare-pack
 
   const descriptor = library.compilerPackage
   const objectId = descriptor?.nativeTypes?.find((item) => item.typeId === 'mongodb#ObjectId')
+  const cursor = descriptor?.nativeTypes?.find((item) => item.typeId === 'mongodb#Cursor')
 
   assert.ok(objectId)
   assert.equal(objectId.cRuntimeValueOwnership, 'owned')
+  assert.deepEqual(cursor?.declarationNames, ['FindCursor', 'AggregationCursor'])
   assert.ok(descriptor?.operations.some((item) => item.bindingId === 'mongodb#module:mongodb:BSON.serialize'))
   assert.ok(descriptor?.operations.some((item) => item.bindingId === 'mongodb#module:mongodb:BSON.deserialize'))
+  assert.ok(descriptor?.operations.some((item) => item.bindingId === 'mongodb#Collection.find'))
+  assert.ok(descriptor?.operations.some((item) => item.bindingId === 'mongodb#Cursor.toArray'))
 })
 
 test('mongodb facade не раскрывает заголовки C Driver', async () => {

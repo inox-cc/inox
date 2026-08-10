@@ -15,6 +15,7 @@ class MongoBsonCodec;
 class MongoClientState;
 class MongoDatabaseState;
 class MongoCollectionState;
+class MongoCursorState;
 
 class MongoObjectId final {
 public:
@@ -96,6 +97,27 @@ private:
   friend class MongoCollection;
 };
 
+class MongoCursor final {
+public:
+  MongoCursor();
+  explicit MongoCursor(const inox::Value& value);
+  explicit MongoCursor(std::shared_ptr<MongoCursorState> state);
+
+  static bool isMongoCursor(const inox::Value& value);
+
+  MongoCursor sort(const inox::Value& sort) const;
+  MongoCursor limit(double limit) const;
+  inox::Promise next() const;
+  inox::Promise toArray() const;
+  bool valid() const;
+  inox::Value runtimeValue() const;
+
+private:
+  std::shared_ptr<MongoCursorState> state_;
+
+  friend class MongoCollection;
+};
+
 class MongoCollection final {
 public:
   MongoCollection();
@@ -103,9 +125,18 @@ public:
 
   static bool isMongoCollection(const inox::Value& value);
 
+  MongoCursor find() const;
+  MongoCursor find(const inox::Value& filter) const;
   inox::Promise findOne() const;
   inox::Promise findOne(const inox::Value& filter) const;
   inox::Promise findOneAndUpdate(const inox::Value& filter, const inox::Value& update) const;
+  MongoCursor aggregate() const;
+  MongoCursor aggregate(const inox::Value& pipeline) const;
+  inox::Promise distinct(inox::StringView key) const;
+  inox::Promise distinct(inox::StringView key, const inox::Value& filter) const;
+  inox::Promise countDocuments() const;
+  inox::Promise countDocuments(const inox::Value& filter) const;
+  inox::Promise estimatedDocumentCount() const;
   inox::Promise insertOne(const inox::Value& document) const;
   inox::Promise insertMany(const inox::Value& documents) const;
   inox::Promise updateOne(const inox::Value& filter, const inox::Value& update) const;
