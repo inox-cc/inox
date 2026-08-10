@@ -17,6 +17,7 @@ import {
   readFeatureTestFile,
   runFeatureTest
 } from './helpers/feature-tests.ts'
+import { discoverLibraryIntegrationTests } from './helpers/library-integration-tests.ts'
 
 type FeatureTestStatus = 'passed' | 'failed' | 'skipped'
 
@@ -136,13 +137,6 @@ async function runHostedIntegrationTests(): Promise<void> {
   const { assertHostedCryptoSecretKeyRuntime } = await import('./integration/crypto-secret-key-runtime-hosted.test.ts')
   const { assertHostedCryptoSignatureRuntime } = await import('./integration/crypto-signature-runtime-hosted.test.ts')
   const { assertHostedCryptoScryptRuntime } = await import('./integration/crypto-scrypt-runtime-hosted.test.ts')
-  const { assertHostedMongoBsonRuntime } = await import('./integration/mongodb-bson-runtime-hosted.test.ts')
-  const { assertHostedMongoCrudRuntime } = await import('./integration/mongodb-crud-runtime-hosted.test.ts')
-  const { assertHostedMongoIndexBulkRuntime } =
-    await import('./integration/mongodb-index-bulk-runtime-hosted.test.ts')
-  const { assertHostedMongoQueryRuntime } = await import('./integration/mongodb-query-runtime-hosted.test.ts')
-  const { assertHostedMongoServerEntryRuntime } =
-    await import('./integration/mongodb-server-entry-runtime-hosted.test.ts')
   const { assertDateLowersToGlobalObject } = await import('./integration/date-global-object-lowering.test.ts')
   const { assertPerformanceLowersToGlobalObject } =
     await import('./integration/performance-global-object-lowering.test.ts')
@@ -331,25 +325,11 @@ async function runHostedIntegrationTests(): Promise<void> {
       await assertHostedCryptoScryptRuntime()
     })
 
-    await t.test('mongodb-bson-runtime-hosted', async () => {
-      await assertHostedMongoBsonRuntime()
-    })
-
-    await t.test('mongodb-crud-runtime-hosted', async () => {
-      await assertHostedMongoCrudRuntime()
-    })
-
-    await t.test('mongodb-index-bulk-runtime-hosted', async () => {
-      await assertHostedMongoIndexBulkRuntime()
-    })
-
-    await t.test('mongodb-query-runtime-hosted', async () => {
-      await assertHostedMongoQueryRuntime()
-    })
-
-    await t.test('mongodb-server-entry-runtime-hosted', async () => {
-      await assertHostedMongoServerEntryRuntime()
-    })
+    for (const integrationTest of await discoverLibraryIntegrationTests()) {
+      await t.test(`${integrationTest.name}-hosted`, async () => {
+        await integrationTest.run({ kind: 'hosted' })
+      })
+    }
 
     await t.test('date-global-object-lowering', () => {
       assertDateLowersToGlobalObject()
@@ -558,7 +538,7 @@ async function runHostedIntegrationTests(): Promise<void> {
       assertPromiseVariablesUseCppRaii()
     })
 
-    await t.test('Promise observe сохраняет ownership callback context при ошибке', async () => {
+    await t.test('Promise observe preserves callback context ownership on error', async () => {
       await assertPromiseObserveFailureRetainsCallbackContext()
     })
 
@@ -659,13 +639,6 @@ async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<
   const { assertNativeCryptoSecretKeyRuntime } = await import('./integration/crypto-secret-key-runtime-native.test.ts')
   const { assertNativeCryptoSignatureRuntime } = await import('./integration/crypto-signature-runtime-native.test.ts')
   const { assertNativeCryptoScryptRuntime } = await import('./integration/crypto-scrypt-runtime-native.test.ts')
-  const { assertNativeMongoBsonRuntime } = await import('./integration/mongodb-bson-runtime-native.test.ts')
-  const { assertNativeMongoCrudRuntime } = await import('./integration/mongodb-crud-runtime-native.test.ts')
-  const { assertNativeMongoIndexBulkRuntime } =
-    await import('./integration/mongodb-index-bulk-runtime-native.test.ts')
-  const { assertNativeMongoQueryRuntime } = await import('./integration/mongodb-query-runtime-native.test.ts')
-  const { assertNativeMongoServerEntryRuntime } =
-    await import('./integration/mongodb-server-entry-runtime-native.test.ts')
   const { assertNativeCompilerUsesDirectNativeInitializers } =
     await import('./integration/direct-native-variable-lowering.test.ts')
   const { assertNativeCompilerRuntimeLogValuesUseDirectRaiiAssignment } =
@@ -731,25 +704,11 @@ async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<
       await assertNativeCryptoScryptRuntime(compilerPath)
     })
 
-    await t.test('mongodb-bson-runtime-native', async () => {
-      await assertNativeMongoBsonRuntime(compilerPath)
-    })
-
-    await t.test('mongodb-crud-runtime-native', async () => {
-      await assertNativeMongoCrudRuntime(compilerPath)
-    })
-
-    await t.test('mongodb-index-bulk-runtime-native', async () => {
-      await assertNativeMongoIndexBulkRuntime(compilerPath)
-    })
-
-    await t.test('mongodb-query-runtime-native', async () => {
-      await assertNativeMongoQueryRuntime(compilerPath)
-    })
-
-    await t.test('mongodb-server-entry-runtime-native', async () => {
-      await assertNativeMongoServerEntryRuntime(compilerPath)
-    })
+    for (const integrationTest of await discoverLibraryIntegrationTests()) {
+      await t.test(`${integrationTest.name}-native`, async () => {
+        await integrationTest.run({ kind: 'binary', path: compilerPath })
+      })
+    }
 
     await t.test('native-direct-variable-lowering', async () => {
       await assertNativeCompilerUsesDirectNativeInitializers(compilerPath)

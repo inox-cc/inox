@@ -2,13 +2,30 @@ import assert from 'node:assert/strict'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { rootDir } from '../../scripts/lib/repo-root.ts'
-import { runCommand } from '../../scripts/lib/run-command.ts'
+import { rootDir } from '../../../../../scripts/lib/repo-root.ts'
+import { runCommand } from '../../../../../scripts/lib/run-command.ts'
+import type { LibraryIntegrationCompiler } from '../../../../../tests/helpers/library-integration-tests.ts'
 
 export type MongoBsonRuntimeCompiler = {
   args: string[]
   command: string
   label: string
+}
+
+export function mongoRuntimeCompiler(compiler: LibraryIntegrationCompiler): MongoBsonRuntimeCompiler {
+  if (compiler.kind === 'hosted') {
+    return {
+      args: ['compiler/index.ts'],
+      command: process.execPath,
+      label: 'hosted'
+    }
+  }
+
+  return {
+    args: [],
+    command: compiler.path,
+    label: 'native'
+  }
 }
 
 const resultPrefix = 'INOX_MONGODB_BSON '

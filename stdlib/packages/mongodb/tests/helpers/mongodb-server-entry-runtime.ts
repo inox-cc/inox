@@ -3,7 +3,9 @@ import { assertMongoServerRuntime } from './mongodb-server-runtime.ts'
 
 const resultPrefix = 'INOX_MONGODB_SERVER '
 
-export async function assertMongoServerEntryRuntime(compiler: MongoBsonRuntimeCompiler): Promise<void> {
+export async function assertMongoServerEntryRuntime(
+  compiler: MongoBsonRuntimeCompiler
+): Promise<void> {
   await assertMongoServerRuntime(compiler, {
     name: 'mongodb-server-entry-runtime',
     resultPrefix,

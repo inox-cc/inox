@@ -22,7 +22,7 @@
     "lint": "prettier . --write",
     "typecheck": "tsc --noEmit",
     "test": "pnpm run test:features",
-    "test:architecture": "node scripts/test-log.ts dist/test-architecture.log -- node --test tests/architecture/*.test.ts",
+    "test:architecture": "node scripts/test-log.ts dist/test-architecture.log -- node scripts/test-architecture.ts",
     "test:node": "pnpm run test:features --compiler node",
     "test:inox": "node scripts/test-log.ts dist/test-inox.log -- node scripts/test-inox.ts --compiler dist/inox --semantic-probe dist/inox-stage6-semantic-probe",
     "test:network": "node scripts/test-log.ts dist/test-network.log -- node scripts/check-network-inox.ts hosted",

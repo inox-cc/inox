@@ -4,8 +4,8 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { join } from 'node:path'
 
-import { rootDir } from '../../scripts/lib/repo-root.ts'
-import { runCommand } from '../../scripts/lib/run-command.ts'
+import { rootDir } from '../../../../../scripts/lib/repo-root.ts'
+import { runCommand } from '../../../../../scripts/lib/run-command.ts'
 import type { MongoBsonRuntimeCompiler } from './mongodb-bson-runtime.ts'
 
 export interface MongoServerRuntimeCase {

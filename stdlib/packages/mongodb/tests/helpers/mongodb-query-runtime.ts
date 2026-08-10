@@ -3,7 +3,9 @@ import { assertMongoServerRuntime } from './mongodb-server-runtime.ts'
 
 const resultPrefix = 'INOX_MONGODB_QUERY '
 
-export async function assertMongoQueryRuntime(compiler: MongoBsonRuntimeCompiler): Promise<void> {
+export async function assertMongoQueryRuntime(
+  compiler: MongoBsonRuntimeCompiler
+): Promise<void> {
   await assertMongoServerRuntime(compiler, {
     name: 'mongodb-query-runtime',
     resultPrefix,

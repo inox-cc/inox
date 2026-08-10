@@ -8,9 +8,15 @@ import { createCompilerLibrarySetFromDiscovered } from '../../scripts/lib/compil
 
 const fixture = resolve('dist/test-tmp/compiler-global-promise-full-tree-deletion')
 
-test('физическое удаление global:promise даёт dependency diagnostic для реальных dependents', async () => {
+test('deleting global:promise reports a dependency diagnostic for real dependents', async () => {
   await rm(fixture, { recursive: true, force: true })
   await cp(resolve('stdlib'), resolve(fixture, 'stdlib'), { recursive: true })
+
+  const baseline = await discoverCompilerLibraries(fixture)
+  const expectedDependents = baseline
+    .filter((library) => library.compilerPackage?.dependencies.includes('global:promise'))
+    .map((library) => library.id)
+
   await rm(resolve(fixture, 'stdlib/global/promise'), { recursive: true })
 
   const discovered = await discoverCompilerLibraries(fixture)
@@ -21,13 +27,8 @@ test('физическое удаление global:promise даёт dependency d
     .map((library) => library.id)
 
   assert.ok(!libraryIds.includes('global:promise'))
-  assert.deepEqual(dependents, [
-    'global:fetch',
-    'mongodb',
-    'node:dns/promises',
-    'node:fs/promises',
-    'node:timers/promises'
-  ])
+  assert.ok(expectedDependents.length > 0)
+  assert.deepEqual(dependents, expectedDependents)
   assert.ok(nativeSources.every((source) => !source.startsWith('stdlib/global/promise/')))
 
   const math = discovered.find((library) => library.id === 'global:math')

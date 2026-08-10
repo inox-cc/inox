@@ -3,7 +3,9 @@ import { assertMongoServerRuntime } from './mongodb-server-runtime.ts'
 
 const resultPrefix = 'INOX_MONGODB_INDEX_BULK '
 
-export async function assertMongoIndexBulkRuntime(compiler: MongoBsonRuntimeCompiler): Promise<void> {
+export async function assertMongoIndexBulkRuntime(
+  compiler: MongoBsonRuntimeCompiler
+): Promise<void> {
   await assertMongoServerRuntime(compiler, {
     name: 'mongodb-index-bulk-runtime',
     resultPrefix,

@@ -246,11 +246,17 @@ async function collectPath(path: string): Promise<string[]> {
     return files
   }
 
-  if (info.isFile() && path.endsWith('.test.ts')) {
+  if (info.isFile() && path.endsWith('.test.ts') && isFeatureTestPath(path)) {
     return [path]
   }
 
   return []
+}
+
+function isFeatureTestPath(path: string): boolean {
+  const normalized = normalizeFilePath(path)
+
+  return !normalized.includes('/tests/architecture/') && !normalized.includes('/tests/integration/')
 }
 
 function parseFeatureTestFile(path: string, raw: string): FeatureTestFile {
