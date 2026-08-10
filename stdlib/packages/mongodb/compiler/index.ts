@@ -5,7 +5,9 @@ import type {
   LibraryCArgumentKind,
   LibraryCResultMappingDescriptor,
   LibraryOperationDescriptor,
+  LibraryOperationTypeParameterDescriptor,
   LibraryOperationVariantDescriptor,
+  LibraryNativeTypeDescriptor,
   NominalTypeRef,
   ObjectTypeRef,
   PrimitiveTypeRef,
@@ -15,13 +17,24 @@ import type {
 const libraryId = 'mongodb'
 const runtimeRequirement = libraryId
 const objectIdTypeId = `${libraryId}#ObjectId`
+const mongoClientTypeId = `${libraryId}#MongoClient`
+const databaseTypeId = `${libraryId}#Db`
+const collectionTypeId = `${libraryId}#Collection`
 const uint8ArrayTypeId = 'global:binary#Uint8Array'
+const arrayTypeId = 'global:collections#Array'
+const promiseTypeId = 'global:promise#Promise'
+const errorTypeId = 'global:error#Error'
 const runtimeRequirements = [runtimeRequirement]
 const objectIdTypeRef: NominalTypeRef = nominalTypeRef(objectIdTypeId)
 const uint8ArrayTypeRef: NominalTypeRef = nominalTypeRef(uint8ArrayTypeId)
 const booleanTypeRef: PrimitiveTypeRef = primitiveTypeRef('boolean')
 const numberTypeRef: PrimitiveTypeRef = primitiveTypeRef('number')
 const stringTypeRef: PrimitiveTypeRef = primitiveTypeRef('string')
+const voidTypeRef: PrimitiveTypeRef = primitiveTypeRef('void')
+const mongoClientTypeRef = nominalTypeRef(mongoClientTypeId)
+const databaseTypeRef = nominalTypeRef(databaseTypeId)
+const schemaParameterTypeRef: TypeRef = { kind: 'parameter', name: 'TSchema' }
+const nullableSchemaParameterTypeRef: TypeRef = { kind: 'parameter', name: 'TSchema', nullable: true }
 const documentTypeRef: ObjectTypeRef = {
   kind: 'object',
   fields: [],
@@ -60,12 +73,26 @@ const operations: LibraryOperationDescriptor[] = [
   objectIdReceiverCall('equals', ['receiver', 'string-view-or-value'], booleanTypeRef, [stringOrObjectIdArgument()]),
   objectIdReceiverCall('toString', ['receiver'], stringTypeRef, [], stringResultMapping),
   bsonCall('serialize', ['runtime-value'], uint8ArrayTypeRef, undefined, [documentArgument()]),
-  bsonCall('deserialize', ['value'], documentTypeRef, valueResultMapping, [uint8ArrayArgument()])
+  bsonCall('deserialize', ['value'], documentTypeRef, valueResultMapping, [uint8ArrayArgument()]),
+  mongoClientConstructor(),
+  mongoClientStaticConnect(),
+  mongoClientReceiverCall('connect', [], promiseTypeRef(mongoClientTypeRef)),
+  mongoClientDbCall(),
+  mongoClientReceiverCall('close', [], promiseTypeRef(voidTypeRef)),
+  databaseCollectionCall(),
+  collectionFindOneCall(),
+  collectionReceiverCall('findOneAndUpdate', [documentArgument(), documentArgument()], promiseTypeRef(nullableSchemaParameterTypeRef)),
+  collectionReceiverCall('insertOne', [schemaArgument()], promiseTypeRef(insertOneResultTypeRef())),
+  collectionReceiverCall('insertMany', [arrayArgument()], promiseTypeRef(insertManyResultTypeRef())),
+  collectionReceiverCall('updateOne', [documentArgument(), documentArgument()], promiseTypeRef(updateResultTypeRef())),
+  collectionReceiverCall('updateMany', [documentArgument(), documentArgument()], promiseTypeRef(updateResultTypeRef())),
+  collectionReceiverCall('deleteOne', [documentArgument()], promiseTypeRef(deleteResultTypeRef())),
+  collectionReceiverCall('deleteMany', [documentArgument()], promiseTypeRef(deleteResultTypeRef()))
 ]
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:binary', 'global:collections', 'global:time'],
+  dependencies: ['global:binary', 'global:collections', 'global:error', 'global:promise', 'global:time'],
   nativeTypes: [
     {
       libraryId,
@@ -81,6 +108,12 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       cRuntimeValueExpression: '$value.runtimeValue().release()',
       cRuntimeValueOwnership: 'owned',
       cRuntimeValueValidExpression: 'MongoObjectId::isObjectId(inox::Value($value))'
+    },
+    nativeFacadeType(mongoClientTypeId, 'MongoClient', 'MongoClient'),
+    nativeFacadeType(databaseTypeId, 'Db', 'MongoDatabase'),
+    {
+      ...nativeFacadeType(collectionTypeId, 'Collection', 'MongoCollection'),
+      typeParameters: ['TSchema']
     }
   ],
   operations,
@@ -91,13 +124,23 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       dependencies: [
         'global:binary',
         'global:collections#array',
+        'global:error',
+        'global:promise#promise',
         'global:time',
         'managed-values',
         'objects',
         'string-bytes'
       ],
       cPreludeIncludes: ['inox/mongodb.h'],
-      capabilities: []
+      capabilities: ['tcp'],
+      optionConstraints: [
+        {
+          optionId: 'target:runtime#loop-backend',
+          allowedValues: ['libuv'],
+          diagnosticCode: 'INOX_MONGODB_LOOP_BACKEND',
+          diagnosticMessage: 'mongodb is not implemented without libuv; select --loop-backend libuv'
+        }
+      ]
     }
   ]
 }
@@ -122,6 +165,7 @@ export const compilerLibraryNativeBuild: CompilerLibraryNativeBuildDescriptor = 
         { name: 'ENABLE_ZSTD', value: 'OFF' },
         { name: 'ENABLE_ZLIB', value: 'OFF' },
         { name: 'ENABLE_SASL', value: 'OFF' },
+        { name: 'ENABLE_SHM_COUNTERS', value: 'OFF' },
         { name: 'ENABLE_CLIENT_SIDE_ENCRYPTION', value: 'OFF' },
         { name: 'ENABLE_MONGODB_AWS_AUTH', value: 'OFF' },
         { name: 'ENABLE_SRV', value: 'ON' },
@@ -243,6 +287,265 @@ function bsonCall(
   }
 }
 
+function nativeFacadeType(typeId: string, declarationName: string, cppType: string): LibraryNativeTypeDescriptor {
+  return {
+    libraryId,
+    typeId,
+    declarationNames: [declarationName],
+    valueType: 'object',
+    cppType,
+    baseTypeIds: [],
+    runtimeRequirements,
+    cValueAdapter: `${cppType}(inox::Value($value))`,
+    cValueAdapterFailureMode: 'thrown',
+    cValueAdapterPreservesPendingException: true,
+    cRuntimeValueExpression: '$value.runtimeValue().release()',
+    cRuntimeValueOwnership: 'owned',
+    cRuntimeValueValidExpression: `${cppType}::is${cppType === 'MongoDatabase' ? 'MongoDatabase' : cppType}(inox::Value($value))`
+  }
+}
+
+function mongoClientConstructor(): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: moduleBinding('MongoClient'),
+    bindingAliases: [moduleDefaultBinding('MongoClient')],
+    operationId: `${mongoClientTypeId}#construct`,
+    kind: 'construct',
+    runtimeRequirements,
+    minArgs: 1,
+    maxArgs: 2,
+    argumentChecks: [stringArgument(), objectArgument()],
+    cFailureMode: 'thrown',
+    resultTypeRef: mongoClientTypeRef,
+    variants: [
+      constructorVariant('MongoClient', 1, ['string-view'], [stringArgument()]),
+      constructorVariant('MongoClient', 2, ['string-view', 'runtime-value'], [stringArgument(), objectArgument()])
+    ]
+  }
+}
+
+function mongoClientStaticConnect(): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: moduleBinding('MongoClient.connect'),
+    bindingAliases: [moduleDefaultBinding('MongoClient.connect')],
+    operationId: `${mongoClientTypeId}#static-connect`,
+    kind: 'call',
+    runtimeRequirements,
+    minArgs: 1,
+    maxArgs: 2,
+    argumentChecks: [stringArgument(), objectArgument()],
+    cFailureMode: 'thrown',
+    cCallStyle: 'function',
+    resultTypeRef: promiseTypeRef(mongoClientTypeRef),
+    variants: [
+      callVariant('MongoClient::connect', 1, ['string-view'], [stringArgument()]),
+      callVariant('MongoClient::connect', 2, ['string-view', 'runtime-value'], [stringArgument(), objectArgument()])
+    ]
+  }
+}
+
+function mongoClientReceiverCall(
+  name: string,
+  argumentChecks: LibraryArgumentCheckDescriptor[],
+  resultTypeRef: TypeRef
+): LibraryOperationDescriptor {
+  return receiverCall(mongoClientTypeId, name, argumentChecks, resultTypeRef)
+}
+
+function mongoClientDbCall(): LibraryOperationDescriptor {
+  return {
+    ...receiverCall(mongoClientTypeId, 'db', [], databaseTypeRef),
+    minArgs: 0,
+    maxArgs: 1,
+    argumentChecks: [stringArgument()],
+    variants: [
+      callVariant('db', 0, ['receiver'], []),
+      callVariant('db', 1, ['receiver', 'string-view'], [stringArgument()])
+    ]
+  }
+}
+
+function databaseCollectionCall(): LibraryOperationDescriptor {
+  const typeParameters: LibraryOperationTypeParameterDescriptor[] = [
+    {
+      name: 'TSchema',
+      sources: [
+        { source: 'explicit-type-argument', argumentIndex: 0 },
+        { source: 'contextual-type-argument', argumentIndex: 0 }
+      ]
+    }
+  ]
+
+  return {
+    ...receiverCall(databaseTypeId, 'collection', [stringArgument()], collectionTypeRef(schemaParameterTypeRef)),
+    cArgumentKinds: ['receiver', 'string-view'],
+    typeParameters
+  }
+}
+
+function collectionFindOneCall(): LibraryOperationDescriptor {
+  return {
+    ...collectionReceiverCall('findOne', [], promiseTypeRef(nullableSchemaParameterTypeRef)),
+    minArgs: 0,
+    maxArgs: 1,
+    argumentChecks: [documentArgument()],
+    variants: [
+      callVariant('findOne', 0, ['receiver'], []),
+      callVariant('findOne', 1, ['receiver', 'runtime-value'], [documentArgument()])
+    ]
+  }
+}
+
+function collectionReceiverCall(
+  name: string,
+  argumentChecks: LibraryArgumentCheckDescriptor[],
+  resultTypeRef: TypeRef
+): LibraryOperationDescriptor {
+  return {
+    ...receiverCall(collectionTypeId, name, argumentChecks, resultTypeRef),
+    typeParameters: [{ name: 'TSchema', sources: [{ source: 'receiver-type-argument', argumentIndex: 0 }] }]
+  }
+}
+
+function receiverCall(
+  receiverTypeId: string,
+  name: string,
+  argumentChecks: LibraryArgumentCheckDescriptor[],
+  resultTypeRef: TypeRef
+): LibraryOperationDescriptor {
+  return {
+    libraryId,
+    bindingId: `${receiverTypeId}.${name}`,
+    operationId: `${receiverTypeId}#${name}`,
+    kind: 'call',
+    runtimeRequirements,
+    receiverTypeId,
+    cExpression: name,
+    cArgumentKinds: ['receiver', ...argumentChecks.map(() => 'runtime-value' as const)],
+    cCallStyle: 'member',
+    cFailureMode: 'thrown',
+    minArgs: argumentChecks.length,
+    maxArgs: argumentChecks.length,
+    argumentChecks,
+    resultTypeRef
+  }
+}
+
+function constructorVariant(
+  cExpression: string,
+  argumentCount: number,
+  cArgumentKinds: LibraryCArgumentKind[],
+  argumentChecks: LibraryArgumentCheckDescriptor[]
+): LibraryOperationVariantDescriptor {
+  return {
+    minArgs: argumentCount,
+    maxArgs: argumentCount,
+    cExpression,
+    cArgumentKinds,
+    cResultMode: 'value',
+    argumentChecks
+  }
+}
+
+function callVariant(
+  cExpression: string,
+  argumentCount: number,
+  cArgumentKinds: LibraryCArgumentKind[],
+  argumentChecks: LibraryArgumentCheckDescriptor[]
+): LibraryOperationVariantDescriptor {
+  return {
+    minArgs: argumentCount,
+    maxArgs: argumentCount,
+    cExpression,
+    cArgumentKinds,
+    argumentChecks
+  }
+}
+
+function collectionTypeRef(schema: TypeRef): NominalTypeRef {
+  return {
+    kind: 'nominal',
+    typeId: collectionTypeId,
+    args: [schema],
+    nullable: false,
+    ownership: 'value',
+    traits: []
+  }
+}
+
+function arrayTypeRef(element: TypeRef): NominalTypeRef {
+  return {
+    kind: 'nominal',
+    typeId: arrayTypeId,
+    args: [element],
+    nullable: false,
+    ownership: 'value',
+    traits: [{ traitId: 'iterable', args: [element] }]
+  }
+}
+
+function promiseTypeRef(fulfilledType: TypeRef): NominalTypeRef {
+  const errorTypeRef = nominalTypeRef(errorTypeId)
+  return {
+    kind: 'nominal',
+    typeId: promiseTypeId,
+    args: [fulfilledType],
+    nullable: false,
+    ownership: 'value',
+    traits: [{ traitId: 'awaitable', args: [fulfilledType, errorTypeRef] }]
+  }
+}
+
+function resultObjectTypeRef(
+  declaredName: string,
+  fields: Array<{ name: string; typeRef: TypeRef; optional?: boolean }>
+): ObjectTypeRef {
+  return {
+    kind: 'object',
+    declaredName,
+    fields: fields.map((field) => ({ ...field, readonly: true })),
+    dynamic: false,
+    dynamicField: null,
+    nullable: false,
+    ownership: 'value',
+    traits: []
+  }
+}
+
+function insertOneResultTypeRef(): ObjectTypeRef {
+  return resultObjectTypeRef('InsertOneResult', [
+    { name: 'acknowledged', typeRef: booleanTypeRef },
+    { name: 'insertedId', typeRef: unknownTypeRef() }
+  ])
+}
+
+function insertManyResultTypeRef(): ObjectTypeRef {
+  return resultObjectTypeRef('InsertManyResult', [
+    { name: 'acknowledged', typeRef: booleanTypeRef },
+    { name: 'insertedCount', typeRef: numberTypeRef },
+    { name: 'insertedIds', typeRef: documentTypeRef }
+  ])
+}
+
+function updateResultTypeRef(): ObjectTypeRef {
+  return resultObjectTypeRef('UpdateResult', [
+    { name: 'acknowledged', typeRef: booleanTypeRef },
+    { name: 'matchedCount', typeRef: numberTypeRef },
+    { name: 'modifiedCount', typeRef: numberTypeRef },
+    { name: 'upsertedCount', typeRef: numberTypeRef },
+    { name: 'upsertedId', typeRef: unknownTypeRef() }
+  ])
+}
+
+function deleteResultTypeRef(): ObjectTypeRef {
+  return resultObjectTypeRef('DeleteResult', [
+    { name: 'acknowledged', typeRef: booleanTypeRef },
+    { name: 'deletedCount', typeRef: numberTypeRef }
+  ])
+}
+
 function moduleBinding(name: string): string {
   return `${libraryId}#module:${libraryId}:${name}`
 }
@@ -251,7 +554,7 @@ function moduleDefaultBinding(name: string): string {
   return `${libraryId}#module:${libraryId}:default.${name}`
 }
 
-function primitiveTypeRef(name: 'boolean' | 'number' | 'string'): PrimitiveTypeRef {
+function primitiveTypeRef(name: 'boolean' | 'number' | 'string' | 'void'): PrimitiveTypeRef {
   return { kind: 'primitive', name, nullable: false, ownership: 'value', traits: [] }
 }
 
@@ -277,6 +580,18 @@ function stringOrObjectIdArgument(): LibraryArgumentCheckDescriptor {
 
 function documentArgument(): LibraryArgumentCheckDescriptor {
   return { valueTypes: ['object'] }
+}
+
+function objectArgument(): LibraryArgumentCheckDescriptor {
+  return { valueTypes: ['object'] }
+}
+
+function schemaArgument(): LibraryArgumentCheckDescriptor {
+  return { valueTypes: ['object'], typeRef: schemaParameterTypeRef }
+}
+
+function arrayArgument(): LibraryArgumentCheckDescriptor {
+  return { valueTypes: ['object'], objectTypeIds: [arrayTypeId], typeRef: arrayTypeRef(schemaParameterTypeRef) }
 }
 
 function uint8ArrayArgument(): LibraryArgumentCheckDescriptor {

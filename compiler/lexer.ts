@@ -719,7 +719,7 @@ function isDigit(ch: string): boolean {
 
 function isIdentifierStart(ch: string): boolean {
   const code = ch.charCodeAt(0)
-  return ch === '_' || (code >= 97 && code <= 122) || (code >= 65 && code <= 90)
+  return ch === '_' || ch === '$' || (code >= 97 && code <= 122) || (code >= 65 && code <= 90)
 }
 
 function isIdentifierPart(ch: string): boolean {

@@ -137,6 +137,7 @@ async function runHostedIntegrationTests(): Promise<void> {
   const { assertHostedCryptoSignatureRuntime } = await import('./integration/crypto-signature-runtime-hosted.test.ts')
   const { assertHostedCryptoScryptRuntime } = await import('./integration/crypto-scrypt-runtime-hosted.test.ts')
   const { assertHostedMongoBsonRuntime } = await import('./integration/mongodb-bson-runtime-hosted.test.ts')
+  const { assertHostedMongoCrudRuntime } = await import('./integration/mongodb-crud-runtime-hosted.test.ts')
   const { assertDateLowersToGlobalObject } = await import('./integration/date-global-object-lowering.test.ts')
   const { assertPerformanceLowersToGlobalObject } =
     await import('./integration/performance-global-object-lowering.test.ts')
@@ -327,6 +328,10 @@ async function runHostedIntegrationTests(): Promise<void> {
 
     await t.test('mongodb-bson-runtime-hosted', async () => {
       await assertHostedMongoBsonRuntime()
+    })
+
+    await t.test('mongodb-crud-runtime-hosted', async () => {
+      await assertHostedMongoCrudRuntime()
     })
 
     await t.test('date-global-object-lowering', () => {
@@ -638,6 +643,7 @@ async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<
   const { assertNativeCryptoSignatureRuntime } = await import('./integration/crypto-signature-runtime-native.test.ts')
   const { assertNativeCryptoScryptRuntime } = await import('./integration/crypto-scrypt-runtime-native.test.ts')
   const { assertNativeMongoBsonRuntime } = await import('./integration/mongodb-bson-runtime-native.test.ts')
+  const { assertNativeMongoCrudRuntime } = await import('./integration/mongodb-crud-runtime-native.test.ts')
   const { assertNativeCompilerUsesDirectNativeInitializers } =
     await import('./integration/direct-native-variable-lowering.test.ts')
   const { assertNativeCompilerRuntimeLogValuesUseDirectRaiiAssignment } =
@@ -705,6 +711,10 @@ async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<
 
     await t.test('mongodb-bson-runtime-native', async () => {
       await assertNativeMongoBsonRuntime(compilerPath)
+    })
+
+    await t.test('mongodb-crud-runtime-native', async () => {
+      await assertNativeMongoCrudRuntime(compilerPath)
     })
 
     await t.test('native-direct-variable-lowering', async () => {

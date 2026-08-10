@@ -264,7 +264,13 @@ export function resolveDeclaredType(
     const nativeTypeParameters = genericNativeType?.typeParameters
 
     if (nativeTypeParameters !== null && typeof nativeTypeParameters !== 'undefined') {
-      if (nativeTypeParameters.length !== genericApplication.args.length) {
+      const declarationTypeParameters = context.symbols.get(genericApplication.name)?.typeParameters ?? []
+      const argumentNames = defaultTypeArgumentNames(declarationTypeParameters, genericApplication.args)
+
+      if (
+        nativeTypeParameters.length !== genericApplication.args.length &&
+        (argumentNames === null || nativeTypeParameters.length !== argumentNames.length)
+      ) {
         context.diagnostics.push(
           diagnostic(
             'INOX_TYPE_ARGUMENT_COUNT',
@@ -276,14 +282,22 @@ export function resolveDeclaredType(
       }
 
       const resolved = unresolvedTypeInfo()
-      applyGenericNativeType(context, name, genericApplication.args, resolved, loc)
+      applyGenericNativeType(context, name, argumentNames ?? genericApplication.args, resolved, loc)
       return resolved
     }
 
     const definition = context.types.get(genericApplication.name)
 
     if (definition !== null && typeof definition !== 'undefined' && (definition.typeParameters ?? []).length > 0) {
-      return resolveGenericDeclaredType(context, name, definition, genericApplication.args, loc)
+      const argumentNames = defaultTypeArgumentNames(definition.typeParameters ?? [], genericApplication.args)
+
+      return resolveGenericDeclaredType(
+        context,
+        argumentNames === null ? name : `${genericApplication.name}<${argumentNames.join(',')}>`,
+        definition,
+        argumentNames ?? genericApplication.args,
+        loc
+      )
     }
   }
 
@@ -314,20 +328,29 @@ export function resolveDeclaredType(
     const info = unresolvedTypeInfo()
     const fields: AnyNode[] = []
     const nativeFields = nativeType.fields ?? []
+    const declarationTypeParameters = context.symbols.get(name)?.typeParameters ?? []
+    const defaultArgumentNames = defaultTypeArgumentNames(declarationTypeParameters, [])
 
     for (let index = 0; index < nativeFields.length; index = index + 1) {
       fields.push(libraryNativeTypeField(nativeFields[index], loc))
     }
 
     info.valueType = nativeType.valueType as ValueType
-    info.typeRef = {
-      kind: 'nominal',
-      typeId: nativeType.typeId,
-      args: [],
-      nullable: false,
-      ownership: 'value',
-      traits: []
-    }
+    info.typeRef = defaultArgumentNames === null
+      ? {
+          kind: 'nominal',
+          typeId: nativeType.typeId,
+          args: [],
+          nullable: false,
+          ownership: 'value',
+          traits: []
+        }
+      : instantiateNativeTypeRef(
+          nativeType,
+          defaultArgumentNames.map((argument) =>
+            typeRefFromResolvedType(resolveDeclaredType(context, argument, loc), argument)
+          )
+        )
     info.shape = {
       kind: 'object',
       baseTypes: nativeType.baseTypeIds,
@@ -433,6 +456,18 @@ export function resolveDeclaredType(
   const shape = context.types.get(name)
 
   if (shape !== null && typeof shape !== 'undefined') {
+    const defaultArgumentNames = defaultTypeArgumentNames(shape.typeParameters ?? [], [])
+
+    if ((shape.typeParameters ?? []).length > 0 && defaultArgumentNames !== null) {
+      return resolveGenericDeclaredType(
+        context,
+        `${name}<${defaultArgumentNames.join(',')}>`,
+        shape,
+        defaultArgumentNames,
+        loc
+      )
+    }
+
     const cached = context.resolvedDeclaredTypes.get(name)
     const retryIncomplete =
       !context.resolvingDeclaredTypes.has(name) &&
@@ -937,6 +972,26 @@ function resolveGenericDeclaredType(
   } finally {
     context.resolvingDeclaredTypes.delete(applicationName)
   }
+}
+
+function defaultTypeArgumentNames(typeParameters: AnyNode[], provided: string[]): string[] | null {
+  if (provided.length > typeParameters.length) {
+    return null
+  }
+
+  const result = provided.slice()
+
+  for (let index = provided.length; index < typeParameters.length; index = index + 1) {
+    const defaultType = typeParameters[index]?.defaultType
+
+    if (typeof defaultType !== 'string' || defaultType.length === 0) {
+      return null
+    }
+
+    result.push(defaultType)
+  }
+
+  return result
 }
 
 function markIncompleteDeclaredTypeResolutions(context: DeclaredTypeResolverContext, recursiveName: string): void {

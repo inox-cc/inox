@@ -149,10 +149,11 @@ export function createFunctionDeclaration(options: FunctionDeclarationOptions): 
   }
 }
 
-export function createTypeParameter(name: Token, constraint: string | null): AnyNode {
+export function createTypeParameter(name: Token, constraint: string | null, defaultType: string | null): AnyNode {
   return {
     name: name.value,
     constraint,
+    defaultType,
     loc: locFromToken(name)
   }
 }

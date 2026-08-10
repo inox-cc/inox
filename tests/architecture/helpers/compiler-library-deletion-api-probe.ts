@@ -22,6 +22,7 @@ export type CompilerLibraryDeletionApiProbeResult = {
 
 type PackageLocalDeletionProbe = {
   source: string
+  presentDiagnosticCodes?: string[]
   absentDiagnosticCodes: string[]
 }
 
@@ -34,7 +35,7 @@ export async function compilerLibraryDeletionApiProbe(
   if (packageLocal !== null) {
     return {
       ...packageLocal,
-      presentDiagnosticCodes: []
+      presentDiagnosticCodes: packageLocal.presentDiagnosticCodes ?? []
     }
   }
 
@@ -122,6 +123,9 @@ function isPackageLocalDeletionProbe(value: unknown): value is PackageLocalDelet
   return (
     typeof probe.source === 'string' &&
     probe.source.length > 0 &&
+    (typeof probe.presentDiagnosticCodes === 'undefined' ||
+      (Array.isArray(probe.presentDiagnosticCodes) &&
+        probe.presentDiagnosticCodes.every((code) => typeof code === 'string'))) &&
     Array.isArray(probe.absentDiagnosticCodes) &&
     probe.absentDiagnosticCodes.every((code) => typeof code === 'string')
   )

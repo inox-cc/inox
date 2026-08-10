@@ -10,7 +10,7 @@ test('self-host build releases per-module compiler graphs at a bounded GC bounda
   assert.match(buildSource, /compiledModules\.push\(result\.module\)\s+releaseSelfHostedCompilationMemory\(\)/)
   assert.match(
     buildSource,
-    /await writeGeneratedFiles\(generatedDir, modules\.files\)\s+releaseSelfHostedCompilationMemory\(\)/
+    /await writeGeneratedFiles\(generatedDir, modules\.files\)[\s\S]*?for \(const requirement of modules\.irRuntimeRequirements\)[\s\S]*?releaseSelfHostedCompilationMemory\(\)/
   )
   assert.doesNotMatch(buildSource, /contract\.resolvedProgram/)
   assert.match(buildSource, /self-hosted build must run Node with --expose-gc/)

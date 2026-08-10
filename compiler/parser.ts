@@ -310,6 +310,12 @@ class Parser {
       return declaration
     }
 
+    if (this.matchContextualKeyword('interface')) {
+      const declaration = this.parseInterfaceDeclaration(exported)
+      this.reportUnsupportedInlinePlacement(inlineAnnotation)
+      return declaration
+    }
+
     if (exported && this.isValue('{')) {
       const declaration = this.parseExportDeclaration(false)
       this.reportUnsupportedInlinePlacement(inlineAnnotation)
@@ -528,12 +534,17 @@ class Parser {
     while (!this.isValue('>') && !this.is('eof')) {
       const name = this.expectTypeParameterName('expected type parameter name')
       let constraint: string | null = null
+      let defaultType: string | null = null
 
       if (this.matchContextualKeyword('extends')) {
-        constraint = this.parseTypeAnnotation([',', '>'], null)
+        constraint = this.parseTypeAnnotation([',', '>', '='], null)
       }
 
-      typeParameters.push(createTypeParameter(name, constraint))
+      if (this.matchValue('=')) {
+        defaultType = this.parseTypeAnnotation([',', '>'], null)
+      }
+
+      typeParameters.push(createTypeParameter(name, constraint, defaultType))
 
       if (!this.matchValue(',')) {
         break
@@ -580,6 +591,28 @@ class Parser {
     this.matchValue(';')
 
     return createTypeAliasDeclaration(exported, name, typeParameters, createAliasType(valueType))
+  }
+
+  parseInterfaceDeclaration(exported: boolean): AnyNode {
+    const name = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected interface name')
+    const typeParameters = this.parseFunctionTypeParameters()
+    const baseTypes: string[] = []
+
+    if (this.matchContextualKeyword('extends')) {
+      while (!this.isValue('{') && !this.is('eof')) {
+        const baseType = this.parseTypeAnnotation([',', '{'], null)
+
+        if (baseType.length > 0) {
+          baseTypes.push(baseType)
+        }
+
+        if (!this.matchValue(',')) {
+          break
+        }
+      }
+    }
+
+    return createTypeAliasDeclaration(exported, name, typeParameters, this.parseObjectType(baseTypes))
   }
 
   parseUnionObjectType(): AnyNode {

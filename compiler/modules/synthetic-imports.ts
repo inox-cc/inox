@@ -444,6 +444,7 @@ function collectFunctionDeclarationTypeDependencyNames(declaration: SyntheticImp
 
   for (const typeParameter of typeParameters) {
     collectTypeNameDependencyNames(typeParameter.constraint, dependencyNames)
+    collectTypeNameDependencyNames(typeParameter.defaultType, dependencyNames)
   }
 
   for (const param of params) {
@@ -484,6 +485,7 @@ function collectClassDeclarationTypeDependencyNames(declaration: SyntheticImport
   for (const typeParameter of declaration.typeParameters ?? []) {
     typeParameterNames.add(typeParameter.name)
     collectTypeNameDependencyNames(typeParameter.constraint, dependencyNames)
+    collectTypeNameDependencyNames(typeParameter.defaultType, dependencyNames)
   }
 
   collectTypeNameDependencyNames(declaration.extendsName, dependencyNames)
@@ -552,6 +554,7 @@ function typeAliasDependencyNames(alias: TypeAliasDeclarationNode): string[] {
   for (const typeParameter of alias.typeParameters ?? []) {
     typeParameterNames.add(typeParameter.name)
     collectTypeNameDependencyNames(typeParameter.constraint, names)
+    collectTypeNameDependencyNames(typeParameter.defaultType, names)
   }
 
   collectTypeAliasDependencyNames(alias.valueType, names)
@@ -725,6 +728,7 @@ function cloneTypeParameters(typeParameters: AnyNode[] | null | undefined): AnyN
     cloned.push({
       name: typeParameter.name,
       constraint: nullableNodeValue(typeParameter.constraint),
+      defaultType: nullableNodeValue(typeParameter.defaultType),
       loc: nullableNodeValue(typeParameter.loc)
     })
   }

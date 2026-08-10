@@ -57,6 +57,13 @@ type ModuleGraphContext = {
   libraryGlobalTypeNames: Set<string>
 }
 
+type ModuleImportTypeAliasNode = AnyNode & {
+  valueType?: {
+    kind?: string
+    valueType?: string
+  }
+}
+
 type ModuleGraphDeclarationImport = {
   sourcePath: string
   declarationPath: string | null
@@ -926,11 +933,13 @@ function prepareLibraryTypeImportSpecifier(
 }
 
 function moduleImportTypeAliasTarget(alias: AnyNode): { source: string; name: string } | null {
-  if (alias.valueType?.kind !== 'alias') {
+  const valueType = (alias as ModuleImportTypeAliasNode).valueType
+
+  if (valueType?.kind !== 'alias' || typeof valueType.valueType !== 'string') {
     return null
   }
 
-  return moduleImportTypeNameFromTypeName(alias.valueType.valueType)
+  return moduleImportTypeNameFromTypeName(valueType.valueType)
 }
 
 function mergeImportTypeDeclarations(

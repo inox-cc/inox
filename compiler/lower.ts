@@ -214,6 +214,7 @@ function cloneLowerTypeParameters(typeParameters: AnyNode[] | null | undefined):
     cloned.push({
       name: typeParameter.name,
       constraint: nullableString(typeParameter.constraint),
+      defaultType: nullableString(typeParameter.defaultType),
       loc: typeParameter.loc
     })
   }

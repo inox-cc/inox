@@ -2510,6 +2510,13 @@ function visitCallbackExpression(
     return
   }
 
+  if (expression.type === 'ConditionalExpression') {
+    visitCallbackExpression(expression.test, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
+    visitCallbackExpression(expression.consequent, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
+    visitCallbackExpression(expression.alternate, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
+    return
+  }
+
   if (
     expression.type === 'UnaryExpression' ||
     expression.type === 'UpdateExpression' ||

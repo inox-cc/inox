@@ -1458,12 +1458,23 @@ function appendNormalizedInterfaceDeclaration(parts: string[], tokens: Token[], 
   parts.push('type')
   parts.push(tokenSource(name))
 
-  while (
-    !tokenIs(tokens, current, 'eof', '<eof>') &&
-    tokenValue(tokens, current) !== 'extends' &&
-    tokenValue(tokens, current) !== '{'
-  ) {
-    parts.push(tokenSource(tokenAt(tokens, current)))
+  let genericDepth = 0
+
+  while (!tokenIs(tokens, current, 'eof', '<eof>')) {
+    const token = tokenAt(tokens, current)
+
+    if (genericDepth === 0 && (token.value === 'extends' || token.value === '{')) {
+      break
+    }
+
+    parts.push(tokenSource(token))
+
+    if (token.value === '<') {
+      genericDepth = genericDepth + 1
+    } else if (token.value === '>' && genericDepth > 0) {
+      genericDepth = genericDepth - 1
+    }
+
     current = current + 1
   }
 
@@ -2019,12 +2030,18 @@ function formatTypeParameterList(typeParameters: AnyNode[] | null | undefined): 
 
   for (const typeParameter of typeParameters) {
     const constraint = nullableStringMetadata(typeParameter.constraint)
+    const defaultType = nullableStringMetadata(typeParameter.defaultType)
+    let value = typeParameter.name
 
     if (constraint !== null) {
-      values.push(`${typeParameter.name} extends ${constraint}`)
-    } else {
-      values.push(typeParameter.name)
+      value = `${value} extends ${constraint}`
     }
+
+    if (defaultType !== null) {
+      value = `${value} = ${defaultType}`
+    }
+
+    values.push(value)
   }
 
   return `<${joinStrings(values, ', ')}>`
@@ -2379,6 +2396,7 @@ function cloneTypeParameters(typeParameters: AnyNode[] | null | undefined): AnyN
     cloned.push({
       name: typeParameter.name,
       constraint: nullableMetadata(typeParameter.constraint),
+      defaultType: nullableMetadata(typeParameter.defaultType),
       loc: nullableMetadata(typeParameter.loc)
     })
   }
