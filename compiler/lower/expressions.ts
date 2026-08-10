@@ -1303,7 +1303,7 @@ function cloneUnaryExpression(
       operator: expression.operator,
       argument,
       valueType,
-      nullable: expression.nullable === true,
+      nullable: expression.operator === 'void' || expression.nullable === true,
       asyncResultValueType: nullableString(expression.asyncResultValueType),
       functionType: nullableNode(expression.functionType),
       shape: nullableNode(expression.shape),
@@ -1317,6 +1317,10 @@ function cloneUnaryExpression(
 function unaryExpressionValueType(expression: LowerExpressionNode): string {
   if (expression.operator === 'typeof') {
     return 'string'
+  }
+
+  if (expression.operator === 'void') {
+    return 'unknown'
   }
 
   if (expression.operator === '!') {

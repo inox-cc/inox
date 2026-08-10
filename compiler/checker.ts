@@ -2531,6 +2531,12 @@ class Checker {
         return 'string'
       }
 
+      if (expression.operator === 'void') {
+        expression.valueType = 'unknown'
+        expression.nullable = true
+        return 'unknown'
+      }
+
       if (expression.operator === '!') {
         expression.valueType = 'boolean'
         return 'boolean'

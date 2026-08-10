@@ -591,6 +591,10 @@ export function inferExpressionType(
       return 'string'
     }
 
+    if (expression.operator === 'void') {
+      return 'unknown'
+    }
+
     if (expression.operator === '!') {
       return 'boolean'
     }

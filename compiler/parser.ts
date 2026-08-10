@@ -2012,6 +2012,10 @@ class Parser {
       return createUnaryExpression(this.previous(), this.parseUnary())
     }
 
+    if (this.matchKeyword('void')) {
+      return createUnaryExpression(this.previous(), this.parseUnary())
+    }
+
     if (this.isValue('++') || this.isValue('--')) {
       const operator = this.advance()
 

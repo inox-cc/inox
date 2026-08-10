@@ -3904,6 +3904,10 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
     return []
   }
 
+  if (expression.type === 'UnaryExpression' && expression.operator === 'void') {
+    return emitExpressionStatement({ ...statement, expression: expression.argument }, context)
+  }
+
   const asyncResultSettlement = deps.emitAsyncResultConstructorSettlementCall(expression, context)
 
   if (asyncResultSettlement !== null && typeof asyncResultSettlement !== 'undefined') {

@@ -762,6 +762,7 @@ function isKeyword(value: string): boolean {
     value === 'type' ||
     value === 'try' ||
     value === 'var' ||
+    value === 'void' ||
     value === 'while'
   )
 }

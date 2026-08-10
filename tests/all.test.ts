@@ -141,6 +141,8 @@ async function runHostedIntegrationTests(): Promise<void> {
   const { assertHostedMongoIndexBulkRuntime } =
     await import('./integration/mongodb-index-bulk-runtime-hosted.test.ts')
   const { assertHostedMongoQueryRuntime } = await import('./integration/mongodb-query-runtime-hosted.test.ts')
+  const { assertHostedMongoServerEntryRuntime } =
+    await import('./integration/mongodb-server-entry-runtime-hosted.test.ts')
   const { assertDateLowersToGlobalObject } = await import('./integration/date-global-object-lowering.test.ts')
   const { assertPerformanceLowersToGlobalObject } =
     await import('./integration/performance-global-object-lowering.test.ts')
@@ -343,6 +345,10 @@ async function runHostedIntegrationTests(): Promise<void> {
 
     await t.test('mongodb-query-runtime-hosted', async () => {
       await assertHostedMongoQueryRuntime()
+    })
+
+    await t.test('mongodb-server-entry-runtime-hosted', async () => {
+      await assertHostedMongoServerEntryRuntime()
     })
 
     await t.test('date-global-object-lowering', () => {
@@ -658,6 +664,8 @@ async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<
   const { assertNativeMongoIndexBulkRuntime } =
     await import('./integration/mongodb-index-bulk-runtime-native.test.ts')
   const { assertNativeMongoQueryRuntime } = await import('./integration/mongodb-query-runtime-native.test.ts')
+  const { assertNativeMongoServerEntryRuntime } =
+    await import('./integration/mongodb-server-entry-runtime-native.test.ts')
   const { assertNativeCompilerUsesDirectNativeInitializers } =
     await import('./integration/direct-native-variable-lowering.test.ts')
   const { assertNativeCompilerRuntimeLogValuesUseDirectRaiiAssignment } =
@@ -737,6 +745,10 @@ async function runNativeCompilerIntegrationTests(compilerPath: string): Promise<
 
     await t.test('mongodb-query-runtime-native', async () => {
       await assertNativeMongoQueryRuntime(compilerPath)
+    })
+
+    await t.test('mongodb-server-entry-runtime-native', async () => {
+      await assertNativeMongoServerEntryRuntime(compilerPath)
     })
 
     await t.test('native-direct-variable-lowering', async () => {

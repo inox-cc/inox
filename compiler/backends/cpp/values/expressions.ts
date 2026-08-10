@@ -4993,6 +4993,23 @@ function emitCValueExpressionUnadapted(
   context: CFunctionContext,
   deps: CValueExpressionDependencies
 ): PreparedExpression {
+  if (expression.type === 'UnaryExpression' && expression.operator === 'void') {
+    const argument = deps.emitCValueExpression(expression.argument, context)
+    let value = 'inox_undefined_value()'
+
+    if (argument.expression !== '') {
+      value = `(static_cast<void>(${argument.expression}), inox_undefined_value())`
+    }
+
+    return {
+      lines: argument.lines,
+      expression: value,
+      cppType: 'inox_value',
+      nullable: true,
+      valueType: 'unknown'
+    }
+  }
+
   if (isCoalesceExpression(expression)) {
     return deps.emitCNullishCoalescingValueExpression(expression, context)
   }
