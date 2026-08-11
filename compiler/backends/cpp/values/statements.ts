@@ -878,7 +878,7 @@ export function emitForStatement(statement: StatementNode, context: CFunctionCon
     const init = emitPreparedForInitializer(statement.init, context)
     const testExpression = statementChild(statement.test)
     const test = emitPreparedForExpressionClause(testExpression, context)
-    const update = emitPreparedForExpressionClause(statement.update, context)
+    const update = emitPreparedForUpdateClause(statement.update, context)
     const narrowing = resolveStatementConditionNarrowing(testExpression, context)
     const typeNarrowing = resolveTypeofConditionNarrowing(testExpression)
     const breakTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_break'), throughFinally: false }
@@ -1042,7 +1042,7 @@ export function emitStringScalarVariableDeclaration(
   }
 
   return [
-    `${constPrefix(statement.kind === 'const')}char* ${emitCIdentifier(statement.name)} = ${deps.emitStringExpression(statement.init, context)};`
+    `${constPrefix(statement.kind === 'const')}const char* ${emitCIdentifier(statement.name)} = ${deps.emitStringExpression(statement.init, context)};`
   ]
 }
 
@@ -2348,7 +2348,7 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
 
     return {
       lines: [],
-      expression: `char* ${emitCIdentifier(statement.name)} = ${deps.emitStringExpression(statement.init, context)}`
+      expression: `const char* ${emitCIdentifier(statement.name)} = ${deps.emitStringExpression(statement.init, context)}`
     }
   }
 
@@ -2430,6 +2430,24 @@ function emitPreparedForExpressionClause(
   }
 
   return emitPreparedConditionExpression(expression, context)
+}
+
+function emitPreparedForUpdateClause(
+  expression: StatementNode | null | undefined,
+  context: CFunctionContext
+): PreparedExpression {
+  if (expression !== null && typeof expression !== 'undefined' && expression.type === 'UpdateExpression') {
+    const value = statementDeps(context).emitPreparedUpdateExpression(expression, context)
+
+    if (expression.prefix === false) {
+      return {
+        lines: value.lines.slice(1),
+        expression: ''
+      }
+    }
+  }
+
+  return emitPreparedForExpressionClause(expression, context)
 }
 
 function emitPreparedConditionExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression {

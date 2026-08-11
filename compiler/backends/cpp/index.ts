@@ -2576,7 +2576,7 @@ function emitUninitializedScalarVariableDeclaration(statement: AnyNode, context:
   const prefix = uninitializedDeclarationPrefix(statement)
 
   if (inferred === 'string') {
-    return [`${prefix}char* ${emitCIdentifier(statement.name)} = "";`]
+    return [`${prefix}const char* ${emitCIdentifier(statement.name)} = "";`]
   }
 
   if (isManagedRuntimeReturnType(inferred) || isOpaqueRuntimeValueType(inferred)) {

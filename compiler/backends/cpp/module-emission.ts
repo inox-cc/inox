@@ -3265,7 +3265,7 @@ function cModuleValueCType(valueType: string, context: CEmitContext): string {
   }
 
   if (valueType === 'string') {
-    return 'char*'
+    return 'const char*'
   }
 
   if (valueType === 'unknown') {

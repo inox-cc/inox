@@ -946,6 +946,29 @@ export function emitPreparedCompilerLibraryCallExpression(
     callExpression = `(${receiverExpression}.${target} = ${argumentsList[0]})`
   }
 
+  if (optionalReceiverCondition !== null && options?.discard === true && item.valueType !== 'async-result') {
+    const discardedLines: string[] = []
+    const discarded = emitDiscardedCompilerLibraryCall(
+      item,
+      context,
+      dependencies,
+      discardedLines,
+      callExpression,
+      cppType
+    )
+
+    lines.push(`if (${optionalReceiverCondition}) {`)
+    for (const line of discardedLines) {
+      lines.push(`  ${line}`)
+    }
+    lines.push('}')
+
+    return {
+      ...discarded,
+      lines
+    }
+  }
+
   if (optionalReceiverCondition !== null) {
     if (item.valueType === 'number' || item.valueType === 'boolean') {
       const out = nextCName(context, 'inox_library_optional_result')

@@ -3284,6 +3284,20 @@ function emitKnownPreparedClassMethodCallExpression(
     method.returnShape
   )
 
+  if (options.discard === true && method.returnType !== 'async-result') {
+    const lines: string[] = []
+    pushAllLines(lines, callLines)
+    lines.push(`${callExpression};`)
+    if (leavesPendingException) {
+      pushAllLines(lines, emitClassPendingExceptionCheck(context))
+    }
+
+    return {
+      lines,
+      expression: ''
+    }
+  }
+
   if (method.returnType === 'async-result') {
     let out = callExpression
     let asyncResultValueType = 'unknown'
