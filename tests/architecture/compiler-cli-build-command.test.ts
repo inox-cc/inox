@@ -18,8 +18,7 @@ test('inox build creates and builds an internal CMake project', () => {
       '--out-dir',
       'out',
       '--name',
-      'demo',
-      '--release'
+      'demo'
     ],
     build: {
       cmakeCommand: 'cmake',

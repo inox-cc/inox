@@ -12,6 +12,8 @@ export async function assertCompilerIndexNodeHelp(): Promise<void> {
   assert.match(result.stderr, /Usage:/)
   assert.match(result.stderr, /inox input\.ts \[output\.cc\]/)
   assert.match(result.stderr, /--out-dir generated --entry/)
+  assert.match(result.stderr, /--debug/)
+  assert.match(result.stderr, /Release mode by default/)
   assert.doesNotMatch(result.stderr, /INOX_NOT_IMPLEMENTED/)
 }
 

@@ -100,7 +100,7 @@ function defaultOutputPath(input: string): string {
 
 function usage(libraries: CompilerLibrarySet): string {
   let source =
-    'Usage:\n  inox --help\n  inox build input.ts [--out-dir directory] [--name executable] [--release]\n  inox run input.ts [--out-dir directory] [--name executable] [--release] [-- program arguments]\n  inox input.ts [output.cc]\n  inox input.ts --emit cc [-o output.cc]\n  inox input.ts --emit cc --out-dir generated --entry [--build-manifest manifest.json]\n\nBuilds or runs an Inox executable, or emits C++ source.\nBuild output defaults to dist/<name>. Low-level C++ output defaults to input.cc.'
+    'Usage:\n  inox --help\n  inox build input.ts [--out-dir directory] [--name executable] [--debug]\n  inox run input.ts [--out-dir directory] [--name executable] [--debug] [-- program arguments]\n  inox input.ts [output.cc]\n  inox input.ts --emit cc [-o output.cc]\n  inox input.ts --emit cc --out-dir generated --entry [--build-manifest manifest.json]\n\nBuilds or runs an Inox executable in Release mode by default, or emits C++ source.\nUse --debug for an unoptimized native build.\nBuild output defaults to dist/<name>. Low-level C++ output defaults to input.cc.'
   const options = libraries.options ?? []
 
   if (options.length > 0) {
@@ -291,7 +291,7 @@ function parseCliBuildArgs(
   let name = ''
   let outDir = ''
   const programArgs: string[] = []
-  let release = false
+  let release = true
   let readingProgramArgs = false
 
   for (let index = 0; index < args.length; index = index + 1) {
@@ -333,6 +333,8 @@ function parseCliBuildArgs(
 
       hasName = true
       name = value
+    } else if (arg === '--debug') {
+      release = false
     } else if (arg === '--release') {
       release = true
     } else if (arg.startsWith('-')) {

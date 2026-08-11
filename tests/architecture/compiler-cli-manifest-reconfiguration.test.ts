@@ -49,9 +49,9 @@ test('CLI повторно конфигурирует CMake при смене з
   assert.equal(executeCliBuild(plan, createCompilerLibrarySet([]), environment), true)
 
   assert.deepEqual(commands, [
-    ['-S', '/work/out', '-B', '/work/out/build'],
-    ['--build', '/work/out/build', '--target', 'inox_example', '--parallel'],
-    ['-S', '/work/out', '-B', '/work/out/build'],
-    ['--build', '/work/out/build', '--target', 'inox_example', '--parallel']
+    ['-S', '/work/out', '-B', '/work/out/build', '-DCMAKE_BUILD_TYPE=Debug'],
+    ['--build', '/work/out/build', '--target', 'inox_example', '--parallel', '--config', 'Debug'],
+    ['-S', '/work/out', '-B', '/work/out/build', '-DCMAKE_BUILD_TYPE=Debug'],
+    ['--build', '/work/out/build', '--target', 'inox_example', '--parallel', '--config', 'Debug']
   ])
 })

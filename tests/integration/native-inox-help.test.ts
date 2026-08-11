@@ -13,6 +13,8 @@ export async function assertNativeInoxHelp(compilerPath: string): Promise<void> 
   assert.equal(result.code, 0, `dist/inox --help failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
   assert.equal(result.stderr, '')
   assert.match(result.stdout, /Usage:/)
+  assert.match(result.stdout, /--debug/)
+  assert.match(result.stdout, /Release mode by default/)
   assert.match(result.stdout, /inox --help/)
   assert.match(result.stdout, /inox input\.ts \[output\.cc\]/)
   assert.match(result.stdout, /--out-dir generated --entry/)

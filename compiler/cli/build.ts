@@ -116,6 +116,7 @@ export function executeCliBuild(
   const input = resolvePath(plan.input)
   const paths = cliBuildPaths(output, name, configuration.executableSuffix)
   const optionPlan = cliBuildOptionPlan(plan, libraries, configuration)
+  const buildType = plan.release ? 'Release' : 'Debug'
 
   if (!prepareCliBuild(optionPlan.options, configuration, environment)) {
     return false
@@ -129,7 +130,7 @@ export function executeCliBuild(
     paths,
     configuration,
     optionPlan,
-    plan.release,
+    buildType,
     environment.cwd
   )
   writeFileIfChanged(
@@ -146,9 +147,7 @@ export function executeCliBuild(
   if (cmakeCache === null || previousConfigureState !== configureState) {
     const configureArgs = ['-S', paths.project, '-B', paths.build]
 
-    if (plan.release) {
-      configureArgs.push('-DCMAKE_BUILD_TYPE=Release')
-    }
+    configureArgs.push(`-DCMAKE_BUILD_TYPE=${buildType}`)
 
     const configured = runCommand(configuration.cmakeCommand, configureArgs, environment.cwd)
 
@@ -161,9 +160,7 @@ export function executeCliBuild(
 
   const buildArgs = ['--build', paths.build, '--target', target, '--parallel']
 
-  if (plan.release) {
-    buildArgs.push('--config', 'Release')
-  }
+  buildArgs.push('--config', buildType)
 
   const built = runCommand(configuration.cmakeCommand, buildArgs, environment.cwd)
 
@@ -385,7 +382,7 @@ function renderCliCMakeProject(
   paths: CliBuildPaths,
   configuration: CliBuildConfiguration,
   optionPlan: CliBuildOptionPlan,
-  release: boolean,
+  buildType: 'Debug' | 'Release',
   sourceRoot: string
 ): string {
   const lines = [
@@ -400,9 +397,7 @@ function renderCliCMakeProject(
     `set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${cmakeString(joinPath(paths.output, 'bin'))}")`
   ]
 
-  if (release) {
-    lines.push('set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)')
-  }
+  lines.push(`set(CMAKE_BUILD_TYPE ${buildType} CACHE STRING "" FORCE)`)
 
   lines.push('')
   for (let index = 0; index < optionPlan.cacheEntries.length; index = index + 1) {

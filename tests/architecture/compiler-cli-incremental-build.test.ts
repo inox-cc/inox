@@ -40,7 +40,15 @@ test('повторная CLI-сборка не перезаписывает не
   runCompilerCli(createCompilerLibrarySet([]), environment)
 
   assert.equal(commands.length, 3)
-  assert.deepEqual(commands[2], ['--build', '/work/out/build', '--target', 'inox_empty', '--parallel'])
+  assert.deepEqual(commands[2], [
+    '--build',
+    '/work/out/build',
+    '--target',
+    'inox_empty',
+    '--parallel',
+    '--config',
+    'Release'
+  ])
   assert.equal(writes.length, 6)
   assert.match(writes[0], /\.cc$/)
   assert.match(writes[1], /\.h$/)

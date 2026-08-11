@@ -23,6 +23,7 @@ const reservedCompilerCliAliases = [
   '--emit',
   '--entry',
   '--build-manifest',
+  '--debug',
   '--help',
   '--name',
   '--out',

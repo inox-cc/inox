@@ -4,23 +4,21 @@ import { test } from 'node:test'
 import { runCompilerCli, type CliCommandResult, type CliEnvironment } from '../../compiler/cli.ts'
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
 
-test('inox run builds and executes the inferred application binary', () => {
+test('inox build uses Debug configuration only when requested', () => {
   const commands: Array<{ command: string; args: string[] }> = []
-  const programs: Array<{ command: string; args: string[] }> = []
+  const files: Map<string, string> = new Map()
   const success: CliCommandResult = { code: 0, stderr: '', stdout: '' }
   const environment: CliEnvironment = {
     args: [
       'node',
       'inox',
-      'run',
+      'build',
       'tests/architecture/fixtures/empty.ts',
       '--out-dir',
       'out',
       '--name',
-      'project',
-      '--',
-      '--flag',
-      'value'
+      'example',
+      '--debug'
     ],
     build: {
       cmakeCommand: 'cmake',
@@ -38,12 +36,8 @@ test('inox run builds and executes the inferred application binary', () => {
       commands.push({ command, args })
       return success
     },
-    runProgram: (command, args) => {
-      programs.push({ command, args })
-      return success
-    },
     setExitCode() {},
-    writeFileSync() {}
+    writeFileSync: (path, source) => files.set(path, source)
   }
 
   runCompilerCli(createCompilerLibrarySet([]), environment)
@@ -51,17 +45,12 @@ test('inox run builds and executes the inferred application binary', () => {
   assert.deepEqual(commands, [
     {
       command: 'cmake',
-      args: ['-S', '/work/out', '-B', '/work/out/build', '-DCMAKE_BUILD_TYPE=Release']
+      args: ['-S', '/work/out', '-B', '/work/out/build', '-DCMAKE_BUILD_TYPE=Debug']
     },
     {
       command: 'cmake',
-      args: ['--build', '/work/out/build', '--target', 'inox_project', '--parallel', '--config', 'Release']
+      args: ['--build', '/work/out/build', '--target', 'inox_example', '--parallel', '--config', 'Debug']
     }
   ])
-  assert.deepEqual(programs, [
-    {
-      command: '/work/out/bin/project',
-      args: ['--flag', 'value']
-    }
-  ])
+  assert.match(files.get('/work/out/CMakeLists.txt') ?? '', /set\(CMAKE_BUILD_TYPE Debug CACHE STRING "" FORCE\)/)
 })
