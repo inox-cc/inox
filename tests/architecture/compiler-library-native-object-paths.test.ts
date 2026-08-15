@@ -19,6 +19,11 @@ test('native stdlib target сохраняет относительные пут�
   assert.match(stdlibCMakeSource, /INOX_STDLIB_RELATIVE_SOURCE MATCHES "\^\\\\\.\\\\\.\/"/)
   assert.match(
     stdlibCMakeSource,
+    /list\(APPEND INOX_STDLIB_RESULT "\$\{INOX_STDLIB_SOURCE_ABSOLUTE\}"\)/
+  )
+  assert.doesNotMatch(stdlibCMakeSource, /native source is outside the stdlib root/)
+  assert.match(
+    stdlibCMakeSource,
     /add_library\(inox_stdlib_objects OBJECT \$\{INOX_STDLIB_RELATIVE_SOURCES\}\)/
   )
   assert.doesNotMatch(stdlibCMakeSource, /add_library\(inox_stdlib_objects OBJECT \$\{INOX_STDLIB_SOURCES\}\)/)

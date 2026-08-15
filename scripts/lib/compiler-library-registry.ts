@@ -155,23 +155,51 @@ export function renderCompilerLibraryRegistry(
     "import path from 'node:path'\n" +
     "import process from 'node:process'\n" +
     "import { runCompilerCli } from '../../compiler/cli.ts'\n" +
-    "import { defaultCompilerLibraryLiteralTypeInference, defaultCompilerLibrarySet } from './default-registry.ts'\n\n" +
-    'const compilerArgs: string[] = []\n\n' +
+    "import { loadProjectCompilerLibraries } from '../../compiler/extensions/project-libraries.ts'\n" +
+    "import { createNodeCompilerSyncPathHost } from '../../compiler/node-host.ts'\n" +
+    "import { defaultCompilerLibraryDescriptors, defaultCompilerLibraryLiteralTypeInference, defaultCompilerLibrarySet, defaultCompilerLibraryTargetOptions } from './default-registry.ts'\n\n" +
+    'const compilerArgs: string[] = []\n' +
+    'let helpRequested = false\n' +
+    'const compilerHost = createNodeCompilerSyncPathHost()\n\n' +
     'for (let index = 0; index < process.argv.length; index = index + 1) {\n' +
     '  compilerArgs.push(process.argv[index])\n' +
     '}\n\n' +
+    'for (let index = 2; index < compilerArgs.length; index = index + 1) {\n' +
+    "  if (compilerArgs[index] === '--') {\n" +
+    '    break\n' +
+    '  }\n' +
+    "  if (compilerArgs[index] === '--help') {\n" +
+    '    helpRequested = true\n' +
+    '    break\n' +
+    '  }\n' +
+    "  if (compilerArgs[index] === '-h') {\n" +
+    '    helpRequested = true\n' +
+    '    break\n' +
+    '  }\n' +
+    '}\n\n' +
     "const configuredHome = process.env.INOX_HOME ?? ''\n" +
+    "const configuredNativePlan = process.env.INOX_NATIVE_PLAN ?? ''\n" +
     'const compilerExecutable = path.resolve(process.execPath)\n' +
     'const toolchainRoot = configuredHome.length > 0\n' +
     '  ? configuredHome\n' +
-    '  : path.dirname(path.dirname(compilerExecutable))\n\n' +
-    'runCompilerCli(defaultCompilerLibrarySet, {\n' +
+    '  : path.dirname(path.dirname(compilerExecutable))\n' +
+    'const projectLibrarySet = helpRequested\n' +
+    '  ? defaultCompilerLibrarySet\n' +
+    '  : loadProjectCompilerLibraries(\n' +
+    '      defaultCompilerLibrarySet,\n' +
+    '      defaultCompilerLibraryDescriptors,\n' +
+    '      defaultCompilerLibraryTargetOptions,\n' +
+    '      compilerHost,\n' +
+    '      process.env.INOX_PROJECT_LIBRARIES ?? null\n' +
+    '    ).librarySet\n\n' +
+    'runCompilerCli(projectLibrarySet, {\n' +
     '  args: compilerArgs,\n' +
     '  build: {\n' +
     "    cmakeCommand: 'cmake',\n" +
     `    cmakeOptionMappings: ${JSON.stringify(compilerTargetCMakeOptionMappings)},\n` +
     '    defaultLibraryOptions: [],\n' +
     "    executableSuffix: process.platform === 'win32' ? '.exe' : '',\n" +
+    "    nativePlanPath: configuredNativePlan.length > 0 ? path.resolve(process.cwd(), configuredNativePlan) : '',\n" +
     `    preparations: ${JSON.stringify(compilerTargetBuildPreparations)},\n` +
     '    toolchainRoot\n' +
     '  },\n' +
@@ -239,9 +267,9 @@ export function renderCompilerLibraryRegistry(
   }
 }
 
-function renderNativePlanCMake(plan: CompilerLibraryNativePlan): string {
+export function renderNativePlanCMake(plan: CompilerLibraryNativePlan): string {
   let source =
-    `set(INOX_STDLIB_LIBRARY_SET_FINGERPRINT "${plan.librarySetFingerprint}")\n` +
+    `set(INOX_STDLIB_LIBRARY_SET_FINGERPRINT "${nativePlanCMakeScalar(plan.librarySetFingerprint)}")\n` +
     renderNativePlanCMakeList('INOX_STDLIB_SOURCES', plan.sources) +
     renderNativePlanCMakeList('INOX_STDLIB_INCLUDE_DIRS', plan.includeDirs) +
     `set(INOX_STDLIB_NATIVE_UNIT_COUNT ${plan.units.length})\n`
@@ -252,7 +280,7 @@ function renderNativePlanCMake(plan: CompilerLibraryNativePlan): string {
 
     source =
       source +
-      `set(${prefix}_LIBRARY_ID "${unit.libraryId}")\n` +
+      `set(${prefix}_LIBRARY_ID "${nativePlanCMakeScalar(unit.libraryId)}")\n` +
       renderNativePlanValueList(`${prefix}_RUNTIME_REQUIREMENTS`, unit.runtimeRequirements) +
       renderNativePlanValueList(`${prefix}_CMAKE_PACKAGES`, unit.cmakePackages) +
       renderNativePlanValueList(`${prefix}_CMAKE_LINK_LIBRARIES`, unit.cmakeLinkLibraries) +
@@ -273,7 +301,7 @@ function renderNativePlanCMakeProjects(prefix: string, projects: CompilerLibrary
 
     source =
       source +
-      `set(${projectPrefix}_SOURCE_DIR "\${INOX_REPO_ROOT}/${project.sourceDir}")\n` +
+      `set(${projectPrefix}_SOURCE_DIR "${nativePlanCMakePath(project.sourceDir)}")\n` +
       renderNativePlanValueList(
         `${projectPrefix}_OPTIONS`,
         project.options.map((option) => `${option.name}=${option.value}`)
@@ -287,17 +315,52 @@ function renderNativePlanCMakeList(name: string, paths: string[]): string {
   let source = `set(${name}\n`
 
   for (const path of paths) {
-    source = `${source}  "\${INOX_REPO_ROOT}/${path}"\n`
+    source = `${source}  "${nativePlanCMakePath(path)}"\n`
   }
 
   return `${source})\n`
+}
+
+function nativePlanCMakePath(path: string): string {
+  const normalized = path.split('\\').join('/')
+  const escaped = nativePlanCMakeScalar(normalized)
+
+  if (
+    normalized.startsWith('/') ||
+    normalized.startsWith('//') ||
+    (normalized.length >= 3 && isAsciiLetter(normalized[0]) && normalized[1] === ':' && normalized[2] === '/')
+  ) {
+    return escaped
+  }
+
+  return `\${INOX_REPO_ROOT}/${escaped}`
+}
+
+function nativePlanCMakeScalar(value: string): string {
+  return value
+    .split('\\')
+    .join('\\\\')
+    .split('"')
+    .join('\\"')
+    .split('$')
+    .join('\\$')
+    .split(';')
+    .join('\\;')
+    .split('\n')
+    .join('\\n')
+    .split('\r')
+    .join('\\r')
+}
+
+function isAsciiLetter(value: string): boolean {
+  return (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z')
 }
 
 function renderNativePlanValueList(name: string, values: string[]): string {
   let source = `set(${name}\n`
 
   for (const value of values) {
-    source = `${source}  "${value}"\n`
+    source = `${source}  "${nativePlanCMakeScalar(value)}"\n`
   }
 
   return `${source})\n`
@@ -390,7 +453,7 @@ function renderRegistrySource(librarySet: CompilerLibrarySet, discovered: Discov
   let source =
     "import { createGeneratedCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'\n" +
     "import type { ParseCompilerLibraryGlobalDeclarationsResult } from '../../compiler/extensions/global-declarations.ts'\n" +
-    "import type { CompilerLibraryDescriptor, CompilerLibrarySet, TypeRef } from '../../compiler/extensions/types.ts'\n"
+    "import type { CompilerLibraryDescriptor, CompilerLibrarySet, LibraryOptionDescriptor, TypeRef } from '../../compiler/extensions/types.ts'\n"
   const packageNames: Map<string, string> = new Map()
   const literalInferenceNames: Map<string, string> = new Map()
   let packageIndex = 0
@@ -417,7 +480,7 @@ function renderRegistrySource(librarySet: CompilerLibrarySet, discovered: Discov
     }
   }
 
-  source = source + '\nconst compilerLibraryDescriptors: CompilerLibraryDescriptor[] = [\n'
+  source = source + '\nexport const defaultCompilerLibraryDescriptors: CompilerLibraryDescriptor[] = [\n'
 
   for (const library of discovered) {
     const descriptor = compilerLibraryDescriptor(library)
@@ -437,9 +500,12 @@ function renderRegistrySource(librarySet: CompilerLibrarySet, discovered: Discov
   source = source + ']\n\n'
   source =
     source +
+    `export const defaultCompilerLibraryTargetOptions: LibraryOptionDescriptor[] = ${JSON.stringify(defaultCompilerTargetOptions)}\n\n`
+  source =
+    source +
     `const compilerLibraryGlobalDeclarations: ParseCompilerLibraryGlobalDeclarationsResult = ${JSON.stringify(globalDeclarations)}\n\n`
   source = source + 'export const defaultCompilerLibrarySet: CompilerLibrarySet = createGeneratedCompilerLibrarySet(\n'
-  source = source + '  compilerLibraryDescriptors,\n'
+  source = source + '  defaultCompilerLibraryDescriptors,\n'
   source = source + `  ${JSON.stringify(defaultCompilerTargetOptions)},\n`
   source = source + `  ${JSON.stringify(librarySet.fingerprint)},\n`
   source = source + '  compilerLibraryGlobalDeclarations\n'

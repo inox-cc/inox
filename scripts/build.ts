@@ -948,6 +948,9 @@ async function linkNativeCompiler(
       '-B',
       cmakeBuildDir,
       '-DCMAKE_BUILD_TYPE=Release',
+      ...(process.platform === 'darwin'
+        ? [`-DCMAKE_OSX_DEPLOYMENT_TARGET=${process.env.MACOSX_DEPLOYMENT_TARGET ?? '13.5'}`]
+        : []),
       ...compilerTargetCMakeConfigureArgs(nativeCompilerTargetProfile)
     ]),
     {

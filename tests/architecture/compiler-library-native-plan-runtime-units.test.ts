@@ -2,7 +2,10 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
-import { renderCompilerLibraryRegistry } from '../../scripts/lib/compiler-library-registry.ts'
+import {
+  renderCompilerLibraryRegistry,
+  renderNativePlanCMake
+} from '../../scripts/lib/compiler-library-registry.ts'
 
 test('native plan связывает каждый stdlib source с runtime requirements его package', async () => {
   const rendered = renderCompilerLibraryRegistry(await discoverCompilerLibraries())
@@ -29,4 +32,34 @@ test('native plan связывает каждый stdlib source с runtime requi
   assert.match(rendered.nativePlanCMakeSource, /INOX_STDLIB_NATIVE_UNIT_\d+_CMAKE_PACKAGES/)
   assert.match(rendered.nativePlanCMakeSource, /INOX_STDLIB_NATIVE_UNIT_\d+_CMAKE_LINK_LIBRARIES/)
   assert.match(rendered.nativePlanCMakeSource, /INOX_STDLIB_NATIVE_UNIT_\d+_LINKER_ARGUMENTS/)
+})
+
+test('native plan preserves absolute external package paths', () => {
+  const source = renderNativePlanCMake({
+    version: 1,
+    librarySetFingerprint: 'external',
+    sources: ['/work/node_modules/mongodb/src/mongodb.cc'],
+    includeDirs: ['/work/node_modules/mongodb/include'],
+    units: [
+      {
+        libraryId: 'mongodb',
+        runtimeRequirements: ['mongodb'],
+        sources: ['/work/node_modules/mongodb/src/mongodb.cc'],
+        cmakePackages: [],
+        cmakeLinkLibraries: ['mongoc::static'],
+        linkerArguments: [],
+        cmakeProjects: [
+          {
+            sourceDir: '/work/node_modules/mongodb/third_party/mongo-c-driver',
+            options: [{ name: 'ENABLE_STATIC', value: 'ON' }]
+          }
+        ]
+      }
+    ]
+  })
+
+  assert.match(source, /"\/work\/node_modules\/mongodb\/src\/mongodb\.cc"/)
+  assert.match(source, /"\/work\/node_modules\/mongodb\/include"/)
+  assert.match(source, /SOURCE_DIR "\/work\/node_modules\/mongodb\/third_party\/mongo-c-driver"/)
+  assert.doesNotMatch(source, /\$\{INOX_REPO_ROOT\}\/\/work/)
 })

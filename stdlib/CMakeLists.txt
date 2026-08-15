@@ -21,10 +21,10 @@ function(inox_stdlib_relative_sources output)
       INOX_STDLIB_RELATIVE_SOURCE STREQUAL ".." OR
       INOX_STDLIB_RELATIVE_SOURCE MATCHES "^\\.\\./"
     )
-      message(FATAL_ERROR "stdlib native source is outside the stdlib root: ${INOX_STDLIB_SOURCE}")
+      list(APPEND INOX_STDLIB_RESULT "${INOX_STDLIB_SOURCE_ABSOLUTE}")
+    else()
+      list(APPEND INOX_STDLIB_RESULT "${INOX_STDLIB_RELATIVE_SOURCE}")
     endif()
-
-    list(APPEND INOX_STDLIB_RESULT "${INOX_STDLIB_RELATIVE_SOURCE}")
   endforeach()
 
   set(${output} "${INOX_STDLIB_RESULT}" PARENT_SCOPE)
@@ -114,6 +114,10 @@ function(inox_configure_stdlib_native_units)
         "INOX_STDLIB_NATIVE_UNIT_${INOX_STDLIB_NATIVE_UNIT_INDEX}_CMAKE_LINK_LIBRARIES"
       )
       set(
+        INOX_STDLIB_UNIT_LINKER_ARGUMENTS_VARIABLE
+        "INOX_STDLIB_NATIVE_UNIT_${INOX_STDLIB_NATIVE_UNIT_INDEX}_LINKER_ARGUMENTS"
+      )
+      set(
         INOX_STDLIB_UNIT_CMAKE_PROJECT_COUNT_VARIABLE
         "INOX_STDLIB_NATIVE_UNIT_${INOX_STDLIB_NATIVE_UNIT_INDEX}_CMAKE_PROJECT_COUNT"
       )
@@ -164,6 +168,14 @@ function(inox_configure_stdlib_native_units)
           inox_runtime_configuration
           INTERFACE
           ${${INOX_STDLIB_UNIT_CMAKE_LINK_LIBRARIES_VARIABLE}}
+        )
+      endif()
+
+      if(DEFINED ${INOX_STDLIB_UNIT_LINKER_ARGUMENTS_VARIABLE})
+        target_link_options(
+          inox_runtime_configuration
+          INTERFACE
+          ${${INOX_STDLIB_UNIT_LINKER_ARGUMENTS_VARIABLE}}
         )
       endif()
 

@@ -52,5 +52,11 @@ test('inox build uses Debug configuration only when requested', () => {
       args: ['--build', '/work/out/build', '--target', 'inox_example', '--parallel', '--config', 'Debug']
     }
   ])
-  assert.match(files.get('/work/out/CMakeLists.txt') ?? '', /set\(CMAKE_BUILD_TYPE Debug CACHE STRING "" FORCE\)/)
+  const project = files.get('/work/out/CMakeLists.txt') ?? ''
+  assert.match(project, /set\(CMAKE_BUILD_TYPE Debug CACHE STRING "" FORCE\)/)
+  assert.match(project, /set\(INOX_THIRD_PARTY_BUILD_ROOT "\/work\/out\/build\/third-party" CACHE PATH "" FORCE\)/)
+  assert.match(
+    project,
+    /set\(INOX_STDLIB_NATIVE_PLAN "\/toolchain\/dist\/compiler-libraries\/native-plan\.cmake"\)/
+  )
 })

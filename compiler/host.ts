@@ -5,6 +5,14 @@ export type CompilerHostPosixPath = {
   relative(from: string, to: string): string
 }
 
+export type CompilerSyncPathHost = {
+  isAbsolutePath(path: string): boolean
+  joinPath(left: string, right: string): string
+  readFileSync(path: string): string | null
+  relativePath(from: string, to: string): string
+  resolvePath(path: string): string
+}
+
 export type CompilerHost = {
   pathSeparator: string
   posixPath: CompilerHostPosixPath

@@ -2,10 +2,20 @@ import { createHash } from 'node:crypto'
 import { readFileSync as readNodeFileSync } from 'node:fs'
 import { dirname, extname, isAbsolute, join, normalize, posix, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { CompilerHost, CompilerHostPosixPath } from './host.ts'
+import type { CompilerHost, CompilerHostPosixPath, CompilerSyncPathHost } from './host.ts'
 
 export function createNodeCompilerHost(): CompilerHost {
   return new NodeCompilerHost()
+}
+
+export function createNodeCompilerSyncPathHost(): CompilerSyncPathHost {
+  return {
+    isAbsolutePath: isAbsoluteNodeCompilerHost,
+    joinPath: joinNodeCompilerHost,
+    readFileSync: readFileSyncNodeCompilerHost,
+    relativePath: relativeNodeCompilerHost,
+    resolvePath: resolveNodeCompilerHost
+  }
 }
 
 class NodeCompilerHost {

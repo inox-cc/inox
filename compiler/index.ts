@@ -8,15 +8,25 @@ import { pathToFileURL } from 'node:url'
 import { generateCompilerLibraryRegistry } from '../scripts/lib/compiler-library-registry.ts'
 import { runHostCommand, runHostProgram } from '../scripts/lib/compiler-cli-host.ts'
 import { rootDir } from '../scripts/lib/repo-root.ts'
+import { prepareProjectCompilerLibraries } from '../bin/project-libraries.js'
 import {
   compilerTargetBuildPreparations,
-  compilerTargetCMakeOptionMappings,
+  compilerTargetCMakeOptionMappings
 } from '../scripts/lib/compiler-target-profile.ts'
 import { runCompilerCli } from './cli.ts'
-import type { CompilerLibraryLiteralTypeInference, CompilerLibrarySet } from './extensions/types.ts'
+import { loadProjectCompilerLibraries } from './extensions/project-libraries.ts'
+import { createNodeCompilerSyncPathHost } from './node-host.ts'
+import type {
+  CompilerLibraryDescriptor,
+  CompilerLibraryLiteralTypeInference,
+  CompilerLibrarySet,
+  LibraryOptionDescriptor
+} from './extensions/types.ts'
 
 type GeneratedCompilerLibraryRegistry = {
+  defaultCompilerLibraryDescriptors: CompilerLibraryDescriptor[]
   defaultCompilerLibrarySet: CompilerLibrarySet
+  defaultCompilerLibraryTargetOptions: LibraryOptionDescriptor[]
   defaultCompilerLibraryLiteralTypeInference: CompilerLibraryLiteralTypeInference
 }
 
@@ -25,9 +35,38 @@ await generateCompilerLibraryRegistry(rootDir, outputDirectory)
 
 const registryUrl = pathToFileURL(join(outputDirectory, 'default-registry.ts')).href
 const registry = (await import(registryUrl)) as GeneratedCompilerLibraryRegistry
+const compilerHost = createNodeCompilerSyncPathHost()
+const helpRequested = compilerHelpRequested(process.argv.slice(2))
+let projectPreparation: ReturnType<typeof prepareProjectCompilerLibraries> | null = null
+
+if (!helpRequested) {
+  try {
+    projectPreparation = prepareProjectCompilerLibraries({
+      cwd: process.cwd(),
+      toolchainRoot: rootDir
+    })
+  } catch (error) {
+    console.error(`Cannot prepare Inox project libraries: ${(error as Error).message}`)
+    process.exit(1)
+  }
+}
+
+const projectLibrariesManifest =
+  (process.env.INOX_PROJECT_LIBRARIES ?? '').length > 0
+    ? (process.env.INOX_PROJECT_LIBRARIES ?? null)
+    : (projectPreparation?.packageRootsManifestPath ?? null)
+const projectLibraries = helpRequested
+  ? { librarySet: registry.defaultCompilerLibrarySet, nativeUnits: [], packageRoots: [] }
+  : loadProjectCompilerLibraries(
+      registry.defaultCompilerLibrarySet,
+      registry.defaultCompilerLibraryDescriptors,
+      registry.defaultCompilerLibraryTargetOptions,
+      compilerHost,
+      projectLibrariesManifest
+    )
 
 runCompilerCli(
-  registry.defaultCompilerLibrarySet,
+  projectLibraries.librarySet,
   {
     args: process.argv,
     build: {
@@ -35,6 +74,10 @@ runCompilerCli(
       cmakeOptionMappings: compilerTargetCMakeOptionMappings,
       defaultLibraryOptions: [],
       executableSuffix: process.platform === 'win32' ? '.exe' : '',
+      nativePlanPath:
+        (process.env.INOX_NATIVE_PLAN ?? '').length > 0
+          ? resolve(process.cwd(), process.env.INOX_NATIVE_PLAN ?? '')
+          : (projectPreparation?.nativePlanCMakePath ?? ''),
       preparations: compilerTargetBuildPreparations,
       toolchainRoot: rootDir
     },
@@ -60,3 +103,17 @@ runCompilerCli(
   },
   registry.defaultCompilerLibraryLiteralTypeInference
 )
+
+function compilerHelpRequested(args: string[]): boolean {
+  for (let index = 0; index < args.length; index = index + 1) {
+    if (args[index] === '--') {
+      return false
+    }
+
+    if (args[index] === '--help' || args[index] === '-h') {
+      return true
+    }
+  }
+
+  return false
+}

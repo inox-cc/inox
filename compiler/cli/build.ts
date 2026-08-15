@@ -23,6 +23,7 @@ export type CliBuildConfiguration = {
   cmakeOptionMappings: CliCMakeOptionMapping[]
   defaultLibraryOptions: CompilerLibraryOptionValue[]
   executableSuffix: string
+  nativePlanPath?: string
   preparations?: CliBuildPreparation[]
   toolchainRoot: string
 }
@@ -405,7 +406,18 @@ function renderCliCMakeProject(
     lines.push(`set(${entry.name} "${cmakeString(entry.value)}" CACHE STRING "" FORCE)`)
   }
 
-  lines.push(`set(INOX_STDLIB_NATIVE_PLAN "${cmakeString(joinPath(configuration.toolchainRoot, 'dist/compiler-libraries/native-plan.cmake'))}")`)
+  lines.push(
+    `set(INOX_THIRD_PARTY_BUILD_ROOT "${cmakeString(joinPath(paths.build, 'third-party'))}" CACHE PATH "" FORCE)`
+  )
+  const nativePlanPath =
+    configuration.nativePlanPath === null ||
+    typeof configuration.nativePlanPath === 'undefined' ||
+    configuration.nativePlanPath.length === 0
+      ? joinPath(configuration.toolchainRoot, 'dist/compiler-libraries/native-plan.cmake')
+      : configuration.nativePlanPath
+  lines.push(
+    `set(INOX_STDLIB_NATIVE_PLAN "${cmakeString(nativePlanPath)}")`
+  )
   lines.push(`include("${cmakeString(joinPath(configuration.toolchainRoot, 'cmake/Inox.cmake'))}")`)
   lines.push('')
   lines.push(`inox_add_executable(${target}`)

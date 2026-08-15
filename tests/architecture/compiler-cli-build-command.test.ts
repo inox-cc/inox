@@ -25,6 +25,7 @@ test('inox build creates and builds an internal CMake project', () => {
       cmakeOptionMappings: [],
       defaultLibraryOptions: [],
       executableSuffix: '',
+      nativePlanPath: '/work/.inox/native-plan.cmake',
       toolchainRoot: '/toolchain'
     },
     cwd: '/work',
@@ -60,5 +61,6 @@ test('inox build creates and builds an internal CMake project', () => {
   assert.match(cmake, /ENTRY "\/work\/tests\/architecture\/fixtures\/empty\.ts"/)
   assert.doesNotMatch(cmake, /INOX_COMPILER_COMMAND/)
   assert.match(cmake, /OUTPUT_NAME "demo"/)
+  assert.match(cmake, /set\(INOX_STDLIB_NATIVE_PLAN "\/work\/\.inox\/native-plan\.cmake"\)/)
   assert.doesNotMatch(cmake, /stdlib\/(?:global|node)\//)
 })

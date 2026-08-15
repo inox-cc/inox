@@ -1,6 +1,6 @@
 {
   "name": "@inox-cc/inox",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -9,6 +9,8 @@
   },
   "scripts": {
     "build": "node --max-old-space-size=6144 --expose-gc scripts/build.ts",
+    "package:npm": "node scripts/package-npm.ts",
+    "test:package:npm": "node tests/integration/npm-package-stage.test.ts",
     "example:simple": "node compiler/index.ts run examples/simple/index.ts",
     "example:simple:inox": "./dist/inox run examples/simple/index.ts",
     "example:http-server": "node compiler/index.ts run examples/http-server/index.ts -- 8080 manual examples/http-server/public",
