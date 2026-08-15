@@ -1,2 +1,1 @@
-minimumReleaseAgeExclude:
-  - '@orlv/formatter@1.3.2'
+minimumReleaseAge: 43200 # 30 days

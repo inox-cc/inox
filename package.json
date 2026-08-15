@@ -37,13 +37,13 @@
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
-      "version": "11.20.0",
+      "version": "11.21.0",
       "onFail": "error"
     }
   },
   "devDependencies": {
-    "@types/node": "^26.1.2",
-    "prettier": "^3.9.6",
+    "@types/node": "^26.1.1",
+    "prettier": "^3.9.5",
     "typescript": "^6.0.3"
   }
 }
