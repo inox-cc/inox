@@ -206,6 +206,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
     devDependencies:
       '@types/node':
         specifier: ^26.1.1
@@ -213,9 +217,6 @@ importers:
       prettier:
         specifier: ^3.9.5
         version: 3.9.5
-      typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
 
 packages:
 

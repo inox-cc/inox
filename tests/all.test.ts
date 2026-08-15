@@ -171,6 +171,8 @@ async function runHostedIntegrationTests(): Promise<void> {
   const { assertModuleDeclarationImports } = await import('./integration/module-declaration-imports.test.ts')
   const { assertModuleDeclarationWeakTypeMarker } =
     await import('./integration/module-declaration-weak-type-marker.test.ts')
+  const { assertNpmLauncherLoadsTypeScriptFromNodeModules } =
+    await import('./integration/npm-launcher-typescript.test.ts')
   const { assertObjectLowersToGlobalObject } = await import('./integration/object-global-object-lowering.test.ts')
   const { assertObjectRuntimeIndexUsesDirectHelpers } =
     await import('./integration/object-runtime-index-lowering.test.ts')
@@ -287,6 +289,10 @@ async function runHostedIntegrationTests(): Promise<void> {
 
     await t.test('compiler-index-node-help', async () => {
       await assertCompilerIndexNodeHelp()
+    })
+
+    await t.test('npm-launcher-typescript', async () => {
+      await assertNpmLauncherLoadsTypeScriptFromNodeModules()
     })
 
     await t.test('crypto-cipher-runtime-hosted', async () => {

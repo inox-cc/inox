@@ -5,7 +5,7 @@
   "type": "module",
   "license": "Apache-2.0",
   "bin": {
-    "inox": "./compiler/index.ts"
+    "inox": "./bin/inox.js"
   },
   "scripts": {
     "build": "node --max-old-space-size=6144 --expose-gc scripts/build.ts",
@@ -41,9 +41,11 @@
       "onFail": "error"
     }
   },
+  "dependencies": {
+    "typescript": "^6.0.3"
+  },
   "devDependencies": {
     "@types/node": "^26.1.1",
-    "prettier": "^3.9.5",
-    "typescript": "^6.0.3"
+    "prettier": "^3.9.5"
   }
 }
