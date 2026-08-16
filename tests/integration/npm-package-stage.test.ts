@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { access, chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { access, chmod, mkdir, mkdtemp, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import process from 'node:process'
@@ -96,10 +96,21 @@ export async function assertNpmPackageStageIsPublishReady(): Promise<void> {
   assert.notEqual(launcher.mode & 0o111, 0)
   assert.notEqual(compiler.mode & 0o111, 0)
 
-  const missingPlatform = await runCommand(process.execPath, [launcherPath, '--help'], rootDir)
-  assert.equal(missingPlatform.code, 1)
-  assert.match(missingPlatform.stderr, new RegExp(stage.platform.descriptor.packageName.replace('/', '\\/')))
-  assert.match(missingPlatform.stderr, /without --omit=optional/)
+  const siblingPlatform = await runCommand(process.execPath, [launcherPath, '--help'], rootDir)
+  assert.equal(siblingPlatform.code, 0, siblingPlatform.stderr)
+  assert.match(siblingPlatform.stdout, /Usage:\n\s+inox --help/)
+
+  const hiddenPlatformRoot = `${stage.platform.root}-missing`
+  await rename(stage.platform.root, hiddenPlatformRoot)
+
+  try {
+    const missingPlatform = await runCommand(process.execPath, [launcherPath, '--help'], rootDir)
+    assert.equal(missingPlatform.code, 1)
+    assert.match(missingPlatform.stderr, new RegExp(stage.platform.descriptor.packageName.replace('/', '\\/')))
+    assert.match(missingPlatform.stderr, /without --omit=optional/)
+  } finally {
+    await rename(hiddenPlatformRoot, stage.platform.root)
+  }
 
   const scopeRoot = join(stage.common.root, 'node_modules/@inox-cc')
   const platformLink = join(scopeRoot, basename(stage.platform.descriptor.packageName))

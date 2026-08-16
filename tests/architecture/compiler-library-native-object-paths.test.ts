@@ -11,6 +11,11 @@ test('native stdlib target сохраняет относительные пут�
     /add_subdirectory\("\$\{INOX_REPO_ROOT\}\/stdlib" "\$\{CMAKE_CURRENT_BINARY_DIR\}\/stdlib"\)/
   )
   assert.match(runtimeCMakeSource, /\$<TARGET_OBJECTS:inox_stdlib_objects>/)
+  assert.match(runtimeCMakeSource, /string\(SHA256 INOX_THIRD_PARTY_SOURCE_HASH "\$\{INOX_REPO_ROOT_REAL\}"\)/)
+  assert.match(
+    runtimeCMakeSource,
+    /\$\{INOX_BUILD_CONFIG_COMPONENT\}\/\$\{INOX_THIRD_PARTY_SOURCE_COMPONENT\}/
+  )
   assert.doesNotMatch(
     runtimeCMakeSource,
     /set\(INOX_RUNTIME_SOURCES[\s\S]*?\$\{INOX_STDLIB_SOURCES\}[\s\S]*?\)/

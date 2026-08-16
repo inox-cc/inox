@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import process from 'node:process'
@@ -17,7 +17,8 @@ if (platform === null) {
   process.exit(1)
 }
 
-const platformManifest = resolvePlatformManifest(platform.packageName)
+const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
+const platformManifest = resolvePlatformManifest(platform.packageName, packageRoot)
 
 if (platformManifest === null) {
   console.error(
@@ -27,7 +28,6 @@ if (platformManifest === null) {
   process.exit(1)
 }
 
-const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const platformRoot = dirname(platformManifest)
 const packageVersion = readPackageVersion(join(packageRoot, 'package.json'))
 const platformVersion = readPackageVersion(platformManifest)
@@ -129,7 +129,7 @@ function removeSignalHandlers() {
   }
 }
 
-function resolvePlatformManifest(packageName) {
+function resolvePlatformManifest(packageName, packageRoot) {
   const request = `${packageName}/package.json`
   const resolvers = [createRequire(import.meta.url)]
 
@@ -145,6 +145,13 @@ function resolvePlatformManifest(packageName) {
         throw error
       }
     }
+  }
+
+  const packageDirectory = packageName.slice(packageName.lastIndexOf('/') + 1)
+  const siblingManifest = join(dirname(packageRoot), packageDirectory, 'package.json')
+
+  if (existsSync(siblingManifest)) {
+    return siblingManifest
   }
 
   return null
