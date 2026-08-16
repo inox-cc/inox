@@ -1306,7 +1306,23 @@ static inox_status inox_json_stringify_class_instance_value(
     return INOX_ERR_UNSUPPORTED;
   }
 
-  if (buffer == 0 || stack == 0 || descriptor == 0 || instance == 0 || descriptor->read_field == 0) {
+  if (buffer == 0 || stack == 0 || descriptor == 0 || instance == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  if (descriptor->to_json != 0) {
+    inox_value converted = inox_undefined_value();
+    inox_status status = descriptor->to_json(instance, &converted);
+
+    if (status == INOX_OK) {
+      status = inox_json_stringify_value(buffer, stack, options, converted, depth);
+    }
+
+    inox_release(converted);
+    return status;
+  }
+
+  if (descriptor->field_count != 0 && (descriptor->fields == 0 || descriptor->read_field == 0)) {
     return INOX_ERR_TYPE;
   }
 
@@ -1446,7 +1462,9 @@ static inox::String inox_json_stringify_value(const inox::Value& value, const in
   inox_json_buffer_dispose(&buffer);
 
   if (status != INOX_OK || !out.valid()) {
-    inox::throw_value(inox::String("JSON.stringify failed"));
+    if (!inox::thrown()) {
+      inox::throw_value(inox::String("JSON.stringify failed"));
+    }
     return inox::String();
   }
 

@@ -227,7 +227,28 @@ static inox_status inox_console_format_class_instance_into(
     return inox_console_format_append(buffer, "[Object]", 8);
   }
 
-  if (buffer == 0 || descriptor == 0 || instance == 0 || descriptor->read_field == 0) {
+  if (buffer == 0 || descriptor == 0 || instance == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  if (descriptor->to_string != 0) {
+    inox_value converted = inox_undefined_value();
+    inox_status status = descriptor->to_string(instance, &converted);
+
+    if (status == INOX_OK && (converted.tag != INOX_TAG_STRING || converted.as.ref == 0)) {
+      status = INOX_ERR_TYPE;
+    }
+
+    if (status == INOX_OK) {
+      const inox_string* string = (const inox_string*)converted.as.ref;
+      status = inox_console_format_append(buffer, string->bytes, string->len);
+    }
+
+    inox_release(converted);
+    return status;
+  }
+
+  if (descriptor->field_count != 0 && (descriptor->fields == 0 || descriptor->read_field == 0)) {
     return INOX_ERR_TYPE;
   }
 

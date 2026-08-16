@@ -495,11 +495,11 @@ static inox_status inox_object_entry_from_key_value(
 }
 
 static bool inox_class_descriptor_is_valid(const inox_class_descriptor* descriptor) {
-  if (descriptor == 0 || descriptor->read_field == 0) {
+  if (descriptor == 0) {
     return false;
   }
 
-  return descriptor->field_count == 0 || descriptor->fields != 0;
+  return descriptor->field_count == 0 || (descriptor->fields != 0 && descriptor->read_field != 0);
 }
 
 static uint32_t inox_class_descriptor_enumerable_count(const inox_class_descriptor* descriptor) {

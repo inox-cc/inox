@@ -174,7 +174,9 @@ import {
   compilerLibraryIntrinsicNativeCAwaitHandlesInvalidSource,
   compilerLibraryIntrinsicNativeCppType,
   compilerLibraryIntrinsicSequenceMaterialization,
+  compilerLibraryNativeRuntimeValueExpressionForCppType,
   compilerLibraryNativeRuntimeValueExpressionForTypeRef,
+  compilerLibraryNativeRuntimeValueOwnershipForCppType,
   compilerLibraryNativeRuntimeValueOwnershipForTypeRef,
   compilerLibraryNativeRuntimeValueValidExpressionForTypeRef,
   requireCompilerLibraryAsyncResultCppType,
@@ -4253,14 +4255,23 @@ function emitPreparedNativeRuntimeStoredValue(
   }
 
   const typeRef = expression.typeRef ?? fallbackTypeRef
-  const runtimeValueExpression = compilerLibraryNativeRuntimeValueExpressionForTypeRef(context.libraries, typeRef)
+  const typeRefRuntimeValueExpression = compilerLibraryNativeRuntimeValueExpressionForTypeRef(
+    context.libraries,
+    typeRef
+  )
+  const runtimeValueExpression =
+    typeRefRuntimeValueExpression ??
+    compilerLibraryNativeRuntimeValueExpressionForCppType(context.libraries, value.cppType)
 
   if (runtimeValueExpression === null) {
     return null
   }
 
   const converted = runtimeValueExpression.split('$value').join(value.expression)
-  const ownership = compilerLibraryNativeRuntimeValueOwnershipForTypeRef(context.libraries, typeRef)
+  const ownership =
+    typeRefRuntimeValueExpression === null
+      ? compilerLibraryNativeRuntimeValueOwnershipForCppType(context.libraries, value.cppType)
+      : compilerLibraryNativeRuntimeValueOwnershipForTypeRef(context.libraries, typeRef)
   const temp = nextCName(context, 'inox_runtime_value')
   const lines = value.lines.slice()
 
@@ -5801,7 +5812,8 @@ function emitDirectSingleRuntimeValueFormattedLibraryCallStatement(
     return null
   }
 
-  const value = emitCValueExpression(args[0], context)
+  const prepared = emitCValueExpression(args[0], context)
+  const value = emitPreparedNativeRuntimeStoredValue(args[0], null, prepared, context) ?? prepared
   const lines: string[] = []
 
   pushAll(lines, value.lines)
@@ -5828,7 +5840,8 @@ function emitDirectRuntimeValueFormattedLibraryCallStatement(
       return [`${target}(${objectExpression});`]
     }
 
-    const value = emitCValueExpression(args[0], context)
+    const prepared = emitCValueExpression(args[0], context)
+    const value = emitPreparedNativeRuntimeStoredValue(args[0], null, prepared, context) ?? prepared
 
     pushAll(lines, value.lines)
     lines.push(`${target}(${value.expression});`)
@@ -5843,7 +5856,8 @@ function emitDirectRuntimeValueFormattedLibraryCallStatement(
       return [`${target}(${cStringLiteral(args[0].value)}, ${objectExpression});`]
     }
 
-    const value = emitCValueExpression(args[1], context)
+    const prepared = emitCValueExpression(args[1], context)
+    const value = emitPreparedNativeRuntimeStoredValue(args[1], null, prepared, context) ?? prepared
 
     pushAll(lines, value.lines)
     lines.push(`${target}(${cStringLiteral(args[0].value)}, ${value.expression});`)

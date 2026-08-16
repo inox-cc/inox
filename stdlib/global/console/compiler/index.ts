@@ -38,6 +38,7 @@ function consoleOperations(): LibraryOperationDescriptor[] {
       cExpression: `console.${name}`,
       cClassFormatExpression: 'inox::console_format_class_instance',
       cArgumentKinds: ['variadic-format-values'],
+      cFailureMode: 'thrown',
       minArgs: 0,
       maxArgs: 16,
       argumentChecks: [],

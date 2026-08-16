@@ -530,6 +530,36 @@ export function compilerLibraryNativeRuntimeRequirementsForCppType(
   return []
 }
 
+export function compilerLibraryNativeRuntimeValueExpressionForCppType(
+  libraries: CCompilerLibrarySet,
+  cppType: string
+): string | null {
+  const nativeTypes = cCompilerLibrarySetValue(libraries).nativeTypes
+
+  for (let index = 0; index < nativeTypes.length; index = index + 1) {
+    if (nativeTypes[index].cppType === cppType) {
+      return nativeTypes[index].cRuntimeValueExpression ?? null
+    }
+  }
+
+  return null
+}
+
+export function compilerLibraryNativeRuntimeValueOwnershipForCppType(
+  libraries: CCompilerLibrarySet,
+  cppType: string
+): 'borrowed' | 'owned' {
+  const nativeTypes = cCompilerLibrarySetValue(libraries).nativeTypes
+
+  for (let index = 0; index < nativeTypes.length; index = index + 1) {
+    if (nativeTypes[index].cppType === cppType) {
+      return nativeTypes[index].cRuntimeValueOwnership ?? 'borrowed'
+    }
+  }
+
+  return 'borrowed'
+}
+
 export function compilerLibraryNativeRuntimeRequirementsForId(
   libraries: CCompilerLibrarySet,
   typeId: string

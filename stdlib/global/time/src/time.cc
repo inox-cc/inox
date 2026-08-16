@@ -1,5 +1,6 @@
 #include "inox/time.h"
 #include "inox/class_descriptor.h"
+#include "inox/class_runtime.h"
 #include "inox/loop.h"
 #include "inox/string.h"
 #include "inox/time_bridge.h"
@@ -84,7 +85,9 @@ static const inox_class_descriptor* inox_date_class_descriptor(void) {
     0,
     inox_date_copy_instance,
     inox_date_destroy_instance,
-    0
+    0,
+    inox::class_to_string<DateValue>,
+    inox::class_to_json<DateValue>
   };
 
   return &descriptor;
