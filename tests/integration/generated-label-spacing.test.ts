@@ -22,6 +22,18 @@ try {
 } catch (error) {
   console.log(error)
 }
+try {
+  console.log('try')
+} finally {
+  console.log('finally')
+}
+try {
+  throw 'bad again'
+} catch (error) {
+  console.log(error)
+} finally {
+  console.log('finally again')
+}
 console.log('after')
 `
       }
@@ -41,7 +53,12 @@ console.log('after')
   assert.match(source, /console\.log\("before"\);\n\n  \{ \/\/ try_\d+/)
   assert.match(source, /goto end_\d+;\n\s+\} catch_\d+: \{\n\s+auto inox_error = inox::take_exception\(\);/)
   assert.doesNotMatch(source, /\}\n\s+catch_\d+: \{/)
-  assert.match(source, /\} end_\d+:;\n\n  console\.log\("after"\);/)
+  assert.match(source, /goto finally_(\d+);\n\s+\} finally_\1: \{/)
+  assert.match(source, /\} catch_(\d+): \{[\s\S]*?\n\s+\} finally_\1: \{/)
+  assert.doesNotMatch(source, /\}\n(?:\s*\n)?\s+finally_\d+:/)
+  assert.doesNotMatch(source, /finally_\d+:\n\s+\{/)
+  assert.match(source, /\} end_\d+:;/)
+  assert.match(source, /\n  end_\d+:;\n\n  console\.log\("after"\);/)
   assert.doesNotMatch(source, /\}\n(?:\s*\n)?\s+end_\d+:;/)
   assert.doesNotMatch(source, /end_\d+: ;/)
   assert.doesNotMatch(source, /end_\d+:\n\s+;/)

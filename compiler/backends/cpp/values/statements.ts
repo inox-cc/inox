@@ -2990,8 +2990,7 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
       popErrorTarget(context)
     }
 
-    lines.push(`${finallyLabel}:`)
-    lines.push('  {')
+    pushLabelBlock(lines, finallyLabel)
     pushIndentedLines(lines, finalizerBody, '    ')
     lines.push('  }')
 
@@ -3030,12 +3029,23 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
 function pushEndLabel(lines: string[], endLabel: string): void {
   const previousLineIndex = lines.length - 1
 
-  if (previousLineIndex >= 0 && lines[previousLineIndex] === '}') {
-    lines[previousLineIndex] = `} ${endLabel}:;`
+  if (previousLineIndex >= 0 && lines[previousLineIndex].trim() === '}') {
+    lines[previousLineIndex] = `${lines[previousLineIndex]} ${endLabel}:;`
     return
   }
 
   lines.push(`${endLabel}:;`)
+}
+
+function pushLabelBlock(lines: string[], label: string): void {
+  const previousLineIndex = lines.length - 1
+
+  if (previousLineIndex >= 0 && lines[previousLineIndex].trim() === '}') {
+    lines[previousLineIndex] = `${lines[previousLineIndex]} ${label}: {`
+    return
+  }
+
+  lines.push(`${label}: {`)
 }
 
 export function emitThrowStatement(statement: StatementNode, context: CFunctionContext): string[] {
