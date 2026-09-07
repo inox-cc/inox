@@ -51,7 +51,12 @@ console.log(Object.keys(foo.v))
     source,
     /auto inox_library_object_\d+ = Object\.keys\(inox::object_value_at\(foo, 0, "v"\)\);\n  if \(inox::thrown\(\)\) return;/
   )
-  assert.match(source, /console\.log\(inox_library_object_\d+\);/)
+  assert.equal(
+    source.match(
+      /auto inox_runtime_value_\d+ = inox::Value\(inox_library_object_\d+\.raw\(\)\);\n  if \(inox::thrown\(\)\) return;\n  console\.log\(inox_runtime_value_\d+\);/g
+    )?.length,
+    3
+  )
   assert.doesNotMatch(source, /auto inox_(?:entries|values|keys)_\d+ = Object\./)
   assert.doesNotMatch(source, /auto inox_value_\d+ = inox::get\(foo, "v"\);/)
   assert.doesNotMatch(source, /Array\(inox::Value\(inox_value_\d+\)\)\.valid\(\)/)

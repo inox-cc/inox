@@ -11,6 +11,6 @@ test('type name helpers normalize names and collect alias dependencies', () => {
     typeNameDependencyNames(
       'record<string,ExternalUser>|nullable<Result>|weak<Owner>|object|union<string,number>|Map<string,Project>'
     ),
-    ['ExternalUser', 'Result', 'Owner', 'Project']
+    ['ExternalUser', 'Result', 'Owner', 'Map', 'Project']
   )
 })

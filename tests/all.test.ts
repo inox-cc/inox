@@ -125,6 +125,7 @@ async function runHostedIntegrationTests(): Promise<void> {
   const { assertCPreludeIncludeOrder } = await import('./integration/c-prelude-include-order.test.ts')
   const { assertConsoleLowersToGlobalObject } = await import('./integration/console-global-object-lowering.test.ts')
   const { assertCompilerIndexNodeHelp } = await import('./integration/compiler-index-node-help.test.ts')
+  const { assertCryptoMethodsLowerToCppObject } = await import('./integration/crypto-cpp-object-lowering.test.ts')
   const { assertHostedCryptoCipherRuntime } = await import('./integration/crypto-cipher-runtime-hosted.test.ts')
   const { assertHostedCryptoEncodingRuntime } = await import('./integration/crypto-encoding-runtime-hosted.test.ts')
   const { assertHostedCryptoHashAlgorithmsRuntime } =
@@ -138,6 +139,7 @@ async function runHostedIntegrationTests(): Promise<void> {
   const { assertHostedCryptoSignatureRuntime } = await import('./integration/crypto-signature-runtime-hosted.test.ts')
   const { assertHostedCryptoScryptRuntime } = await import('./integration/crypto-scrypt-runtime-hosted.test.ts')
   const { assertDateLowersToGlobalObject } = await import('./integration/date-global-object-lowering.test.ts')
+  const { assertDgramSocketUsesCppObjectFacade } = await import('./integration/dgram-cpp-object-lowering.test.ts')
   const { assertPerformanceLowersToGlobalObject } =
     await import('./integration/performance-global-object-lowering.test.ts')
   const {
@@ -155,6 +157,7 @@ async function runHostedIntegrationTests(): Promise<void> {
     assertProcessMainUsesReturnCodeHelper,
     assertUnitMainUsesRaiiReturns
   } = await import('./integration/main-raii-lowering.test.ts')
+  const { assertMathLowersToStdlibRuntime } = await import('./integration/math-stdlib-runtime-lowering.test.ts')
   const { assertModuleDeclarationImportBoundary } =
     await import('./integration/module-declaration-import-boundary.test.ts')
   const { assertModuleDeclarationContracts } = await import('./integration/module-declaration-contracts.test.ts')
@@ -171,6 +174,8 @@ async function runHostedIntegrationTests(): Promise<void> {
   const { assertModuleDeclarationImports } = await import('./integration/module-declaration-imports.test.ts')
   const { assertModuleDeclarationWeakTypeMarker } =
     await import('./integration/module-declaration-weak-type-marker.test.ts')
+  const { assertModuleObjectMemberAssignmentStoresRuntimeFunctionFields } =
+    await import('./integration/module-object-member-function-assignment.test.ts')
   const { assertNpmLauncherLoadsTypeScriptFromNodeModules } =
     await import('./integration/npm-launcher-typescript.test.ts')
   const { assertObjectLowersToGlobalObject } = await import('./integration/object-global-object-lowering.test.ts')
@@ -199,6 +204,8 @@ async function runHostedIntegrationTests(): Promise<void> {
   const { assertPromiseVariablesUseCppRaii } = await import('./integration/promise-raii-lowering.test.ts')
   const { assertPromiseObserveFailureRetainsCallbackContext } =
     await import('./integration/promise-observe-ownership.test.ts')
+  const { assertProcessRuntimeValueExpressionsUseConsoleObjects } =
+    await import('./integration/process-runtime-value-throw-guard.test.ts')
   const { assertPathLowersToCppObject } = await import('./integration/path-cpp-object-lowering.test.ts')
   const { assertNetUsesCppObjectFacade } = await import('./integration/net-cpp-object-lowering.test.ts')
   const { assertHttpClientUsesCppObjectFacade } = await import('./integration/http-client-cpp-object-lowering.test.ts')
@@ -287,6 +294,10 @@ async function runHostedIntegrationTests(): Promise<void> {
       assertConsoleLowersToGlobalObject()
     })
 
+    await t.test('process-runtime-value-throw-guard', () => {
+      assertProcessRuntimeValueExpressionsUseConsoleObjects()
+    })
+
     await t.test('compiler-index-node-help', async () => {
       await assertCompilerIndexNodeHelp()
     })
@@ -331,6 +342,10 @@ async function runHostedIntegrationTests(): Promise<void> {
       await assertHostedCryptoScryptRuntime()
     })
 
+    await t.test('crypto-cpp-object-lowering', () => {
+      assertCryptoMethodsLowerToCppObject()
+    })
+
     for (const integrationTest of await discoverLibraryIntegrationTests()) {
       await t.test(`${integrationTest.name}-hosted`, async () => {
         await integrationTest.run({ kind: 'hosted' })
@@ -339,6 +354,10 @@ async function runHostedIntegrationTests(): Promise<void> {
 
     await t.test('date-global-object-lowering', () => {
       assertDateLowersToGlobalObject()
+    })
+
+    await t.test('math-stdlib-runtime-lowering', () => {
+      assertMathLowersToStdlibRuntime()
     })
 
     await t.test('performance-global-object-lowering', () => {
@@ -402,6 +421,10 @@ async function runHostedIntegrationTests(): Promise<void> {
 
     await t.test('module-declaration-weak-type-marker', () => {
       assertModuleDeclarationWeakTypeMarker()
+    })
+
+    await t.test('module-object-member-function-assignment', () => {
+      assertModuleObjectMemberAssignmentStoresRuntimeFunctionFields()
     })
 
     await t.test('json-parse-shape-lowering', () => {
@@ -516,6 +539,10 @@ async function runHostedIntegrationTests(): Promise<void> {
 
     await t.test('net-cpp-object-lowering', async () => {
       await assertNetUsesCppObjectFacade()
+    })
+
+    await t.test('dgram-cpp-object-lowering', async () => {
+      await assertDgramSocketUsesCppObjectFacade()
     })
 
     await t.test('http-cpp-object-lowering', async () => {

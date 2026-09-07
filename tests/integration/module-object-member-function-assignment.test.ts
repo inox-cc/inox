@@ -9,7 +9,7 @@ type GeneratedTextFile = {
   code: string
 }
 
-export function assertModuleObjectMemberAssignmentCopiesFunctionCompanions(): void {
+export function assertModuleObjectMemberAssignmentStoresRuntimeFunctionFields(): void {
   const host = createMemoryCompilerHost(
     [
       {
@@ -47,12 +47,14 @@ replaceNested(carrier, nested)
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'index.cc').code
 
-  assert.match(source, /inox_objfn_nested_resolve = resolve;/)
-  assert.match(source, /inox_objfn_carrier_nested_resolve = inox_objfn_nested_resolve;/)
+  assert.match(source, /inox_callback_new\([^\n]+inox_callback_resolve_\d+/)
+  assert.match(source, /inox_object_\d+\.init\(0, inox_callback_\d+\);/)
+  assert.match(source, /inox::set_object_value_at\(carrier, 0, "nested", nested\);/)
   assert.match(
     source,
-    /inox_objfn_context_nested_resolve = inox_objfn_dependencies_resolve;/
+    /inox::set_object_value_at\(context, 0, "nested", dependencies\);/
   )
+  assert.doesNotMatch(source, /inox_objfn_/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {
@@ -66,5 +68,5 @@ function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedT
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  assertModuleObjectMemberAssignmentCopiesFunctionCompanions()
+  assertModuleObjectMemberAssignmentStoresRuntimeFunctionFields()
 }
